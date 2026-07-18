@@ -629,6 +629,19 @@ actor RewindStorage {
 
   /// Delete empty day directories in both Screenshots and Videos folders
   func cleanupEmptyDirectories() async throws {
+    // `VideoChunkEncoder` claims `currentChunkPath` before AVAssetWriter creates
+    // its output file. Retention cleanup runs concurrently with first-frame
+    // ingestion, so an otherwise empty active day directory must survive this
+    // sweep until the writer makes that file visible. The shared directory lock
+    // also closes the nil-snapshot → writer-start window.
+    let activeVideoChunkPath = await VideoChunkEncoder.shared.currentChunkPath
+    try cleanupEmptyDirectories(protectingActiveVideoChunkPath: activeVideoChunkPath)
+  }
+
+  /// Delete empty day directories while preserving the parent of an active video
+  /// chunk path. The encoder snapshot is kept as an argument so the filesystem
+  /// mutation stays deterministic after the cross-actor read above.
+  func cleanupEmptyDirectories(protectingActiveVideoChunkPath activeVideoChunkPath: String?) throws {
     // Clean up Screenshots directory
     if let screenshotsDirectory = screenshotsDirectory {
       try cleanupEmptySubdirectories(in: screenshotsDirectory)
@@ -636,11 +649,40 @@ actor RewindStorage {
 
     // Clean up Videos directory
     if let videosDirectory = videosDirectory {
-      try cleanupEmptySubdirectories(in: videosDirectory)
+      let protectedDirectory = Self.activeVideoDayDirectory(
+        for: activeVideoChunkPath,
+        in: videosDirectory
+      )
+      try cleanupEmptyVideoSubdirectories(in: videosDirectory, preserving: protectedDirectory)
     }
   }
 
-  private func cleanupEmptySubdirectories(in directory: URL) throws {
+  /// Resolves the one-level day directory containing an active encoder chunk.
+  /// Invalid or nested paths deliberately get no protection: encoder-generated
+  /// paths are exactly `<day>/chunk_<time>.mp4`, and cleanup only owns immediate
+  /// day directories beneath the Videos root.
+  private static func activeVideoDayDirectory(for relativePath: String?, in videosDirectory: URL) -> URL? {
+    guard let relativePath, !relativePath.isEmpty else { return nil }
+
+    let components = relativePath.split(separator: "/", omittingEmptySubsequences: false)
+    guard
+      components.count == 2,
+      components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+    else {
+      return nil
+    }
+
+    let root = videosDirectory.standardizedFileURL
+    let parent =
+      root
+      .appendingPathComponent(String(components[0]), isDirectory: true)
+      .standardizedFileURL
+
+    guard parent.deletingLastPathComponent().standardizedFileURL == root else { return nil }
+    return parent
+  }
+
+  private func cleanupEmptySubdirectories(in directory: URL, preserving protectedDirectory: URL? = nil) throws {
     // The legacy Screenshots dir may not exist for video-only users — skip it
     // rather than aborting the whole cleanup sweep.
     guard fileManager.fileExists(atPath: directory.path) else { return }
@@ -652,6 +694,10 @@ actor RewindStorage {
     )
 
     for url in contents {
+      if url.standardizedFileURL == protectedDirectory {
+        continue
+      }
+
       let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey])
       if resourceValues.isDirectory == true {
         let subContents = try fileManager.contentsOfDirectory(atPath: url.path)
@@ -660,6 +706,16 @@ actor RewindStorage {
           log("RewindStorage: Removed empty directory \(url.lastPathComponent)")
         }
       }
+    }
+  }
+
+  /// Serializes directory removal with `VideoChunkEncoder.startVideoWriter`.
+  /// Without this, cleanup could read a nil active-path snapshot, then delete a
+  /// day directory created by a just-starting writer before its output file is
+  /// materialized.
+  private func cleanupEmptyVideoSubdirectories(in directory: URL, preserving protectedDirectory: URL?) throws {
+    try RewindVideoDirectoryMutation.lock.withLock {
+      try cleanupEmptySubdirectories(in: directory, preserving: protectedDirectory)
     }
   }
 

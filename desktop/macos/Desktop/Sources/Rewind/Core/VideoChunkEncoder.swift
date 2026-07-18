@@ -303,6 +303,15 @@ actor VideoChunkEncoder {
   // MARK: - Video Writer Management
 
   private func startVideoWriter(for relativePath: String, videosDir: URL, imageSize: CGSize) throws {
+    try RewindVideoDirectoryMutation.lock.withLock {
+      try startVideoWriterLocked(for: relativePath, videosDir: videosDir, imageSize: imageSize)
+    }
+  }
+
+  /// Holds the shared directory mutation lock through day-directory creation and
+  /// `AVAssetWriter.startWriting()`. Retention cleanup can otherwise remove an
+  /// empty just-created day directory before the writer materializes its file.
+  private func startVideoWriterLocked(for relativePath: String, videosDir: URL, imageSize: CGSize) throws {
     // Create day subdirectory if needed
     let components = relativePath.components(separatedBy: "/")
     if components.count > 1 {
@@ -797,4 +806,11 @@ private final class AssetWriterBox: @unchecked Sendable {
   init(_ writer: AVAssetWriter) {
     self.writer = writer
   }
+}
+
+/// Coordinates the two actors that mutate the Rewind Videos directory. This
+/// lock is held only around synchronous filesystem/writer startup operations;
+/// no actor hop or asynchronous work occurs while it is held.
+enum RewindVideoDirectoryMutation {
+  static let lock = NSLock()
 }
