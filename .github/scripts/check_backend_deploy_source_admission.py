@@ -237,13 +237,26 @@ def validate_auto_workflow(text: str) -> list[str]:
             "Checkout admitted Firestore source",
             "admitted-source checkout",
         )
+        require_step(
+            errors,
+            readiness_steps,
+            "Google Auth for read-only Firestore inventory",
+            "read-only Firestore inventory authentication",
+        )
         admission_index = named_step_index(readiness_steps, "Verify Release Eligibility proof is current main")
         credential_index = named_step_index(readiness_steps, "Require read-only Firestore credentials")
         checkout_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
+        auth_index = named_step_index(readiness_steps, "Google Auth for read-only Firestore inventory")
         if admission_index is not None and credential_index is not None and admission_index > credential_index:
             errors.append("automatic release-proof freshness validation must run before read-only credential use")
         if admission_index is not None and checkout_index is not None and admission_index > checkout_index:
             errors.append("automatic release-proof freshness validation must run before admitted-source checkout or execution")
+        if admission_index is not None and auth_index is not None and admission_index > auth_index:
+            errors.append("automatic release-proof freshness validation must run before read-only Firestore authentication")
+        if credential_index is not None and checkout_index is not None and credential_index > checkout_index:
+            errors.append("read-only credential use must run before admitted-source checkout")
+        if checkout_index is not None and auth_index is not None and checkout_index > auth_index:
+            errors.append("admitted-source checkout must run before read-only Firestore authentication")
 
     deploy_job = mapping_block(text, "deploy", 2)
     if deploy_job is None or "    needs: firestore_readiness" not in (deploy_job or ""):

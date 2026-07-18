@@ -275,27 +275,47 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("auto backend deploy must not override source-admission dependency", CHECKER.validate(root))
 
-    def test_auto_workflow_rejects_credential_or_admitted_source_before_freshness_validation(self) -> None:
+    def test_auto_workflow_rejects_steps_outside_the_source_admission_sequence(self) -> None:
         cases = (
             (
                 "read-only credentials",
                 "Require read-only Firestore credentials",
+                "Verify Release Eligibility proof is current main",
                 "automatic release-proof freshness validation must run before read-only credential use",
             ),
             (
                 "admitted source checkout",
                 "Checkout admitted Firestore source",
+                "Verify Release Eligibility proof is current main",
                 "automatic release-proof freshness validation must run before admitted-source checkout or execution",
             ),
+            (
+                "read-only Firestore auth",
+                "Google Auth for read-only Firestore inventory",
+                "Verify Release Eligibility proof is current main",
+                "automatic release-proof freshness validation must run before read-only Firestore authentication",
+            ),
+            (
+                "admitted source checkout before credentials",
+                "Checkout admitted Firestore source",
+                "Require read-only Firestore credentials",
+                "read-only credential use must run before admitted-source checkout",
+            ),
+            (
+                "read-only Firestore auth before admitted source checkout",
+                "Google Auth for read-only Firestore inventory",
+                "Checkout admitted Firestore source",
+                "admitted-source checkout must run before read-only Firestore authentication",
+            ),
         )
-        for name, moved_step, expected in cases:
+        for name, moved_step, before_step, expected in cases:
             with self.subTest(name=name):
                 root = self.fixture_root()
                 self.move_step_before(
                     root,
                     CHECKER.AUTO_WORKFLOW_PATH,
                     moved_step,
-                    "Verify Release Eligibility proof is current main",
+                    before_step,
                 )
                 self.assertIn(expected, CHECKER.validate(root))
 
