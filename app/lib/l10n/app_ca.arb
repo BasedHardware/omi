@@ -2904,7 +2904,7 @@
     "upgradePlan": "Actualitzar pla",
     "billingMonthly": "Mensual",
     "billingYearly": "Anual",
-    "savePercent": "Estalvia ~17%",
+    "savePercent": "Estalvia ~{percent}%",
     "popular": "Popular",
     "currentPlan": "Actual",
     "neoSubtitle": "{count} preguntes al mes",

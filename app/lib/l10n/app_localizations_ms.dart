@@ -9012,7 +9012,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get billingYearly => 'Tahunan';
 
   @override
-  String get savePercent => 'Jimat ~17%';
+  String savePercent(int percent) {
+    return 'Jimat ~$percent%';
+  }
 
   @override
   String get popular => 'Popular';

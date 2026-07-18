@@ -8988,7 +8988,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get billingYearly => 'Vuosittain';
 
   @override
-  String get savePercent => 'Säästä ~17%';
+  String savePercent(int percent) {
+    return 'Säästä ~$percent%';
+  }
 
   @override
   String get popular => 'Suosittu';

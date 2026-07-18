@@ -2970,7 +2970,7 @@
     "upgradePlan": "Améliorer le forfait",
     "billingMonthly": "Mensuel",
     "billingYearly": "Annuel",
-    "savePercent": "Économisez ~17%",
+    "savePercent": "Économisez ~{percent}%",
     "popular": "Populaire",
     "currentPlan": "Actuel",
     "neoSubtitle": "{count} questions par mois",

@@ -8846,7 +8846,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get billingYearly => '연간';
 
   @override
-  String get savePercent => '~17% 절약';
+  String savePercent(int percent) {
+    return '~$percent% 절약';
+  }
 
   @override
   String get popular => '인기';

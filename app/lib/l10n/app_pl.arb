@@ -2970,7 +2970,7 @@
     "upgradePlan": "Ulepsz plan",
     "billingMonthly": "Miesięcznie",
     "billingYearly": "Rocznie",
-    "savePercent": "Oszczędź ~17%",
+    "savePercent": "Oszczędź ~{percent}%",
     "popular": "Popularne",
     "currentPlan": "Bieżący",
     "neoSubtitle": "{count} pytań miesięcznie",
