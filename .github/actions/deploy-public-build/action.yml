@@ -54,6 +54,10 @@ runs:
           echo 'runtime_secrets<<EOF'
           jq -r '.deployment.runtime_secrets | to_entries[]? | "\(.key)=\(.value)"' <<<"$target_json"
           echo EOF
+          printf 'remove_runtime_secrets=%s\n' "$(
+            jq -r '(.deployment.remove_runtime_secrets // []) | if length == 0 then "" else "--remove-secrets=" + join(",") end' \
+              <<<"$target_json"
+          )"
         } >> "$GITHUB_OUTPUT"
 
     - name: Prepare reviewed public build inputs
@@ -115,6 +119,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.candidate.outputs.revision_suffix }}
           --tag=${{ steps.candidate.outputs.tag }}
+          ${{ steps.contract.outputs.remove_runtime_secrets }}
           ${{ steps.contract.outputs.flags }}
         secrets: ${{ steps.contract.outputs.runtime_secrets }}
 
