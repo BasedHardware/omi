@@ -1,0 +1,50 @@
+name: Verify release eligibility
+description: Publish a release proof only for the exact checked-out main commit.
+inputs:
+  ref:
+    description: GitHub ref that triggered the release proof.
+    required: true
+  sha:
+    description: Immutable commit SHA selected for the release proof.
+    required: true
+  before:
+    description: Previous main commit SHA used as the deterministic-check base.
+    required: true
+  after:
+    description: Push event commit SHA that must equal the release SHA.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Verify exact main release identity
+      shell: bash
+      env:
+        RELEASE_REF: ${{ inputs.ref }}
+        RELEASE_SHA: ${{ inputs.sha }}
+        RELEASE_BEFORE: ${{ inputs.before }}
+        RELEASE_AFTER: ${{ inputs.after }}
+      run: |
+        set -euo pipefail
+        RELEASE_CHECKOUT_SHA="$(git rev-parse --verify HEAD)"
+        python3 .github/scripts/verify_release_eligibility.py \
+          --ref "$RELEASE_REF" \
+          --sha "$RELEASE_SHA" \
+          --before "$RELEASE_BEFORE" \
+          --after "$RELEASE_AFTER" \
+          --checkout-sha "$RELEASE_CHECKOUT_SHA"
+        git cat-file -e "${RELEASE_BEFORE}^{commit}"
+        git cat-file -e "${RELEASE_SHA}^{commit}"
+        git merge-base --is-ancestor "$RELEASE_BEFORE" "$RELEASE_SHA"
+
+    - name: Run canonical deterministic CI preflight
+      shell: bash
+      env:
+        RELEASE_BEFORE: ${{ inputs.before }}
+        RELEASE_SHA: ${{ inputs.sha }}
+      run: |
+        set -euo pipefail
+        python3 .github/scripts/run_checks.py \
+          --lane ci \
+          --base "$RELEASE_BEFORE" \
+          --head "$RELEASE_SHA" \
+          --skip-pr-body-checks
