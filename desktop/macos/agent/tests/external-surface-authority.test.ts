@@ -1336,6 +1336,12 @@ rl.on("line", (line) => {
       defaultAdapterId: "pi-mono",
       authorizedProducerJournal: producerJournal,
       authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-codex-spawn",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
       getOwnerId: () => "owner",
     }, "spawn_agent", routed.toolInput)) as Record<string, any>;
 
@@ -1391,6 +1397,12 @@ rl.on("line", (line) => {
       defaultAdapterId: "pi-mono",
       authorizedProducerJournal: producerJournal,
       authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-codex-unavailable",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
       getOwnerId: () => "owner",
     }, "spawn_agent", routed.toolInput));
 
