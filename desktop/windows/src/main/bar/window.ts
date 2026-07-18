@@ -401,7 +401,9 @@ function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal, bounds
     win.setBounds(bounds)
     win.setOpacity(0)
   } else {
-    win.setBounds(offscreenStageBounds(bounds))
+    win.setBounds(
+      offscreenStageBounds(bounds, screen.getAllDisplays().map(displayLike), PARKED_POS)
+    )
   }
   const token = ++revealToken
   pendingReveal = { token, mode, reveal, bounds }

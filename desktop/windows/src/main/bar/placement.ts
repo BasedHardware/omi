@@ -79,31 +79,53 @@ export function computeBarBounds(display: DisplayLike): Rect {
  *  below — enough to lift the whole window off the monitor so it never flashes. */
 export const OFFSCREEN_STAGE_MARGIN = 100
 
+/** Do two DIP rects overlap (share any area)? Edge-touching does not count. */
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
 /**
- * Off-screen staging rect for a reveal on the target display: the SAME horizontal
- * center and size as the final bar, parked just ABOVE the display's top edge.
+ * Where to size/paint the still-invisible bar window for a reveal on the target
+ * display, so it is DPI-associated with THAT display before it is revealed.
  *
- * Why not a single fixed far-off corner (the old `PARKED_POS`): on Windows,
- * `BrowserWindow.setBounds` converts the requested DIP size to physical pixels
- * using the scaleFactor of the monitor the window is CURRENTLY on. Sizing the
- * window at a fixed corner that happens to sit on a different-scaleFactor monitor
- * (e.g. a 1.5× display left of a 1.0× main monitor) inflates the window by that
- * monitor's scale when it is then revealed on the main monitor — the bar comes
- * out ~1.5× too large, so its top-center pill lands off-center and the frame
- * (painted at the wrong device scale) shows blurry. Staging above the TARGET
- * display keeps the window DPI-associated with that display while it is sized and
- * painted, so both size and paint scale are correct before it is revealed; the
- * final on-screen move (`computeBarBounds`) is then within one monitor, never
- * across a DPI boundary. In horizontal multi-monitor layouts the space directly
- * above the target is empty, so the target stays the nearest monitor.
+ * Why this matters: on Windows, `BrowserWindow.setBounds` converts the requested
+ * DIP size to physical pixels using the scaleFactor of the monitor the window is
+ * CURRENTLY on. Sizing the window at a fixed corner that happens to sit on a
+ * different-scaleFactor monitor (e.g. a 1.5× display left of a 1.0× main monitor)
+ * inflates the window by that monitor's scale when it is then revealed on the main
+ * monitor — the bar comes out ~1.5× too large, so its top-center pill lands
+ * off-center and the frame (painted at the wrong device scale) shows blurry.
+ *
+ * Fix: stage the window just ABOVE the target display's top edge (same center +
+ * size). That keeps it on the target monitor while it is sized and painted, so
+ * both size and paint scale are correct; `commitReveal` then moves it on-screen
+ * within that one monitor, never across a DPI boundary.
+ *
+ * BUT the staging rect is only safe when the space above the target is empty. If a
+ * monitor is stacked directly above the target, the staged rect lands ON it —
+ * where the window (shown at opacity 1 in off-screen park mode, with `bar:show`
+ * already sent) would briefly FLASH the pill during the paint-ack window, and
+ * would be sized under that monitor's DPI, reintroducing the very bug this avoids.
+ * So when the staged rect intersects ANY display, fall back to the caller's fixed
+ * off-desktop corner (`parkedPos`) — the pre-fix behavior: no flash, and DPI
+ * inflation only in that exotic stacked case (never worse than before the fix).
  */
-export function offscreenStageBounds(finalBounds: Rect): Rect {
-  return {
+export function offscreenStageBounds(
+  finalBounds: Rect,
+  displays: DisplayLike[],
+  parkedPos: { x: number; y: number }
+): Rect {
+  const staged: Rect = {
     x: finalBounds.x,
     y: finalBounds.y - finalBounds.height - OFFSCREEN_STAGE_MARGIN,
     width: finalBounds.width,
     height: finalBounds.height
   }
+  if (displays.some((d) => rectsOverlap(staged, d.bounds))) {
+    // Off-desktop fallback: keep the final size, park at the fixed corner.
+    return { x: parkedPos.x, y: parkedPos.y, width: finalBounds.width, height: finalBounds.height }
+  }
+  return staged
 }
 
 /** The display whose bounds contain the point, else the nearest by center
