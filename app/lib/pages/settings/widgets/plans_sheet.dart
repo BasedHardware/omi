@@ -17,6 +17,7 @@ import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/utils/plan_pricing.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -1658,7 +1659,7 @@ class _PlansSheetState extends State<PlansSheet> {
             child: _buildDynamicPlanOption(
               isSelected: isSelected,
               planData: planDataWithName,
-              saveTag: isYearly ? '2 Months Free' : null,
+              saveTag: isYearly ? annualSaveTag(tierPlans) : null,
               isPopular: eyebrow == 'Most popular',
               featureSummary: planSubtitle,
               features: planFeatures,
@@ -1681,7 +1682,7 @@ class _PlansSheetState extends State<PlansSheet> {
         _buildDynamicPlanOption(
           isSelected: selectedPlan == 'yearly',
           planData: plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first),
-          saveTag: '2 Months Free',
+          saveTag: annualSaveTag(plans),
           isPopular: true,
           onTap: () {
             HapticFeedback.lightImpact();
