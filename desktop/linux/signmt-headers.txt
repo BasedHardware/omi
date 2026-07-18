@@ -1,0 +1,7 @@
+content-type=application/pose
+content-length=256192
+access-control-allow-origin=*
+access-control-allow-credentials=None
+access-control-expose-headers=None
+cross-origin-resource-policy=None
+content-disposition=inline; filename*=UTF-8''hello.pose; filename=result.pose
