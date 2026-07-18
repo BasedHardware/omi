@@ -38,6 +38,7 @@
     "gen:tray-icons": "node scripts/gen-tray-icons.mjs",
     "gen:app-icon": "node scripts/gen-app-icon.mjs",
     "test:e2e:cold-start": "node scripts/run-cold-start-e2e.mjs",
+    "test:e2e:token-pull": "node scripts/run-token-pull-e2e.mjs",
     "test:e2e:ptt": "node scripts/run-live-e2e.mjs src/main/ipc/pttTranscribe.e2e.test.ts",
     "test:e2e:agent": "node scripts/run-agent-e2e.mjs src/main/codingAgent/acp.e2e.test.ts",
     "test:e2e:conv-sync": "node scripts/run-live-e2e.mjs src/renderer/src/lib/sync/convSync.e2e.test.ts",
