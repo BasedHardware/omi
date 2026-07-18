@@ -52,7 +52,7 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 Merging `desktop/macos/**` changes queues them for the next daily or manually dispatched candidate. A candidate advances to beta automatically only after every qualification gate passes:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag
+1. **GitHub Actions** (`desktop_auto_release.yml`) — batches mainline changes, auto-increments the version, and pushes a `v*-macos` build-candidate tag. It fail-closes before changelog or tag mutation unless `Desktop Swift Build & Tests` completed successfully for the exact source SHA to tag; `force_release` does not bypass this source gate
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
