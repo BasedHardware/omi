@@ -47,6 +47,32 @@ def _containers(service: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return []
 
 
+def _secret_reference(value_source: Mapping[str, Any] | None) -> str | None:
+    """Return a Secret Manager reference from one documented Cloud Run shape.
+
+    Cloud Run v1 serializes secret refs as ``name``/``key`` under
+    ``valueFrom``. Cloud Run v2 uses ``secret``/``version`` under
+    ``valueSource``. Treat incomplete or ambiguous payloads as non-secret
+    bindings so the preflight remains fail-closed.
+    """
+
+    secret_ref = value_source.get("secretKeyRef") if isinstance(value_source, Mapping) else None
+    if not isinstance(secret_ref, Mapping):
+        return None
+
+    references: list[str] = []
+    for secret_field, version_field in (("name", "key"), ("secret", "version")):
+        secret = secret_ref.get(secret_field)
+        version = secret_ref.get(version_field)
+        if secret is None and version is None:
+            continue
+        if not isinstance(secret, str) or not secret or not isinstance(version, str) or not version:
+            return None
+        references.append(f"{secret}:{version}")
+
+    return references[0] if len(references) == 1 else None
+
+
 def current_bindings(service: Mapping[str, Any]) -> dict[str, RuntimeBinding]:
     """Extract Cloud Run env bindings without ever reading their values."""
 
@@ -62,13 +88,9 @@ def current_bindings(service: Mapping[str, Any]) -> dict[str, RuntimeBinding]:
             value_source = raw_item.get("valueSource")
             if not isinstance(value_source, Mapping):
                 value_source = raw_item.get("valueFrom")
-            secret_ref = value_source.get("secretKeyRef") if isinstance(value_source, Mapping) else None
-            if (
-                isinstance(secret_ref, Mapping)
-                and isinstance(secret_ref.get("name"), str)
-                and isinstance(secret_ref.get("key"), str)
-            ):
-                bindings[name] = RuntimeBinding("secret", f"{secret_ref['name']}:{secret_ref['key']}")
+            secret_reference = _secret_reference(value_source)
+            if secret_reference is not None:
+                bindings[name] = RuntimeBinding("secret", secret_reference)
             else:
                 bindings[name] = RuntimeBinding("literal")
     return bindings
