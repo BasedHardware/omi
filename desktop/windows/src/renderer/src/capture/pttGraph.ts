@@ -86,12 +86,14 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
   analyser.smoothingTimeConstant = 0.85 // smooth, springy bars
   source.connect(analyser)
 
-  // A second, (near-)zero-smoothing analyser dedicated to the orb: the bars'
-  // 0.85 smoothing lags ~600ms and mutes syllable transients. This one passes
-  // the raw per-poll level through; the orb's own envelope does the shaping.
+  // A second analyser dedicated to the orb: the bars' 0.85 smoothing lags
+  // ~600ms and mutes syllable transients. The host reads this one's TIME-DOMAIN
+  // window (getFloatTimeDomainData) for a true linear peak — the canonical
+  // orbLevel unit, matching the hub driver's pcmPeakLevel — so fftSize sets the
+  // peak window: 1024 samples @16kHz ≈ 64ms, fully covering the ~33ms level
+  // poll. (smoothingTimeConstant only affects frequency data — irrelevant here.)
   const orbAnalyser = ctx.createAnalyser()
-  orbAnalyser.fftSize = 64
-  orbAnalyser.smoothingTimeConstant = 0.2
+  orbAnalyser.fftSize = 1024
   source.connect(orbAnalyser)
 
   const processor = ctx.createScriptProcessor(4096, 1, 1)

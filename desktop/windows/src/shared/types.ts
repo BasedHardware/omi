@@ -341,9 +341,12 @@ export type CaptureEvent =
  *  in the capture window. */
 export type WaveformSource = {
   getByteFrequencyData: (dest: Uint8Array) => void
-  /** Fast-response loudness 0..1 for the orb, when the source provides one (the
-   *  IPC PTT adapter fills it from `ptt-levels.orbLevel`). Absent on a plain
-   *  `AnalyserNode`; the orb then falls back to RMS of the frequency bins. */
+  /** Fast-response loudness for the orb, when the source provides one (the
+   *  IPC PTT adapter fills it from `ptt-levels.orbLevel`). CANONICAL UNIT:
+   *  linear amplitude 0..1 of full scale (a peak over the recent window — the
+   *  hub's pcmPeakLevel and the capture window's time-domain peak both are).
+   *  Absent on a plain `AnalyserNode`; the orb then derives an approximate
+   *  linear level from the frequency bins. */
   getOrbLevel?: () => number
 }
 

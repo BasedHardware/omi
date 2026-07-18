@@ -33,11 +33,11 @@ import {
 import {
   WAVE_MAX_SLOTS,
   slotCountForAspect,
-  shapeBarLevel,
   historyPush,
   historySlots,
   stepWaveLevels
 } from './waveform'
+import { AmplitudeMapper } from './amplitudeMapper'
 import { OrbRenderer, DEFAULT_MORPH_RECT, type OrbRect } from './orbRenderer'
 
 /** How often (seconds) a new loudness sample scrolls into the waveform row —
@@ -79,9 +79,23 @@ export class OrbAnimator {
   private failedAt: number | null = null
   private morphTarget = 0
   private morph = 0
-  /** Raw live level target (from the mic pipeline) and its smoothed envelope. */
+  /** Raw live level target (from the mic pipeline — canonical linear amplitude
+   *  0..1 of full scale), the adaptive mapper that calibrates it to a display
+   *  level, and the smoothed display envelope. The mapper lives on the animator
+   *  (not per-frame) so its floor/ceiling trackers persist across utterances. */
   private rawAmplitude = 0
+  private amp = new AmplitudeMapper()
   private ampEnvelope = 0
+  /** Opt-in numeric trace of the amplitude chain (localStorage omi.orbAmpDiag =
+   *  '1'): logs raw → mapped → envelope at the waveform-sample cadence, for
+   *  calibration/verification runs. Dev-only cost: one flag read at build. */
+  private readonly ampDiag: boolean = (() => {
+    try {
+      return globalThis.localStorage?.getItem('omi.orbAmpDiag') === '1'
+    } catch {
+      return false
+    }
+  })()
   /** Speech-merge envelope: eases to 1 while speech is active, dissolves to 0.
    *  Doubles as the waveform crossfade (ring dots → bar visualizer). */
   private speechActive = false
@@ -180,7 +194,9 @@ export class OrbAnimator {
     this.kick()
   }
 
-  /** RAW live level ≥ 0 (hot input tolerated — shaped downstream). */
+  /** RAW live level: canonical linear amplitude 0..1 of full scale (the hub's
+   *  pcmPeakLevel / the capture window's time-domain peak). Hot input above 1 is
+   *  tolerated — the adaptive mapper bounds it downstream. */
   setAmplitude(a: number): void {
     this.rawAmplitude = Math.max(0, a)
   }
@@ -271,8 +287,14 @@ export class OrbAnimator {
     const dt = Math.max(0, Math.min(0.1, t - this.lastTime))
     this.lastTime = t
     // Deterministic envelope steps (same functions the harness scrubs with).
+    // Amplitude chain: raw linear level → adaptive mapper (gate + bounded AGC +
+    // perceptual curve, see amplitudeMapper.ts) → fast-attack/slow-release
+    // envelope. The envelope value IS the display level both consumers use: the
+    // waveform bars push it directly and the blob wobble shapes it in
+    // computeOrbFrame. All dt-based — identical response at 30 or 60fps.
     this.speechMerge = stepMergeEnvelope(this.speechMerge, this.speechActive ? 1 : 0, dt)
-    this.ampEnvelope = stepAmplitudeEnvelope(this.ampEnvelope, this.rawAmplitude, dt)
+    const mapped = this.amp.step(this.rawAmplitude, dt)
+    this.ampEnvelope = stepAmplitudeEnvelope(this.ampEnvelope, mapped, dt)
     // Waveform history: scroll a fresh loudness sample in at a fixed cadence
     // (steady scroll regardless of fps), then ease the displayed bar levels toward
     // the last `slotCount` samples so no bar height snaps in a single frame. When
@@ -346,17 +368,21 @@ export class OrbAnimator {
     }
     this.wavePushAccum += dt
     // Cap catch-up so a long stall (tab throttled) can't push hundreds of samples.
-    // Each sample is run through the sensitivity curve (shapeBarLevel) so moderate
-    // speech reads mid-height and loud never pins the bars at the max.
+    // The envelope is already the calibrated display level (the adaptive mapper
+    // gated/normalized it), so it feeds the bars directly: moderate speech reads
+    // mid-height and even the loudest input approaches — never pins — the max.
     let pushes = 0
     while (this.wavePushAccum >= WAVE_SAMPLE_SEC && pushes < WAVE_MAX_SLOTS) {
-      this.waveWrite = historyPush(
-        this.waveHistory,
-        this.waveWrite,
-        shapeBarLevel(this.ampEnvelope)
-      )
+      this.waveWrite = historyPush(this.waveHistory, this.waveWrite, this.ampEnvelope)
       this.wavePushAccum -= WAVE_SAMPLE_SEC
       pushes++
+    }
+    if (this.ampDiag && pushes > 0) {
+      const t = this.amp.trackers
+      console.log(
+        `[orb-amp] raw=${this.rawAmplitude.toFixed(4)} env=${this.ampEnvelope.toFixed(3)} ` +
+          `gate=${t.gateDb.toFixed(1)}dB ceil=${t.ceilDb.toFixed(1)}dB`
+      )
     }
     const target = historySlots(this.waveHistory, this.waveWrite, this.slotCount)
     stepWaveLevels(this.waveDisplay, target, dt)

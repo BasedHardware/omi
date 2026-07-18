@@ -2,11 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   WAVE,
   WAVE_MAX_SLOTS,
-  WAVE_LEVEL_CEIL,
-  WAVE_NOISE_GATE,
   waveHalfWidth,
   slotCountForAspect,
-  shapeBarLevel,
   waveBars,
   historyPush,
   historySlots,
@@ -14,72 +11,9 @@ import {
 } from './waveform'
 import { RING_DOT_RENDER_RADIUS } from './choreography'
 
-describe('shapeBarLevel (gated sensitivity curve, calibrated to real mic)', () => {
-  // Reference points are the user's MEASURED live orbLevel distribution
-  // (2026-07-12, ~956 samples = (rms/255)·2.2): room silence p50 0.49 / p95 0.65
-  // / max 0.75; normal speech p50 0.98 / p95 1.32 / max 1.38.
-  const SILENCE_P50 = 0.49
-  const SILENCE_P95 = 0.65
-  const SPEECH_P50 = 0.98
-  const SPEECH_MAX = 1.38
-
-  it('gates the ambient floor to a resting dot (level 0)', () => {
-    expect(shapeBarLevel(0)).toBe(0)
-    expect(shapeBarLevel(-5)).toBe(0) // negatives clamp to silence
-    // The whole measured room-silence band must read as a rest dot, not tall
-    // bars — this is the user's core complaint the gate fixes.
-    expect(shapeBarLevel(SILENCE_P50)).toBe(0)
-    expect(shapeBarLevel(SILENCE_P95)).toBe(0)
-    expect(shapeBarLevel(WAVE_NOISE_GATE)).toBe(0)
-    // Gate sits between the silence ceiling and speech onset.
-    expect(WAVE_NOISE_GATE).toBeGreaterThanOrEqual(SILENCE_P95)
-    expect(WAVE_NOISE_GATE).toBeLessThan(SPEECH_P50)
-  })
-
-  it('has a soft onset just above the gate so quiet speech still registers', () => {
-    const justAbove = shapeBarLevel(WAVE_NOISE_GATE + 0.05)
-    expect(justAbove).toBeGreaterThan(0) // registers
-    expect(justAbove).toBeLessThan(0.25) // but small — a quiet nudge, not a jump
-  })
-
-  it('places normal speech low-mid and peaks tall-but-not-pinned (softened knee)', () => {
-    // Softened 2.0 → 1.5 (user: "still getting maxed"). Normal (~0.98) sits
-    // low-mid so the row lives in the middle with headroom; peaks (~1.38) read
-    // tall yet leave clear room below the ceiling.
-    const normal = shapeBarLevel(SPEECH_P50)
-    const peak = shapeBarLevel(SPEECH_MAX)
-    expect(normal).toBeGreaterThanOrEqual(0.35)
-    expect(normal).toBeLessThanOrEqual(0.5)
-    expect(peak).toBeGreaterThan(normal)
-    expect(peak).toBeGreaterThanOrEqual(0.6)
-    expect(peak).toBeLessThanOrEqual(0.75)
-  })
-
-  it('keeps headroom for HOT live input — the "still getting maxed" guard', () => {
-    // The user's live speech runs hotter than the calibration sample. Even a hot
-    // ~1.8 must stay clearly below the ceiling (not pin), and the absolute max
-    // orbLevel (2.2 = (255/255)·2.2) still leaves a sliver — bars never max out.
-    expect(shapeBarLevel(1.8)).toBeLessThanOrEqual(0.86)
-    expect(shapeBarLevel(2.2)).toBeLessThan(WAVE_LEVEL_CEIL)
-  })
-
-  it('is bounded below the ceiling for ANY input — never pins at max (1)', () => {
-    for (const raw of [1, 2, 5, 100, 1e6]) {
-      expect(shapeBarLevel(raw)).toBeLessThanOrEqual(WAVE_LEVEL_CEIL)
-      expect(shapeBarLevel(raw)).toBeLessThan(1)
-    }
-    expect(WAVE_LEVEL_CEIL).toBeLessThan(1)
-  })
-
-  it('is monotonic non-decreasing', () => {
-    let prev = -1
-    for (let i = 0; i <= 40; i++) {
-      const v = shapeBarLevel(i / 20)
-      expect(v).toBeGreaterThanOrEqual(prev)
-      prev = v
-    }
-  })
-})
+// The raw-loudness sensitivity curve (formerly shapeBarLevel here) moved to the
+// adaptive AmplitudeMapper — its acceptance table lives in
+// amplitudeMapper.test.ts. This file tests the waveform GEOMETRY only.
 
 describe('slotCountForAspect', () => {
   it('gives a compact square mount a handful of slots and a wide mount many more', () => {
