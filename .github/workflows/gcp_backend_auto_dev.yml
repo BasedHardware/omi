@@ -196,14 +196,14 @@ jobs:
       - name: Probe LLM gateway from the Cloud Run VPC before promotion
         run: |
           bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --region="${{ env.REGION }}" \
-            --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
-            --gateway-url="${{ steps.gateway-serving.outputs.gateway_url }}" \
-            --network="${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
-            --subnet="${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
-            --vpc-egress=private-ranges-only \
-            --name-suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
+            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress private-ranges-only \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Render backend runtime env from the gated gateway endpoint
         id: runtime-env
@@ -483,10 +483,10 @@ jobs:
 
       - name: Verify validated revisions are still current
         run: |
-          test "$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
-          test "$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
-          test "$(gcloud run services describe backend-sync-backfill --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
-          test "$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
+          test "$(gcloud run services describe backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
       - name: Shift Cloud Run traffic to validated revisions
         run: |
