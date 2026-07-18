@@ -30,6 +30,22 @@ enum OnboardingFlow {
   /// navigation may jump over those freely; these four gate it.
   static let unskippableSteps: Set<Int> = [0, 1, 2, 3]
 
+  /// The pages grouped into the four user-facing phases the segmented progress
+  /// bar shows. Ranges must tile `steps` contiguously and completely — a test
+  /// asserts this so a step added to `steps` can't silently fall outside every
+  /// phase.
+  struct Phase {
+    let title: String
+    let steps: Range<Int>
+  }
+
+  static let phases: [Phase] = [
+    Phase(title: "Profile", steps: 0..<3),
+    Phase(title: "Permissions", steps: 3..<10),
+    Phase(title: "Shortcuts", steps: 10..<14),
+    Phase(title: "Your memory", steps: 14..<18),
+  ]
+
   /// Whether the user may navigate directly to `target` (progress dots, forward
   /// arrow). Backward and already-reached steps are always allowed. A forward
   /// jump is allowed when every step it would pass over — from the current

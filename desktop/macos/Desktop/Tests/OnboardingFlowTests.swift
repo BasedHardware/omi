@@ -273,6 +273,19 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(OnboardingFlow.unskippableSteps, [0, 1, 2, 3])
   }
 
+  func testPhasesTileAllStepsContiguously() {
+    // The segmented progress bar renders one segment per phase; a step outside
+    // every phase (or in two) would render a broken bar. Phases must cover
+    // 0..<steps.count exactly, in order, with no gaps or overlaps.
+    var nextStep = 0
+    for phase in OnboardingFlow.phases {
+      XCTAssertFalse(phase.steps.isEmpty, "phase \(phase.title) is empty")
+      XCTAssertEqual(phase.steps.lowerBound, nextStep, "phase \(phase.title) leaves a gap or overlaps")
+      nextStep = phase.steps.upperBound
+    }
+    XCTAssertEqual(nextStep, OnboardingFlow.steps.count)
+  }
+
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {
     XCTAssertFalse(
       OnboardingFlow.shouldUnlockVoiceShortcutContinue(

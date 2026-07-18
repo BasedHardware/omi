@@ -234,7 +234,7 @@ struct OnboardingStepScaffold<Content: View>: View {
   }
 
   private func progressRow(centered: Bool) -> some View {
-    OnboardingProgressDots(stepIndex: stepIndex, totalSteps: totalSteps)
+    OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
       .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
   }
 
@@ -292,49 +292,129 @@ struct OnboardingLogoMark: View {
   }
 }
 
-/// Progress dots shown at the top of an onboarding step. Each dot is clickable
-/// (via the injected `onboardingJumpTo` action) so the user can jump straight to
-/// any step. Used by `OnboardingStepScaffold` and by the custom full-width steps
-/// (floating-bar shortcut/demo) that don't use the scaffold.
-struct OnboardingProgressDots: View {
+/// Segmented progress bar shown at the top of an onboarding step: one capsule
+/// per phase (`OnboardingFlow.phases`), sized by its page count. The fill tip
+/// stands at the end of the completed pages, and clicking any part puts the
+/// tip there (via the injected `onboardingJumpTo` action, gated by
+/// `OnboardingFlow.canJump`). Hovering a segment reveals tick marks at its
+/// page boundaries. Used by `OnboardingStepScaffold` and by the custom
+/// full-width steps (floating-bar shortcut/demo) that don't use the scaffold.
+struct OnboardingProgressBar: View {
   let stepIndex: Int
   let totalSteps: Int
   @Environment(\.onboardingJumpTo) private var onboardingJumpTo
   @Environment(\.onboardingFurthestStep) private var furthestStep
+  @State private var hoveredPhase: Int?
+  @State private var settledStep: Int?
+
+  private static let pageWidth: CGFloat = 14
+  private static let barHeight: CGFloat = 5
+
+  /// The step the previous page's bar instance last showed. Each page hosts
+  /// its own bar, so cross-page fill animation is faked by first rendering the
+  /// previous page's fill and animating to the real value on appear — forward
+  /// navigation grows the fill, backward navigation shrinks it back.
+  @MainActor private static var lastRenderedStep: Int?
+
+  /// The page the fill has animated up to. Before the on-appear animation
+  /// settles, the starting fill is clamped to one page away from the target:
+  /// pages already behind you render complete instantly and only the slice of
+  /// the page being entered (or left, going backward) animates — a jump across
+  /// several pages never sweeps them all.
+  private var filledUpTo: Int {
+    if let settledStep { return settledStep }
+    guard let last = Self.lastRenderedStep else { return stepIndex }
+    return last <= stepIndex ? max(last, stepIndex - 1) : stepIndex + 1
+  }
 
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
-      ForEach(0..<totalSteps, id: \.self) { index in
-        dot(index)
+      ForEach(OnboardingFlow.phases.indices, id: \.self) { index in
+        segment(index)
       }
+    }
+    .onAppear {
+      // The fill capsule's .animation(value: filled) turns this into the
+      // one-slice grow/drain transition.
+      settledStep = stepIndex
+      Self.lastRenderedStep = stepIndex
     }
   }
 
+  private func segment(_ phaseIndex: Int) -> some View {
+    let phase = OnboardingFlow.phases[phaseIndex]
+    let pages = phase.steps.count
+    let width = CGFloat(pages) * Self.pageWidth
+    // A page counts as filled only once you've moved past it, so the fill
+    // always stands at the start of the current page's slot — the first page
+    // shows no fill at all.
+    let filled = phase.steps.filter { $0 < filledUpTo }.count
+
+    return ZStack(alignment: .leading) {
+      Capsule()
+        .fill(Color.white.opacity(0.22))
+        .frame(width: width, height: Self.barHeight)
+      Capsule()
+        .fill(Color.white)
+        .frame(width: width * CGFloat(filled) / CGFloat(pages), height: Self.barHeight)
+        .animation(.snappy(duration: 0.2), value: filled)
+      HStack(spacing: 0) {
+        ForEach(phase.steps, id: \.self) { step in
+          pageSlice(step, phase: phase, showTicks: hoveredPhase == phaseIndex)
+        }
+      }
+    }
+    .frame(width: width)
+    .onHover { inside in
+      if inside {
+        hoveredPhase = phaseIndex
+      } else if hoveredPhase == phaseIndex {
+        hoveredPhase = nil
+      }
+    }
+    .help(phase.title)
+  }
+
   @ViewBuilder
-  private func dot(_ index: Int) -> some View {
-    let capsule = Capsule()
-      .fill(index <= stepIndex ? Color.white : Color.white.opacity(0.1))
-      .frame(width: index == stepIndex ? 28 : 8, height: 6)
+  private func pageSlice(_ step: Int, phase: OnboardingFlow.Phase, showTicks: Bool) -> some View {
+    let localIndex = step - phase.steps.lowerBound
+    // The fill tip reads as "where you are", standing at the end of the
+    // completed parts. Clicking any part — in any segment, forward or back —
+    // means "put the tip at the end of this part": navigate to the page after
+    // it (rolling into the next segment from a segment's last part).
+    let target = min(step + 1, OnboardingFlow.lastStepIndex)
+    // Pad the hit area vertically so the thin bar is comfortably clickable
+    // without changing the row's visual layout.
+    let slice = Color.clear
+      .frame(width: Self.pageWidth, height: Self.barHeight)
+      .padding(.vertical, OmiSpacing.sm)
+      .contentShape(Rectangle())
+      .overlay(alignment: .leading) {
+        // Page-boundary tick, revealed on hover. Background-colored so it
+        // reads as the same notch over the filled and unfilled parts alike.
+        if showTicks, localIndex > 0 {
+          RoundedRectangle(cornerRadius: 0.75)
+            .fill(OmiColors.backgroundPrimary)
+            .frame(width: 1.5, height: Self.barHeight + 4)
+            .offset(x: -0.75)
+        }
+      }
 
     // Clickable when the jump policy allows it: cleared steps always, forward
     // jumps only over skippable steps (see OnboardingFlow.canJump).
-    if let onboardingJumpTo, OnboardingFlow.canJump(to: index, furthestStep: furthestStep) {
+    if let onboardingJumpTo, OnboardingFlow.canJump(to: target, furthestStep: furthestStep) {
       Button {
-        onboardingJumpTo(index)
+        onboardingJumpTo(target)
       } label: {
-        // Pad the hit area vertically so the 6pt dot is comfortably clickable
-        // without changing the row's visual layout.
-        capsule
-          .padding(.vertical, OmiSpacing.sm)
-          .contentShape(Rectangle())
+        slice
       }
       .buttonStyle(.plain)
       .onHover { inside in
         if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
       }
-      .help("Go to step \(index + 1)")
+      .help("\(phase.title) — step \(localIndex + 1) of \(phase.steps.count)")
     } else {
-      capsule
+      slice
     }
   }
 }

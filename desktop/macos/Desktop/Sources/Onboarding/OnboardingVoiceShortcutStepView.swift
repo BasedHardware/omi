@@ -42,7 +42,7 @@ struct OnboardingVoiceShortcutStepView: View {
       Divider()
         .background(OmiColors.backgroundTertiary)
 
-      OnboardingProgressDots(stepIndex: stepIndex, totalSteps: totalSteps)
+      OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, OmiSpacing.xl)
 
