@@ -286,6 +286,83 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
 
         self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service), [])
 
+    def test_runtime_preflight_normalizes_v1_and_v2_secret_binding_shapes(self) -> None:
+        v1_service = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "env": [
+                                    {
+                                        "name": "FAKE_RUNTIME_SECRET",
+                                        "valueFrom": {
+                                            "secretKeyRef": {"name": "legacy-secret", "key": "7"}
+                                        },
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        v2_service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "FAKE_RUNTIME_SECRET",
+                                "valueSource": {
+                                    "secretKeyRef": {"secret": "legacy-secret", "version": "7"}
+                                },
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        expected = {"FAKE_RUNTIME_SECRET": RUNTIME_PREFLIGHT.RuntimeBinding("secret", "legacy-secret:7")}
+        self.assertEqual(RUNTIME_PREFLIGHT.current_bindings(v1_service), expected)
+        self.assertEqual(RUNTIME_PREFLIGHT.current_bindings(v2_service), expected)
+
+    def test_runtime_preflight_fails_closed_for_incomplete_secret_binding_shapes(self) -> None:
+        malformed_sources = (
+            {"valueFrom": {"secretKeyRef": {"name": "legacy-secret"}}},
+            {"valueFrom": {"secretKeyRef": {"key": "7"}}},
+            {"valueSource": {"secretKeyRef": {"secret": "legacy-secret"}}},
+            {"valueSource": {"secretKeyRef": {"version": "7"}}},
+            {"valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": 7}}},
+            {
+                "valueSource": {
+                    "secretKeyRef": {
+                        "name": "legacy-secret",
+                        "key": "7",
+                        "secret": "other-secret",
+                        "version": "8",
+                    }
+                }
+            },
+        )
+
+        for source in malformed_sources:
+            with self.subTest(source=source):
+                service = {
+                    "template": {
+                        "containers": [{"env": [{"name": "FAKE_RUNTIME_SECRET", **source}]}]
+                    }
+                }
+
+                self.assertEqual(
+                    RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
+                    [
+                        "fake: runtime binding FAKE_RUNTIME_SECRET is a literal; expected Secret Manager "
+                        "FAKE_RUNTIME_SECRET:latest"
+                    ],
+                )
+
     def test_runtime_preflight_rejects_disabled_secret_version(self) -> None:
         original = RUNTIME_PREFLIGHT._gcloud_json
         RUNTIME_PREFLIGHT._gcloud_json = lambda _args: {"state": "DISABLED"}
