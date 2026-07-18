@@ -63,8 +63,10 @@ def current_bindings(service: Mapping[str, Any]) -> dict[str, RuntimeBinding]:
             if not isinstance(value_source, Mapping):
                 value_source = raw_item.get("valueFrom")
             secret_ref = value_source.get("secretKeyRef") if isinstance(value_source, Mapping) else None
-            if isinstance(secret_ref, Mapping) and isinstance(secret_ref.get("name"), str) and isinstance(
-                secret_ref.get("key"), str
+            if (
+                isinstance(secret_ref, Mapping)
+                and isinstance(secret_ref.get("name"), str)
+                and isinstance(secret_ref.get("key"), str)
             ):
                 bindings[name] = RuntimeBinding("secret", f"{secret_ref['name']}:{secret_ref['key']}")
             else:
@@ -87,7 +89,26 @@ def validate_current_bindings(target: Target, service: Mapping[str, Any]) -> lis
             errors.append(
                 f"{target.name}: runtime binding {name} references {actual.reference}; expected {expected_reference}"
             )
-    declared_or_removed = set(target.deployment.runtime_secrets) | set(target.deployment.remove_runtime_secrets)
+    for name in target.deployment.preserve_runtime_secrets:
+        actual = bindings.get(name)
+        if actual is None:
+            errors.append(
+                f"{target.name}: preserved runtime secret {name} is absent; expected an enabled Secret Manager binding"
+            )
+        elif actual.kind != "secret":
+            errors.append(
+                f"{target.name}: preserved runtime secret {name} is a literal; expected an enabled Secret Manager binding"
+            )
+    for name in target.deployment.runtime_env_vars:
+        actual = bindings.get(name)
+        if actual is not None and actual.kind != "literal":
+            errors.append(f"{target.name}: runtime config {name} is a Secret Manager binding; expected a literal value")
+    declared_or_removed = (
+        set(target.deployment.runtime_secrets)
+        | set(target.deployment.preserve_runtime_secrets)
+        | set(target.deployment.runtime_env_vars)
+        | set(target.deployment.remove_runtime_secrets)
+    )
     for name, actual in bindings.items():
         if actual.kind == "secret" and name not in declared_or_removed:
             errors.append(f"{target.service}: secret binding {name} is missing from the deployment contract")
@@ -147,9 +168,27 @@ def load_current_service(*, target: Target, project_id: str) -> Mapping[str, Any
 
 
 def validate_secret_versions(*, target: Target, project_id: str) -> list[str]:
+    return validate_secret_references(
+        service_name=target.service,
+        references=target.deployment.runtime_secrets,
+        project_id=project_id,
+    )
+
+
+def validate_preserved_secret_versions(*, target: Target, service: Mapping[str, Any], project_id: str) -> list[str]:
+    bindings = current_bindings(service)
+    references = {
+        name: binding.reference
+        for name in target.deployment.preserve_runtime_secrets
+        if (binding := bindings.get(name)) is not None and binding.kind == "secret" and binding.reference is not None
+    }
+    return validate_secret_references(service_name=target.service, references=references, project_id=project_id)
+
+
+def validate_secret_references(*, service_name: str, references: Mapping[str, str], project_id: str) -> list[str]:
     errors: list[str] = []
     results: dict[str, RuntimePreflightError | Mapping[str, Any]] = {}
-    for binding_name, reference in sorted(target.deployment.runtime_secrets.items()):
+    for binding_name, reference in sorted(references.items()):
         secret, version = split_secret_reference(reference)
         result = results.get(reference)
         if result is None:
@@ -169,13 +208,13 @@ def validate_secret_versions(*, target: Target, project_id: str) -> list[str]:
             results[reference] = result
         if isinstance(result, RuntimePreflightError):
             errors.append(
-                f"{target.service}: runtime binding {binding_name} requires Secret Manager version {reference}, "
+                f"{service_name}: runtime binding {binding_name} requires Secret Manager version {reference}, "
                 f"but it is unavailable ({result})"
             )
             continue
         if result.get("state") != "ENABLED":
             errors.append(
-                f"{target.service}: runtime binding {binding_name} requires enabled Secret Manager version {reference}"
+                f"{service_name}: runtime binding {binding_name} requires enabled Secret Manager version {reference}"
             )
     return errors
 
@@ -187,8 +226,14 @@ def preflight(*, target: Target, project_id: str) -> list[str]:
     except RuntimePreflightError as exc:
         errors.append(str(exc))
     else:
-        if service is not None:
+        if service is None:
+            if target.deployment.preserve_runtime_secrets:
+                errors.append(
+                    f"{target.name}: cannot preserve runtime secrets because current Cloud Run service {target.service} is absent"
+                )
+        else:
             errors.extend(validate_current_bindings(target, service))
+            errors.extend(validate_preserved_secret_versions(target=target, service=service, project_id=project_id))
     return errors
 
 
