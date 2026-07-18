@@ -117,11 +117,11 @@ PUSHER_CONFIGMAP_PREFLIGHT = (
 PUSHER_REFERENCE_PREFLIGHT = "backend/scripts/verify_pusher_config_references.py"
 
 # The automatic backend deploy is triggered by a completed Release Eligibility
-# workflow, not by the source push itself. The source-admission contract
-# verifies this event SHA is a successful, same-repository main proof before
-# the deploy job can run; retain the exact expression here so the candidate
-# gate cannot silently switch back to the workflow_run's unrelated github.sha.
-AUTO_DEPLOY_ADMITTED_SHA = "${{ github.event.workflow_run.head_sha }}"
+# workflow, not by the source push itself. The source-admission job publishes
+# the SHA only after proving it is still current, same-repository main; retain
+# that output expression so release-vector gates cannot bypass admission with
+# workflow_run or workflow execution context SHAs.
+AUTO_DEPLOY_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }}"
 
 
 class PolicyError(ValueError):
@@ -705,7 +705,7 @@ jobs:
       - run: >-
           python3 backend/scripts/verify_backend_release_vector.py
           --candidate
-          --commit-sha "${{ github.event.workflow_run.head_sha }}"
+          --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}"
           --deploy-run-id "${{ github.run_id }}"
           --deploy-run-attempt "${{ github.run_attempt }}"
           --environment dev
@@ -716,11 +716,10 @@ jobs:
     if validate_auto_deploy_acceptance(in_deploy_acceptance):
         raise PolicyError("valid in-deploy candidate acceptance was rejected")
 
-    wrong_source = in_deploy_acceptance.replace(
-        "${{ github.event.workflow_run.head_sha }}", "${{ github.sha }}"
-    )
-    if not any("commit-sha" in error for error in validate_auto_deploy_acceptance(wrong_source)):
-        raise PolicyError("workflow-run github.sha satisfied the admitted-source candidate contract")
+    for wrong_sha in ("${{ github.sha }}", "${{ github.event.workflow_run.head_sha }}"):
+        wrong_source = in_deploy_acceptance.replace(AUTO_DEPLOY_ADMITTED_SHA, wrong_sha)
+        if not any("commit-sha" in error for error in validate_auto_deploy_acceptance(wrong_source)):
+            raise PolicyError(f"unadmitted {wrong_sha} satisfied the candidate acceptance contract")
 
     serving_vector = """name: fixture
 jobs:

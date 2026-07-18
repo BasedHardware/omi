@@ -146,6 +146,19 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn(old, text)
         path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
+    def move_step_before(self, root: Path, relative: Path, name: str, before_name: str) -> None:
+        path = root / relative
+        text = path.read_text(encoding="utf-8")
+        marker = f"      - name: {name}"
+        before_marker = f"      - name: {before_name}"
+        start = text.index(marker)
+        end = text.find("\n      - ", start + 1)
+        self.assertNotEqual(end, -1)
+        step = text[start : end + 1]
+        text = text[:start] + text[end + 1 :]
+        before = text.index(before_marker)
+        path.write_text(text[:before] + step + text[before:], encoding="utf-8")
+
     def test_current_workflows_are_valid(self) -> None:
         self.assertEqual(CHECKER.validate(), [])
 
@@ -261,6 +274,61 @@ class WorkflowContractTests(unittest.TestCase):
             "    needs: firestore_readiness\n    if: always()\n",
         )
         self.assertIn("auto backend deploy must not override source-admission dependency", CHECKER.validate(root))
+
+    def test_auto_workflow_rejects_credential_or_admitted_source_before_freshness_validation(self) -> None:
+        cases = (
+            (
+                "read-only credentials",
+                "Require read-only Firestore credentials",
+                "automatic release-proof freshness validation must run before read-only credential use",
+            ),
+            (
+                "admitted source checkout",
+                "Checkout admitted Firestore source",
+                "automatic release-proof freshness validation must run before admitted-source checkout or execution",
+            ),
+        )
+        for name, moved_step, expected in cases:
+            with self.subTest(name=name):
+                root = self.fixture_root()
+                self.move_step_before(
+                    root,
+                    CHECKER.AUTO_WORKFLOW_PATH,
+                    moved_step,
+                    "Verify Release Eligibility proof is current main",
+                )
+                self.assertIn(expected, CHECKER.validate(root))
+
+    def test_auto_workflow_scopes_admission_steps_to_readiness_and_rejects_duplicates(self) -> None:
+        root = self.fixture_root()
+        self.move_step_before(
+            root,
+            CHECKER.AUTO_WORKFLOW_PATH,
+            "Require read-only Firestore credentials",
+            "Verify Release Eligibility proof is current main",
+        )
+        self.mutate(
+            root,
+            CHECKER.AUTO_WORKFLOW_PATH,
+            "  firestore_readiness:\n",
+            "  dummy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Verify Release Eligibility proof is current main\n        run: true\n\n  firestore_readiness:\n",
+        )
+        self.assertIn(
+            "automatic release-proof freshness validation must run before read-only credential use",
+            CHECKER.validate(root),
+        )
+
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.AUTO_WORKFLOW_PATH,
+            "      - name: Verify Release Eligibility proof is current main\n        id: admitted_source\n",
+            "      - name: Verify Release Eligibility proof is current main\n        run: true\n\n      - name: Verify Release Eligibility proof is current main\n        id: admitted_source\n",
+        )
+        self.assertIn(
+            "backend source admission must contain exactly one automatic release-proof freshness validation step",
+            CHECKER.validate(root),
+        )
 
     def test_manual_workflow_rejects_fail_open_ref_or_mode_conditions(self) -> None:
         root = self.fixture_root()

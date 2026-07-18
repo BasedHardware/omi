@@ -395,7 +395,7 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert 'needs: firestore_readiness' in text
 
 
-def test_firestore_readiness_fails_before_checkout_when_read_only_credentials_are_missing() -> None:
+def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_only_credentials_are_missing() -> None:
     workflows = (
         BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
         BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
@@ -404,11 +404,7 @@ def test_firestore_readiness_fails_before_checkout_when_read_only_credentials_ar
     for workflow in workflows:
         text = workflow.read_text(encoding='utf-8')
         readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
-        checkout_marker = (
-            'Checkout current main for source admission'
-            if workflow.name == 'gcp_backend.yml'
-            else 'Checkout approved Firestore source'
-        )
+        checkout_marker = 'Checkout admitted Firestore source'
 
         assert 'Require read-only Firestore credentials' in readiness
         assert 'GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in readiness
@@ -417,6 +413,10 @@ def test_firestore_readiness_fails_before_checkout_when_read_only_credentials_ar
         assert readiness.index('Require read-only Firestore credentials') < readiness.index(
             'Google Auth for read-only Firestore inventory'
         )
+        if workflow.name == 'gcp_backend_auto_dev.yml':
+            assert readiness.index('Verify Release Eligibility proof is current main') < readiness.index(
+                'Require read-only Firestore credentials'
+            )
 
 
 def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
@@ -756,7 +756,7 @@ def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion(
     root = BACKEND_DIR.parent
     workflows = {
         'gcp_backend.yml': '--commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}"',
-        'gcp_backend_auto_dev.yml': '--commit-sha "${{ github.event.workflow_run.head_sha }}"',
+        'gcp_backend_auto_dev.yml': '--commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}"',
     }
 
     for filename, commit_marker in workflows.items():

@@ -966,47 +966,47 @@ def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow
     ):
         errors.append(ValidationError(scope, 'Firestore readiness must use the dedicated read-only credentials'))
     checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v7']
-    if is_manual_deploy:
-        admission_checkout = next(
-            (step for step in checkout_steps if step.get('name') == 'Checkout current main for source admission'), None
-        )
-        admitted_checkout = next(
-            (step for step in checkout_steps if step.get('name') == 'Checkout admitted Firestore source'), None
-        )
-        admission_with = _as_config_dict((admission_checkout or {}).get('with')) or {}
-        admitted_with = _as_config_dict((admitted_checkout or {}).get('with')) or {}
-        if (
-            len(checkout_steps) != 2
-            or admission_with.get('ref') != 'main'
-            or admission_with.get('fetch-depth') != 0
-            or admitted_with.get('ref') != '${{ steps.admitted_source.outputs.admitted_sha }}'
-        ):
-            errors.append(
-                ValidationError(scope, 'manual Firestore readiness must check out main then the admitted SHA')
-            )
-    elif len(checkout_steps) != 1 or (_as_config_dict(checkout_steps[0].get('with')) or {}).get('ref') != (
-        '${{ github.event.workflow_run.head_sha }}'
+    admitted_readiness_ref = '${{ steps.admitted_source.outputs.admitted_sha }}'
+    admission_checkout_name = (
+        'Checkout current main for source admission'
+        if is_manual_deploy
+        else 'Checkout current main for automatic source admission'
+    )
+    admission_error = (
+        f"{'manual' if is_manual_deploy else 'automatic'} Firestore readiness must check out "
+        f"{'main' if is_manual_deploy else 'current main'} then the admitted SHA"
+    )
+    admission_checkout = next((step for step in checkout_steps if step.get('name') == admission_checkout_name), None)
+    admitted_checkout = next(
+        (step for step in checkout_steps if step.get('name') == 'Checkout admitted Firestore source'), None
+    )
+    admission_with = _as_config_dict((admission_checkout or {}).get('with')) or {}
+    admitted_with = _as_config_dict((admitted_checkout or {}).get('with')) or {}
+    if (
+        len(checkout_steps) != 2
+        or admission_with.get('ref') != 'main'
+        or admission_with.get('fetch-depth') != 0
+        or admitted_with.get('ref') != admitted_readiness_ref
     ):
-        errors.append(
-            ValidationError(scope, 'Firestore readiness must check out the workflow-run admitted source commit')
-        )
+        errors.append(ValidationError(scope, admission_error))
     deploy_steps = [_as_config_dict(step) or {} for step in (_as_config_list(deploy_job.get('steps')) or [])]
     deploy_checkout = [step for step in deploy_steps if step.get('uses') == 'actions/checkout@v7']
-    expected_deploy_ref = (
-        '${{ needs.firestore_readiness.outputs.admitted_sha }}'
-        if is_manual_deploy
-        else '${{ github.event.workflow_run.head_sha }}'
-    )
-    if len(deploy_checkout) != 1 or (_as_config_dict(deploy_checkout[0].get('with')) or {}).get('ref') != (
-        expected_deploy_ref
+    if (
+        len(deploy_checkout) != 1
+        or (_as_config_dict(deploy_checkout[0].get('with')) or {}).get('ref')
+        != '${{ needs.firestore_readiness.outputs.admitted_sha }}'
     ):
         errors.append(
             ValidationError(scope, 'backend deploy checkout must remain bound to the readiness-approved commit')
         )
-    if is_manual_deploy:
-        outputs = _as_config_dict(readiness_job.get('outputs')) or {}
-        if outputs.get('admitted_sha') != '${{ steps.admitted_source.outputs.admitted_sha }}':
-            errors.append(ValidationError(scope, 'manual deploy must export the exact release-proof-admitted SHA'))
+    outputs = _as_config_dict(readiness_job.get('outputs')) or {}
+    if outputs.get('admitted_sha') != admitted_readiness_ref:
+        message = (
+            'manual deploy must export the exact release-proof-admitted SHA'
+            if is_manual_deploy
+            else 'automatic Firestore readiness must export the exact release-proof-admitted SHA'
+        )
+        errors.append(ValidationError(scope, message))
 
     readiness_steps: list[tuple[int, ConfigDict, Any]] = []
     validation_steps: list[tuple[int, ConfigDict, Any]] = []
