@@ -199,6 +199,7 @@
         ".github/workflows/release-eligibility.yml",
         ".github/scripts/verify_release_eligibility.py",
         ".github/scripts/verify_backend_release_admission.py",
+        ".github/scripts/verify_auto_backend_release_admission.py",
         ".github/scripts/check_backend_deploy_source_admission.py"
       ],
       "tests": [

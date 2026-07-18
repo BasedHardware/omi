@@ -12,12 +12,17 @@ ROOT = Path(__file__).resolve().parents[2]
 AUTO_WORKFLOW_PATH = Path(".github/workflows/gcp_backend_auto_dev.yml")
 MANUAL_WORKFLOW_PATH = Path(".github/workflows/gcp_backend.yml")
 ADMISSION_VERIFIER_PATH = Path(".github/scripts/verify_backend_release_admission.py")
-ADMITTED_SHA = "${{ github.event.workflow_run.head_sha }}"
+AUTO_ADMISSION_VERIFIER_PATH = Path(".github/scripts/verify_auto_backend_release_admission.py")
+AUTO_PROOF_SHA = "${{ github.event.workflow_run.head_sha }}"
+AUTO_PROOF_RUN_ATTEMPT = "${{ github.event.workflow_run.run_attempt }}"
+AUTO_FIRESTORE_ADMITTED_SHA = "${{ steps.admitted_source.outputs.admitted_sha }}"
+AUTO_DEPLOY_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }}"
 MANUAL_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }}"
 AUTO_SOURCE_ADMISSION_CONDITION = "\n".join(
     (
         "github.event.workflow_run.conclusion == 'success' &&",
         "github.event.workflow_run.event == 'push' &&",
+        "github.event.workflow_run.run_attempt == 1 &&",
         "github.event.workflow_run.head_branch == 'main' &&",
         "github.event.workflow_run.head_repository.full_name == github.repository",
     )
@@ -84,6 +89,17 @@ def require_step(errors: list[str], text: str, name: str, label: str) -> str:
     return step
 
 
+def validate_fail_closed_step(errors: list[str], step: str, label: str) -> None:
+    """Reject conditions and shell fallbacks on an automatic source guard."""
+
+    if re.search(r"(?m)^        [\"']?(?:if|continue-on-error)[\"']?:", step):
+        errors.append(f"{label} must not be conditionally skipped or tolerated")
+    if "        set -euo pipefail" not in step:
+        errors.append(f"{label} must enable strict shell failure handling")
+    if re.search(r"\|\|\s*(?:true\b|:|exit\s+0\b)|\bset\s+\+(?:e|o\s+(?:errexit|pipefail))\b", step):
+        errors.append(f"{label} must not contain a shell fail-open path")
+
+
 def folded_job_condition(job: str) -> str | None:
     """Return an exact folded job-level ``if: >-`` condition.
 
@@ -128,6 +144,70 @@ def validate_auto_workflow(text: str) -> list[str]:
             errors.append(
                 "auto source-admission job must use exactly the fail-closed Release Eligibility predicate"
             )
+        require_fragment(
+            errors,
+            firestore_job,
+            "outputs:\n      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}",
+            "auto source-admission job must publish one admitted SHA",
+        )
+
+    main_checkout = require_step(
+        errors,
+        text,
+        "Checkout current main for automatic source admission",
+        "current-main automatic admission checkout",
+    )
+    for fragment, message in (
+        ("ref: main", "automatic source admission must check out current main"),
+        ("fetch-depth: 0", "automatic source admission must fetch current main ancestry"),
+    ):
+        require_fragment(errors, main_checkout, fragment, message)
+
+    admission = require_step(
+        errors,
+        text,
+        "Verify Release Eligibility proof is current main",
+        "automatic release-proof freshness validation",
+    )
+    validate_fail_closed_step(errors, admission, "automatic release-proof freshness validation")
+    for fragment, message in (
+        (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "automatic source admission must bind the proof SHA"),
+        (
+            f"RELEASE_RUN_ATTEMPT: {AUTO_PROOF_RUN_ATTEMPT}",
+            "automatic source admission must bind the proof run attempt",
+        ),
+        (
+            "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+            "automatic source admission must refresh current main",
+        ),
+        (
+            "main_sha=\"$(git rev-parse --verify 'origin/main^{commit}')\"",
+            "automatic source admission must resolve current main's immutable SHA",
+        ),
+        (
+            "checkout_sha=\"$(git rev-parse --verify HEAD)\"",
+            "automatic source admission must resolve the current-main guard checkout SHA",
+        ),
+        (
+            ".github/scripts/verify_auto_backend_release_admission.py",
+            "automatic source admission must verify proof freshness and current main identity",
+        ),
+        ("--sha \"$RELEASE_SHA\"", "automatic source admission must verify the proof SHA"),
+        ("--main-sha \"$main_sha\"", "automatic source admission must verify current main"),
+        (
+            "--checkout-sha \"$checkout_sha\"",
+            "automatic source admission must verify the current-main guard checkout",
+        ),
+        (
+            "--run-attempt \"$RELEASE_RUN_ATTEMPT\"",
+            "automatic source admission must reject proof reruns",
+        ),
+        (
+            "printf 'admitted_sha=%s\\n' \"$RELEASE_SHA\" >> \"$GITHUB_OUTPUT\"",
+            "automatic source admission must publish the verified SHA",
+        ),
+    ):
+        require_fragment(errors, admission, fragment, message)
 
     deploy_job = mapping_block(text, "deploy", 2)
     if deploy_job is None or "    needs: firestore_readiness" not in (deploy_job or ""):
@@ -137,12 +217,18 @@ def validate_auto_workflow(text: str) -> list[str]:
 
     if "github.sha" in text:
         errors.append("auto backend deploy must not use github.sha after workflow_run admission")
-    if text.count(f"ref: {ADMITTED_SHA}") != 2:
-        errors.append("auto backend deploy must check out workflow_run.head_sha in both source jobs")
-    if text.count(f"FIRESTORE_SOURCE_COMMIT: {ADMITTED_SHA}") != 2:
-        errors.append("auto backend deploy must bind Firestore readiness to workflow_run.head_sha")
-    if text.count(f'--commit-sha "{ADMITTED_SHA}"') != 3:
-        errors.append("auto backend deploy must bind every release vector to workflow_run.head_sha")
+    if text.count(AUTO_PROOF_SHA) != 1:
+        errors.append("auto backend deploy must use workflow_run.head_sha only in the current-main admission guard")
+    if text.count(AUTO_PROOF_RUN_ATTEMPT) != 1:
+        errors.append("auto backend deploy must use workflow_run.run_attempt only in the source-admission guard")
+    if text.count(f"ref: {AUTO_FIRESTORE_ADMITTED_SHA}") != 1:
+        errors.append("auto backend deploy must check out the verified SHA before Firestore readiness")
+    if text.count(f"FIRESTORE_SOURCE_COMMIT: {AUTO_FIRESTORE_ADMITTED_SHA}") != 2:
+        errors.append("auto backend deploy must bind Firestore readiness to the verified SHA")
+    if text.count(f"ref: {AUTO_DEPLOY_ADMITTED_SHA}") != 1:
+        errors.append("auto backend deploy must check out the verified SHA before deployment")
+    if text.count(f'--commit-sha "{AUTO_DEPLOY_ADMITTED_SHA}"') != 3:
+        errors.append("auto backend deploy must bind every release vector to the verified SHA")
     return errors
 
 
@@ -216,7 +302,10 @@ def validate_manual_workflow(text: str) -> list[str]:
             '[[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]',
             "manual source admission must reject non-exact SHA inputs before querying GitHub",
         ),
-        ("git fetch --no-tags origin main", "manual source admission must fetch the current main ancestry"),
+        (
+            "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+            "manual source admission must fetch the current main ancestry",
+        ),
         ("git cat-file -e \"${DEPLOY_SHA}^{commit}\"", "manual source admission must require a commit object"),
         (
             "git merge-base --is-ancestor \"$DEPLOY_SHA\" \"$main_sha\"",
@@ -269,7 +358,7 @@ def validate_manual_workflow(text: str) -> list[str]:
 
 
 def validate(root: Path = ROOT) -> list[str]:
-    paths = (AUTO_WORKFLOW_PATH, MANUAL_WORKFLOW_PATH, ADMISSION_VERIFIER_PATH)
+    paths = (AUTO_WORKFLOW_PATH, MANUAL_WORKFLOW_PATH, ADMISSION_VERIFIER_PATH, AUTO_ADMISSION_VERIFIER_PATH)
     missing = [str(path) for path in paths if not (root / path).is_file()]
     if missing:
         return [f"backend source-admission contract is missing: {path}" for path in missing]

@@ -147,7 +147,7 @@ jobs:
             echo "ERROR: release_sha must be one non-zero, lowercase, full commit SHA."
             exit 1
           fi
-          git fetch --no-tags origin main
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
           git cat-file -e "${DEPLOY_SHA}^{commit}"
           git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"
