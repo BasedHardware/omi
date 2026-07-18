@@ -1,10 +1,10 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6215,
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6226,
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2850
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Adds carryingLocalOnlyFields projection guard so journal replay preserves local-only row state (metadata/rating/notificationScreenshot); INV-CHAT-1 write-path fix.",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Codex joins existing native-provider profile routing and canonical spawned-agent card projection.",
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Adds a shared rowInt helper so GRDB Int64 aggregate columns decode instead of silently returning nil from an always-failing Int64 as? Int cast."
   },
   "threshold": 1500
