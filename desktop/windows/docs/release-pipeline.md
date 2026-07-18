@@ -46,7 +46,14 @@ electron-builder only **auto-detects** a config named `electron-builder.<ext>`
 (yml/json/js/cjs/mjs/ts); it does **not** auto-detect the `electron-builder.config.*`
 name. So every build must pass `--config electron-builder.config.mjs` explicitly —
 the workflow's unsigned path runs `pnpm build:win` (which already carries the flag)
-and the signed path passes it by hand. Dropping the flag would silently drop this
+and the signed path passes it by hand.
+
+Every build command must also pass `--publish never` (`build:win` carries it; the
+signed path passes it by hand). The config's `publish` block is only the
+electron-updater feed pointer, but electron-builder treats it as an upload target
+too and auto-publishes whenever it sees CI plus a checked-out git tag — exactly the
+release job's situation — then fails on the missing `GH_TOKEN`. Publishing is done
+explicitly with `gh release` in the workflow's final step instead. Dropping the flag would silently drop this
 whole config (and the pi-mono closure), shipping an installer that breaks the coding
 agent. There is intentionally **no** `electron-builder.yml` — the `.config.mjs` file
 is the single source of truth.

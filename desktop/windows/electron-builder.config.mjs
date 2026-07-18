@@ -148,5 +148,10 @@ export default {
   // Local testing uses dev-app-update.yml + OMI_UPDATER_DEV=1 (forceDevUpdateConfig)
   // instead of this feed. releaseType 'release' means only non-prerelease GitHub
   // releases are served as updates.
+  //
+  // NOTE: this block is the UPDATE FEED only — it must never be used as an upload
+  // target. electron-builder auto-publishes to it when CI + a git tag are detected,
+  // so every build command must pass `--publish never` (build:win does; the release
+  // workflow uploads explicitly via `gh release` instead).
   publish: [{ provider: 'github', owner: 'BasedHardware', repo: 'omi', releaseType: 'release' }]
 }

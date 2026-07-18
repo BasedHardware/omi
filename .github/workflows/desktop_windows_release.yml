@@ -271,7 +271,12 @@ jobs:
         if: steps.signing.outputs.signed != 'true'
         shell: bash
         # pnpm build:win == `npm run build && electron-builder --win --x64 --config
-        # electron-builder.config.mjs` — it already carries the required config flag.
+        # electron-builder.config.mjs --publish never` — it carries the required config
+        # flag AND --publish never. The latter matters: the config's `publish` block is
+        # the electron-updater FEED pointer, but electron-builder also treats it as an
+        # upload target and auto-publishes when CI + a git tag are detected (this job
+        # checks out the release tag). Without --publish never it dies on a missing
+        # GH_TOKEN; the real upload happens in the explicit `gh release` step below.
         run: pnpm build:win
 
       - name: Collect release artifacts
