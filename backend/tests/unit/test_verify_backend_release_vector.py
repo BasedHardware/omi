@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import verify_dev_backend_deployment as verifier
+from scripts import verify_backend_release_vector as verifier
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PREFLIGHT_SCRIPT = BACKEND_DIR / 'scripts' / 'preflight-cloud-run-deploy.py'
@@ -31,16 +31,17 @@ def _expectation() -> verifier.DeploymentExpectation:
         deploy_run_attempt='1',
         project='based-hardware-dev',
         region='us-central1',
+        environment='dev',
     )
 
 
-def _cloud_run_document(*, revision: str, image: str) -> dict:
+def _cloud_run_document(*, revision: str, image: str, environment: str = 'dev') -> dict:
     return {
         'spec': {
             'template': {
                 'spec': {
                     'timeoutSeconds': 300,
-                    'containers': [{'image': image, 'env': [{'name': 'OMI_ENV_STAGE', 'value': 'dev'}]}],
+                    'containers': [{'image': image, 'env': [{'name': 'OMI_ENV_STAGE', 'value': environment}]}],
                 }
             }
         },
@@ -54,7 +55,11 @@ def _cloud_run_document(*, revision: str, image: str) -> dict:
 
 def _documents(expectation: verifier.DeploymentExpectation) -> dict:
     documents = {
-        f'cloud_run/{service}': _cloud_run_document(revision=revision, image=expectation.image)
+        f'cloud_run/{service}': _cloud_run_document(
+            revision=revision,
+            image=expectation.image,
+            environment=expectation.environment,
+        )
         for service, revision in expectation.revisions.items()
     }
     documents.update(
@@ -67,7 +72,10 @@ def _documents(expectation: verifier.DeploymentExpectation) -> dict:
                         'spec': {
                             'serviceAccountName': expectation.listener_deployment,
                             'containers': [
-                                {'image': expectation.image, 'env': [{'name': 'OMI_ENV_STAGE', 'value': 'dev'}]}
+                                {
+                                    'image': expectation.image,
+                                    'env': [{'name': 'OMI_ENV_STAGE', 'value': expectation.environment}],
+                                }
                             ],
                         }
                     },
@@ -458,12 +466,96 @@ def test_static_manual_branch_deploy_requires_the_approved_main_schema() -> None
     assert 'secrets.GCP_CREDENTIALS' not in readiness
 
 
+def test_static_release_vector_verify_binds_the_workflow_short_sha() -> None:
+    # git rev-parse --short=7 HEAD can extend past seven characters; the verifier
+    # must receive the exact short SHA the workflow used to tag the image and
+    # revision suffix, so it does not reject a correctly deployed release whose
+    # 7-character prefix is ambiguous. Every release-vector verify call in the
+    # backend deploy workflows must pass --short-sha bound to image-tag output.
+    workflows = (
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
+    )
+    for workflow in workflows:
+        text = workflow.read_text(encoding='utf-8')
+        assert 'verify_backend_release_vector.py' in text, f'{workflow.name} must invoke the release-vector verifier'
+        # Count verify invocations and the --short-sha wiring; require a 1:1 match.
+        invocations = text.count('verify_backend_release_vector.py \\\n')
+        wired = text.count('--short-sha "${{ steps.image-tag.outputs.short_sha }}"')
+        assert invocations == wired, (
+            f'{workflow.name}: {invocations} release-vector verify call(s) but '
+            f'{wired} --short-sha wiring(s); each verify must bind the workflow short SHA'
+        )
+
+
 def test_expectation_binds_commit_to_deploy_run_revision_and_image() -> None:
     expectation = _expectation()
 
     assert expectation.image == 'gcr.io/based-hardware-dev/backend:abcdef1'
     assert expectation.revisions['backend-sync'] == 'backend-sync-abcdef1-12345-1'
     assert expectation.listener_deployment == 'dev-omi-backend-listen'
+
+
+def test_expectation_derives_a_prod_vector_with_the_matching_environment() -> None:
+    expectation = verifier.build_expectation(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='54321',
+        deploy_run_attempt='2',
+        project='based-hardware',
+        region='us-central1',
+        environment='prod',
+    )
+
+    assert expectation.image == 'gcr.io/based-hardware/backend:abcdef1'
+    assert expectation.revisions['backend'] == 'backend-abcdef1-54321-2'
+    assert expectation.listener_deployment == 'prod-omi-backend-listen'
+    assert verifier.evaluate(expectation, _documents(expectation)) == []
+
+
+def test_expectation_uses_the_workflow_short_sha_when_ambiguous() -> None:
+    # git rev-parse --short=7 HEAD can return 8+ characters when the 7-character
+    # prefix is ambiguous; the workflow tags the image with that longer suffix.
+    # The verifier must bind to the workflow's exact short SHA rather than a
+    # naive 7-character truncation of the commit SHA.
+    expectation = verifier.build_expectation(
+        commit_sha='abcdef1234567890',
+        short_sha='abcdef12',
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware-dev',
+        region='us-central1',
+        environment='dev',
+    )
+
+    assert expectation.image == 'gcr.io/based-hardware-dev/backend:abcdef12'
+    assert expectation.revisions['backend'] == 'backend-abcdef12-12345-1'
+    assert verifier.evaluate(expectation, _documents(expectation)) == []
+
+
+def test_expectation_rejects_a_short_sha_that_is_not_a_prefix() -> None:
+    with pytest.raises(ValueError, match='short SHA must be a prefix of the commit SHA'):
+        verifier.build_expectation(
+            commit_sha='abcdef1234567890',
+            short_sha='deadbeef',
+            deploy_run_id='12345',
+            deploy_run_attempt='1',
+            project='based-hardware-dev',
+            region='us-central1',
+            environment='dev',
+        )
+
+
+def test_expectation_rejects_a_malformed_short_sha() -> None:
+    with pytest.raises(ValueError, match='short SHA must be a hexadecimal value'):
+        verifier.build_expectation(
+            commit_sha='abcdef1234567890',
+            short_sha='abcdefg',
+            deploy_run_id='12345',
+            deploy_run_attempt='1',
+            project='based-hardware-dev',
+            region='us-central1',
+            environment='dev',
+        )
 
 
 def test_read_only_commands_are_limited_to_queries() -> None:
@@ -496,6 +588,16 @@ def test_evaluate_fails_closed_when_a_stale_revision_is_serving() -> None:
     assert 'gke/deployment: desired replicas are not all updated' in errors
 
 
+def test_evaluate_rejects_a_partial_cloud_run_traffic_apply() -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    documents['cloud_run/backend-sync']['status']['traffic'] = [{'revisionName': 'backend-sync-old', 'percent': 100}]
+
+    errors = verifier.evaluate(expectation, documents)
+
+    assert errors == ['cloud_run/backend-sync: expected revision does not receive 100% traffic']
+
+
 def test_candidate_evaluation_accepts_ready_revision_before_traffic_promotion() -> None:
     expectation = _expectation()
     documents = _documents(expectation)
@@ -506,7 +608,7 @@ def test_candidate_evaluation_accepts_ready_revision_before_traffic_promotion() 
     assert errors == []
 
 
-def test_evaluate_fails_closed_when_available_replicas_are_not_the_updated_template() -> None:
+def test_evaluate_rejects_a_listener_rollout_timeout_when_updated_replicas_lag() -> None:
     expectation = _expectation()
     documents = _documents(expectation)
     documents['gke/deployment']['status']['updatedReplicas'] = 0
@@ -515,6 +617,72 @@ def test_evaluate_fails_closed_when_available_replicas_are_not_the_updated_templ
 
     assert 'gke/deployment: desired replicas are not all available' not in errors
     assert 'gke/deployment: desired replicas are not all updated' in errors
+
+
+def test_retry_derives_a_new_vector_and_accepts_only_the_converged_attempt() -> None:
+    first_attempt = _expectation()
+    partial_documents = _documents(first_attempt)
+    partial_documents['cloud_run/backend-integration']['status']['traffic'] = [
+        {'revisionName': 'backend-integration-old', 'percent': 100}
+    ]
+
+    retry = verifier.build_expectation(
+        commit_sha=first_attempt.commit_sha,
+        deploy_run_id=first_attempt.deploy_run_id,
+        deploy_run_attempt='2',
+        project=first_attempt.project,
+        region=first_attempt.region,
+        environment=first_attempt.environment,
+    )
+
+    assert verifier.evaluate(first_attempt, partial_documents) == [
+        'cloud_run/backend-integration: expected revision does not receive 100% traffic'
+    ]
+    assert retry.revisions['backend-integration'] != first_attempt.revisions['backend-integration']
+    assert verifier.evaluate(retry, _documents(retry)) == []
+
+
+def test_evidence_records_the_derived_release_vector() -> None:
+    expectation = _expectation()
+
+    report = verifier.evidence(expectation, _documents(expectation), [])
+
+    assert report['release_vector'] == {
+        'schema_version': 1,
+        'commit_sha': 'abcdef1234567890',
+        'deploy_run_id': '12345',
+        'deploy_run_attempt': '1',
+        'environment': 'dev',
+        'immutable_image': 'gcr.io/based-hardware-dev/backend:abcdef1',
+        'cloud_run_revisions': dict(expectation.revisions),
+        'backend_listen': {
+            'deployment': 'dev-omi-backend-listen',
+            'image': 'gcr.io/based-hardware-dev/backend:abcdef1',
+        },
+        'require_serving_traffic': True,
+    }
+
+
+def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion() -> None:
+    root = BACKEND_DIR.parent
+    workflows = {
+        'gcp_backend.yml': '--commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}"',
+        'gcp_backend_auto_dev.yml': '--commit-sha "${{ github.sha }}"',
+    }
+
+    for filename, commit_marker in workflows.items():
+        text = (root / '.github' / 'workflows' / filename).read_text(encoding='utf-8')
+        promotion = text.index('Shift Cloud Run traffic to validated revisions')
+        verification = text.index('Verify serving backend release vector')
+        assert promotion < verification
+        release_vector_step = text[verification : text.index('\n      - name:', verification + 1)]
+        assert 'backend/scripts/verify_backend_release_vector.py' in release_vector_step
+        assert commit_marker in release_vector_step
+        assert '--environment' in release_vector_step
+
+    manual = (root / '.github' / 'workflows' / 'gcp_backend.yml').read_text(encoding='utf-8')
+    manual_verification = manual[manual.index('Verify serving backend release vector') :]
+    assert "github.event.inputs.deploy_targets == 'all'" in manual_verification
 
 
 def test_backend_listen_rollout_wait_can_cover_a_real_rollout():

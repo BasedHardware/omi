@@ -168,8 +168,9 @@ export class OmiArtifactStorage {
    * adapter path. Recover that narrow, user-visible case without treating every
    * pathname mentioned in model text as an artifact.
    *
-   * Absolute paths are eligible only under a temporary directory, covering
-   * providers that do not honor Omi's managed working directory convention.
+   * Absolute paths are eligible under a temporary directory or Omi's managed
+   * artifact root. The latter covers nested agents that report a file from
+   * their assigned Omi workspace rather than emitting the structured event.
    * Desktop uses its own stricter delivery grammar ("I built file.html on your
    * Desktop" or "file.html was built on the Desktop"), which resolves only a
    * simple filename beneath the signed-in user's Desktop.
@@ -184,14 +185,23 @@ export class OmiArtifactStorage {
     const discovered: AdapterArtifactReference[] = [];
     const seenPaths = new Set<string>();
 
-    for (const line of finalText.slice(0, MAX_REPORTED_TERMINAL_TEXT_CHARS).split(/\r?\n/)) {
+    const lines = finalText.slice(0, MAX_REPORTED_TERMINAL_TEXT_CHARS).split(/\r?\n/);
+    for (const [lineIndex, line] of lines.entries()) {
       const desktopCandidates = reportedDesktopFileCandidates(line, this.reportedDesktopRoots);
-      if (!EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE.test(line) && desktopCandidates.length === 0) continue;
+      // ACP providers commonly put an explicit "file created" receipt and
+      // its absolute path on separate lines (often inside a Markdown code
+      // block). Keep the acceptance signal local to that receipt rather than
+      // treating an arbitrary managed-workspace pathname as an artifact.
+      const explicitDelivery = hasExplicitArtifactDeliveryContext(lines, lineIndex);
+      if (!explicitDelivery && desktopCandidates.length === 0) continue;
 
       const candidates = [
         ...reportedLocalFileCandidates(line).map((candidate) => ({
           candidate,
-          allowedRoots: this.temporaryArtifactRoots,
+          allowedRoots: [
+            ...this.temporaryArtifactRoots,
+            this.rootDir,
+          ],
         })),
         ...desktopCandidates.map((candidate) => ({
           candidate,
@@ -286,11 +296,34 @@ const MAX_REPORTED_TERMINAL_TEXT_CHARS = 64 * 1024;
 const MAX_REPORTED_TERMINAL_ARTIFACTS = 8;
 const EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE = /(?:\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b[^\n]{0,120}\b(?:lives?|saved|written|created|generated|produced|ready|available|located)\b|\b(?:saved|written|created|generated|produced)\b[^\n]{0,120}\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b|\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b\s*:)/i;
 const REPORTED_LOCAL_FILE_CANDIDATE = /file:\/\/[^\s`<>"']+|\/(?:[^\s`<>"']+)/g;
+const REPORTED_CODE_PATH_CANDIDATE = /`([^`\n]+)`/g;
 const REPORTED_DESKTOP_FILE_CANDIDATE = /\b(?:built|created|generated|saved|wrote)\b[^\n]{0,120}?\b([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?:[`*_]+)?\s+on\s+(?:your|the)\s+desktop\b/gi;
 const REPORTED_DESKTOP_PASSIVE_FILE_CANDIDATE = /\b([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?:[`*_]+)?\s+(?:was\s+)?(?:built|created|generated|saved|written)\s+on\s+(?:your|the)\s+desktop\b/gi;
 
 function reportedLocalFileCandidates(line: string): string[] {
-  return line.match(REPORTED_LOCAL_FILE_CANDIDATE) ?? [];
+  const inline: string[] = [...(line.match(REPORTED_LOCAL_FILE_CANDIDATE) ?? [])];
+  for (const match of line.matchAll(REPORTED_CODE_PATH_CANDIDATE)) {
+    const candidate = match[1]?.trim();
+    if (candidate?.startsWith("/") || candidate?.startsWith("file://")) {
+      inline.push(candidate);
+    }
+  }
+  // A result path is often alone in a fenced Markdown line. Preserve spaces
+  // in managed directory names such as "Application Support", whether the
+  // provider reports it in a table cell, a fenced block, or plain line.
+  const standalone = line.trim();
+  if (standalone.startsWith("/") || standalone.startsWith("file://")) {
+    inline.push(standalone);
+  }
+  return [...new Set(inline)];
+}
+
+function hasExplicitArtifactDeliveryContext(lines: readonly string[], lineIndex: number): boolean {
+  // Keep this bounded to one compact terminal receipt. Markdown dividers and
+  // fenced paths add several otherwise-empty lines between the confirmation
+  // and the path, so a three-line window misses normal provider formatting.
+  const first = Math.max(0, lineIndex - 8);
+  return EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE.test(lines.slice(first, lineIndex + 1).join("\n"));
 }
 
 function reportedDesktopFileCandidates(line: string, desktopRoots: readonly string[]): string[] {
@@ -304,7 +337,7 @@ function reportedDesktopFileCandidates(line: string, desktopRoots: readonly stri
 }
 
 function localPathFromReportedCandidate(candidate: string): string | null {
-  const trimmed = candidate.replace(/[),.;:!?\]}]+$/g, "");
+  const trimmed = candidate.trim().replace(/^`+|`+$/g, "").replace(/[),.;:!?\]}]+$/g, "");
   try {
     const path = trimmed.startsWith("file://") ? fileURLToPath(trimmed) : trimmed;
     return isAbsolute(path) ? resolve(path) : null;

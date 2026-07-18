@@ -3,6 +3,30 @@ import XCTest
 @testable import Omi_Computer
 
 final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
+  func testUnavailableTargetResetsEngineFailuresWithoutHidingCaptureHealth() {
+    var failures = ScreenCaptureFailureTracker()
+
+    XCTAssertEqual(failures.recordEngineFailure(), 1)
+    XCTAssertEqual(failures.recordEngineFailure(), 2)
+    failures.recordTargetUnavailable()
+
+    XCTAssertEqual(failures.consecutiveEngineFailures, 0)
+    XCTAssertEqual(failures.recordEngineFailure(), 1)
+    XCTAssertEqual(
+      ScreenCaptureHealth.temporarilyUnavailable.statusText, "Capture paused: current window can’t be captured")
+    XCTAssertEqual(ScreenCaptureHealth.temporarilyUnavailable.rewindBadgeText, "Capture paused")
+    XCTAssertEqual(ScreenCaptureHealth.recovering.rewindBadgeText, "Recovering")
+  }
+
+  func testSuccessfulCaptureClearsOnlyEngineFailureState() {
+    var failures = ScreenCaptureFailureTracker()
+
+    XCTAssertEqual(failures.recordEngineFailure(), 1)
+    XCTAssertEqual(failures.recordEngineFailure(), 2)
+    XCTAssertEqual(failures.recordCaptureSuccess(), 2)
+    XCTAssertEqual(failures.consecutiveEngineFailures, 0)
+  }
+
   func testPermissionRecheckUsesConfiguredInterval() {
     let lastCheck = Date(timeIntervalSinceReferenceDate: 1_000)
 

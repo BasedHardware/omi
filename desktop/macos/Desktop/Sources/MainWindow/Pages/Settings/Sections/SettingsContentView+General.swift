@@ -21,10 +21,14 @@ extension SettingsContentView {
 
             Text(
               permissionError
-                ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused")
+                ?? screenCaptureHealth.statusText
             )
             .scaledFont(size: OmiType.body)
-            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+            .foregroundColor(
+              permissionError != nil || screenCaptureHealth == .temporarilyUnavailable
+                || screenCaptureHealth == .recovering
+                ? OmiColors.warning : OmiColors.textTertiary
+            )
           }
 
           Spacer()

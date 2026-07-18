@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only acceptance checks for the automatic development backend deploy."""
+"""Read-only verification of a converged Cloud Run and backend-listen release vector."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ class DeploymentExpectation:
     deploy_run_attempt: str
     project: str
     region: str
+    environment: str
     namespace: str
     image: str
     revisions: Mapping[str, str]
@@ -36,26 +37,47 @@ def build_expectation(
     deploy_run_attempt: str,
     project: str,
     region: str,
-    environment: str = 'dev',
+    environment: str,
+    short_sha: str | None = None,
 ) -> DeploymentExpectation:
-    """Build exact expected immutable revisions from deploy-run metadata."""
+    """Derive an immutable desired release vector from deploy-run metadata.
+
+    ``short_sha`` is the exact abbreviated SHA the deploy workflow used to tag
+    the image and build the revision suffix (``git rev-parse --short=7 HEAD``).
+    Git documents ``--short=N`` as a prefix of *at least* N characters: when the
+    N-character prefix is ambiguous Git extends it, so the deployed revision can
+    carry 8+ characters while a naive ``commit_sha[:7]`` truncation would expect
+    exactly seven and reject a correctly deployed release. Passing the
+    workflow's computed short SHA keeps the verifier aligned with what was
+    actually deployed; when omitted it falls back to the seven-character prefix
+    for local/manual invocations.
+    """
     normalized_sha = commit_sha.strip().lower()
     if len(normalized_sha) < 7 or any(char not in '0123456789abcdef' for char in normalized_sha):
         raise ValueError('commit SHA must be a hexadecimal value with at least seven characters')
     if not deploy_run_id.isdigit() or not deploy_run_attempt.isdigit():
         raise ValueError('deploy run ID and attempt must be decimal integers')
-    if environment != 'dev':
-        raise ValueError('this acceptance verifier is restricted to the development environment')
-    short_sha = normalized_sha[:7]
-    suffix = f'{short_sha}-{deploy_run_id}-{deploy_run_attempt}'
+    if environment not in {'dev', 'prod'}:
+        raise ValueError("environment must be 'dev' or 'prod'")
+    if short_sha is not None:
+        normalized_short = short_sha.strip().lower()
+        if len(normalized_short) < 7 or any(char not in '0123456789abcdef' for char in normalized_short):
+            raise ValueError('short SHA must be a hexadecimal value with at least seven characters')
+        if not normalized_sha.startswith(normalized_short):
+            raise ValueError('short SHA must be a prefix of the commit SHA')
+        resolved_short_sha = normalized_short
+    else:
+        resolved_short_sha = normalized_sha[:7]
+    suffix = f'{resolved_short_sha}-{deploy_run_id}-{deploy_run_attempt}'
     return DeploymentExpectation(
         commit_sha=normalized_sha,
         deploy_run_id=deploy_run_id,
         deploy_run_attempt=deploy_run_attempt,
         project=project,
         region=region,
+        environment=environment,
         namespace=f'{environment}-omi-backend',
-        image=f'gcr.io/{project}/backend:{short_sha}',
+        image=f'gcr.io/{project}/backend:{resolved_short_sha}',
         revisions={service: f'{service}-{suffix}' for service in CLOUD_RUN_SERVICES},
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
@@ -160,6 +182,7 @@ def evaluate(
                     expected_revision,
                     expectation.image,
                     document,
+                    expected_environment=expectation.environment,
                     require_serving_traffic=require_serving_traffic,
                 )
             )
@@ -182,6 +205,7 @@ def evaluate_cloud_run_service(
     expected_image: str,
     document: Mapping[str, Any],
     *,
+    expected_environment: str,
     require_serving_traffic: bool = True,
 ) -> list[str]:
     status = _mapping(document.get('status'))
@@ -202,8 +226,8 @@ def evaluate_cloud_run_service(
     timeout = template_spec.get('timeoutSeconds')
     if not isinstance(timeout, int) or timeout < MIN_CLOUD_RUN_TIMEOUT_SECONDS:
         errors.append(f'cloud_run/{service}: timeoutSeconds must be at least {MIN_CLOUD_RUN_TIMEOUT_SECONDS}')
-    if _container_env(containers).get('OMI_ENV_STAGE') != 'dev':
-        errors.append(f'cloud_run/{service}: OMI_ENV_STAGE must be dev')
+    if _container_env(containers).get('OMI_ENV_STAGE') != expected_environment:
+        errors.append(f'cloud_run/{service}: OMI_ENV_STAGE must be {expected_environment}')
     return errors
 
 
@@ -228,8 +252,8 @@ def evaluate_listener_deployment(expectation: DeploymentExpectation, document: M
         errors.append('gke/deployment: desired replicas are not all updated')
     if status.get('observedGeneration') != metadata.get('generation'):
         errors.append('gke/deployment: controller has not observed the latest generation')
-    if _container_env(containers).get('OMI_ENV_STAGE') != 'dev':
-        errors.append('gke/deployment: OMI_ENV_STAGE must be dev')
+    if _container_env(containers).get('OMI_ENV_STAGE') != expectation.environment:
+        errors.append(f'gke/deployment: OMI_ENV_STAGE must be {expectation.environment}')
     return errors
 
 
@@ -292,13 +316,19 @@ def evidence(
     template_spec = _mapping(_mapping(deployment_spec.get('template')).get('spec'))
     containers = _list(template_spec.get('containers'))
     return {
-        'scope': 'development backend auto-deploy (read-only)',
-        'expectation': {
+        'scope': 'backend deploy (read-only)',
+        'release_vector': {
+            'schema_version': 1,
             'commit_sha': expectation.commit_sha,
             'deploy_run_id': expectation.deploy_run_id,
             'deploy_run_attempt': expectation.deploy_run_attempt,
-            'image': expectation.image,
-            'revisions': dict(expectation.revisions),
+            'environment': expectation.environment,
+            'immutable_image': expectation.image,
+            'cloud_run_revisions': dict(expectation.revisions),
+            'backend_listen': {
+                'deployment': expectation.listener_deployment,
+                'image': expectation.image,
+            },
             'require_serving_traffic': require_serving_traffic,
         },
         'cloud_run': cloud_run,
@@ -336,21 +366,30 @@ def _container_env(containers: Sequence[Any]) -> dict[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--commit-sha', required=True)
+    parser.add_argument(
+        '--short-sha',
+        help=(
+            'exact abbreviated SHA the deploy workflow used to tag the image and '
+            'revision suffix; must be a prefix of --commit-sha. Matches the workflow '
+            'git rev-parse --short=7 HEAD, which Git may extend past seven characters.'
+        ),
+    )
     parser.add_argument('--deploy-run-id', required=True)
     parser.add_argument('--deploy-run-attempt', required=True)
     parser.add_argument('--project', required=True)
     parser.add_argument('--region', default='us-central1')
-    parser.add_argument('--environment', default='dev')
+    parser.add_argument('--environment', choices=('dev', 'prod'), required=True)
     parser.add_argument(
         '--candidate',
         action='store_true',
-        help='verify a ready no-traffic candidate revision before promotion',
+        help='verify a ready no-traffic candidate release vector before promotion',
     )
     parser.add_argument('--evidence-path', type=Path)
     args = parser.parse_args()
     try:
         expectation = build_expectation(
             commit_sha=args.commit_sha,
+            short_sha=args.short_sha,
             deploy_run_id=args.deploy_run_id,
             deploy_run_attempt=args.deploy_run_attempt,
             project=args.project,

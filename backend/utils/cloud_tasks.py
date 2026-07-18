@@ -121,6 +121,19 @@ def is_listen_finalization_dispatch_enabled() -> bool:
     return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
+def is_listen_finalization_dispatch_configured() -> bool:
+    """Whether the durable finalizer can be admitted without an inline fallback."""
+    return is_listen_finalization_dispatch_enabled() and all(
+        (
+            os.getenv('SYNC_TASKS_PROJECT', ''),
+            os.getenv('SYNC_TASKS_LOCATION', ''),
+            os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+            _listen_finalization_handler_url(),
+            _listen_finalization_invoker_sa(),
+        )
+    )
+
+
 def get_account_deletion_tasks_max_attempts() -> int:
     return int(os.getenv('ACCOUNT_DELETION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
 

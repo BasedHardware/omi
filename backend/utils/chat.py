@@ -23,7 +23,6 @@ from utils.notifications import send_notification, send_notification_async
 from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
-    get_deepgram_model_for_language,
     postprocess_words,
     prerecorded,
     prerecorded_from_bytes,
@@ -153,8 +152,7 @@ def _transcribe_voice_message_url(
     detect_language: bool = True,
 ) -> Tuple[Optional[str], Optional[str]]:
     """Run the synchronous prerecorded-STT pipeline for one signed URL."""
-    provider, _, _ = get_prerecorded_service(language)
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    provider, stt_language, stt_model = get_prerecorded_service(language)
     is_multi = stt_language == 'multi'
     try:
         if is_multi and detect_language:
@@ -219,7 +217,7 @@ def transcribe_pcm_bytes(
     channels: int = 1,
     keywords: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    """Transcribe raw PCM audio bytes directly via Deepgram pre-recorded API.
+    """Transcribe raw PCM audio bytes through the selected pre-recorded STT provider.
 
     Skips GCS upload and WAV conversion for maximum speed.
     Used by desktop PTT batch mode.
@@ -227,8 +225,7 @@ def transcribe_pcm_bytes(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    provider, _, _ = get_prerecorded_service(language)
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    provider, stt_language, stt_model = get_prerecorded_service(language)
     is_multi = stt_language == 'multi'
 
     if encoding == 'linear16':

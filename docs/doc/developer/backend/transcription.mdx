@@ -20,13 +20,16 @@ flowchart LR
     end
 
     subgraph STT["🎧 STT Providers"]
-        DG[Deepgram Nova-3]
+        Parakeet[Parakeet]
+        Modulate[Modulate Velma-2]
     end
 
     Audio -->|Binary stream| WS
     WS --> Decode
-    Decode --> DG
-    DG -->|Transcript| WS
+    Decode --> Parakeet
+    Decode --> Modulate
+    Parakeet -->|Transcript| WS
+    Modulate -->|Transcript| WS
     WS -->|JSON segments| Audio
 ```
 
@@ -114,7 +117,7 @@ wss://api.omi.me/v4/listen?uid={uid}&language={lang}&sample_rate={rate}&codec={c
   <Accordion title="stt_service" icon="server">
     **Type:** `string` | **Optional**
 
-    Explicitly specify STT service. Options: `deepgram`. If not specified, Deepgram is used.
+    Serving provider selection is controlled by the deployment policy. The supported providers are `parakeet` and `modulate`; clients cannot opt into retired providers.
   </Accordion>
 
   <Accordion title="custom_stt" icon="code">
@@ -150,23 +153,27 @@ All audio is internally converted to 16-bit linear PCM before being sent to STT 
 
 ## STT Service Selection
 
-The selected streaming provider comes from the ordered `STT_SERVICE_MODELS`
-configuration. The first configured model that supports the requested language
-wins. Pre-recorded voice and sync routes use the corresponding
-`STT_PRERECORDED_MODEL` selection contract.
+The canonical provider/surface matrix and default model order live in
+`backend/config/stt_provider_policy.py`. The deployment validator requires
+`STT_SERVICE_MODELS` and `STT_PRERECORDED_MODEL` to match that code-owned
+policy; an environment edit cannot re-enable hosted Deepgram. The normal serving
+defaults are `parakeet,modulate-velma-2`. Self-hosted Deepgram is a distinct,
+streaming-only provider that requires `DEEPGRAM_SELF_HOSTED_ENABLED=true` and a
+non-cloud `DEEPGRAM_SELF_HOSTED_URL`; it is never a fallback to
+`api.deepgram.com`. If no supported provider can serve a language, the request
+fails closed.
 
 ```mermaid
 flowchart TD
     Start[Incoming Audio] --> Lang{Language?}
-    Lang -->|Supported by first configured model| Selected[Deepgram / Modulate / Parakeet]
-    Lang -->|Unsupported| Fallback[Next configured model]
+    Lang -->|Supported by first configured model| Selected[Parakeet / Modulate]
+    Lang -->|Unsupported| Unavailable[Fail closed]
 ```
 
 ### Provider Capabilities
 
 | Provider | Languages | Model | Best For |
 |----------|-----------|-------|----------|
-| **Deepgram** | 50+ | `nova-3` | Broad language coverage |
 | **Modulate** | Provider-dependent | `velma-2` | Supported configured languages |
 | **Parakeet** | Deployment-dependent | `parakeet` | Self-hosted streaming and batch STT |
 
@@ -274,21 +281,14 @@ and legacy `backend-listen` services must use `http://pusher.omiapi.com`.
 Other dev Cloud Run services and jobs must not define `HOSTED_PUSHER_API_URL`.
 Retire those public endpoints only after they show no `/v4/listen` traffic.
 
-## Deepgram Configuration
+## Serving STT Configuration
 
-When using Deepgram, the following options are configured:
-
-| Option | Value | Purpose |
-|--------|-------|---------|
-| `punctuate` | `true` | Automatic punctuation insertion |
-| `no_delay` | `true` | Minimize latency for real-time feedback |
-| `endpointing` | `300` | 300ms silence to detect sentence boundaries |
-| `interim_results` | `false` | Only return final transcripts |
-| `smart_format` | `true` | Format numbers, dates, currencies |
-| `profanity_filter` | `false` | Keep all words unfiltered |
-| `diarize` | `true` | Enable speaker identification |
-| `filler_words` | `false` | Remove "um", "uh", etc. |
-| `encoding` | `linear16` | 16-bit PCM encoding |
+Serving revisions use `HOSTED_PARAKEET_API_URL` for Parakeet and
+`MODULATE_API_KEY` for Modulate. Both are required because the selected
+provider depends on language capability. The retained self-hosted Deepgram
+deployment uses `DEEPGRAM_API_KEY`, `DEEPGRAM_SELF_HOSTED_ENABLED`, and
+`DEEPGRAM_SELF_HOSTED_URL` only in its explicitly configured GKE workload;
+hosted Deepgram is disabled.
 
 ## External Custom STT Service
 
@@ -372,19 +372,19 @@ When a user has a speech profile, the system uses speaker embedding comparison t
 sequenceDiagram
     participant App as 📱 Omi App
     participant Backend as 🖥️ Backend
-    participant DG as 🎧 Deepgram
+    participant STT as 🎧 Selected STT provider
     participant Embed as 🧠 Embedding API
 
     Note over Backend: User has speech profile
 
     App->>Backend: Connect WebSocket
-    Backend->>DG: Create single socket
+    Backend->>STT: Create single socket
     Backend->>Embed: Extract user embedding from profile WAV
 
     loop Audio streaming
         App->>Backend: Audio chunk
-        Backend->>DG: Forward to Deepgram
-        DG-->>Backend: Transcript with speaker IDs
+        Backend->>STT: Forward decoded audio
+        STT-->>Backend: Transcript with speaker IDs
     end
 
     Note over Backend: New speaker detected (2s+ audio)
@@ -397,7 +397,7 @@ sequenceDiagram
 
 1. **User Identification**: Speaker embedding comparison identifies the device owner by voice biometrics
 2. **No Startup Delay**: Transcription begins immediately (no profile audio prepending)
-3. **Single Socket**: One Deepgram connection per session (reduced API costs)
+3. **Single Socket**: One selected-provider connection per session
 
 ## Transcription Flow
 
@@ -409,7 +409,7 @@ sequenceDiagram
     App sends binary audio chunks. Backend decodes based on codec parameter.
   </Step>
   <Step title="STT Processing" icon="microphone">
-    Decoded audio sent to Deepgram. Provider returns word-level transcripts with speaker IDs.
+    Decoded audio is sent to the selected Parakeet or Modulate provider. The provider returns word-level transcripts with speaker IDs.
   </Step>
   <Step title="Segment Creation" icon="align-left">
     Words grouped into segments. Same-speaker consecutive words merged. Timing adjusted for speech profile offset.
@@ -518,7 +518,7 @@ sequenceDiagram
         "start": 0.0,
         "end": 1.5,
         "speech_profile_processed": true,
-        "stt_provider": "deepgram"
+        "stt_provider": "parakeet"
       }
     ]
     ```
@@ -686,7 +686,7 @@ close and must retain unconfirmed local audio until a later successful sync.
 | Component | Path |
 |-----------|------|
 | WebSocket Handler | `backend/routers/transcribe.py` |
-| Deepgram Integration | `backend/utils/stt/streaming.py` |
+| Streaming STT Integration | `backend/utils/stt/streaming.py` |
 | Audio Decoding | `backend/routers/transcribe.py` |
 | Speech Profile | `backend/utils/stt/speech_profile.py` |
 | VAD (Voice Activity) | `backend/utils/stt/vad.py` |

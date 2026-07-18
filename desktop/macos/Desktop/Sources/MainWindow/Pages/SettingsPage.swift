@@ -126,6 +126,7 @@ struct SettingsContentView: View {
 
   // Master monitoring state (screen analysis)
   @State var isMonitoring: Bool
+  @State var screenCaptureHealth: ScreenCaptureHealth
   @State var isToggling: Bool = false
   @State var permissionError: String?
 
@@ -468,6 +469,7 @@ struct SettingsContentView: View {
     self.chatProvider = chatProvider
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
+    _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
     _isTranscribing = State(initialValue: appState.isTranscribing)
     _focusEnabled = State(initialValue: FocusAssistantSettings.shared.isEnabled)
     _cooldownInterval = State(initialValue: FocusAssistantSettings.shared.cooldownInterval)
@@ -582,12 +584,14 @@ struct SettingsContentView: View {
       chatProvider?.checkClaudeConnectionStatus()
       // Refresh notification permission state
       appState.checkNotificationPermission()
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
       if let userInfo = notification.userInfo, let state = userInfo["isMonitoring"] as? Bool {
         isMonitoring = state
       }
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onChange(of: appState.isTranscribing) { _, newValue in
       isTranscribing = newValue

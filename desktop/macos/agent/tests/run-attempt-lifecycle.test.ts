@@ -339,7 +339,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
-  it("projects verified temporary deliverables reported by OpenClaw and Hermes terminal prose", async () => {
+  it("projects verified temporary and managed-root deliverables reported by OpenClaw and Hermes terminal prose", async () => {
     for (const provider of ["openclaw", "hermes"] as const) {
       const artifactRoot = mkdtempTracked(`omi-${provider}-artifacts-`);
       const externalDirectory = mkdtempTracked(`omi-${provider}-reported-`);
@@ -348,6 +348,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       const reportedPath = join(externalDirectory, "dog_facts.html");
       const desktopPath = join(desktopDirectory, "cool_cat_facts.html");
       const nonTemporaryPath = join(nonTemporaryDirectory, "not_a_deliverable.html");
+      const managedRootPath = join(artifactRoot, "nested_agent_artifact.html");
       const deniedPath = join(externalDirectory, ".claude");
       const symlinkPath = join(externalDirectory, "symlinked_dog_facts.html");
       const { store, adapter, kernel } = createKernelHarness(
@@ -361,6 +362,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       writeFileSync(reportedPath, "<h1>Dog facts</h1>");
       writeFileSync(desktopPath, "<h1>Cat facts</h1>");
       writeFileSync(nonTemporaryPath, "<h1>Not a delivery</h1>");
+      writeFileSync(managedRootPath, "<h1>Nested agent artifact</h1>");
       writeFileSync(deniedPath, "{}");
       symlinkSync(reportedPath, symlinkPath);
       adapter.nextText = `I inspected the file at ${reportedPath} while preparing the answer.`;
@@ -412,6 +414,16 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       });
       expect(kernel.inspectArtifacts({ runId: nonTemporary.run.runId })).toEqual([]);
 
+      adapter.nextText = `I inspected ${managedRootPath} while preparing the answer.`;
+      const incidentalManagedPath = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-incidental-managed-artifact`,
+        cwd: artifactRoot,
+      });
+      expect(kernel.inspectArtifacts({ runId: incidentalManagedPath.run.runId })).toEqual([]);
+
       adapter.nextText = `The file lives at ${desktopPath}.`;
       const genericDesktopPath = await kernel.executeRun({
         ...baseRunInput,
@@ -449,6 +461,39 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
         discoveredFromTerminalReport: true,
         omiManaged: true,
         originalUri: `file://${reportedPath}`,
+      });
+
+      adapter.nextText = [
+        "File created successfully.",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        `| **Absolute path** | \`${managedRootPath}\` |`,
+      ].join("\n");
+      const managedRoot = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-managed-root-artifact`,
+        cwd: artifactRoot,
+      });
+      const managedRootArtifacts = kernel.inspectArtifacts({ runId: managedRoot.run.runId });
+      expect(managedRootArtifacts).toEqual([
+        expect.objectContaining({
+          sessionId: managedRoot.session.sessionId,
+          runId: managedRoot.run.runId,
+          attemptId: managedRoot.attempt.attemptId,
+          displayName: "nested_agent_artifact.html",
+          kind: "html",
+          role: "result",
+          mimeType: "text/html",
+          uri: `file://${managedRootPath}`,
+        }),
+      ]);
+      expect(JSON.parse(managedRootArtifacts[0]!.metadataJson)).toMatchObject({
+        discoveredFromTerminalReport: true,
+        omiManaged: true,
+        managedPath: managedRootPath,
       });
 
       adapter.nextText = "Done! 🐱 I built and opened **`cool_cat_facts.html`** on your Desktop.";

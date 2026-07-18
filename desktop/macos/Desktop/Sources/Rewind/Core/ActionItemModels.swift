@@ -320,7 +320,7 @@ extension ActionItemRecord {
       backendSynced: true,
       description: item.description,
       completed: item.completed,
-      deleted: item.deleted ?? false,
+      deleted: item.isRetired,
       source: item.source,
       conversationId: item.conversationId,
       priority: item.priority,
@@ -373,7 +373,7 @@ extension ActionItemRecord {
     self.backendSynced = true
     self.description = item.description
     self.completed = item.completed
-    self.deleted = item.deleted ?? false
+    self.deleted = item.isRetired
     self.deletedBy = item.deletedBy
     self.source = item.source
     self.conversationId = item.conversationId
@@ -753,7 +753,7 @@ struct StagedTaskRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
       backendSynced: true,
       description: item.description,
       completed: item.completed,
-      deleted: item.deleted ?? false,
+      deleted: item.isRetired,
       source: item.source,
       conversationId: item.conversationId,
       priority: item.priority,

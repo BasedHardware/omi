@@ -6020,7 +6020,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
+      '300 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
 
   @override
   String get viewUsage => 'Преглед на използването';
@@ -6103,7 +6103,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
+      '300 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
 
   @override
   String get audioProcessedLocally =>

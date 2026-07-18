@@ -1,11 +1,9 @@
-"""A synchronous finalize failure must not strand a conversation on ``processing``.
+"""A legacy synchronous finalize failure must not strand a conversation.
 
-POST /v1/conversations and POST /v1/conversations/{id}/finalize admit the
-processing generation and then run the processor inside the request itself,
-with no durable finalization job for the reconciler to replay. Before the
-rollback guard, any processor exception left the conversation on
-``processing`` forever — clients rendered a stuck "Processing" card that no
-refresh could ever resolve.
+POST /v1/conversations still runs its processor in the request and must roll
+back its admission if that processor raises. The exact-ID finalize route uses
+the durable finalization job worker instead; its terminal failure is covered
+by the worker and lifecycle contracts.
 """
 
 from types import SimpleNamespace
@@ -58,17 +56,6 @@ def _patch_request_seams(monkeypatch, conversation):
         raise RuntimeError('processor crashed')
 
     monkeypatch.setattr(conversations_router, 'process_conversation', raise_processing)
-
-
-def test_finalize_rolls_back_admission_when_processing_raises(monkeypatch, conversation_state):
-    conversation = _in_progress_conversation()
-    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
-    _patch_request_seams(monkeypatch, conversation)
-
-    with pytest.raises(RuntimeError, match='processor crashed'):
-        conversations_router.finalize_conversation('conv1', request=None, uid='uid1')
-
-    assert conversation_state['status'] == ConversationStatus.in_progress.value
 
 
 def test_create_conversation_rolls_back_admission_when_processing_raises(monkeypatch, conversation_state):

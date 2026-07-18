@@ -178,11 +178,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -272,10 +267,6 @@ env:
         key: TYPESENSE_API_KEY
   - name: MEMORY_TYPESENSE_COLLECTION
     value: "canonical_memory_atoms"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omi.me"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -292,6 +283,10 @@ env:
     value: "us-central1"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
+  - name: STT_PRERECORDED_MODEL
+    value: "parakeet,modulate-velma-2"
+  - name: STT_SERVICE_MODELS
+    value: "parakeet,modulate-velma-2"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS
@@ -302,7 +297,7 @@ env:
         name: prod-omi-backend-secrets
         key: ENCRYPTION_SECRET
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "600"
+    value: "300"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH

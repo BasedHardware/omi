@@ -17,7 +17,11 @@ from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from models.conversation_enums import ConversationStatus
-from utils.cloud_tasks import enqueue_listen_finalization_job, is_listen_finalization_dispatch_enabled
+from utils.cloud_tasks import (
+    enqueue_listen_finalization_job,
+    is_listen_finalization_dispatch_configured,
+    is_listen_finalization_dispatch_enabled,
+)
 from utils.conversations.finalization_decision import (
     FinalizationDecisionState,
     FinalizationEvent,
@@ -45,6 +49,10 @@ _STATUS_TRANSITIONS = {
 
 class LifecycleTransitionError(ValueError):
     """Raised when an intent would reopen or otherwise violate a terminal lifecycle."""
+
+
+class FinalizationDispatchUnavailable(RuntimeError):
+    """A caller requiring the durable worker cannot be admitted safely."""
 
 
 RECORDING_SESSION_MODES = frozenset({'shadow', 'dual_write', 'enforce'})
@@ -562,14 +570,25 @@ def request_finalization(
     conversation_id: str,
     *,
     has_byok_keys: bool,
+    force_process: bool = False,
+    extra_updates: Mapping[str, Any] | None = None,
+    require_cloud_tasks: bool = False,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
+    if require_cloud_tasks and not is_listen_finalization_dispatch_configured():
+        # A REST request has no pusher session to execute an inline handoff.
+        # Reject before mutating the conversation instead of persisting work
+        # that this deployment cannot recover or dispatch.
+        raise FinalizationDispatchUnavailable('durable conversation finalization worker is not configured')
+
     intent = jobs_db.create_or_get_finalization_intent(
         uid,
         conversation_id,
         requires_byok=has_byok_keys,
         finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
+        force_process=force_process,
+        extra_updates=extra_updates,
         firestore_client=firestore_client,
     )
     # The outbox transaction is the authoritative acceptance boundary. Count
@@ -611,3 +630,28 @@ def request_finalization(
         logger.exception('listen finalization enqueue failed job=%s', intent['job_id'])
         return dict(intent) | {'route': 'queued'}
     return dict(intent) | {'route': 'cloud_tasks'}
+
+
+def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | None:
+    """Return the authoritative, privacy-safe state for this conversation's job."""
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        return None
+    job_id = conversation.get('finalization_job_id')
+    if not isinstance(job_id, str) or not job_id:
+        return None
+    job = jobs_db.get_finalization_job(job_id)
+    if not job or job.get('uid') != uid or job.get('conversation_id') != conversation_id:
+        return None
+
+    status = str(job.get('status') or 'unknown')
+    return {
+        'job_id': job_id,
+        'status': status,
+        'terminal': status in jobs_db.TERMINAL_JOB_STATUSES,
+        # A queued job may be safely replayed by the reconciler; a leased job
+        # is actively owned until its fenced lease expires.
+        'retryable': status == 'queued',
+        'attempt_count': int(job.get('attempt_count') or 0),
+        'task_retry_count': int(job.get('task_retry_count') or 0),
+    }

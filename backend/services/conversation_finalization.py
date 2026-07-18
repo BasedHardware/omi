@@ -106,7 +106,7 @@ def final_attempt_failed(
             record_capture_finalization_terminal('failure', accepted_at)
         except Exception:
             # Dead-lettering is authoritative; a best-effort metric lookup must
-            # never prevent the caller from discarding the terminal conversation.
+            # never change its terminal outcome.
             logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
     return marked
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -8,6 +9,19 @@ from typing import Any, cast
 import yaml
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = BACKEND_ROOT.parent
+GATEWAY_DEPLOY_WORKFLOWS = (
+    'gcp_llm_gateway.yml',
+    'gcp_llm_gateway_auto_dev.yml',
+    'gcp_backend_pusher.yml',
+)
+VPC_PROBE_WORKFLOWS = (
+    'gcp_backend_auto_dev.yml',
+    'gcp_backend.yml',
+    'gcp_llm_gateway.yml',
+    'gcp_llm_gateway_auto_dev.yml',
+    'gcp_backend_pusher.yml',
+)
 
 
 def _load_yaml(relative_path: str) -> dict[str, Any]:
@@ -19,6 +33,38 @@ def _load_yaml(relative_path: str) -> dict[str, Any]:
 
 def _env_map(values: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {entry['name']: entry for entry in values['env']}
+
+
+def _load_workflow(name: str) -> dict[str, Any]:
+    with (REPOSITORY_ROOT / '.github' / 'workflows' / name).open('r', encoding='utf-8') as handle:
+        loaded = yaml.safe_load(handle)
+    assert isinstance(loaded, dict)
+    return cast(dict[str, Any], loaded)
+
+
+def _workflow_step(workflow: dict[str, Any], name: str) -> dict[str, Any]:
+    steps = workflow['jobs']['deploy']['steps']
+    return next(step for step in steps if step.get('name') == name)
+
+
+def _workflow_step_with_run(workflow: dict[str, Any], needle: str) -> dict[str, Any]:
+    steps = workflow['jobs']['deploy']['steps']
+    return next(step for step in steps if needle in str(step.get('run', '')))
+
+
+def _render_probe_workflow_run(run: str) -> str:
+    replacements = {
+        '${{ vars.GCP_PROJECT_ID }}': 'test-project',
+        '${{ env.REGION }}': 'us-central1',
+        '${{ env.SERVICE }}': 'llm-gateway',
+        '${{ steps.image-tag.outputs.short_sha }}': 'abc1234',
+        '${{ steps.gateway-serving.outputs.gateway_url }}': 'http://10.0.0.5',
+        '${{ vars.CLOUD_RUN_VPC_NETWORK }}': 'test-network',
+        '${{ vars.CLOUD_RUN_VPC_SUBNET }}': 'test-subnet',
+    }
+    for expression, value in replacements.items():
+        run = run.replace(expression, value)
+    return run
 
 
 def _secret_keys(values: dict[str, Any]) -> set[str]:
@@ -104,6 +150,17 @@ def test_prod_gateway_wiring_is_off_until_verified_promotion():
     }
 
 
+def test_gateway_runtime_static_address_matches_helm_ingress_declaration():
+    manifest = _load_yaml('deploy/runtime_env.yaml')
+
+    for environment in ('dev', 'prod'):
+        gateway = _load_yaml(f'charts/llm-gateway/{environment}_omi_llm_gateway_values.yaml')
+        assert (
+            manifest['environments'][environment]['llm_gateway']['static_address_name']
+            == gateway['ingress']['annotations']['kubernetes.io/ingress.regional-static-ip-name']
+        )
+
+
 def test_gateway_deploy_workflow_and_helper_allow_explicit_prod_launches():
     helper = (BACKEND_ROOT / 'scripts/deploy-llm-gateway.sh').read_text(encoding='utf-8')
     workflow = (BACKEND_ROOT.parent / '.github/workflows/gcp_llm_gateway.yml').read_text(encoding='utf-8')
@@ -135,6 +192,79 @@ def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_
     assert 'Verify LLM gateway control plane before promotion' in auto_dev
     assert 'Probe LLM gateway from the Cloud Run VPC before promotion' in auto_dev
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in auto_dev
+
+
+def test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract():
+    """Static guard: each deploy-llm-gateway caller must supply its script inputs and serving gates."""
+    for workflow_name in GATEWAY_DEPLOY_WORKFLOWS:
+        workflow = _load_workflow(workflow_name)
+        deploy = _workflow_step_with_run(workflow, 'backend/scripts/deploy-llm-gateway.sh')
+        assert deploy['env']['LLM_GATEWAY_GSA'] == '${{ vars.LLM_GATEWAY_GSA }}'
+        assert any(
+            'test -n "$LLM_GATEWAY_GSA"' in str(step.get('run', '')) for step in workflow['jobs']['deploy']['steps']
+        )
+        assert _workflow_step(workflow, 'Verify LLM Gateway serving data plane')
+        assert _workflow_step(workflow, 'Probe LLM Gateway from the Cloud Run VPC')
+
+
+def test_gateway_vpc_probe_workflows_execute_the_production_parser(tmp_path):
+    """Exercise each rendered workflow caller through the real probe parser with fake gcloud."""
+    probe = BACKEND_ROOT / 'scripts' / 'probe-llm-gateway-from-cloud-run.sh'
+    calls = tmp_path / 'gcloud-calls.txt'
+    fake_gcloud = tmp_path / 'gcloud'
+    fake_gcloud.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$FAKE_GCLOUD_CALLS"\n', encoding='utf-8')
+    fake_gcloud.chmod(0o755)
+
+    for workflow_name in VPC_PROBE_WORKFLOWS:
+        workflow = _load_workflow(workflow_name)
+        step = _workflow_step_with_run(workflow, 'probe-llm-gateway-from-cloud-run.sh')
+        environment = {
+            **os.environ,
+            'FAKE_GCLOUD_CALLS': str(calls),
+            'GITHUB_RUN_ATTEMPT': '1',
+            'GITHUB_RUN_ID': '42',
+            'GITHUB_SHA': 'abcdef0123456789',
+            'PATH': f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
+        }
+
+        result = subprocess.run(
+            ['bash', '-c', _render_probe_workflow_run(str(step['run']))],
+            cwd=REPOSITORY_ROOT,
+            check=False,
+            capture_output=True,
+            env=environment,
+            text=True,
+        )
+
+        assert result.returncode == 0, f'{workflow_name}: {result.stderr}'
+
+    recorded_calls = calls.read_text(encoding='utf-8').splitlines()
+    assert any(call.startswith('run jobs deploy llm-gateway-vpc-probe-42-1 ') for call in recorded_calls)
+    assert any(call.startswith('run jobs execute llm-gateway-vpc-probe-42-1 ') for call in recorded_calls)
+    assert any(call.startswith('run jobs delete llm-gateway-vpc-probe-42-1 ') for call in recorded_calls)
+
+
+def test_gateway_vpc_probe_rejects_equals_style_arguments():
+    result = subprocess.run(
+        [
+            'bash',
+            str(BACKEND_ROOT / 'scripts' / 'probe-llm-gateway-from-cloud-run.sh'),
+            '--project=test-project',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert 'unknown argument: --project=test-project' in result.stderr
+
+
+def test_auto_dev_revision_fence_targets_the_deployment_project_static_contract():
+    """Static guard: every final revision read uses the same explicit project as promotion."""
+    workflow = _load_workflow('gcp_backend_auto_dev.yml')
+    fence = _workflow_step(workflow, 'Verify validated revisions are still current')
+    assert str(fence['run']).count('--project=${{ vars.GCP_PROJECT_ID }}') == 4
 
 
 def test_monitoring_scrapes_llm_gateway_with_shared_metrics_secret_contract():

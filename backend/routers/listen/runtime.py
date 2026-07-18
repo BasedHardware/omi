@@ -46,6 +46,7 @@ from utils.notifications import send_credit_limit_notification, send_silent_user
 from utils.onboarding import OnboardingHandler
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.stt.streaming import STTService, get_stt_service_for_language
+from config.stt_provider_policy import PARAKEET_PROVIDER, STTServingSurface, provider_is_enabled
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
@@ -219,7 +220,11 @@ class ListenSessionRuntime:
         if not self.stt_service or not self.stt_language:
             await request.websocket.close(code=1008, reason=f'The language is not supported, {self.language}')
             return False
-        if requested_service == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
+        if (
+            requested_service == 'parakeet'
+            and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
+            and os.getenv('HOSTED_PARAKEET_API_URL')
+        ):
             self.stt_service = STTService.parakeet
         context = finalize_listen_connect_context(
             base, language=self.language, onboarding_mode=request.onboarding_mode, stt_language=self.stt_language

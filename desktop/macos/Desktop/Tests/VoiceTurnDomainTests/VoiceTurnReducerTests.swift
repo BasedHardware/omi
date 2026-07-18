@@ -886,6 +886,74 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
   }
 
+  func testScreenRecordingPermissionFailureKeepsNativeVoiceContinuation() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = reservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)
+    ).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model =
+      reduce(
+        model,
+        .screenEvidenceProtocolStartedScoped(
+          turnID: turnID,
+          token: token,
+          expiresAfter: 5)
+      ).model
+
+    model =
+      reduce(
+        model,
+        .screenEvidenceUnavailableScoped(
+          turnID: turnID,
+          screenshotIdentity: screenshotIdentity,
+          screenshotCallID: screenshotCallID)
+      ).model
+    XCTAssertNil(model.turn?.screenEvidenceProtocol)
+    XCTAssertFalse(model.turn?.providerFinished == true)
+    XCTAssertTrue(model.turn?.postToolContinuationRequired == true)
+
+    let providerIdentity = try XCTUnwrap(model.turn?.providerEffectIdentity)
+    model =
+      reduce(
+        model,
+        .providerTurnFinishedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: sessionID,
+          responseID: responseID)
+      ).model
+    model =
+      reduce(
+        model,
+        .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+      ).model
+    XCTAssertEqual(model.turn?.phase, .awaitingResponse)
+
+    model =
+      reduce(
+        model,
+        .providerResponseStartedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: sessionID,
+          responseID: responseID)
+      ).model
+    let nativeLease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    model = reduce(model, .playbackStarted(turnID: turnID, lease: nativeLease)).model
+    XCTAssertEqual(model.turn?.activeLease?.lane, .nativeRealtime)
+  }
+
   func testFailedScreenEvidenceRejectsLateProviderToolWithoutReopeningTheTurn() {
     let (startingModel, turnID, _, _) = awaitingHubResponse()
     let screenshotReservation = reserveIdentity(startingModel, turnID: turnID)
