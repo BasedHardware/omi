@@ -300,6 +300,16 @@ checks:
     triggers: ["desktop/macos/agent/src/runtime/agent-spawn-journal.ts", "desktop/macos/agent/fixtures/spawn-receipt/**", "desktop/macos/agent/tests/spawn-receipt-fixtures.test.ts", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh", "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift", "desktop/macos/Desktop/Tests/RealtimeHubSpawnAgentTests.swift"]
     lanes: ["local", "ci"]
     reason: "cross-language realtime spawn receipt producer/consumer contract"
+  - id: release-eligibility-contract
+    command: ["python3", ".github/scripts/check_release_eligibility.py"]
+    triggers: [".github/workflows/release-eligibility.yml", ".github/actions/release-eligibility/**", ".github/scripts/verify_release_eligibility.py", ".github/scripts/check_release_eligibility.py", ".github/scripts/test_check_release_eligibility.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9989 keeps the automatic release proof main-scoped, SHA-bound, and routed through the canonical deterministic CI runner"
+  - id: release-eligibility-contract-fixtures
+    command: ["python3", ".github/scripts/test_check_release_eligibility.py"]
+    triggers: [".github/workflows/release-eligibility.yml", ".github/actions/release-eligibility/**", ".github/scripts/verify_release_eligibility.py", ".github/scripts/check_release_eligibility.py", ".github/scripts/test_check_release_eligibility.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9989 exercises non-main, ambiguous SHA, mismatched checkout, and workflow-contract rejection cases"
 
 exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
