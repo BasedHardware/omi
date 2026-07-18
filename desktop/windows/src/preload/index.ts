@@ -226,6 +226,16 @@ const omi: OmiBridgeApi = {
   aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
   aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
   aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
+  // --- Main-process token PULL (session freshness) ---
+  onSessionTokenRequest: (cb: (requestId: number) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, requestId: number): void => cb(requestId)
+    ipcRenderer.on('session:tokenRequest', listener)
+    return () => ipcRenderer.removeListener('session:tokenRequest', listener)
+  },
+  respondSessionToken: (
+    requestId: number,
+    session: { apiBase: string; desktopApiBase: string; token: string } | null
+  ) => ipcRenderer.send('session:tokenResponse', requestId, session),
   // --- Track 3 (task sync engine) ---
   // Local-first tasks: reads return local rows instantly + kick a background sync;
   // subscribe to onTasksChanged to re-fetch when the store updates.

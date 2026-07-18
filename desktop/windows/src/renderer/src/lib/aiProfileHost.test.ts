@@ -36,14 +36,34 @@ function signIn(token: string): FakeUser {
 /** Let the listener's fire-and-forget promise chain settle. */
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
 
-function installWindowOmi(): { aiProfileSetSession: ReturnType<typeof vi.fn> } {
+function installWindowOmi(): {
+  aiProfileSetSession: ReturnType<typeof vi.fn>
+  respondSessionToken: ReturnType<typeof vi.fn>
+  /** Fire a main→renderer token PULL, as makeRendererTokenRefresher would. */
+  fireTokenRequest: (requestId: number) => void
+} {
   const aiProfileSetSession = vi.fn(async () => undefined)
-  // setSession is the only member the host should ever touch; the other two are
-  // stubbed purely so a test can assert the host never calls them.
+  const respondSessionToken = vi.fn()
+  let tokenRequestCb: ((requestId: number) => void) | null = null
+  // setSession + the pull channel are the members the host touches; the other two
+  // are stubbed purely so a test can assert the host never calls them.
   ;(globalThis as unknown as { window: unknown }).window = {
-    omi: { aiProfileSetSession, aiProfileGenerateNow: vi.fn(), aiProfileGetLatest: vi.fn() }
+    omi: {
+      aiProfileSetSession,
+      aiProfileGenerateNow: vi.fn(),
+      aiProfileGetLatest: vi.fn(),
+      onSessionTokenRequest: (cb: (requestId: number) => void) => {
+        tokenRequestCb = cb
+        return () => {}
+      },
+      respondSessionToken
+    }
   }
-  return { aiProfileSetSession }
+  return {
+    aiProfileSetSession,
+    respondSessionToken,
+    fireTokenRequest: (requestId: number) => tokenRequestCb?.(requestId)
+  }
 }
 
 // `started` is module-scoped, so every test needs a fresh module instance.
@@ -175,6 +195,66 @@ describe('startAiProfileHost (session relay)', () => {
     expect(console.warn).toHaveBeenCalledWith(
       '[ai-profile-host] session push failed',
       expect.any(Error)
+    )
+  })
+})
+
+// The PULL counterpart to the push relay: main asks for a fresh token on demand
+// (its push-relayed one goes stale when this hidden window's background refresh is
+// throttled). The host must answer with a freshly-minted session, or null when it
+// can't — but never re-arm main with a departed user's token.
+describe('startAiProfileHost (token pull responder)', () => {
+  it('answers a pull with a freshly minted session', async () => {
+    const { respondSessionToken, fireTokenRequest } = installWindowOmi()
+    const { startAiProfileHost } = await freshHost()
+    startAiProfileHost()
+    signIn('fresh-tok')
+    await flush()
+
+    fireTokenRequest(7)
+    await flush()
+
+    expect(respondSessionToken).toHaveBeenCalledTimes(1)
+    expect(respondSessionToken).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ token: 'fresh-tok' })
+    )
+  })
+
+  it('answers null when signed out (never a sign-out signal, just "no token")', async () => {
+    const { respondSessionToken, fireTokenRequest } = installWindowOmi()
+    const { startAiProfileHost } = await freshHost()
+    startAiProfileHost()
+    // No sign-in: auth.currentUser is null.
+    fireTokenRequest(9)
+    await flush()
+
+    expect(respondSessionToken).toHaveBeenCalledWith(9, null)
+  })
+
+  it('drops a pull whose token a sign-out overtook (replies null, not the stale token)', async () => {
+    const { respondSessionToken, fireTokenRequest } = installWindowOmi()
+    const { startAiProfileHost } = await freshHost()
+    startAiProfileHost()
+
+    // Signed in, but getIdToken hangs (a real network refresh).
+    let resolveToken!: (t: string) => void
+    const user: FakeUser = { getIdToken: () => new Promise<string>((r) => (resolveToken = r)) }
+    h.auth.currentUser = user
+
+    fireTokenRequest(3)
+    await flush()
+    expect(respondSessionToken).not.toHaveBeenCalled() // still awaiting the token
+
+    // User signs out while that token is in flight, then it resolves late.
+    h.auth.currentUser = null
+    resolveToken('tok-signed-out-user')
+    await flush()
+
+    expect(respondSessionToken).toHaveBeenCalledWith(3, null)
+    expect(respondSessionToken).not.toHaveBeenCalledWith(
+      3,
+      expect.objectContaining({ token: 'tok-signed-out-user' })
     )
   })
 })

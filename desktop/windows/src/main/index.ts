@@ -107,6 +107,8 @@ import { setTaskDeletionListener } from './tasks/taskSyncEngine'
 import { removeFromIndex as removeTaskFromEmbeddingIndex } from './tasks/taskEmbeddingService'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
+import { setTokenRefresher } from './assistants/core/session'
+import { makeRendererTokenRefresher } from './assistants/core/tokenPull'
 import { registerFocusAssistant } from './assistants/focus/register'
 import { registerInsightAssistant } from './assistants/insight/register'
 import { registerMemoryAssistant } from './assistants/memory/register'
@@ -946,6 +948,17 @@ app.whenReady().then(async () => {
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.
   const win = (mainWindow = createWindow())
+
+  // Pull-based token freshness: let main-process REST callers (task sync, and any
+  // other assistant on the shared core/session) refresh the Firebase token on
+  // demand by asking the renderer, instead of 401ing on a stale relayed token when
+  // this hidden window's background push refresh is throttled. Reads the
+  // module-level `mainWindow` so a re-created window is always the pull target.
+  setTokenRefresher(
+    makeRendererTokenRefresher(() =>
+      mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+    )
+  )
 
   // System tray: the app's anchor while windows are hidden. Reflects listening
   // state (renderer reports via tray:state), toggles the window, and owns Quit.

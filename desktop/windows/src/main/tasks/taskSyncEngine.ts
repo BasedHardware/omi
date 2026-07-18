@@ -45,6 +45,7 @@ import {
   updateCompletionStatus
 } from '../ipc/db'
 import {
+  fetchWithFreshToken,
   getAbortSignal,
   getBackendSession,
   getSessionEpoch,
@@ -155,8 +156,11 @@ class HttpError extends Error {
 }
 
 /** name/status only — never a raw body (repo logging-security rule): a JSON parse
- *  error can echo a fragment of a user-data response. */
+ *  error can echo a fragment of a user-data response. An HttpError surfaces its
+ *  STATUS (e.g. "HTTP 401"): logging only `e.name` collapsed every backend failure
+ *  to a bare "HttpError" and hid the stale-token 401s this file now refreshes. */
 function errName(e: unknown): string {
+  if (e instanceof HttpError) return `HTTP ${e.status}`
   return e instanceof Error ? e.name : 'Error'
 }
 
@@ -182,46 +186,47 @@ async function withTimeout<T>(
 
 // electron net.fetch uses Chromium's network stack (proxy/TLS aware) — same path
 // as aiUserProfile/service.ts. `body` is JSON-encoded when present.
+//
+// fetchWithFreshToken (core/session) wraps every call with pull-based token
+// freshness: it hands the fetch closure the CURRENT session (so the retry uses a
+// freshly pulled token, not the one captured at operation start), pre-empts a
+// doomed 401 when the cached token is already expired, and on a 401 pulls a fresh
+// token and retries once. The per-attempt timeout + session abort still compose
+// via withTimeout, once per attempt.
 async function apiFetch(
-  session: BackendSession,
   method: string,
   path: string,
   body: unknown,
   external?: AbortSignal
 ): Promise<Response> {
-  return withTimeout(
-    REQUEST_TIMEOUT_MS,
-    (signal) =>
-      net.fetch(`${session.apiBase}${path}`, {
-        method,
-        headers: {
-          Authorization: `Bearer ${session.token}`,
-          'Content-Type': 'application/json'
-        },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal
-      }),
-    external
+  return fetchWithFreshToken((session) =>
+    withTimeout(
+      REQUEST_TIMEOUT_MS,
+      (signal) =>
+        net.fetch(`${session.apiBase}${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${session.token}`,
+            'Content-Type': 'application/json'
+          },
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal
+        }),
+      external
+    )
   )
 }
 
 /** Page one listing. `completed` undefined = all; the envelope is
  *  `{ action_items, has_more }`. */
 async function fetchPage(
-  session: BackendSession,
   completed: boolean | undefined,
   offset: number,
   external?: AbortSignal
 ): Promise<{ items: BackendActionItem[]; hasMore: boolean }> {
   const q = new URLSearchParams({ limit: String(PAGE_LIMIT), offset: String(offset) })
   if (completed !== undefined) q.set('completed', String(completed))
-  const res = await apiFetch(
-    session,
-    'GET',
-    `/v1/action-items?${q.toString()}`,
-    undefined,
-    external
-  )
+  const res = await apiFetch('GET', `/v1/action-items?${q.toString()}`, undefined, external)
   if (!res.ok) throw new HttpError(res.status)
   const json = (await res.json()) as { action_items?: BackendActionItem[]; has_more?: boolean }
   return {
@@ -233,7 +238,6 @@ async function fetchPage(
 /** Page an entire listing (until has_more is false). Bails if the session epoch
  *  moved mid-paging. */
 async function fetchAll(
-  session: BackendSession,
   completed: boolean | undefined,
   epoch: number,
   external?: AbortSignal
@@ -242,7 +246,7 @@ async function fetchAll(
   let offset = 0
   for (let page = 0; page < MAX_PAGES; page++) {
     if (getSessionEpoch() !== epoch) break
-    const { items, hasMore } = await fetchPage(session, completed, offset, external)
+    const { items, hasMore } = await fetchPage(completed, offset, external)
     out.push(...items)
     if (!hasMore || items.length === 0) break
     offset += PAGE_LIMIT
@@ -336,8 +340,8 @@ async function maybeFullSync(
   if (!uid) return
   const key = `tasksFullSyncCompleted_v1_${uid}`
   if (getAppMeta(key)) return
-  const incomplete = await fetchAll(session, false, epoch, external)
-  const completed = await fetchAll(session, true, epoch, external)
+  const incomplete = await fetchAll(false, epoch, external)
+  const completed = await fetchAll(true, epoch, external)
   if (getSessionEpoch() !== epoch) return
   const now = Date.now()
   syncTaskActionItems(
@@ -377,7 +381,7 @@ async function doHydrateIncomplete(): Promise<void> {
     await retryUnsynced()
     await maybeFullSync(session, epoch, external)
     if (getSessionEpoch() !== epoch) return
-    const items = await fetchAll(session, false, epoch, external)
+    const items = await fetchAll(false, epoch, external)
     if (getSessionEpoch() !== epoch) return
     const now = Date.now()
     const res = syncTaskActionItems(
@@ -414,7 +418,7 @@ async function doHydrateCompleted(): Promise<void> {
   const epoch = getSessionEpoch()
   const external = getAbortSignal()
   try {
-    const items = await fetchAll(session, true, epoch, external)
+    const items = await fetchAll(true, epoch, external)
     if (getSessionEpoch() !== epoch) return
     const now = Date.now()
     const res = syncTaskActionItems(
@@ -500,7 +504,7 @@ async function pushCreate(localId: number, fields: TaskCreateFields, epoch: numb
   if (!session) return // stays unsynced — retryUnsynced picks it up later
   const external = getAbortSignal()
   try {
-    const res = await apiFetch(session, 'POST', '/v1/action-items', createBody(fields), external)
+    const res = await apiFetch('POST', '/v1/action-items', createBody(fields), external)
     if (!res.ok) throw new HttpError(res.status)
     const created = (await res.json()) as BackendActionItem
     if (getSessionEpoch() !== epoch) return
@@ -536,7 +540,6 @@ async function pushToggle(backendId: string, completed: boolean, epoch: number):
   const external = getAbortSignal()
   try {
     const res = await apiFetch(
-      session,
       'PATCH',
       `/v1/action-items/${encodeURIComponent(backendId)}`,
       { completed },
@@ -576,7 +579,6 @@ async function pushUpdate(
   const external = getAbortSignal()
   try {
     const res = await apiFetch(
-      session,
       'PATCH',
       `/v1/action-items/${encodeURIComponent(backendId)}`,
       body,
@@ -611,7 +613,6 @@ async function pushDelete(backendId: string, epoch: number): Promise<void> {
   const external = getAbortSignal()
   try {
     const res = await apiFetch(
-      session,
       'DELETE',
       `/v1/action-items/${encodeURIComponent(backendId)}`,
       undefined,
@@ -645,7 +646,6 @@ export async function retryUnsynced(): Promise<void> {
       if (getSessionEpoch() !== epoch) break
       try {
         const res = await apiFetch(
-          session,
           'POST',
           '/v1/action-items',
           createBody({
