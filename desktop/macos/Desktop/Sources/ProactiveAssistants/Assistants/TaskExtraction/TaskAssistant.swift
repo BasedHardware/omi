@@ -946,44 +946,7 @@ actor TaskAssistant: ProactiveAssistant {
       prompt += profile.profileText + "\n\n"
     }
 
-    if !context.activeTasks.isEmpty {
-      prompt +=
-        "ACTIVE TASKS (use only for semantic duplicate/refinement evidence; never globally rank new captures):\n"
-      for (i, task) in context.activeTasks.enumerated() {
-        let pri = task.priority.map { " [\($0)]" } ?? ""
-        prompt += "\(i + 1). [id:\(task.id)] \(task.description)\(pri)\n"
-      }
-      prompt += "\n"
-    }
-
-    if !context.completedTasks.isEmpty {
-      prompt +=
-        "RECENTLY COMPLETED TASKS (user engaged with these — this is the kind of task the user finds valuable. Extract similar types of tasks, just not exact duplicates of these specific ones):\n"
-      for (i, task) in context.completedTasks.enumerated() {
-        prompt += "\(i + 1). \(task.description)\n"
-      }
-      prompt += "\n"
-    }
-
-    if !context.deletedTasks.isEmpty {
-      prompt += "USER-DELETED TASKS (user explicitly rejected these — do not re-extract similar):\n"
-      for (i, task) in context.deletedTasks.enumerated() {
-        prompt += "\(i + 1). \(task.description)\n"
-      }
-      prompt += "\n"
-    }
-
-    if !context.goals.isEmpty {
-      prompt += "ACTIVE GOALS:\n"
-      for (i, goal) in context.goals.enumerated() {
-        prompt += "\(i + 1). \(goal.title)"
-        if let desc = goal.description {
-          prompt += " — \(desc)"
-        }
-        prompt += "\n"
-      }
-      prompt += "\n"
-    }
+    prompt += Self.contextEvidencePrompt(context)
 
     prompt += """
       Analyze this screenshot. If you see a potential request, search for duplicates first.
@@ -1463,6 +1426,69 @@ actor TaskAssistant: ProactiveAssistant {
     )
   }
 
+  // MARK: - Prompt Context
+
+  /// Renders the task-context evidence block of the extraction prompt. Extracted
+  /// as a pure function so the id contract is unit-testable: only ACTIVE TASKS
+  /// carry an `[id:…]` the model may target with duplicate_of/refines_task;
+  /// completed, deleted, and staged tasks are id-less "do not re-extract"
+  /// evidence. Staged tasks have no backend id, so they must never appear in the
+  /// id'd active list (they used to, all as `id:0`, producing bogus updates).
+  static func contextEvidencePrompt(_ context: TaskExtractionContext) -> String {
+    var prompt = ""
+
+    if !context.activeTasks.isEmpty {
+      prompt +=
+        "ACTIVE TASKS (use only for semantic duplicate/refinement evidence; never globally rank new captures):\n"
+      for (i, task) in context.activeTasks.enumerated() {
+        let pri = task.priority.map { " [\($0)]" } ?? ""
+        prompt += "\(i + 1). [id:\(task.id)] \(task.description)\(pri)\n"
+      }
+      prompt += "\n"
+    }
+
+    if !context.completedTasks.isEmpty {
+      prompt +=
+        "RECENTLY COMPLETED TASKS (user engaged with these — this is the kind of task the user finds valuable. Extract similar types of tasks, just not exact duplicates of these specific ones):\n"
+      for (i, task) in context.completedTasks.enumerated() {
+        prompt += "\(i + 1). \(task.description)\n"
+      }
+      prompt += "\n"
+    }
+
+    if !context.deletedTasks.isEmpty {
+      prompt += "USER-DELETED TASKS (user explicitly rejected these — do not re-extract similar):\n"
+      for (i, task) in context.deletedTasks.enumerated() {
+        prompt += "\(i + 1). \(task.description)\n"
+      }
+      prompt += "\n"
+    }
+
+    if !context.stagedTaskDescriptions.isEmpty {
+      prompt +=
+        "ALREADY CAPTURED — STAGED (these are already tracked locally; do not re-extract duplicates. "
+        + "They have no id, so never target them with duplicate_of/refines_task):\n"
+      for (i, description) in context.stagedTaskDescriptions.enumerated() {
+        prompt += "\(i + 1). \(description)\n"
+      }
+      prompt += "\n"
+    }
+
+    if !context.goals.isEmpty {
+      prompt += "ACTIVE GOALS:\n"
+      for (i, goal) in context.goals.enumerated() {
+        prompt += "\(i + 1). \(goal.title)"
+        if let desc = goal.description {
+          prompt += " — \(desc)"
+        }
+        prompt += "\n"
+      }
+      prompt += "\n"
+    }
+
+    return prompt
+  }
+
   // MARK: - Title Validation
 
   /// Validates a task title for minimum specificity. Returns an error message if invalid, nil if OK.
@@ -1529,13 +1555,16 @@ actor TaskAssistant: ProactiveAssistant {
       logError("Task: Failed to load recent tasks", error: error)
     }
 
-    // Also include staged tasks for dedup context
+    // Also load staged tasks for dedup context. These are local-only (no
+    // backend id), so they are surfaced separately as "already captured — do
+    // not re-extract" evidence rather than in the id'd active-task list. Putting
+    // them in activeTasks previously stamped every one with `id:0`, which the
+    // model could echo back as `duplicate_of:0`, driving an update against a
+    // non-existent backend task.
+    var stagedTaskDescriptions: [String] = []
     do {
       let stagedTasks = try await StagedTaskStorage.shared.getAllStagedTasks(limit: 30)
-      let stagedAsTuples = stagedTasks.map { task in
-        (id: Int64(0), description: task.description, priority: task.priority, relevanceScore: task.relevanceScore)
-      }
-      recentTasks.append(contentsOf: stagedAsTuples)
+      stagedTaskDescriptions = stagedTasks.map { $0.description }
     } catch {
       logError("Task: Failed to load staged tasks for context", error: error)
     }
@@ -1572,6 +1601,7 @@ actor TaskAssistant: ProactiveAssistant {
       activeTasks: activeTasks,
       completedTasks: completedTasks,
       deletedTasks: deletedTasks,
+      stagedTaskDescriptions: stagedTaskDescriptions,
       goals: cachedGoals
     )
   }

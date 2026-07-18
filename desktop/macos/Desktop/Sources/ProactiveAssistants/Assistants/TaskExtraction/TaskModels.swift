@@ -524,6 +524,12 @@ struct TaskExtractionContext {
   let activeTasks: [(id: Int64, description: String, priority: String?, relevanceScore: Int?)]
   let completedTasks: [(id: Int64, description: String)]
   let deletedTasks: [(id: Int64, description: String)]
+  /// Descriptions of tasks already staged locally (not yet promoted to the
+  /// backend). Presented as "already captured — do not re-extract" evidence
+  /// WITHOUT an updatable id: staged tasks have no backend id, so exposing them
+  /// in the id'd active list (previously all as `id:0`) let the model emit
+  /// `duplicate_of:0` and drive an update against a non-existent task.
+  let stagedTaskDescriptions: [String]
   let goals: [Goal]
 }
 
