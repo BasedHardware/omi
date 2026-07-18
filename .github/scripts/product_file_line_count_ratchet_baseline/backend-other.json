@@ -1,9 +1,9 @@
 {
   "files": {
-    "backend/scripts/validate-backend-runtime-env.py": 1790
+    "backend/scripts/validate-backend-runtime-env.py": 1831
   },
   "raise_justifications": {
-    "backend/scripts/validate-backend-runtime-env.py": "The shared forbidden-env guard keeps Cloud Run runtime-contract validation auditable in its authoritative validator."
+    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement and shared forbidden-env guard keep provider/runtime validation in the authoritative deployment contract validator."
   },
   "threshold": 1500
 }
