@@ -11,8 +11,11 @@ import XCTest
 final class ChatToolExecutorRowIntTests: XCTestCase {
 
   func testInt64AsIntNeverBridges() {
-    // The exact defect the helper exists to work around.
-    XCTAssertNil(Int64(7) as? Int)
+    // The exact defect the helper exists to work around. Cast from an `Any`
+    // box (as production does with a GRDB row value) — spelling `Int64 as? Int`
+    // directly is diagnosed as an always-failing cast under -warnings-as-errors.
+    let boxed: Any = Int64(7)
+    XCTAssertNil(boxed as? Int)
   }
 
   func testRowIntExtractsInt64Value() {

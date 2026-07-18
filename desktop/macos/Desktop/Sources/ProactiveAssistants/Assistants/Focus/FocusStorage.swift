@@ -130,7 +130,7 @@ class FocusStorage: ObservableObject {
   /// SQLite `deleteFocusSession(id:)` path. A UUID-id session that is not yet
   /// marked synced routes to neither the SQLite nor the backend delete, so it
   /// is only removed in memory and resurrects on the next `loadFromSQLite`.
-  static func sessionId(forSqliteRowId rowId: Int64?) -> String {
+  nonisolated static func sessionId(forSqliteRowId rowId: Int64?) -> String {
     rowId.map(String.init) ?? UUID().uuidString
   }
 

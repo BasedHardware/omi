@@ -1425,7 +1425,9 @@ class ChatToolExecutor {
   /// columns to `Int64`, and `Int64 as? Int` is ALWAYS nil in Swift (no numeric
   /// bridging), so a bare `row["col"] as? Int` silently falls through to its
   /// default. Prefer `Int64`, fall back to `Int` for any already-Int value.
-  static func rowInt(_ value: Any?) -> Int? {
+  /// `nonisolated` so non-main-actor tests (and callers) can use this pure
+  /// helper without hopping the actor.
+  nonisolated static func rowInt(_ value: Any?) -> Int? {
     (value as? Int64).map(Int.init) ?? (value as? Int)
   }
 
