@@ -20,7 +20,7 @@ struct OnboardingExportsStepView: View {
       totalSteps: totalSteps,
       eyebrow: "",
       title: "Put Omi memory where you work.",
-      description: "Connect the tools where you want Omi context to live.",
+      description: "Export Omi context to the tools you already use.",
       rightPaneFooterText: summaryText,
       graphLeading: true,
       showsSkip: true,
@@ -99,7 +99,7 @@ struct OnboardingExportsStepView: View {
 
       Spacer(minLength: 12)
 
-      Button(activeDestination == destination ? "Close" : "Connect") {
+      Button(activeDestination == destination ? "Close" : "Export") {
         activeDestination = activeDestination == destination ? nil : destination
       }
       .buttonStyle(.plain)
