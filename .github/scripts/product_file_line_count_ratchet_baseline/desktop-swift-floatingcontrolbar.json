@@ -1,15 +1,15 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2375,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2832,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4798,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2928,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4838,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2423,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1621
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Agent completion presentation now follows the canonical terminal lifecycle used by PTT and chat.",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "Notch hover and voice presentation now share a private surface-state boundary; extracting it would broaden view-local ownership.",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "Onboarding bar glow and the actionable reach-error card (Retry/Skip) render on the shared bar surface.",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Reach-error state (show/retry/dismiss) lives with the manager that owns the notification surface.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
   },
