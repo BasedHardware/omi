@@ -181,6 +181,9 @@ function makeDriver(
 
 const flush = (): Promise<void> => Promise.resolve().then(() => {})
 const loud = (): Int16Array => Int16Array.from([0, 16000, -16000, 8000])
+/** 1s of fully-voiced 16kHz audio — passes the cascade release gate
+ *  (total ≥ 0.35s, voiced ≥ 0.2s, peak above the dead-mic floor). */
+const voiced1s = (): Int16Array => new Int16Array(16000).fill(8000)
 
 // ---- (a) the invariant: flag OFF never engages the hub --------------------
 
@@ -399,6 +402,7 @@ describe('chat recording', () => {
     h.hub.setAvailability(false) // omniSTT cascade route
     h.driver.begin({ backfillMs: 0 })
     await flush()
+    h.capture.feed(voiced1s()) // a real utterance — passes the release gate
     h.driver.end()
     await flush()
     await flush()
@@ -504,7 +508,7 @@ describe('cascade route (omniSTT)', () => {
     h.driver.begin({ backfillMs: 0 })
     await flush()
     expect(h.hub.calls.beginTurn).toHaveLength(0)
-    h.capture.feed(loud())
+    h.capture.feed(voiced1s())
     h.driver.end()
     await flush()
     await flush()
@@ -527,11 +531,76 @@ describe('warm-wait fallback', () => {
     // The hub controller would fire onCascadeHandoff off handoffWarmWaitToCascade;
     // simulate the reducer firing the 1 s hubWarm deadline, then the controller's handoff.
     h.scheduler.fire('hubWarm')
-    h.hub.events().onCascadeHandoff?.({ frames: [pcm16ToBytes(loud())], committed: true })
+    h.hub.events().onCascadeHandoff?.({ frames: [pcm16ToBytes(voiced1s())], committed: true })
     await flush()
     await flush()
     expect(h.spies.transcribe).toHaveBeenCalled()
     expect(h.spies.onFinalText).toHaveBeenCalledWith('fallback text', expect.any(String))
+  })
+})
+
+// ---- cascade release gate (the empty-first-press field bug, 2026-07) --------
+// The first PTT press after idle can capture ZERO samples (mic spin-up after a
+// long idle outlasts the hold), and the cascade lane POSTed that empty buffer →
+// backend 400 "No audio data provided" with no user feedback. The driver must
+// gate on the captured audio (macOS finalize silence-gate parity): never POST
+// empty/too-short audio, and never end such a turn silently.
+
+describe('cascade release gate (empty / too-short / silent captures)', () => {
+  it('an empty capture (cold-mic first press) never POSTs and shows "Hold longer to record"', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(false) // omniSTT cascade route
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    // No chunks ever arrive (mic still spinning up for the whole hold).
+    h.driver.end()
+    await flush()
+    expect(h.spies.transcribe).not.toHaveBeenCalled() // the zero-byte POST is gone
+    expect(h.spies.onFinalText).not.toHaveBeenCalled()
+    // Not silent: the reducer terminal carries Mac's too-short hint to the bar.
+    expect(h.states.some((s) => s.hint === 'Hold longer to record')).toBe(true)
+    expect(h.states.at(-1)!.active).toBe(false) // turn ended, orb idle
+  })
+
+  it('a too-short capture (a few frames under 0.35s) is hinted, not POSTed', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(false)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(loud()) // 4 samples ≪ MIN_TOTAL_AUDIO_SEC
+    h.driver.end()
+    await flush()
+    expect(h.spies.transcribe).not.toHaveBeenCalled()
+    expect(h.states.some((s) => s.hint === 'Hold longer to record')).toBe(true)
+  })
+
+  it('a real hold with no speech (quiet room) is discarded quietly — no POST, no hint', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(false)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    // 1s of low-level room noise: total ≥ 0.35s, peak above the dead-mic floor,
+    // but nothing voiced — Mac discards silence without ceremony (STT models
+    // hallucinate phrases from silence, so it must never be sent).
+    h.capture.feed(new Int16Array(16000).fill(100))
+    h.driver.end()
+    await flush()
+    expect(h.spies.transcribe).not.toHaveBeenCalled()
+    expect(h.states.every((s) => s.hint === '')).toBe(true)
+    expect(h.states.at(-1)!.active).toBe(false)
+  })
+
+  it('a warm-wait handoff whose hub buffered nothing is hinted, not POSTed', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(false, true) // hubWarmWait route
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.driver.end() // released before any audio arrived
+    h.scheduler.fire('hubWarm')
+    h.hub.events().onCascadeHandoff?.({ frames: [], committed: true })
+    await flush()
+    expect(h.spies.transcribe).not.toHaveBeenCalled()
+    expect(h.states.some((s) => s.hint === 'Hold longer to record')).toBe(true)
   })
 })
 

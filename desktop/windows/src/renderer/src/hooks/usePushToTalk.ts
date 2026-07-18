@@ -30,6 +30,7 @@ import { startPttKeywordCollection } from '../lib/ptt/vocabulary'
 import { applyPttSystemAudio, restoreSystemAudio } from '../lib/ptt/systemAudioMute'
 import {
   HOLD_THRESHOLD_MS,
+  HOTKEY_HOLD_THRESHOLD_MS,
   STREAM_FINALIZE_DEADLINE_MS,
   HINT_MS,
   TOO_LONG_HINT_MS,
@@ -595,15 +596,18 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // One implementation shared by the textarea handlers and the window-level
   // listeners; the wrappers differ only in snapshot source and preventDefault.
 
-  /** Key-down: warm the mic, snapshot the draft, arm the threshold timer. */
-  const gestureDown = (snapshot: string): void => {
+  /** Key-down: warm the mic, snapshot the draft, arm the threshold timer.
+   *  The threshold differs by entry path: the textarea Space keeps the
+   *  typing-safe HOLD_THRESHOLD_MS; the summon hotkey (beginHold) uses Mac's
+   *  220ms boundary (HOTKEY_HOLD_THRESHOLD_MS) — see constants.ts. */
+  const gestureDown = (snapshot: string, thresholdMs: number = HOLD_THRESHOLD_MS): void => {
     keyDownAtRef.current = Date.now()
     touchMic()
     snapshotRef.current = snapshot
     holdTimerRef.current = setTimeout(() => {
       holdTimerRef.current = null
       startHold()
-    }, HOLD_THRESHOLD_MS)
+    }, thresholdMs)
   }
 
   /** Key-up: resolve the gesture. 'tap' = threshold not reached (the space
@@ -650,7 +654,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
       if (prevLock === 'locked' || lockStateRef.current.phase === 'locked') return
     }
     if (isHolding() || holdTimerRef.current !== null) return
-    gestureDown(optsRef.current.getDraft())
+    gestureDown(optsRef.current.getDraft(), HOTKEY_HOLD_THRESHOLD_MS)
   }
   const endHold = (): void => {
     // A locked capture never ends on key-up — the next tap finalizes it.

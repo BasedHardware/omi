@@ -552,7 +552,7 @@ export function BarApp(): React.JSX.Element {
                     setDraft={setDraft}
                     onSubmit={(text) => sendFromBar(text, typedVoice)}
                     limitNotice={limitNotice}
-                    pttNotice={ptt.hint || ptt.error}
+                    pttNotice={ptt.hint || ptt.error || hubOrb.hint || null}
                     pttKeyDown={ptt.onKeyDown}
                     pttKeyUp={ptt.onKeyUp}
                     recording={ptt.recording}
@@ -591,8 +591,13 @@ export function BarApp(): React.JSX.Element {
           pill as it retracts (this chip lives outside .bar-slide, so it doesn't
           share the pill's fade). Renders nothing when there is no hint/error, so the
           success path is untouched. hint is the Mac-parity guidance ("Hold longer to
-          record"); error is the failure line. */}
-      <BarHintStrip text={expanded || sliding === 'out' ? null : ptt.hint || ptt.error} />
+          record"); error is the failure line. hubOrb.hint is the SAME guidance for a
+          MAIN-owned hub/cascade turn (the reducer's terminalHint, auto-cleared by its
+          2s hintVisibility deadline) — without it a failed hub-lane hold only fired
+          the orb tremor and the chip stayed dark. */}
+      <BarHintStrip
+        text={expanded || sliding === 'out' ? null : ptt.hint || ptt.error || hubOrb.hint || null}
+      />
     </div>
   )
 }

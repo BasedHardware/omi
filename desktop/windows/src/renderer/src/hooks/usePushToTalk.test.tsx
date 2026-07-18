@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, cleanup } from '@testing-library/react'
 import {
   HOLD_THRESHOLD_MS,
+  HOTKEY_HOLD_THRESHOLD_MS,
   STREAM_FINALIZE_DEADLINE_MS,
   ERROR_STRIP_MS,
   DOUBLE_TAP_WINDOW_MS
@@ -738,5 +739,37 @@ describe('tap-to-lock latch (hotkey path)', () => {
     await advance(HOLD_THRESHOLD_MS)
     expect(result.current.locked).toBe(false)
     expect(result.current.recording).toBe(true) // an ordinary hold
+  })
+})
+
+// The hotkey path classifies at Mac's 220ms boundary (PushToTalkManager.
+// tapToLockMaxHoldDuration), NOT the textarea's typing-safe 350ms. Regression
+// for the 220–350ms dead band: those presses recorded on Mac but were silently
+// dropped on Windows.
+describe('hotkey hold threshold (Mac 220ms parity)', () => {
+  it('constants: the hotkey boundary is 220ms and the textarea keeps 350ms', () => {
+    expect(HOTKEY_HOLD_THRESHOLD_MS).toBe(220)
+    expect(HOLD_THRESHOLD_MS).toBe(350)
+  })
+
+  it('a 250ms hotkey press RECORDS (was silently dropped in the 220–350ms band)', async () => {
+    const { result } = setup()
+    act(() => result.current.beginHold())
+    await advance(250)
+    expect(result.current.recording).toBe(true) // capture began at 220ms
+    // Backfill covers the whole threshold — no speech lost (fake timers → precise).
+    expect(h.state.captureOpts[0].backfillMs).toBe(HOTKEY_HOLD_THRESHOLD_MS)
+    act(() => result.current.endHold())
+    await advance(0)
+    expect(h.startPttCapture).toHaveBeenCalledOnce()
+  })
+
+  it('a 250ms textarea Space press still never starts a capture (typing safety)', async () => {
+    setup()
+    pressSpace()
+    await advance(250)
+    releaseSpace()
+    await advance(1000)
+    expect(h.startPttCapture).not.toHaveBeenCalled()
   })
 })
