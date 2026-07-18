@@ -253,7 +253,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                         "env": [
                             {
                                 "name": "FAKE_RUNTIME_SECRET",
-                                "valueSource": {"secretKeyRef": {"name": "FAKE_RUNTIME_SECRET", "key": "latest"}},
+                                "valueSource": {"secretKeyRef": {"secret": "FAKE_RUNTIME_SECRET", "version": "latest"}},
                             }
                         ]
                     }
@@ -296,9 +296,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                                 "env": [
                                     {
                                         "name": "FAKE_RUNTIME_SECRET",
-                                        "valueFrom": {
-                                            "secretKeyRef": {"name": "legacy-secret", "key": "7"}
-                                        },
+                                        "valueFrom": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}},
                                     }
                                 ]
                             }
@@ -314,9 +312,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                         "env": [
                             {
                                 "name": "FAKE_RUNTIME_SECRET",
-                                "valueSource": {
-                                    "secretKeyRef": {"secret": "legacy-secret", "version": "7"}
-                                },
+                                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
                             }
                         ]
                     }
@@ -328,13 +324,15 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
         self.assertEqual(RUNTIME_PREFLIGHT.current_bindings(v1_service), expected)
         self.assertEqual(RUNTIME_PREFLIGHT.current_bindings(v2_service), expected)
 
-    def test_runtime_preflight_fails_closed_for_incomplete_secret_binding_shapes(self) -> None:
+    def test_runtime_preflight_fails_closed_for_malformed_or_ambiguous_secret_binding_shapes(self) -> None:
         malformed_sources = (
             {"valueFrom": {"secretKeyRef": {"name": "legacy-secret"}}},
             {"valueFrom": {"secretKeyRef": {"key": "7"}}},
             {"valueSource": {"secretKeyRef": {"secret": "legacy-secret"}}},
             {"valueSource": {"secretKeyRef": {"version": "7"}}},
             {"valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": 7}}},
+            {"valueFrom": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}}},
+            {"valueSource": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}}},
             {
                 "valueSource": {
                     "secretKeyRef": {
@@ -345,22 +343,37 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                     }
                 }
             },
+            {
+                "valueSource": {
+                    "secretKeyRef": {"secret": "legacy-secret", "version": "7"},
+                    "configMapKeyRef": {"name": "other-source"},
+                }
+            },
+            {
+                "valueFrom": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}},
+                "valueSource": {"secretKeyRef": {"secret": "other-secret", "version": "8"}},
+            },
+            {
+                "value": "literal",
+                "valueFrom": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}},
+            },
+            {
+                "value": "literal",
+                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
+            },
         )
 
         for source in malformed_sources:
             with self.subTest(source=source):
-                service = {
-                    "template": {
-                        "containers": [{"env": [{"name": "FAKE_RUNTIME_SECRET", **source}]}]
-                    }
-                }
+                service = {"template": {"containers": [{"env": [{"name": "FAKE_RUNTIME_SECRET", **source}]}]}}
 
                 self.assertEqual(
+                    RUNTIME_PREFLIGHT.current_bindings(service),
+                    {"FAKE_RUNTIME_SECRET": RUNTIME_PREFLIGHT.RuntimeBinding("invalid")},
+                )
+                self.assertEqual(
                     RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
-                    [
-                        "fake: runtime binding FAKE_RUNTIME_SECRET is a literal; expected Secret Manager "
-                        "FAKE_RUNTIME_SECRET:latest"
-                    ],
+                    ["fake-service: runtime binding FAKE_RUNTIME_SECRET has an ambiguous or malformed value source"],
                 )
 
     def test_runtime_preflight_rejects_disabled_secret_version(self) -> None:
@@ -417,7 +430,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                         "env": [
                             {
                                 "name": "STALE_RUNTIME_SECRET",
-                                "valueSource": {"secretKeyRef": {"name": "stale-secret", "key": "latest"}},
+                                "valueSource": {"secretKeyRef": {"secret": "stale-secret", "version": "latest"}},
                             }
                         ]
                     }
@@ -441,7 +454,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                         "env": [
                             {
                                 "name": "STALE_RUNTIME_SECRET",
-                                "valueSource": {"secretKeyRef": {"name": "stale-secret", "key": "latest"}},
+                                "valueSource": {"secretKeyRef": {"secret": "stale-secret", "version": "latest"}},
                             }
                         ]
                     }
@@ -462,7 +475,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                         "env": [
                             {
                                 "name": "PRESERVED_RUNTIME_SECRET",
-                                "valueSource": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}},
+                                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
                             }
                         ]
                     }
@@ -501,7 +514,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                         "env": [
                             {
                                 "name": "PRESERVED_RUNTIME_SECRET",
-                                "valueSource": {"secretKeyRef": {"name": "legacy-secret", "key": "7"}},
+                                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
                             }
                         ]
                     }
@@ -546,6 +559,35 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
             ],
         )
 
+    def test_runtime_preflight_rejects_a_literal_secret_union_for_a_preserved_binding(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "PRESERVED_RUNTIME_SECRET",
+                                "value": "literal",
+                                "valueSource": {"secretKeyRef": {"secret": "legacy-secret", "version": "7"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.current_bindings(service),
+            {"PRESERVED_RUNTIME_SECRET": RUNTIME_PREFLIGHT.RuntimeBinding("invalid")},
+        )
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
+            ["fake-service: runtime binding PRESERVED_RUNTIME_SECRET has an ambiguous or malformed value source"],
+        )
+
     def test_runtime_preflight_requires_a_live_service_to_preserve_secret_bindings(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
@@ -576,7 +618,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
                         "env": [
                             {
                                 "name": "FAKE_RUNTIME_CONFIG",
-                                "valueSource": {"secretKeyRef": {"name": "incorrect", "key": "latest"}},
+                                "valueSource": {"secretKeyRef": {"secret": "incorrect", "version": "latest"}},
                             }
                         ]
                     }
@@ -620,20 +662,26 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
             ),
         )
         live_bindings = {
-            name: {"valueSource": {"secretKeyRef": {"name": reference.rsplit(":", 1)[0], "key": "latest"}}}
+            name: {"valueSource": {"secretKeyRef": {"secret": reference.rsplit(":", 1)[0], "version": "latest"}}}
             for name, reference in personas.deployment.runtime_secrets.items()
         }
         live_bindings.update(
             {
-                "REDIS_HOST": {"valueSource": {"secretKeyRef": {"name": "legacy-redis-host", "key": "9"}}},
-                "REDIS_PASSWORD": {"valueSource": {"secretKeyRef": {"name": "legacy-redis-password", "key": "4"}}},
-                "NEXT_PUBLIC_OMI_APP_ID": {"valueSource": {"secretKeyRef": {"name": "legacy-app-id", "key": "2"}}},
-                "NEXT_PUBLIC_OMI_API_KEY": {"valueSource": {"secretKeyRef": {"name": "legacy-api-key", "key": "6"}}},
+                "REDIS_HOST": {"valueSource": {"secretKeyRef": {"secret": "legacy-redis-host", "version": "9"}}},
+                "REDIS_PASSWORD": {
+                    "valueSource": {"secretKeyRef": {"secret": "legacy-redis-password", "version": "4"}}
+                },
+                "NEXT_PUBLIC_OMI_APP_ID": {
+                    "valueSource": {"secretKeyRef": {"secret": "legacy-app-id", "version": "2"}}
+                },
+                "NEXT_PUBLIC_OMI_API_KEY": {
+                    "valueSource": {"secretKeyRef": {"secret": "legacy-api-key", "version": "6"}}
+                },
                 "LINKEDIN_API_HOST": {
-                    "valueSource": {"secretKeyRef": {"name": "NEXT_PUBLIC_LINKEDIN_API_HOST", "key": "latest"}}
+                    "valueSource": {"secretKeyRef": {"secret": "NEXT_PUBLIC_LINKEDIN_API_HOST", "version": "latest"}}
                 },
                 **{
-                    name: {"valueSource": {"secretKeyRef": {"name": f"retired-{name.lower()}", "key": "latest"}}}
+                    name: {"valueSource": {"secretKeyRef": {"secret": f"retired-{name.lower()}", "version": "latest"}}}
                     for name in personas.deployment.remove_runtime_secrets
                     if name != "LINKEDIN_API_HOST"
                 },
