@@ -255,7 +255,7 @@ def _global_read_gate_path():
 
 
 def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -523,7 +523,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
 
 
 def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_and_only_returns_archive(monkeypatch):
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
@@ -581,7 +581,7 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
 def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -657,7 +657,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
 def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_flag(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
     db_client = _FirestoreFake(
         {
@@ -707,7 +707,7 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
 def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
     db_client = _FirestoreFake(
         {

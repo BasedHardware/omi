@@ -238,9 +238,7 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
     base = tmp_path / "base"
     base.mkdir()
     (base / "kustomization.yaml").write_text("resources:\n  - deployment.yaml\n")
-    (base / "deployment.yaml").write_text(
-        textwrap.dedent(
-            f"""\
+    (base / "deployment.yaml").write_text(textwrap.dedent(f"""\
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -263,15 +261,12 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
                             secretKeyRef:
                               name: dev-omi-backend-secrets
                               key: {env_name}
-            """
-        )
-    )
+            """))
 
     def render(value_from: str) -> dict:
         overlay = tmp_path / f"overlay-{len(list(tmp_path.glob('overlay-*')))}"
         overlay.mkdir()
-        strategic_patch = textwrap.dedent(
-            f"""\
+        strategic_patch = textwrap.dedent(f"""\
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -284,11 +279,9 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
                       env:
                         - name: {env_name}
                           valueFrom:
-            """
-        )
+            """)
         strategic_patch += textwrap.indent(value_from, " " * 16)
-        kustomization = textwrap.dedent(
-            """\
+        kustomization = textwrap.dedent("""\
             resources:
               - ../base
             patches:
@@ -296,19 +289,16 @@ def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
                   kind: Deployment
                   name: pusher
                 patch: |-
-            """
-        )
+            """)
         (overlay / "kustomization.yaml").write_text(kustomization + textwrap.indent(strategic_patch, " " * 6))
         result = subprocess.run(["kubectl", "kustomize", str(overlay)], check=True, capture_output=True, text=True)
         return yaml.safe_load(result.stdout)
 
-    broken = render(
-        f"""\
+    broken = render(f"""\
 configMapKeyRef:
   name: dev-omi-backend-config
   key: {env_name}
-"""
-    )
+""")
     broken_value_from = broken["spec"]["template"]["spec"]["containers"][0]["env"][0]["valueFrom"]
     assert broken_value_from == {
         "configMapKeyRef": {"name": "dev-omi-backend-config", "key": env_name},
