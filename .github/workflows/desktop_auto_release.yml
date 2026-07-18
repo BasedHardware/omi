@@ -146,19 +146,16 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
-          SOURCE_SHA="${{ steps.recheck.outputs.source_sha }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
-          # The planner checked this exact source SHA before any changelog mutation.
-          # Keep the candidate tag on that verified source; the changelog commit is
-          # synced back to main separately below.
+          # The planner checked the newest queued releasable desktop source SHA.
+          # Tag this commit so Codemagic receives the consolidated release notes too.
           # NOTE: commit message must NOT contain [skip ci].
-          git cat-file -e "${SOURCE_SHA}^{commit}"
-          git tag "$RELEASE_TAG" "$SOURCE_SHA"
+          git tag "$RELEASE_TAG"
           git push origin "$RELEASE_TAG"
 
       - name: Create and auto-merge PR to sync changelog back to main
