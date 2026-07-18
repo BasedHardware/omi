@@ -142,6 +142,23 @@ describe('fetchWithFreshToken', () => {
     expect(s.getSessionEpoch()).toBeGreaterThan(epochBefore) // switch bumped the epoch
   })
 
+  it('does NOT retry when the pulled token has an undecodable uid (treated as not-same-user)', async () => {
+    const s = await freshSession()
+    s.setBackendSession(sess(freshU1(0)))
+    const epochBefore = s.getSessionEpoch()
+    // Token whose payload carries no user_id/sub → tokenUid() is null. A null uid
+    // must NOT `null === null`-match the cached uid and swap in place; it is routed
+    // through setBackendSession (epoch bumps), so the retry is skipped.
+    s.setTokenRefresher(async () => sess(makeToken({ exp: nowSec() + 3600 })))
+
+    const doFetch = vi.fn(async () => resp(401))
+    const res = await s.fetchWithFreshToken(doFetch)
+
+    expect(doFetch).toHaveBeenCalledTimes(1) // no retry — undecodable uid is not-same-user
+    expect(res.status).toBe(401)
+    expect(s.getSessionEpoch()).toBeGreaterThan(epochBefore)
+  })
+
   it('returns the 401 unchanged when no refresher is wired', async () => {
     const s = await freshSession()
     s.setBackendSession(sess(freshU1(0)))

@@ -140,11 +140,16 @@ export function isSessionExpired(now: number = Date.now()): boolean {
 /** Apply a pulled session. A null pull is ignored (see TokenRefresher). A pull for
  *  the SAME user (uid + both bases match) swaps the token in place with the epoch
  *  PRESERVED; a different user is a real switch → setBackendSession bumps the epoch,
- *  dooming the caller's in-flight run exactly as a fresh sign-in would. */
+ *  dooming the caller's in-flight run exactly as a fresh sign-in would.
+ *  An UNDECODABLE pulled uid (null) is treated as NOT-same-user: we can't prove it
+ *  is the current user, so we conservatively route through setBackendSession rather
+ *  than let `null === null` swap it in place while preserving the epoch. */
 function applyPulledSession(pulled: BackendSession | null): void {
   if (!pulled || !cached) return
+  const pulledUid = tokenUid(pulled.token)
   const sameUser =
-    tokenUid(pulled.token) === tokenUid(cached.token) &&
+    pulledUid !== null &&
+    pulledUid === tokenUid(cached.token) &&
     pulled.apiBase === cached.apiBase &&
     pulled.desktopApiBase === cached.desktopApiBase
   if (sameUser) cached = { ...cached, token: pulled.token }
@@ -177,7 +182,13 @@ export async function pullFreshSession(): Promise<void> {
  *   - On a 401: pull once and retry EXACTLY once — but only when the pull was a
  *     same-user refresh (the epoch did not move). A pull that moved the epoch is an
  *     account switch / sign-out whose result the caller's own epoch guard drops, so
- *     the 401 is surfaced instead of retried (never a hot retry loop). */
+ *     the 401 is surfaced instead of retried (never a hot retry loop).
+ *
+ *  CONTRACT: this helper guarantees token FRESHNESS, not identity safety. If the
+ *  pre-emptive pull switches accounts, the FIRST doFetch runs against the new
+ *  user's session — that is safe only because the caller composes the session abort
+ *  signal (getAbortSignal) into the request AND drops the result via its own epoch
+ *  guard (getSessionEpoch pinned at entry). Callers must keep doing both. */
 export async function fetchWithFreshToken(
   doFetch: (session: BackendSession) => Promise<Response>
 ): Promise<Response> {
