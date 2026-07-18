@@ -30,6 +30,7 @@ def _runtime_for_periodic_usage(*, tracking, exhausted):
         fair_use_last_check_ts=0.0,
         fair_use_track_dg_usage=tracking,
         fair_use_dg_budget_exhausted=exhausted,
+        fair_use_plan=None,
     )
 
     async def wait(_seconds):
@@ -75,7 +76,11 @@ async def test_periodic_fair_use_check_preserves_proactive_tracking_and_clears_s
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', True)
     monkeypatch.setattr(runtime_module, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 60_000)
     monkeypatch.setattr(runtime_module, 'get_rolling_speech_ms', lambda _uid: {'daily_ms': 1})
-    monkeypatch.setattr(runtime_module, 'check_soft_caps', lambda _uid, *, speech_totals: caps)
+    monkeypatch.setattr(runtime_module, 'check_soft_caps', lambda _uid, *, speech_totals, plan: caps)
+    monkeypatch.setattr(runtime_module, 'is_daily_audio_ceiling_exceeded', lambda _uid, *, speech_totals: False)
+    monkeypatch.setattr(
+        runtime_module.user_db, 'get_user_valid_subscription', lambda _uid: SimpleNamespace(plan='basic')
+    )
     monkeypatch.setattr(runtime_module, 'get_enforcement_stage', lambda _uid: 'observe')
     monkeypatch.setattr(runtime_module, 'trigger_classifier_if_needed', classifier)
     monkeypatch.setattr(runtime_module, 'start_background_task', start_background)

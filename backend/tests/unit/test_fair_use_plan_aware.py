@@ -50,12 +50,16 @@ class TestFairUseCapsForPlan:
         # Guards the whole point of the feature: Unlimited must tolerate more before scrutiny.
         assert fair_use_mod.FAIR_USE_DAILY_SPEECH_MS_UNLIMITED > fair_use_mod.FAIR_USE_DAILY_SPEECH_MS
 
-    def test_free_tier_is_never_unlimited_even_with_zero_configured_cap(self):
-        # Free's configured monthly cap can be 0 ("no cap configured") in some envs; that
-        # must NOT be mistaken for a paid unlimited plan (regression for the is_paid_plan guard).
-        with patch.object(fair_use_mod, 'get_plan_limits') as gpl:
-            gpl.return_value = type('L', (), {'transcription_seconds': 0})()
-            assert fair_use_mod._is_unlimited_tier(PlanType.basic) is False
+    def test_free_and_plus_are_never_unlimited_tier(self):
+        # The whole point of the tier split: Free/Plus must never get the raised caps.
+        assert fair_use_mod._is_unlimited_tier(PlanType.basic) is False
+        assert fair_use_mod._is_unlimited_tier(PlanType.plus) is False
+        assert fair_use_mod._is_unlimited_tier(None) is False
+
+    def test_is_unlimited_tier_accepts_raw_string_plan(self):
+        # subscription.plan may arrive as a raw string; PlanType is a str enum so membership holds.
+        assert fair_use_mod._is_unlimited_tier('unlimited_v2') is True
+        assert fair_use_mod._is_unlimited_tier('basic') is False
 
 
 class TestCheckSoftCapsPlanAware:
