@@ -5,8 +5,10 @@ from models.memory_search_gateway import SearchMode, SearchVectorHit
 from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
     FirestoreFake as _FirestoreFake,
+    MEMORY_ADAPTER_FIXTURE_NOW as _FIXTURE_NOW,
     VectorCandidateResult as _VectorCandidateResult,
     enabled_rollout_doc,
+    freeze_default_vector_eligibility_clock,
     memory_item,
     stored_item as _stored_item,
 )
@@ -438,8 +440,9 @@ def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_
     assert db_client.collection_paths == []
 
 
-def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
-    now = datetime.now(timezone.utc)
+def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default(monkeypatch):
+    now = _FIXTURE_NOW
+    freeze_default_vector_eligibility_clock(monkeypatch, now=now)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
