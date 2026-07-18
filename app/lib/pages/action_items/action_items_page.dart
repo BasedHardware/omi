@@ -313,8 +313,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           showMenu();
         },
         child: Container(
-          width: 36,
-          height: 36,
+          width: 48,
+          height: 48,
           decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
           child: const Center(child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20)),
         ),

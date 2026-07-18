@@ -100,6 +100,18 @@ LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
     ['feature', 'field', 'outcome'],
 )
 
+LLM_GATEWAY_CIRCUIT_OPEN = Gauge(
+    'llm_gateway_circuit_open',
+    'Whether this backend process is bypassing the LLM gateway after transport failures',
+)
+
+LLM_GATEWAY_CLIENT_FIRST_BYTE_SECONDS = Histogram(
+    'llm_gateway_client_first_byte_seconds',
+    'Client time until the gateway returns a non-streaming response, first stream event, or transport failure',
+    ['feature', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 30),
+)
+
 OMI_FALLBACK_TOTAL = Counter(
     'omi_fallback_total',
     'Fallback / resilience transitions by component, path, reason, and outcome',

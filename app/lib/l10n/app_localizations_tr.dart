@@ -9001,7 +9001,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get billingYearly => 'Yıllık';
 
   @override
-  String get savePercent => '~%17 tasarruf';
+  String savePercent(int percent) {
+    return '~%$percent tasarruf';
+  }
 
   @override
   String get popular => 'Popüler';
@@ -9610,4 +9612,8 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz.';
 }

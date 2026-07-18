@@ -2935,7 +2935,7 @@
     "upgradePlan": "Uppgradera plan",
     "billingMonthly": "Månadsvis",
     "billingYearly": "Årsvis",
-    "savePercent": "Spara ~17%",
+    "savePercent": "Spara ~{percent}%",
     "popular": "Populärt",
     "currentPlan": "Nuvarande",
     "neoSubtitle": "{count} frågor per månad",
@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "{used} av {total} använt",
     "deviceStorageFree": "{free} ledigt",
     "deviceStorageNearlyFull": "Enheten är nästan full — synkronisera för att frigöra utrymme.",
-    "phoneMicOfflineFallbackMessage": "Ingen anslutning – spelas in lokalt. Det transkriberas när du är online igen."
+    "phoneMicOfflineFallbackMessage": "Ingen anslutning – spelas in lokalt. Det transkriberas när du är online igen.",
+    "dataEncryptedBanner": "Dina data skyddas som standard med stark kryptering, och du bestämmer hur de lagras och används."
 }

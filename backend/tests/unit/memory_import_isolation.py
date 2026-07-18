@@ -167,6 +167,7 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     for name in (
         "anthropic",
         "utils.llm.clients",
+        "utils.llm.gateway_client",
         "utils.llm.chat",
         "utils.retrieval.rag",
         "utils.other.hume",
@@ -298,6 +299,7 @@ WS_I_HEAVY_STUB_MODULE_NAMES = (
     "utils.llm.usage_tracker",
     "anthropic",
     "utils.llm.clients",
+    "utils.llm.gateway_client",
     "utils.llm.chat",
     "utils.retrieval.rag",
     "utils.other.hume",

@@ -9042,7 +9042,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get billingYearly => 'Annuale';
 
   @override
-  String get savePercent => 'Risparmia ~17%';
+  String savePercent(int percent) {
+    return 'Risparmia ~$percent%';
+  }
 
   @override
   String get popular => 'Popolare';
@@ -9655,4 +9657,8 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Nessuna connessione: registrazione in locale. Verrà trascritto quando tornerai online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'I tuoi dati sono protetti per impostazione predefinita con una crittografia avanzata, e sei tu a controllare come vengono archiviati e utilizzati.';
 }

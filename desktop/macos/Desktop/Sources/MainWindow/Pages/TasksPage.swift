@@ -580,6 +580,18 @@ class TasksViewModel: ObservableObject {
   }
   var error: String? { store.error }
   var tasks: [TaskActionItem] { store.tasks }
+  var activeTasks: [TaskActionItem] {
+    showCompleted ? store.completedTasks : store.incompleteTasks
+  }
+  var isActiveViewLoading: Bool {
+    showCompleted ? store.isLoadingCompleted : store.isLoadingIncomplete
+  }
+  var activeViewError: String? {
+    showCompleted ? store.completedError : store.incompleteError
+  }
+  var hasLoadedActiveView: Bool {
+    showCompleted ? store.hasLoadedCompletedTasks : store.hasLoadedIncompleteTasks
+  }
 
   init(
     ownerIDProvider: @escaping @MainActor () -> String? = {
@@ -1727,17 +1739,25 @@ class TasksViewModel: ObservableObject {
   func loadTasksForFirstUse() async {
     guard
       TasksPageFirstUseLoadPolicy.shouldLoadTasks(
-        hasRenderedTasks: !store.tasks.isEmpty,
-        isLoading: store.isLoading
+        isActiveViewLoaded: hasLoadedActiveView,
+        isActiveViewLoading: isActiveViewLoading
       )
     else { return }
 
     log("TasksPage: First-use loading task list")
-    await store.loadTasksIfNeeded()
+    if showCompleted {
+      await store.loadCompletedTasks()
+    } else {
+      await store.loadTasksIfNeeded()
+    }
   }
 
   func loadTasks() async {
-    await store.loadTasks()
+    if showCompleted {
+      await store.loadCompletedTasks()
+    } else {
+      await store.loadTasks()
+    }
   }
 
   func revealTaskForNavigation(_ task: TaskActionItem) {
@@ -2705,9 +2725,9 @@ struct TasksPage: View {
       }
 
       // Content
-      if viewModel.isLoading && viewModel.tasks.isEmpty {
+      if viewModel.isActiveViewLoading && viewModel.activeTasks.isEmpty {
         loadingView
-      } else if let error = viewModel.error, viewModel.tasks.isEmpty {
+      } else if let error = viewModel.activeViewError, viewModel.activeTasks.isEmpty {
         errorView(error)
       } else if viewModel.displayTasks.isEmpty && !viewModel.isInlineCreating
         && suggestedStore.candidates.isEmpty && !suggestedStore.isLoading

@@ -131,15 +131,17 @@ class ListenReceiver:
             )
         if self.host.stt_service == STTService.modulate:
             return await process_audio_modulate(callback, sample_rate, self.host.stt_language)
-        return await process_audio_dg(
-            callback,
-            self.host.stt_language,
-            sample_rate,
-            1,
-            model=self.host.stt_model,
-            keywords=keywords,
-            is_active=lambda: self.host.state.active,
-        )
+        if self.host.stt_service == STTService.deepgram:
+            return await process_audio_dg(
+                callback,
+                self.host.stt_language,
+                sample_rate,
+                1,
+                model=self.host.stt_model,
+                keywords=keywords,
+                is_active=lambda: self.host.state.active,
+            )
+        raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
 
     async def initialize_stt(self) -> bool:
         request = self.host.request

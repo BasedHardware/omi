@@ -2,6 +2,86 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.80",
+      "date": "2026-07-18",
+      "changes": [
+        "Improved macOS beta qualification reliability during fault-path testing."
+      ]
+    },
+    {
+      "version": "0.12.79",
+      "date": "2026-07-18",
+      "changes": [
+        "Fixed several stability and accuracy issues: a chat-gateway crash on some upstream errors, a crash parsing malformed Limitless audio packets, loss of Rewind footage when power was connected mid-recording, and daily-recap/file-scan numbers wrongly showing zero",
+        "Improved macOS beta qualification reliability.",
+        "Reduced memory use in Rewind search by loading downsampled thumbnails instead of full-resolution screenshots",
+        "Fixed proactive task capture occasionally trying to update a non-existent task when a new capture matched an already-staged one"
+      ]
+    },
+    {
+      "version": "0.12.78",
+      "date": "2026-07-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.77",
+      "date": "2026-07-18",
+      "changes": [
+        "Added end-to-end test coverage for desktop audio recording finalization.",
+        "Restored artifact pills for explicitly delivered files created on your Desktop by delegated agents.",
+        "OpenClaw and Hermes requests now stay in the primary agent's model-driven tool loop instead of being parsed into deterministic UI handoffs.",
+        "Restores automatic Rewind capture in named development bundles after Screen Recording is granted, including smooth recovery from lock-screen transitions.",
+        "Keeps the notch centered and clear of hover controls throughout push-to-talk and voice responses",
+        "Fixed the first push-to-talk turns after launch or a completed Gemini response being delayed by redundant realtime-session reconnects",
+        "Restored artifact pills when a delegated agent explicitly reports a verified temporary deliverable, such as an HTML page.",
+        "Keeps the user's screen-capture preference enabled when transient Rewind monitoring stops, so capture can recover instead of silently staying disabled.",
+        "Sign in with Apple now shows your real name during onboarding instead of \"there\"",
+        "Fixed generated artifact cards across main and notch chat, and kept Screen Recording prompts on the normal voice path",
+        "Improved reliability when finalizing recordings after reconnecting",
+        "Omi Beta and other named desktop builds now show their installed version in the window title",
+        "Fixed Rewind pausing silently when macOS cannot capture the current window",
+        "Fixed Mac task views disagreeing after a task was cancelled or superseded"
+      ]
+    },
+    {
+      "version": "0.12.76",
+      "date": "2026-07-17",
+      "changes": [
+        "Add the per-conversation action-items count endpoint to the generated Omi API client.",
+        "Fixed the app detail button labeled 'Open' removing an installed non-integration app instead of opening it",
+        "Fixed chat hiding a long message that happened to share its opening with an earlier one",
+        "Added a Select button on Conversations so you can pick multiple conversations and merge them",
+        "Fixed a dashboard recommendation occasionally reporting itself unavailable while it was still loading",
+        "Fixed persona creation failures showing no error and leaving the Persona page stuck on an error screen",
+        "Fixed Later and Dismiss on suggested tasks being disabled when the task title was cleared",
+        "Added semantic feature sentinels proving Swift compiler flags are active, plus an advisory strict-concurrency diagnostic ledger for the executable target",
+        "Recorded Periphery pilot verdict: deferred due to binary incompatibility on the pinned toolchain environment",
+        "Added a pinned swift-format bootstrap wrapper and platform-aware manifest checks so macOS-only static checks run on macOS CI",
+        "Pinned the Xcode toolchain and committed the SwiftPM dependency lockfile so desktop builds are reproducible",
+        "Replaced per-bug-class asyncAfter and UserDefaults ratchet scripts with equivalent SwiftLint custom rules backed by the down-only baseline guard",
+        "Right-aligned the remaining Settings dropdowns (voice, voice model, AI provider, system audio, focus cooldown), made the daily summary time picker glide with a native stepper, and slimmed the voice speed value label",
+        "Made OmiSupport and its direct tests strict — complete strict concurrency and warnings-as-errors with zero diagnostics",
+        "Made OmiTheme strict — fixed FontScaleSettings singleton and OmiTextEditor Coordinator with @MainActor isolation",
+        "Made OmiWAL and its direct model tests strict — complete strict concurrency and warnings-as-errors with zero diagnostics",
+        "Added a pinned swift-format configuration (2-space indent, 120-column) with generated-source exclusion and formatter scope management",
+        "Enforced pinned swift-format in pre-commit and macOS CI — staged Swift files auto-format on commit, CI rejects formatting drift",
+        "Added a down-only SwiftLint baseline ratchet that rejects new violations and enforces reasoned swiftlint:disable suppressions",
+        "Added SwiftLint safety rules (force unwrap, force try, force cast, IUO, weak delegate) via a pinned build-tool plugin with a committed violation baseline",
+        "Improved desktop CI build checks.",
+        "Fixed chat responses losing their model/token/cost footer stats and dropping discovery cards and refreshed file states once a turn finished",
+        "Improved macOS developer feedback loops with faster targeted test reruns and app relaunches",
+        "Fixed macOS preferring a machine-wide OpenClaw install over the version managed in your home directory",
+        "Improved desktop chat and voice reliability by splitting oversized internals into smaller owned components.",
+        "Kept push-to-talk on one voice when starting a background agent",
+        "Kept background agents on Omi unless you choose another provider",
+        "Hardened push-to-talk and realtime voice reliability by enforcing one compiler-checked voice-turn lifecycle domain.",
+        "Improved desktop compatibility with conversation action-item progress updates",
+        "Restored desktop builds after a third-party audio dependency removed its release tags"
+      ]
+    },
+    {
       "version": "0.12.75",
       "date": "2026-07-16",
       "changes": [
@@ -23,7 +103,8 @@
         "Fixed Rewind capture getting stuck after a recoverable local database failure instead of reopening its database automatically",
         "Improved macOS Settings controls with better alignment, larger inputs, and more responsive interactions",
         "Fixed task prioritization syncing large score updates by sending them in backend-safe batches",
-        "Improved macOS development bundle isolation and troubleshooting."
+        "Improved macOS development bundle isolation and troubleshooting.",
+        "Fixed push-to-talk screen questions so Omi clearly asks for Screen Recording permission when macOS denies capture instead of treating the screen as unavailable."
       ]
     },
     {

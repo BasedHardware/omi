@@ -504,6 +504,16 @@ class TimeBasedTimelineNSView: NSView {
     tooltipWindow = nil
   }
 
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    super.viewWillMove(toWindow: newWindow)
+    // If this view is removed from its window (e.g. the user navigates away)
+    // while a tooltip is showing, mouse-exit never fires, so the borderless
+    // floating tooltip window would be orphaned on screen. Tear it down here.
+    if newWindow == nil {
+      hideTooltip()
+    }
+  }
+
   // MARK: - Drawing
 
   override func draw(_ dirtyRect: NSRect) {

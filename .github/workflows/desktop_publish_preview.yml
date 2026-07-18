@@ -47,7 +47,7 @@ jobs:
       desktop_api_url: ${{ steps.backend.outputs.desktop_api_url }}
     steps:
       - name: Checkout publishing controls from main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # workflow_dispatch can be invoked against another ref. Controls must
           # remain default-branch owned before an Environment exposes secrets.
@@ -155,7 +155,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout publishing controls from main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 1

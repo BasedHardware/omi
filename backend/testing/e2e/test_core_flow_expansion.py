@@ -104,24 +104,64 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
         lifecycle.complete(uid, conversation.id)
         return deserialize_conversation(conversations_db.get_conversation(uid, conversation.id))
 
-    async def fake_trigger_external_integrations(uid, conversation):
+    async def fake_trigger_external_integrations(uid, conversation, **kwargs):
         return []
+
+    # The exact-ID finalize route now hands off to the durable Cloud Tasks
+    # worker instead of processing inline. Configure dispatch, stub the enqueue
+    # (the hermetic harness cannot reach Cloud Tasks), and patch the expensive
+    # processing surfaces the worker calls through the shared finalizer.
+    monkeypatch.setenv("LISTEN_FINALIZATION_DISPATCH_MODE", "cloud_tasks")
+    monkeypatch.setenv("SYNC_TASKS_PROJECT", "test-e2e-project")
+    monkeypatch.setenv("SYNC_TASKS_LOCATION", "us-central1")
+    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_QUEUE", "conversation-finalization")
+    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_HANDLER_URL", "https://example.invalid/finalize")
+    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_INVOKER_SA", "worker@example.invalid")
+
+    cloud_tasks_module = sys.modules["utils.cloud_tasks"]
+    monkeypatch.setattr(cloud_tasks_module, "enqueue_listen_finalization_job", lambda *a, **k: None)
 
     conversations_router = sys.modules["routers.conversations"]
     monkeypatch.setattr(conversations_router, "process_conversation", fake_process_conversation)
     monkeypatch.setattr(conversations_router, "trigger_external_integrations", fake_trigger_external_integrations)
 
+    finalization_router = sys.modules["routers.conversation_finalization"]
+    finalizer_module = sys.modules["utils.conversations.finalizer"]
+    monkeypatch.setattr(finalizer_module, "process_conversation", fake_process_conversation)
+    monkeypatch.setattr(finalizer_module, "extract_memories", lambda *a, **k: None)
+    monkeypatch.setattr(finalizer_module, "trigger_external_integrations", fake_trigger_external_integrations)
+
     finalized = client.post(f"/v1/conversations/{conversation_id}/finalize", headers=auth_headers)
     assert finalized.status_code == 200, finalized.text
     finalized_body = finalized.json()["conversation"]
     assert finalized_body["id"] == conversation_id
-    assert finalized_body["status"] == "completed"
-    assert finalized_body["structured"]["title"] == "Finalized hermetic listen session"
-    assert finalized_body["transcript_segments"] == emitted_segments
+    # The route returns promptly after durable dispatch; processing completes
+    # when the Cloud Tasks worker claims the job lease below.
+    assert finalized_body["status"] == "processing"
+
+    # Drive the durable worker the way Cloud Tasks would. The hermetic harness
+    # cannot mint a real OIDC token, so bypass the verifier dependency.
+    original_overrides = dict(client.app.dependency_overrides)
+    client.app.dependency_overrides[finalization_router.verify_listen_finalization_cloud_tasks_oidc] = lambda: 0
+    try:
+        job = client.get(f"/v1/conversations/{conversation_id}/finalization", headers=auth_headers)
+        assert job.status_code == 200, job.text
+        worker_response = client.post(
+            "/v1/conversation-finalization-jobs/run",
+            json={"job_id": job.json()["job_id"], "dispatch_generation": 1},
+        )
+        assert worker_response.status_code == 200, worker_response.text
+        assert worker_response.json()["status"] == "done"
+    finally:
+        client.app.dependency_overrides.clear()
+        client.app.dependency_overrides.update(original_overrides)
 
     persisted = client.get(f"/v1/conversations/{conversation_id}", headers=auth_headers)
     assert persisted.status_code == 200, persisted.text
-    assert persisted.json()["status"] == "completed"
+    persisted_body = persisted.json()
+    assert persisted_body["status"] == "completed"
+    assert persisted_body["structured"]["title"] == "Finalized hermetic listen session"
+    assert persisted_body["transcript_segments"] == emitted_segments
 
 
 def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_headers, monkeypatch):

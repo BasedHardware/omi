@@ -1,6 +1,22 @@
 import Cocoa
 @preconcurrency import UserNotifications
 
+/// Pure gating policy for scheduled screen-capture ticks. Extracted so the
+/// precondition is unit-testable: a scheduled capture may run only while
+/// monitoring and neither recovering nor background-polling. This is the
+/// contract stopMonitoring must restore — if it fails to clear the recovery /
+/// background-polling flags, every subsequent tick is gated off even though
+/// monitoring is nominally on.
+enum ProactiveCapturePolicy {
+  static func captureTickAllowed(
+    isMonitoring: Bool,
+    isInRecoveryMode: Bool,
+    isInBackgroundPolling: Bool
+  ) -> Bool {
+    isMonitoring && !isInRecoveryMode && !isInBackgroundPolling
+  }
+}
+
 /// Service that manages proactive assistants - screen monitoring, frame capture, and assistant coordination
 @MainActor
 public class ProactiveAssistantsPlugin: NSObject {
@@ -33,6 +49,11 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var currentWindowTitle: String?
   private var lastStatus: FocusStatus?
   private var frameCount = 0
+  private(set) var screenCaptureHealth: ScreenCaptureHealth = .stopped
+
+  func updateScreenCaptureHealthState(_ health: ScreenCaptureHealth) {
+    screenCaptureHealth = health
+  }
 
   // Backpressure: prevents unbounded CGImage accumulation (~24MB each) when video
   // encoding is slower than the capture rate — the primary cause of multi-GB memory growth.
@@ -45,7 +66,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private let permissionCheckInterval: TimeInterval = 60
 
   // Failure tracking for screen capture recovery
-  private var consecutiveFailures = 0
+  private var screenCaptureFailureTracker = ScreenCaptureFailureTracker()
   private let maxConsecutiveFailures = 5
   private var lastCaptureSucceeded = true
   private var wasMonitoringBeforeSleep = false
@@ -389,6 +410,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     restartCaptureTimer(reason: "monitoring start")
 
     isMonitoring = true
+    setScreenCaptureHealth(.active)
 
     // Capture the first frame immediately so screenshots appear right away
     // (don't wait for the first timer interval to elapse)
@@ -402,11 +424,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     sendEvent(type: "monitoringStarted", data: [:])
     AnalyticsManager.shared.monitoringStarted()
-    NotificationCenter.default.post(
-      name: .assistantMonitoringStateDidChange,
-      object: nil,
-      userInfo: ["isMonitoring": true]
-    )
     log("Proactive assistants started")
 
     completion(true, nil)
@@ -415,7 +432,12 @@ public class ProactiveAssistantsPlugin: NSObject {
   private func setupPowerAwareCaptureTimer() {
     PowerMonitor.shared.onPowerSourceChanged = { [weak self] isOnBattery in
       Task { @MainActor in
-        guard let self, self.isMonitoring, !self.isInRecoveryMode, !self.isInBackgroundPolling else { return }
+        guard let self,
+          ProactiveCapturePolicy.captureTickAllowed(
+            isMonitoring: self.isMonitoring,
+            isInRecoveryMode: self.isInRecoveryMode,
+            isInBackgroundPolling: self.isInBackgroundPolling)
+        else { return }
 
         self.captureTimer?.invalidate()
         self.captureTimer = nil
@@ -428,7 +450,12 @@ public class ProactiveAssistantsPlugin: NSObject {
           }
 
           await MainActor.run {
-            guard self.isMonitoring, !self.isInRecoveryMode, !self.isInBackgroundPolling else { return }
+            guard
+              ProactiveCapturePolicy.captureTickAllowed(
+                isMonitoring: self.isMonitoring,
+                isInRecoveryMode: self.isInRecoveryMode,
+                isInBackgroundPolling: self.isInBackgroundPolling)
+            else { return }
             self.restartCaptureTimer(reason: "power source changed to \(isOnBattery ? "battery" : "AC")")
           }
         }
@@ -457,6 +484,18 @@ public class ProactiveAssistantsPlugin: NSObject {
     analysisDelayTimer = nil
     distributionDebounceTimer?.invalidate()
     distributionDebounceTimer = nil
+    // Clear capture-recovery / background-polling state. Without this, a stop
+    // that happens while recovering or background-polling leaves
+    // isInRecoveryMode / isInBackgroundPolling stuck true (only their exit
+    // paths clear them) and orphans the 60s backgroundPollTimer. On the next
+    // start, the scheduled-capture guards (ProactiveCapturePolicy.captureTickAllowed)
+    // then silently skip every tick, so monitoring appears on but never captures.
+    backgroundPollTimer?.invalidate()
+    backgroundPollTimer = nil
+    isInRecoveryMode = false
+    isInBackgroundPolling = false
+    backgroundPollCount = 0
+    recoveryRetryCount = 0
     isInDelayPeriod = false
     screenshotCaptureGate.reset()
     videoCallThrottleGate.reset()
@@ -508,6 +547,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     currentWindowTitle = nil
     lastStatus = nil
     frameCount = 0
+    setScreenCaptureHealth(.stopped)
 
     // Clear FocusStorage real-time state
     FocusStorage.shared.clearRealtimeStatus()
@@ -517,11 +557,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     sendEvent(type: "monitoringStopped", data: [:])
     AnalyticsManager.shared.monitoringStopped()
-    NotificationCenter.default.post(
-      name: .assistantMonitoringStateDidChange,
-      object: nil,
-      userInfo: ["isMonitoring": false]
-    )
     log("Proactive assistants stopped")
   }
 
@@ -558,6 +593,30 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// Get current monitoring status
   var currentStatus: (isMonitoring: Bool, currentApp: String?, lastStatus: FocusStatus?) {
     return (isMonitoring, currentApp, lastStatus)
+  }
+
+  private func handleCaptureTargetUnavailable() {
+    // A secure/system/helper surface is not proof that the capture engine or
+    // permission failed. Keep the normal timer armed so the very next real
+    // window resumes capture instead of waiting through recovery polling.
+    screenCaptureFailureTracker.recordTargetUnavailable()
+    lastCaptureSucceeded = true
+    setScreenCaptureHealth(.temporarilyUnavailable)
+  }
+
+  private func handleCaptureEngineFailure() {
+    let consecutiveFailures = screenCaptureFailureTracker.recordEngineFailure()
+    lastCaptureSucceeded = false
+
+    if consecutiveFailures == 1 || consecutiveFailures % 5 == 0 {
+      log(
+        "ProactiveAssistantsPlugin: Capture failed (\(consecutiveFailures) consecutive), frontmost: \(getFrontmostAppInfo())"
+      )
+    }
+
+    if consecutiveFailures >= maxConsecutiveFailures {
+      handleRepeatedCaptureFailures()
+    }
   }
 
   // MARK: - Frame Capture
@@ -665,9 +724,14 @@ public class ProactiveAssistantsPlugin: NSObject {
     case .capture:
       break
     }
-
     // Get current window info (use real app name, not cached)
     let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
+    guard !ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) else { return }
+
+    guard let windowID else {
+      handleCaptureTargetUnavailable()
+      return
+    }
 
     // Check if the current app is excluded from Rewind capture
     var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
@@ -724,9 +788,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
 
     // Update local window tracking
-    if let windowID = windowID {
-      currentWindowID = windowID
-    }
+    currentWindowID = windowID
     currentWindowTitle = windowTitle
 
     // Use real app name from window info, fall back to cached if unavailable.
@@ -737,32 +799,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
     // pass CGImage to RewindIndexer (avoids redundant encode/decode round-trips)
     if #available(macOS 14.0, *) {
-      // Use the window ID already resolved above (line 624) to avoid stale cache hits
-      // from a second getActiveWindowInfoAsync() call inside captureActiveWindowCGImage()
+      // Use the window ID already resolved above to avoid stale cache hits
+      // from a second getActiveWindowInfoAsync() call inside captureActiveWindowCGImage().
       var cgImage: CGImage? = nil
-      if let wid = windowID {
-        switch await screenCaptureService.captureWindowCGImage(windowID: wid) {
-        case .success(let image):
-          cgImage = image
-        case .windowGone:
-          // The window disappeared between resolution and capture (user closed
-          // a tab, dismissed a modal, app destroyed the window). Re-resolve the
-          // active window fresh and retry once — do NOT count this as a capture
-          // failure. This used to trip the consecutive-failure counter and falsely
-          // declare "screen recording permission lost" after normal user actions.
-          cgImage = await screenCaptureService.captureActiveWindowCGImage()
-          // Privacy: re-resolve app name since active window may have changed
-          let (retryApp, retryTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
-          if let retryApp = retryApp {
-            appName = retryApp
-            currentWindowTitle = retryTitle
-            isRewindExcluded = RewindSettings.shared.isAppExcluded(retryApp)
-          }
-        case .failed:
-          cgImage = nil
-        }
-      } else {
-        cgImage = await screenCaptureService.captureActiveWindowCGImage()
+      var captureResult = await screenCaptureService.captureWindowCGImage(windowID: windowID)
+      if case .windowGone = captureResult {
+        // The target disappeared or ScreenCaptureKit does not expose it. Retry
+        // once after a fresh resolution, then treat a second unavailable target
+        // as a normal paused tick rather than an engine failure.
+        captureResult = await screenCaptureService.captureActiveWindowCGImage()
         // Privacy: re-resolve app name since captureActiveWindowCGImage captures
         // whatever is currently active, which may differ from the earlier resolution.
         let (fallbackApp, fallbackTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
@@ -772,14 +817,25 @@ public class ProactiveAssistantsPlugin: NSObject {
           isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
         }
       }
+      switch captureResult {
+      case .success(let image):
+        cgImage = image
+      case .windowGone:
+        handleCaptureTargetUnavailable()
+        return
+      case .failed:
+        handleCaptureEngineFailure()
+        return
+      }
       if let cgImage = cgImage,
         let appName = appName
       {
+        let recoveredAfterFailures = screenCaptureFailureTracker.recordCaptureSuccess()
         if !lastCaptureSucceeded {
-          log("Screen capture recovered after \(consecutiveFailures) failures")
+          log("Screen capture recovered after \(recoveredAfterFailures) failures")
         }
-        consecutiveFailures = 0
         lastCaptureSucceeded = true
+        setScreenCaptureHealth(.active)
 
         frameCount += 1
         let captureTime = Date()
@@ -845,18 +901,7 @@ public class ProactiveAssistantsPlugin: NSObject {
           }
         }
       } else {
-        consecutiveFailures += 1
-        lastCaptureSucceeded = false
-
-        if consecutiveFailures == 1 || consecutiveFailures % 5 == 0 {
-          log(
-            "ProactiveAssistantsPlugin: Capture failed (\(consecutiveFailures) consecutive), frontmost: \(getFrontmostAppInfo())"
-          )
-        }
-
-        if consecutiveFailures >= maxConsecutiveFailures {
-          handleRepeatedCaptureFailures()
-        }
+        handleCaptureEngineFailure()
         return
       }
     } else if let jpegData = await screenCaptureService.captureActiveWindowAsync(),
@@ -873,11 +918,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
       }
 
+      let recoveredAfterFailures = screenCaptureFailureTracker.recordCaptureSuccess()
       if !lastCaptureSucceeded {
-        log("Screen capture recovered after \(consecutiveFailures) failures")
+        log("Screen capture recovered after \(recoveredAfterFailures) failures")
       }
-      consecutiveFailures = 0
       lastCaptureSucceeded = true
+      setScreenCaptureHealth(.active)
 
       frameCount += 1
 
@@ -920,20 +966,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
       }
     } else {
-      // Track capture failures
-      consecutiveFailures += 1
-      lastCaptureSucceeded = false
-
-      // Log first failure and every 5th failure to avoid spam
-      if consecutiveFailures == 1 || consecutiveFailures % 5 == 0 {
-        log(
-          "ProactiveAssistantsPlugin: Capture failed (\(consecutiveFailures) consecutive), frontmost: \(getFrontmostAppInfo())"
-        )
-      }
-
-      if consecutiveFailures >= maxConsecutiveFailures {
-        handleRepeatedCaptureFailures()
-      }
+      handleCaptureEngineFailure()
     }
   }
 
@@ -1155,7 +1188,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin: System woke from sleep")
 
     // Reset failure counter
-    consecutiveFailures = 0
+    screenCaptureFailureTracker.reset()
     lastCaptureSucceeded = true
 
     // If we were monitoring before sleep, reinitialize capture service and restart timer
@@ -1197,7 +1230,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     log("ProactiveAssistantsPlugin: Screen unlocked - resuming capture")
 
     // Reset failure counter
-    consecutiveFailures = 0
+    screenCaptureFailureTracker.reset()
     lastCaptureSucceeded = true
 
     if wasMonitoringBeforeLock && isMonitoring {
@@ -1225,7 +1258,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private func handleRepeatedCaptureFailures() {
     let frontApp = getFrontmostAppInfo()
     log(
-      "ProactiveAssistantsPlugin: Detected \(consecutiveFailures) consecutive capture failures (frontmost: \(frontApp))"
+      "ProactiveAssistantsPlugin: Detected \(screenCaptureFailureTracker.consecutiveEngineFailures) consecutive capture failures (frontmost: \(frontApp))"
     )
 
     // Check if we're in a special system mode (Exposé, Mission Control, etc.)
@@ -1390,6 +1423,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     isInRecoveryMode = true
     recoveryRetryCount = 0
+    setScreenCaptureHealth(.recovering)
 
     log("ProactiveAssistantsPlugin: Entering recovery mode, will retry capture periodically")
 
@@ -1455,11 +1489,12 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     if success {
       // Reset failure counter and resume normal operation
-      consecutiveFailures = 0
+      screenCaptureFailureTracker.reset()
       lastCaptureSucceeded = true
 
       // Restart normal capture timer
       restartCaptureTimer(reason: "recovery success")
+      setScreenCaptureHealth(.active)
     } else {
       // Recovery failed - enter background polling before giving up
       log("ProactiveAssistantsPlugin: Initial recovery failed, entering background polling mode")
@@ -1519,11 +1554,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     backgroundPollTimer = nil
 
     if success {
-      consecutiveFailures = 0
+      screenCaptureFailureTracker.reset()
       lastCaptureSucceeded = true
 
       // Resume normal capture
       restartCaptureTimer(reason: "background polling recovery")
+      setScreenCaptureHealth(.active)
     } else {
       attemptAutoReset()
     }
@@ -1542,11 +1578,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         await MainActor.run {
           if recovered {
             log("ProactiveAssistantsPlugin: Soft recovery succeeded, resuming capture")
-            self.consecutiveFailures = 0
+            self.screenCaptureFailureTracker.reset()
             self.lastCaptureSucceeded = true
 
             // Restart normal capture timer
             self.restartCaptureTimer(reason: "soft recovery success")
+            self.setScreenCaptureHealth(.active)
           } else {
             // Soft recovery failed in-process, restart app to refresh permission state
             // This still avoids wiping TCC — the restart itself often fixes stale caches

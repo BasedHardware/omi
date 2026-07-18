@@ -2940,7 +2940,7 @@
     "upgradePlan": "Aktualizovať plán",
     "billingMonthly": "Mesačne",
     "billingYearly": "Ročne",
-    "savePercent": "Ušetrite ~17%",
+    "savePercent": "Ušetrite ~{percent}%",
     "popular": "Obľúbené",
     "currentPlan": "Aktuálny",
     "neoSubtitle": "{count} otázok mesačne",
@@ -3154,5 +3154,6 @@
     "deviceStorageUsedOfTotal": "{used} z {total} využité",
     "deviceStorageFree": "{free} voľných",
     "deviceStorageNearlyFull": "Zariadenie je takmer plné — synchronizujte, aby ste uvoľnili miesto.",
-    "phoneMicOfflineFallbackMessage": "Bez pripojenia – nahráva sa lokálne. Prepíše sa, keď budete znova online."
+    "phoneMicOfflineFallbackMessage": "Bez pripojenia – nahráva sa lokálne. Prepíše sa, keď budete znova online.",
+    "dataEncryptedBanner": "Vaše údaje sú predvolene zabezpečené silným šifrovaním a vy máte kontrolu nad tým, ako sa ukladajú a používajú."
 }

@@ -3,6 +3,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -15,10 +17,15 @@ def _load_script(name: str):
     return module
 
 
-def test_memory_policy_core_change_selects_inv_mem_guard():
-    """Narrow memory policy PRs always pull INV-MEM guard tests."""
+@pytest.fixture(scope="module")
+def selector_and_all_tests():
     selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+    return selector, selector.discover_all_tests()
+
+
+def test_memory_policy_core_change_selects_inv_mem_guard(selector_and_all_tests):
+    """Narrow memory policy PRs always pull INV-MEM guard tests."""
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         ["backend/utils/memory/chat_memory_adapter.py"],
@@ -28,9 +35,8 @@ def test_memory_policy_core_change_selects_inv_mem_guard():
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_workflow_contract_sources_select_adjacent_tests():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     full_run_cases = {
         "backend/database/memory_vector_repair_outbox_worker.py": "tests/unit/test_vector_repair_outbox_worker.py",
@@ -53,8 +59,9 @@ def test_workflow_contract_sources_select_adjacent_tests():
         ".github/workflows/desktop_backend_auto_dev.yml": "tests/unit/test_voice_provider_probe.py",
         "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
-        ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_verify_dev_backend_deployment.py",
+        ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_verify_backend_release_vector.py",
         ".github/workflows/gcp_llm_gateway.yml": "tests/unit/test_preflight_cloud_run_deploy.py",
+        ".github/workflows/gcp_llm_gateway_auto_dev.yml": "tests/unit/test_llm_gateway_deploy_contract.py",
         "backend/jobs/short_term_lifecycle_worker.py": "tests/unit/test_ws_b_short_term_lifecycle.py",
         "backend/utils/memory_ingestion/export_runner.py": "tests/unit/test_memory_ingestion_pipeline.py",
     }
@@ -71,9 +78,8 @@ def test_workflow_contract_sources_select_adjacent_tests():
         assert selected == all_tests
 
 
-def test_workflow_contract_directory_glob_selects_nested_chart_test():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         ["backend/charts/pusher/templates/deployment.yaml"],
@@ -84,10 +90,9 @@ def test_workflow_contract_directory_glob_selects_nested_chart_test():
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
+def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector_and_all_tests):
     """Docs/AGENTS skip selection; metrics is not a FULL_RUN_GLOBS hit."""
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+    selector, all_tests = selector_and_all_tests
 
     for path in (
         "backend/AGENTS.md",
@@ -114,9 +119,8 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
         assert reason == f"{path} requires the full backend unit suite"
 
 
-def test_unmapped_source_forces_full_suite_even_when_direct_test_changed():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         [
@@ -130,9 +134,8 @@ def test_unmapped_source_forces_full_suite_even_when_direct_test_changed():
     assert reason == "backend/new_unmapped_runtime.py did not match a backend test-selection contract"
 
 
-def test_mapped_source_with_direct_test_remains_narrow():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_mapped_source_with_direct_test_remains_narrow(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         [
@@ -147,9 +150,8 @@ def test_mapped_source_with_direct_test_remains_narrow():
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_removed_test_forces_full_discovered_suite():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_removed_test_forces_full_discovered_suite(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         ["backend/tests/unit/test_removed_contract.py"],
@@ -189,10 +191,28 @@ def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
     assert "scripts/run-unit-ci.sh --changed-files" in workflow_text
     assert "scripts/run-unit-ci.sh --all" in workflow_text
     assert "backend/scripts/run-unit-ci.sh" not in pre_push
+    assert "backend/scripts/needs-typecheck.sh" in pre_push
+    assert '"$SCRIPT_DIR/needs-typecheck.sh" "$2"' in runner
     assert 'PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40' in pre_push
     assert "pre-push is intentionally a bounded local-feedback gate" in pre_push
     assert 'BACKEND_FAST_UNIT_WARN_SECONDS="0.1"' in runner
     assert 'BACKEND_FAST_UNIT_FAIL_SECONDS="1.0"' in runner
+
+
+def test_expensive_pr_contracts_cancel_only_superseded_pull_request_runs():
+    repo = BACKEND_DIR.parent
+    workflows = {
+        "backend-unit-tests.yml": "backend-unit-tests-",
+        "openapi-contract.yml": "openapi-contract-",
+    }
+
+    for filename, group_prefix in workflows.items():
+        workflow = (repo / ".github/workflows" / filename).read_text(encoding="utf-8")
+        assert "concurrency:" in workflow
+        assert f"group: {group_prefix}${{{{ github.event_name == 'pull_request'" in workflow
+        assert "format('pr-{0}', github.event.pull_request.number)" in workflow
+        assert "format('run-{0}', github.run_id)" in workflow
+        assert "cancel-in-progress: true" in workflow
 
 
 def test_backend_test_runner_defaults_python_to_utf8():
@@ -266,6 +286,24 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     assert "check_desktop_test_quality.py" in manifest
     assert 'python3 "$SCRIPT_DIR/check_desktop_test_quality.py"' in swift_test_suites
     assert 'if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then' in swift_test_suites
+
+
+def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
+    repo = BACKEND_DIR.parent
+    detect_changes = (repo / '.github/actions/detect-changes/action.yml').read_text(encoding='utf-8')
+    mobile_checks = (repo / '.github/workflows/mobile-app-checks.yml').read_text(encoding='utf-8')
+    generated = mobile_checks.split('\n  generated-files:\n', 1)[1].split('\n  analyze:\n', 1)[0]
+    android = mobile_checks.split('\n  android-compile-smoke:\n', 1)[1]
+    changes = mobile_checks.split('\n  changes:\n', 1)[1].split('\n  generated-files:\n', 1)[0]
+
+    assert 'if [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then' in detect_changes
+    assert (
+        'if [ "$has_dart" = "true" ] || [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then'
+        not in detect_changes
+    )
+    assert 'fetch-depth: 1' in generated
+    assert 'fetch-depth: 1' in android
+    assert 'fetch-depth: 0' in changes
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():

@@ -123,7 +123,7 @@ runs:
           echo "has_format=false" >> "$GITHUB_OUTPUT"
         fi
 
-        if [ "$has_dart" = "true" ] || [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then
+        if [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then
           echo "has_flutter_generated=true" >> "$GITHUB_OUTPUT"
         else
           echo "has_flutter_generated=false" >> "$GITHUB_OUTPUT"

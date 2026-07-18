@@ -107,6 +107,20 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='codex'");
   });
 
+  it("leaves explicit provider delegation to the primary model loop", () => {
+    const primarySpawn = toolsForAdapter("pi-mono", { executionRole: "coordinator" })
+      .find((tool) => tool.name === "spawn_agent");
+    const leafTools = toolNamesForAdapter("pi-mono", { executionRole: "leaf" });
+
+    expect(primarySpawn?.promptGuidelines?.join("\n")).toContain(
+      "The primary coordinator decides in its model loop whether to call spawn_agent.",
+    );
+    expect(primarySpawn?.promptGuidelines?.join("\n")).toContain(
+      "do not delegate that instruction to another agent",
+    );
+    expect(leafTools).not.toContain("spawn_agent");
+  });
+
   it("guides realtime child-result retrieval without exposing internal ids", () => {
     const list = omiToolManifest.find((tool) => tool.name === "list_agent_sessions");
     const run = omiToolManifest.find((tool) => tool.name === "get_agent_run");

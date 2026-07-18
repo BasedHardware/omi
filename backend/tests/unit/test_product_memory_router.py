@@ -90,6 +90,10 @@ def _memory_product_router_import_isolation():
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from tests.unit.fixtures.memory_adapter_fakes import (
+    MEMORY_ADAPTER_FIXTURE_NOW as _FIXTURE_NOW,
+    freeze_default_vector_eligibility_clock,
+)
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 
 memory_product = None  # populated by _memory_product_router_import_isolation
@@ -167,7 +171,7 @@ def _evidence(source_id='conv1'):
 
 
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
-    now = now or datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = now or _FIXTURE_NOW
     captured_at = captured_at or (now - timedelta(days=1))
     data = {
         'memory_id': memory_id,
@@ -581,10 +585,13 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
 def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
-    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
-    stale_short_term = _memory_item(
-        'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
+    now = _FIXTURE_NOW
+    freeze_default_vector_eligibility_clock(monkeypatch, now=now)
+    fresh_short_term = _memory_item(
+        'fresh-short-term', now=now, content='coffee fresh short term', expires_at=now + timedelta(microseconds=1)
+    )
+    expired_short_term = _memory_item(
+        'expired-short-term', now=now, content='coffee expired short term', expires_at=now
     )
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
@@ -603,7 +610,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
             },
             **{
                 f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
-                for item in [stale_short_term, archive, fresh_short_term, long_term]
+                for item in [expired_short_term, archive, fresh_short_term, long_term]
             },
         }
     )
@@ -627,7 +634,12 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
     def fake_vector_query(uid, query, *, mode, limit):
         vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
         return _VectorCandidateResult(
-            hits=[hit(stale_short_term, 0.99), hit(archive, 0.98), hit(long_term, 0.90), hit(fresh_short_term, 0.80)],
+            hits=[
+                hit(expired_short_term, 0.99),
+                hit(archive, 0.98),
+                hit(long_term, 0.90),
+                hit(fresh_short_term, 0.80),
+            ],
             rejected_count=1,
         )
 
@@ -636,7 +648,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
     assert db_client.document_paths == [
         _global_read_gate_path(),
         'users/u1/memory_control/state',
-        'users/u1/memory_items/stale-short-term',
+        'users/u1/memory_items/expired-short-term',
         'users/u1/memory_items/archive',
         'users/u1/memory_items/long-term',
         'users/u1/memory_items/fresh-short-term',
@@ -645,7 +657,8 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
     assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']
     assert response['scores_by_memory_id'] == {'long-term': 0.9, 'fresh-short-term': 0.8}
-    assert response['decisions']['stale-short-term'] == 'access_denied'
+    assert response['decisions']['expired-short-term'] == 'access_denied'
+    assert response['decisions']['fresh-short-term'] == 'allowed'
     assert response['decisions']['archive'] == 'access_denied'
     assert response['policy']['consumer'] == 'omi_chat'
     assert response['policy']['archive_capability'] is False

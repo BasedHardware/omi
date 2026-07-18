@@ -603,8 +603,7 @@ actor ActionItemStorage {
   @discardableResult
   func reconcileDashboardVisibilityFields(
     _ items: [TaskActionItem],
-    authorization: LocalMutationAuthorization,
-    deriveDeletedFromCancelledStatus: Bool = false
+    authorization: LocalMutationAuthorization
   ) async throws -> Int {
     try authorization.require()
     guard !items.isEmpty else { return 0 }
@@ -623,13 +622,11 @@ actor ActionItemStorage {
           else { continue }
 
           // The list/detail wire model carries no `deleted` field; the
-          // backend projects soft-deletion as status cancelled/superseded.
-          // Callers doing authoritative per-document reconciliation opt in
-          // to that derivation.
-          let statusImpliesDeleted =
-            deriveDeletedFromCancelledStatus
-            && (item.taskStatus == "cancelled" || item.taskStatus == "superseded")
-          let incomingDeleted = item.deleted ?? statusImpliesDeleted
+          // backend projects soft retirement as status cancelled/superseded.
+          // `TaskActionItem.isRetired` is the one lifecycle projection for
+          // every caller, so a dashboard detail refresh cannot resurrect a
+          // task that the canonical list has already retired.
+          let incomingDeleted = item.isRetired
           var changed = false
 
           if record.completed != item.completed {
@@ -1243,9 +1240,12 @@ actor ActionItemStorage {
               FROM action_items
               WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
           """)
+      // GRDB decodes INTEGER (incl. MIN/MAX aggregates) as Int64, and
+      // `Int64 as? Int` is always nil — a bare `as? Int` would pin both bounds to
+      // 0. Match the typed-decode idiom used elsewhere in this file.
       return (
-        min: row?["minScore"] as? Int ?? 0,
-        max: row?["maxScore"] as? Int ?? 0
+        min: (row?["minScore"] as? Int64).map(Int.init) ?? 0,
+        max: (row?["maxScore"] as? Int64).map(Int.init) ?? 0
       )
     }
   }

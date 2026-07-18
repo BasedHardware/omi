@@ -5999,7 +5999,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium-minutter/måned. Fanen På enheten tilbyr ubegrenset gratis transkribering.';
+      '300 premium-minutter/måned. Fanen På enheten tilbyr ubegrenset gratis transkribering.';
 
   @override
   String get viewUsage => 'Se forbruk';
@@ -6079,7 +6079,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium minutter/måned. På enheten-fanen tilbyr ubegrenset gratis transkribering. ';
+      '300 premium minutter/måned. På enheten-fanen tilbyr ubegrenset gratis transkribering. ';
 
   @override
   String get audioProcessedLocally => 'Lyd behandles lokalt. Fungerer offline, mer privat, men bruker mer batteri.';
@@ -8985,7 +8985,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get billingYearly => 'Årlig';
 
   @override
-  String get savePercent => 'Spar ~17%';
+  String savePercent(int percent) {
+    return 'Spar ~$percent%';
+  }
 
   @override
   String get popular => 'Populært';
@@ -9597,4 +9599,8 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Ingen tilkobling – tar opp lokalt. Det blir transkribert når du er tilkoblet igjen.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dataene dine er som standard sikret med sterk kryptering, og du bestemmer hvordan de lagres og brukes.';
 }

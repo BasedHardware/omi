@@ -15,7 +15,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 ## 1. Connection + Streaming + Transcription
 
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
-(e.g., `modulate-velma-2,dg-nova-3`). The first provider supporting the
+(e.g., `parakeet,modulate-velma-2`). The first provider supporting the
 requested language wins. Listen startup loads transcription preferences once and
 reuses the embedded user language for translation targeting, avoiding a second
 user-preference read on WebSocket startup. All providers implement the
@@ -92,7 +92,7 @@ assigned to a different device.
 sequenceDiagram
     participant Client
     participant Backend as Backend (/v4/listen)
-    participant STT as STT Provider (Deepgram / Modulate)
+    participant STT as STT Provider (Parakeet / Modulate)
     participant Pusher
     participant Firestore
 

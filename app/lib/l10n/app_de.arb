@@ -2903,7 +2903,7 @@
     "upgradePlan": "Plan upgraden",
     "billingMonthly": "Monatlich",
     "billingYearly": "Jährlich",
-    "savePercent": "~17% sparen",
+    "savePercent": "~{percent}% sparen",
     "popular": "Beliebt",
     "currentPlan": "Aktuell",
     "neoSubtitle": "{count} Fragen pro Monat",
@@ -3117,5 +3117,6 @@
     "deviceStorageUsedOfTotal": "{used} von {total} belegt",
     "deviceStorageFree": "{free} frei",
     "deviceStorageNearlyFull": "Gerät fast voll — synchronisieren, um Speicher freizugeben.",
-    "phoneMicOfflineFallbackMessage": "Keine Verbindung – Aufnahme erfolgt lokal. Sie wird transkribiert, sobald du wieder online bist."
+    "phoneMicOfflineFallbackMessage": "Keine Verbindung – Aufnahme erfolgt lokal. Sie wird transkribiert, sobald du wieder online bist.",
+    "dataEncryptedBanner": "Deine Daten sind standardmäßig durch starke Verschlüsselung geschützt, und du behältst die Kontrolle darüber, wie sie gespeichert und verwendet werden."
 }

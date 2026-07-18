@@ -283,51 +283,6 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertNil(AIProvider.from(bridgeMode: "agentSDK"))
   }
 
-  func testProviderDirectiveRoutesAskOpenClawToOpenClawHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "Please ask openclaw how it's going")
-
-    XCTAssertEqual(directive?.provider, .openclaw)
-    XCTAssertEqual(directive?.provider.harnessMode, .openclaw)
-    XCTAssertEqual(directive?.rewrittenQuery, "how it's going")
-    XCTAssertEqual(directive?.title, "OpenClaw")
-  }
-
-  func testProviderDirectiveRoutesHermesToHermesHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "Hermes: summarize your current status")
-
-    XCTAssertEqual(directive?.provider, .hermes)
-    XCTAssertEqual(directive?.provider.harnessMode, .hermes)
-    XCTAssertEqual(directive?.rewrittenQuery, "summarize your current status")
-    XCTAssertEqual(directive?.title, "Hermes")
-  }
-
-  func testProviderDirectiveRoutesCodexToCodexHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "ask codex to fix the failing unit tests")
-
-    XCTAssertEqual(directive?.provider, .codex)
-    XCTAssertEqual(directive?.provider.harnessMode, .codex)
-    XCTAssertEqual(directive?.rewrittenQuery, "to fix the failing unit tests")
-    XCTAssertEqual(directive?.title, "Codex")
-  }
-
-  func testProviderDirectiveMapsCodexSttMishears() {
-    let directive = AgentPillsManager.providerDirective(
-      from: "Tell codes to create the home.txt file on my desktop folder.")
-
-    XCTAssertEqual(directive?.provider, .codex)
-    XCTAssertEqual(directive?.rewrittenQuery, "to create the home.txt file on my desktop folder.")
-  }
-
-  func testProviderDirectiveIgnoresNonProviderQuestions() {
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "what is openclaw?"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "openclaw architecture"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "hermes scarf"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "compare hermes and openclaw"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "what is codex?"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "the discount codes are in my email"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "how is it going?"))
-  }
-
   // MARK: - Rename completeness: no ACPBridge / acp-bridge in Swift sources
 
   func testNoACPBridgeReferencesInSources() throws {

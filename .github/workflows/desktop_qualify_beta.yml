@@ -25,7 +25,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout qualification controls
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Manual workflow dispatch permits choosing a ref. Never execute
           # branch-controlled scripts on this privileged self-hosted runner.
@@ -34,7 +34,7 @@ jobs:
 
       - name: Generate Omi Bot token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}

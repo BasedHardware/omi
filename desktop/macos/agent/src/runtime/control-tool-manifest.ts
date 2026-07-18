@@ -716,6 +716,7 @@ Pass parentRunId to link the new run to a parent.`,
     promptGuidelines: [
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
+      "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw, Hermes, or Codex to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
       "Pass provider='openclaw', provider='hermes', or provider='codex' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
       "Inspect progress with list_agent_sessions or get_agent_run.",
     ],

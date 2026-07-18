@@ -1209,25 +1209,28 @@ export async function handleAgentControlToolCall(
             ? context.kernel.defaultAdapterIdForRun(parentRunId)
             : spawnProfile.adapterId);
         /**
-         * Realtime control always stamps its own run as `parentRunId` so the
-         * producer journal is bound to the exact authorized turn.  That
-         * provenance must not turn an explicit user-selected local provider
-         * into a child of the managed pi-mono session: delegateAgent correctly
-         * pins children to their parent's credential boundary.
+         * A kernel-authorized primary model tool carries its producing run so
+         * the journal can attach the child to the exact assistant turn. That
+         * applies to typed main chat as well as realtime, and a typed turn has
+         * a producerTurnId. The journal link is provenance, not delegation:
+         * an explicitly user-selected local provider must start as an
+         * independent local-provider run rather than inherit pi-mono's
+         * managed credential boundary.
          *
-         * The exception is deliberately narrow.  It requires both the
-         * kernel-issued realtime caller/run and its producer-journal
-         * descriptor, an explicit provider selector, and no producerTurnId
-         * whose validation requires an actual child parent_run_id.  Normal
-         * parent-linked delegation stays on the existing boundary-safe path.
+         * The exception remains narrow: the tool invocation, parent run, and
+         * producer journal must all be kernel-authorized, the caller must be
+         * the primary coordinator, and the provider must be explicit. Leaf
+         * workers never receive this tool and ordinary parent-linked children
+         * still stay inside their parent's provider boundary.
          */
         const isAuthorizedIndependentLocalProviderSpawn = Boolean(
           parentRunId
           && context.authorizedCallerRunId === parentRunId
           && context.authorizedProducerJournal
+          && context.authorizedToolInvocation?.toolName === "spawn_agent"
+          && context.executionRole === "coordinator"
           && parsed.provider
           && parsed.provider === adapterId
-          && !producerJournal?.producerTurnId,
         );
         const inheritsParentExecutionProfile = Boolean(parentRunId) && !isAuthorizedIndependentLocalProviderSpawn;
         const cwd = parsed.cwd ?? (inheritsParentExecutionProfile ? undefined : spawnProfile.workingDirectory);

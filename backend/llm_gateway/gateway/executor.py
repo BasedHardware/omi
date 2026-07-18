@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from llm_gateway.gateway.accounting import AttemptTrace, ProviderResponseMetadata, UsageStatus
 from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
@@ -22,6 +23,7 @@ from llm_gateway.gateway.providers import (
     EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
     GENERIC_PROVIDER_FAILURE_MESSAGE,
     ProviderFailure,
+    ProviderResponse,
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, apply_output_budget
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
@@ -43,6 +45,7 @@ class ExecutorResult:
     fallback_reason: FailureClass | None
     used_lkg: bool
     output_budget: OutputBudgetDecision
+    provider_accounting: ProviderResponseMetadata
 
 
 class ProviderRegistry:
@@ -76,6 +79,8 @@ async def execute_chat_completion(
     resolved_route: ResolvedRoute,
     credential_context: CredentialContext,
     provider_registry: ProviderRegistry,
+    *,
+    attempt_trace: AttemptTrace | None = None,
 ) -> ExecutorResult:
     serving_route = _select_serving_route(resolved_route)
     serving_is_lkg = serving_route is resolved_route.last_known_good_route
@@ -91,6 +96,7 @@ async def execute_chat_completion(
             provider_registry,
             is_lkg=serving_is_lkg,
             fallback_reason=None,
+            attempt_trace=attempt_trace,
         )
     except GatewayError as exc:
         first_failure = exc.failure_class
@@ -110,6 +116,7 @@ async def execute_chat_completion(
                 provider_registry,
                 is_lkg=True,
                 fallback_reason=first_failure,
+                attempt_trace=attempt_trace,
             )
         except GatewayError as exc:
             last_error = exc
@@ -200,6 +207,7 @@ async def _execute_route(
     *,
     is_lkg: bool,
     fallback_reason: FailureClass | None,
+    attempt_trace: AttemptTrace | None,
 ) -> ExecutorResult:
     refs = [route.primary, *route.fallbacks]
     last_error: GatewayError | None = None
@@ -224,6 +232,8 @@ async def _execute_route(
                 provider,
                 provider_ref,
                 credential_context,
+                attempt_trace=attempt_trace,
+                fallback_reason=current_fallback_reason,
             )
             if error is None:
                 if response is None:
@@ -257,7 +267,10 @@ async def _attempt_provider(
     provider: ChatCompletionProvider,
     provider_ref: ProviderRef,
     credential_context: CredentialContext,
-) -> tuple[Mapping[str, Any] | None, GatewayError | None]:
+    *,
+    attempt_trace: AttemptTrace | None,
+    fallback_reason: FailureClass | None,
+) -> tuple[ProviderResponse | None, GatewayError | None]:
     """Try a single provider up to ``route.retry.max_attempts`` times.
 
     Returns ``(response, None)`` on success, or ``(None, error)`` if all
@@ -265,7 +278,7 @@ async def _attempt_provider(
     """
     max_attempts = max(route.retry.max_attempts, 1)
     error: GatewayError | None = None
-    for _attempt in range(max_attempts):
+    for retry_ordinal in range(1, max_attempts + 1):
         try:
             response = await provider.create_chat_completion(
                 _provider_request(resolved_route, provider_ref, route=route),
@@ -273,11 +286,59 @@ async def _attempt_provider(
                 credentials=credential_context,
                 timeout_ms=route.timeouts.request_ms,
             )
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='success',
+                    error_class='none',
+                    metadata=response.accounting,
+                )
             return response, None
         except ProviderFailure as exc:
             error = _map_provider_failure(exc, credential_context)
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='error',
+                    error_class=exc.failure_class.value,
+                    usage_status=UsageStatus.INDETERMINATE,
+                )
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
+        except asyncio.CancelledError:
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='cancelled',
+                    error_class='client_cancelled',
+                    usage_status=UsageStatus.INDETERMINATE,
+                )
+            raise
+        except Exception:
+            if attempt_trace is not None:
+                attempt_trace.record(
+                    provider=provider_ref.provider,
+                    configured_model=provider_ref.model,
+                    route_artifact_id=route.route_artifact_id,
+                    fallback_reason=fallback_reason.value if fallback_reason is not None else None,
+                    retry_ordinal=retry_ordinal,
+                    outcome='error',
+                    error_class='unexpected_provider_error',
+                    usage_status=UsageStatus.INDETERMINATE,
+                )
+            raise
     return None, error
 
 
@@ -343,7 +404,7 @@ def _apply_gemini_thinking_budget(provider_request: dict[str, Any], thinking_bud
 
 
 def _executor_result(
-    provider_response: Mapping[str, Any],
+    provider_response: ProviderResponse,
     *,
     resolved_route: ResolvedRoute,
     route: RouteArtifact,
@@ -352,7 +413,7 @@ def _executor_result(
     fallback_reason: FailureClass | None,
     used_lkg: bool,
 ) -> ExecutorResult:
-    response = dict(provider_response)
+    response = dict(provider_response.response)
     response['model'] = resolved_route.validated_request.model
     return ExecutorResult(
         response=response,
@@ -364,6 +425,7 @@ def _executor_result(
         fallback_reason=fallback_reason,
         used_lkg=used_lkg,
         output_budget=output_budget_for(resolved_route, route),
+        provider_accounting=provider_response.accounting,
     )
 
 

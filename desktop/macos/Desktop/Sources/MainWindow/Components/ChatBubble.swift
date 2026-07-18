@@ -375,6 +375,14 @@ struct ChatBubble: View {
       }
     }
     .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+    // Keep the dedupe shadow in sync with the live rating. Without this, an
+    // external rating change (background sync/poll updates message.rating on a
+    // stable .id(message.id) view) leaves lastSubmittedRating stale, so a later
+    // un-rate tap computes newRating == nil == lastSubmittedRating and the guard
+    // swallows it — the rating can never be cleared.
+    .onChange(of: message.rating, initial: true) { _, newValue in
+      lastSubmittedRating = newValue
+    }
   }
 
   private func showRatingFeedbackBriefly() {

@@ -168,6 +168,8 @@ final class SuggestedTasksStore: ObservableObject {
   private var ownerRevision: UInt = 0
   private var activeLoadToken: UUID?
   private var loadingOwnerScope: OwnerScope?
+  private var activeLoadTask: Task<Void, Never>?
+  private var activeLoadTaskID: UUID?
   private var suppressions: [String: Date]
   private var pendingFeedback: [PendingSuggestedFeedback]
   private var didRegisterAutomationActions = false
@@ -195,7 +197,33 @@ final class SuggestedTasksStore: ObservableObject {
 
   func load() async {
     let ownerScope = captureOwnerScope()
-    guard loadingOwnerScope != ownerScope else { return }
+    if loadingOwnerScope == ownerScope {
+      // A same-owner load is already running. Await it rather than returning a
+      // no-op, so a caller that depends on the fetched data — e.g. a dashboard→
+      // Suggested navigation reveal — sees the populated result instead of an
+      // empty/stale one.
+      if let activeLoadTask { await activeLoadTask.value }
+      return
+    }
+    // Claim the dedup slot synchronously here — before spawning the task and
+    // before the first await — so a re-entrant same-owner load() can't still
+    // see it free and start a second concurrent load.
+    loadingOwnerScope = ownerScope
+    let taskID = UUID()
+    let task = Task { [weak self] in
+      guard let self else { return }
+      await self.performLoad(ownerScope: ownerScope)
+    }
+    activeLoadTask = task
+    activeLoadTaskID = taskID
+    await task.value
+    if activeLoadTaskID == taskID {
+      activeLoadTask = nil
+      activeLoadTaskID = nil
+    }
+  }
+
+  private func performLoad(ownerScope: OwnerScope) async {
     let loadToken = UUID()
     activeLoadToken = loadToken
     loadingOwnerScope = ownerScope

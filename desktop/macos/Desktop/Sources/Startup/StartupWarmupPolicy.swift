@@ -84,8 +84,8 @@ struct DelayedFileIndexingBackfillState {
 }
 
 enum TasksPageFirstUseLoadPolicy {
-  static func shouldLoadTasks(hasRenderedTasks: Bool, isLoading: Bool) -> Bool {
-    !hasRenderedTasks && !isLoading
+  static func shouldLoadTasks(isActiveViewLoaded: Bool, isActiveViewLoading: Bool) -> Bool {
+    !isActiveViewLoaded && !isActiveViewLoading
   }
 }
 

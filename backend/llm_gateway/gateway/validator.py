@@ -30,6 +30,7 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'prompt_cache_key',
         'seed',
         'stop',
+        'stream_options',
         'temperature',
         'top_logprobs',
         'top_p',

@@ -600,7 +600,10 @@ extension RealtimeHubController {
           return .failed(Self.authorizedRealtimeToolError(code: "stale_realtime_tool_authorization"))
         }
         rejectScreenEvidence(failureEvidence, reason: "capture_unavailable")
-        return .succeeded(screenshotToolResultTextForCurrentProvider(attachment: nil))
+        return .succeeded(
+          screenshotToolResultTextForCurrentProvider(
+            attachment: nil,
+            unavailableEvidence: failureEvidence))
       }
       let attachment = RealtimeScreenEvidenceAttachment(descriptor: evidence.descriptor, jpeg: jpeg)
       // The provider receives these exact pre-overlay pixels only inside the matching tool

@@ -5,6 +5,7 @@ import importlib.util
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -45,9 +46,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
-        {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,dg-nova-3"},
+        {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,modulate-velma-2"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
-        {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
@@ -65,6 +65,16 @@ def with_memory_env(payload: str) -> str:
     )
 
 
+def with_backend_pusher_env(payload: str) -> str:
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "HOSTED_PUSHER_API_URL", "value": "http://pusher.omiapi.com"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
@@ -76,12 +86,11 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
 
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
-    payload = with_memory_env(with_sync_ledger_fence_mode(payload))
+    payload = with_backend_pusher_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
@@ -105,7 +114,6 @@ def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Pat
 STANDARD_CLOUD_RUN_SECRETS = {
     'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
     'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
-    'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
     'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
 }
 
@@ -178,6 +186,34 @@ def test_prod_account_deletion_dispatch_contract_rejects_missing_or_inline_profi
         ) in validator._validate_account_deletion_dispatch_contract('prod', prod)
     finally:
         dispatch_mode['value'] = original_mode
+
+
+def test_prod_listen_finalization_contract_requires_the_dedicated_worker_bindings():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = manifest['environments']['prod']
+
+    assert validator._validate_listen_finalization_dispatch_contract('prod', prod) == []
+
+    backend_env = prod['cloud_run']['services']['backend']['env']
+    queue = backend_env['LISTEN_FINALIZATION_TASKS_QUEUE']
+    queue['value'] = 'sync-jobs'
+    try:
+        assert validator.ValidationError(
+            'prod/cloud_run/backend',
+            "listen-finalization env LISTEN_FINALIZATION_TASKS_QUEUE must be literal 'conversation-finalization'",
+        ) in validator._validate_listen_finalization_dispatch_contract('prod', prod)
+    finally:
+        queue['value'] = 'conversation-finalization'
+
+    missing_entry = backend_env.pop('LISTEN_FINALIZATION_TASKS_HANDLER_URL')
+    try:
+        assert validator.ValidationError(
+            'prod/cloud_run/backend',
+            'missing required listen-finalization env LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        ) in validator._validate_listen_finalization_dispatch_contract('prod', prod)
+    finally:
+        backend_env['LISTEN_FINALIZATION_TASKS_HANDLER_URL'] = missing_entry
 
 
 def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
@@ -381,7 +417,7 @@ def test_firestore_readiness_contract_requires_validation_before_artifact_upload
     workflow_path = ROOT.parent / '.github/workflows' / workflow_name
     workflow = validator._load_yaml(workflow_path)
     steps = workflow['jobs']['firestore_readiness']['steps']
-    upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v4')
+    upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v7')
     upload = steps.pop(upload_index)
     validation_index = next(
         index for index, step in enumerate(steps) if step.get('id') == 'validate_firestore_proposal'
@@ -401,7 +437,7 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     auth = next(
         step
         for step in workflow['jobs']['firestore_readiness']['steps']
-        if step.get('uses') == 'google-github-actions/auth@v2'
+        if step.get('uses') == 'google-github-actions/auth@v3'
     )
     auth['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
 
@@ -419,6 +455,149 @@ def test_repo_prod_rendered_cloud_run_state_matches_manifest():
     errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
 
     assert errors == []
+
+
+def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, 'dev')
+    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+
+    backend_env = rendered_state['services']['backend']['env']
+    next(entry for entry in backend_env if entry['name'] == 'HOSTED_PUSHER_API_URL')[
+        'value'
+    ] = 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal'
+    rendered_state['services']['backend-sync']['env'].append(
+        {
+            'name': 'HOSTED_PUSHER_API_URL',
+            'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+        }
+    )
+    rendered_state['services']['backend-sync-backfill']['env'].append(
+        {
+            'name': 'HOSTED_PUSHER_API_URL',
+            'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+        }
+    )
+
+    errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
+
+    assert errors == [
+        validator.ValidationError(
+            'cloud_run/backend',
+            "env HOSTED_PUSHER_API_URL value mismatch: expected 'http://pusher.omiapi.com'",
+        ),
+        validator.ValidationError('cloud_run/backend-sync', 'forbidden env HOSTED_PUSHER_API_URL is present'),
+        validator.ValidationError('cloud_run/backend-sync-backfill', 'forbidden env HOSTED_PUSHER_API_URL is present'),
+    ]
+
+
+def test_dev_cloud_run_pusher_contract_rejects_job_binding():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, 'dev')
+    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+    rendered_state['jobs']['notifications-job']['env'].append(
+        {
+            'name': 'HOSTED_PUSHER_API_URL',
+            'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+        }
+    )
+
+    errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
+
+    assert (
+        validator.ValidationError('cloud_run/notifications-job', 'forbidden env HOSTED_PUSHER_API_URL is present')
+        in errors
+    )
+
+
+def test_cloud_run_workflow_forbidden_env_requires_remove_env_vars(tmp_path):
+    validator = load_validator()
+    values_file = tmp_path / 'backend_listen.yaml'
+    write_yaml(values_file, {'env': []})
+    workflow_file = tmp_path / 'deploy.yml'
+    workflow = {
+        'env': {'SERVICE': 'notifications-job'},
+        'jobs': {
+            'deploy': {
+                'steps': [
+                    {
+                        'uses': 'google-github-actions/deploy-cloudrun@v2',
+                        'with': {
+                            'job': '${{ env.SERVICE }}',
+                            'env_vars': 'GOOGLE_CLOUD_PROJECT=based-hardware\n',
+                            'secrets': 'SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest\n',
+                            'flags': '--remove-env-vars=STALE_KEY',
+                        },
+                    }
+                ]
+            }
+        },
+    }
+    write_yaml(workflow_file, workflow)
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(
+        manifest_path,
+        {
+            'schema_version': 1,
+            'environments': {
+                'dev': {
+                    'gcp_project': 'based-hardware',
+                    'runtime_gcp_project': 'based-hardware',
+                    'region': 'us-central1',
+                    'gke': {'backend-listen': {'values_file': str(values_file), 'env': {}}},
+                    'cloud_run': {
+                        'workflow_files': [str(workflow_file)],
+                        'services': {},
+                        'jobs': {
+                            'notifications-job': {
+                                'env': {'GOOGLE_CLOUD_PROJECT': {'value': 'based-hardware'}},
+                                'forbidden_env': ['HOSTED_PUSHER_API_URL'],
+                                'secrets': {
+                                    'SERVICE_ACCOUNT_JSON': {
+                                        'secret': 'SERVICE_ACCOUNT_JSON',
+                                        'version': 'latest',
+                                    }
+                                },
+                            }
+                        },
+                    },
+                }
+            },
+        },
+    )
+
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
+
+    assert (
+        validator.ValidationError(
+            'cloud_run_workflow/notifications-job',
+            'forbidden env HOSTED_PUSHER_API_URL must be listed in --remove-env-vars',
+        )
+        in errors
+    )
+
+    workflow['jobs'] = {
+        'deploy': {
+            'steps': [
+                {
+                    'uses': 'google-github-actions/deploy-cloudrun@v2',
+                    'with': {
+                        'job': '${{ env.SERVICE }}',
+                        'env_vars': 'GOOGLE_CLOUD_PROJECT=based-hardware\n',
+                        'secrets': 'SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest\n',
+                        'flags': '--remove-env-vars=STALE_KEY,HOSTED_PUSHER_API_URL',
+                    },
+                }
+            ]
+        }
+    }
+    write_yaml(workflow_file, workflow)
+
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
+
+    assert not any('HOSTED_PUSHER_API_URL must be listed' in error.message for error in errors)
 
 
 def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
@@ -469,7 +648,7 @@ def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
 
     errors = validator._validate_prerecorded_stt_contract('dev', env_config)
 
-    assert len(errors) == 12
+    assert len(errors) == 9
     assert {error.scope for error in errors} == {
         'dev/cloud_run/backend',
         'dev/cloud_run/backend-sync',
@@ -477,13 +656,12 @@ def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
     }
     assert {error.message for error in errors} == {
         'required Cloud Run service is missing STT_PRERECORDED_MODEL',
-        'required Cloud Run service is missing non-empty DEEPGRAM_API_KEY',
         'required Cloud Run service is missing non-empty MODULATE_API_KEY',
         'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
     }
 
 
-def test_literal_deepgram_model_does_not_require_parakeet_endpoint():
+def test_retired_deepgram_model_requires_non_deepgram_defaults():
     validator = load_validator()
     env_config = {
         'gke': {
@@ -497,10 +675,45 @@ def test_literal_deepgram_model_does_not_require_parakeet_endpoint():
         'cloud_run': {'services': {}},
     }
 
-    assert validator._validate_prerecorded_stt_contract('prod', env_config) == []
+    assert validator._validate_prerecorded_stt_contract('prod', env_config) == [
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+        ),
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
+        ),
+    ]
 
 
-def test_literal_modulate_model_requires_its_declared_api_key_binding():
+def test_deployment_stt_models_must_match_the_central_serving_policy():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {
+                    'STT_PRERECORDED_MODEL': {'value': 'dg-nova-3'},
+                    'STT_SERVICE_MODELS': {'value': 'modulate-velma-2'},
+                },
+            }
+        },
+        'cloud_run': {'services': {}},
+    }
+
+    assert validator._validate_stt_serving_model_policy('prod', env_config) == [
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            "STT_PRERECORDED_MODEL must match stt_provider_policy: expected 'parakeet,modulate-velma-2', got 'dg-nova-3'",
+        ),
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'parakeet,modulate-velma-2', got 'modulate-velma-2'",
+        ),
+    ]
+
+
+def test_literal_modulate_model_requires_all_non_deepgram_fallback_bindings():
     validator = load_validator()
     env_config = {
         'gke': {
@@ -518,11 +731,15 @@ def test_literal_modulate_model_requires_its_declared_api_key_binding():
         validator.ValidationError(
             'prod/gke/backend-listen',
             'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
-        )
+        ),
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+        ),
     ]
 
 
-def test_literal_model_configs_require_deepgram_language_and_unknown_token_fallback():
+def test_literal_model_configs_require_non_deepgram_fallback_bindings():
     validator = load_validator()
     cases = (
         ('parakeet', {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.local'}}),
@@ -543,12 +760,9 @@ def test_literal_model_configs_require_deepgram_language_and_unknown_token_fallb
             'cloud_run': {'services': {}},
         }
 
-        assert validator._validate_prerecorded_stt_contract('prod', env_config) == [
-            validator.ValidationError(
-                'prod/gke/backend-listen',
-                'STT_PRERECORDED_MODEL requires non-empty DEEPGRAM_API_KEY',
-            )
-        ]
+        errors = validator._validate_prerecorded_stt_contract('prod', env_config)
+        assert all('DEEPGRAM_API_KEY' not in error.message for error in errors)
+        assert errors
 
 
 def test_full_validation_reports_missing_provider_binding_once():
@@ -569,7 +783,6 @@ def test_full_validation_reports_missing_provider_binding_once():
                             'secret': 'STT_PRERECORDED_MODEL',
                             'version': 'latest',
                         },
-                        'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
                         'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
                     },
                 }
@@ -838,22 +1051,11 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
                                     'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
+                                    'STT_PRERECORDED_MODEL': {'value': 'parakeet,modulate-velma-2'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
                                 'secrets': {
                                     **STANDARD_CLOUD_RUN_SECRETS,
-                                    'STT_PRERECORDED_MODEL': {
-                                        'secret': 'STT_PRERECORDED_MODEL',
-                                        'version': 'latest',
-                                    },
-                                    'DEEPGRAM_API_KEY': {
-                                        'secret': 'DEEPGRAM_API_KEY',
-                                        'version': 'latest',
-                                    },
-                                    'MODULATE_API_KEY': {
-                                        'secret': 'MODULATE_API_KEY',
-                                        'version': 'latest',
-                                    },
                                 },
                             }
                         },
@@ -1510,3 +1712,40 @@ def test_repo_ilb_endpoints_use_http_scheme(env_name):
             _check_service('gke', svc_name, svc_cfg)
 
     assert violations == [], f'ILB endpoints must use http:// (no TLS): {violations}'
+
+
+# --- live Cloud Run check validates services only (this pipeline deploys no Cloud Run jobs) ---
+
+_LIVE_SERVICE_JSON = '{"spec":{"template":{"metadata":{"annotations":{}},"spec":{"containers":[{"env":[]}]}}}}'
+
+
+def _live_env_config():
+    return {
+        'gcp_project': 'based-hardware',
+        'region': 'us-central1',
+        'cloud_run': {
+            'services': {'backend': {}},
+            'jobs': {'memory-maintenance-job': {}, 'notifications-job': {}},
+        },
+    }
+
+
+def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
+    # gcp_backend.yml deploys Cloud Run services, not jobs (memory-maintenance-job and
+    # notifications-job ship via separate workflows). The live check must describe services
+    # only and never `gcloud run jobs describe` — that produced false deploy failures (a
+    # not-found job crashed it; a separately-managed job's env legitimately differs).
+    validator = load_validator()
+    described = []
+
+    def fake_run(command, **kwargs):
+        described.append(command)
+        assert 'jobs' not in command, f'must not describe Cloud Run jobs: {command}'
+        return SimpleNamespace(returncode=0, stdout=_LIVE_SERVICE_JSON, stderr='')
+
+    monkeypatch.setattr(validator.subprocess, 'run', fake_run)
+    state = validator._fetch_live_cloud_run_state(_live_env_config())
+
+    assert 'jobs' not in state  # no live job state → consumer skips job env checks
+    assert 'backend' in state['services']  # services are still fetched + validated
+    assert any('services' in cmd for cmd in described)

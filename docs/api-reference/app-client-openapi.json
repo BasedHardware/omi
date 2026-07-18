@@ -6715,6 +6715,45 @@
         "title": "ConversationCreateResponse",
         "type": "object"
       },
+      "ConversationFinalizationStatusResponse": {
+        "description": "Customer-visible projection of one durable finalization job.",
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_retry_count": {
+            "title": "Task Retry Count",
+            "type": "integer"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "terminal",
+          "retryable",
+          "attempt_count",
+          "task_retry_count"
+        ],
+        "title": "ConversationFinalizationStatusResponse",
+        "type": "object"
+      },
       "ConversationMutationResponse": {
         "description": "Canonical conversation snapshot returned after a user mutation.",
         "properties": {
@@ -15349,7 +15388,9 @@
           "basic",
           "unlimited",
           "architect",
-          "operator"
+          "operator",
+          "plus",
+          "unlimited_v2"
         ],
         "title": "PlanType",
         "type": "string"
@@ -17914,7 +17955,13 @@
           },
           "plan": {
             "$ref": "#/components/schemas/PlanType",
-            "default": "basic"
+            "default": "basic",
+            "enum": [
+              "basic",
+              "unlimited",
+              "architect",
+              "operator"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
@@ -32094,6 +32141,95 @@
           }
         ],
         "summary": "Set Conversation Events State",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/finalization": {
+      "get": {
+        "operationId": "get_conversation_finalization_status_v1_conversations__conversation_id__finalization_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationFinalizationStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Finalization Status",
         "tags": [
           "conversations"
         ]

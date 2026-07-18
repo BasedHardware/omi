@@ -364,39 +364,15 @@ import XCTest
     XCTAssertFalse(source.contains("scopedDesktopToolPrompt(excluding:"))
   }
 
-  func testProviderCorrectionUsesPreviousFloatingRequestObjective() throws {
-    let directive = AgentPillsManager.providerDirective(
-      from: "I meant ask OpenClaw",
-      contextualPreviousRequest: "ask grok to search for david zhang on X and tell me who the top 3 are")
-
-    XCTAssertEqual(directive?.provider, .openclaw)
-    XCTAssertEqual(directive?.rewrittenQuery, "search for david zhang on X and tell me who the top 3 are")
-  }
-
-  func testFloatingRouterProvidesRecentVisibleRequestToProviderDirective() throws {
-    let source = try floatingControlBarWindowSource()
-
-    XCTAssertTrue(source.contains("contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)"))
-    XCTAssertTrue(
-      source.contains("private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String?"))
-    XCTAssertTrue(source.contains("barWindow.state.derivedChatHistory(from: historyChatProvider)"))
-  }
-
-  func testTypedProviderDirectiveDelegatesAvailabilityToKernel() throws {
-    let source = try floatingControlBarWindowSource()
-
-    XCTAssertTrue(source.contains("let resolvedProvider = directedProvider"))
-    XCTAssertFalse(source.contains("LocalAgentProviderDetector.availability"))
-    XCTAssertFalse(source.contains("provider-unavailable"))
-    XCTAssertTrue(source.contains("originSurface: .floatingBar"))
-  }
-
-  func testSubagentChatFollowUpAlwaysContinuesCurrentAgent() throws {
+  func testProviderRequestsStayInTheModelLoop() throws {
+    // omi-test-quality: source-inspection -- static contract: UI must not pre-parse user wording into a provider spawn.
+    let windowSource = try floatingControlBarWindowSource()
     let source = try floatingControlBarViewSource()
 
-    XCTAssertFalse(source.contains("AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
-    XCTAssertFalse(source.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
-    XCTAssertFalse(source.contains("onSpawnSibling"))
+    XCTAssertFalse(windowSource.contains("providerDirective"))
+    XCTAssertFalse(windowSource.contains("resolveDelegationAndDispatch"))
+    XCTAssertTrue(windowSource.contains("await dispatchChatQuery("))
+    XCTAssertFalse(source.contains("AgentPillFollowUpRoutingPolicy"))
     XCTAssertTrue(source.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
   }
 
@@ -515,7 +491,7 @@ import XCTest
         "notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"
       ))
     XCTAssertTrue(source.contains("@State private var notchSettingsHovering = false"))
-    XCTAssertTrue(source.contains("if !showingNotchThinking && notchSettingsHovering"))
+    XCTAssertTrue(source.contains("if !state.isVoicePresentationActive && notchSettingsHovering"))
     XCTAssertTrue(source.contains("private var notchSettingsButton: some View"))
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
     XCTAssertTrue(source.contains(".accessibilityIdentifier(\"notch_floating_bar_settings\")"))
@@ -523,7 +499,7 @@ import XCTest
       source.contains(
         ".background(Color.white.opacity(0.12))\n                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))"
       ))
-    XCTAssertTrue(source.contains("notchSettingsHovering = hovering"))
+    XCTAssertTrue(source.contains("notchSettingsHovering = showsHoverChrome"))
     XCTAssertTrue(source.contains("openFloatingBarSettings()"))
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
     XCTAssertFalse(
@@ -798,17 +774,11 @@ import XCTest
     XCTAssertFalse(body.contains("FloatingControlBarGeometry.targetFrame("))
   }
 
-  func testTopLevelDelegationExecutorRemainsOutsideSubagentComposer() throws {
+  func testSubagentComposerOnlyContinuesItsCanonicalSession() throws {
     let viewSource = try floatingControlBarViewSource()
-    let executorURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/AgentDelegationExecutor.swift")
-    let executorSource = try String(contentsOf: executorURL, encoding: .utf8)
 
-    XCTAssertFalse(viewSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
     XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
-    XCTAssertTrue(executorSource.contains("harnessOverride ?? task.directedProvider?.harnessMode"))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {

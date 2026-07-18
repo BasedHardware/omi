@@ -272,6 +272,18 @@ actor FileIndexerService {
     for item in contents {
       // Check directory
       let resourceValues = try? item.resourceValues(forKeys: Set(resourceKeys))
+      if resourceValues == nil {
+        // A per-item stat/permission failure is a READ error, not a deletion.
+        // We cannot tell whether this entry is a directory; defaulting
+        // `isDirectory` to false would treat a real subdirectory as a file,
+        // drop it (makeFileRecord returns nil), never descend into it, and never
+        // add its children to `scannedPaths` — so the retention diff would purge
+        // every previously-indexed file under it. Protect its subtree like an
+        // enumeration failure instead of silently dropping it.
+        failedDirectories.insert(scanPolicy.relativePath(for: item, homePath: homePath))
+        log("FileIndexer: Cannot stat \(item.lastPathComponent); protecting its subtree from retention purge")
+        continue
+      }
       let isDirectory = resourceValues?.isDirectory ?? false
 
       if isDirectory {

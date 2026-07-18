@@ -122,9 +122,24 @@ class FocusStorage: ObservableObject {
 
   // MARK: - Public Methods
 
-  /// Add a new session from screen analysis
-  func addSession(from analysis: ScreenAnalysis) {
+  /// The id to use for an in-memory session. When the SQLite `focus_sessions`
+  /// rowid is known, reuse it (as a string) so it matches `loadFromSQLite`'s
+  /// convention for a not-yet-synced row. Otherwise mint a UUID.
+  ///
+  /// This matters for deletion: `deleteSession` routes a numeric id to the
+  /// SQLite `deleteFocusSession(id:)` path. A UUID-id session that is not yet
+  /// marked synced routes to neither the SQLite nor the backend delete, so it
+  /// is only removed in memory and resurrects on the next `loadFromSQLite`.
+  nonisolated static func sessionId(forSqliteRowId rowId: Int64?) -> String {
+    rowId.map(String.init) ?? UUID().uuidString
+  }
+
+  /// Add a new session from screen analysis. `sqliteId` is the row id returned
+  /// by the `focus_sessions` insert, when available, so the in-memory session
+  /// can be deleted from SQLite (rather than only in memory) before it resyncs.
+  func addSession(from analysis: ScreenAnalysis, sqliteId: Int64? = nil) {
     let session = StoredFocusSession(
+      id: Self.sessionId(forSqliteRowId: sqliteId),
       status: analysis.status,
       appOrSite: analysis.appOrSite,
       description: analysis.description,

@@ -1,5 +1,6 @@
 import asyncio
 import binascii
+import inspect
 import json
 import tempfile
 import uuid
@@ -55,9 +56,10 @@ from utils.chat import (
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
-from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
+from utils.stt.streaming import STTService, get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
+from config.stt_provider_policy import STTServingSurface
 from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
@@ -856,8 +858,8 @@ async def transcribe_voice_message(
         for file in upload_files:
             filename = file.filename
             assert filename is not None
-            if filename.lower().endswith('.wav'):
-                temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
+            if (suffix := Path(filename).suffix.lower()) in ('.wav', '.webm', '.mp4'):
+                temp_path = f"/tmp/{uid}_{uuid.uuid4()}{suffix}"
                 await run_blocking(storage_executor, _save_wav, temp_path, file.file)
                 wav_paths.append(temp_path)
             else:
@@ -978,7 +980,8 @@ async def transcribe_voice_message_stream(
 ):
     """WebSocket endpoint for PTT live mode transcription-only streaming.
 
-    Receives binary PCM audio chunks, streams them to Deepgram, and returns
+    Receives binary PCM audio chunks, streams them to the selected non-Deepgram
+    provider, and returns
     transcript segments in real-time. No conversation lifecycle, no memory
     extraction, no pusher — just audio in, transcript out.
 
@@ -991,15 +994,15 @@ async def transcribe_voice_message_stream(
 
     Client sends:
         - binary frames: audio data (PCM 16-bit)
-        - text "finalize": flush remaining audio + trigger Deepgram finalization
+        - text "finalize": flush remaining audio + trigger provider finalization
     Server sends: JSON arrays of transcript segments
         [{"speaker": "SPEAKER_00", "start": 0.0, "end": 1.5, "text": "Hello world",
           "is_user": false, "person_id": null}]
     """
     await websocket.accept()
 
-    # Paywalled desktop users — close before opening DG connection so we don't
-    # bill Deepgram for a PTT stream that wouldn't be allowed to chat anyway.
+    # Paywalled desktop users — close before opening a provider connection for
+    # a PTT stream that would not be allowed to chat anyway.
     if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
         await websocket.close(code=1008, reason='trial_expired')
         return
@@ -1016,6 +1019,15 @@ async def transcribe_voice_message_stream(
         await websocket.close(code=1008, reason='channels must be 1 or 2')
         return
 
+    # Deepgram was the only PTT provider that accepted stereo. Parakeet and
+    # Modulate (the retired-DG replacements) wire a mono PCM path: sending
+    # interleaved stereo here would be billed as two channels while being
+    # transcribed as mono, corrupting timing and quality. Reject channels > 1
+    # explicitly instead of silently downmixing or double-billing.
+    if channels != 1:
+        await websocket.close(code=1008, reason='Only mono (channels=1) is supported by this transcription provider')
+        return
+
     # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
     try:
         max_requests, window = get_effective_limit('voice:transcribe_stream')
@@ -1030,7 +1042,7 @@ async def transcribe_voice_message_stream(
     except Exception:
         pass  # Fail-open, consistent with Redis rate limiting elsewhere
 
-    # Daily budget check — reject if already exhausted before opening DG connection
+    # Daily budget check — reject if already exhausted before opening a provider connection.
     budget_remaining_ms = None  # None = fail-open (no enforcement)
     try:
         has_budget, used_ms, remaining_ms = check_budget(uid)
@@ -1049,19 +1061,21 @@ async def transcribe_voice_message_stream(
     accepted_audio_bytes = 0  # Only bytes the provider explicitly accepted.
     # A terminal provider failure after either audio handoff or finalization.
     stt_send_failed = False
-    stt_finalized = False
-    # 30ms flush threshold for Deepgram streaming quality (16-bit PCM = 2 bytes per sample per channel)
+    stt_drained = False
+    usage_recorded = False
+    # 30ms flush threshold for the live-STT transport (16-bit PCM = 2 bytes per sample per channel).
     bytes_per_second = sample_rate * channels * 2
     stt_buffer_flush_size = int(bytes_per_second * 0.03)
 
-    # PTT transcribe-stream always uses Deepgram (lightweight, no conversation lifecycle).
-    # get_stt_service_for_language resolves the language/model for the DG call.
-    _, stt_language, stt_model = get_stt_service_for_language(language)
+    stt_service, stt_language, stt_model = get_stt_service_for_language(language, surface=STTServingSurface.PTT)
+    if stt_service is None or stt_language is None or stt_model is None:
+        await websocket.close(code=1011, reason='Transcription service unavailable')
+        return
     context_keywords = _parse_context_keywords(keywords)
 
     loop = asyncio.get_running_loop()
 
-    # Deepgram's on_message callback runs in a thread — bridge to async via
+    # Provider callbacks can run off-loop — bridge to async via
     # loop.call_soon_threadsafe so asyncio.Queue wakeups are reliable.
     _SENTINEL = object()
     segment_queue = asyncio.Queue()
@@ -1112,36 +1126,64 @@ async def transcribe_voice_message_stream(
         await close_stt_failure()
         return False
 
-    async def finalize_stt_or_close() -> bool:
-        """Finalize exactly once and make a provider failure customer-visible."""
-        nonlocal stt_finalized
+    def record_stt_usage_once() -> None:
+        """Record accepted provider audio only after a terminal provider drain."""
+        nonlocal usage_recorded
+        if usage_recorded or accepted_audio_bytes <= 0 or bytes_per_second <= 0:
+            return
+        actual_duration_ms = compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels)
+        record_actual_duration(uid, actual_duration_ms)
+        usage_recorded = True
+
+    async def drain_stt_or_close() -> bool:
+        """Finalize and await the selected provider's tail before sender teardown."""
+        nonlocal stt_drained
         if stt_send_failed:
             return False
-        if stt_finalized:
+        if stt_drained:
             return True
         try:
             if dg_socket is None:
                 raise RuntimeError('missing STT socket')
             dg_socket.finalize()
+            drain_and_close = getattr(dg_socket, 'drain_and_close', None)
+            if callable(drain_and_close):
+                drain_result = drain_and_close()
+                if inspect.isawaitable(drain_result):
+                    await drain_result
+                else:
+                    # Every serving provider exposes an async drain. Keep older
+                    # test doubles and non-serving sockets safely closed instead.
+                    logger.warning('transcribe-stream: provider lacks async tail drain')
+                    dg_socket.finish()
+            else:
+                dg_socket.finish()
         except Exception:
             await close_stt_failure()
             return False
-        stt_finalized = True
+        stt_drained = True
         return True
 
     try:
-        dg_socket = await process_audio_dg(
-            stream_transcript,
-            language=stt_language,
-            sample_rate=sample_rate,
-            channels=channels,
-            model=stt_model,
-            keywords=context_keywords,
-            is_active=lambda: websocket_active,
-        )
+        if stt_service == STTService.parakeet:
+            dg_socket = await process_audio_parakeet(
+                stream_transcript,
+                language=stt_language,
+                sample_rate=sample_rate,
+                channels=channels,
+                model=stt_model,
+                keywords=context_keywords,
+                is_active=lambda: websocket_active,
+            )
+        elif stt_service == STTService.modulate:
+            dg_socket = await process_audio_modulate(stream_transcript, sample_rate, stt_language)
+        else:
+            raise RuntimeError(f'Unsupported serving STT provider {stt_service!r}')
 
         if dg_socket is None:
-            logger.error(f'transcribe-stream: failed to connect to Deepgram uid={uid}')
+            logger.error(
+                'transcribe-stream: failed to connect to STT provider uid=%s provider=%s', uid, stt_service.value
+            )
             await websocket.close(code=1011, reason='Transcription service unavailable')
             return
 
@@ -1173,8 +1215,8 @@ async def transcribe_voice_message_stream(
             if message.get("type") == "websocket.disconnect":
                 break
 
-            # Handle text "finalize" message: flush remaining audio, finalize Deepgram,
-            # wait for final transcript, then continue receiving (client closes when ready).
+            # Handle text "finalize" message: flush remaining audio and await the provider's
+            # final transcript. Finalization is terminal; clients close once they have received it.
             # Note: text frames do NOT reset the audio-idle timer.
             text_data = message.get("text")
             if text_data and text_data.strip() == "finalize":
@@ -1184,8 +1226,8 @@ async def transcribe_voice_message_stream(
                             break
                         accepted_audio_bytes += len(stt_audio_buffer)
                         stt_audio_buffer.clear()
-                    if await finalize_stt_or_close():
-                        await asyncio.sleep(0.3)
+                    if await drain_stt_or_close():
+                        record_stt_usage_once()
                     else:
                         break
                 continue
@@ -1193,6 +1235,10 @@ async def transcribe_voice_message_stream(
             data = message.get("bytes")
             if data is None:
                 continue
+
+            if stt_drained:
+                await websocket.close(code=1008, reason='Transcription already finalized')
+                break
 
             last_audio_time = asyncio.get_event_loop().time()
 
@@ -1202,7 +1248,7 @@ async def transcribe_voice_message_stream(
                 continue
 
             # In-session budget enforcement: check BEFORE incrementing received_audio_bytes
-            # so that the triggering frame is not counted as consumed (it won't be sent to DG).
+            # so that the triggering frame is not counted as consumed (it won't be sent upstream).
             if budget_remaining_ms is not None and bytes_per_second > 0:
                 prospective_ms = compute_pcm_duration_ms(received_audio_bytes + len(data), sample_rate, channels)
                 if prospective_ms > budget_remaining_ms:
@@ -1215,7 +1261,7 @@ async def transcribe_voice_message_stream(
             received_audio_bytes += len(data)
             stt_audio_buffer.extend(data)
 
-            # Flush to Deepgram in 30ms chunks
+            # Flush to the selected provider in 30ms chunks.
             while len(stt_audio_buffer) >= stt_buffer_flush_size:
                 chunk = bytes(stt_audio_buffer[:stt_buffer_flush_size])
                 if not await send_stt_audio_or_close(chunk):
@@ -1231,31 +1277,17 @@ async def transcribe_voice_message_stream(
         websocket_active = False
 
         # Flush remaining audio buffer
-        if dg_socket and not stt_send_failed and len(stt_audio_buffer) > 0:
+        if dg_socket and not stt_send_failed and not stt_drained and len(stt_audio_buffer) > 0:
             if await send_stt_audio_or_close(bytes(stt_audio_buffer)):
                 accepted_audio_bytes += len(stt_audio_buffer)
                 stt_audio_buffer.clear()
 
-        # Finalize only healthy streams to get the last transcript segment, then
-        # always close DG. A rejected send can leave SafeDeepgramSocket's
-        # keepalive thread running, so it still needs finish() even though a
-        # final transcript would be misleading.
-        if dg_socket and not stt_send_failed:
-            finalized_before_teardown = stt_finalized
-            if await finalize_stt_or_close():
-                # Record only audio from a terminally successful stream,
-                # including a successful tail flush. Do this immediately after
-                # the provider accepts finalization: a disconnected client can
-                # cancel the transcript-drain sleep below, but it must not
-                # turn a successful provider handoff into missing usage.
-                if accepted_audio_bytes > 0 and bytes_per_second > 0:
-                    actual_duration_ms = compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels)
-                    record_actual_duration(uid, actual_duration_ms)
-                if not finalized_before_teardown:
-                    # Brief wait for final transcript callback.
-                    await asyncio.sleep(0.3)
+        # Await a healthy provider's final tail before stopping the segment sender.
+        # A rejected send still gets a best-effort close but no final transcript or usage charge.
+        if dg_socket and not stt_send_failed and await drain_stt_or_close():
+            record_stt_usage_once()
 
-        if dg_socket:
+        if dg_socket and not stt_drained:
             try:
                 dg_socket.finish()
             except Exception:

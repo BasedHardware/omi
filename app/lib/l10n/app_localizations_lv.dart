@@ -1470,7 +1470,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get payYourSttProvider => 'Brīvi izmantojiet omi. Jūs maksājat tikai savam STT pakalpojumu sniedzējam tieši.';
 
   @override
-  String get freeMinutesMonth => '600 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
+  String get freeMinutesMonth => '300 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
 
   @override
   String get omiUnlimited => 'Omi Neierobežots';
@@ -4716,7 +4716,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nav konfigurēta specifiska datu piekļuve.';
 
   @override
-  String get basicPlanDescription => '600 premium minūtes + neierobežots ierīcē';
+  String get basicPlanDescription => '300 premium minūtes + neierobežots ierīcē';
 
   @override
   String get minutes => 'minūtes';
@@ -6011,7 +6011,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
+      '300 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
 
   @override
   String get viewUsage => 'Skatīt lietojumu';
@@ -6093,7 +6093,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
+      '300 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9007,7 +9007,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get billingYearly => 'Gadā';
 
   @override
-  String get savePercent => 'Ietaupiet ~17%';
+  String savePercent(int percent) {
+    return 'Ietaupiet ~$percent%';
+  }
 
   @override
   String get popular => 'Populārs';
@@ -9620,4 +9622,8 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti.';
 }

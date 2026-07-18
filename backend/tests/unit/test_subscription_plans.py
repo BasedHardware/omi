@@ -101,3 +101,60 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
 
     assert subscription_module.has_transcription_credits('uid') is False
     monthly_usage.assert_called_once_with('uid')
+
+
+def test_plus_and_unlimited_v2_price_ids_resolve(monkeypatch, subscription_module):
+    monkeypatch.setenv("STRIPE_PLUS_MONTHLY_PRICE_ID", "price_plus_monthly")
+    monkeypatch.setenv("STRIPE_PLUS_ANNUAL_PRICE_ID", "price_plus_annual")
+    monkeypatch.setenv("STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID", "price_unlimited_v2_monthly")
+
+    resolve = subscription_module.get_plan_type_from_price_id
+    assert resolve("price_plus_monthly") == PlanType.plus
+    assert resolve("price_plus_annual") == PlanType.plus
+    assert resolve("price_unlimited_v2_monthly") == PlanType.unlimited_v2
+
+
+def test_plus_is_capped_unlimited_v2_is_unlimited(subscription_module):
+    plus = subscription_module.get_plan_limits(PlanType.plus)
+    max_ = subscription_module.get_plan_limits(PlanType.unlimited_v2)
+    assert plus.transcription_seconds == subscription_module.PLUS_TIER_MONTHLY_SECONDS_LIMIT
+    assert plus.transcription_seconds and plus.transcription_seconds > 0
+    assert max_.transcription_seconds is None
+    assert subscription_module.is_paid_plan(PlanType.plus) is True
+    assert subscription_module.is_paid_plan(PlanType.unlimited_v2) is True
+
+
+def test_wire_plan_remaps_mobile_tiers_only_for_clients_without_the_enum(monkeypatch, subscription_module):
+    # The module fixture stubs compare_versions to a no-op; use a real semver
+    # comparator so the version floor actually gates the remap.
+    def _cmp(a, b):
+        pa = [int(x) for x in a.split('.')]
+        pb = [int(x) for x in b.split('.')]
+        return (pa > pb) - (pa < pb)
+
+    monkeypatch.setattr(subscription_module, 'compare_versions', _cmp)
+    wire = subscription_module.wire_plan_for_client
+    # Current clients (below the plus/unlimited_v2-aware floor) must see a known paid label.
+    assert wire(PlanType.plus, 'ios', '1.0.600') == PlanType.unlimited
+    assert wire(PlanType.unlimited_v2, 'android', '1.0.600') == PlanType.unlimited
+    assert wire(PlanType.plus, 'macos', '0.12.0') == PlanType.unlimited
+    # A plus/unlimited_v2-aware client (at/above the floor) receives the real plan.
+    assert wire(PlanType.plus, 'ios', '999.0.0') == PlanType.plus
+    assert wire(PlanType.unlimited_v2, 'ios', '999.0.0') == PlanType.unlimited_v2
+    # Non-mobile plans are never remapped.
+    assert wire(PlanType.unlimited, 'ios', '1.0.600') == PlanType.unlimited
+    assert wire(PlanType.operator, 'ios', '1.0.600') == PlanType.operator
+
+
+def test_plus_and_unlimited_v2_features_state_transcription_limits(subscription_module):
+    """Mobile cards render get_plan_features; Plus/Unlimited must state their
+    transcription terms, not fall through to the Free-tier feature list."""
+    m = subscription_module
+    plus_mobile = m.get_plan_features(PlanType.plus, simplified=True)
+    unlim_mobile = m.get_plan_features(PlanType.unlimited_v2, simplified=True)
+
+    assert any("minutes of transcription" in f for f in plus_mobile), plus_mobile
+    assert any(f"{m.PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,}" in f for f in plus_mobile), plus_mobile
+    assert any("Unlimited transcription" in f for f in unlim_mobile), unlim_mobile
+    # Must not leak the Free-tier "Unlimited listening time" fallback.
+    assert not any("listening" in f for f in plus_mobile), plus_mobile

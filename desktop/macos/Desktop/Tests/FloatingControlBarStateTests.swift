@@ -50,6 +50,39 @@ final class FloatingControlBarStateTests: XCTestCase {
     XCTAssertFalse(state.isHoveringBar)
   }
 
+  func testNotchHoverSurfaceIsReservedForEveryVoicePresentationPhase() {
+    XCTAssertTrue(
+      NotchHoverSurfacePolicy.allowsMenu(
+        showingAIConversation: false,
+        isVoicePresentationActive: false,
+        isShowingNotification: false
+      )
+    )
+    XCTAssertTrue(
+      NotchHoverSurfacePolicy.usesAnimatedHoverSurface(
+        usesNotchIsland: true,
+        showingAIConversation: false,
+        isVoicePresentationActive: false,
+        isShowingNotification: false
+      )
+    )
+    XCTAssertFalse(
+      NotchHoverSurfacePolicy.allowsMenu(
+        showingAIConversation: false,
+        isVoicePresentationActive: true,
+        isShowingNotification: false
+      )
+    )
+    XCTAssertFalse(
+      NotchHoverSurfacePolicy.usesAnimatedHoverSurface(
+        usesNotchIsland: true,
+        showingAIConversation: false,
+        isVoicePresentationActive: true,
+        isShowingNotification: false
+      )
+    )
+  }
+
   func testAgentSurfaceDoesNotDependOnMainChatContentOrHeight() {
     let state = FloatingControlBarState()
     let agentID = UUID()
@@ -655,5 +688,67 @@ final class FloatingControlBarStateTests: XCTestCase {
     // Clearing the viewport cursor must hide all resources (no orphan strip).
     state.clearCurrentAnswerAnchors()
     XCTAssertTrue(state.viewportDisplayResources(from: provider).isEmpty)
+  }
+
+  /// INV-6: a terminal-only completion can be hidden after its artifact is
+  /// projected onto the producing row. The same artifact must stay visible in
+  /// the main transcript and the floating/notch viewport when either identity
+  /// is anchored.
+  func testViewportResourcesResolveTerminalCompletionAnchorToProducingRow() {
+    let state = FloatingControlBarState()
+    let provider = ChatProvider()
+    let pillID = UUID()
+    let artifact = ChatResource.localGeneratedFile(
+      id: "artifact:terminal-anchor",
+      title: "result.html",
+      subtitle: "text/html",
+      mimeType: "text/html",
+      uri: "file:///tmp/result.html"
+    )
+    let producing = ChatMessage(
+      id: "agent-producing-turn",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentSpawn(
+          id: "spawn-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "HTML agent",
+          objective: "Create an HTML result"
+        )
+      ],
+      resources: [artifact]
+    )
+    let terminal = ChatMessage(
+      id: "agent-terminal-turn",
+      text: "",
+      sender: .ai,
+      contentBlocks: [
+        .agentCompletion(
+          id: "completion-block",
+          pillId: pillID,
+          sessionId: "session-1",
+          runId: "run-1",
+          title: "HTML agent",
+          promptSnippet: "Create an HTML result",
+          output: "Done.",
+          status: "completed"
+        )
+      ]
+    )
+    provider.messages = [producing, terminal]
+
+    let mainMessage = AgentLifecycleDisplayProjection.projectedMessage(
+      id: terminal.id,
+      in: provider.messages
+    )
+    XCTAssertEqual(mainMessage?.id, producing.id)
+    XCTAssertEqual(mainMessage?.displayResources.map(\.id), [artifact.id])
+
+    state.bindAnswerMessage(terminal)
+    XCTAssertEqual(state.currentAIMessage(from: provider)?.id, producing.id)
+    XCTAssertEqual(state.viewportDisplayResources(from: provider).map(\.id), [artifact.id])
   }
 }

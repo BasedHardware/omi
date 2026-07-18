@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Dict, Optional
 
-from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-from utils.llm.gateway_client import get_llm_gateway_base_url, get_llm_gateway_service_token
+from utils.llm.gateway_client import GatewayContextChatOpenAI, get_llm_gateway_base_url, get_llm_gateway_service_token
+from utils.llm.gateway_resilience import gateway_transport_timeout
 from utils.llm.usage_tracker import get_usage_callback
 
 _BYOK_GATEWAY_HEADER_PREFIX = 'X-Omi-Byok-'
@@ -45,11 +45,14 @@ def get_or_create_omi_gateway_llm_for_byok(
     api_key: str,
     streaming: bool = False,
     options: Optional[Dict[str, Any]] = None,
+    feature: str | None = None,
 ):
     """Return a gateway-backed LangChain client that forwards the user's BYOK key."""
 
     options = options or {}
     base_url = f'{get_llm_gateway_base_url()}/v1'
+    request_timeout = options.get('request_timeout', gateway_transport_timeout())
+    max_retries = options.get('max_retries', 0)
     service_token = get_llm_gateway_service_token()
     default_headers: dict[str, str] = {
         'X-Omi-Service-Caller': 'backend',
@@ -68,8 +71,9 @@ def get_or_create_omi_gateway_llm_for_byok(
         service_token_cache_key,
         provider,
         key_fingerprint,
-        options.get('request_timeout', 120),
-        options.get('max_retries', 1),
+        repr(request_timeout),
+        max_retries,
+        feature,
     )
     cached = _byok_gateway_llm_cache.get(cache_key)
     if cached is not None:
@@ -79,12 +83,12 @@ def get_or_create_omi_gateway_llm_for_byok(
         'base_url': base_url,
         'callbacks': [_usage_callback],
         'default_headers': default_headers,
-        'request_timeout': options.get('request_timeout', 120),
-        'max_retries': options.get('max_retries', 1),
+        'request_timeout': request_timeout,
+        'max_retries': max_retries,
     }
     if streaming:
         kwargs['streaming'] = True
         kwargs['stream_options'] = {'include_usage': True}
-    client = ChatOpenAI(model=lane_id, **kwargs)
+    client = GatewayContextChatOpenAI(model=lane_id, omi_gateway_feature=feature, **kwargs)
     _remember_byok_client(cache_key, client)
     return client

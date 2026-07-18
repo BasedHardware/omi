@@ -511,7 +511,7 @@ export class KernelCore {
         ? `voice:${externalTurnId.toLowerCase()}`
         : `agent_spawn:${input.invocationId}`,
       pillId,
-      ...(producerTurnId ? { producerTurnId } : {}),
+      ...(producerTurnId ? { producerRunId: run.runId, producerTurnId } : {}),
       userText: typeof runInput.prompt === "string" ? runInput.prompt : "",
       assistantText: "I started a background agent for that.",
       objective,
@@ -1807,22 +1807,26 @@ export class KernelCore {
       });
       const emittedArtifacts = result.artifacts ?? [];
       const existingArtifacts = this.readArtifacts({ sessionId: session.sessionId, limit: 500 });
+      const runScope = {
+        ownerId: session.ownerId,
+        sessionId: session.sessionId,
+        runId,
+        attemptId: attempt.attemptId,
+      };
+      const runDirectoryArtifacts = this.artifactStorage?.discoverRunArtifacts(
+        runScope,
+        [...emittedArtifacts, ...existingArtifacts]
+      ) ?? [];
       const artifacts = [
         ...emittedArtifacts,
-        ...(this.artifactStorage?.discoverRunArtifacts({
-          ownerId: session.ownerId,
-          sessionId: session.sessionId,
-          runId,
-          attemptId: attempt.attemptId,
-        }, [...emittedArtifacts, ...existingArtifacts]) ?? []),
+        ...runDirectoryArtifacts,
+        ...(this.artifactStorage?.discoverReportedTerminalArtifacts(
+          result.text,
+          [...emittedArtifacts, ...existingArtifacts, ...runDirectoryArtifacts]
+        ) ?? []),
       ];
       for (const rawArtifact of artifacts) {
-        const artifact = this.artifactStorage?.normalizeArtifact(rawArtifact, {
-          ownerId: session.ownerId,
-          sessionId: session.sessionId,
-          runId,
-          attemptId: attempt.attemptId,
-        }) ?? rawArtifact;
+        const artifact = this.artifactStorage?.normalizeArtifact(rawArtifact, runScope) ?? rawArtifact;
         this.persistArtifactInTransaction({
           sessionId: session.sessionId,
           runId,

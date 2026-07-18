@@ -6084,7 +6084,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
+      '300 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8998,7 +8998,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get billingYearly => 'Metinis';
 
   @override
-  String get savePercent => 'Sutaupykite ~17%';
+  String savePercent(int percent) {
+    return 'Sutaupykite ~$percent%';
+  }
 
   @override
   String get popular => 'Populiarus';
@@ -9615,4 +9617,8 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami.';
 }
