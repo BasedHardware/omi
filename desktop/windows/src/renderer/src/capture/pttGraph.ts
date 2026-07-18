@@ -64,6 +64,9 @@ export type PttCaptureOptions = {
  *  converts to Int16 once and fans out to the pre-roll ring + attached captures. */
 type MicGraph = {
   stream: MediaStream
+  /** AGC-free second stream feeding the orb analyser (null = acquire failed,
+   *  orb analyser fell back to the processed `stream`). */
+  orbStream: MediaStream | null
   ctx: AudioContext
   source: MediaStreamAudioSourceNode
   processor: ScriptProcessorNode
@@ -94,13 +97,72 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
   // poll. (smoothingTimeConstant only affects frequency data — irrelevant here.)
   const orbAnalyser = ctx.createAnalyser()
   orbAnalyser.fftSize = 1024
-  source.connect(orbAnalyser)
+
+  // The orb analyser taps its OWN AGC-free stream on the SAME device. The main
+  // stream keeps getUserMedia's default processing (echoCancellation +
+  // noiseSuppression + autoGainControl) — right for STT, but AGC compresses
+  // away exactly the loudness dynamics the orb visualizes (measured through
+  // VB-Cable: -26dB and -10dB inputs both surfaced ≈ -9dBFS after AGC). EC/NS
+  // stay on so playback echo and room hiss don't draw bars; only the gain
+  // flattening is removed. STT audio is untouched. If the second acquire fails
+  // the orb falls back to the processed stream — compressed but working levels.
+  let orbStream: MediaStream | null = null
+  try {
+    // Open by the CONCRETE device id, never the 'default'/'communications'
+    // alias: Chrome shares one input source per (device id string), and a
+    // second open of the SAME id silently inherits the first open's processing
+    // — the requested autoGainControl:false is ignored and getSettings()
+    // reports agc:true (measured). The concrete id forces a separate source
+    // with its own processing chain.
+    const settings = stream.getAudioTracks()[0]?.getSettings()
+    let deviceId = settings?.deviceId
+    if (deviceId === 'default' || deviceId === 'communications') {
+      const concrete = (await navigator.mediaDevices.enumerateDevices()).find(
+        (d) =>
+          d.kind === 'audioinput' &&
+          d.groupId === settings?.groupId &&
+          d.deviceId !== 'default' &&
+          d.deviceId !== 'communications'
+      )
+      if (concrete) deviceId = concrete.deviceId
+    }
+    orbStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false
+      }
+    })
+    // Honesty check: if the source still got shared, the constraint silently
+    // didn't take — that's a failed tap, not a working one.
+    if (orbStream.getAudioTracks()[0]?.getSettings().autoGainControl === true) {
+      throw new Error('autoGainControl still on (source was shared)')
+    }
+    ctx.createMediaStreamSource(orbStream).connect(orbAnalyser)
+    console.log(
+      '[audio] orb tap active:',
+      JSON.stringify(orbStream.getAudioTracks()[0]?.getSettings() ?? {})
+    )
+  } catch (e) {
+    // Loud on purpose: with the fallback the orb sees AGC-flattened levels, so
+    // "the visualizer barely tracks loudness" bugs start here.
+    console.warn('[audio] orb AGC-free tap failed — orb levels will be AGC-compressed:', e)
+    try {
+      orbStream?.getTracks().forEach((t) => t.stop())
+    } catch {
+      /* best effort */
+    }
+    orbStream = null
+    source.connect(orbAnalyser)
+  }
 
   const processor = ctx.createScriptProcessor(4096, 1, 1)
   source.connect(processor)
 
   const graph: MicGraph = {
     stream,
+    orbStream,
     ctx,
     source,
     processor,
@@ -128,6 +190,13 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
 }
 
 function destroyGraph(graph: MicGraph): void {
+  // The orb's AGC-free stream is not part of the shared teardown shape — stop
+  // its tracks explicitly or the mic stays open (in-use indicator) after release.
+  try {
+    graph.orbStream?.getTracks().forEach((t) => t.stop())
+  } catch {
+    /* already stopped */
+  }
   teardownAudioGraph({
     nodes: [graph.processor, graph.source],
     stream: graph.stream,
