@@ -856,8 +856,8 @@ async def transcribe_voice_message(
         for file in upload_files:
             filename = file.filename
             assert filename is not None
-            if filename.lower().endswith('.wav'):
-                temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
+            if (suffix := Path(filename).suffix.lower()) in ('.wav', '.webm', '.mp4'):
+                temp_path = f"/tmp/{uid}_{uuid.uuid4()}{suffix}"
                 await run_blocking(storage_executor, _save_wav, temp_path, file.file)
                 wav_paths.append(temp_path)
             else:

@@ -1106,6 +1106,28 @@ class TestVoiceMessageTranscribeEndpoint:
         finally:
             _cleanup_chat_client(saved)
 
+    @pytest.mark.parametrize(
+        ('suffix', 'content_type'),
+        [('webm', 'audio/webm'), ('mp4', 'audio/mp4')],
+    )
+    def test_multipart_browser_container_preserves_extension_for_prerecorded_stt(self, suffix, content_type):
+        """Browser MediaRecorder uploads must not be stored as WAV files."""
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(
+                module, 'transcribe_voice_message_segment', return_value=('Hello world', 'en')
+            ) as transcribe:
+                response = client.post(
+                    '/v2/voice-message/transcribe',
+                    files={'files': (f'audio.{suffix}', b'containerized-audio', content_type)},
+                )
+
+            assert response.status_code == 200
+            assert response.json()['transcript'] == 'Hello world'
+            assert transcribe.call_args.args[0].endswith(f'.{suffix}')
+        finally:
+            _cleanup_chat_client(saved)
+
 
 # ---------------------------------------------------------------------------
 # WebSocket endpoint tests: /v2/voice-message/transcribe-stream
