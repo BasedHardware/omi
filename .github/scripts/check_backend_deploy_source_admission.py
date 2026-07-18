@@ -82,11 +82,24 @@ def named_step_block(text: str, name: str, indent: int) -> str | None:
 
 
 def require_step(errors: list[str], text: str, name: str, label: str) -> str:
-    step = named_step_block(text, name, 6)
-    if step is None:
+    indices = named_step_indices(text, name)
+    if not indices:
         errors.append(f"backend source admission is missing its {label} step")
         return ""
-    return step
+    if len(indices) != 1:
+        errors.append(f"backend source admission must contain exactly one {label} step")
+        return ""
+    return named_step_block(text, name, 6) or ""
+
+
+def named_step_indices(text: str, name: str, indent: int = 6) -> list[int]:
+    marker = f"{' ' * indent}- name: {name}"
+    return [match.start() for match in re.finditer(rf"(?m)^{re.escape(marker)}$", text)]
+
+
+def named_step_index(text: str, name: str, indent: int = 6) -> int | None:
+    indices = named_step_indices(text, name, indent)
+    return indices[0] if len(indices) == 1 else None
 
 
 def validate_fail_closed_step(errors: list[str], step: str, label: str) -> None:
@@ -136,6 +149,7 @@ def validate_auto_workflow(text: str) -> list[str]:
         require_fragment(errors, text, fragment, message)
 
     firestore_job = mapping_block(text, "firestore_readiness", 2)
+    readiness_steps = None if firestore_job is None else mapping_block(firestore_job, "steps", 4)
     if firestore_job is None:
         errors.append("auto backend deploy is missing its source-admission job")
     else:
@@ -150,64 +164,86 @@ def validate_auto_workflow(text: str) -> list[str]:
             "outputs:\n      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}",
             "auto source-admission job must publish one admitted SHA",
         )
+    if readiness_steps is None:
+        errors.append("auto backend deploy source-admission job must contain its steps")
+    else:
+        main_checkout = require_step(
+            errors,
+            readiness_steps,
+            "Checkout current main for automatic source admission",
+            "current-main automatic admission checkout",
+        )
+        for fragment, message in (
+            ("ref: main", "automatic source admission must check out current main"),
+            ("fetch-depth: 0", "automatic source admission must fetch current main ancestry"),
+        ):
+            require_fragment(errors, main_checkout, fragment, message)
 
-    main_checkout = require_step(
-        errors,
-        text,
-        "Checkout current main for automatic source admission",
-        "current-main automatic admission checkout",
-    )
-    for fragment, message in (
-        ("ref: main", "automatic source admission must check out current main"),
-        ("fetch-depth: 0", "automatic source admission must fetch current main ancestry"),
-    ):
-        require_fragment(errors, main_checkout, fragment, message)
+        admission = require_step(
+            errors,
+            readiness_steps,
+            "Verify Release Eligibility proof is current main",
+            "automatic release-proof freshness validation",
+        )
+        validate_fail_closed_step(errors, admission, "automatic release-proof freshness validation")
+        for fragment, message in (
+            (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "automatic source admission must bind the proof SHA"),
+            (
+                f"RELEASE_RUN_ATTEMPT: {AUTO_PROOF_RUN_ATTEMPT}",
+                "automatic source admission must bind the proof run attempt",
+            ),
+            (
+                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+                "automatic source admission must refresh current main",
+            ),
+            (
+                "main_sha=\"$(git rev-parse --verify 'origin/main^{commit}')\"",
+                "automatic source admission must resolve current main's immutable SHA",
+            ),
+            (
+                "checkout_sha=\"$(git rev-parse --verify HEAD)\"",
+                "automatic source admission must resolve the current-main guard checkout SHA",
+            ),
+            (
+                ".github/scripts/verify_auto_backend_release_admission.py",
+                "automatic source admission must verify proof freshness and current main identity",
+            ),
+            ("--sha \"$RELEASE_SHA\"", "automatic source admission must verify the proof SHA"),
+            ("--main-sha \"$main_sha\"", "automatic source admission must verify current main"),
+            (
+                "--checkout-sha \"$checkout_sha\"",
+                "automatic source admission must verify the current-main guard checkout",
+            ),
+            (
+                "--run-attempt \"$RELEASE_RUN_ATTEMPT\"",
+                "automatic source admission must reject proof reruns",
+            ),
+            (
+                "printf 'admitted_sha=%s\\n' \"$RELEASE_SHA\" >> \"$GITHUB_OUTPUT\"",
+                "automatic source admission must publish the verified SHA",
+            ),
+        ):
+            require_fragment(errors, admission, fragment, message)
 
-    admission = require_step(
-        errors,
-        text,
-        "Verify Release Eligibility proof is current main",
-        "automatic release-proof freshness validation",
-    )
-    validate_fail_closed_step(errors, admission, "automatic release-proof freshness validation")
-    for fragment, message in (
-        (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "automatic source admission must bind the proof SHA"),
-        (
-            f"RELEASE_RUN_ATTEMPT: {AUTO_PROOF_RUN_ATTEMPT}",
-            "automatic source admission must bind the proof run attempt",
-        ),
-        (
-            "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
-            "automatic source admission must refresh current main",
-        ),
-        (
-            "main_sha=\"$(git rev-parse --verify 'origin/main^{commit}')\"",
-            "automatic source admission must resolve current main's immutable SHA",
-        ),
-        (
-            "checkout_sha=\"$(git rev-parse --verify HEAD)\"",
-            "automatic source admission must resolve the current-main guard checkout SHA",
-        ),
-        (
-            ".github/scripts/verify_auto_backend_release_admission.py",
-            "automatic source admission must verify proof freshness and current main identity",
-        ),
-        ("--sha \"$RELEASE_SHA\"", "automatic source admission must verify the proof SHA"),
-        ("--main-sha \"$main_sha\"", "automatic source admission must verify current main"),
-        (
-            "--checkout-sha \"$checkout_sha\"",
-            "automatic source admission must verify the current-main guard checkout",
-        ),
-        (
-            "--run-attempt \"$RELEASE_RUN_ATTEMPT\"",
-            "automatic source admission must reject proof reruns",
-        ),
-        (
-            "printf 'admitted_sha=%s\\n' \"$RELEASE_SHA\" >> \"$GITHUB_OUTPUT\"",
-            "automatic source admission must publish the verified SHA",
-        ),
-    ):
-        require_fragment(errors, admission, fragment, message)
+        require_step(
+            errors,
+            readiness_steps,
+            "Require read-only Firestore credentials",
+            "read-only Firestore credential boundary",
+        )
+        require_step(
+            errors,
+            readiness_steps,
+            "Checkout admitted Firestore source",
+            "admitted-source checkout",
+        )
+        admission_index = named_step_index(readiness_steps, "Verify Release Eligibility proof is current main")
+        credential_index = named_step_index(readiness_steps, "Require read-only Firestore credentials")
+        checkout_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
+        if admission_index is not None and credential_index is not None and admission_index > credential_index:
+            errors.append("automatic release-proof freshness validation must run before read-only credential use")
+        if admission_index is not None and checkout_index is not None and admission_index > checkout_index:
+            errors.append("automatic release-proof freshness validation must run before admitted-source checkout or execution")
 
     deploy_job = mapping_block(text, "deploy", 2)
     if deploy_job is None or "    needs: firestore_readiness" not in (deploy_job or ""):
