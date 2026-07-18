@@ -39,6 +39,11 @@ checks:
     triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9717: changelog JSON I/O must decode/encode as UTF-8 regardless of contributor host locale"
+  - id: preflight-runner-signal-tests
+    command: ["python3", ".github/scripts/test_preflight_runner.py"]
+    triggers: [".github/scripts/preflight_runner.py", ".github/scripts/test_preflight_runner.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9724: single-flight pre-push runner must register only host-available signals (no SIGHUP on Windows)"
   - id: agents-md-lean
     command: ["python3", ".github/scripts/check_agents_md_lean.py"]
     triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
