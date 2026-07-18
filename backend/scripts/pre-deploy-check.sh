@@ -38,6 +38,7 @@ run_hermetic() {
   python3 -m pytest \
     tests/unit/test_backend_runtime_env_validator.py \
     tests/unit/test_repair_cloud_run_traffic.py \
+    tests/unit/test_cloud_run_traffic_snapshot.py \
     tests/unit/test_preflight_cloud_run_deploy.py \
     tests/unit/test_deploy_status_report.py \
     tests/unit/test_verify_backend_release_vector.py \
