@@ -1,0 +1,11 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6215,
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2840
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Adds carryingLocalOnlyFields projection guard so journal replay preserves local-only row state (metadata/rating/notificationScreenshot); INV-CHAT-1 write-path fix.",
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Strict concurrency cleanup keeps non-Sendable JSON payloads behind checked boundaries without changing runtime behavior."
+  },
+  "threshold": 1500
+}
