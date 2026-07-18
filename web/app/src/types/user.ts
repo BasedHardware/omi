@@ -63,7 +63,7 @@ export interface UserUsageResponse {
 
 // Subscription details
 export interface Subscription {
-  plan: 'basic' | 'unlimited';
+  plan: 'basic' | 'unlimited' | 'plus' | 'unlimited_v2' | 'operator' | 'architect';
   status: 'active' | 'inactive';
   current_period_end?: number;
   stripe_subscription_id?: string;
