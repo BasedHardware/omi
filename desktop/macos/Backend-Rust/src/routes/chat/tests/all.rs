@@ -18,7 +18,10 @@ fn truncate_for_log_never_slices_inside_a_utf8_char() {
     // not a multiple of 4) falls INSIDE a multi-byte character.
     let body = format!("{}{}", "x".repeat(398), "😀".repeat(200));
     assert!(body.len() > 500);
-    assert!(!body.is_char_boundary(500), "test premise: byte 500 must be mid-char");
+    assert!(
+        !body.is_char_boundary(500),
+        "test premise: byte 500 must be mid-char"
+    );
 
     let out = super::truncate_for_log(&body, 500); // must not panic
     assert_eq!(out.chars().count(), 500);
