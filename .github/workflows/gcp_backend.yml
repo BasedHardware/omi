@@ -648,6 +648,22 @@ jobs:
           gcloud run services update-traffic backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
 
+      # A traffic command can complete after an earlier target has moved. The
+      # shared deploy lock prevents competing writers, while this read-only
+      # gate prevents a partial apply from being reported as a healthy release.
+      - name: Verify serving backend release vector
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
+        run: |
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment "${{ vars.ENV }}" \
+            --evidence-path artifacts/backend-serving-release-vector.json
+
       - name: Smoke What Matters Now datastore query
         if: ${{ github.event.inputs.environment == 'development' }}
         env:
@@ -687,6 +703,14 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Upload backend release-vector evidence
+        if: ${{ always() && github.event.inputs.deploy_targets == 'all' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-serving-release-vector-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/backend-serving-release-vector.json
+          if-no-files-found: warn
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

@@ -451,13 +451,15 @@ jobs:
       # remains held until composition and exact candidate smoke both pass.
       - name: Verify exact candidate composition
         run: |
-          python3 backend/scripts/verify_dev_backend_deployment.py \
+          python3 backend/scripts/verify_backend_release_vector.py \
             --candidate \
             --commit-sha "${{ github.sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
+            --environment dev \
             --evidence-path artifacts/dev-backend-deployment-composition.json
 
       - name: Gate candidate revisions with the acceptance manifest
@@ -493,6 +495,21 @@ jobs:
           gcloud run services update-traffic backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
 
+      # The no-traffic candidate gate proves readiness; this post-promotion
+      # read verifies that every serving tier actually converged on the same
+      # attempt-scoped release vector.
+      - name: Verify serving backend release vector
+        run: |
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --commit-sha "${{ github.sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment dev \
+            --evidence-path artifacts/dev-backend-serving-release-vector.json
+
       - name: Cloud Run deploy status report
         if: always()
         run: |
@@ -520,6 +537,7 @@ jobs:
           name: dev-backend-deployment-acceptance-${{ github.run_id }}
           path: |
             artifacts/dev-backend-deployment-composition.json
+            artifacts/dev-backend-serving-release-vector.json
             artifacts/dev-backend-candidate-acceptance.json
             artifacts/dev-backend-candidate-status.json
           if-no-files-found: warn
