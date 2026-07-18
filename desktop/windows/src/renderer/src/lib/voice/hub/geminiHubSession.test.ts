@@ -173,6 +173,57 @@ describe('GeminiHubSession — warm config', () => {
     h.getSocket().spec.onMessage(JSON.stringify({ setupComplete: {} }))
     await warm
   })
+
+  it('strips JSON-Schema-only keywords Gemini rejects from tool parameters (fast-close root cause)', async () => {
+    // The real host catalog stamps `additionalProperties` on every tool (35/35). Gemini's
+    // `parameters` is an OpenAPI-3.0 Schema, not full JSON Schema; sending these keys makes
+    // Gemini reject the setup and close the socket seconds after connect. The setup frame
+    // MUST carry a sanitized schema.
+    const h = harness({
+      tools: [
+        {
+          name: 'create_desktop_dispatch',
+          description: 'dispatch',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            $schema: 'https://json-schema.org/draft/2020-12/schema',
+            properties: {
+              payload: { type: 'object', additionalProperties: true },
+              kind: { type: 'string', enum: ['a', 'b'] }
+            },
+            required: ['kind']
+          }
+        }
+      ]
+    })
+    const warm = h.session.ensureWarm()
+    await tick()
+    h.getSocket().spec.onOpen()
+    const setup = h.getSocket().frames()[0].setup as Json
+    expect(setup.tools).toEqual([
+      {
+        functionDeclarations: [
+          {
+            name: 'create_desktop_dispatch',
+            description: 'dispatch',
+            parameters: {
+              type: 'object',
+              properties: {
+                payload: { type: 'object' },
+                kind: { type: 'string', enum: ['a', 'b'] }
+              },
+              required: ['kind']
+            }
+          }
+        ]
+      }
+    ])
+    // No unsupported keyword survives anywhere in the emitted setup frame.
+    expect(JSON.stringify(setup.tools)).not.toMatch(/additionalProperties|\$schema/)
+    h.getSocket().spec.onMessage(JSON.stringify({ setupComplete: {} }))
+    await warm
+  })
 })
 
 describe('GeminiHubSession — one turn', () => {
