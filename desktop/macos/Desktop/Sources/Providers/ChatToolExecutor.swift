@@ -1199,7 +1199,7 @@ class ChatToolExecutor {
           for app in apps.prefix(20) {
             let name = app["appName"] as? String ?? "Unknown"
             let minutes = app["minutes"] as? Double ?? 0
-            let screenshots = app["screenshots"] as? Int ?? 0
+            let screenshots = Self.rowInt(app["screenshots"]) ?? 0
             let firstSeen = app["first_seen"] as? String ?? ""
             let lastSeen = app["last_seen"] as? String ?? ""
             out +=
@@ -1228,7 +1228,7 @@ class ChatToolExecutor {
         } else {
           for task in tasks {
             let desc = task["description"] as? String ?? ""
-            let completed = (task["completed"] as? Int ?? 0) == 1
+            let completed = (Self.rowInt(task["completed"]) ?? 0) == 1
             let priority = task["priority"] as? String ?? ""
             let check = completed ? "[x]" : "[ ]"
             let pri = priority.isEmpty ? "" : " (\(priority))"
@@ -1245,7 +1245,7 @@ class ChatToolExecutor {
             let status = session["status"] as? String ?? ""
             let app = session["appOrSite"] as? String ?? ""
             let desc = session["description"] as? String ?? ""
-            let dur = session["durationSeconds"] as? Int ?? 0
+            let dur = Self.rowInt(session["durationSeconds"]) ?? 0
             let durStr = dur > 0 ? " (\(dur / 60)m)" : ""
             let icon = status == "focused" ? "+" : "-"
             out += "- \(icon) \(app)\(durStr): \(desc)\n"
@@ -1419,6 +1419,16 @@ class ChatToolExecutor {
     if let value = value as? Double { return Int(value) }
     if let value = value as? String { return Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) }
     return nil
+  }
+
+  /// Reads an integer value out of a GRDB `Row`. GRDB decodes SQLite INTEGER
+  /// columns to `Int64`, and `Int64 as? Int` is ALWAYS nil in Swift (no numeric
+  /// bridging), so a bare `row["col"] as? Int` silently falls through to its
+  /// default. Prefer `Int64`, fall back to `Int` for any already-Int value.
+  /// `nonisolated` so non-main-actor tests (and callers) can use this pure
+  /// helper without hopping the actor.
+  nonisolated static func rowInt(_ value: Any?) -> Int? {
+    (value as? Int64).map(Int.init) ?? (value as? Int)
   }
 
   // MARK: - Task Search
@@ -2332,7 +2342,7 @@ class ChatToolExecutor {
         out += "## File Types\n"
         for row in typeBreakdown {
           let type = row["fileType"] as? String ?? "unknown"
-          let count = row["count"] as? Int ?? 0
+          let count = Self.rowInt(row["count"]) ?? 0
           out += "- \(type): \(count) files\n"
         }
 

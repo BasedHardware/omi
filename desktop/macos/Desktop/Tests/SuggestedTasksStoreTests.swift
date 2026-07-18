@@ -498,6 +498,36 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertTrue(outbox.entries.isEmpty)
   }
 
+  func testConcurrentSameOwnerLoadAwaitsInFlightDataInsteadOfNoOp() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-a", status: .pending)]
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+
+    // First same-owner load suspends inside getCandidateWorkflowControl.
+    api.controlSuspensionsRemaining = 1
+    let first = Task { await store.load() }
+    while api.controlRelease == nil { await Task.yield() }
+    let release = api.controlRelease
+
+    // Second same-owner load launched while the first is in flight. It must
+    // AWAIT the in-flight load rather than return a no-op, so by the time it
+    // returns the candidates are populated. The old guard returned immediately,
+    // leaving a dashboard→Suggested navigation reveal to run against empty state.
+    let secondSawData = Task { () -> Bool in
+      await store.load()
+      return store.candidates.map(\.id) == ["candidate-a"]
+    }
+    await Task.yield()
+    release?.resume()
+
+    let sawData = await secondSawData.value
+    await first.value
+
+    XCTAssertTrue(
+      sawData, "A concurrent same-owner load must await the in-flight load's data before returning")
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-a"])
+  }
+
   func testOwnerSwitchSupersedesDelayedFailingControlLoadWithoutExposingPriorCards() async {
     let api = FakeSuggestedTasksClient()
     let suppression = MemorySuppressionStore()

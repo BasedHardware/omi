@@ -36,6 +36,27 @@ enum ChatMessageDeduplicator {
   }
 }
 
+/// Pure decision for the conversation-switch scroll-state reset. Extracted from
+/// the (generic) view so it is unit-testable and so switching between two
+/// conversations through a transient empty timeline (A -> nil -> B) still
+/// resets session-scoped scroll state for B.
+enum ChatConversationSwitch {
+  /// - Parameters:
+  ///   - tracked: the conversation id currently being tracked.
+  ///   - newId: the incoming `messages.first?.id` (nil while empty/loading).
+  /// - Returns: the id to track next, and whether to reset session state.
+  ///   A nil incoming id keeps tracking the previous conversation (so the
+  ///   reset fires when the real conversation arrives) and never resets;
+  ///   a real incoming id resets only when a previous conversation existed
+  ///   (never on the initial population).
+  static func transition(current tracked: String?, incoming newId: String?)
+    -> (newTracked: String?, shouldReset: Bool)
+  {
+    guard let newId, newId != tracked else { return (tracked, false) }
+    return (newId, tracked != nil)
+  }
+}
+
 /// Reusable chat messages scroll view extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 struct ChatMessagesView<WelcomeContent: View>: View {
@@ -204,15 +225,17 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       }
     }
     // MARK: - Reset session state on conversation switch
-    .onChange(of: messages.first?.id) { oldId, newId in
+    .onChange(of: messages.first?.id) { _, newId in
       // When the first message ID changes, the user switched to a
       // different conversation (or a new one was loaded). Reset all
       // session-scoped @State so stale tracking doesn't leak across.
-      guard newId != trackedConversationId, newId != nil else { return }
-      trackedConversationId = newId
-      if oldId != nil {
-        // Reset conversation-scoped state. Only do this on an actual
-        // switch (oldId != nil), not the initial population.
+      // The decision is delegated to a pure helper so the switch-through-
+      // empty transition (A -> nil -> B) is unit-testable and no longer
+      // skips the reset for B.
+      let transition = ChatConversationSwitch.transition(
+        current: trackedConversationId, incoming: newId)
+      trackedConversationId = transition.newTracked
+      if transition.shouldReset {
         initialRestoreHandled = false
         lastSeenSendGeneration = localSendToken?.generation ?? 0
         prependAnchorId = nil

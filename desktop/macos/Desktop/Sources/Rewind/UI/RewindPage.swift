@@ -1560,7 +1560,10 @@ struct SearchResultListItem: View {
 
   private func loadThumbnail() async {
     do {
-      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
+      // 120×80 pt row @2x retina — decode a downsampled thumbnail, not the
+      // full-resolution screenshot, to keep a long results list light on memory.
+      let image = try await RewindStorage.shared.loadScreenshotThumbnail(
+        for: screenshot, maxPixelSize: 240)
       await MainActor.run {
         thumbnail = image
       }
@@ -1722,7 +1725,10 @@ struct SearchResultGroupItem: View {
 
   private func loadThumbnail() async {
     do {
-      let image = try await RewindStorage.shared.loadScreenshotImage(for: group.representativeScreenshot)
+      // 120×80 pt row @2x retina — decode a downsampled thumbnail, not the
+      // full-resolution screenshot, to keep a long results list light on memory.
+      let image = try await RewindStorage.shared.loadScreenshotThumbnail(
+        for: group.representativeScreenshot, maxPixelSize: 240)
       await MainActor.run {
         thumbnail = image
       }

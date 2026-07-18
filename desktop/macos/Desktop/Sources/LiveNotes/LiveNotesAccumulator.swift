@@ -18,6 +18,10 @@ struct LiveNotesAccumulator {
 
   private var processedSegmentWordCounts: [String: Int] = [:]
   private var wordsSinceLastGeneration = 0
+  /// Number of words included in the most recent generation request's window.
+  /// `markGenerationSucceeded` decrements the unsummarized counter by exactly
+  /// this, so words that arrived while the generation was in flight are kept.
+  private var wordsInFlightForGeneration = 0
 
   init(
     wordThreshold: Int = 50,
@@ -35,6 +39,7 @@ struct LiveNotesAccumulator {
     currentSegmentOrder = 0
     processedSegmentWordCounts = [:]
     wordsSinceLastGeneration = 0
+    wordsInFlightForGeneration = 0
   }
 
   mutating func seedExistingNotes(_ notes: [String]) {
@@ -68,13 +73,25 @@ struct LiveNotesAccumulator {
     wordBuffer.append(contentsOf: newWords)
     wordsSinceLastGeneration += newWords.count
     trimWordBuffer()
+    // A word can't be "unsummarized" if it was already trimmed out of the
+    // buffer, so cap the counter at the buffered word count. Without this, an
+    // extreme burst larger than the buffer would leave a residual counter that
+    // re-summarizes the same tail forever.
+    wordsSinceLastGeneration = min(wordsSinceLastGeneration, wordBuffer.count)
 
     guard wordsSinceLastGeneration >= wordThreshold, !isGenerating else {
       return nil
     }
 
+    // Summarize ALL unsummarized words, not just the last `wordThreshold`. When
+    // a single update (or accumulation while a prior generation was in flight)
+    // brings more than `wordThreshold` new words, a fixed suffix(wordThreshold)
+    // window dropped the middle span and re-summarized the tail.
+    let generationWindow = wordsSinceLastGeneration
+    wordsInFlightForGeneration = generationWindow
+
     return LiveNotesGenerationRequest(
-      recentText: wordBuffer.suffix(wordThreshold).joined(separator: " "),
+      recentText: wordBuffer.suffix(generationWindow).joined(separator: " "),
       existingNotesText: existingNotesText(),
       segmentStartOrder: max(0, currentSegmentOrder - 3),
       segmentEndOrder: currentSegmentOrder
@@ -82,7 +99,10 @@ struct LiveNotesAccumulator {
   }
 
   mutating func markGenerationSucceeded(noteText: String) {
-    wordsSinceLastGeneration = max(0, wordsSinceLastGeneration - wordThreshold)
+    // Decrement only by the window that was actually summarized, so words that
+    // arrived while this generation was in flight remain unsummarized.
+    wordsSinceLastGeneration = max(0, wordsSinceLastGeneration - wordsInFlightForGeneration)
+    wordsInFlightForGeneration = 0
     appendExistingNote(noteText)
   }
 

@@ -120,6 +120,11 @@ class AppProvider: ObservableObject {
   func fetchApps() async {
     isLoading = true
     errorMessage = nil
+    // Owner fence: capture the account this fetch belongs to. An account switch
+    // (resetStartupState → resetSessionState) can land mid-fetch; without this
+    // the in-flight response would repopulate the previous account's apps and
+    // per-user enabled flags over the reset state.
+    let ownerID = RuntimeOwnerIdentity.currentOwnerId()
     defer {
       isLoading = false
       NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
@@ -176,6 +181,9 @@ class AppProvider: ObservableObject {
         return (dedupedApps, popular, integration, chat, summary, notification)
       }.value
 
+      // Owner fence: drop the response if the account switched while fetching.
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+
       // Batch-assign all @Published properties on main actor
       apps = processed.0
       marketplaceApps = processed.0
@@ -200,6 +208,9 @@ class AppProvider: ObservableObject {
       Task {
         do {
           let ratedApps = try await self.apiClient.getAppsWithRatings()
+          // Owner fence: the ratings/enabled enrichment must not write the
+          // previous account's per-user enabled flags after an account switch.
+          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
           // Build a map of id → full app (for ratings AND enabled state).
           // The API can return duplicate app ids; use last-write-wins.
           let v1Map = Dictionary(lastWriteWins: ratedApps.map { ($0.id, $0) })
