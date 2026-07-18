@@ -1,0 +1,9 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 2961
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "To Do and Done now retain independent load and error state so an aggregate cache cannot mask the selected view's fetch result."
+  },
+  "threshold": 1500
+}
