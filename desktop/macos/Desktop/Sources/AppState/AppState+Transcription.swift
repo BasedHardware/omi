@@ -856,11 +856,27 @@ extension AppState {
         isAppleSilicon: Self.isAppleSilicon
       )
     else {
+      // Could not fail open (no local STT): record the exhausted cloud→stopped rotation.
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "cloud_stt",
+        from: "cloud",
+        to: "stopped",
+        reason: "cloud_stt_reconnect_failed",
+        outcome: .exhausted,
+        extra: ["source": currentConversationSource.rawValue])
       stopTranscription()
       return
     }
     sttSession.beginCloudToLocalFallback()
     log("Transcription: cloud STT unreachable (reconnects exhausted) — falling back to on-device Parakeet")
+    // Fail-open cloud → on-device Parakeet switch: shared fallback telemetry (AGENTS.md).
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "cloud_stt",
+      from: "cloud",
+      to: "local",
+      reason: "cloud_stt_reconnect_failed",
+      outcome: .recovered,
+      extra: ["source": currentConversationSource.rawValue])
     AnalyticsManager.shared.recordingError(
       error: "cloud_stt_reconnect_failed_fallback_local",
       reason: "cloud_stt_reconnect_failed",
