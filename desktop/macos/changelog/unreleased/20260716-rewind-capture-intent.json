@@ -1,3 +1,0 @@
-{
-  "change": "Keeps the user's screen-capture preference enabled when transient Rewind monitoring stops, so capture can recover instead of silently staying disabled."
-}

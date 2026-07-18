@@ -1,3 +1,0 @@
-{
-  "change": "OpenClaw and Hermes requests now stay in the primary agent's model-driven tool loop instead of being parsed into deterministic UI handoffs."
-}
