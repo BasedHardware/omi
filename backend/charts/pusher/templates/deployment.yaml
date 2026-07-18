@@ -5,6 +5,8 @@ metadata:
   labels:
     {{- include "pusher.labels" . | nindent 4 }}
 spec:
+  minReadySeconds: {{ required "minReadySeconds is required" .Values.minReadySeconds }}
+  progressDeadlineSeconds: {{ required "progressDeadlineSeconds is required" .Values.progressDeadlineSeconds }}
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
