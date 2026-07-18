@@ -406,6 +406,49 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(clearCalls.map(\.generation), [7])
   }
 
+  func testTemporaryAutomationOwnerKeepsFaultResetOnKernelBoundary() async {
+    let suiteName = "KernelTurnRecordedProjectionTests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suiteName) else {
+      return XCTFail("failed to create isolated defaults")
+    }
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    var clearCalls: [(ownerID: String, generation: Int)] = []
+    let projection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: {
+        RuntimeOwnerIdentity.currentOwnerId(defaults: defaults, allowAutomationOverride: true)
+      },
+      journalListOperation: { _, _, ownerID, _, _ in
+        self.journalPage(conversationId: "fault-conversation", turns: [], generation: 9)
+      },
+      journalClearOperation: { _, _, ownerID, generation in
+        clearCalls.append((ownerID, generation))
+        return 0
+      },
+      kernelReadyOperation: { true }
+    )
+
+    XCTAssertNil(RuntimeOwnerIdentity.currentOwnerId(defaults: defaults, allowAutomationOverride: true))
+    let cleared = await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
+      "desktop-harness-reset-omi-fault",
+      defaults: defaults
+    ) {
+      await projection.clear(surface: surface)
+    }
+
+    XCTAssertTrue(cleared)
+    XCTAssertEqual(clearCalls.map(\.ownerID), ["desktop-harness-reset-omi-fault"])
+    XCTAssertEqual(clearCalls.map(\.generation), [9])
+    XCTAssertNil(
+      RuntimeOwnerIdentity.currentOwnerId(defaults: defaults, allowAutomationOverride: true),
+      "the temporary owner must not turn an auth-recovery fault bundle into a signed-in session"
+    )
+  }
+
   func testClearFailsClosedWhenGenerationBootstrapFails() async throws {
     struct BootstrapFailure: Error {}
 
