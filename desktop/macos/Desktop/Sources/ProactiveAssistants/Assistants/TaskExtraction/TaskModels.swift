@@ -253,7 +253,7 @@ enum TaskSourceCategory: String, Codable, CaseIterable {
 
   var validSubcategories: [TaskSourceSubcategory] {
     switch self {
-    case .direct_request: return [.message, .meeting, .mention]
+    case .direct_request: return [.message, .meeting, .mention, .commitment]
     case .self_generated: return [.idea, .reminder, .goal_subtask]
     case .calendar_driven: return [.event_prep, .recurring, .deadline]
     case .reactive: return [.error, .notification, .observation]
@@ -269,6 +269,7 @@ enum TaskSourceSubcategory: String, Codable, CaseIterable {
   case message
   case meeting
   case mention
+  case commitment
   // self_generated
   case idea
   case reminder
