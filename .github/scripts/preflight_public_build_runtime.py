@@ -47,30 +47,44 @@ def _containers(service: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return []
 
 
-def _secret_reference(value_source: Mapping[str, Any] | None) -> str | None:
+def _secret_reference(wrapper: str, value_source: Any) -> str | None:
     """Return a Secret Manager reference from one documented Cloud Run shape.
 
     Cloud Run v1 serializes secret refs as ``name``/``key`` under
     ``valueFrom``. Cloud Run v2 uses ``secret``/``version`` under
-    ``valueSource``. Treat incomplete or ambiguous payloads as non-secret
-    bindings so the preflight remains fail-closed.
+    ``valueSource``. The wrapper and nested shape must match exactly so the
+    preflight never accepts an ambiguous source as a Secret Manager binding.
     """
 
-    secret_ref = value_source.get("secretKeyRef") if isinstance(value_source, Mapping) else None
-    if not isinstance(secret_ref, Mapping):
+    expected_fields = {
+        "valueFrom": ("name", "key"),
+        "valueSource": ("secret", "version"),
+    }.get(wrapper)
+    if expected_fields is None or not isinstance(value_source, Mapping) or set(value_source) != {"secretKeyRef"}:
         return None
+    secret_ref = value_source["secretKeyRef"]
+    if not isinstance(secret_ref, Mapping) or set(secret_ref) != set(expected_fields):
+        return None
+    secret, version = (secret_ref[field] for field in expected_fields)
+    if not isinstance(secret, str) or not secret or not isinstance(version, str) or not version:
+        return None
+    return f"{secret}:{version}"
 
-    references: list[str] = []
-    for secret_field, version_field in (("name", "key"), ("secret", "version")):
-        secret = secret_ref.get(secret_field)
-        version = secret_ref.get(version_field)
-        if secret is None and version is None:
-            continue
-        if not isinstance(secret, str) or not secret or not isinstance(version, str) or not version:
-            return None
-        references.append(f"{secret}:{version}")
 
-    return references[0] if len(references) == 1 else None
+def _runtime_binding(raw_item: Mapping[str, Any]) -> RuntimeBinding:
+    """Classify one Cloud Run environment entry without reading literal values."""
+
+    source_wrappers = [wrapper for wrapper in ("valueFrom", "valueSource") if wrapper in raw_item]
+    if not source_wrappers:
+        return RuntimeBinding("literal")
+    if len(source_wrappers) != 1 or "value" in raw_item:
+        return RuntimeBinding("invalid")
+
+    wrapper = source_wrappers[0]
+    secret_reference = _secret_reference(wrapper, raw_item[wrapper])
+    if secret_reference is None:
+        return RuntimeBinding("invalid")
+    return RuntimeBinding("secret", secret_reference)
 
 
 def current_bindings(service: Mapping[str, Any]) -> dict[str, RuntimeBinding]:
@@ -85,23 +99,21 @@ def current_bindings(service: Mapping[str, Any]) -> dict[str, RuntimeBinding]:
             if not isinstance(raw_item, Mapping) or not isinstance(raw_item.get("name"), str):
                 continue
             name = raw_item["name"]
-            value_source = raw_item.get("valueSource")
-            if not isinstance(value_source, Mapping):
-                value_source = raw_item.get("valueFrom")
-            secret_reference = _secret_reference(value_source)
-            if secret_reference is not None:
-                bindings[name] = RuntimeBinding("secret", secret_reference)
-            else:
-                bindings[name] = RuntimeBinding("literal")
+            bindings[name] = _runtime_binding(raw_item)
     return bindings
 
 
 def validate_current_bindings(target: Target, service: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
     bindings = current_bindings(service)
+    for name, actual in bindings.items():
+        if actual.kind == "invalid":
+            errors.append(f"{target.service}: runtime binding {name} has an ambiguous or malformed value source")
     for name, expected_reference in target.deployment.runtime_secrets.items():
         actual = bindings.get(name)
         if actual is None:
+            continue
+        if actual.kind == "invalid":
             continue
         if actual.kind != "secret":
             errors.append(
@@ -117,12 +129,16 @@ def validate_current_bindings(target: Target, service: Mapping[str, Any]) -> lis
             errors.append(
                 f"{target.name}: preserved runtime secret {name} is absent; expected an enabled Secret Manager binding"
             )
+        elif actual.kind == "invalid":
+            continue
         elif actual.kind != "secret":
             errors.append(
                 f"{target.name}: preserved runtime secret {name} is a literal; expected an enabled Secret Manager binding"
             )
     for name in target.deployment.runtime_env_vars:
         actual = bindings.get(name)
+        if actual is not None and actual.kind == "invalid":
+            continue
         if actual is not None and actual.kind != "literal":
             errors.append(f"{target.name}: runtime config {name} is a Secret Manager binding; expected a literal value")
     declared_or_removed = (
