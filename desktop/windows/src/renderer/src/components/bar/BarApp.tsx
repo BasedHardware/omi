@@ -26,6 +26,7 @@ import { BarHintStrip } from './BarHintStrip'
 import { createBarSender } from './barSend'
 import {
   deriveOrbState,
+  deriveBarVoiceState,
   isBarBusy,
   deriveAgentRows,
   pillLabel,
@@ -256,9 +257,22 @@ export function BarApp(): React.JSX.Element {
     getOrbLevel: () => hubOrbRef.current.orbLevel
   })
   const hubActive = hubOrb.active
-  // The user's voice is being captured — local hold OR a main-owned hub hold.
-  const recordingNow = hubActive ? hubOrb.isListening : ptt.recording
-  const thinkingNow = hubActive ? hubOrb.isThinking || hubOrb.isResponseActive : ptt.transcribing
+  // Effective bar voice signals — a main-owned warm-hub turn (when active) folds over
+  // the local PTT/chat state. Crucially a hub SPOKEN reply lands as status 'speaking'
+  // (NOT thinking), mirroring the cascade TTS path so the orb shows the speaking pose
+  // instead of sticking in the thinking pose for the whole reply. See deriveBarVoiceState.
+  const voice = deriveBarVoiceState({
+    hub: hubOrb,
+    localRecording: ptt.recording,
+    localTranscribing: ptt.transcribing,
+    chatStatus: chat.status
+  })
+  const recordingNow = voice.recording
+  const thinkingNow = voice.transcribing
+  const hubSpeaking = voice.hubSpeaking
+  // Effective chat state the bar renders its orb pose + list row status text from.
+  // Preserve `chat`'s identity when there's no hub reply (avoid needless prop churn).
+  const barChat: BarChatState = hubSpeaking ? { ...chat, status: voice.status } : chat
 
   // Main drives PTT for the summon-hotkey hold; read the latest handlers.
   const beginHoldRef = useRef(ptt.beginHold)
@@ -358,11 +372,22 @@ export function BarApp(): React.JSX.Element {
   // Recording/finalizing → abort the capture; in the conversation → back to the
   // list; on the list → close the bar. Window-level so it fires regardless of
   // which control has focus. Refs keep the once-registered listener current.
-  // recordingNow/thinkingNow fold in a main-owned hub turn (flag on) so Esc aborts
-  // it too — flag off they equal the local ptt.* state, so this is unchanged.
-  const escStateRef = useRef({ view, recording: recordingNow, transcribing: thinkingNow })
+  // recordingNow/thinkingNow/hubSpeaking fold in a main-owned hub turn (flag on) so
+  // Esc aborts it in every phase — capture, thinking, AND the spoken reply — flag off
+  // they equal the local ptt.* state, so this is unchanged.
+  const escStateRef = useRef({
+    view,
+    recording: recordingNow,
+    transcribing: thinkingNow,
+    speaking: hubSpeaking
+  })
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-registered listener
-  escStateRef.current = { view, recording: recordingNow, transcribing: thinkingNow }
+  escStateRef.current = {
+    view,
+    recording: recordingNow,
+    transcribing: thinkingNow,
+    speaking: hubSpeaking
+  }
   const cancelPttRef = useRef(ptt.cancel)
   // eslint-disable-next-line react-hooks/refs -- latest-ref
   cancelPttRef.current = ptt.cancel
@@ -371,7 +396,7 @@ export function BarApp(): React.JSX.Element {
       if (e.key !== 'Escape') return
       const s = escStateRef.current
       e.preventDefault()
-      if (s.recording || s.transcribing) cancelPttRef.current()
+      if (s.recording || s.transcribing || s.speaking) cancelPttRef.current()
       else if (s.view === 'conversation') setView('list')
       else window.omiOverlay.hide()
     }
@@ -387,7 +412,7 @@ export function BarApp(): React.JSX.Element {
   const busy = isBarBusy({
     recording: recordingNow,
     transcribing: thinkingNow,
-    status: chat.status
+    status: barChat.status
   })
   const retractTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
@@ -431,15 +456,17 @@ export function BarApp(): React.JSX.Element {
   // `user` (from useAuth) is the single auth source — fake-aware for the E2E and
   // equivalent to a live session in prod (both read the same auth).
   const continuousListening = continuous && !!user
-  const agentsActive = chat.agentsActive ?? false
+  const agentsActive = barChat.agentsActive ?? false
   const orb = deriveOrbState({
     recording: recordingNow,
     // Distinct locked-listening pose for a tap-to-lock hands-free capture. The
     // recording/thinking signals already fold in a main-owned hub turn via
-    // recordingNow/thinkingNow (onVoiceHubState).
+    // recordingNow/thinkingNow (onVoiceHubState); a hub spoken reply rides
+    // barChat.status === 'speaking' (see hubSpeaking above) so it lands in the same
+    // 'speaking' branch the cascade TTS path does.
     locked: ptt.locked,
     transcribing: thinkingNow,
-    status: chat.status,
+    status: barChat.status,
     continuousListening,
     agentsActive
   })
@@ -514,7 +541,7 @@ export function BarApp(): React.JSX.Element {
                   <SignedOutContent />
                 ) : (
                   <BarChatSurface
-                    chat={chat}
+                    chat={barChat}
                     agents={agentRows}
                     view={view}
                     conversationTitle={target ? target.displayName : 'Omi Chat'}

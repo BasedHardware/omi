@@ -54,6 +54,35 @@ export function isBarBusy(a: Pick<BarActivity, 'recording' | 'transcribing' | 's
   return a.recording || a.transcribing || a.status === 'sending' || a.status === 'speaking'
 }
 
+/** The bar's effective voice signals for the current turn. A main-owned warm-hub
+ *  turn (A5 PR-6b) owns the orb while `hub.active`; otherwise the local PTT signals
+ *  pass through unchanged (flag off, this is exactly today's behavior).
+ *
+ *  The load-bearing rule: a hub SPOKEN reply (`isResponseActive`) is a 'speaking'
+ *  phase, NOT thinking. It maps to chat status 'speaking' — the same signal the
+ *  cascade STT→chat→TTS path raises via `chat.status` — so `deriveOrbState` lands it
+ *  in the identical 'speaking' branch (orb speaking pose, list row "Speaking…"), and
+ *  it is deliberately kept OUT of `transcribing` so the orb never sticks in the
+ *  thinking pose for the whole reply (the bug this guards). `hubSpeaking` is returned
+ *  so callers can still treat an in-flight reply as an active turn (Esc-abort,
+ *  keep-alive) without reviving the thinking conflation. Pure so the hub→orb mapping
+ *  is unit-tested without a DOM or IPC. */
+export function deriveBarVoiceState(args: {
+  hub: { active: boolean; isListening: boolean; isThinking: boolean; isResponseActive: boolean }
+  localRecording: boolean
+  localTranscribing: boolean
+  chatStatus: BarChatStatus
+}): { recording: boolean; transcribing: boolean; hubSpeaking: boolean; status: BarChatStatus } {
+  const { hub, localRecording, localTranscribing, chatStatus } = args
+  const hubSpeaking = hub.active && hub.isResponseActive
+  return {
+    recording: hub.active ? hub.isListening : localRecording,
+    transcribing: hub.active ? hub.isThinking : localTranscribing,
+    hubSpeaking,
+    status: hubSpeaking ? 'speaking' : chatStatus
+  }
+}
+
 /** One-line status for the list's "Omi Chat" row: what Omi is doing, a preview
  *  of the last turn, or an invitation when the thread is empty. */
 export function omiChatListStatus(chat: BarChatState): string {

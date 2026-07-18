@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   deriveOrbState,
+  deriveBarVoiceState,
   isBarBusy,
   omiChatListStatus,
   deriveAgentRows,
@@ -87,6 +88,78 @@ describe('deriveOrbState', () => {
     })
     // Omi speaking a reply also outranks the agents pose
     expect(deriveOrbState({ ...base, agentsActive: true, status: 'speaking' }).state).toBe(
+      'speaking'
+    )
+  })
+})
+
+describe('deriveBarVoiceState (warm-hub → bar signals)', () => {
+  const hub = (partial: Partial<Parameters<typeof deriveBarVoiceState>[0]['hub']> = {}) => ({
+    active: false,
+    isListening: false,
+    isThinking: false,
+    isResponseActive: false,
+    ...partial
+  })
+  const call = (
+    overrides: Partial<Parameters<typeof deriveBarVoiceState>[0]> = {}
+  ): ReturnType<typeof deriveBarVoiceState> =>
+    deriveBarVoiceState({
+      hub: hub(),
+      localRecording: false,
+      localTranscribing: false,
+      chatStatus: 'idle',
+      ...overrides
+    })
+
+  it('hub inactive → the local PTT/chat signals pass through unchanged', () => {
+    expect(call({ localRecording: true }).recording).toBe(true)
+    expect(call({ localTranscribing: true }).transcribing).toBe(true)
+    expect(call({ chatStatus: 'speaking' }).status).toBe('speaking')
+    expect(call().hubSpeaking).toBe(false)
+  })
+
+  // The regression: a hub SPOKEN reply must NOT be reported as thinking, and must map
+  // to the 'speaking' chat status so deriveOrbState shows the speaking pose. Before the
+  // fix isResponseActive folded into transcribing → the orb stuck in the thinking pose.
+  it('hub speaking its reply → speaking status, NOT thinking, and flags hubSpeaking', () => {
+    const v = call({ hub: hub({ active: true, isResponseActive: true }) })
+    expect(v.status).toBe('speaking')
+    expect(v.transcribing).toBe(false)
+    expect(v.hubSpeaking).toBe(true)
+    // …and fed through deriveOrbState it yields the speaking pose (no amplitude).
+    expect(
+      deriveOrbState({
+        recording: v.recording,
+        transcribing: v.transcribing,
+        status: v.status,
+        continuousListening: false,
+        agentsActive: false
+      })
+    ).toEqual({ state: 'speaking', withAmplitude: false })
+  })
+
+  it('hub awaiting its response → thinking (unchanged), not speaking', () => {
+    const v = call({ hub: hub({ active: true, isThinking: true }) })
+    expect(v.transcribing).toBe(true)
+    expect(v.status).toBe('idle')
+    expect(v.hubSpeaking).toBe(false)
+    expect(
+      deriveOrbState({ ...v, locked: false, continuousListening: false, agentsActive: false }).state
+    ).toBe('thinking')
+  })
+
+  it('hub capturing the user → recording (the reactive listening/speaking pose)', () => {
+    const v = call({ hub: hub({ active: true, isListening: true }) })
+    expect(v.recording).toBe(true)
+    expect(v.transcribing).toBe(false)
+    expect(v.hubSpeaking).toBe(false)
+  })
+
+  it('cascade TTS (no hub turn) still yields speaking via chat.status', () => {
+    const v = call({ chatStatus: 'speaking' })
+    expect(v.status).toBe('speaking')
+    expect(deriveOrbState({ ...v, continuousListening: false, agentsActive: false }).state).toBe(
       'speaking'
     )
   })
