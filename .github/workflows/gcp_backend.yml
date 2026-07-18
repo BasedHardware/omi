@@ -358,7 +358,7 @@ jobs:
       - name: Probe LLM gateway from the Cloud Run VPC before promotion
         if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
         run: |
-          backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="${{ env.REGION }}" \
             --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \

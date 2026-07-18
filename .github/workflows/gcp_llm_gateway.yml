@@ -113,7 +113,7 @@ jobs:
 
       - name: Probe LLM Gateway from the Cloud Run VPC
         run: |
-          backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="${{ env.REGION }}" \
             --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
