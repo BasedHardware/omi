@@ -44,6 +44,10 @@ _STATUS_TRANSITIONS = {
         ConversationStatus.failed.value,
     },
     ConversationStatus.merging.value: {ConversationStatus.completed.value, ConversationStatus.failed.value},
+    # Merge admission rejects every status except completed (validate_merge_compatibility), so
+    # completed is the only status that can reach begin_merge. Without this edge every accepted
+    # merge raises LifecycleTransitionError. The merging -> completed edge above is its rollback.
+    ConversationStatus.completed.value: {ConversationStatus.merging.value},
 }
 
 
