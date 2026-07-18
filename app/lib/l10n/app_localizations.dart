@@ -16794,8 +16794,8 @@ abstract class AppLocalizations {
   /// No description provided for @savePercent.
   ///
   /// In en, this message translates to:
-  /// **'Save ~17%'**
-  String get savePercent;
+  /// **'Save ~{percent}%'**
+  String savePercent(int percent);
 
   /// No description provided for @popular.
   ///

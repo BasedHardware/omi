@@ -8929,7 +8929,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get billingYearly => 'سنوي';
 
   @override
-  String get savePercent => 'وفّر ~17%';
+  String savePercent(int percent) {
+    return 'وفّر ~$percent%';
+  }
 
   @override
   String get popular => 'شائع';

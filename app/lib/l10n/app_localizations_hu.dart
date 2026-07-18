@@ -9026,7 +9026,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get billingYearly => 'Éves';
 
   @override
-  String get savePercent => '~17% megtakarítás';
+  String savePercent(int percent) {
+    return '~$percent% megtakarítás';
+  }
 
   @override
   String get popular => 'Népszerű';

@@ -1397,10 +1397,14 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       '/v1/users/me/subscription',
     );
 
+    // Any paid tier counts as premium for UI gating (Manage vs Choose Plan).
+    // Plus / Unlimited arrive wired as 'unlimited'; Operator / Architect arrive
+    // as their real plan id now that web renders the full new catalog.
+    const paidPlans = ['unlimited', 'plus', 'unlimited_v2', 'operator', 'architect'];
     const result: UserSubscription = {
       plan: response.subscription?.plan || 'basic',
       status: response.subscription?.status || 'active',
-      is_unlimited: response.subscription?.plan === 'unlimited',
+      is_unlimited: paidPlans.includes(response.subscription?.plan ?? ''),
       current_period_end: response.subscription?.current_period_end,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
       current_price_id: response.subscription?.current_price_id,

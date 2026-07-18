@@ -8989,7 +8989,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get billingYearly => 'Hàng năm';
 
   @override
-  String get savePercent => 'Tiết kiệm ~17%';
+  String savePercent(int percent) {
+    return 'Tiết kiệm ~$percent%';
+  }
 
   @override
   String get popular => 'Phổ biến';
