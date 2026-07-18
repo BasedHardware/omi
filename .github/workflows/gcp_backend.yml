@@ -386,7 +386,6 @@ jobs:
           MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
           MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
           OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9' }}
-          STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
           SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
@@ -535,8 +534,8 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
-          STT_SERVICE_MODELS: ${{ vars.STT_SERVICE_MODELS }}
+          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
+          STT_SERVICE_MODELS: parakeet,modulate-velma-2
           SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
