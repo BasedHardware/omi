@@ -17,7 +17,8 @@ import database.fair_use as fair_use_db
 import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import SoftCapTrigger
-from utils.subscription import has_transcription_credits, is_paid_plan
+from models.users import PlanType
+from utils.subscription import get_plan_limits, has_transcription_credits, is_paid_plan
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.fair_use_classifier import classify_user_purpose
 from utils.notifications import send_notification
@@ -46,10 +47,18 @@ logger = logging.getLogger(__name__)
 FAIR_USE_ENABLED = os.getenv('FAIR_USE_ENABLED', 'false').lower() == 'true'
 FAIR_USE_KILL_SWITCH = os.getenv('FAIR_USE_KILL_SWITCH', 'false').lower() == 'true'
 
-# Soft cap thresholds (milliseconds of real speech)
+# Soft cap thresholds (milliseconds of real speech) — default tier (Free, Plus, and any
+# plan with a bounded monthly transcription allowance).
 FAIR_USE_DAILY_SPEECH_MS = int(os.getenv('FAIR_USE_DAILY_SPEECH_MS', '7200000'))  # 2h
 FAIR_USE_3DAY_SPEECH_MS = int(os.getenv('FAIR_USE_3DAY_SPEECH_MS', '28800000'))  # 8h
 FAIR_USE_WEEKLY_SPEECH_MS = int(os.getenv('FAIR_USE_WEEKLY_SPEECH_MS', '36000000'))  # 10h
+
+# Raised triggers for unlimited-transcription tiers (Unlimited/unlimited_v2, legacy Neo,
+# Operator, Architect). They pay for unlimited use, so scrutiny starts later. Kept in the
+# same burst-vs-sustained ratio as the default tier (~4x daily for 3-day, ~5x for weekly).
+FAIR_USE_DAILY_SPEECH_MS_UNLIMITED = int(os.getenv('FAIR_USE_DAILY_SPEECH_MS_UNLIMITED', '14400000'))  # 4h
+FAIR_USE_3DAY_SPEECH_MS_UNLIMITED = int(os.getenv('FAIR_USE_3DAY_SPEECH_MS_UNLIMITED', '57600000'))  # 16h
+FAIR_USE_WEEKLY_SPEECH_MS_UNLIMITED = int(os.getenv('FAIR_USE_WEEKLY_SPEECH_MS_UNLIMITED', '72000000'))  # 20h
 
 # Redis bucket granularity
 FAIR_USE_BUCKET_SECONDS = int(os.getenv('FAIR_USE_BUCKET_SECONDS', '60'))  # 1-min buckets
@@ -68,6 +77,14 @@ FAIR_USE_CHECK_INTERVAL_SECONDS = int(os.getenv('FAIR_USE_CHECK_INTERVAL_SECONDS
 # Restrict-stage daily Deepgram budget (milliseconds of audio forwarded to DG per day)
 # 0 = no budget cap (disabled). Only enforced when stage == 'restrict'.
 FAIR_USE_RESTRICT_DAILY_DG_MS = int(os.getenv('FAIR_USE_RESTRICT_DAILY_DG_MS', '1800000'))  # 30 min
+
+# Hard anti-abuse ceiling: max total audio processed per rolling 24h, ALL plans. Set high
+# enough that no legitimate single human hits it (a real person cannot generate this much
+# audio in a day) — it exists to stop bulk-sync dumps / reselling, not to cap usage.
+# Metered against the live rolling meter (realtime + sync_fresh); sync_backfill is separately
+# paced by reserve_backfill_speech. 0 = disabled.
+MAX_DAILY_AUDIO_HOURS = int(os.getenv('MAX_DAILY_AUDIO_HOURS', '30'))
+MAX_DAILY_AUDIO_MS = MAX_DAILY_AUDIO_HOURS * 3600 * 1000
 
 
 LIVE_SPEECH_SOURCES = ('realtime', 'sync_fresh')
@@ -253,13 +270,64 @@ def get_rolling_backfill_speech_ms(uid: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def check_soft_caps(uid: str, speech_totals: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def _is_unlimited_tier(plan: Optional[PlanType]) -> bool:
+    """True for paid unlimited-transcription plans (Unlimited/unlimited_v2, legacy Neo,
+    Operator, Architect) — the tiers whose monthly transcription allowance is unbounded.
+
+    Keyed off plan limits rather than a hardcoded set so it stays self-consistent as the
+    catalog changes. Requires a *paid* plan AND ``transcription_seconds is None`` (paid
+    unlimited plans use None): this excludes Free — whose configured cap can be 0 ("no cap
+    configured") in some environments — and Plus, which carries a positive monthly cap.
+    """
+    if plan is None:
+        return False
+    try:
+        return is_paid_plan(plan) and get_plan_limits(plan).transcription_seconds is None
+    except Exception:
+        return False
+
+
+def fair_use_caps_for_plan(plan: Optional[PlanType] = None) -> tuple[int, int, int]:
+    """Return the (daily_ms, three_day_ms, weekly_ms) soft-cap triggers for a plan.
+
+    Unlimited-tier plans get the raised triggers; everyone else gets the default tier.
+    plan=None yields the default tier (backwards-compatible for callers without plan context).
+    """
+    if _is_unlimited_tier(plan):
+        return (
+            FAIR_USE_DAILY_SPEECH_MS_UNLIMITED,
+            FAIR_USE_3DAY_SPEECH_MS_UNLIMITED,
+            FAIR_USE_WEEKLY_SPEECH_MS_UNLIMITED,
+        )
+    return (FAIR_USE_DAILY_SPEECH_MS, FAIR_USE_3DAY_SPEECH_MS, FAIR_USE_WEEKLY_SPEECH_MS)
+
+
+def is_daily_audio_ceiling_exceeded(uid: str, speech_totals: Optional[Dict[str, Any]] = None) -> bool:
+    """Hard anti-abuse ceiling on total daily audio, applied to ALL plans.
+
+    Reuses the live rolling daily meter (realtime + sync_fresh). Returns False when the
+    feature is disabled (MAX_DAILY_AUDIO_MS <= 0), fair-use is off, or the kill switch is on.
+    Exempt UIDs bypass the ceiling.
+    """
+    if not FAIR_USE_ENABLED or FAIR_USE_KILL_SWITCH or MAX_DAILY_AUDIO_MS <= 0:
+        return False
+    if uid in FAIR_USE_EXEMPT_UIDS:
+        return False
+    totals = speech_totals if speech_totals is not None else get_rolling_speech_ms(uid)
+    return totals.get('daily_ms', 0) >= MAX_DAILY_AUDIO_MS
+
+
+def check_soft_caps(
+    uid: str, speech_totals: Optional[Dict[str, Any]] = None, plan: Optional[PlanType] = None
+) -> List[Dict[str, Any]]:
     """Check if user exceeds any rolling speech cap.
 
     Args:
         uid: User ID.
         speech_totals: Optional precomputed result from get_rolling_speech_ms().
             If None, fetches fresh from Redis.
+        plan: Optional plan; selects the per-tier trigger thresholds. Unlimited-tier plans
+            get raised triggers. plan=None uses the default tier (backwards-compatible).
 
     Returns list of triggered caps, e.g.:
       [{'trigger': 'daily', 'speech_ms': 7500000, 'threshold_ms': 7200000}]
@@ -271,30 +339,31 @@ def check_soft_caps(uid: str, speech_totals: Optional[Dict[str, Any]] = None) ->
         return []
 
     speech = speech_totals if speech_totals is not None else get_rolling_speech_ms(uid)
+    daily_cap, three_day_cap, weekly_cap = fair_use_caps_for_plan(plan)
     triggered: List[Dict[str, Any]] = []
 
-    if speech['daily_ms'] > FAIR_USE_DAILY_SPEECH_MS:
+    if speech['daily_ms'] > daily_cap:
         triggered.append(
             {
                 'trigger': SoftCapTrigger.DAILY,
                 'speech_ms': speech['daily_ms'],
-                'threshold_ms': FAIR_USE_DAILY_SPEECH_MS,
+                'threshold_ms': daily_cap,
             }
         )
-    if speech['three_day_ms'] > FAIR_USE_3DAY_SPEECH_MS:
+    if speech['three_day_ms'] > three_day_cap:
         triggered.append(
             {
                 'trigger': SoftCapTrigger.THREE_DAY,
                 'speech_ms': speech['three_day_ms'],
-                'threshold_ms': FAIR_USE_3DAY_SPEECH_MS,
+                'threshold_ms': three_day_cap,
             }
         )
-    if speech['weekly_ms'] > FAIR_USE_WEEKLY_SPEECH_MS:
+    if speech['weekly_ms'] > weekly_cap:
         triggered.append(
             {
                 'trigger': SoftCapTrigger.WEEKLY,
                 'speech_ms': speech['weekly_ms'],
-                'threshold_ms': FAIR_USE_WEEKLY_SPEECH_MS,
+                'threshold_ms': weekly_cap,
             }
         )
 
