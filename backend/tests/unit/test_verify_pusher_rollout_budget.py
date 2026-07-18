@@ -204,7 +204,7 @@ def test_rejects_template_that_does_not_render_the_chart_deadline(
     template = rollout_fixture / "backend/charts/pusher/templates/deployment.yaml"
     replace_once(
         template,
-        'minReadySeconds: {{ required "minReadySeconds is required" .Values.minReadySeconds }}',
+        "minReadySeconds: {{ .Values.minReadySeconds }}",
         "minReadySeconds: 0",
     )
     replace_once(
