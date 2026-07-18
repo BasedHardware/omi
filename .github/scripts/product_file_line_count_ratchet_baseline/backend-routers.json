@@ -4,12 +4,13 @@
     "backend/routers/chat.py": 1580,
     "backend/routers/developer.py": 2186,
     "backend/routers/mcp_sse.py": 1857,
-    "backend/routers/sync.py": 1981,
+    "backend/routers/sync.py": 2000,
     "backend/routers/users.py": 2046
   },
   "raise_justifications": {
     "backend/routers/chat.py": "PTT stereo rejection keeps the serving STT provider boundary explicit in the established chat admission owner.",
-    "backend/routers/users.py": "GET /v1/users/subscription serializes the new mobile plus/max plans as `unlimited` for clients whose plan enum predates them, so day-one buyers read as paid instead of Free (mirrors the existing operator remap); real limits/grandfather are computed from the true plan first."
+    "backend/routers/users.py": "GET /v1/users/subscription serializes the new mobile plus/max plans as `unlimited` for clients whose plan enum predates them, so day-one buyers read as paid instead of Free (mirrors the existing operator remap); real limits/grandfather are computed from the true plan first.",
+    "backend/routers/sync.py": "Fresh-sync admission gains a hard daily-audio anti-abuse ceiling gate (is_daily_audio_ceiling_exceeded), mirroring the adjacent hard-restriction gate, plus plan-aware soft-cap wiring; both belong at this existing ingestion owner, not a new module."
   },
   "threshold": 1500
 }
