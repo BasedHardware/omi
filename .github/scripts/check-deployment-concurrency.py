@@ -182,12 +182,13 @@ def validate_auto_deploy_acceptance(text: str) -> list[str]:
         return ["gcp_backend_auto_dev.yml: missing deploy job"]
     required_markers = (
         "Capture exact no-traffic candidate URLs",
-        "backend/scripts/verify_dev_backend_deployment.py",
+        "backend/scripts/verify_backend_release_vector.py",
         "backend/scripts/run_dev_candidate_acceptance.py",
         "--candidate",
         '--commit-sha "${{ github.sha }}"',
         '--deploy-run-id "${{ github.run_id }}"',
         '--deploy-run-attempt "${{ github.run_attempt }}"',
+        "--environment dev",
         "Shift Cloud Run traffic to validated revisions",
     )
     errors = [
@@ -201,6 +202,38 @@ def validate_auto_deploy_acceptance(text: str) -> list[str]:
         errors.append("gcp_backend_auto_dev.yml: candidate acceptance must run before traffic promotion")
     if job_block(text, "verify") is not None:
         errors.append("gcp_backend_auto_dev.yml: candidate acceptance must not run in a post-promotion verify job")
+    return errors
+
+
+def validate_serving_release_vector(name: str, text: str) -> list[str]:
+    """Require a post-promotion, all-tier vector check in each full backend deploy."""
+
+    block = job_block(text, "deploy")
+    if block is None:
+        return [f"{name}: missing deploy job"]
+    promotion_index = next((index for index, line in enumerate(block) if "Shift Cloud Run traffic" in line), -1)
+    verifier_index = next(
+        (index for index, line in enumerate(block) if "Verify serving backend release vector" in line), -1
+    )
+    errors: list[str] = []
+    if promotion_index < 0:
+        errors.append(f"{name}: missing Cloud Run traffic promotion")
+    if verifier_index < 0:
+        errors.append(f"{name}: missing post-promotion release-vector verification")
+    elif verifier_index <= promotion_index:
+        errors.append(f"{name}: release-vector verification must run after traffic promotion")
+
+    verifier_step = next(
+        (step for step in deploy_job_steps(block) if "Verify serving backend release vector" in "\n".join(step)),
+        [],
+    )
+    verifier_text = "\n".join(verifier_step)
+    if "backend/scripts/verify_backend_release_vector.py" not in verifier_text:
+        errors.append(f"{name}: release-vector verification must use the canonical verifier")
+    if "--environment" not in verifier_text:
+        errors.append(f"{name}: release-vector verification must bind an environment")
+    if name == "gcp_backend.yml" and "github.event.inputs.deploy_targets == 'all'" not in verifier_text:
+        errors.append(f"{name}: all-tier release-vector verification must not run for cloud-run-only deploys")
     return errors
 
 
@@ -433,15 +466,19 @@ def check_repository() -> list[str]:
 
     auto_deploy = workflow_text.get("gcp_backend_auto_dev.yml", "")
     errors.extend(validate_auto_deploy_acceptance(auto_deploy))
+    for name in ("gcp_backend.yml", "gcp_backend_auto_dev.yml"):
+        errors.extend(validate_serving_release_vector(name, workflow_text.get(name, "")))
     for name, text in workflow_text.items():
         errors.extend(validate_pusher_config_preflight(name, text))
-    separate_acceptance_workflows = sorted(
+    release_vector_workflows = sorted(
         name
         for name, text in workflow_text.items()
-        if name != "gcp_backend_auto_dev.yml" and "backend/scripts/verify_dev_backend_deployment.py" in text
+        if "backend/scripts/verify_backend_release_vector.py" in text
     )
-    for name in separate_acceptance_workflows:
-        errors.append(f"{name}: acceptance must remain inside the source deploy workflow")
+    allowed_release_vector_workflows = {"gcp_backend.yml", "gcp_backend_auto_dev.yml"}
+    for name in release_vector_workflows:
+        if name not in allowed_release_vector_workflows:
+            errors.append(f"{name}: release-vector verification may run only in a source backend deploy workflow")
 
     return errors
 
@@ -587,17 +624,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: >-
-          python3 backend/scripts/verify_dev_backend_deployment.py
+          python3 backend/scripts/verify_backend_release_vector.py
           --candidate
           --commit-sha "${{ github.sha }}"
           --deploy-run-id "${{ github.run_id }}"
           --deploy-run-attempt "${{ github.run_attempt }}"
+          --environment dev
       - name: Capture exact no-traffic candidate URLs
       - run: python3 backend/scripts/run_dev_candidate_acceptance.py
       - name: Shift Cloud Run traffic to validated revisions
 """
     if validate_auto_deploy_acceptance(in_deploy_acceptance):
         raise PolicyError("valid in-deploy candidate acceptance was rejected")
+
+    serving_vector = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - name: Shift Cloud Run traffic to validated revisions
+      - name: Verify serving backend release vector
+        run: python3 backend/scripts/verify_backend_release_vector.py --environment dev
+"""
+    if validate_serving_release_vector("gcp_backend_auto_dev.yml", serving_vector):
+        raise PolicyError("valid post-promotion release-vector verification was rejected")
 
     pusher_deploy = """name: fixture
 jobs:
