@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1706,
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1607
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1645
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "stopMonitoring now clears capture-recovery/background-polling state and timers, plus a pure ProactiveCapturePolicy gate, so a stop mid-recovery cannot silently disable capture on the next start."
   },
   "threshold": 1500
 }
