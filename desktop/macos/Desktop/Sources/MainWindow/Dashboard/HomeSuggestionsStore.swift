@@ -170,9 +170,48 @@ final class HomeSuggestionsStore: ObservableObject {
 
 // MARK: - Gemini generation
 
+enum HomeSuggestionGenerationError: Error {
+  /// Context fetches failed and nothing usable arrived — a transport or auth
+  /// outage, not a thin-context account. Must not burn the daily slot.
+  case contextUnavailable
+}
+
 struct GeminiHomeSuggestionGenerator: HomeSuggestionGenerating {
   private struct Response: Decodable {
     let questions: [String]
+  }
+
+  /// Classifies the four context fetches (nil = that fetch failed) so an
+  /// outage is distinguishable from an account that genuinely has no data.
+  enum ContextClassification: Equatable {
+    /// Every source is empty and at least one fetch failed: treat as an
+    /// outage and throw so the store retries later instead of caching an
+    /// empty day.
+    case unavailable
+    /// Every fetch succeeded and there is genuinely nothing to reference.
+    case thin
+    /// Enough real context arrived (partial fetch failures are tolerated).
+    case available(memories: String, conversations: String, tasks: String, goals: String)
+  }
+
+  static func classifyContext(
+    memories: String?,
+    conversations: String?,
+    tasks: String?,
+    goals: String?
+  ) -> ContextClassification {
+    let sources = [memories, conversations, tasks, goals]
+    let anyFailed = sources.contains(nil)
+    let combined = sources.compactMap { $0 }.joined()
+    if combined.isEmpty {
+      return anyFailed ? .unavailable : .thin
+    }
+    return .available(
+      memories: memories ?? "",
+      conversations: conversations ?? "",
+      tasks: tasks ?? "",
+      goals: goals ?? ""
+    )
   }
 
   private var responseSchema: GeminiRequest.GenerationConfig.ResponseSchema {
@@ -192,37 +231,51 @@ struct GeminiHomeSuggestionGenerator: HomeSuggestionGenerating {
   func generatePersonalizedQuestions(
     snapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> [String] {
-    async let memoriesFetch = { () async -> [ServerMemory] in
-      (try? await APIClient.shared.getMemories(limit: 200, authorizationSnapshot: snapshot)) ?? []
+    // nil = that fetch failed (vs. succeeded with no data) — the distinction
+    // drives outage-vs-thin classification below.
+    async let memoriesFetch = { () async -> [ServerMemory]? in
+      try? await APIClient.shared.getMemories(limit: 200, authorizationSnapshot: snapshot)
     }()
-    async let conversationsFetch = { () async -> [ServerConversation] in
-      (try? await APIClient.shared.getConversations(
-        limit: 30, statuses: [.completed], authorizationSnapshot: snapshot)) ?? []
+    async let conversationsFetch = { () async -> [ServerConversation]? in
+      try? await APIClient.shared.getConversations(
+        limit: 30, statuses: [.completed], authorizationSnapshot: snapshot)
     }()
     async let actionItemsFetch = { () async -> ActionItemsListResponse? in
       try? await APIClient.shared.getActionItems(
         limit: 50, completed: false, authorizationSnapshot: snapshot)
     }()
-    async let goalsFetch = { () async -> [Goal] in
-      (try? await APIClient.shared.getGoals(authorizationSnapshot: snapshot)) ?? []
+    async let goalsFetch = { () async -> [Goal]? in
+      try? await APIClient.shared.getGoals(authorizationSnapshot: snapshot)
     }()
 
     let (memories, conversations, actionItems, goals) = await (
       memoriesFetch, conversationsFetch, actionItemsFetch, goalsFetch
     )
 
-    let memoryContext = memories.map { $0.content }.joined(separator: "\n")
-    let conversationContext =
-      conversations
-      .compactMap { $0.structured.overview.isEmpty ? nil : $0.structured.overview }
-      .joined(separator: "\n")
-    let tasksContext = (actionItems?.items ?? []).map { $0.description }.joined(separator: "\n")
-    let goalsContext = goals.map { $0.title }.joined(separator: "\n")
+    let classification = Self.classifyContext(
+      memories: memories.map { $0.map { $0.content }.joined(separator: "\n") },
+      conversations: conversations.map {
+        $0.compactMap { $0.structured.overview.isEmpty ? nil : $0.structured.overview }
+          .joined(separator: "\n")
+      },
+      tasks: actionItems.map { $0.items.map { $0.description }.joined(separator: "\n") },
+      goals: goals.map { $0.map { $0.title }.joined(separator: "\n") }
+    )
 
-    if memoryContext.isEmpty && conversationContext.isEmpty && tasksContext.isEmpty
-      && goalsContext.isEmpty
-    {
+    let memoryContext: String
+    let conversationContext: String
+    let tasksContext: String
+    let goalsContext: String
+    switch classification {
+    case .unavailable:
+      throw HomeSuggestionGenerationError.contextUnavailable
+    case .thin:
       return []
+    case .available(let memories, let conversations, let tasks, let goals):
+      memoryContext = memories
+      conversationContext = conversations
+      tasksContext = tasks
+      goalsContext = goals
     }
 
     let dateFormatter = DateFormatter()
