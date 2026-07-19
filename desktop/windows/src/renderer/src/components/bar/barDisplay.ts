@@ -28,24 +28,45 @@ export type BarActivity = {
   agentsActive: boolean
 }
 
+/** Which live level feeds the orb: the user's mic, Omi's own audible reply
+ *  (the played-out PCM's peak), or nothing (pose-only choreography). */
+export type OrbAmplitudeLane = 'mic' | 'playback' | null
+
 /**
- * The bar orb's state + whether to attach the live mic amplitude:
- *  - recording  → speaking, with the user's amplitude (the blob reacts)
- *  - TTS reply  → speaking, no amplitude (Omi is talking; playback-amp is v-next)
+ * The bar orb's state + which live amplitude lane (if any) to attach:
+ *  - recording  → speaking, with the user's MIC amplitude (the blob reacts)
+ *  - TTS reply  → speaking, with the PLAYBACK amplitude (the reply's own speech
+ *    dynamics animate the dots — the same visual language as the mic, driven by
+ *    the audio actually playing)
  *  - streaming/finalizing → thinking
  *  - continuous listen → listening
  *  - else idle
  * Recording wins over a still-playing TTS so the user's own turn is reactive.
  */
-export function deriveOrbState(a: BarActivity): { state: OrbState; withAmplitude: boolean } {
-  if (a.recording) return { state: a.locked ? 'listening' : 'speaking', withAmplitude: true }
-  if (a.status === 'speaking') return { state: 'speaking', withAmplitude: false }
+export function deriveOrbState(a: BarActivity): { state: OrbState; amplitude: OrbAmplitudeLane } {
+  if (a.recording) return { state: a.locked ? 'listening' : 'speaking', amplitude: 'mic' }
+  if (a.status === 'speaking') return { state: 'speaking', amplitude: 'playback' }
   // A running coding-agent shows the distinctive 'agents' pose over generic
   // 'thinking' (both carry status==='sending'), but live voice above still wins.
-  if (a.agentsActive) return { state: 'agents', withAmplitude: false }
-  if (a.transcribing || a.status === 'sending') return { state: 'thinking', withAmplitude: false }
-  if (a.continuousListening) return { state: 'listening', withAmplitude: false }
-  return { state: 'idle', withAmplitude: false }
+  if (a.agentsActive) return { state: 'agents', amplitude: null }
+  if (a.transcribing || a.status === 'sending') return { state: 'thinking', amplitude: null }
+  if (a.continuousListening) return { state: 'listening', amplitude: null }
+  return { state: 'idle', amplitude: null }
+}
+
+/** How long a received playback level stays trustworthy. The player tap posts
+ *  ~31Hz while audio actually plays (plus one trailing 0 at burst end), so a
+ *  gap this long means the lane is NOT being fed — e.g. the reply is playing
+ *  through a path without the PCM-player tap (the `<audio>`-element cascade
+ *  TTS). Stale ⇒ the orb falls back to its pose-only speaking choreography
+ *  (exactly the pre-tap behavior) instead of freezing on dead-zero dots. */
+export const PLAYBACK_LEVEL_FRESH_MS = 600
+
+/** True while a playback level received at `lastLevelAt` may still drive the
+ *  orb (both timestamps from the same clock). Pure for unit-testing the
+ *  fallback rule. */
+export function isPlaybackLevelFresh(lastLevelAt: number, now: number): boolean {
+  return now - lastLevelAt < PLAYBACK_LEVEL_FRESH_MS
 }
 
 /** True while a summoned pill must NOT auto-retract — a PTT hold / streaming
@@ -157,15 +178,36 @@ export function nextConversationDraft(args: {
   return staleSeed ? '' : current
 }
 
-/** The collapsed-pill wordmark: "Listening" whenever Omi is capturing the user's
- *  voice — an active PTT hold (recording, even though the orb pose derives as
- *  'speaking' for the reactive amplitude) OR always-on continuous listening. Omi's
- *  own spoken (TTS) reply is NOT the user being heard, so it keeps the resting
- *  "Omi" wordmark; every non-capture state does too (the orb stays the sole
- *  indicator for thinking/speaking/agents). Keyed off ACTIVITY, not the orb pose,
- *  so a silent hold visibly says "Listening" while the bar is pinned open. Both
- *  words fit the fixed pill width, so the label swaps in place without shifting
+/** The collapsed-pill wordmark, tracking the whole voice turn (not just the
+ *  capture): Listening → Thinking → Speaking → Omi.
+ *   - "Listening" — Omi is capturing the user's voice: an active PTT hold
+ *     (recording, even though the orb pose derives as 'speaking' for the
+ *     reactive amplitude) OR always-on continuous listening. Matches the Mac
+ *     bar's capture word (FloatingControlBarView "Listening...").
+ *   - "Speaking" — Omi's spoken reply is playing (hub or cascade TTS; the same
+ *     'speaking' chat status deriveBarVoiceState maps a hub reply onto). Same
+ *     word as the list row's "Speaking…".
+ *   - "Thinking" — the turn is between capture and reply: finalizing the
+ *     transcript or awaiting/streaming the response. Matches Mac's typing
+ *     indicator ("Thinking") and the list row's "Thinking…".
+ *   - "Omi" — resting wordmark otherwise. A delegated coding-agent run also
+ *     rests: the orb's distinctive 'agents' pose is the indicator there, and a
+ *     minutes-long task must not pin "Thinking" on the pill.
+ *  Keyed off ACTIVITY, not the orb pose, so a silent hold visibly says
+ *  "Listening" while the bar is pinned open. "Listening" is the longest word
+ *  and fits the fixed pill width, so the label swaps in place without shifting
  *  the orb. */
-export function pillLabel(a: { recording: boolean; continuousListening: boolean }): string {
-  return a.recording || a.continuousListening ? 'Listening' : 'Omi'
+export function pillLabel(a: {
+  recording: boolean
+  transcribing: boolean
+  status: BarChatStatus
+  continuousListening: boolean
+  agentsActive: boolean
+}): 'Listening' | 'Thinking' | 'Speaking' | 'Omi' {
+  if (a.recording) return 'Listening'
+  if (a.status === 'speaking') return 'Speaking'
+  if (a.agentsActive) return 'Omi'
+  if (a.transcribing || a.status === 'sending') return 'Thinking'
+  if (a.continuousListening) return 'Listening'
+  return 'Omi'
 }

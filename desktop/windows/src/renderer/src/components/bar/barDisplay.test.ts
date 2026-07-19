@@ -3,6 +3,8 @@ import {
   deriveOrbState,
   deriveBarVoiceState,
   isBarBusy,
+  isPlaybackLevelFresh,
+  PLAYBACK_LEVEL_FRESH_MS,
   omiChatListStatus,
   deriveAgentRows,
   agentRowStatus,
@@ -31,31 +33,32 @@ describe('deriveOrbState', () => {
     agentsActive: false
   } as const
 
-  it('recording → speaking WITH the user amplitude (the blob reacts to the mic)', () => {
+  it('recording → speaking WITH the user MIC amplitude (the blob reacts to the mic)', () => {
     expect(deriveOrbState({ ...base, recording: true })).toEqual({
       state: 'speaking',
-      withAmplitude: true
+      amplitude: 'mic'
     })
   })
 
   it('recording wins even while a reply is still speaking/streaming', () => {
-    expect(deriveOrbState({ ...base, recording: true, status: 'speaking' }).withAmplitude).toBe(
-      true
-    )
+    expect(deriveOrbState({ ...base, recording: true, status: 'speaking' }).amplitude).toBe('mic')
     expect(deriveOrbState({ ...base, recording: true, status: 'sending' }).state).toBe('speaking')
   })
 
   it('a tap-to-locked capture shows the distinct listening pose, still amplitude-reactive', () => {
     expect(deriveOrbState({ ...base, recording: true, locked: true })).toEqual({
       state: 'listening',
-      withAmplitude: true
+      amplitude: 'mic'
     })
   })
 
-  it('TTS playback → speaking WITHOUT amplitude (Omi is talking)', () => {
+  // Regression ("when it's speaking the visualizer stays put"): the spoken reply
+  // now animates the orb from the PLAYBACK lane — the audio actually playing —
+  // instead of a frozen no-amplitude speaking pose.
+  it('TTS playback → speaking WITH the playback amplitude (the reply animates the dots)', () => {
     expect(deriveOrbState({ ...base, status: 'speaking' })).toEqual({
       state: 'speaking',
-      withAmplitude: false
+      amplitude: 'playback'
     })
   })
 
@@ -72,7 +75,7 @@ describe('deriveOrbState', () => {
   it('running coding-agent → agents pose (over generic thinking; both are status=sending)', () => {
     expect(deriveOrbState({ ...base, agentsActive: true, status: 'sending' })).toEqual({
       state: 'agents',
-      withAmplitude: false
+      amplitude: null
     })
     // agents also wins over passive continuous listening
     expect(deriveOrbState({ ...base, agentsActive: true, continuousListening: true }).state).toBe(
@@ -84,7 +87,7 @@ describe('deriveOrbState', () => {
     // user holding PTT during an agent task → the user's reactive mic turn
     expect(deriveOrbState({ ...base, agentsActive: true, recording: true })).toEqual({
       state: 'speaking',
-      withAmplitude: true
+      amplitude: 'mic'
     })
     // Omi speaking a reply also outranks the agents pose
     expect(deriveOrbState({ ...base, agentsActive: true, status: 'speaking' }).state).toBe(
@@ -127,7 +130,8 @@ describe('deriveBarVoiceState (warm-hub → bar signals)', () => {
     expect(v.status).toBe('speaking')
     expect(v.transcribing).toBe(false)
     expect(v.hubSpeaking).toBe(true)
-    // …and fed through deriveOrbState it yields the speaking pose (no amplitude).
+    // …and fed through deriveOrbState it yields the speaking pose driven by the
+    // playback lane (the hub reply's own audio animates the dots).
     expect(
       deriveOrbState({
         recording: v.recording,
@@ -136,7 +140,7 @@ describe('deriveBarVoiceState (warm-hub → bar signals)', () => {
         continuousListening: false,
         agentsActive: false
       })
-    ).toEqual({ state: 'speaking', withAmplitude: false })
+    ).toEqual({ state: 'speaking', amplitude: 'playback' })
   })
 
   it('hub awaiting its response → thinking (unchanged), not speaking', () => {
@@ -317,15 +321,56 @@ describe('nextConversationDraft', () => {
 })
 
 describe('pillLabel', () => {
+  const base = {
+    recording: false,
+    transcribing: false,
+    status: 'idle',
+    continuousListening: false,
+    agentsActive: false
+  } as const
+
   it('says "Listening" whenever the user is being captured — a PTT hold OR always-on', () => {
     // PTT hold: recording even though the orb pose derives as 'speaking'.
-    expect(pillLabel({ recording: true, continuousListening: false })).toBe('Listening')
+    expect(pillLabel({ ...base, recording: true })).toBe('Listening')
     // Always-on continuous listening.
-    expect(pillLabel({ recording: false, continuousListening: true })).toBe('Listening')
+    expect(pillLabel({ ...base, continuousListening: true })).toBe('Listening')
   })
 
-  it('keeps the resting "Omi" wordmark when the user is NOT being captured', () => {
-    // Idle.
-    expect(pillLabel({ recording: false, continuousListening: false })).toBe('Omi')
+  // Regression ("the word in the bar still doesn't change"): the pill must track
+  // the whole turn, not stay on the capture word.
+  it('tracks the turn: Thinking while finalizing/awaiting, Speaking while the reply plays', () => {
+    // Finalizing the transcript (local cascade) / hub isThinking.
+    expect(pillLabel({ ...base, transcribing: true })).toBe('Thinking')
+    // Awaiting/streaming the reply.
+    expect(pillLabel({ ...base, status: 'sending' })).toBe('Thinking')
+    // The spoken reply is playing (hub reply folds into status 'speaking' via
+    // deriveBarVoiceState; the cascade TTS raises the same chat status).
+    expect(pillLabel({ ...base, status: 'speaking' })).toBe('Speaking')
+    // …even when continuous listening is on underneath.
+    expect(pillLabel({ ...base, status: 'speaking', continuousListening: true })).toBe('Speaking')
+  })
+
+  it('an active capture outranks a still-playing reply (mirrors deriveOrbState)', () => {
+    expect(pillLabel({ ...base, recording: true, status: 'speaking' })).toBe('Listening')
+  })
+
+  it('keeps the resting "Omi" wordmark when idle', () => {
+    expect(pillLabel(base)).toBe('Omi')
+  })
+
+  it('a delegated coding-agent run rests on "Omi" — the orb agents pose is the indicator', () => {
+    // Agent tasks ride status 'sending' for minutes; the pill must not pin "Thinking".
+    expect(pillLabel({ ...base, agentsActive: true, status: 'sending' })).toBe('Omi')
+  })
+})
+
+describe('isPlaybackLevelFresh (playback-amplitude fallback rule)', () => {
+  it('fresh within the window, stale after it (unfed lane ⇒ pose-only fallback)', () => {
+    expect(isPlaybackLevelFresh(1000, 1000 + PLAYBACK_LEVEL_FRESH_MS - 1)).toBe(true)
+    expect(isPlaybackLevelFresh(1000, 1000 + PLAYBACK_LEVEL_FRESH_MS)).toBe(false)
+  })
+
+  it('a never-fed lane (at=0) is stale from the start', () => {
+    expect(isPlaybackLevelFresh(0, PLAYBACK_LEVEL_FRESH_MS + 1)).toBe(false)
   })
 })
