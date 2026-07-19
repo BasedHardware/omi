@@ -823,6 +823,9 @@ actor AgentBridge {
   private func startJournalControl(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws {
+    guard AppBuild.isNonProduction else {
+      throw BridgeError.agentError("Journal control is disabled on production bundles")
+    }
     try await start(authorizationSnapshot: authorizationSnapshot, requiresCredentials: false)
   }
 
@@ -890,14 +893,19 @@ actor AgentBridge {
       generation: generation,
       authorizationSnapshot: authorizationSnapshot)
     let registeredThisCall = !registered || !processWasAlive
-    let requiresManagedCredentials = requiresCredentials && isPiMonoHarness
+    let requiresManagedCredentials =
+      isPiMonoHarness
+      && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: requiresCredentials,
+        isNonProduction: AppBuild.isNonProduction)
     var acquiredRegistration = false
     do {
       if registeredThisCall {
         try await runtime.registerClient(
           clientId: clientId,
           harnessMode: harnessMode,
-          authorizationSnapshot: authorizationSnapshot)
+          authorizationSnapshot: authorizationSnapshot,
+          requiresCredentials: requiresCredentials)
         acquiredRegistration = true
         try assertLifecycleFlightCurrent(
           id: flightID,
@@ -921,7 +929,9 @@ actor AgentBridge {
         || synchronizedRuntimeAuthorityEpoch != status.epoch
         || synchronizedRuntimeAuthorityOwnerID != ownerID
       if authorityNeedsSynchronization {
-        await synchronizeRuntimeAuthority(authorizationSnapshot: authorizationSnapshot)
+        await synchronizeRuntimeAuthority(
+          authorizationSnapshot: authorizationSnapshot,
+          requiresCredentials: requiresManagedCredentials)
         try assertLifecycleFlightCurrent(
           id: flightID,
           generation: generation,
@@ -1000,7 +1010,9 @@ actor AgentBridge {
       id: flightID,
       generation: generation,
       authorizationSnapshot: authorizationSnapshot)
-    await synchronizeRuntimeAuthority(authorizationSnapshot: authorizationSnapshot)
+    await synchronizeRuntimeAuthority(
+      authorizationSnapshot: authorizationSnapshot,
+      requiresCredentials: isPiMonoHarness)
     try assertLifecycleFlightCurrent(
       id: flightID,
       generation: generation,
@@ -1899,28 +1911,44 @@ actor AgentBridge {
   /// harness must replace it before the first owner-scoped RPC; pi-mono also
   /// receives the credential it needs, while local adapters use an owner-only
   /// handshake and remain independent of managed-cloud token availability.
-  private func synchronizeRuntimeAuthority(
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  nonisolated static func synchronizeAuthorityForStart(
+    requiresCredentials: Bool,
+    refreshCredentials: () async throws -> Bool,
+    refreshOwner: () async -> Void
   ) async {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-    guard isPiMonoHarness else {
-      await runtime.refreshRuntimeOwner(
-        expectedOwnerId: authorizationSnapshot.ownerID,
-        authorizationSnapshot: authorizationSnapshot)
+    guard requiresCredentials else {
+      await refreshOwner()
       return
     }
-    ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)
     do {
-      if try await refreshAuthToken(authorizationSnapshot: authorizationSnapshot) == false {
-        await runtime.refreshRuntimeOwner(
-          expectedOwnerId: authorizationSnapshot.ownerID,
-          authorizationSnapshot: authorizationSnapshot)
+      if try await refreshCredentials() == false {
+        await refreshOwner()
       }
     } catch {
-      await runtime.refreshRuntimeOwner(
-        expectedOwnerId: authorizationSnapshot.ownerID,
-        authorizationSnapshot: authorizationSnapshot)
+      await refreshOwner()
     }
+  }
+
+  private func synchronizeRuntimeAuthority(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    requiresCredentials: Bool
+  ) async {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    if requiresCredentials {
+      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)
+    }
+    await Self.synchronizeAuthorityForStart(
+      requiresCredentials: requiresCredentials,
+      refreshCredentials: { [weak self] in
+        guard let self else { return false }
+        return try await self.refreshAuthToken(authorizationSnapshot: authorizationSnapshot)
+      },
+      refreshOwner: { [weak self] in
+        guard let self else { return }
+        await self.runtime.refreshRuntimeOwner(
+          expectedOwnerId: authorizationSnapshot.ownerID,
+          authorizationSnapshot: authorizationSnapshot)
+      })
   }
 
   func testPlaywrightConnection() async throws -> Bool {
@@ -1979,13 +2007,13 @@ actor AgentBridge {
       defaults: .standard,
       isAuthorizationCurrent: {
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
-      }
-    ) { entries in
-      try await runtime.importLegacyMainChatSessions(
-        clientId: clientId,
-        entries: entries,
-        authorizationSnapshot: authorizationSnapshot)
-    }
+      },
+      importer: { entries in
+        try await runtime.importLegacyMainChatSessions(
+          clientId: clientId,
+          entries: entries,
+          authorizationSnapshot: authorizationSnapshot)
+      })
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     switch outcome {
     case .noAliases:
