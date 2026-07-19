@@ -420,8 +420,20 @@ def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
+    # Write only the two fields promotion owns, with merge=True. A full-document
+    # .set() overwrote the entire control doc from a non-transactional read snapshot,
+    # so a concurrent apply_long_term_patch_firestore transaction landing between that
+    # read and this write had its head_commit_id / commit_sequence / projection &
+    # vector watermarks silently reverted (lost update). Mirrors the consolidation
+    # writer (canonical_consolidation._persist_control_state).
     db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
-        control.model_dump(mode="json")
+        {
+            "last_promotion_run_at": (
+                control.last_promotion_run_at.isoformat() if control.last_promotion_run_at is not None else None
+            ),
+            "updated_at": control.updated_at.isoformat(),
+        },
+        merge=True,
     )
 
 

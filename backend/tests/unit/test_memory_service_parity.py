@@ -204,6 +204,19 @@ class TestMemoryServiceParity:
         assert decision.fail_closed is True
         assert decision.reason == "invalid_rollout_config"
 
+    def test_canonical_write_decision_missing_db_fails_closed_for_code_cohort(self, monkeypatch):
+        from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+        from utils.memory.canonical_activation import canonical_write_decision
+
+        set_canonical_cohort(monkeypatch, "uid-canonical")
+
+        decision = canonical_write_decision("uid-canonical", db_client=None)
+
+        assert decision.enabled is False
+        assert decision.memory_system == MemorySystem.CANONICAL
+        assert decision.fail_closed is True
+        assert decision.reason == "missing_db_client"
+
     def test_read_matches_direct_legacy_helper(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
         memories = [_sample_memory_dict("mem-1"), _sample_memory_dict("mem-2")]
@@ -274,6 +287,62 @@ class TestMemoryServiceParity:
 
         assert exc.value.status_code == 503
         create_memory.assert_not_called()
+
+    def test_all_canonical_service_mutations_fail_closed_without_legacy_fallback(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        monkeypatch.setattr(
+            service_mod,
+            "canonical_write_decision",
+            lambda *args, **kwargs: SimpleNamespace(
+                enabled=False,
+                memory_system=MemorySystem.CANONICAL,
+                fail_closed=True,
+                reason="rollout_write_not_ready",
+            ),
+        )
+        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        legacy = service._legacy
+        for method in (
+            "write",
+            "write_batch",
+            "update_content",
+            "update_visibility",
+            "review",
+            "update_product_fields",
+            "delete",
+            "delete_all",
+        ):
+            setattr(legacy, method, MagicMock())
+
+        operations = [
+            lambda: service.ensure_canonical_mutation_ready("uid-canonical"),
+            lambda: service.write("uid-canonical", _sample_memory_dict()),
+            lambda: service.write_batch("uid-canonical", [_sample_memory_dict()]),
+            lambda: service.update_content("uid-canonical", "memory-id", "updated"),
+            lambda: service.update_visibility("uid-canonical", "memory-id", "private"),
+            lambda: service.review("uid-canonical", "memory-id", True),
+            lambda: service.update_product_fields("uid-canonical", "memory-id", tags=["tag"]),
+            lambda: service.delete("uid-canonical", "memory-id"),
+            lambda: service.delete_all("uid-canonical"),
+            lambda: service.retract_conversation_memories("uid-canonical", "conversation-id"),
+        ]
+
+        for operation in operations:
+            with pytest.raises(HTTPException) as exc:
+                operation()
+            assert exc.value.status_code == 503
+
+        for method in (
+            "write",
+            "write_batch",
+            "update_content",
+            "update_visibility",
+            "review",
+            "update_product_fields",
+            "delete",
+            "delete_all",
+        ):
+            getattr(legacy, method).assert_not_called()
 
     def test_external_canonical_create_uses_canonical_backend_without_rechecking_public_write(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)

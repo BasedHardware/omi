@@ -1,7 +1,7 @@
 use super::*;
 
 impl FirestoreService {
-    pub async fn upsert_screen_activity(
+    pub(crate) async fn upsert_screen_activity(
         &self,
         uid: &str,
         rows: &[crate::models::screen_activity::ScreenActivityRow],

@@ -6459,6 +6459,29 @@
         "title": "Conversation",
         "type": "object"
       },
+      "ConversationActionItemsCountResponse": {
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "incomplete": {
+            "title": "Incomplete",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "completed",
+          "incomplete"
+        ],
+        "title": "ConversationActionItemsCountResponse",
+        "type": "object"
+      },
       "ConversationActionItemsDeleteResponse": {
         "properties": {
           "deleted_count": {
@@ -6731,6 +6754,45 @@
           "discarded"
         ],
         "title": "ConversationCreateResponse",
+        "type": "object"
+      },
+      "ConversationFinalizationStatusResponse": {
+        "description": "Customer-visible projection of one durable finalization job.",
+        "properties": {
+          "attempt_count": {
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task_retry_count": {
+            "title": "Task Retry Count",
+            "type": "integer"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "terminal",
+          "retryable",
+          "attempt_count",
+          "task_retry_count"
+        ],
+        "title": "ConversationFinalizationStatusResponse",
         "type": "object"
       },
       "ConversationMutationResponse": {
@@ -13833,6 +13895,17 @@
             ],
             "title": "Chat Session Id"
           },
+          "client_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Message Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -13874,6 +13947,17 @@
             "title": "Id",
             "type": "string"
           },
+          "journal_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Revision"
+          },
           "langsmith_run_id": {
             "anyOf": [
               {
@@ -13900,6 +13984,28 @@
             },
             "title": "Memories Id",
             "type": "array"
+          },
+          "message_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Source"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
           },
           "plugin_id": {
             "anyOf": [
@@ -13963,6 +14069,17 @@
           },
           "sender": {
             "$ref": "#/components/schemas/MessageSender"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
           },
           "text": {
             "title": "Text",
@@ -15312,7 +15429,9 @@
           "basic",
           "unlimited",
           "architect",
-          "operator"
+          "operator",
+          "plus",
+          "unlimited_v2"
         ],
         "title": "PlanType",
         "type": "string"
@@ -15926,6 +16045,17 @@
             ],
             "title": "Chat Session Id"
           },
+          "client_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Message Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -15967,6 +16097,17 @@
             "title": "Id",
             "type": "string"
           },
+          "journal_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Revision"
+          },
           "langsmith_run_id": {
             "anyOf": [
               {
@@ -15993,6 +16134,28 @@
             },
             "title": "Memories Id",
             "type": "array"
+          },
+          "message_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Source"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
           },
           "plugin_id": {
             "anyOf": [
@@ -16056,6 +16219,17 @@
           },
           "sender": {
             "$ref": "#/components/schemas/MessageSender"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
           },
           "text": {
             "title": "Text",
@@ -17871,7 +18045,13 @@
           },
           "plan": {
             "$ref": "#/components/schemas/PlanType",
-            "default": "basic"
+            "default": "basic",
+            "enum": [
+              "basic",
+              "unlimited",
+              "architect",
+              "operator"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
@@ -19808,6 +19988,64 @@
         "title": "TranscriptSegment",
         "type": "object"
       },
+      "TranscriptionErrorDetail": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/TranscriptionOutcome"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "error",
+          "outcome",
+          "provider",
+          "retryable",
+          "message"
+        ],
+        "title": "TranscriptionErrorDetail",
+        "type": "object"
+      },
+      "TranscriptionErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/TranscriptionErrorDetail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "TranscriptionErrorResponse",
+        "type": "object"
+      },
+      "TranscriptionOutcome": {
+        "description": "Closed, low-cardinality vocabulary for every accepted transcription.",
+        "enum": [
+          "success",
+          "expected_silence",
+          "empty_unexpected",
+          "timeout",
+          "upstream_error",
+          "config_error",
+          "invalid_input"
+        ],
+        "title": "TranscriptionOutcome",
+        "type": "string"
+      },
       "TranscriptionPreferencesResponse": {
         "properties": {
           "custom_stt_since": {
@@ -21549,6 +21787,16 @@
               }
             ],
             "title": "Language"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "stt_model": {
             "anyOf": [
@@ -29223,6 +29471,23 @@
             }
           },
           {
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "suggested",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surface"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -31277,6 +31542,96 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/action-items/count": {
+      "get": {
+        "description": "Return total / completed / incomplete action-item counts for one conversation.\n\nA task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.",
+        "operationId": "get_conversation_action_items_count_v1_conversations__conversation_id__action_items_count_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationActionItemsCountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Action Items Count",
+        "tags": [
+          "action-items"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/action-items/{action_item_idx}": {
       "patch": {
         "operationId": "update_action_item_description_v1_conversations__conversation_id__action_items__action_item_idx__patch",
@@ -31966,6 +32321,95 @@
           }
         ],
         "summary": "Set Conversation Events State",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/finalization": {
+      "get": {
+        "operationId": "get_conversation_finalization_status_v1_conversations__conversation_id__finalization_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationFinalizationStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Finalization Status",
         "tags": [
           "conversations"
         ]
@@ -53959,6 +54403,16 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid audio input"
+          },
           "401": {
             "$ref": "#/components/responses/Error401"
           },
@@ -53971,6 +54425,36 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Upstream or unexpected-empty result"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Provider configuration unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Provider timeout"
           }
         },
         "security": [

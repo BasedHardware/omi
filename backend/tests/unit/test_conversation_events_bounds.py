@@ -12,6 +12,13 @@ The fix rejects a length mismatch with 422 and bounds-checks both ends
 corrupting data or 500ing. This test loads the conversations router fresh against stubbed heavy
 dependencies (the router pulls in clients that construct at import time -- typesense, pinecone,
 firebase -- so the fakes must precede the import) and calls the handler directly.
+
+The same index-bounds class also affected PATCH /v1/conversations/{id}/segments/{segment_idx}/assign
+(set_assignee_conversation_segment), which indexed transcript_segments[segment_idx] with no bound at
+all: an out-of-range idx 500ed (IndexError) and a negative idx silently mutated the wrong segment.
+Because that route targets a single named segment rather than a batch of parallel arrays, the fix
+returns 404 for a missing segment instead of skipping. Those regression tests live alongside the
+events ones below since they share the fixture and the same failure class.
 """
 
 import hashlib
@@ -23,6 +30,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
@@ -224,3 +232,77 @@ def test_valid_index_still_updates(router):
 
     assert events[1].created is True
     assert events[0].created is False
+
+
+class _FakeSegment:
+    """Minimal transcript segment: assignable (.is_user / .person_id) and model_dump-able."""
+
+    def __init__(self):
+        self.is_user = False
+        self.person_id = None
+
+    def model_dump(self):
+        return {"is_user": self.is_user, "person_id": self.person_id}
+
+
+def _fake_conversation_with_segments(count):
+    segments = [_FakeSegment() for _ in range(count)]
+    return SimpleNamespace(transcript_segments=segments), segments
+
+
+def _segment_assign_handler(conv):
+    """Return the real segments/{segment_idx}/assign handler off its APIRoute.
+
+    Two functions share the name ``set_assignee_conversation_segment`` in the module -- the second
+    (the ``assign-speaker/{speaker_id}`` route) rebinds the module global -- so the module attribute
+    points at the wrong one. The registered route captured the correct function object at decoration
+    time, so pull the handler from ``router.routes`` by path instead.
+    """
+    target = "/v1/conversations/{conversation_id}/segments/{segment_idx}/assign"
+    for route in conv.router.routes:
+        if getattr(route, "path", None) == target and "PATCH" in getattr(route, "methods", set()):
+            return route.endpoint
+    raise AssertionError("segments/{segment_idx}/assign route is not registered")
+
+
+def test_segment_assign_out_of_range_returns_404(router):
+    """An out-of-range segment_idx must raise 404, not IndexError -> HTTP 500."""
+    convo, segments = _fake_conversation_with_segments(2)
+    handler = _segment_assign_handler(router.conv)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ):
+        with pytest.raises(HTTPException) as exc:
+            handler("c1", 999, "is_user", uid="u1")
+
+    assert exc.value.status_code == 404
+    # Nothing mutated: the guard fired before any assignment.
+    assert all(seg.is_user is False and seg.person_id is None for seg in segments)
+
+
+def test_segment_assign_negative_index_returns_404(router):
+    """A negative segment_idx (-1) must 404 instead of silently mutating the last segment."""
+    convo, segments = _fake_conversation_with_segments(2)
+    handler = _segment_assign_handler(router.conv)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ):
+        with pytest.raises(HTTPException) as exc:
+            handler("c1", -1, "person_id", value="person-9", uid="u1")
+
+    assert exc.value.status_code == 404
+    assert segments[-1].person_id is None  # last segment untouched
+
+
+def test_segment_assign_valid_index_still_updates(router):
+    """Sanity: an in-range index still applies the assignment (fix must not break the happy path)."""
+    convo, segments = _fake_conversation_with_segments(2)
+    handler = _segment_assign_handler(router.conv)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ):
+        result = handler("c1", 1, "is_user", value="true", uid="u1")
+
+    assert segments[1].is_user is True
+    assert segments[0].is_user is False  # untouched
+    assert result is convo

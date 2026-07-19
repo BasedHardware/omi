@@ -1,1566 +1,1642 @@
 import Cocoa
-import UserNotifications
+@preconcurrency import UserNotifications
+
+/// Pure gating policy for scheduled screen-capture ticks. Extracted so the
+/// precondition is unit-testable: a scheduled capture may run only while
+/// monitoring and neither recovering nor background-polling. This is the
+/// contract stopMonitoring must restore — if it fails to clear the recovery /
+/// background-polling flags, every subsequent tick is gated off even though
+/// monitoring is nominally on.
+enum ProactiveCapturePolicy {
+  static func captureTickAllowed(
+    isMonitoring: Bool,
+    isInRecoveryMode: Bool,
+    isInBackgroundPolling: Bool
+  ) -> Bool {
+    isMonitoring && !isInRecoveryMode && !isInBackgroundPolling
+  }
+}
 
 /// Service that manages proactive assistants - screen monitoring, frame capture, and assistant coordination
 @MainActor
 public class ProactiveAssistantsPlugin: NSObject {
 
-    // MARK: - Singleton
+  // MARK: - Singleton
 
-    /// Shared instance
-    public static let shared = ProactiveAssistantsPlugin()
+  /// Shared instance
+  public static let shared = ProactiveAssistantsPlugin()
 
-    // MARK: - Properties
+  // MARK: - Properties
 
-    private var screenCaptureService: ScreenCaptureService?
-    private var windowMonitor: WindowMonitor?
-    private var focusAssistant: FocusAssistant?
+  private var screenCaptureService: ScreenCaptureService?
+  private var windowMonitor: WindowMonitor?
+  private var focusAssistant: FocusAssistant?
 
-    /// Public read-only accessor for memory diagnostics
-    var currentFocusAssistant: FocusAssistant? { focusAssistant }
-    private var taskAssistant: TaskAssistant?
-    private var insightAssistant: InsightAssistant?
-    private var memoryAssistant: MemoryAssistant?
-    private var captureTimer: Timer?
-    private var analysisDelayTimer: Timer?
-    private var isInDelayPeriod = false
+  /// Public read-only accessor for memory diagnostics
+  var currentFocusAssistant: FocusAssistant? { focusAssistant }
+  private var taskAssistant: TaskAssistant?
+  private var insightAssistant: InsightAssistant?
+  private var memoryAssistant: MemoryAssistant?
+  private var captureTimer: Timer?
+  private var analysisDelayTimer: Timer?
+  private var isInDelayPeriod = false
 
-    private(set) var isMonitoring = false
-    private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
-    private var _hasScreenRecordingPermission: Bool?  // Cached permission state
-    private var currentApp: String?
-    private var currentWindowID: CGWindowID?
-    private var currentWindowTitle: String?
-    private var lastStatus: FocusStatus?
-    private var frameCount = 0
+  private(set) var isMonitoring = false
+  private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
+  private var _hasScreenRecordingPermission: Bool?  // Cached permission state
+  private var currentApp: String?
+  private var currentWindowID: CGWindowID?
+  private var currentWindowTitle: String?
+  private var lastStatus: FocusStatus?
+  private var frameCount = 0
+  private(set) var screenCaptureHealth: ScreenCaptureHealth = .stopped
 
-    // Backpressure: prevents unbounded CGImage accumulation (~24MB each) when video
-    // encoding is slower than the capture rate — the primary cause of multi-GB memory growth.
-    private(set) var isProcessingRewindFrame = false
-    private(set) var droppedFrameCount = 0
+  func updateScreenCaptureHealthState(_ health: ScreenCaptureHealth) {
+    screenCaptureHealth = health
+  }
 
-    /// Periodic screen recording permission recheck interval (60 seconds).
-    /// Detects permission revocation while monitoring is active (issue #5792).
-    private var lastPermissionCheckTime: Date = .distantPast
-    private let permissionCheckInterval: TimeInterval = 60
+  // Backpressure: prevents unbounded CGImage accumulation (~24MB each) when video
+  // encoding is slower than the capture rate — the primary cause of multi-GB memory growth.
+  private(set) var isProcessingRewindFrame = false
+  private(set) var droppedFrameCount = 0
 
-    // Failure tracking for screen capture recovery
-    private var consecutiveFailures = 0
-    private let maxConsecutiveFailures = 5
-    private var lastCaptureSucceeded = true
-    private var wasMonitoringBeforeSleep = false
-    private var wasMonitoringBeforeLock = false
-    private var systemEventObservers: [NSObjectProtocol] = []
+  /// Periodic screen recording permission recheck interval (60 seconds).
+  /// Detects permission revocation while monitoring is active (issue #5792).
+  private var lastPermissionCheckTime: Date = .distantPast
+  private let permissionCheckInterval: TimeInterval = 60
 
-    // Video call throttling: reduce capture frequency when a call app is frontmost
-    // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
-    private var videoCallThrottleGate = ProactiveVideoCallThrottleGate()
-    private let videoCallThrottleFactor = 5  // Capture 1 out of every 5 frames (effective ~5s interval)
+  // Failure tracking for screen capture recovery
+  private var screenCaptureFailureTracker = ScreenCaptureFailureTracker()
+  private let maxConsecutiveFailures = 5
+  private var lastCaptureSucceeded = true
+  private var wasMonitoringBeforeSleep = false
+  private var wasMonitoringBeforeLock = false
+  private var systemEventObservers: [NSObjectProtocol] = []
 
-    // Screenshot-app yielding: pause capture entirely while another screenshot/recording
-    // app is frontmost, and hold a short backoff after it resigns so its editor UI isn't
-    // disturbed. Prevents Omi's 3s capture loop from locking WindowServer at the moment
-    // the user is trying to take a screenshot (CleanShot, Shottr, macOS screenshot, etc.).
-    private var screenshotCaptureGate = ProactiveScreenshotCaptureGate()
-    private let screenshotAppBackoffDuration: TimeInterval = 10
+  // Video call throttling: reduce capture frequency when a call app is frontmost
+  // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
+  private var videoCallThrottleGate = ProactiveVideoCallThrottleGate()
+  private let videoCallThrottleFactor = 5  // Capture 1 out of every 5 frames (effective ~5s interval)
 
-    // Change-gated distribution: only distribute frames to assistants when context changes.
-    // Eliminates continuous polling when the user stays on the same app/window.
-    private var distributionGate = ProactiveFrameDistributionGate()
-    private var distributionDebounceTimer: Timer?
-    private var latestCapturedFrame: CapturedFrame?
-    /// Fallback interval: re-distribute even without context change to catch visual-only updates.
-    private let distributionFallbackInterval: TimeInterval = 60
-    private let messagingDistributionFallbackInterval: TimeInterval = 15
+  // Screenshot-app yielding: pause capture entirely while another screenshot/recording
+  // app is frontmost, and hold a short backoff after it resigns so its editor UI isn't
+  // disturbed. Prevents Omi's 3s capture loop from locking WindowServer at the moment
+  // the user is trying to take a screenshot (CleanShot, Shottr, macOS screenshot, etc.).
+  private var screenshotCaptureGate = ProactiveScreenshotCaptureGate()
+  private let screenshotAppBackoffDuration: TimeInterval = 10
 
-    /// Apps where new content can arrive while the user stays focused. Reusing the same
-    /// list TaskAssistant uses for its fast in-app trigger so the two layers stay aligned.
-    private static let messagingFastPathApps: Set<String> = [
-        "Telegram", "Messages", "iMessage", "WhatsApp", "Signal",
-        "Slack", "Discord", "Messenger",
-    ]
+  // Change-gated distribution: only distribute frames to assistants when context changes.
+  // Eliminates continuous polling when the user stays on the same app/window.
+  private var distributionGate = ProactiveFrameDistributionGate()
+  private var distributionDebounceTimer: Timer?
+  private var latestCapturedFrame: CapturedFrame?
+  /// Fallback interval: re-distribute even without context change to catch visual-only updates.
+  private let distributionFallbackInterval: TimeInterval = 60
+  private let messagingDistributionFallbackInterval: TimeInterval = 15
 
-    // Conferencing-app catalog (call apps / browser apps / call keywords) now lives in the
-    // shared `ConferencingApps` enum, used here (call throttling) and by `MeetingDetector`
-    // (system-audio gating).
+  /// Apps where new content can arrive while the user stays focused. Reusing the same
+  /// list TaskAssistant uses for its fast in-app trigger so the two layers stay aligned.
+  private static let messagingFastPathApps: Set<String> = [
+    "Telegram", "Messages", "iMessage", "WhatsApp", "Signal",
+    "Slack", "Discord", "Messenger",
+  ]
 
-    /// Bundle IDs of third-party and system screenshot/screen-recording apps.
-    /// When one of these is frontmost, Omi's 3s capture loop contends with the
-    /// user's active capture (WindowServer locks + SCK arbitration), which can
-    /// freeze the other app's capture UI for 20-60 seconds. We pause Omi's
-    /// capture entirely while any of these is frontmost.
-    private static let screenshotAppBundleIDs: Set<String> = [
-        "pl.maketheweb.cleanshotx",          // CleanShot X
-        "cc.ffitch.shottr",                  // Shottr
-        "com.apple.screencaptureui",         // macOS screenshot.app overlay
-        "com.apple.screenshot.launcher",     // macOS screenshot hotkey launcher
-        "com.loom.desktop-app",              // Loom
-        "com.loom.desktop",                  // Loom (alt)
-        "com.techsmith.snagit2025",          // Snagit (current)
-        "com.techsmith.snagit2024",          // Snagit (prior)
-        "com.techsmith.snagit2023",          // Snagit (older)
-        "com.obsproject.obs-studio",         // OBS Studio
-        "com.screenium.Screenium3",          // Screenium
-        "com.kapeli.screenium",              // Screenium (alt)
-        "com.skitch.skitch",                 // Skitch
-        "com.evernote.skitch",               // Skitch (alt)
-        "com.monosnap.monosnap",             // Monosnap
-        "com.lightshot.app",                 // Lightshot
-        "com.capto.Capto",                   // Capto
-        "com.pixelmatorteam.screenshot",     // Pixelmator screenshot
-        "com.tencent.xin.lemon",             // WeCom screenshot
-    ]
+  // Conferencing-app catalog (call apps / browser apps / call keywords) now lives in the
+  // shared `ConferencingApps` enum, used here (call throttling) and by `MeetingDetector`
+  // (system-audio gating).
 
-    // Auto-retry state for transient failures (Exposé, Mission Control, etc.)
-    private var isInRecoveryMode = false
-    private var recoveryRetryCount = 0
-    private let maxRecoveryRetries = 30  // Try up to 30 attempts before giving up
-    private let recoveryInterval: TimeInterval = 5.0  // Seconds between recovery attempts
+  /// Bundle IDs of third-party and system screenshot/screen-recording apps.
+  /// When one of these is frontmost, Omi's 3s capture loop contends with the
+  /// user's active capture (WindowServer locks + SCK arbitration), which can
+  /// freeze the other app's capture UI for 20-60 seconds. We pause Omi's
+  /// capture entirely while any of these is frontmost.
+  private static let screenshotAppBundleIDs: Set<String> = [
+    "pl.maketheweb.cleanshotx",  // CleanShot X
+    "cc.ffitch.shottr",  // Shottr
+    "com.apple.screencaptureui",  // macOS screenshot.app overlay
+    "com.apple.screenshot.launcher",  // macOS screenshot hotkey launcher
+    "com.loom.desktop-app",  // Loom
+    "com.loom.desktop",  // Loom (alt)
+    "com.techsmith.snagit2025",  // Snagit (current)
+    "com.techsmith.snagit2024",  // Snagit (prior)
+    "com.techsmith.snagit2023",  // Snagit (older)
+    "com.obsproject.obs-studio",  // OBS Studio
+    "com.screenium.Screenium3",  // Screenium
+    "com.kapeli.screenium",  // Screenium (alt)
+    "com.skitch.skitch",  // Skitch
+    "com.evernote.skitch",  // Skitch (alt)
+    "com.monosnap.monosnap",  // Monosnap
+    "com.lightshot.app",  // Lightshot
+    "com.capto.Capto",  // Capto
+    "com.pixelmatorteam.screenshot",  // Pixelmator screenshot
+    "com.tencent.xin.lemon",  // WeCom screenshot
+  ]
 
-    // Background polling state for extended recovery after initial retry fails
-    private var isInBackgroundPolling = false
-    private var backgroundPollTimer: Timer?
-    private var backgroundPollCount = 0
-    private let maxBackgroundPollAttempts = 5  // 5 attempts × 60s = 5 minutes
-    private static var hasAutoResetThisSession = false
-    private static var hasSoftRecoveryThisSession = false
+  // Auto-retry state for transient failures (Exposé, Mission Control, etc.)
+  private var isInRecoveryMode = false
+  private var recoveryRetryCount = 0
+  private let maxRecoveryRetries = 30  // Try up to 30 attempts before giving up
+  private let recoveryInterval: TimeInterval = 5.0  // Seconds between recovery attempts
 
-    // Retain distributed notification observer tokens
-    private var testNotificationObservers: [NSObjectProtocol] = []
+  // Background polling state for extended recovery after initial retry fails
+  private var isInBackgroundPolling = false
+  private var backgroundPollTimer: Timer?
+  private var backgroundPollCount = 0
+  private let maxBackgroundPollAttempts = 5  // 5 attempts × 60s = 5 minutes
+  private static var hasAutoResetThisSession = false
+  private static var hasSoftRecoveryThisSession = false
 
-    // MARK: - Initialization
+  // Retain distributed notification observer tokens
+  private var testNotificationObservers: [NSObjectProtocol] = []
 
-    private override init() {
-        super.init()
+  // MARK: - Initialization
 
-        // Load environment variables
-        loadEnvironment()
+  private override init() {
+    super.init()
 
-        // Set up the coordinator event callback
-        AssistantCoordinator.shared.setEventCallback { [weak self] type, data in
-            self?.sendEvent(type: type, data: data)
-        }
+    // Load environment variables
+    loadEnvironment()
 
-        // Set up system event observers for sleep/wake/lock recovery
-        setupSystemEventObservers()
-
-        // Listen for CLI-triggered test notifications
-        setupTestNotificationListeners()
-
-        log("ProactiveAssistantsPlugin initialized")
+    // Set up the coordinator event callback
+    AssistantCoordinator.shared.setEventCallback { [weak self] type, data in
+      self?.sendEvent(type: type, data: data)
     }
 
-    // MARK: - Environment Loading
+    // Set up system event observers for sleep/wake/lock recovery
+    setupSystemEventObservers()
 
-    private func loadEnvironment() {
-        let envPaths = [
-            Bundle.main.path(forResource: ".env", ofType: nil),
-            FileManager.default.currentDirectoryPath + "/.env",
-            NSHomeDirectory() + "/.omi.env",
-            NSHomeDirectory() + "/.hartford.env"
-        ].compactMap { $0 }
+    // Listen for CLI-triggered test notifications
+    setupTestNotificationListeners()
 
-        for path in envPaths {
-            if let contents = try? String(contentsOfFile: path, encoding: .utf8) {
-                for line in contents.components(separatedBy: .newlines) {
-                    let parts = line.split(separator: "=", maxSplits: 1)
-                    if parts.count == 2 {
-                        let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
-                        let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
-                            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-                        setenv(key, value, 1)
-                    }
-                }
-                log("Loaded environment from: \(path)")
-                break
-            }
+    log("ProactiveAssistantsPlugin initialized")
+  }
+
+  // MARK: - Environment Loading
+
+  private func loadEnvironment() {
+    let envPaths = [
+      Bundle.main.path(forResource: ".env", ofType: nil),
+      FileManager.default.currentDirectoryPath + "/.env",
+      NSHomeDirectory() + "/.omi.env",
+      NSHomeDirectory() + "/.hartford.env",
+    ].compactMap { $0 }
+
+    for path in envPaths {
+      if let contents = try? String(contentsOfFile: path, encoding: .utf8) {
+        for line in contents.components(separatedBy: .newlines) {
+          let parts = line.split(separator: "=", maxSplits: 1)
+          if parts.count == 2 {
+            let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
+            let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
+              .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            setenv(key, value, 1)
+          }
         }
-
-        DesktopBackendEnvironment.applyReleaseChannelDefaults()
+        log("Loaded environment from: \(path)")
+        break
+      }
     }
 
+    DesktopBackendEnvironment.applyReleaseChannelDefaults()
+  }
 
-    // MARK: - Assistant Management
+  // MARK: - Assistant Management
 
-    private func enableAssistant(identifier: String, enabled: Bool) {
-        switch identifier {
-        case "focus":
-            FocusAssistantSettings.shared.isEnabled = enabled
-        case "task-extraction":
-            TaskAssistantSettings.shared.isEnabled = enabled
-        case "insight":
-            InsightAssistantSettings.shared.isEnabled = enabled
-        case "memory-extraction":
-            MemoryAssistantSettings.shared.isEnabled = enabled
-        default:
-            log("Unknown assistant: \(identifier)")
-        }
+  private func enableAssistant(identifier: String, enabled: Bool) {
+    switch identifier {
+    case "focus":
+      FocusAssistantSettings.shared.isEnabled = enabled
+    case "task-extraction":
+      TaskAssistantSettings.shared.isEnabled = enabled
+    case "insight":
+      InsightAssistantSettings.shared.isEnabled = enabled
+    case "memory-extraction":
+      MemoryAssistantSettings.shared.isEnabled = enabled
+    default:
+      log("Unknown assistant: \(identifier)")
+    }
+  }
+
+  // MARK: - Public Monitoring Control
+
+  /// Start monitoring with optional retry for transient permission failures
+  public func startMonitoring(retryCount: Int = 0, completion: @escaping (Bool, String?) -> Void) {
+    let maxRetries = 3
+    let retryDelays: [Double] = [2.0, 4.0, 8.0]  // exponential backoff
+
+    // Guard against both active monitoring and pending startup (race condition fix)
+    guard !isMonitoring && !isStartingMonitoring else {
+      completion(isMonitoring, nil)
+      return
     }
 
-    // MARK: - Public Monitoring Control
-
-    /// Start monitoring with optional retry for transient permission failures
-    public func startMonitoring(retryCount: Int = 0, completion: @escaping (Bool, String?) -> Void) {
-        let maxRetries = 3
-        let retryDelays: [Double] = [2.0, 4.0, 8.0]  // exponential backoff
-
-        // Guard against both active monitoring and pending startup (race condition fix)
-        guard !isMonitoring && !isStartingMonitoring else {
-            completion(isMonitoring, nil)
-            return
-        }
-
-        // Paywall hard-stop: refuse to start screen capture + Gemini analysis
-        // when the user is past their trial. `AppState` writes
-        // `desktop_isPaywalled` to UserDefaults whenever it flips so other
-        // singletons can synchronously check. Toggle UI also gates on this.
-        // BYOK users (all four keys configured locally) are never paywalled,
-        // so they bypass this gate even if the flag is transiently stale.
-        if !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
-            log("Paywall: refusing startMonitoring (trial expired)")
-            NotificationCenter.default.post(
-                name: .showUsageLimitPopup,
-                object: nil,
-                userInfo: ["reason": "trial_expired"]
-            )
-            completion(false, "trial_expired")
-            return
-        }
-
-        // Set flag synchronously before async call to prevent race condition
-        isStartingMonitoring = true
-
-        // Check screen recording permission (and update cache)
-        refreshScreenRecordingPermission()
-        guard hasScreenRecordingPermission else {
-            // Must never trigger the OS permission prompt here: this method runs on
-            // non-user-initiated paths (launch, app re-activation, key load, wake),
-            // so requesting would pop the dialog on every login. User-initiated
-            // enable flows request permission before calling this; the retry loop
-            // below picks up out-of-band grants without prompting.
-            if retryCount < maxRetries {
-                let delay = retryDelays[retryCount]
-                log("Screen recording permission not yet granted, retrying in \(delay)s (attempt \(retryCount + 1)/\(maxRetries))")
-                isStartingMonitoring = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                    self?.startMonitoring(retryCount: retryCount + 1, completion: completion)
-                }
-                return
-            }
-
-            log("Screen recording permission not granted after \(maxRetries) retries, giving up")
-            isStartingMonitoring = false
-            completion(false, "Screen recording permission not granted")
-            return
-        }
-
-        // Request notification permission in parallel, but only for first-time users.
-        // Denied users should not be put through repeated startup repair loops.
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
-                guard settings.authorizationStatus == .notDetermined else {
-                    log("Skipping startup notification authorization request (auth=\(settings.authorizationStatus.rawValue))")
-                    return
-                }
-
-                // Only attempt the launch-services repair-capable authorization once per
-                // app version on this non-user-initiated path. Otherwise users stuck in the
-                // launch-disabled + notDetermined state re-run lsregister + killall
-                // usernoted/NotificationCenter on every launch/wake (issue #9082). The
-                // user-initiated "Fix" flows and onboarding prompt remain unaffected.
-                guard NotificationRegistrationRepair.shouldAttemptStartupRepair() else {
-                    log("Skipping startup notification repair — already attempted for this app version")
-                    return
-                }
-                NotificationRegistrationRepair.markStartupRepairAttempted()
-
-                NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-                    reason: "launch_disabled_error_startup",
-                    previousStatus: "notDetermined"
-                ) { granted in
-                    if !granted {
-                        log("Notification permission not granted - screen analysis will work but notifications will be disabled")
-                    }
-                }
-            }
-        }
-
-        // Start monitoring immediately — don't wait for notification permission callback
-        continueStartMonitoring(completion: completion)
+    // Paywall hard-stop: refuse to start screen capture + Gemini analysis
+    // when the user is past their trial. `AppState` writes
+    // `desktop_isPaywalled` to UserDefaults whenever it flips so other
+    // singletons can synchronously check. Toggle UI also gates on this.
+    // BYOK users (all four keys configured locally) are never paywalled,
+    // so they bypass this gate even if the flag is transiently stale.
+    if !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+      log("Paywall: refusing startMonitoring (trial expired)")
+      NotificationCenter.default.post(
+        name: .showUsageLimitPopup,
+        object: nil,
+        userInfo: ["reason": "trial_expired"]
+      )
+      completion(false, "trial_expired")
+      return
     }
 
-    /// Repair LaunchServices registration when notification authorization fails with "not allowed".
-    /// The launch-disabled flag in LaunchServices prevents notification center registration.
-    /// Unregistering and re-registering clears the flag, then retries authorization.
-    static func repairNotificationRegistration() {
-        NotificationRegistrationRepair.repair(reason: "legacy_call_site", includeUnregister: true) { _ in
-            NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
-                reason: "legacy_call_site_retry",
-                previousStatus: "post_repair"
-            ) { _ in }
-        }
-    }
+    // Set flag synchronously before async call to prevent race condition
+    isStartingMonitoring = true
 
-    private func continueStartMonitoring(completion: @escaping (Bool, String?) -> Void) {
-        // Report resources before starting heavy monitoring
-        ResourceMonitor.shared.reportResourcesNow(context: "before_monitoring_start")
-
-        // Initialize services
-        screenCaptureService = ScreenCaptureService()
-
-        do {
-            focusAssistant = try FocusAssistant(
-                onAlert: { [weak self] message in
-                    self?.sendEvent(type: "alert", data: ["message": message])
-                },
-                onStatusChange: { [weak self] status in
-                    Task { @MainActor in
-                        self?.lastStatus = status
-                        self?.sendEvent(type: "statusChange", data: ["status": status.rawValue])
-                    }
-                },
-                onRefocus: {
-                    Task { @MainActor in
-                        OverlayService.shared.showGlowAroundActiveWindow(colorMode: .focused)
-                    }
-                },
-                onDistraction: {
-                    Task { @MainActor in
-                        OverlayService.shared.showGlowAroundActiveWindow(colorMode: .distracted)
-                    }
-                }
-            )
-
-            if let focus = focusAssistant {
-                AssistantCoordinator.shared.register(focus)
-            }
-
-            taskAssistant = try TaskAssistant()
-
-            if let task = taskAssistant {
-                AssistantCoordinator.shared.register(task)
-            }
-
-            Task { await TaskDeduplicationService.shared.start() }
-            Task { await TaskPrioritizationService.shared.start() }
-            Task { await TaskPromotionService.shared.start() }
-
-            insightAssistant = try InsightAssistant()
-
-            if let insight = insightAssistant {
-                AssistantCoordinator.shared.register(insight)
-            }
-
-            memoryAssistant = try MemoryAssistant()
-
-            if let memory = memoryAssistant {
-                AssistantCoordinator.shared.register(memory)
-            }
-
-        } catch {
-            log("ProactiveAssistantsPlugin: Failed to initialize assistants: \(error.localizedDescription)")
-            logError("ProactiveAssistantsPlugin: Assistant initialization failed", error: error)
-            isStartingMonitoring = false
-            completion(false, error.localizedDescription)
-            return
-        }
-
-        // Get initial app state
-        let (appName, _, _) = WindowMonitor.getActiveWindowInfoStatic()
-        if let appName = appName {
-            currentApp = appName
-            // Update FocusStorage with initial detected app
-            FocusStorage.shared.updateDetectedApp(appName)
-            AssistantCoordinator.shared.notifyAppSwitch(newApp: appName)
-        }
-
-        // Start window monitor
-        windowMonitor = WindowMonitor { [weak self] appName in
-            Task { @MainActor in
-                self?.onAppActivated(appName: appName)
-            }
-        }
-        windowMonitor?.start()
-
-        setupPowerAwareCaptureTimer()
-        restartCaptureTimer(reason: "monitoring start")
-
-        isMonitoring = true
-
-        // Capture the first frame immediately so screenshots appear right away
-        // (don't wait for the first timer interval to elapse)
-        Task { @MainActor in
-            await self.captureFrame()
-        }
+    // Check screen recording permission (and update cache)
+    refreshScreenRecordingPermission()
+    guard hasScreenRecordingPermission else {
+      // Must never trigger the OS permission prompt here: this method runs on
+      // non-user-initiated paths (launch, app re-activation, key load, wake),
+      // so requesting would pop the dialog on every login. User-initiated
+      // enable flows request permission before calling this; the retry loop
+      // below picks up out-of-band grants without prompting.
+      if retryCount < maxRetries {
+        let delay = retryDelays[retryCount]
+        log(
+          "Screen recording permission not yet granted, retrying in \(delay)s (attempt \(retryCount + 1)/\(maxRetries))"
+        )
         isStartingMonitoring = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+          self?.startMonitoring(retryCount: retryCount + 1, completion: completion)
+        }
+        return
+      }
 
-        // Report resources after initialization
-        ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_start")
+      log("Screen recording permission not granted after \(maxRetries) retries, giving up")
+      isStartingMonitoring = false
+      completion(false, "Screen recording permission not granted")
+      return
+    }
 
-        sendEvent(type: "monitoringStarted", data: [:])
-        AnalyticsManager.shared.monitoringStarted()
-        NotificationCenter.default.post(
-            name: .assistantMonitoringStateDidChange,
-            object: nil,
-            userInfo: ["isMonitoring": true]
+    // Request notification permission in parallel, but only for first-time users.
+    // Denied users should not be put through repeated startup repair loops.
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      DispatchQueue.main.async {
+        guard settings.authorizationStatus == .notDetermined else {
+          log("Skipping startup notification authorization request (auth=\(settings.authorizationStatus.rawValue))")
+          return
+        }
+
+        // Only attempt the launch-services repair-capable authorization once per
+        // app version on this non-user-initiated path. Otherwise users stuck in the
+        // launch-disabled + notDetermined state re-run lsregister + killall
+        // usernoted/NotificationCenter on every launch/wake (issue #9082). The
+        // user-initiated "Fix" flows and onboarding prompt remain unaffected.
+        guard NotificationRegistrationRepair.shouldAttemptStartupRepair() else {
+          log("Skipping startup notification repair — already attempted for this app version")
+          return
+        }
+        NotificationRegistrationRepair.markStartupRepairAttempted()
+
+        NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+          reason: "launch_disabled_error_startup",
+          previousStatus: "notDetermined"
+        ) { granted in
+          if !granted {
+            log("Notification permission not granted - screen analysis will work but notifications will be disabled")
+          }
+        }
+      }
+    }
+
+    // Start monitoring immediately — don't wait for notification permission callback
+    continueStartMonitoring(completion: completion)
+  }
+
+  /// Repair LaunchServices registration when notification authorization fails with "not allowed".
+  /// The launch-disabled flag in LaunchServices prevents notification center registration.
+  /// Unregistering and re-registering clears the flag, then retries authorization.
+  static func repairNotificationRegistration() {
+    NotificationRegistrationRepair.repair(reason: "legacy_call_site", includeUnregister: true) { _ in
+      NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+        reason: "legacy_call_site_retry",
+        previousStatus: "post_repair"
+      ) { _ in }
+    }
+  }
+
+  private func continueStartMonitoring(completion: @escaping (Bool, String?) -> Void) {
+    // Report resources before starting heavy monitoring
+    ResourceMonitor.shared.reportResourcesNow(context: "before_monitoring_start")
+
+    // Initialize services
+    screenCaptureService = ScreenCaptureService()
+
+    do {
+      focusAssistant = try FocusAssistant(
+        onAlert: { [weak self] message in
+          Task { @MainActor in
+            self?.sendEvent(type: "alert", data: ["message": message])
+          }
+        },
+        onStatusChange: { [weak self] status in
+          Task { @MainActor in
+            self?.lastStatus = status
+            self?.sendEvent(type: "statusChange", data: ["status": status.rawValue])
+          }
+        },
+        onRefocus: {
+          Task { @MainActor in
+            OverlayService.shared.showGlowAroundActiveWindow(colorMode: .focused)
+          }
+        },
+        onDistraction: {
+          Task { @MainActor in
+            OverlayService.shared.showGlowAroundActiveWindow(colorMode: .distracted)
+          }
+        }
+      )
+
+      if let focus = focusAssistant {
+        AssistantCoordinator.shared.register(focus)
+      }
+
+      taskAssistant = try TaskAssistant()
+
+      if let task = taskAssistant {
+        AssistantCoordinator.shared.register(task)
+      }
+
+      Task { await TaskDeduplicationService.shared.start() }
+      Task { await TaskPrioritizationService.shared.start() }
+      Task { await TaskPromotionService.shared.start() }
+
+      insightAssistant = try InsightAssistant()
+
+      if let insight = insightAssistant {
+        AssistantCoordinator.shared.register(insight)
+      }
+
+      memoryAssistant = try MemoryAssistant()
+
+      if let memory = memoryAssistant {
+        AssistantCoordinator.shared.register(memory)
+      }
+
+    } catch {
+      log("ProactiveAssistantsPlugin: Failed to initialize assistants: \(error.localizedDescription)")
+      logError("ProactiveAssistantsPlugin: Assistant initialization failed", error: error)
+      isStartingMonitoring = false
+      completion(false, error.localizedDescription)
+      return
+    }
+
+    // Get initial app state
+    let (appName, _, _) = WindowMonitor.getActiveWindowInfoStatic()
+    if let appName = appName {
+      currentApp = appName
+      // Update FocusStorage with initial detected app
+      FocusStorage.shared.updateDetectedApp(appName)
+      AssistantCoordinator.shared.notifyAppSwitch(newApp: appName)
+    }
+
+    // Start window monitor
+    windowMonitor = WindowMonitor { [weak self] appName in
+      Task { @MainActor in
+        self?.onAppActivated(appName: appName)
+      }
+    }
+    windowMonitor?.start()
+
+    setupPowerAwareCaptureTimer()
+    restartCaptureTimer(reason: "monitoring start")
+
+    isMonitoring = true
+    setScreenCaptureHealth(.active)
+
+    // Capture the first frame immediately so screenshots appear right away
+    // (don't wait for the first timer interval to elapse)
+    Task { @MainActor in
+      await self.captureFrame()
+    }
+    isStartingMonitoring = false
+
+    // Report resources after initialization
+    ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_start")
+
+    sendEvent(type: "monitoringStarted", data: [:])
+    AnalyticsManager.shared.monitoringStarted()
+    log("Proactive assistants started")
+
+    completion(true, nil)
+  }
+
+  private func setupPowerAwareCaptureTimer() {
+    PowerMonitor.shared.onPowerSourceChanged = { [weak self] isOnBattery in
+      Task { @MainActor in
+        guard let self,
+          ProactiveCapturePolicy.captureTickAllowed(
+            isMonitoring: self.isMonitoring,
+            isInRecoveryMode: self.isInRecoveryMode,
+            isInBackgroundPolling: self.isInBackgroundPolling)
+        else { return }
+
+        self.captureTimer?.invalidate()
+        self.captureTimer = nil
+
+        Task {
+          do {
+            _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
+          } catch {
+            logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch", error: error)
+          }
+
+          await MainActor.run {
+            guard
+              ProactiveCapturePolicy.captureTickAllowed(
+                isMonitoring: self.isMonitoring,
+                isInRecoveryMode: self.isInRecoveryMode,
+                isInBackgroundPolling: self.isInBackgroundPolling)
+            else { return }
+            self.restartCaptureTimer(reason: "power source changed to \(isOnBattery ? "battery" : "AC")")
+          }
+        }
+      }
+    }
+  }
+
+  private func restartCaptureTimer(reason: String) {
+    captureTimer?.invalidate()
+    let interval = RewindSettings.shared.effectiveCaptureInterval(isOnBattery: PowerMonitor.shared.isOnBattery)
+    captureTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        await self?.captureFrame()
+      }
+    }
+    log("ProactiveAssistantsPlugin: Capture timer set to \(String(format: "%.1f", interval))s (\(reason))")
+  }
+
+  /// Stop monitoring
+  public func stopMonitoring() {
+    guard isMonitoring else { return }
+
+    captureTimer?.invalidate()
+    captureTimer = nil
+    analysisDelayTimer?.invalidate()
+    analysisDelayTimer = nil
+    distributionDebounceTimer?.invalidate()
+    distributionDebounceTimer = nil
+    // Clear capture-recovery / background-polling state. Without this, a stop
+    // that happens while recovering or background-polling leaves
+    // isInRecoveryMode / isInBackgroundPolling stuck true (only their exit
+    // paths clear them) and orphans the 60s backgroundPollTimer. On the next
+    // start, the scheduled-capture guards (ProactiveCapturePolicy.captureTickAllowed)
+    // then silently skip every tick, so monitoring appears on but never captures.
+    backgroundPollTimer?.invalidate()
+    backgroundPollTimer = nil
+    isInRecoveryMode = false
+    isInBackgroundPolling = false
+    backgroundPollCount = 0
+    recoveryRetryCount = 0
+    isInDelayPeriod = false
+    screenshotCaptureGate.reset()
+    videoCallThrottleGate.reset()
+    distributionGate.reset()
+    latestCapturedFrame = nil
+
+    windowMonitor?.stop()
+    windowMonitor = nil
+
+    if let focus = focusAssistant {
+      Task {
+        await focus.stop()
+      }
+    }
+    if let task = taskAssistant {
+      Task {
+        await task.stop()
+      }
+    }
+    Task { await TaskDeduplicationService.shared.stop() }
+    Task { await TaskPromotionService.shared.stop() }
+    if let insight = insightAssistant {
+      Task {
+        await insight.stop()
+      }
+    }
+    if let memory = memoryAssistant {
+      Task {
+        await memory.stop()
+      }
+    }
+    _ = RewindShutdownFlush.flush(timeout: 5, context: "ProactiveAssistantsPlugin")
+
+    focusAssistant = nil
+    taskAssistant = nil
+    insightAssistant = nil
+    memoryAssistant = nil
+    screenCaptureService = nil
+
+    isMonitoring = false
+    isStartingMonitoring = false  // Reset in case stop was called during startup
+    isProcessingRewindFrame = false
+    if droppedFrameCount > 0 {
+      log("RewindBackpressure: Session total dropped frames: \(droppedFrameCount)")
+    }
+    droppedFrameCount = 0
+    currentApp = nil
+    currentWindowID = nil
+    currentWindowTitle = nil
+    lastStatus = nil
+    frameCount = 0
+    setScreenCaptureHealth(.stopped)
+
+    // Clear FocusStorage real-time state
+    FocusStorage.shared.clearRealtimeStatus()
+
+    // Report resources after stopping
+    ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_stop")
+
+    sendEvent(type: "monitoringStopped", data: [:])
+    AnalyticsManager.shared.monitoringStopped()
+    log("Proactive assistants stopped")
+  }
+
+  /// Toggle monitoring state
+  public func toggleMonitoring() {
+    if isMonitoring {
+      stopMonitoring()
+    } else {
+      startMonitoring { success, error in
+        if !success, let error = error {
+          logError("Failed to start monitoring: \(error)")
+        }
+      }
+    }
+  }
+
+  /// Check if screen recording permission is granted
+  /// Uses cached value to avoid excessive permission check logging
+  public var hasScreenRecordingPermission: Bool {
+    if let cached = _hasScreenRecordingPermission {
+      return cached
+    }
+    // First access - check and cache
+    let result = ScreenCaptureService.checkPermission()
+    _hasScreenRecordingPermission = result
+    return result
+  }
+
+  /// Refresh the cached screen recording permission state
+  public func refreshScreenRecordingPermission() {
+    _hasScreenRecordingPermission = ScreenCaptureService.checkPermission()
+  }
+
+  /// Get current monitoring status
+  var currentStatus: (isMonitoring: Bool, currentApp: String?, lastStatus: FocusStatus?) {
+    return (isMonitoring, currentApp, lastStatus)
+  }
+
+  private func handleCaptureTargetUnavailable() {
+    // A secure/system/helper surface is not proof that the capture engine or
+    // permission failed. Keep the normal timer armed so the very next real
+    // window resumes capture instead of waiting through recovery polling.
+    screenCaptureFailureTracker.recordTargetUnavailable()
+    lastCaptureSucceeded = true
+    setScreenCaptureHealth(.temporarilyUnavailable)
+  }
+
+  private func handleCaptureEngineFailure() {
+    let consecutiveFailures = screenCaptureFailureTracker.recordEngineFailure()
+    lastCaptureSucceeded = false
+
+    if consecutiveFailures == 1 || consecutiveFailures % 5 == 0 {
+      log(
+        "ProactiveAssistantsPlugin: Capture failed (\(consecutiveFailures) consecutive), frontmost: \(getFrontmostAppInfo())"
+      )
+    }
+
+    if consecutiveFailures >= maxConsecutiveFailures {
+      handleRepeatedCaptureFailures()
+    }
+  }
+
+  // MARK: - Frame Capture
+
+  private func onAppActivated(appName: String) {
+    guard appName != currentApp else { return }
+    currentApp = appName
+    currentWindowID = nil
+    currentWindowTitle = nil  // Reset window title on app switch
+
+    // Update FocusStorage immediately with detected app (before analysis)
+    FocusStorage.shared.updateDetectedApp(appName)
+
+    // Notify all assistants
+    AssistantCoordinator.shared.notifyAppSwitch(newApp: appName)
+
+    sendEvent(type: "appSwitch", data: ["app": appName])
+
+    // Start/restart the analysis delay timer
+    let delaySeconds = AssistantSettings.shared.analysisDelay
+
+    analysisDelayTimer?.invalidate()
+    analysisDelayTimer = nil
+
+    if delaySeconds > 0 {
+      isInDelayPeriod = true
+      AssistantCoordinator.shared.clearAllPendingWork()
+      log("App switch detected, starting \(delaySeconds)s analysis delay")
+
+      // Update FocusStorage with delay end time
+      let delayEndTime = Date().addingTimeInterval(TimeInterval(delaySeconds))
+      FocusStorage.shared.updateDelayEndTime(delayEndTime)
+
+      analysisDelayTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(delaySeconds), repeats: false) {
+        [weak self] _ in
+        Task { @MainActor in
+          self?.isInDelayPeriod = false
+          self?.analysisDelayTimer = nil
+          FocusStorage.shared.updateDelayEndTime(nil)
+          log("Analysis delay ended, resuming frame processing")
+        }
+      }
+    } else {
+      isInDelayPeriod = false
+      FocusStorage.shared.updateDelayEndTime(nil)
+      Task { @MainActor in
+        await captureFrame()
+      }
+    }
+  }
+
+  private func captureFrame() async {
+    guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
+
+    // Periodic screen recording permission recheck (issue #5792).
+    // Detects when the user revokes permission via System Settings while monitoring is active,
+    // and stops gracefully instead of silently failing on every capture.
+    let now = Date()
+    if ProactiveAssistantOrchestrationPolicy.shouldRecheckPermission(
+      now: now,
+      lastCheckTime: lastPermissionCheckTime,
+      interval: permissionCheckInterval
+    ) {
+      lastPermissionCheckTime = now
+      let permissionGranted = ScreenCaptureService.checkPermission()
+      _hasScreenRecordingPermission = permissionGranted
+      if !permissionGranted {
+        log("ProactiveAssistantsPlugin: Screen recording permission revoked — stopping monitoring")
+        // Send user-visible notification about lost permission
+        sendEvent(type: "permissionLost", data: ["permission": "screenRecording"])
+        stopMonitoring()
+        return
+      }
+    }
+
+    // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
+    // This avoids burning through consecutive failures and generating unnecessary error events
+    if isInSpecialSystemMode() {
+      return
+    }
+
+    // Skip capture while a screenshot / screen-recording app is frontmost.
+    // Both apps using ScreenCaptureKit at the same time contend for WindowServer
+    // locks, which can stall the user's capture UI for 20-60s. Yield to the user.
+    let wasScreenshotAppFrontmostBeforeDecision = screenshotCaptureGate.wasScreenshotAppFrontmost
+    switch screenshotCaptureGate.nextDecision(
+      isScreenshotAppFrontmost: isScreenshotAppFrontmost(),
+      now: now,
+      backoffDuration: screenshotAppBackoffDuration
+    ) {
+    case .pause:
+      if !wasScreenshotAppFrontmostBeforeDecision {
+        log("ProactiveAssistantsPlugin: Screenshot app frontmost — pausing capture to avoid WindowServer contention")
+      }
+      return
+    case .resumeIntoBackoff:
+      log(
+        "ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for \(Int(max(0, screenshotCaptureGate.backoffUntil.timeIntervalSinceNow)))s"
+      )
+      return
+    case .resumeAndCapture:
+      log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for 0s")
+    case .continueBackoff:
+      return
+    case .capture:
+      break
+    }
+    // Get current window info (use real app name, not cached)
+    let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
+    guard !ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) else { return }
+
+    guard let windowID else {
+      handleCaptureTargetUnavailable()
+      return
+    }
+
+    // Check if the current app is excluded from Rewind capture
+    var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
+
+    // Throttle capture when a video call app is frontmost to reduce CPU contention.
+    // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
+    let videoCallDecision = videoCallThrottleGate.nextDecision(
+      isVideoCall: isVideoCallApp(appName: realAppName, windowTitle: windowTitle),
+      throttleFactor: videoCallThrottleFactor
+    )
+    switch videoCallDecision {
+    case .skip(_, let didEnterCall):
+      if didEnterCall {
+        log(
+          "VideoCallThrottle: Detected call app '\(realAppName ?? "unknown")', throttling capture to 1/\(videoCallThrottleFactor) frames"
         )
-        log("Proactive assistants started")
-
-        completion(true, nil)
+      }
+      return
+    case .capture(_, let didLeaveCall):
+      if didLeaveCall {
+        log("VideoCallThrottle: Left call app, resuming normal capture")
+      }
     }
 
-    private func setupPowerAwareCaptureTimer() {
-        PowerMonitor.shared.onPowerSourceChanged = { [weak self] isOnBattery in
-            Task { @MainActor in
-                guard let self, self.isMonitoring, !self.isInRecoveryMode, !self.isInBackgroundPolling else { return }
-
-                self.captureTimer?.invalidate()
-                self.captureTimer = nil
-
-                Task {
-                    do {
-                        _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
-                    } catch {
-                        logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch: \(error)")
-                    }
-
-                    await MainActor.run {
-                        guard self.isMonitoring, !self.isInRecoveryMode, !self.isInBackgroundPolling else { return }
-                        self.restartCaptureTimer(reason: "power source changed to \(isOnBattery ? "battery" : "AC")")
-                    }
-                }
-            }
-        }
-    }
-
-    private func restartCaptureTimer(reason: String) {
-        captureTimer?.invalidate()
-        let interval = RewindSettings.shared.effectiveCaptureInterval(isOnBattery: PowerMonitor.shared.isOnBattery)
-        captureTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                await self?.captureFrame()
-            }
-        }
-        log("ProactiveAssistantsPlugin: Capture timer set to \(String(format: "%.1f", interval))s (\(reason))")
-    }
-
-    /// Stop monitoring
-    public func stopMonitoring() {
-        guard isMonitoring else { return }
-
-        captureTimer?.invalidate()
-        captureTimer = nil
-        analysisDelayTimer?.invalidate()
-        analysisDelayTimer = nil
-        distributionDebounceTimer?.invalidate()
-        distributionDebounceTimer = nil
-        isInDelayPeriod = false
-        screenshotCaptureGate.reset()
-        videoCallThrottleGate.reset()
-        distributionGate.reset()
-        latestCapturedFrame = nil
-
-        windowMonitor?.stop()
-        windowMonitor = nil
-
-        if let focus = focusAssistant {
-            Task {
-                await focus.stop()
-            }
-        }
-        if let task = taskAssistant {
-            Task {
-                await task.stop()
-            }
-        }
-        Task { await TaskDeduplicationService.shared.stop() }
-        Task { await TaskPromotionService.shared.stop() }
-        if let insight = insightAssistant {
-            Task {
-                await insight.stop()
-            }
-        }
-        if let memory = memoryAssistant {
-            Task {
-                await memory.stop()
-            }
-        }
-        _ = RewindShutdownFlush.flush(timeout: 5, context: "ProactiveAssistantsPlugin")
-
-        focusAssistant = nil
-        taskAssistant = nil
-        insightAssistant = nil
-        memoryAssistant = nil
-        screenCaptureService = nil
-
-        isMonitoring = false
-        isStartingMonitoring = false  // Reset in case stop was called during startup
-        isProcessingRewindFrame = false
-        if droppedFrameCount > 0 {
-            log("RewindBackpressure: Session total dropped frames: \(droppedFrameCount)")
-        }
-        droppedFrameCount = 0
-        currentApp = nil
-        currentWindowID = nil
-        currentWindowTitle = nil
-        lastStatus = nil
-        frameCount = 0
-
-        // Clear FocusStorage real-time state
-        FocusStorage.shared.clearRealtimeStatus()
-
-        // Report resources after stopping
-        ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_stop")
-
-        sendEvent(type: "monitoringStopped", data: [:])
-        AnalyticsManager.shared.monitoringStopped()
-        NotificationCenter.default.post(
-            name: .assistantMonitoringStateDidChange,
-            object: nil,
-            userInfo: ["isMonitoring": false]
-        )
-        log("Proactive assistants stopped")
-    }
-
-    /// Toggle monitoring state
-    public func toggleMonitoring() {
-        if isMonitoring {
-            stopMonitoring()
-        } else {
-            startMonitoring { success, error in
-                if !success, let error = error {
-                    logError("Failed to start monitoring: \(error)")
-                }
-            }
-        }
-    }
-
-    /// Check if screen recording permission is granted
-    /// Uses cached value to avoid excessive permission check logging
-    public var hasScreenRecordingPermission: Bool {
-        if let cached = _hasScreenRecordingPermission {
-            return cached
-        }
-        // First access - check and cache
-        let result = ScreenCaptureService.checkPermission()
-        _hasScreenRecordingPermission = result
-        return result
-    }
-
-    /// Refresh the cached screen recording permission state
-    public func refreshScreenRecordingPermission() {
-        _hasScreenRecordingPermission = ScreenCaptureService.checkPermission()
-    }
-
-    /// Get current monitoring status
-    var currentStatus: (isMonitoring: Bool, currentApp: String?, lastStatus: FocusStatus?) {
-        return (isMonitoring, currentApp, lastStatus)
-    }
-
-    // MARK: - Frame Capture
-
-    private func onAppActivated(appName: String) {
-        guard appName != currentApp else { return }
-        currentApp = appName
-        currentWindowID = nil
-        currentWindowTitle = nil  // Reset window title on app switch
-
-        // Update FocusStorage immediately with detected app (before analysis)
-        FocusStorage.shared.updateDetectedApp(appName)
-
-        // Notify all assistants
-        AssistantCoordinator.shared.notifyAppSwitch(newApp: appName)
-
-        sendEvent(type: "appSwitch", data: ["app": appName])
-
-        // Start/restart the analysis delay timer
+    // Unified context switch detection (covers app changes, window ID changes, and title changes)
+    // Called BEFORE trackFrame so the coordinator's departing frame is from the previous context
+    if let appForCheck = realAppName ?? currentApp {
+      let switched = AssistantCoordinator.shared.checkContextSwitch(
+        newApp: appForCheck,
+        newWindowTitle: windowTitle
+      )
+      if switched && !isInDelayPeriod {
         let delaySeconds = AssistantSettings.shared.analysisDelay
-
-        analysisDelayTimer?.invalidate()
-        analysisDelayTimer = nil
-
         if delaySeconds > 0 {
-            isInDelayPeriod = true
-            AssistantCoordinator.shared.clearAllPendingWork()
-            log("App switch detected, starting \(delaySeconds)s analysis delay")
+          isInDelayPeriod = true
+          AssistantCoordinator.shared.clearAllPendingWork()
+          log("Context switch detected, starting \(delaySeconds)s analysis delay")
 
-            // Update FocusStorage with delay end time
-            let delayEndTime = Date().addingTimeInterval(TimeInterval(delaySeconds))
-            FocusStorage.shared.updateDelayEndTime(delayEndTime)
+          analysisDelayTimer?.invalidate()
+          let delayEndTime = Date().addingTimeInterval(TimeInterval(delaySeconds))
+          FocusStorage.shared.updateDelayEndTime(delayEndTime)
 
-            analysisDelayTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(delaySeconds), repeats: false) { [weak self] _ in
-                Task { @MainActor in
-                    self?.isInDelayPeriod = false
-                    self?.analysisDelayTimer = nil
-                    FocusStorage.shared.updateDelayEndTime(nil)
-                    log("Analysis delay ended, resuming frame processing")
-                }
-            }
-        } else {
-            isInDelayPeriod = false
-            FocusStorage.shared.updateDelayEndTime(nil)
+          analysisDelayTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(delaySeconds), repeats: false) {
+            [weak self] _ in
             Task { @MainActor in
-                await captureFrame()
+              self?.isInDelayPeriod = false
+              self?.analysisDelayTimer = nil
+              FocusStorage.shared.updateDelayEndTime(nil)
+              log("Analysis delay ended, resuming frame processing")
             }
+          }
         }
+      }
     }
 
-    private func captureFrame() async {
-        guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
+    // Update local window tracking
+    currentWindowID = windowID
+    currentWindowTitle = windowTitle
 
-        // Periodic screen recording permission recheck (issue #5792).
-        // Detects when the user revokes permission via System Settings while monitoring is active,
-        // and stops gracefully instead of silently failing on every capture.
-        let now = Date()
-        if ProactiveAssistantOrchestrationPolicy.shouldRecheckPermission(
-            now: now,
-            lastCheckTime: lastPermissionCheckTime,
-            interval: permissionCheckInterval
-        ) {
-            lastPermissionCheckTime = now
-            let permissionGranted = ScreenCaptureService.checkPermission()
-            _hasScreenRecordingPermission = permissionGranted
-            if !permissionGranted {
-                log("ProactiveAssistantsPlugin: Screen recording permission revoked — stopping monitoring")
-                // Send user-visible notification about lost permission
-                sendEvent(type: "permissionLost", data: ["permission": "screenRecording"])
-                stopMonitoring()
-                return
-            }
+    // Use real app name from window info, fall back to cached if unavailable.
+    // Mutable because windowGone retry may re-resolve to a different app.
+    var appName = realAppName ?? currentApp
+
+    // Always capture frames (other features may need them)
+    // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
+    // pass CGImage to RewindIndexer (avoids redundant encode/decode round-trips)
+    if #available(macOS 14.0, *) {
+      // Use the window ID already resolved above to avoid stale cache hits
+      // from a second getActiveWindowInfoAsync() call inside captureActiveWindowCGImage().
+      var cgImage: CGImage? = nil
+      var captureResult = await screenCaptureService.captureWindowCGImage(windowID: windowID)
+      if case .windowGone = captureResult {
+        // The target disappeared or ScreenCaptureKit does not expose it. Retry
+        // once after a fresh resolution, then treat a second unavailable target
+        // as a normal paused tick rather than an engine failure.
+        captureResult = await screenCaptureService.captureActiveWindowCGImage()
+        // Privacy: re-resolve app name since captureActiveWindowCGImage captures
+        // whatever is currently active, which may differ from the earlier resolution.
+        let (fallbackApp, fallbackTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+        if let fallbackApp = fallbackApp {
+          appName = fallbackApp
+          currentWindowTitle = fallbackTitle
+          isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
         }
-
-        // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
-        // This avoids burning through consecutive failures and generating unnecessary error events
-        if isInSpecialSystemMode() {
-            return
+      }
+      switch captureResult {
+      case .success(let image):
+        cgImage = image
+      case .windowGone:
+        handleCaptureTargetUnavailable()
+        return
+      case .failed:
+        handleCaptureEngineFailure()
+        return
+      }
+      if let cgImage = cgImage,
+        let appName = appName
+      {
+        let recoveredAfterFailures = screenCaptureFailureTracker.recordCaptureSuccess()
+        if !lastCaptureSucceeded {
+          log("Screen capture recovered after \(recoveredAfterFailures) failures")
         }
-
-        // Skip capture while a screenshot / screen-recording app is frontmost.
-        // Both apps using ScreenCaptureKit at the same time contend for WindowServer
-        // locks, which can stall the user's capture UI for 20-60s. Yield to the user.
-        let wasScreenshotAppFrontmostBeforeDecision = screenshotCaptureGate.wasScreenshotAppFrontmost
-        switch screenshotCaptureGate.nextDecision(
-            isScreenshotAppFrontmost: isScreenshotAppFrontmost(),
-            now: now,
-            backoffDuration: screenshotAppBackoffDuration
-        ) {
-        case .pause:
-            if !wasScreenshotAppFrontmostBeforeDecision {
-                log("ProactiveAssistantsPlugin: Screenshot app frontmost — pausing capture to avoid WindowServer contention")
-            }
-            return
-        case .resumeIntoBackoff:
-            log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for \(Int(max(0, screenshotCaptureGate.backoffUntil.timeIntervalSinceNow)))s")
-            return
-        case .resumeAndCapture:
-            log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for 0s")
-        case .continueBackoff:
-            return
-        case .capture:
-            break
-        }
-
-        // Get current window info (use real app name, not cached)
-        let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
-
-        // Check if the current app is excluded from Rewind capture
-        var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
-
-        // Throttle capture when a video call app is frontmost to reduce CPU contention.
-        // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
-        let videoCallDecision = videoCallThrottleGate.nextDecision(
-            isVideoCall: isVideoCallApp(appName: realAppName, windowTitle: windowTitle),
-            throttleFactor: videoCallThrottleFactor
-        )
-        switch videoCallDecision {
-        case .skip(_, let didEnterCall):
-            if didEnterCall {
-                log("VideoCallThrottle: Detected call app '\(realAppName ?? "unknown")', throttling capture to 1/\(videoCallThrottleFactor) frames")
-            }
-            return
-        case .capture(_, let didLeaveCall):
-            if didLeaveCall {
-                log("VideoCallThrottle: Left call app, resuming normal capture")
-            }
-        }
-
-        // Unified context switch detection (covers app changes, window ID changes, and title changes)
-        // Called BEFORE trackFrame so the coordinator's departing frame is from the previous context
-        if let appForCheck = realAppName ?? currentApp {
-            let switched = AssistantCoordinator.shared.checkContextSwitch(
-                newApp: appForCheck,
-                newWindowTitle: windowTitle
-            )
-            if switched && !isInDelayPeriod {
-                let delaySeconds = AssistantSettings.shared.analysisDelay
-                if delaySeconds > 0 {
-                    isInDelayPeriod = true
-                    AssistantCoordinator.shared.clearAllPendingWork()
-                    log("Context switch detected, starting \(delaySeconds)s analysis delay")
-
-                    analysisDelayTimer?.invalidate()
-                    let delayEndTime = Date().addingTimeInterval(TimeInterval(delaySeconds))
-                    FocusStorage.shared.updateDelayEndTime(delayEndTime)
-
-                    analysisDelayTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(delaySeconds), repeats: false) { [weak self] _ in
-                        Task { @MainActor in
-                            self?.isInDelayPeriod = false
-                            self?.analysisDelayTimer = nil
-                            FocusStorage.shared.updateDelayEndTime(nil)
-                            log("Analysis delay ended, resuming frame processing")
-                        }
-                    }
-                }
-            }
-        }
-
-        // Update local window tracking
-        if let windowID = windowID {
-            currentWindowID = windowID
-        }
-        currentWindowTitle = windowTitle
-
-        // Use real app name from window info, fall back to cached if unavailable.
-        // Mutable because windowGone retry may re-resolve to a different app.
-        var appName = realAppName ?? currentApp
-
-        // Always capture frames (other features may need them)
-        // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
-        // pass CGImage to RewindIndexer (avoids redundant encode/decode round-trips)
-        if #available(macOS 14.0, *) {
-            // Use the window ID already resolved above (line 624) to avoid stale cache hits
-            // from a second getActiveWindowInfoAsync() call inside captureActiveWindowCGImage()
-            var cgImage: CGImage? = nil
-            if let wid = windowID {
-                switch await screenCaptureService.captureWindowCGImage(windowID: wid) {
-                case .success(let image):
-                    cgImage = image
-                case .windowGone:
-                    // The window disappeared between resolution and capture (user closed
-                    // a tab, dismissed a modal, app destroyed the window). Re-resolve the
-                    // active window fresh and retry once — do NOT count this as a capture
-                    // failure. This used to trip the consecutive-failure counter and falsely
-                    // declare "screen recording permission lost" after normal user actions.
-                    cgImage = await screenCaptureService.captureActiveWindowCGImage()
-                    // Privacy: re-resolve app name since active window may have changed
-                    let (retryApp, retryTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
-                    if let retryApp = retryApp {
-                        appName = retryApp
-                        currentWindowTitle = retryTitle
-                        isRewindExcluded = RewindSettings.shared.isAppExcluded(retryApp)
-                    }
-                case .failed:
-                    cgImage = nil
-                }
-            } else {
-                cgImage = await screenCaptureService.captureActiveWindowCGImage()
-                // Privacy: re-resolve app name since captureActiveWindowCGImage captures
-                // whatever is currently active, which may differ from the earlier resolution.
-                let (fallbackApp, fallbackTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
-                if let fallbackApp = fallbackApp {
-                    appName = fallbackApp
-                    currentWindowTitle = fallbackTitle
-                    isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
-                }
-            }
-            if let cgImage = cgImage,
-               let appName = appName {
-                if !lastCaptureSucceeded {
-                    log("Screen capture recovered after \(consecutiveFailures) failures")
-                }
-                consecutiveFailures = 0
-                lastCaptureSucceeded = true
-
-                frameCount += 1
-                let captureTime = Date()
-
-                // Encode JPEG off main actor — CGImageDestinationFinalize is CPU-heavy
-                let captureService = screenCaptureService
-                let jpegData = await Task.detached(priority: .userInitiated) {
-                    captureService.encodeJPEG(from: cgImage)
-                }.value
-                if let jpegData = jpegData {
-                    let frame = CapturedFrame(
-                        jpegData: jpegData,
-                        appName: appName,
-                        windowTitle: currentWindowTitle,
-                        frameNumber: frameCount,
-                        captureTime: captureTime
-                    )
-
-                    // Privacy gate: skip ALL assistant paths for Rewind-excluded apps.
-                    // This includes trackFrame — the tracked frame can be passed to assistants
-                    // via onContextSwitch (e.g. TaskAssistant), so excluded frames must never
-                    // be stored as lastTrackedFrame.
-                    // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
-                    // (set by checkContextSwitch), not lastTrackedFrame.
-                    if isRewindExcluded {
-                        log("PrivacyGate: Blocked frame from Rewind-excluded app '\(appName)' — not sent to assistants")
-                    }
-                    if !isRewindExcluded {
-                        AssistantCoordinator.shared.trackFrame(frame)
-                        if !isInDelayPeriod {
-                            distributeFrameIfChanged(frame)
-                        } else {
-                            // During delay, still distribute to assistants that need it (e.g. refocus detection)
-                            AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
-                        }
-                    }
-                }
-
-                // Pass CGImage directly to RewindIndexer (only if not excluded from Rewind)
-                // Backpressure: skip this frame if the previous one is still being processed.
-                // Without this, fire-and-forget Tasks queue up holding CGImages (~24MB each),
-                // causing multi-GB memory growth when encoding can't keep up with capture rate.
-                if !isRewindExcluded {
-                    if isProcessingRewindFrame {
-                        droppedFrameCount += 1
-                        if droppedFrameCount == 1 || droppedFrameCount % 30 == 0 {
-                            log("RewindBackpressure: Dropped frame (encoder busy), total dropped: \(droppedFrameCount)")
-                        }
-                    } else {
-                        isProcessingRewindFrame = true
-                        let windowTitle = self.currentWindowTitle
-                        Task { [weak self] in
-                            await RewindIndexer.shared.processFrame(
-                                cgImage: cgImage,
-                                appName: appName,
-                                windowTitle: windowTitle,
-                                captureTime: captureTime
-                            )
-                            await MainActor.run {
-                                self?.isProcessingRewindFrame = false
-                            }
-                        }
-                    }
-                }
-            } else {
-                consecutiveFailures += 1
-                lastCaptureSucceeded = false
-
-                if consecutiveFailures == 1 || consecutiveFailures % 5 == 0 {
-                    log("ProactiveAssistantsPlugin: Capture failed (\(consecutiveFailures) consecutive), frontmost: \(getFrontmostAppInfo())")
-                }
-
-                if consecutiveFailures >= maxConsecutiveFailures {
-                    handleRepeatedCaptureFailures()
-                }
-                return
-            }
-        } else if let jpegData = await screenCaptureService.captureActiveWindowAsync(),
-           let appName = appName {
-            // macOS 13.x fallback: existing JPEG-based path
-            // Privacy: re-resolve app name since captureActiveWindowAsync captures
-            // whatever is currently active, which may differ from the earlier resolution.
-            var resolvedApp = appName
-            let (freshApp, freshTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
-            if let freshApp = freshApp {
-                resolvedApp = freshApp
-                currentWindowTitle = freshTitle
-                isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
-            }
-
-            if !lastCaptureSucceeded {
-                log("Screen capture recovered after \(consecutiveFailures) failures")
-            }
-            consecutiveFailures = 0
-            lastCaptureSucceeded = true
-
-            frameCount += 1
-
-            let frame = CapturedFrame(
-                jpegData: jpegData,
-                appName: resolvedApp,
-                windowTitle: currentWindowTitle,
-                frameNumber: frameCount
-            )
-
-            // Privacy gate: skip ALL assistant paths for Rewind-excluded apps
-            // (including trackFrame — see macOS 14+ path comment for rationale).
-            if isRewindExcluded {
-                log("PrivacyGate: Blocked frame from Rewind-excluded app '\(resolvedApp)' — not sent to assistants")
-            }
-            if !isRewindExcluded {
-                AssistantCoordinator.shared.trackFrame(frame)
-                if !isInDelayPeriod {
-                    distributeFrameIfChanged(frame)
-                } else {
-                    // During delay, still distribute to assistants that need it (e.g. refocus detection)
-                    AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
-                }
-            }
-
-            if !isRewindExcluded {
-                if isProcessingRewindFrame {
-                    droppedFrameCount += 1
-                    if droppedFrameCount == 1 || droppedFrameCount % 30 == 0 {
-                        log("RewindBackpressure: Dropped frame (encoder busy), total dropped: \(droppedFrameCount)")
-                    }
-                } else {
-                    isProcessingRewindFrame = true
-                    Task { [weak self] in
-                        await RewindIndexer.shared.processFrame(frame)
-                        await MainActor.run {
-                            self?.isProcessingRewindFrame = false
-                        }
-                    }
-                }
-            }
-        } else {
-            // Track capture failures
-            consecutiveFailures += 1
-            lastCaptureSucceeded = false
-
-            // Log first failure and every 5th failure to avoid spam
-            if consecutiveFailures == 1 || consecutiveFailures % 5 == 0 {
-                log("ProactiveAssistantsPlugin: Capture failed (\(consecutiveFailures) consecutive), frontmost: \(getFrontmostAppInfo())")
-            }
-
-            if consecutiveFailures >= maxConsecutiveFailures {
-                handleRepeatedCaptureFailures()
-            }
-        }
-    }
-
-
-    // MARK: - Change-Gated Distribution
-
-    /// Distribute a frame to assistants only when context changed (app or window title),
-    /// with a 3-second debounce to let rapid switches settle, and a 60-second fallback
-    /// for periodic re-analysis within the same context.
-    private func distributeFrameIfChanged(_ frame: CapturedFrame) {
-        latestCapturedFrame = frame
-
-        let now = Date()
-        switch distributionGate.nextAction(
-            frameApp: frame.appName,
-            frameWindowTitle: frame.windowTitle,
-            now: now,
-            defaultFallbackInterval: distributionFallbackInterval,
-            messagingFallbackInterval: messagingDistributionFallbackInterval,
-            messagingFastPathApps: Self.messagingFastPathApps
-        ) {
-        case .flushNow:
-            distributionDebounceTimer?.invalidate()
-            flushDebouncedFrame()
-        case .scheduleDebounce:
-            // Restart the 3s debounce timer — fires 3s after the last context change
-            distributionDebounceTimer?.invalidate()
-            distributionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
-                Task { @MainActor in
-                    self?.flushDebouncedFrame()
-                }
-            }
-        case .skip:
-            break
-        }
-    }
-
-    /// Flush the latest captured frame to all assistants (called when debounce timer fires or fallback is due).
-    private func flushDebouncedFrame() {
-        guard let frame = latestCapturedFrame else { return }
-
-        distributionGate.markFlushed(
-            frameApp: frame.appName,
-            frameWindowTitle: frame.windowTitle,
-            at: Date()
-        )
-        distributionDebounceTimer = nil
-
-        AssistantCoordinator.shared.distributeFrame(frame)
-    }
-
-    // MARK: - Event Broadcasting
-
-    private func sendEvent(type: String, data: [String: Any]) {
-        var event = data
-        event["type"] = type
-        event["timestamp"] = ISO8601DateFormatter().string(from: Date())
-
-        // Post notification for any listeners
-        NotificationCenter.default.post(
-            name: .assistantEvent,
-            object: nil,
-            userInfo: event
-        )
-    }
-
-    // MARK: - Utility Methods
-
-    /// Open screen recording preferences
-    public func openScreenRecordingPreferences() {
-        ScreenCaptureService.openScreenRecordingPreferences()
-    }
-
-    /// Trigger glow effect manually (for testing)
-    func triggerGlow(colorMode: GlowColorMode = .focused) {
-        OverlayService.shared.showGlowAroundActiveWindow(colorMode: colorMode)
-    }
-
-    // MARK: - CLI Test Triggers
-
-    /// Listen for distributed notifications from CLI to trigger test runs
-    private func setupTestNotificationListeners() {
-        // Use selector-based observer (more reliable with DistributedNotificationCenter)
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(handleInsightTestNotification(_:)),
-            name: NSNotification.Name("com.omi.test.insight"),
-            object: nil
-        )
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(handleFocusTestNotification(_:)),
-            name: NSNotification.Name("com.omi.test.focus"),
-            object: nil
-        )
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(handleNotificationTestNotification(_:)),
-            name: NSNotification.Name("com.omi.test.notification"),
-            object: nil
-        )
-        log("InsightTestCLI: Notification observer registered")
-        log("FocusTestCLI: Notification observer registered")
-        log("NotificationTestCLI: Notification observer registered")
-    }
-
-    @objc private func handleInsightTestNotification(_ notification: Notification) {
-        Task { @MainActor in
-            let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
-            let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
-            log("InsightTestCLI: Received test trigger (hours=\(hours), count=\(count))")
-            await InsightTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
-        }
-    }
-
-    @objc private func handleFocusTestNotification(_ notification: Notification) {
-        Task { @MainActor in
-            let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
-            let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 20
-            log("FocusTestCLI: Received test trigger (hours=\(hours), count=\(count))")
-            await FocusTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
-        }
-    }
-
-    @objc private func handleNotificationTestNotification(_ notification: Notification) {
-        Task { @MainActor in
-            let title = (notification.userInfo?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let message = (notification.userInfo?["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let assistantId = (notification.userInfo?["assistantId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let resolvedTitle = title?.isEmpty == false ? title! : "Insight"
-            let resolvedMessage = message?.isEmpty == false ? message! : "Test notification from Omi"
-            let resolvedAssistantId = assistantId?.isEmpty == false ? assistantId! : "insight"
-
-            let context = FloatingBarNotificationContext(
-                sourceTitle: resolvedTitle,
-                assistantId: resolvedAssistantId,
-                sourceApp: notification.userInfo?["sourceApp"] as? String,
-                windowTitle: notification.userInfo?["windowTitle"] as? String,
-                contextSummary: notification.userInfo?["contextSummary"] as? String,
-                currentActivity: notification.userInfo?["currentActivity"] as? String,
-                reasoning: notification.userInfo?["reasoning"] as? String,
-                detail: notification.userInfo?["detail"] as? String
-            )
-
-            log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")
-            NotificationService.shared.sendNotification(
-                title: resolvedTitle,
-                message: resolvedMessage,
-                assistantId: resolvedAssistantId,
-                context: context
-            )
-        }
-    }
-
-    // MARK: - System Event Handling
-
-    /// Set up observers for system sleep/wake and screen lock/unlock events
-    private func setupSystemEventObservers() {
-        // System about to sleep - track state before sleep
-        let sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.willSleepNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.wasMonitoringBeforeSleep = self?.isMonitoring ?? false
-                log("ProactiveAssistantsPlugin: System going to sleep, wasMonitoring=\(self?.wasMonitoringBeforeSleep ?? false)")
-
-                // Pause the capture timer while sleeping (same as screen lock)
-                self?.captureTimer?.invalidate()
-                self?.captureTimer = nil
-            }
-        }
-        systemEventObservers.append(sleepObserver)
-
-        // System wake from sleep
-        let wakeObserver = NotificationCenter.default.addObserver(
-            forName: .systemDidWake,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handleSystemWake()
-            }
-        }
-        systemEventObservers.append(wakeObserver)
-
-        // Screen locked
-        let lockObserver = NotificationCenter.default.addObserver(
-            forName: .screenDidLock,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handleScreenLock()
-            }
-        }
-        systemEventObservers.append(lockObserver)
-
-        // Screen unlocked
-        let unlockObserver = NotificationCenter.default.addObserver(
-            forName: .screenDidUnlock,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handleScreenUnlock()
-            }
-        }
-        systemEventObservers.append(unlockObserver)
-    }
-
-    /// Handle system wake from sleep
-    private func handleSystemWake() {
-        log("ProactiveAssistantsPlugin: System woke from sleep")
-
-        // Reset failure counter
-        consecutiveFailures = 0
         lastCaptureSucceeded = true
+        setScreenCaptureHealth(.active)
 
-        // If we were monitoring before sleep, reinitialize capture service and restart timer
-        if wasMonitoringBeforeSleep && isMonitoring {
-            log("ProactiveAssistantsPlugin: Restarting screen capture after wake")
+        frameCount += 1
+        let captureTime = Date()
 
-            // Reinitialize the screen capture service
-            screenCaptureService = ScreenCaptureService()
+        // Encode JPEG off main actor — CGImageDestinationFinalize is CPU-heavy
+        let captureService = screenCaptureService
+        let jpegData = await Task.detached(priority: .userInitiated) {
+          captureService.encodeJPEG(from: cgImage)
+        }.value
+        if let jpegData = jpegData {
+          let frame = CapturedFrame(
+            jpegData: jpegData,
+            appName: appName,
+            windowTitle: currentWindowTitle,
+            frameNumber: frameCount,
+            captureTime: captureTime
+          )
 
-            // Refresh permission state
-            refreshScreenRecordingPermission()
-
-            // Restart capture timer after a brief delay to let the system settle
-            captureTimer?.invalidate()
-            captureTimer = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-                guard let self = self, self.isMonitoring else { return }
-                self.restartCaptureTimer(reason: "system wake")
-                log("ProactiveAssistantsPlugin: Capture timer restarted after wake")
+          // Privacy gate: skip ALL assistant paths for Rewind-excluded apps.
+          // This includes trackFrame — the tracked frame can be passed to assistants
+          // via onContextSwitch (e.g. TaskAssistant), so excluded frames must never
+          // be stored as lastTrackedFrame.
+          // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
+          // (set by checkContextSwitch), not lastTrackedFrame.
+          if isRewindExcluded {
+            log("PrivacyGate: Blocked frame from Rewind-excluded app '\(appName)' — not sent to assistants")
+          }
+          if !isRewindExcluded {
+            AssistantCoordinator.shared.trackFrame(frame)
+            if !isInDelayPeriod {
+              distributeFrameIfChanged(frame)
+            } else {
+              // During delay, still distribute to assistants that need it (e.g. refocus detection)
+              AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
             }
+          }
         }
 
-        wasMonitoringBeforeSleep = false
-    }
-
-    /// Handle screen lock - pause capture
-    private func handleScreenLock() {
-        log("ProactiveAssistantsPlugin: Screen locked - pausing capture")
-
-        wasMonitoringBeforeLock = isMonitoring
-
-        // Pause the capture timer while locked
-        captureTimer?.invalidate()
-        captureTimer = nil
-    }
-
-    /// Handle screen unlock - resume capture
-    private func handleScreenUnlock() {
-        log("ProactiveAssistantsPlugin: Screen unlocked - resuming capture")
-
-        // Reset failure counter
-        consecutiveFailures = 0
-        lastCaptureSucceeded = true
-
-        if wasMonitoringBeforeLock && isMonitoring {
-            log("ProactiveAssistantsPlugin: Restarting capture timer after unlock")
-
-            // Reinitialize screen capture service to ensure fresh state
-            screenCaptureService = ScreenCaptureService()
-
-            // Restart capture timer
-            restartCaptureTimer(reason: "screen unlock")
-        } else if wasMonitoringBeforeLock && !isMonitoring {
-            // We stopped monitoring while locked, restart it
-            log("ProactiveAssistantsPlugin: Restarting monitoring after unlock")
-            startMonitoring { success, error in
-                if !success, let error = error {
-                    log("Failed to restart monitoring after unlock: \(error)")
-                }
+        // Pass CGImage directly to RewindIndexer (only if not excluded from Rewind)
+        // Backpressure: skip this frame if the previous one is still being processed.
+        // Without this, fire-and-forget Tasks queue up holding CGImages (~24MB each),
+        // causing multi-GB memory growth when encoding can't keep up with capture rate.
+        if !isRewindExcluded {
+          if isProcessingRewindFrame {
+            droppedFrameCount += 1
+            if droppedFrameCount == 1 || droppedFrameCount % 30 == 0 {
+              log("RewindBackpressure: Dropped frame (encoder busy), total dropped: \(droppedFrameCount)")
             }
-        }
-
-        wasMonitoringBeforeLock = false
-    }
-
-    /// Handle repeated capture failures (likely permission issue)
-    private func handleRepeatedCaptureFailures() {
-        let frontApp = getFrontmostAppInfo()
-        log("ProactiveAssistantsPlugin: Detected \(consecutiveFailures) consecutive capture failures (frontmost: \(frontApp))")
-
-        // Check if we're in a special system mode (Exposé, Mission Control, etc.)
-        // These modes temporarily block screen capture but aren't permission issues
-        if isInSpecialSystemMode() {
-            log("ProactiveAssistantsPlugin: System is in special mode, entering recovery mode instead of stopping")
-            enterRecoveryMode()
-            return
-        }
-
-        // First pass: run a single permission test.
-        refreshScreenRecordingPermission()
-
-        if hasScreenRecordingPermission {
-            // Permission appears granted but capture is failing
-            // This could be a transient issue - enter recovery mode instead of stopping
-            log("ProactiveAssistantsPlugin: Capture failing with permission granted, entering recovery mode")
-            enterRecoveryMode()
-            return
-        }
-
-        // First permission test failed. Do NOT declare permission lost yet —
-        // `/usr/sbin/screencapture` can transiently fail during app-switches,
-        // mid-animation, or while macOS is mid-context-switch. A single failed
-        // probe previously stopped monitoring + fired a scary "permission lost"
-        // notification even though real recording was still working.
-        // Re-test after a short delay; only stop if both tests fail.
-        log("ProactiveAssistantsPlugin: First permission test failed, re-testing to avoid false positive")
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s
-            guard let self = self, self.isMonitoring else { return }
-
-            self.refreshScreenRecordingPermission()
-            if self.hasScreenRecordingPermission {
-                log("ProactiveAssistantsPlugin: Permission test recovered on second check — treating initial failure as transient, entering recovery mode")
-                self.enterRecoveryMode()
-                return
+          } else {
+            isProcessingRewindFrame = true
+            let windowTitle = self.currentWindowTitle
+            Task { [weak self] in
+              await RewindIndexer.shared.processFrame(
+                cgImage: cgImage,
+                appName: appName,
+                windowTitle: windowTitle,
+                captureTime: captureTime
+              )
+              await MainActor.run {
+                self?.isProcessingRewindFrame = false
+              }
             }
-
-            log("ProactiveAssistantsPlugin: Screen recording permission lost (confirmed by second test)")
-
-            // Post notification for AppState to update UI
-            NotificationCenter.default.post(name: .screenCapturePermissionLost, object: nil)
-
-            // Stop monitoring since we can't capture
-            self.stopMonitoring()
-
-            // Send user notification
-            NotificationService.shared.sendNotification(
-                title: "Screen Recording Permission Required",
-                message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings.",
-                deliverSystemBanner: true,
-                respectFrequency: false
-            )
+          }
         }
-    }
+      } else {
+        handleCaptureEngineFailure()
+        return
+      }
+    } else if let jpegData = await screenCaptureService.captureActiveWindowAsync(),
+      let appName = appName
+    {
+      // macOS 13.x fallback: existing JPEG-based path
+      // Privacy: re-resolve app name since captureActiveWindowAsync captures
+      // whatever is currently active, which may differ from the earlier resolution.
+      var resolvedApp = appName
+      let (freshApp, freshTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+      if let freshApp = freshApp {
+        resolvedApp = freshApp
+        currentWindowTitle = freshTitle
+        isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
+      }
 
-    // MARK: - Video Call Detection
+      let recoveredAfterFailures = screenCaptureFailureTracker.recordCaptureSuccess()
+      if !lastCaptureSucceeded {
+        log("Screen capture recovered after \(recoveredAfterFailures) failures")
+      }
+      lastCaptureSucceeded = true
+      setScreenCaptureHealth(.active)
 
-    /// Check if the frontmost app (and optionally window title) indicates an active video call.
-    /// Delegates to the shared `ConferencingApps` catalog (also used by `MeetingDetector`).
-    private func isVideoCallApp(appName: String?, windowTitle: String?) -> Bool {
-        return ConferencingApps.isCallWindow(ownerName: appName, title: windowTitle)
-    }
+      frameCount += 1
 
-    // MARK: - Screenshot App Detection
+      let frame = CapturedFrame(
+        jpegData: jpegData,
+        appName: resolvedApp,
+        windowTitle: currentWindowTitle,
+        frameNumber: frameCount
+      )
 
-    /// True when a known third-party / system screenshot or screen-recording app is
-    /// frontmost. While one is, Omi pauses its 3s capture loop so the user's capture
-    /// doesn't stall on WindowServer lock contention with Omi. See PR attached to
-    /// the "CleanShot lags 20-60s" investigation.
-    private func isScreenshotAppFrontmost() -> Bool {
-        guard let frontApp = NSWorkspace.shared.frontmostApplication,
-              let bundleID = frontApp.bundleIdentifier else {
-            return false
-        }
-        return Self.screenshotAppBundleIDs.contains(bundleID)
-    }
-
-    // MARK: - Special System Mode Detection
-
-    /// Check if the system is in a special mode that blocks screen capture.
-    ///
-    /// Known modes that block ScreenCaptureKit:
-    /// - **Exposé / Mission Control** (F3 or swipe up): Dock owns all windows
-    /// - **App Exposé** (swipe down on app): Shows all windows of one app
-    /// - **Notification Center**: Slide-in panel
-    /// - **Lock Screen**: Captured separately via screenDidLock notification
-    /// - **Screen Saver**: Similar to lock screen
-    ///
-    /// When in these modes, ScreenCaptureKit returns "user declined TCCs" error
-    /// even though permission is actually granted. This is a transient state.
-    private func isInSpecialSystemMode() -> Bool {
-        // Check if Dock is the frontmost app (indicates Exposé/Mission Control)
-        if let frontApp = NSWorkspace.shared.frontmostApplication {
-            if frontApp.bundleIdentifier == "com.apple.dock" {
-                log("SpecialModeDetection: Dock is frontmost app (Exposé/Mission Control active)")
-                return true
-            }
-        }
-
-        // Check for Mission Control windows using CGWindowList
-        // When Mission Control is active, Dock creates a window with no name
-        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
-            return false
-        }
-
-        for window in windowList {
-            guard let ownerName = window[kCGWindowOwnerName as String] as? String else {
-                continue
-            }
-
-            // Dock window with no name indicates Mission Control/Exposé
-            if ownerName == "Dock" {
-                let windowName = window[kCGWindowName as String] as? String
-                if windowName == nil || windowName?.isEmpty == true {
-                    // Check if it's a large window (Mission Control overlay)
-                    if let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
-                       let width = bounds["Width"],
-                       let height = bounds["Height"],
-                       width > 500 && height > 300 {
-                        log("SpecialModeDetection: Dock overlay window detected (\(Int(width))x\(Int(height))) - Mission Control/Exposé")
-                        return true
-                    }
-                }
-            }
-
-            // Notification Center active
-            if ownerName == "NotificationCenter" {
-                log("SpecialModeDetection: Notification Center is active")
-                return true
-            }
-        }
-
-        return false
-    }
-
-    /// Get the current frontmost app for logging
-    private func getFrontmostAppInfo() -> String {
-        if let frontApp = NSWorkspace.shared.frontmostApplication {
-            return "\(frontApp.localizedName ?? "unknown") (\(frontApp.bundleIdentifier ?? "no-bundle-id"))"
-        }
-        return "none"
-    }
-
-    // MARK: - Recovery Mode
-
-    /// Enter recovery mode - pause capture temporarily and retry
-    private func enterRecoveryMode() {
-        guard !isInRecoveryMode else { return }
-
-        isInRecoveryMode = true
-        recoveryRetryCount = 0
-
-        log("ProactiveAssistantsPlugin: Entering recovery mode, will retry capture periodically")
-
-        // Pause the normal capture timer
-        captureTimer?.invalidate()
-        captureTimer = nil
-
-        // Start recovery timer - check every 5 seconds if we can capture again
-        // Using a slower interval than normal capture to reduce CPU overhead from repeated failed ScreenCaptureKit calls
-        captureTimer = Timer.scheduledTimer(withTimeInterval: recoveryInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                await self?.attemptRecovery()
-            }
-        }
-    }
-
-    /// Attempt to recover from transient capture failure
-    private func attemptRecovery() async {
-        recoveryRetryCount += 1
-
-        // Check if system is still in special mode
-        if isInSpecialSystemMode() {
-            // Still in Exposé/Mission Control, keep waiting
-            if recoveryRetryCount % 5 == 0 {
-                log("ProactiveAssistantsPlugin: Still in special system mode, waiting... (attempt \(recoveryRetryCount))")
-            }
-
-            // Give up after max retries (likely a real issue)
-            if recoveryRetryCount >= maxRecoveryRetries {
-                log("ProactiveAssistantsPlugin: Recovery timeout in special mode, continuing to wait")
-                // Reset counter but keep trying - user might be in Exposé for a while
-                recoveryRetryCount = 0
-            }
-            return
-        }
-
-        // Try to capture a frame
-        guard let screenCaptureService = screenCaptureService else {
-            exitRecoveryMode(success: false)
-            return
-        }
-
-        if let _ = await screenCaptureService.captureActiveWindowAsync() {
-            // Success! Exit recovery mode
-            log("ProactiveAssistantsPlugin: Recovery successful after \(recoveryRetryCount) attempts (~\(recoveryRetryCount * Int(recoveryInterval))s), resuming normal capture (frontmost: \(getFrontmostAppInfo()))")
-            exitRecoveryMode(success: true)
+      // Privacy gate: skip ALL assistant paths for Rewind-excluded apps
+      // (including trackFrame — see macOS 14+ path comment for rationale).
+      if isRewindExcluded {
+        log("PrivacyGate: Blocked frame from Rewind-excluded app '\(resolvedApp)' — not sent to assistants")
+      }
+      if !isRewindExcluded {
+        AssistantCoordinator.shared.trackFrame(frame)
+        if !isInDelayPeriod {
+          distributeFrameIfChanged(frame)
         } else {
-            // Still failing
-            if recoveryRetryCount >= maxRecoveryRetries {
-                // Give up and show the reset notification
-                log("ProactiveAssistantsPlugin: Recovery failed after \(maxRecoveryRetries) attempts")
-                exitRecoveryMode(success: false)
-            }
+          // During delay, still distribute to assistants that need it (e.g. refocus detection)
+          AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
         }
+      }
+
+      if !isRewindExcluded {
+        if isProcessingRewindFrame {
+          droppedFrameCount += 1
+          if droppedFrameCount == 1 || droppedFrameCount % 30 == 0 {
+            log("RewindBackpressure: Dropped frame (encoder busy), total dropped: \(droppedFrameCount)")
+          }
+        } else {
+          isProcessingRewindFrame = true
+          Task { [weak self] in
+            await RewindIndexer.shared.processFrame(frame)
+            await MainActor.run {
+              self?.isProcessingRewindFrame = false
+            }
+          }
+        }
+      }
+    } else {
+      handleCaptureEngineFailure()
+    }
+  }
+
+  // MARK: - Change-Gated Distribution
+
+  /// Distribute a frame to assistants only when context changed (app or window title),
+  /// with a 3-second debounce to let rapid switches settle, and a 60-second fallback
+  /// for periodic re-analysis within the same context.
+  private func distributeFrameIfChanged(_ frame: CapturedFrame) {
+    latestCapturedFrame = frame
+
+    let now = Date()
+    switch distributionGate.nextAction(
+      frameApp: frame.appName,
+      frameWindowTitle: frame.windowTitle,
+      now: now,
+      defaultFallbackInterval: distributionFallbackInterval,
+      messagingFallbackInterval: messagingDistributionFallbackInterval,
+      messagingFastPathApps: Self.messagingFastPathApps
+    ) {
+    case .flushNow:
+      distributionDebounceTimer?.invalidate()
+      flushDebouncedFrame()
+    case .scheduleDebounce:
+      // Restart the 3s debounce timer — fires 3s after the last context change
+      distributionDebounceTimer?.invalidate()
+      distributionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+        Task { @MainActor in
+          self?.flushDebouncedFrame()
+        }
+      }
+    case .skip:
+      break
+    }
+  }
+
+  /// Flush the latest captured frame to all assistants (called when debounce timer fires or fallback is due).
+  private func flushDebouncedFrame() {
+    guard let frame = latestCapturedFrame else { return }
+
+    distributionGate.markFlushed(
+      frameApp: frame.appName,
+      frameWindowTitle: frame.windowTitle,
+      at: Date()
+    )
+    distributionDebounceTimer = nil
+
+    AssistantCoordinator.shared.distributeFrame(frame)
+  }
+
+  // MARK: - Event Broadcasting
+
+  private func sendEvent(type: String, data: [String: Any]) {
+    var event = data
+    event["type"] = type
+    event["timestamp"] = ISO8601DateFormatter().string(from: Date())
+
+    // Post notification for any listeners
+    NotificationCenter.default.post(
+      name: .assistantEvent,
+      object: nil,
+      userInfo: event
+    )
+  }
+
+  // MARK: - Utility Methods
+
+  /// Open screen recording preferences
+  public func openScreenRecordingPreferences() {
+    ScreenCaptureService.openScreenRecordingPreferences()
+  }
+
+  /// Trigger glow effect manually (for testing)
+  func triggerGlow(colorMode: GlowColorMode = .focused) {
+    OverlayService.shared.showGlowAroundActiveWindow(colorMode: colorMode)
+  }
+
+  // MARK: - CLI Test Triggers
+
+  /// Listen for distributed notifications from CLI to trigger test runs
+  private func setupTestNotificationListeners() {
+    // Use selector-based observer (more reliable with DistributedNotificationCenter)
+    DistributedNotificationCenter.default().addObserver(
+      self,
+      selector: #selector(handleInsightTestNotification(_:)),
+      name: NSNotification.Name("com.omi.test.insight"),
+      object: nil
+    )
+    DistributedNotificationCenter.default().addObserver(
+      self,
+      selector: #selector(handleFocusTestNotification(_:)),
+      name: NSNotification.Name("com.omi.test.focus"),
+      object: nil
+    )
+    DistributedNotificationCenter.default().addObserver(
+      self,
+      selector: #selector(handleNotificationTestNotification(_:)),
+      name: NSNotification.Name("com.omi.test.notification"),
+      object: nil
+    )
+    log("InsightTestCLI: Notification observer registered")
+    log("FocusTestCLI: Notification observer registered")
+    log("NotificationTestCLI: Notification observer registered")
+  }
+
+  @objc private func handleInsightTestNotification(_ notification: Notification) {
+    Task { @MainActor in
+      let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
+      let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
+      log("InsightTestCLI: Received test trigger (hours=\(hours), count=\(count))")
+      await InsightTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
+    }
+  }
+
+  @objc private func handleFocusTestNotification(_ notification: Notification) {
+    Task { @MainActor in
+      let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
+      let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 20
+      log("FocusTestCLI: Received test trigger (hours=\(hours), count=\(count))")
+      await FocusTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
+    }
+  }
+
+  @objc private func handleNotificationTestNotification(_ notification: Notification) {
+    Task { @MainActor in
+      guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+      let title = (notification.userInfo?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let message = (notification.userInfo?["message"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let assistantId = (notification.userInfo?["assistantId"] as? String)?.trimmingCharacters(
+        in: .whitespacesAndNewlines)
+
+      let resolvedTitle = title?.isEmpty == false ? title! : "Insight"
+      let resolvedMessage = message?.isEmpty == false ? message! : "Test notification from Omi"
+      let resolvedAssistantId = assistantId?.isEmpty == false ? assistantId! : "insight"
+
+      let context = FloatingBarNotificationContext(
+        sourceTitle: resolvedTitle,
+        assistantId: resolvedAssistantId,
+        sourceApp: notification.userInfo?["sourceApp"] as? String,
+        windowTitle: notification.userInfo?["windowTitle"] as? String,
+        contextSummary: notification.userInfo?["contextSummary"] as? String,
+        currentActivity: notification.userInfo?["currentActivity"] as? String,
+        reasoning: notification.userInfo?["reasoning"] as? String,
+        detail: notification.userInfo?["detail"] as? String
+      )
+
+      log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")
+      NotificationService.shared.sendNotification(
+        ownerID: ownerID,
+        title: resolvedTitle,
+        message: resolvedMessage,
+        assistantId: resolvedAssistantId,
+        context: context
+      )
+    }
+  }
+
+  // MARK: - System Event Handling
+
+  /// Set up observers for system sleep/wake and screen lock/unlock events
+  private func setupSystemEventObservers() {
+    // System about to sleep - track state before sleep
+    let sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.willSleepNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.wasMonitoringBeforeSleep = self?.isMonitoring ?? false
+        log(
+          "ProactiveAssistantsPlugin: System going to sleep, wasMonitoring=\(self?.wasMonitoringBeforeSleep ?? false)")
+
+        // Pause the capture timer while sleeping (same as screen lock)
+        self?.captureTimer?.invalidate()
+        self?.captureTimer = nil
+      }
+    }
+    systemEventObservers.append(sleepObserver)
+
+    // System wake from sleep
+    let wakeObserver = NotificationCenter.default.addObserver(
+      forName: .systemDidWake,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.handleSystemWake()
+      }
+    }
+    systemEventObservers.append(wakeObserver)
+
+    // Screen locked
+    let lockObserver = NotificationCenter.default.addObserver(
+      forName: .screenDidLock,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.handleScreenLock()
+      }
+    }
+    systemEventObservers.append(lockObserver)
+
+    // Screen unlocked
+    let unlockObserver = NotificationCenter.default.addObserver(
+      forName: .screenDidUnlock,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.handleScreenUnlock()
+      }
+    }
+    systemEventObservers.append(unlockObserver)
+  }
+
+  /// Handle system wake from sleep
+  private func handleSystemWake() {
+    log("ProactiveAssistantsPlugin: System woke from sleep")
+
+    // Reset failure counter
+    screenCaptureFailureTracker.reset()
+    lastCaptureSucceeded = true
+
+    // If we were monitoring before sleep, reinitialize capture service and restart timer
+    if wasMonitoringBeforeSleep && isMonitoring {
+      log("ProactiveAssistantsPlugin: Restarting screen capture after wake")
+
+      // Reinitialize the screen capture service
+      screenCaptureService = ScreenCaptureService()
+
+      // Refresh permission state
+      refreshScreenRecordingPermission()
+
+      // Restart capture timer after a brief delay to let the system settle
+      captureTimer?.invalidate()
+      captureTimer = nil
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        guard let self = self, self.isMonitoring else { return }
+        self.restartCaptureTimer(reason: "system wake")
+        log("ProactiveAssistantsPlugin: Capture timer restarted after wake")
+      }
     }
 
-    /// Exit recovery mode
-    private func exitRecoveryMode(success: Bool) {
-        isInRecoveryMode = false
-        recoveryRetryCount = 0
+    wasMonitoringBeforeSleep = false
+  }
 
-        if success {
-            // Reset failure counter and resume normal operation
-            consecutiveFailures = 0
-            lastCaptureSucceeded = true
+  /// Handle screen lock - pause capture
+  private func handleScreenLock() {
+    log("ProactiveAssistantsPlugin: Screen locked - pausing capture")
+
+    wasMonitoringBeforeLock = isMonitoring
+
+    // Pause the capture timer while locked
+    captureTimer?.invalidate()
+    captureTimer = nil
+  }
+
+  /// Handle screen unlock - resume capture
+  private func handleScreenUnlock() {
+    log("ProactiveAssistantsPlugin: Screen unlocked - resuming capture")
+
+    // Reset failure counter
+    screenCaptureFailureTracker.reset()
+    lastCaptureSucceeded = true
+
+    if wasMonitoringBeforeLock && isMonitoring {
+      log("ProactiveAssistantsPlugin: Restarting capture timer after unlock")
+
+      // Reinitialize screen capture service to ensure fresh state
+      screenCaptureService = ScreenCaptureService()
+
+      // Restart capture timer
+      restartCaptureTimer(reason: "screen unlock")
+    } else if wasMonitoringBeforeLock && !isMonitoring {
+      // We stopped monitoring while locked, restart it
+      log("ProactiveAssistantsPlugin: Restarting monitoring after unlock")
+      startMonitoring { success, error in
+        if !success, let error = error {
+          log("Failed to restart monitoring after unlock: \(error)")
+        }
+      }
+    }
+
+    wasMonitoringBeforeLock = false
+  }
+
+  /// Handle repeated capture failures (likely permission issue)
+  private func handleRepeatedCaptureFailures() {
+    let frontApp = getFrontmostAppInfo()
+    log(
+      "ProactiveAssistantsPlugin: Detected \(screenCaptureFailureTracker.consecutiveEngineFailures) consecutive capture failures (frontmost: \(frontApp))"
+    )
+
+    // Check if we're in a special system mode (Exposé, Mission Control, etc.)
+    // These modes temporarily block screen capture but aren't permission issues
+    if isInSpecialSystemMode() {
+      log("ProactiveAssistantsPlugin: System is in special mode, entering recovery mode instead of stopping")
+      enterRecoveryMode()
+      return
+    }
+
+    // First pass: run a single permission test.
+    refreshScreenRecordingPermission()
+
+    if hasScreenRecordingPermission {
+      // Permission appears granted but capture is failing
+      // This could be a transient issue - enter recovery mode instead of stopping
+      log("ProactiveAssistantsPlugin: Capture failing with permission granted, entering recovery mode")
+      enterRecoveryMode()
+      return
+    }
+
+    // First permission test failed. Do NOT declare permission lost yet —
+    // `/usr/sbin/screencapture` can transiently fail during app-switches,
+    // mid-animation, or while macOS is mid-context-switch. A single failed
+    // probe previously stopped monitoring + fired a scary "permission lost"
+    // notification even though real recording was still working.
+    // Re-test after a short delay; only stop if both tests fail.
+    log("ProactiveAssistantsPlugin: First permission test failed, re-testing to avoid false positive")
+    let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    Task { @MainActor [weak self, ownerID] in
+      try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s
+      guard let self = self, self.isMonitoring else { return }
+
+      self.refreshScreenRecordingPermission()
+      if self.hasScreenRecordingPermission {
+        log(
+          "ProactiveAssistantsPlugin: Permission test recovered on second check — treating initial failure as transient, entering recovery mode"
+        )
+        self.enterRecoveryMode()
+        return
+      }
+
+      log("ProactiveAssistantsPlugin: Screen recording permission lost (confirmed by second test)")
+
+      // Post notification for AppState to update UI
+      NotificationCenter.default.post(name: .screenCapturePermissionLost, object: nil)
+
+      // Stop monitoring since we can't capture
+      self.stopMonitoring()
+
+      // Send user notification
+      if let ownerID {
+        NotificationService.shared.sendNotification(
+          ownerID: ownerID,
+          title: "Screen Recording Permission Required",
+          message:
+            "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings.",
+          deliverSystemBanner: true,
+          respectFrequency: false
+        )
+      }
+    }
+  }
+
+  // MARK: - Video Call Detection
+
+  /// Check if the frontmost app (and optionally window title) indicates an active video call.
+  /// Delegates to the shared `ConferencingApps` catalog (also used by `MeetingDetector`).
+  private func isVideoCallApp(appName: String?, windowTitle: String?) -> Bool {
+    return ConferencingApps.isCallWindow(ownerName: appName, title: windowTitle)
+  }
+
+  // MARK: - Screenshot App Detection
+
+  /// True when a known third-party / system screenshot or screen-recording app is
+  /// frontmost. While one is, Omi pauses its 3s capture loop so the user's capture
+  /// doesn't stall on WindowServer lock contention with Omi. See PR attached to
+  /// the "CleanShot lags 20-60s" investigation.
+  private func isScreenshotAppFrontmost() -> Bool {
+    guard let frontApp = NSWorkspace.shared.frontmostApplication,
+      let bundleID = frontApp.bundleIdentifier
+    else {
+      return false
+    }
+    return Self.screenshotAppBundleIDs.contains(bundleID)
+  }
+
+  // MARK: - Special System Mode Detection
+
+  /// Check if the system is in a special mode that blocks screen capture.
+  ///
+  /// Known modes that block ScreenCaptureKit:
+  /// - **Exposé / Mission Control** (F3 or swipe up): Dock owns all windows
+  /// - **App Exposé** (swipe down on app): Shows all windows of one app
+  /// - **Notification Center**: Slide-in panel
+  /// - **Lock Screen**: Captured separately via screenDidLock notification
+  /// - **Screen Saver**: Similar to lock screen
+  ///
+  /// When in these modes, ScreenCaptureKit returns "user declined TCCs" error
+  /// even though permission is actually granted. This is a transient state.
+  private func isInSpecialSystemMode() -> Bool {
+    // Check if Dock is the frontmost app (indicates Exposé/Mission Control)
+    if let frontApp = NSWorkspace.shared.frontmostApplication {
+      if frontApp.bundleIdentifier == "com.apple.dock" {
+        log("SpecialModeDetection: Dock is frontmost app (Exposé/Mission Control active)")
+        return true
+      }
+    }
+
+    // Check for Mission Control windows using CGWindowList
+    // When Mission Control is active, Dock creates a window with no name
+    guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
+      return false
+    }
+
+    for window in windowList {
+      guard let ownerName = window[kCGWindowOwnerName as String] as? String else {
+        continue
+      }
+
+      // Dock window with no name indicates Mission Control/Exposé
+      if ownerName == "Dock" {
+        let windowName = window[kCGWindowName as String] as? String
+        if windowName == nil || windowName?.isEmpty == true {
+          // Check if it's a large window (Mission Control overlay)
+          if let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
+            let width = bounds["Width"],
+            let height = bounds["Height"],
+            width > 500 && height > 300
+          {
+            log(
+              "SpecialModeDetection: Dock overlay window detected (\(Int(width))x\(Int(height))) - Mission Control/Exposé"
+            )
+            return true
+          }
+        }
+      }
+
+      // Notification Center active
+      if ownerName == "NotificationCenter" {
+        log("SpecialModeDetection: Notification Center is active")
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /// Get the current frontmost app for logging
+  private func getFrontmostAppInfo() -> String {
+    if let frontApp = NSWorkspace.shared.frontmostApplication {
+      return "\(frontApp.localizedName ?? "unknown") (\(frontApp.bundleIdentifier ?? "no-bundle-id"))"
+    }
+    return "none"
+  }
+
+  // MARK: - Recovery Mode
+
+  /// Enter recovery mode - pause capture temporarily and retry
+  private func enterRecoveryMode() {
+    guard !isInRecoveryMode else { return }
+
+    isInRecoveryMode = true
+    recoveryRetryCount = 0
+    setScreenCaptureHealth(.recovering)
+
+    log("ProactiveAssistantsPlugin: Entering recovery mode, will retry capture periodically")
+
+    // Pause the normal capture timer
+    captureTimer?.invalidate()
+    captureTimer = nil
+
+    // Start recovery timer - check every 5 seconds if we can capture again
+    // Using a slower interval than normal capture to reduce CPU overhead from repeated failed ScreenCaptureKit calls
+    captureTimer = Timer.scheduledTimer(withTimeInterval: recoveryInterval, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        await self?.attemptRecovery()
+      }
+    }
+  }
+
+  /// Attempt to recover from transient capture failure
+  private func attemptRecovery() async {
+    recoveryRetryCount += 1
+
+    // Check if system is still in special mode
+    if isInSpecialSystemMode() {
+      // Still in Exposé/Mission Control, keep waiting
+      if recoveryRetryCount % 5 == 0 {
+        log("ProactiveAssistantsPlugin: Still in special system mode, waiting... (attempt \(recoveryRetryCount))")
+      }
+
+      // Give up after max retries (likely a real issue)
+      if recoveryRetryCount >= maxRecoveryRetries {
+        log("ProactiveAssistantsPlugin: Recovery timeout in special mode, continuing to wait")
+        // Reset counter but keep trying - user might be in Exposé for a while
+        recoveryRetryCount = 0
+      }
+      return
+    }
+
+    // Try to capture a frame
+    guard let screenCaptureService = screenCaptureService else {
+      exitRecoveryMode(success: false)
+      return
+    }
+
+    if await screenCaptureService.captureActiveWindowAsync() != nil {
+      // Success! Exit recovery mode
+      log(
+        "ProactiveAssistantsPlugin: Recovery successful after \(recoveryRetryCount) attempts (~\(recoveryRetryCount * Int(recoveryInterval))s), resuming normal capture (frontmost: \(getFrontmostAppInfo()))"
+      )
+      exitRecoveryMode(success: true)
+    } else {
+      // Still failing
+      if recoveryRetryCount >= maxRecoveryRetries {
+        // Give up and show the reset notification
+        log("ProactiveAssistantsPlugin: Recovery failed after \(maxRecoveryRetries) attempts")
+        exitRecoveryMode(success: false)
+      }
+    }
+  }
+
+  /// Exit recovery mode
+  private func exitRecoveryMode(success: Bool) {
+    isInRecoveryMode = false
+    recoveryRetryCount = 0
+
+    if success {
+      // Reset failure counter and resume normal operation
+      screenCaptureFailureTracker.reset()
+      lastCaptureSucceeded = true
+
+      // Restart normal capture timer
+      restartCaptureTimer(reason: "recovery success")
+      setScreenCaptureHealth(.active)
+    } else {
+      // Recovery failed - enter background polling before giving up
+      log("ProactiveAssistantsPlugin: Initial recovery failed, entering background polling mode")
+      enterBackgroundPollingMode()
+    }
+  }
+
+  // MARK: - Background Polling (Extended Recovery)
+
+  /// Enter background polling mode - check every 60s for up to 5 minutes
+  /// This handles cases where the permission state resolves itself over time
+  private func enterBackgroundPollingMode() {
+    guard !isInBackgroundPolling else { return }
+
+    isInBackgroundPolling = true
+    backgroundPollCount = 0
+
+    log(
+      "ProactiveAssistantsPlugin: Starting background polling (every 60s, up to \(maxBackgroundPollAttempts) attempts)")
+
+    // Pause capture timer if still running
+    captureTimer?.invalidate()
+    captureTimer = nil
+
+    backgroundPollTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        await self?.backgroundPollAttempt()
+      }
+    }
+  }
+
+  /// Single background poll attempt
+  private func backgroundPollAttempt() async {
+    backgroundPollCount += 1
+
+    guard let screenCaptureService = screenCaptureService else {
+      exitBackgroundPolling(success: false)
+      return
+    }
+
+    log("ProactiveAssistantsPlugin: Background poll attempt \(backgroundPollCount)/\(maxBackgroundPollAttempts)")
+
+    if await screenCaptureService.captureActiveWindowAsync() != nil {
+      log("ProactiveAssistantsPlugin: Background polling recovered after \(backgroundPollCount) attempts")
+      exitBackgroundPolling(success: true)
+    } else if backgroundPollCount >= maxBackgroundPollAttempts {
+      log("ProactiveAssistantsPlugin: Background polling exhausted, attempting auto-reset")
+      exitBackgroundPolling(success: false)
+    }
+  }
+
+  /// Exit background polling mode
+  private func exitBackgroundPolling(success: Bool) {
+    isInBackgroundPolling = false
+    backgroundPollCount = 0
+    backgroundPollTimer?.invalidate()
+    backgroundPollTimer = nil
+
+    if success {
+      screenCaptureFailureTracker.reset()
+      lastCaptureSucceeded = true
+
+      // Resume normal capture
+      restartCaptureTimer(reason: "background polling recovery")
+      setScreenCaptureHealth(.active)
+    } else {
+      attemptAutoReset()
+    }
+  }
+
+  /// Attempt automatic recovery (soft first, then hard reset as last resort)
+  private func attemptAutoReset() {
+    let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    // Step 1: Try soft recovery first (lsregister + SCK re-request, no TCC wipe)
+    if !Self.hasSoftRecoveryThisSession {
+      Self.hasSoftRecoveryThisSession = true
+      log("ProactiveAssistantsPlugin: Attempting soft recovery (no TCC reset)")
+
+      Task {
+        let recovered = await ScreenCaptureService.attemptSoftRecovery()
+        await MainActor.run {
+          if recovered {
+            log("ProactiveAssistantsPlugin: Soft recovery succeeded, resuming capture")
+            self.screenCaptureFailureTracker.reset()
+            self.lastCaptureSucceeded = true
 
             // Restart normal capture timer
-            restartCaptureTimer(reason: "recovery success")
-        } else {
-            // Recovery failed - enter background polling before giving up
-            log("ProactiveAssistantsPlugin: Initial recovery failed, entering background polling mode")
-            enterBackgroundPollingMode()
-        }
-    }
-
-    // MARK: - Background Polling (Extended Recovery)
-
-    /// Enter background polling mode - check every 60s for up to 5 minutes
-    /// This handles cases where the permission state resolves itself over time
-    private func enterBackgroundPollingMode() {
-        guard !isInBackgroundPolling else { return }
-
-        isInBackgroundPolling = true
-        backgroundPollCount = 0
-
-        log("ProactiveAssistantsPlugin: Starting background polling (every 60s, up to \(maxBackgroundPollAttempts) attempts)")
-
-        // Pause capture timer if still running
-        captureTimer?.invalidate()
-        captureTimer = nil
-
-        backgroundPollTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                await self?.backgroundPollAttempt()
-            }
-        }
-    }
-
-    /// Single background poll attempt
-    private func backgroundPollAttempt() async {
-        backgroundPollCount += 1
-
-        guard let screenCaptureService = screenCaptureService else {
-            exitBackgroundPolling(success: false)
-            return
-        }
-
-        log("ProactiveAssistantsPlugin: Background poll attempt \(backgroundPollCount)/\(maxBackgroundPollAttempts)")
-
-        if let _ = await screenCaptureService.captureActiveWindowAsync() {
-            log("ProactiveAssistantsPlugin: Background polling recovered after \(backgroundPollCount) attempts")
-            exitBackgroundPolling(success: true)
-        } else if backgroundPollCount >= maxBackgroundPollAttempts {
-            log("ProactiveAssistantsPlugin: Background polling exhausted, attempting auto-reset")
-            exitBackgroundPolling(success: false)
-        }
-    }
-
-    /// Exit background polling mode
-    private func exitBackgroundPolling(success: Bool) {
-        isInBackgroundPolling = false
-        backgroundPollCount = 0
-        backgroundPollTimer?.invalidate()
-        backgroundPollTimer = nil
-
-        if success {
-            consecutiveFailures = 0
-            lastCaptureSucceeded = true
-
-            // Resume normal capture
-            restartCaptureTimer(reason: "background polling recovery")
-        } else {
-            attemptAutoReset()
-        }
-    }
-
-    /// Attempt automatic recovery (soft first, then hard reset as last resort)
-    private func attemptAutoReset() {
-        // Step 1: Try soft recovery first (lsregister + SCK re-request, no TCC wipe)
-        if !Self.hasSoftRecoveryThisSession {
-            Self.hasSoftRecoveryThisSession = true
-            log("ProactiveAssistantsPlugin: Attempting soft recovery (no TCC reset)")
-
-            Task {
-                let recovered = await ScreenCaptureService.attemptSoftRecovery()
-                await MainActor.run {
-                    if recovered {
-                        log("ProactiveAssistantsPlugin: Soft recovery succeeded, resuming capture")
-                        self.consecutiveFailures = 0
-                        self.lastCaptureSucceeded = true
-
-                        // Restart normal capture timer
-                        self.restartCaptureTimer(reason: "soft recovery success")
-                    } else {
-                        // Soft recovery failed in-process, restart app to refresh permission state
-                        // This still avoids wiping TCC — the restart itself often fixes stale caches
-                        log("ProactiveAssistantsPlugin: Soft recovery failed in-process, restarting to refresh state")
-                        AnalyticsManager.shared.screenCaptureBrokenDetected()
-                        ScreenCaptureService.softRecoveryAndRestart()
-                    }
-                }
-            }
-            return
-        }
-
-        // Step 2: Soft recovery already tried — fall back to showing notification
-        // Do NOT auto-reset TCC; let the user decide via the sidebar button
-        if Self.hasAutoResetThisSession {
-            log("ProactiveAssistantsPlugin: All recovery attempts exhausted this session, showing notification")
-
+            self.restartCaptureTimer(reason: "soft recovery success")
+            self.setScreenCaptureHealth(.active)
+          } else {
+            // Soft recovery failed in-process, restart app to refresh permission state
+            // This still avoids wiping TCC — the restart itself often fixes stale caches
+            log("ProactiveAssistantsPlugin: Soft recovery failed in-process, restarting to refresh state")
             AnalyticsManager.shared.screenCaptureBrokenDetected()
-            NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
-            stopMonitoring()
-
-            NotificationService.shared.sendNotification(
-                title: NotificationService.screenCaptureResetTitle,
-                message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
-                deliverSystemBanner: true,
-                respectFrequency: false
-            )
-            return
+            ScreenCaptureService.softRecoveryAndRestart()
+          }
         }
-
-        Self.hasAutoResetThisSession = true
-        log("ProactiveAssistantsPlugin: Soft recovery + restart already tried, notifying user")
-        AnalyticsManager.shared.screenCaptureBrokenDetected()
-        NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
-        stopMonitoring()
-
-        NotificationService.shared.sendNotification(
-            title: NotificationService.screenCaptureResetTitle,
-            message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
-            deliverSystemBanner: true,
-            respectFrequency: false
-        )
+      }
+      return
     }
+
+    // Step 2: Soft recovery already tried — fall back to showing notification
+    // Do NOT auto-reset TCC; let the user decide via the sidebar button
+    if Self.hasAutoResetThisSession {
+      log("ProactiveAssistantsPlugin: All recovery attempts exhausted this session, showing notification")
+
+      AnalyticsManager.shared.screenCaptureBrokenDetected()
+      NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
+      stopMonitoring()
+
+      guard let ownerID else { return }
+      NotificationService.shared.sendNotification(
+        ownerID: ownerID,
+        title: NotificationService.screenCaptureResetTitle,
+        message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
+        deliverSystemBanner: true,
+        respectFrequency: false
+      )
+      return
+    }
+
+    Self.hasAutoResetThisSession = true
+    log("ProactiveAssistantsPlugin: Soft recovery + restart already tried, notifying user")
+    AnalyticsManager.shared.screenCaptureBrokenDetected()
+    NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
+    stopMonitoring()
+
+    guard let ownerID else { return }
+    NotificationService.shared.sendNotification(
+      ownerID: ownerID,
+      title: NotificationService.screenCaptureResetTitle,
+      message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
+      deliverSystemBanner: true,
+      respectFrequency: false
+    )
+  }
 }
 
 // MARK: - Notification Names
 
 extension Notification.Name {
-    static let assistantEvent = Notification.Name("assistantEvent")
+  static let assistantEvent = Notification.Name("assistantEvent")
 }
 
 // MARK: - Backward Compatibility Alias

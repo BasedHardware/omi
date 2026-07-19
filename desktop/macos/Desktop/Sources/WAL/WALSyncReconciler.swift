@@ -21,7 +21,7 @@ final class WALSyncReconciler {
     self.fileExists = fileExists
   }
 
-  private static func defaultFileExists(wal: WALEntry, walDirectory: URL?) -> Bool {
+  nonisolated private static func defaultFileExists(wal: WALEntry, walDirectory: URL?) -> Bool {
     guard let filePath = wal.filePath, let walDirectory else { return false }
     return FileManager.default.fileExists(atPath: walDirectory.appendingPathComponent(filePath).path)
   }

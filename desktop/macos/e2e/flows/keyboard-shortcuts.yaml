@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ShortcutsSettingsSection.swift
 preconditions:
   - automation_bridge_ready
 

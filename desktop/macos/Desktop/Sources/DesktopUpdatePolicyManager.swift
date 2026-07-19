@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 @MainActor
 final class DesktopUpdatePolicyManager: ObservableObject {
@@ -12,8 +12,34 @@ final class DesktopUpdatePolicyManager: ObservableObject {
   private var lastCheckAt = Date.distantPast
   private let minimumCheckInterval: TimeInterval = 5 * 60
   private let dismissedPrefix = "desktopUpdatePolicyDismissed."
+  private let fetchPolicy: (Int?) async throws -> DesktopUpdatePolicyResponse
+  private let currentBuildProvider: () -> Int?
+  private let now: () -> Date
+  private let defaults: UserDefaults
 
-  private init() {}
+  private init() {
+    fetchPolicy = { currentBuild in
+      try await APIClient.shared.getDesktopUpdatePolicy(currentBuild: currentBuild)
+    }
+    currentBuildProvider = {
+      guard let raw = Bundle.main.infoDictionary?["CFBundleVersion"] as? String else { return nil }
+      return Int(raw)
+    }
+    now = Date.init
+    defaults = .standard
+  }
+
+  init(
+    fetchPolicy: @escaping (Int?) async throws -> DesktopUpdatePolicyResponse,
+    currentBuildProvider: @escaping () -> Int? = { nil },
+    now: @escaping () -> Date = Date.init,
+    defaults: UserDefaults = .standard
+  ) {
+    self.fetchPolicy = fetchPolicy
+    self.currentBuildProvider = currentBuildProvider
+    self.now = now
+    self.defaults = defaults
+  }
 
   var visiblePolicy: DesktopUpdatePolicyResponse? {
     guard let policy, policy.active, policy.severity != .none else { return nil }
@@ -22,48 +48,47 @@ final class DesktopUpdatePolicyManager: ObservableObject {
   }
 
   func refresh(force: Bool = false) {
-    let now = Date()
-    guard force || now.timeIntervalSince(lastCheckAt) >= minimumCheckInterval else { return }
-    lastCheckAt = now
+    Task { await refreshNow(force: force) }
+  }
 
-    Task {
-      do {
-        let fetched = try await APIClient.shared.getDesktopUpdatePolicy(currentBuild: currentBuildNumber)
-        await MainActor.run {
-          self.policy = fetched.active ? fetched : nil
-        }
-      } catch {
-        log("DesktopUpdatePolicy: failed to fetch policy: \(error.localizedDescription)")
-      }
+  func refreshNow(force: Bool = false) async {
+    let currentTime = now()
+    guard force || currentTime.timeIntervalSince(lastCheckAt) >= minimumCheckInterval else { return }
+    lastCheckAt = currentTime
+
+    do {
+      let fetched = try await fetchPolicy(currentBuildProvider())
+      policy = fetched.active ? fetched : nil
+    } catch {
+      // Never preserve a stale required prompt when its control plane is down.
+      // Sparkle and the stable manual download path remain available independently.
+      policy = nil
+      log("DesktopUpdatePolicy: unavailable error_type=\(String(reflecting: type(of: error)))")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "other",
+        from: "desktop_update_policy",
+        to: "desktop_update_appcast",
+        reason: "other",
+        outcome: .recovered,
+        extra: ["user_visible": false]
+      )
     }
   }
 
   func dismiss(_ policy: DesktopUpdatePolicyResponse) {
     guard policy.canDismiss, !policy.isRequired else { return }
-    UserDefaults.standard.set(true, forKey: dismissedKey(for: policy))
+    defaults.set(true, forKey: dismissedKey(for: policy))
     if self.policy?.id == policy.id {
       self.policy = nil
     }
   }
 
   func openDownload(_ policy: DesktopUpdatePolicyResponse) {
-    guard let url = URL(string: policy.downloadURL),
-      let scheme = url.scheme?.lowercased(),
-      ["http", "https"].contains(scheme)
-    else {
-      log("DesktopUpdatePolicy: ignored invalid download URL")
-      return
-    }
-    NSWorkspace.shared.open(url)
-  }
-
-  private var currentBuildNumber: Int? {
-    guard let raw = Bundle.main.infoDictionary?["CFBundleVersion"] as? String else { return nil }
-    return Int(raw)
+    NSWorkspace.shared.open(DesktopUpdatePolicyResponse.resolvedDownloadURL(from: policy.downloadURL))
   }
 
   private func isDismissed(_ policy: DesktopUpdatePolicyResponse) -> Bool {
-    UserDefaults.standard.bool(forKey: dismissedKey(for: policy))
+    defaults.bool(forKey: dismissedKey(for: policy))
   }
 
   private func dismissedKey(for policy: DesktopUpdatePolicyResponse) -> String {
@@ -77,20 +102,20 @@ struct DesktopUpdatePolicyBanner: View {
   let onDismiss: () -> Void
 
   var body: some View {
-    HStack(alignment: .center, spacing: 12) {
+    HStack(alignment: .center, spacing: OmiSpacing.md) {
       Image(systemName: "arrow.down.circle.fill")
-        .scaledFont(size: 16)
+        .scaledFont(size: OmiType.subheading)
         .foregroundColor(.white)
         .frame(width: 22)
 
-      VStack(alignment: .leading, spacing: 3) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(policy.title ?? "Update Omi")
-          .scaledFont(size: 13, weight: .semibold)
+          .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(.white)
           .lineLimit(1)
         if let message = policy.message {
           Text(message)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(.white.opacity(0.82))
             .lineLimit(2)
             .truncationMode(.tail)
@@ -104,9 +129,9 @@ struct DesktopUpdatePolicyBanner: View {
         onDownload()
       }
       .buttonStyle(.plain)
-      .scaledFont(size: 12, weight: .semibold)
+      .scaledFont(size: OmiType.caption, weight: .semibold)
       .foregroundColor(Color(red: 0.08, green: 0.09, blue: 0.10))
-      .padding(.horizontal, 14)
+      .padding(.horizontal, OmiSpacing.md)
       .frame(height: 32)
       .background(Color.white.opacity(0.94))
       .clipShape(RoundedRectangle(cornerRadius: 7))
@@ -118,7 +143,7 @@ struct DesktopUpdatePolicyBanner: View {
           onDismiss()
         } label: {
           Image(systemName: "xmark")
-            .scaledFont(size: 11, weight: .semibold)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
         }
         .buttonStyle(.plain)
         .foregroundColor(.white.opacity(0.72))
@@ -126,14 +151,14 @@ struct DesktopUpdatePolicyBanner: View {
         .help("Dismiss")
       }
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 12)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
     .background(Color(red: 0.10, green: 0.12, blue: 0.14).opacity(0.98))
     .overlay(
-      RoundedRectangle(cornerRadius: 8)
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
         .stroke(Color.white.opacity(0.12), lineWidth: 1)
     )
-    .clipShape(RoundedRectangle(cornerRadius: 8))
+    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
     .shadow(color: Color.black.opacity(0.28), radius: 18, x: 0, y: 8)
   }
 }
@@ -143,17 +168,17 @@ struct DesktopRequiredUpdatePrompt: View {
   let onDownload: () -> Void
 
   var body: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "arrow.down.circle.fill")
         .scaledFont(size: 30)
         .foregroundColor(.white)
 
-      VStack(spacing: 8) {
+      VStack(spacing: OmiSpacing.sm) {
         Text(policy.title ?? "Update Required")
-          .scaledFont(size: 20, weight: .semibold)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(.white)
         Text(policy.message ?? "Please install the latest Omi desktop app to continue.")
-          .scaledFont(size: 13)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(.white.opacity(0.72))
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
@@ -166,13 +191,13 @@ struct DesktopRequiredUpdatePrompt: View {
       .controlSize(.large)
     }
     .frame(width: 420)
-    .padding(28)
+    .padding(OmiSpacing.xxl)
     .background(Color(red: 0.08, green: 0.09, blue: 0.10))
     .overlay(
-      RoundedRectangle(cornerRadius: 10)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
         .stroke(Color.white.opacity(0.14), lineWidth: 1)
     )
-    .clipShape(RoundedRectangle(cornerRadius: 10))
+    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
     .shadow(color: Color.black.opacity(0.36), radius: 24, x: 0, y: 14)
   }
 }

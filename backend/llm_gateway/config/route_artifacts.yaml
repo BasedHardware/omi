@@ -1,14 +1,16 @@
 route_artifacts:
   - route_artifact_id: route.chat_structured.2026_06_27.001
-    artifact_digest: sha256:271229622698025cd7f496f3d0cb3cb505306c2e7b5d6ce32a35d059b1908094
+    artifact_digest: sha256:d9ab75d4eb53c029028c7a2ebccee8d273d043d6d7553a8e8c9f9897d28bfb6a
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     primary:
       provider: openai
-      model: gpt-4.1-mini
+      model: gpt-5.4-nano
     fallbacks:
       - provider: openai
-        model: gpt-4.1-mini
+        model: gpt-5.4-nano
+    provider_options:
+      reasoning_effort: low
     timeouts:
       request_ms: 30000
     retry:
@@ -56,17 +58,17 @@ route_artifacts:
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:70492be577ce8833273a58f04802aafa251d7981c0ad4c7a818a895fb5d1d9fc
+    artifact_digest: sha256:70f61658ab9f0283514d86ce3438bdcd89ed3f15dd8d42533648384840894e67
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
-    # LKG primary must match the legacy `chat_extraction` model (gpt-4.1-mini) so
-    # that while the pilot's active route is shadow-only, serving this route is a
-    # no-user-visible behavior match instead of silently swapping gpt-4.1-mini
-    # for gpt-4o-mini and changing classifier behavior for 100% of pilot calls.
+    # The gateway LKG mirrors the active model so shadow serving and fallback use
+    # the same gateway-only model policy without changing legacy chat extraction.
     primary:
       provider: openai
-      model: gpt-4.1-mini
+      model: gpt-5.4-nano
     fallbacks: []
+    provider_options:
+      reasoning_effort: low
     timeouts:
       request_ms: 30000
     retry:

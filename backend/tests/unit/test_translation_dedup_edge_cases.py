@@ -1,254 +1,287 @@
-"""Edge-case tests for DD-008 translation dedup pipeline.
-
-Tests split_into_sentences abbreviation handling in isolation (no heavy deps)
-plus structural checks on translation_coordinator.py and translation.py source.
-
-Covers bot-identified correctness gaps:
-- Abbreviation-aware sentence splitting (P2) — U.S., 3.14, e.g., etc.
-- Full-text cache consulted before sentence-level split (P2)
-- No-op path version bump + batch buffer invalidation (P1)
-- Memory cache not poisoned by failed translations (P1)
-- Sync Redis offloaded to run_blocking in async observe() (P2)
-"""
-
 from __future__ import annotations
 
-import os
-import re
-import unittest
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event, Lock
 
-# ---------------------------------------------------------------------------
-# Inline copy of constants from models/transcript_segment.py
-# ---------------------------------------------------------------------------
-SENTENCE_ENDERS = frozenset('.?!。！？؟۔।॥')
-SENTENCE_ENDERS_CLASS = '[' + re.escape(''.join(SENTENCE_ENDERS)) + ']'
-SENTENCE_FINDALL_RE = re.compile(
-    r'[^' + re.escape(''.join(SENTENCE_ENDERS)) + r']+(?:' + SENTENCE_ENDERS_CLASS + r'\s*|\s*$)'
+import pytest
+import redis
+
+from config.translation import TranslationProvider
+from tests.unit.translation_test_support import (
+    DictTranslationStore,
+    FakeProvider,
+    build_service,
+    profile,
+    provider_error,
+    translations,
 )
-
-_ABBR = 'ⓐⓑⓒ'
-_DEC = 'ⓓⓔⓕ'
-_LAT = 'ⓛⓐⓣ'
-
-
-def _should_merge(prev: str, nxt: str) -> bool:
-    if not prev or prev[-1] not in '.!?。！？':
-        return False
-    if not nxt:
-        return False
-    nxt_body = nxt.rstrip('.!?。！؟؟۔।॥ ')
-    if len(nxt_body) <= 15 and nxt and nxt[0].islower():
-        return True
-    prev_body = prev.rstrip('.!?。！؟ ')
-    if len(prev_body) <= 6:
-        return True
-    return False
+from utils.translation import TranslationStatus
+from utils.translation_core.cache import CachedTranslation, RedisTranslationStore, TranslationCache
+from utils.translation_core.metrics import NoopTranslationMetrics
+from utils.translation_core.planner import fingerprint_text
+from utils.translation_core.providers import ProviderTranslation
 
 
-def split_into_sentences(text: str) -> list[str]:
-    if not text:
-        return []
+@pytest.mark.parametrize(
+    'provider_response',
+    [
+        [],
+        translations(('Uno.', 'en'), ('Dos.', 'en'), ('Tres.', 'en')),
+        [object(), object()],
+        [
+            ProviderTranslation(text=123, detected_language='en'),  # type: ignore[arg-type]
+            ProviderTranslation(text='Dos.', detected_language='en'),
+        ],
+        [
+            ProviderTranslation(text='Uno.', detected_language=None),  # type: ignore[arg-type]
+            ProviderTranslation(text='Dos.', detected_language='en'),
+        ],
+        [
+            ProviderTranslation(text='', detected_language='en'),
+            ProviderTranslation(text='Dos.', detected_language='en'),
+        ],
+        [
+            ProviderTranslation(text='   ', detected_language='en'),
+            ProviderTranslation(text='Dos.', detected_language='en'),
+        ],
+    ],
+    ids=[
+        'truncated',
+        'extra',
+        'malformed-item',
+        'non-string-text',
+        'non-string-language',
+        'empty-item',
+        'blank-item',
+    ],
+)
+def test_invalid_provider_response_fails_every_affected_unit_without_cache_writes(provider_response):
+    store = DictTranslationStore()
+    provider = FakeProvider(TranslationProvider.google, responses=[provider_response])
+    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
 
-    _ABBREV_PATTERNS = [
-        (re.compile(r'\b([A-Z])\.([A-Z])\.'), lambda m: m.group(1) + _ABBR + m.group(2) + '.'),
-        (re.compile(r'(?<=\d)\.(?=\d)'), _DEC),
-        (re.compile(r'\b([a-z])\.([a-z])\.'), lambda m: m.group(1) + _LAT + m.group(2) + '.'),
-        (re.compile(r'\betc\.'), 'etc' + _LAT),
-        (re.compile(r'\bvs\.'), 'vs' + _LAT),
-    ]
+    outcomes = service.translate_outcomes('es', [('one', 'One.'), ('two', 'Two.')])
 
-    result = []
-    for line in text.split('\n'):
-        line = line.strip()
-        if not line:
-            continue
-
-        protected = line
-        for pattern, replacement in _ABBREV_PATTERNS:
-            protected = pattern.sub(replacement, protected)
-
-        raw = SENTENCE_FINDALL_RE.findall(protected)
-
-        restored_list = []
-        for s in raw:
-            s = s.strip()
-            if not s:
-                continue
-            restored = s.replace(_ABBR, '.').replace(_DEC, '.').replace(_LAT, '.')
-            restored_list.append(restored)
-
-        merged = []
-        for seg in restored_list:
-            if merged and _should_merge(merged[-1], seg):
-                merged[-1] = merged[-1] + ' ' + seg
-            else:
-                merged.append(seg)
-        result.extend(merged)
-    return result
-
-
-# ===========================================================================
-# TESTS — Abbreviation Splitting (P2 from Codex bot review)
-# ===========================================================================
+    assert [outcome.status for outcome in outcomes] == [TranslationStatus.failed, TranslationStatus.failed]
+    assert [outcome.text for outcome in outcomes] == ['One.', 'Two.']
+    assert store.puts == []
 
 
-class TestAbbreviationSplitting(unittest.TestCase):
-    """Verify split_into_sentences doesn't break on common abbreviations.
+def test_successful_early_chunk_is_not_cached_when_later_chunk_fails():
+    store = DictTranslationStore()
+    provider = FakeProvider(
+        TranslationProvider.google,
+        responses=[
+            translations(('Uno.', 'en')),
+            provider_error(TranslationProvider.google),
+        ],
+    )
+    service, _cache = build_service(
+        {TranslationProvider.google: provider},
+        selected_profile=profile(max_batch_size=1),
+        store=store,
+    )
 
-    These are the specific cases flagged by the Codex bot reviewer on PR #7954.
-    The algorithm uses placeholder protection for internal periods + post-split
-    merge heuristics for false sentence boundaries at abbreviation tails.
-    """
+    outcomes = service.translate_outcomes('es', [('one', 'One.'), ('two', 'Two.')])
 
-    # ---- Bot-reported cases (MUST pass) ----
-
-    def test_us_abbreviation_not_split(self):
-        """'I live in the U.S. now.' must not become ['I live in the U.', 'S.', 'now.']"""
-        result = split_into_sentences("I live in the U.S. now.")
-        self.assertEqual(len(result), 1, f"Expected 1 sentence, got {result}: {repr(result)}")
-        self.assertIn("U.S.", result[0])
-
-    def test_version_number_not_split(self):
-        """'Version 3.11 is installed.' must not break at the decimal point."""
-        result = split_into_sentences("Version 3.11 is installed.")
-        self.assertEqual(len(result), 1, f"Expected 1 sentence, got {result}: {repr(result)}")
-        self.assertIn("3.11", result[0])
-
-    # ---- Related abbreviation cases ----
-
-    def test_uk_abbreviation_not_split(self):
-        result = split_into_sentences("She is from the U.K. She likes tea.")
-        self.assertEqual(len(result), 2, f"Expected 2 sentences, got {result}: {repr(result)}")
-        self.assertIn("U.K.", result[0])
-
-    def test_decimal_number_not_split(self):
-        result = split_into_sentences("The value is 3.14159. It is precise.")
-        self.assertEqual(len(result), 2, f"Expected 2 sentences, got {result}: {repr(result)}")
-        self.assertIn("3.14159", result[0])
-
-    def test_dr_title_followed_by_name(self):
-        """'Dr. Smith arrived. He was late.' → 2 sentences."""
-        result = split_into_sentences("Dr. Smith arrived. He was late.")
-        self.assertEqual(len(result), 2, f"Expected 2 sentences, got {result}: {repr(result)}")
-
-    def test_etc_at_end_of_clause(self):
-        result = split_into_sentences("We need apples, oranges, etc. for the pie.")
-        self.assertEqual(len(result), 1, f"Expected 1 sentence, got {result}: {repr(result)}")
-        self.assertIn("etc.", result[0])
-
-    def test_eg_ie_not_split(self):
-        result = split_into_sentences("Use fruits e.g. apples. It works well.")
-        self.assertEqual(len(result), 2, f"Expected 2 sentences, got {result}: {repr(result)}")
-        self.assertIn("e.g.", result[0])
-
-    def test_vs_abbreviation_not_split(self):
-        result = split_into_sentences("Red vs. Blue is better. We agree.")
-        self.assertEqual(len(result), 2, f"Expected 2 sentences, got {result}: {repr(result)}")
-        self.assertIn("vs.", result[0])
-
-    # ---- Normal splitting still works ----
-
-    def test_normal_period_still_splits(self):
-        result = split_into_sentences("Hello world. How are you? Goodbye!")
-        self.assertEqual(len(result), 3, f"Expected 3 sentences, got {result}: {repr(result)}")
-
-    def test_cjk_sentence_enders_still_work(self):
-        result = split_into_sentences("你好。世界！")
-        self.assertGreaterEqual(len(result), 1)
-
-    # ---- Edge cases ----
-
-    def test_empty_input(self):
-        self.assertEqual(split_into_sentences(""), [])
-        self.assertEqual(split_into_sentences("   "), [])
-
-    def test_newline_only_splits_by_line(self):
-        result = split_into_sentences("Line one.\nLine two.")
-        self.assertEqual(len(result), 2)
+    assert [outcome.status for outcome in outcomes] == [TranslationStatus.failed, TranslationStatus.failed]
+    assert store.puts == []
+    assert store.values == {}
 
 
-# ===========================================================================
-# TESTS — Structural Code Paths (verify fixes are present in source)
-# ===========================================================================
+class FailingRedis:
+    def get(self, key):
+        raise redis.exceptions.ConnectionError('down')
+
+    def exists(self, key):
+        raise redis.exceptions.ConnectionError('down')
+
+    def set(self, key, value, **kwargs):
+        raise redis.exceptions.ConnectionError('down')
 
 
-class TestStructuralCodePaths(unittest.TestCase):
-    """Verify that bot-identified code paths exist and are correctly structured."""
-
-    def setUp(self):
-        # Derive repo root from this test file's location, works in any checkout
-        # Test file lives at backend/tests/unit/<this_file> → go up 3 dirs
-        self.pr_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-
-    def _read_source(self, filepath: str) -> str | None:
-        try:
-            with open(f"{self.pr_root}/backend/{filepath}") as f:
-                return f.read()
-        except FileNotFoundError:
-            return None
-
-    # --- Abbreviation protection ---
-
-    def test_split_has_abbrev_protection(self):
-        source = self._read_source("utils/translation.py")
-        self.assertIsNotNone(source)
-        self.assertIn("_ABBREV_PATTERNS", source, "split_into_sentences must have abbreviation protection patterns")
-
-    def test_split_has_merge_heuristic(self):
-        source = self._read_source("utils/translation.py")
-        self.assertIsNotNone(source)
-        self.assertIn("_should_merge", source, "split_into_sentences must have post-split merge heuristic")
-
-    # --- Full-text cache before sentence splitting (P2) ---
-
-    def test_translate_units_batch_has_full_text_cache_phase(self):
-        source = self._read_source("utils/translation.py")
-        self.assertIsNotNone(source)
-        self.assertIn("full_text_results", source)
-        phase_neg1 = source.index("# Phase -1:")
-        phase_0 = source.index("# Phase 0:")
-        self.assertLess(
-            phase_neg1, phase_0, "Full-text cache check (Phase -1) must come before " "sentence splitting (Phase 0)"
-        )
-
-    # --- No-op path version bump + batch buffer clear (P1 from round 2) ---
-
-    def test_no_op_path_bumps_version_and_clears_batch(self):
-        source = self._read_source("utils/translation_coordinator.py")
-        self.assertIsNotNone(source)
-        self.assertIn("_next_version()", source)
-        self.assertIn("_batch_buffer", source)
-        no_op_section = source[
-            source.index("should_persist_translation") : source.index("continue  # Don't add to batch buffer")
-        ]
-        self.assertIn(
-            "_next_version()", no_op_section, "No-op path must bump version to invalidate stale batch entries"
-        )
-        self.assertIn("_batch_buffer", no_op_section, "No-op path must clear batch buffer for this segment")
-
-    # --- Failed-fallback memory cache guard (P1 from round 2) ---
-
-    def test_failed_fallback_guards_all_cache_writes(self):
-        source = self._read_source("utils/translation.py")
-        self.assertIsNotNone(source)
-        self.assertIn("_failed_sent_hashes", source)
-        set_mem_pos = source.rfind("_set_memory_cache")
-        cache_trans_pos = source.rfind("cache_translation(text_hash")
-        guard_pos = source.rfind("_failed_sent_hashes", 0, max(set_mem_pos, cache_trans_pos))
-        self.assertGreater(guard_pos, -1, "_failed_sent_hashes guard not found")
-        self.assertLess(guard_pos, set_mem_pos, "_set_memory_cache must be gated by _failed_sent_hashes")
-        self.assertLess(guard_pos, cache_trans_pos, "cache_translation must be gated by _failed_sent_hashes")
-
-    # --- Async Redis via run_blocking (P2 from round 2) ---
-
-    def test_observe_offloads_redis_to_run_blocking(self):
-        source = self._read_source("utils/translation_coordinator.py")
-        self.assertIsNotNone(source)
-        self.assertIn("run_blocking", source)
-        observe_section = source[source.find("def observe") :]
-        self.assertIn("run_blocking", observe_section)
-        self.assertIn("get_cached_translation", observe_section)
+class BrokenRedisClient:
+    def get(self, key):
+        raise TypeError('client programming error')
 
 
-if __name__ == "__main__":
-    unittest.main()
+class InterleavingMemory(OrderedDict[str, CachedTranslation]):
+    """Expose the old pop/reinsert race deterministically."""
+
+    def __init__(self, values: OrderedDict[str, CachedTranslation]) -> None:
+        super().__init__(values)
+        self.first_removed = Event()
+        self.second_attempted = Event()
+        self._pop_count = 0
+        self._count_lock = Lock()
+
+    def pop(self, key, default=None):
+        with self._count_lock:
+            self._pop_count += 1
+            pop_index = self._pop_count
+        value = super().pop(key, default)
+        if pop_index == 1:
+            self.first_removed.set()
+            self.second_attempted.wait(timeout=0.2)
+        else:
+            self.second_attempted.set()
+        return value
+
+
+def test_redis_outage_fails_open_and_memory_cache_remains_usable():
+    metrics = NoopTranslationMetrics()
+    persistent = RedisTranslationStore(client_factory=FailingRedis)
+    cache = TranslationCache(persistent=persistent, metrics=metrics)
+    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _ignored = build_service({TranslationProvider.google: provider}, cache=cache)
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert len(provider.calls) == 1
+
+
+@pytest.mark.parametrize('error_type', [ValueError, TypeError])
+def test_redis_client_construction_errors_fail_open_without_hiding_provider_result(error_type):
+    def raising_factory():
+        raise error_type('invalid Redis configuration')
+
+    cache = TranslationCache(
+        persistent=RedisTranslationStore(client_factory=raising_factory),
+        metrics=NoopTranslationMetrics(),
+    )
+    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _ignored = build_service({TranslationProvider.google: provider}, cache=cache)
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert len(provider.calls) == 1
+
+
+def test_redis_store_does_not_hide_unexpected_programming_errors():
+    def raising_factory():
+        raise RuntimeError('programming error')
+
+    store = RedisTranslationStore(client_factory=raising_factory)
+
+    with pytest.raises(RuntimeError, match='programming error'):
+        store.get('fingerprint', 'es')
+
+    broken_client_store = RedisTranslationStore(client_factory=BrokenRedisClient)
+    with pytest.raises(TypeError, match='client programming error'):
+        broken_client_store.get('fingerprint', 'es')
+
+
+def test_negative_cache_uses_same_fingerprint_policy_as_positive_cache():
+    store = DictTranslationStore()
+    provider = FakeProvider(TranslationProvider.google, responses=[])
+    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    fingerprint = fingerprint_text('Already English')
+    service.set_negative_cache(fingerprint, 'en')
+
+    outcomes = service.translate_outcomes('en', [('segment', 'Already English')])
+
+    assert outcomes[0].status == TranslationStatus.unchanged
+    assert outcomes[0].detected_language == 'en'
+    assert provider.calls == []
+
+
+def test_cached_and_failed_units_never_form_a_partial_mixed_translation():
+    store = DictTranslationStore()
+    provider = FakeProvider(
+        TranslationProvider.google,
+        responses=[provider_error(TranslationProvider.google)],
+    )
+    service, cache = build_service({TranslationProvider.google: provider}, store=store)
+    active_profile = profile()
+    cache.put(fingerprint_text('Cached.'), 'fr', CachedTranslation('En cache.', 'en'), active_profile)
+    outcomes = service.translate_outcomes('fr', [('unit', 'Cached. Missing.')])
+
+    assert outcomes[0].status == TranslationStatus.failed
+    assert outcomes[0].text == 'Cached. Missing.'
+
+
+def test_invalid_response_does_not_poison_memory_and_is_retried():
+    provider = FakeProvider(
+        TranslationProvider.google,
+        responses=[[], translations(('Hola', 'en'))],
+    )
+    service, _cache = build_service({TranslationProvider.google: provider})
+
+    assert service.translate_outcomes('es', [('segment', 'Hello')])[0].status == TranslationStatus.failed
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert len(provider.calls) == 2
+
+
+def test_lru_eviction_is_bounded_and_evicted_text_is_retried():
+    cache = TranslationCache(persistent=None, metrics=NoopTranslationMetrics(), max_entries=1)
+    provider = FakeProvider(
+        TranslationProvider.google,
+        responses=[
+            translations(('Uno', 'en')),
+            translations(('Dos', 'en')),
+            translations(('Uno otra vez', 'en')),
+        ],
+    )
+    service, _ignored = build_service({TranslationProvider.google: provider}, cache=cache)
+
+    assert service.translate_text('es', 'One') == ('Uno', 'en')
+    assert service.translate_text('es', 'Two') == ('Dos', 'en')
+    assert service.translate_text('es', 'One') == ('Uno otra vez', 'en')
+    assert len(provider.calls) == 3
+
+
+def test_concurrent_lru_hits_cannot_observe_the_pop_reinsert_window():
+    cache = TranslationCache(persistent=None, metrics=NoopTranslationMetrics())
+    expected = CachedTranslation('Hola', 'en')
+    cache.put('fingerprint', 'es', expected, profile())
+    cache._memory = InterleavingMemory(cache._memory)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(cache.get, 'fingerprint', 'es')
+        assert cache._memory.first_removed.wait(timeout=1.0)
+        second = executor.submit(cache.get, 'fingerprint', 'es')
+        assert [first.result(timeout=1.0), second.result(timeout=1.0)] == [expected, expected]
+
+
+class RecordingRedis:
+    def __init__(self) -> None:
+        self.values: dict[str, object] = {}
+        self.sets: list[tuple[str, object, int]] = []
+
+    def get(self, key):
+        return self.values.get(key)
+
+    def exists(self, key):
+        return key in self.values
+
+    def set(self, key, value, *, ex):
+        self.values[key] = value
+        self.sets.append((key, value, ex))
+
+
+def test_redis_store_uses_compatible_keys_payloads_and_ttls():
+    client = RecordingRedis()
+    store = RedisTranslationStore(client_factory=lambda: client)
+    value = CachedTranslation('Hola', 'en')
+
+    store.put('fingerprint', 'es', value, ttl_seconds=600)
+    store.put_negative('fingerprint', 'es', ttl_seconds=300)
+
+    assert store.get('fingerprint', 'es') == value
+    assert store.is_negative('fingerprint', 'es')
+    assert client.sets[0][0] == 'translate:v1:fingerprint:es'
+    assert client.sets[0][2] == 600
+    assert client.sets[1] == ('translate:v2:neg:fingerprint:es', '1', 300)
+
+
+@pytest.mark.parametrize(
+    'raw',
+    ['not-json', '[]', '{"text": 3}', '{"text": "   ", "detected_lang": "en"}', b'\xff'],
+)
+def test_malformed_redis_payload_is_a_cache_miss(raw):
+    client = RecordingRedis()
+    client.values['translate:v1:fingerprint:es'] = raw
+    store = RedisTranslationStore(client_factory=lambda: client)
+
+    assert store.get('fingerprint', 'es') is None

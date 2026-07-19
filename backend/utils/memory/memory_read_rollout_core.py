@@ -1,7 +1,7 @@
 """Shared memory read rollout decision primitives.
 
 Both surface adapters (MCP/chat/developer via ``default_read_rollout``) and the
-external ``/v3`` GET stack (``v3_control_reader_contract`` / ``v3_compatibility``)
+external ``/v3`` GET stack (``v3.control_reader_contract`` / ``v3.compatibility``)
 normalize the same Firestore grant and operational-gate inputs. This module holds
 that shared core so grant resolution and enrolled read-mode gate evaluation stay
 aligned without collapsing surface-specific or v3-specific routing behavior.

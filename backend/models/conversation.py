@@ -27,6 +27,7 @@ __all__ = [
     'BulkAssignSegmentsRequest',
     'CalendarEventLink',
     'Conversation',
+    'ConversationFinalizationStatusResponse',
     'ConversationMutationResponse',
     'ConversationPostProcessing',
     'CreateConversation',
@@ -271,6 +272,17 @@ class ExternalIntegrationCreateConversation(BaseModel):
 class CreateConversationResponse(BaseModel):
     conversation: Conversation
     messages: List[Message] = []
+
+
+class ConversationFinalizationStatusResponse(BaseModel):
+    """Customer-visible projection of one durable finalization job."""
+
+    job_id: str
+    status: str
+    terminal: bool
+    retryable: bool
+    attempt_count: int
+    task_retry_count: int
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app

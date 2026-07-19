@@ -19,6 +19,8 @@ import pytest
 
 from utils.stt import vad
 from utils.stt.vad import (
+    VADAudioDecodeError,
+    VADProcessingError,
     vad_is_empty,
     _run_file_vad,
     _get_ort_session,
@@ -27,6 +29,8 @@ from utils.stt.vad import (
     VAD_SAMPLE_RATE,
     VAD_WINDOW_SAMPLES,
     VAD_CONTEXT_SAMPLES,
+    vad_is_empty_strict,
+    linear16_pcm_is_silent,
     _STATE_SHAPE,
 )
 
@@ -130,6 +134,25 @@ def _reset_singleton():
 @pytest.fixture
 def tmp_wav_dir(tmp_path):
     return tmp_path
+
+
+class TestLinear16PcmVad:
+    """Raw PCM eligibility must be local, strict, and never provider-shaped."""
+
+    @patch('utils.stt.vad._segments_from_16khz_samples', return_value=[])
+    def test_pcm_silence_uses_local_vad(self, mock_segments):
+        assert linear16_pcm_is_silent(b'\x00' * 1024, sample_rate=16000, channels=1) is True
+        mock_segments.assert_called_once()
+
+    def test_invalid_pcm_shape_is_typed_decode_failure(self):
+        with pytest.raises(VADAudioDecodeError):
+            linear16_pcm_is_silent(b'\x01', sample_rate=16000, channels=1)
+
+    @patch('utils.stt.vad._segments_from_16khz_samples', side_effect=RuntimeError('synthetic ONNX failure'))
+    def test_pcm_inference_failure_is_typed(self, mock_segments):
+        with pytest.raises(VADProcessingError):
+            linear16_pcm_is_silent(b'\x01\x00' * 512, sample_rate=16000, channels=1)
+        mock_segments.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +413,34 @@ class TestRunFileVad:
 
         segments = _run_file_vad(bad_path)
         assert segments == []
+
+    def test_strict_corrupt_file_raises_decode_error(self, tmp_wav_dir):
+        """Strict eligibility never converts a decode failure into silence."""
+        bad_path = str(tmp_wav_dir / 'corrupt-strict.wav')
+        with open(bad_path, 'wb') as file:
+            file.write(b'NOT A WAV FILE')
+
+        with pytest.raises(VADAudioDecodeError):
+            vad_is_empty_strict(bad_path)
+
+    @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_silence)
+    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    def test_strict_valid_silence_returns_true(self, mock_state, mock_vad, tmp_wav_dir):
+        """A successfully decoded, VAD-negative file remains expected silence."""
+        wav_path = str(tmp_wav_dir / 'strict-silence.wav')
+        _write_wav_file(wav_path, 0.1)
+
+        assert vad_is_empty_strict(wav_path) is True
+
+    @patch('utils.stt.vad.run_vad_window', side_effect=RuntimeError('VAD inference failed'))
+    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    def test_strict_inference_failure_propagates(self, mock_state, mock_vad, tmp_wav_dir):
+        """Strict eligibility never converts an inference failure into silence."""
+        wav_path = str(tmp_wav_dir / 'strict-inference.wav')
+        _write_wav_file(wav_path, 0.1, freq_hz=440.0)
+
+        with pytest.raises(VADProcessingError, match='local VAD could not evaluate audio'):
+            vad_is_empty_strict(wav_path)
 
     @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_speech)
     @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)

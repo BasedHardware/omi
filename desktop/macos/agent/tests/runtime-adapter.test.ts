@@ -115,6 +115,58 @@ describe("ACP authentication recovery classification", () => {
   });
 });
 
+describe("external ACP terminal failures", () => {
+  it("does not mark an external HTTP 400 emitted as final text as successful", async () => {
+    for (const provider of ["hermes", "openclaw"] as const) {
+      const adapter = new AcpRuntimeAdapter({ adapterId: provider });
+      vi.spyOn(adapter, "request").mockImplementation(async (method) => {
+        if (method !== "session/prompt") {
+          throw new Error(`Unexpected ACP method: ${method}`);
+        }
+        (adapter as any).notificationHandler("session/update", {
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: {
+              type: "text",
+              text: 'HTTP 400: {"detail":"The selected model is not supported."}',
+            },
+          },
+        });
+        return { usage: {} };
+      });
+
+      const result = await adapter.executeAttempt({
+        sessionId: `ses_${provider}`,
+        ownerId: "owner",
+        requestId: `request-${provider}`,
+        clientId: "client",
+        runId: `run_${provider}`,
+        attemptId: `att_${provider}`,
+        toolCapabilityRef: "capability",
+        binding: {
+          sessionId: `ses_${provider}`,
+          adapterId: provider,
+          adapterNativeSessionId: `native-${provider}`,
+          resumeFidelity: "none",
+          cwd: "/tmp",
+        },
+        prompt: [{ type: "text", text: "Summarize recent activity" }],
+        mode: "act",
+      }, () => {}, new AbortController().signal);
+
+      expect(result).toMatchObject({
+        terminalStatus: "failed",
+        text: `${provider === "hermes" ? "Hermes" : "OpenClaw"} could not complete the request. Try again.`,
+        failure: {
+          code: "adapter_terminal_http_failure",
+          adapterId: provider,
+          retryable: false,
+        },
+      });
+    }
+  });
+});
+
 describe("AcpRuntimeAdapter process spawning", () => {
   beforeEach(() => {
     vi.mocked(spawn).mockReset();

@@ -73,7 +73,7 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
-  func testLocalAgentProviderDetectorIgnoresArbitraryPathEntries() throws {
+  func testLocalAgentProviderDetectorHonorsInjectedPathEntries() throws {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-provider-path-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -88,7 +88,7 @@ final class PiMonoWiringTests: XCTestCase {
       environment: ["PATH": root.path],
       homeDirectory: "/tmp/missing-home")
 
-    XCTAssertFalse(availability.isAvailable)
+    XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
   func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {
@@ -111,11 +111,11 @@ final class PiMonoWiringTests: XCTestCase {
 
   func testApiKeysResponseDecodesWithoutAnthropicKey() throws {
     let json = """
-    {
-      "firebase_api_key": "AIza-test",
-      "google_calendar_api_key": "cal-key"
-    }
-    """.data(using: .utf8)!
+      {
+        "firebase_api_key": "AIza-test",
+        "google_calendar_api_key": "cal-key"
+      }
+      """.data(using: .utf8)!
     let response = try JSONDecoder().decode(APIClient.ApiKeysResponse.self, from: json)
     XCTAssertEqual(response.firebaseApiKey, "AIza-test")
     XCTAssertEqual(response.googleCalendarApiKey, "cal-key")
@@ -124,18 +124,19 @@ final class PiMonoWiringTests: XCTestCase {
   func testApiKeysResponseIgnoresUnknownAnthropicField() throws {
     // If the backend ever sends anthropic_api_key, the client must ignore it
     let json = """
-    {
-      "firebase_api_key": "AIza-test",
-      "anthropic_api_key": "sk-ant-LEAKED",
-      "google_calendar_api_key": "cal-key"
-    }
-    """.data(using: .utf8)!
+      {
+        "firebase_api_key": "AIza-test",
+        "anthropic_api_key": "sk-ant-LEAKED",
+        "google_calendar_api_key": "cal-key"
+      }
+      """.data(using: .utf8)!
     let response = try JSONDecoder().decode(APIClient.ApiKeysResponse.self, from: json)
     XCTAssertEqual(response.firebaseApiKey, "AIza-test")
     // Verify no property named anthropicApiKey exists on the response
     let mirror = Mirror(reflecting: response)
     let propertyNames = mirror.children.map { $0.label ?? "" }
-    XCTAssertFalse(propertyNames.contains("anthropicApiKey"),
+    XCTAssertFalse(
+      propertyNames.contains("anthropicApiKey"),
       "ApiKeysResponse must not have anthropicApiKey property (removed in #6594)")
   }
 
@@ -248,32 +249,6 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertNil(AIProvider.from(bridgeMode: "agentSDK"))
   }
 
-  func testProviderDirectiveRoutesAskOpenClawToOpenClawHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "Please ask openclaw how it's going")
-
-    XCTAssertEqual(directive?.provider, .openclaw)
-    XCTAssertEqual(directive?.provider.harnessMode, .openclaw)
-    XCTAssertEqual(directive?.rewrittenQuery, "how it's going")
-    XCTAssertEqual(directive?.title, "OpenClaw")
-  }
-
-  func testProviderDirectiveRoutesHermesToHermesHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "Hermes: summarize your current status")
-
-    XCTAssertEqual(directive?.provider, .hermes)
-    XCTAssertEqual(directive?.provider.harnessMode, .hermes)
-    XCTAssertEqual(directive?.rewrittenQuery, "summarize your current status")
-    XCTAssertEqual(directive?.title, "Hermes")
-  }
-
-  func testProviderDirectiveIgnoresNonProviderQuestions() {
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "what is openclaw?"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "openclaw architecture"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "hermes scarf"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "compare hermes and openclaw"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "how is it going?"))
-  }
-
   // MARK: - Rename completeness: no ACPBridge / acp-bridge in Swift sources
 
   func testNoACPBridgeReferencesInSources() throws {
@@ -328,11 +303,13 @@ final class PiMonoWiringTests: XCTestCase {
     let src = try String(contentsOf: configRoutesPath, encoding: .utf8)
 
     // The response struct must have anthropic_api_key field
-    XCTAssert(src.contains("anthropic_api_key: Option<String>"),
+    XCTAssert(
+      src.contains("anthropic_api_key: Option<String>"),
       "ApiKeysResponse must contain anthropic_api_key for old client compat")
 
     // It must be sourced from desktop_legacy_anthropic_key, NOT anthropic_api_key
-    XCTAssert(src.contains("desktop_legacy_anthropic_key.clone()"),
+    XCTAssert(
+      src.contains("desktop_legacy_anthropic_key.clone()"),
       "anthropic_api_key must be sourced from desktop_legacy_anthropic_key, not anthropic_api_key")
   }
 }

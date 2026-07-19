@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { agentControlCapabilityManifest } from "../src/runtime/control-tool-manifest.js";
@@ -13,7 +13,41 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturePath = join(__dirname, "fixtures", "tool-manifest.json");
 const realtimeToolsPath = join(__dirname, "../../Desktop/Sources/Generated/GeneratedRealtimeTools.swift");
+const generatedOutputPaths = [
+  join(__dirname, "../../Desktop/Sources/Generated/GeneratedToolCapabilities.swift"),
+  realtimeToolsPath,
+  join(__dirname, "../../Desktop/Sources/Generated/GeneratedToolExecutors.swift"),
+  join(__dirname, "../../Desktop/Sources/Generated/OmiToolManifest.generated.swift"),
+  fixturePath,
+];
 const providerTopLevelCompositeSchemaKeys = ["anyOf", "oneOf", "allOf"];
+
+function stripTypesNode(): string {
+  const candidates = [
+    process.env.OMI_TOOL_SURFACE_NODE,
+    "/opt/homebrew/opt/node@22/bin/node",
+    "/usr/local/opt/node@22/bin/node",
+    process.execPath,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    try {
+      execFileSync(candidate, ["--experimental-strip-types", "-e", ""], { stdio: "pipe" });
+      return candidate;
+    } catch {
+      // This Vitest process may run under a package-manager Node older than 22.
+    }
+  }
+  throw new Error("Node.js 22.6+ with --experimental-strip-types is required for tool surface generation");
+}
+
+function runToolSurfaceGenerator(args = "") {
+  execFileSync(stripTypesNode(), ["--experimental-strip-types", "scripts/generate-tool-surfaces.mjs", ...args.trim().split(/\s+/).filter(Boolean)], {
+    cwd: join(__dirname, ".."),
+    stdio: "pipe",
+  });
+}
 
 function assertFlatProviderInputSchema(surface: string, toolName: string, schema: Record<string, unknown>) {
   expect(schema, `${surface}:${toolName} schema`).toMatchObject({
@@ -42,6 +76,17 @@ function hasRealtimeSurface(tool: (typeof omiToolManifest)[number]): boolean {
 }
 
 describe("tool surface exhaustiveness", () => {
+  it("declares and generates both permission tools across pi-mono and realtime", () => {
+    const permissionTools = ["check_permission_status", "request_permission"];
+    const piMonoNames = new Set(toolsForAdapter("pi-mono").map((tool) => tool.name));
+    const realtimeNames = new Set(generatedRealtimeToolDefinitions().map((tool) => tool.name));
+
+    for (const name of permissionTools) {
+      expect(piMonoNames, `pi-mono missing ${name}`).toContain(name);
+      expect(realtimeNames, `generated realtime tools missing ${name}`).toContain(name);
+    }
+  });
+
   it("matches the checked-in manifest fixture", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
     expect(fixture).toEqual(omiToolManifest);
@@ -78,12 +123,20 @@ describe("tool surface exhaustiveness", () => {
   });
 
   it("generator check passes on the checked-in manifest snapshot", () => {
-    expect(() =>
-      execSync("node --experimental-strip-types scripts/generate-tool-surfaces.mjs --check", {
-        cwd: join(__dirname, ".."),
-        stdio: "pipe",
-      }),
-    ).not.toThrow();
+    expect(() => runToolSurfaceGenerator(" --check")).not.toThrow();
+  });
+
+  it("does not rewrite unchanged generated outputs", () => {
+    runToolSurfaceGenerator();
+    const firstRunMtimes = new Map(
+      generatedOutputPaths.map((path) => [path, statSync(path, { bigint: true }).mtimeNs]),
+    );
+
+    runToolSurfaceGenerator();
+
+    for (const path of generatedOutputPaths) {
+      expect(statSync(path, { bigint: true }).mtimeNs, path).toBe(firstRunMtimes.get(path));
+    }
   });
 
   it("keeps every provider-facing tool schema as a flat object schema", () => {

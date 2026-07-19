@@ -67,6 +67,12 @@ def merge():
     cloud_tasks_stub = ModuleType("utils.cloud_tasks")
     cloud_tasks_stub.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
 
+    # The lifecycle service owns writes used only by perform_merge_async. The
+    # pure validation surface under test must not import its database graph.
+    lifecycle_stub = ModuleType("utils.conversations.lifecycle")
+    lifecycle_stub.create_processing_conversation = MagicMock()
+    lifecycle_stub.complete = MagicMock()
+
     # models.* — referenced only inside perform_merge_async (not the validate
     # function under test), but the top-level imports still resolve at load.
     models_pkg = ModuleType("models")
@@ -109,6 +115,7 @@ def merge():
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
         "utils.cloud_tasks": cloud_tasks_stub,
+        "utils.conversations.lifecycle": lifecycle_stub,
         "utils.other.storage": storage_stub,
         "models": models_pkg,
         "utils.memory.memory_service": memory_service_stub,

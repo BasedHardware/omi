@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 @MainActor
@@ -30,9 +31,11 @@ final class SuggestedTasksStoreTests: XCTestCase {
 
     await store.load()
 
-    XCTAssertEqual(store.candidates.map(\.id), ["proposal", "pending"])
-    XCTAssertEqual(store.candidates.first(where: { $0.id == "proposal" })?.title, "Prepare launch brief")
-    XCTAssertFalse(store.candidates.contains { $0.title.localizedCaseInsensitiveContains("workstream") })
+    XCTAssertEqual(store.candidates.map(\.id), ["pending", "proposal"])
+    XCTAssertEqual(
+      store.candidates.first(where: { $0.id == "proposal" })?.title, "Prepare launch brief")
+    XCTAssertFalse(
+      store.candidates.contains { $0.title.localizedCaseInsensitiveContains("workstream") })
     XCTAssertTrue(api.registeredInterventionCandidateIDs.isEmpty)
 
     await store.presented(candidateID: "pending")
@@ -46,10 +49,105 @@ final class SuggestedTasksStoreTests: XCTestCase {
     let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
     await store.load()
 
-    let revealed = store.revealCandidateForNavigation(candidate(id: "candidate-101", status: .pending))
+    let revealed = store.revealCandidateForNavigation(
+      candidate(id: "candidate-101", status: .pending))
 
     XCTAssertTrue(revealed)
     XCTAssertEqual(store.candidates.map(\.id), ["candidate-101"])
+  }
+
+  func testExactRecommendedCandidateStaysInsideTheFiveCardCap() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = (1...5).reversed().map { index in
+      candidate(
+        id: "candidate-\(index)",
+        status: .pending,
+        createdAt: "2026-07-\(String(format: "%02d", index))T12:00:00Z"
+      )
+    }
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    await store.load()
+
+    let revealed = store.revealCandidateForNavigation(
+      candidate(id: "candidate-101", status: .pending))
+
+    XCTAssertTrue(revealed)
+    XCTAssertEqual(
+      store.candidates.map(\.id),
+      ["candidate-101", "candidate-5", "candidate-4", "candidate-3", "candidate-2"]
+    )
+    await store.presented(candidateID: "candidate-1")
+    XCTAssertTrue(api.registeredInterventionCandidateIDs.isEmpty)
+  }
+
+  func testLoadKeepsOnlyTheFiveNewestVisibleCandidates() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = (1...7).reversed().map { index in
+      candidate(
+        id: "candidate-\(index)",
+        status: .pending,
+        createdAt: "2026-07-\(String(format: "%02d", index))T12:00:00Z"
+      )
+    }
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+
+    await store.load()
+
+    XCTAssertEqual(
+      store.candidates.map(\.id),
+      ["candidate-7", "candidate-6", "candidate-5", "candidate-4", "candidate-3"]
+    )
+    await store.presented(candidateID: "candidate-2")
+    XCTAssertTrue(api.registeredInterventionCandidateIDs.isEmpty)
+    await store.presented(candidateID: "candidate-7")
+    XCTAssertEqual(api.registeredInterventionCandidateIDs, ["candidate-7"])
+  }
+
+  func testLoadPreservesAuthoritativeBackendOrderAcrossMixedTimestampFormats() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [
+      candidate(id: "backend-first", status: .pending, createdAt: "2026-07-09T12:00:00Z"),
+      candidate(id: "backend-second", status: .pending, createdAt: "2026-07-09T12:00:00.500+00:00"),
+    ]
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+
+    await store.load()
+
+    XCTAssertEqual(store.candidates.map(\.id), ["backend-first", "backend-second"])
+  }
+
+  func testCandidateList404CalmlyDisablesSuggestedWhileOtherFailuresRemainVisible() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-1", status: .pending)]
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    await store.load()
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-1"])
+
+    api.listError = APIError.httpError(statusCode: 404)
+    await store.load()
+
+    XCTAssertTrue(store.candidates.isEmpty)
+    XCTAssertNil(store.error)
+    await store.presented(candidateID: "candidate-1")
+    XCTAssertTrue(api.registeredInterventionCandidateIDs.isEmpty)
+
+    api.listError = FakeSuggestedTasksClient.FakeError.failed
+    await store.load()
+
+    XCTAssertEqual(store.error, "Suggested items could not be refreshed.")
+  }
+
+  func testAutomationDumpNeverReturnsCandidateTitles() async throws {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-private", status: .pending)]
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    await store.load()
+    let result = store.automationDump()
+
+    XCTAssertEqual(result["count"], "1")
+    XCTAssertEqual(result["ids"], "candidate-private")
+    XCTAssertNil(result["titles"])
+    XCTAssertFalse(result.values.contains(where: { $0.contains("Send budget") }))
   }
 
   func testTaskMutationCandidateFailsClosedWithoutAConcreteDiff() async {
@@ -70,11 +168,12 @@ final class SuggestedTasksStoreTests: XCTestCase {
 
     await store.presented(candidateID: "candidate-1")
 
-    XCTAssertEqual(api.registeredInterventionDedupeKeys, ["candidate_fed53ee6b0ddd474f9f2d93dfdb7c003"])
+    XCTAssertEqual(
+      api.registeredInterventionDedupeKeys, ["candidate_fed53ee6b0ddd474f9f2d93dfdb7c003"])
     XCTAssertLessThanOrEqual(api.registeredInterventionDedupeKeys[0].count, 128)
   }
 
-  func testPresentedAndDoNowEmitBoundedAttributionAndOutcome() async {
+  func testPresentedAndDoNowEmitBoundedAttributionWithoutFalseOutcome() async {
     let api = FakeSuggestedTasksClient()
     api.records = [candidate(id: "candidate-1", status: .pending)]
     var events: [TaskIntelligenceAttributionEvent] = []
@@ -95,10 +194,11 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertEqual(taskID, "task-created")
     XCTAssertEqual(
       events.map(\.eventType),
-      [.interventionPresented, .feedbackRecorded, .outcomeRecorded]
+      [.interventionPresented, .feedbackRecorded]
     )
     XCTAssertEqual(events[1].feedbackAction, "accept_candidate")
-    XCTAssertEqual(api.outcomeRequests.map(\.outcomeCode), [.workstream_advanced])
+    XCTAssertTrue(api.outcomeRequests.isEmpty)
+    XCTAssertTrue(api.outcomeKeys.isEmpty)
     XCTAssertNil(events.last?.analyticsProperties["title"])
   }
 
@@ -153,6 +253,34 @@ final class SuggestedTasksStoreTests: XCTestCase {
 
     XCTAssertEqual(store.candidates.map(\.id), ["candidate-1"])
     XCTAssertNotNil(store.error)
+  }
+
+  func testFailedOptimisticResolutionStaysInsideCapDuringConcurrentReveal() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = (1...5).reversed().map { index in
+      candidate(
+        id: "candidate-\(index)",
+        status: .pending,
+        createdAt: "2026-07-\(String(format: "%02d", index))T12:00:00Z"
+      )
+    }
+    api.failAccept = true
+    var store: SuggestedTasksStore!
+    store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+    api.onAccept = {
+      _ = store.revealCandidateForNavigation(self.candidate(id: "candidate-101", status: .pending))
+    }
+    await store.load()
+
+    _ = await store.doNow(candidateID: "candidate-5", editedTitle: nil)
+
+    XCTAssertEqual(store.candidates.count, 5)
+    XCTAssertEqual(
+      store.candidates.map(\.id),
+      ["candidate-5", "candidate-101", "candidate-4", "candidate-3", "candidate-2"]
+    )
+    await store.presented(candidateID: "candidate-1")
+    XCTAssertTrue(api.registeredInterventionCandidateIDs.isEmpty)
   }
 
   func testAcceptedCandidateStaysResolvedWhileFeedbackRetriesFromOutbox() async {
@@ -370,6 +498,75 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertTrue(outbox.entries.isEmpty)
   }
 
+  func testConcurrentSameOwnerLoadAwaitsInFlightDataInsteadOfNoOp() async {
+    let api = FakeSuggestedTasksClient()
+    api.records = [candidate(id: "candidate-a", status: .pending)]
+    let store = SuggestedTasksStore(client: api, suppressionStore: MemorySuppressionStore())
+
+    // First same-owner load suspends inside getCandidateWorkflowControl.
+    api.controlSuspensionsRemaining = 1
+    let first = Task { await store.load() }
+    while api.controlRelease == nil { await Task.yield() }
+    let release = api.controlRelease
+
+    // Second same-owner load launched while the first is in flight. It must
+    // AWAIT the in-flight load rather than return a no-op, so by the time it
+    // returns the candidates are populated. The old guard returned immediately,
+    // leaving a dashboard→Suggested navigation reveal to run against empty state.
+    let secondSawData = Task { () -> Bool in
+      await store.load()
+      return store.candidates.map(\.id) == ["candidate-a"]
+    }
+    await Task.yield()
+    release?.resume()
+
+    let sawData = await secondSawData.value
+    await first.value
+
+    XCTAssertTrue(
+      sawData, "A concurrent same-owner load must await the in-flight load's data before returning")
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-a"])
+  }
+
+  func testOwnerSwitchSupersedesDelayedFailingControlLoadWithoutExposingPriorCards() async {
+    let api = FakeSuggestedTasksClient()
+    let suppression = MemorySuppressionStore()
+    let outbox = MemoryFeedbackOutboxStore()
+    suppression.ownerID = "owner-a"
+    outbox.ownerID = "owner-a"
+    api.records = [candidate(id: "candidate-a", status: .pending)]
+    let store = SuggestedTasksStore(
+      client: api,
+      suppressionStore: suppression,
+      feedbackOutboxStore: outbox
+    )
+    await store.load()
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-a"])
+
+    api.controlError = FakeSuggestedTasksClient.FakeError.failed
+    api.controlSuspensionsRemaining = 1
+    let ownerALoad = Task { await store.load() }
+    while api.controlRelease == nil { await Task.yield() }
+    let ownerARelease = api.controlRelease
+
+    suppression.ownerID = "owner-b"
+    outbox.ownerID = "owner-b"
+    api.controlError = nil
+    api.records = [candidate(id: "candidate-b", status: .pending)]
+    await store.load()
+
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-b"])
+    XCTAssertFalse(store.isLoading)
+    XCTAssertNil(store.error)
+
+    ownerARelease?.resume()
+    await ownerALoad.value
+
+    XCTAssertEqual(store.candidates.map(\.id), ["candidate-b"])
+    XCTAssertFalse(store.isLoading)
+    XCTAssertNil(store.error)
+  }
+
   func testOwnerSwitchDuringAcceptDoesNotNavigateOrRestorePriorOwnerCandidate() async {
     for failAccept in [false, true] {
       let api = FakeSuggestedTasksClient()
@@ -411,12 +608,16 @@ final class SuggestedTasksStoreTests: XCTestCase {
     XCTAssertFalse(source.contains("respectFrequency"))
   }
 
-  private func candidate(id: String, status: OmiAPI.CandidateStatus) -> OmiAPI.CandidateRecord {
+  private func candidate(
+    id: String,
+    status: OmiAPI.CandidateStatus,
+    createdAt: String = "2026-07-09T12:00:00Z"
+  ) -> OmiAPI.CandidateRecord {
     OmiAPI.CandidateRecord(
       accountGeneration: 7,
       candidateId: id,
       captureConfidence: 0.9,
-      createdAt: "2026-07-09T12:00:00Z",
+      createdAt: createdAt,
       evidenceRefs: [],
       goalId: nil,
       idempotencyKey: "capture-\(id)",
@@ -529,7 +730,9 @@ private final class MemorySuppressionStore: SuggestedSuppressionPersisting {
   }
   func currentOwnerID() -> String { ownerID }
   func load(ownerID: String) -> [String: Date] { valuesByOwner[ownerID] ?? [:] }
-  func save(_ suppressions: [String: Date], ownerID: String) { valuesByOwner[ownerID] = suppressions }
+  func save(_ suppressions: [String: Date], ownerID: String) {
+    valuesByOwner[ownerID] = suppressions
+  }
 }
 
 private final class MemoryFeedbackOutboxStore: SuggestedFeedbackOutboxPersisting {
@@ -541,11 +744,14 @@ private final class MemoryFeedbackOutboxStore: SuggestedFeedbackOutboxPersisting
   }
   func currentOwnerID() -> String { ownerID }
   func load(ownerID: String) -> [PendingSuggestedFeedback] { entriesByOwner[ownerID] ?? [] }
-  func save(_ entries: [PendingSuggestedFeedback], ownerID: String) { entriesByOwner[ownerID] = entries }
+  func save(_ entries: [PendingSuggestedFeedback], ownerID: String) {
+    entriesByOwner[ownerID] = entries
+  }
 }
 
-private final class FakeSuggestedTasksClient: SuggestedTasksClient {
+private final class FakeSuggestedTasksClient: SuggestedTasksClient, @unchecked Sendable {
   var records: [OmiAPI.CandidateRecord] = []
+  var listError: Error?
   var registeredInterventionCandidateIDs: Set<String> = []
   var registeredInterventionDedupeKeys: [String] = []
   var acceptedCandidateIDs: [String] = []
@@ -568,19 +774,32 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   var onUpdate: (() -> Void)?
   var accountGeneration = 7
   var workflowMode = OmiAPI.TaskWorkflowMode.read
+  var controlError: Error?
+  var controlSuspensionsRemaining = 0
+  var controlRelease: CheckedContinuation<Void, Never>?
 
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl {
-    OmiAPI.TaskWorkflowControl(accountGeneration: accountGeneration, workflowMode: workflowMode)
+    let result = OmiAPI.TaskWorkflowControl(
+      accountGeneration: accountGeneration, workflowMode: workflowMode)
+    let resultError = controlError
+    if controlSuspensionsRemaining > 0 {
+      controlSuspensionsRemaining -= 1
+      await withCheckedContinuation { controlRelease = $0 }
+      controlRelease = nil
+    }
+    if let resultError { throw resultError }
+    return result
   }
 
   func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord] {
-    Array(records.prefix(limit))
+    if let listError { throw listError }
+    return Array(records.prefix(limit))
   }
 
   func registerTaskIntervention(
     _ request: OmiAPI.InterventionCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.InterventionRecord {
-    onRegisterIntervention?()
+    await MainActor.run { onRegisterIntervention?() }
     if failIntervention { throw FakeError.failed }
     registeredInterventionCandidateIDs.insert(request.subjectId)
     registeredInterventionDedupeKeys.append(request.dedupeKey)
@@ -640,7 +859,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func acceptCanonicalCandidate(
     candidateID: String, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    onAccept?()
+    await MainActor.run { onAccept?() }
     if failAccept { throw FakeError.failed }
     acceptedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .accepted, taskID: acceptedTaskID)
@@ -649,14 +868,14 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func rejectCanonicalCandidate(
     candidateID: String, reason: String?, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    onReject?()
+    await MainActor.run { onReject?() }
     if failReject { throw FakeError.failed }
     rejectedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .rejected, taskID: nil)
   }
 
   func updateSuggestedTaskDescription(id: String, description: String) async throws {
-    onUpdate?()
+    await MainActor.run { onUpdate?() }
     updatedTaskDescriptions[id] = description
   }
 

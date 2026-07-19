@@ -5,6 +5,9 @@ description: Apps/Integrations marketplace flow — browse apps, filter by categ
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ManualInstallationDisclosure.swift
+  - desktop/macos/Desktop/Sources/ConferencingApps.swift
+  - desktop/macos/Desktop/Sources/ConnectorBrandIcon.swift
 preconditions:
   - auth_ready
 

@@ -85,6 +85,7 @@ def _build_fakes() -> dict:
         'redis_pubsub',
         'screen_activity',
         'sync_jobs',
+        'sync_ledger',
         'tasks',
         'trends',
         'user_usage',

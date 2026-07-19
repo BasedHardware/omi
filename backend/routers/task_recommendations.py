@@ -69,6 +69,12 @@ def _require_product(uid: str):
     return rollout
 
 
+def _require_same_product_rollout(uid: str, initial_rollout) -> None:
+    refreshed_rollout = _require_product(uid)
+    if refreshed_rollout.account_generation != initial_rollout.account_generation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+
+
 def _require_mutation_generation(uid: str, account_generation: int) -> None:
     rollout = _rollout(uid)
     if not rollout.intelligence_product_enabled:
@@ -92,7 +98,8 @@ def _require_evaluation_generation(uid: str, account_generation: int):
 
 
 def _bound_device_id(request: Request, requested_device_id: Optional[str], *, required: bool) -> Optional[str]:
-    resolved_device_id = resolve_client_device_from_request(request).client_device_id
+    device_context = resolve_client_device_from_request(request)
+    resolved_device_id = device_context.client_device_id
     if resolved_device_id is None:
         if required or requested_device_id is not None:
             raise HTTPException(
@@ -100,7 +107,15 @@ def _bound_device_id(request: Request, requested_device_id: Optional[str], *, re
                 detail='X-App-Platform and X-Device-Id-Hash are required for device-scoped state',
             )
         return None
-    if requested_device_id is not None and requested_device_id != resolved_device_id:
+    # The headers are the authenticated device binding. Older desktop clients
+    # sent their bare hash as ``device_id`` while canonical records use the
+    # platform-prefixed form (for example ``macos_abcdef12``). Accept that
+    # equivalent legacy representation during rollout, but never let a query
+    # parameter select another device.
+    accepted_device_ids = {resolved_device_id}
+    if device_context.device_hash:
+        accepted_device_ids.add(device_context.device_hash)
+    if requested_device_id is not None and requested_device_id not in accepted_device_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Device scope mismatch')
     return resolved_device_id
 
@@ -111,10 +126,11 @@ def get_what_matters_now(
     device_id: Optional[str] = Query(default=None, min_length=1, max_length=128),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    task_control_db.ensure_development_smoke_fixture(uid)
     rollout = _require_product(uid)
     bound_device_id = _bound_device_id(request_context, device_id, required=False)
     try:
-        return recommendations.evaluate(
+        projection = recommendations.evaluate(
             uid,
             EvaluationRequest(device_id=bound_device_id),
             judgment=_live_judgment(),
@@ -122,6 +138,8 @@ def get_what_matters_now(
         )
     except recommendation_db.TaskRecommendationStoreError as exc:
         _raise_store_error(exc)
+    _require_same_product_rollout(uid, rollout)
+    return projection
 
 
 @router.post('/v1/what-matters-now/evaluate', response_model=WhatMattersNowProjection, tags=['task-intelligence'])
@@ -133,7 +151,7 @@ def evaluate_what_matters_now(
     rollout = _require_product(uid)
     device_id = _bound_device_id(request_context, request.device_id, required=False)
     try:
-        return recommendations.evaluate(
+        projection = recommendations.evaluate(
             uid,
             request.model_copy(update={'device_id': device_id}),
             judgment=_live_judgment(),
@@ -141,6 +159,8 @@ def evaluate_what_matters_now(
         )
     except recommendation_db.TaskRecommendationStoreError as exc:
         _raise_store_error(exc)
+    _require_same_product_rollout(uid, rollout)
+    return projection
 
 
 @router.post('/v1/task-intelligence/interventions', response_model=InterventionRecord, tags=['task-intelligence'])
@@ -200,11 +220,11 @@ def replace_context_snapshot(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     _require_evaluation_generation(uid, account_generation)
-    _bound_device_id(request_context, request.device_id, required=True)
+    device_id = _bound_device_id(request_context, request.device_id, required=True)
     try:
         return recommendations.ingest_context_snapshot(
             uid,
-            request,
+            request.model_copy(update={'device_id': device_id}),
             account_generation=account_generation,
             idempotency_key=idempotency_key,
         )
@@ -221,11 +241,11 @@ def replace_open_loop_snapshot(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     _require_evaluation_generation(uid, account_generation)
-    _bound_device_id(request_context, request.device_id, required=True)
+    device_id = _bound_device_id(request_context, request.device_id, required=True)
     try:
         return recommendations.ingest_open_loop_snapshot(
             uid,
-            request,
+            request.model_copy(update={'device_id': device_id}),
             account_generation=account_generation,
             idempotency_key=idempotency_key,
         )
@@ -255,6 +275,7 @@ def get_evaluation_debug_projection(
         )
     except recommendation_db.TaskRecommendationStoreError as exc:
         _raise_store_error(exc)
+    _require_same_product_rollout(uid, rollout)
     if projection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Evaluation not found')
     return projection

@@ -2,14 +2,17 @@
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from pydantic import ValidationError
 
 from database import _client
+from database.read_boundary import parse_snapshot_strict, parse_snapshots
 from models.goal import (
     GoalMetric,
     GoalProgressEvent,
@@ -21,6 +24,8 @@ from models.goal import (
     GoalType,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+
+logger = logging.getLogger(__name__)
 
 goals_collection = 'goals'
 goal_history_collection = 'goal_history'
@@ -82,7 +87,7 @@ def _goal_control_ref(uid: str, *, firestore_client: Any):
 def _validate_canonical_write(snapshot: Any, *, account_generation: int) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
-        control = TaskWorkflowControl.model_validate(_snapshot_dict(snapshot))
+        control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise GoalConflictError('account generation mismatch')
     if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
@@ -180,20 +185,47 @@ def _goal_created_at_sort_key(goal: Dict[str, Any]) -> datetime:
     return _coerce_created_at(goal.get('created_at'))
 
 
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _metric_from_storage(data: dict[str, Any]) -> Optional[GoalMetric]:
     metric = data.get('metric')
     if isinstance(metric, dict):
-        return GoalMetric.model_validate(metric)
+        try:
+            return GoalMetric.model_validate(metric)
+        except ValidationError:
+            return None
     if data.get('target_value') is None and data.get('goal_type') is None:
         return None
-    return GoalMetric(
-        type=GoalType(data.get('goal_type', GoalType.scale.value)),
-        current=float(data.get('current_value', 0)),
-        target=float(data.get('target_value', 0)),
-        min=float(data.get('min_value', 0)) if data.get('min_value') is not None else None,
-        max=float(data.get('max_value', 10)) if data.get('max_value') is not None else None,
-        unit=data.get('unit'),
-    )
+    # A drifted legacy row can carry a null/non-numeric current/target/min/max, a bad goal_type, or an
+    # inconsistent min/max pair. Coerce each field defensively (the sibling min/max already None-guard) and
+    # guard goal_type by set membership like status/source below; the ValidationError backstop degrades a
+    # still-inconsistent metric to absent instead of 500ing every goal read.
+    goal_type = data.get('goal_type', GoalType.scale.value)
+    if goal_type not in {member.value for member in GoalType}:
+        goal_type = GoalType.scale.value
+    try:
+        return GoalMetric(
+            type=GoalType(goal_type),
+            current=_safe_float(data.get('current_value'), 0.0),
+            target=_safe_float(data.get('target_value'), 0.0),
+            min=_safe_float(data.get('min_value'), 0.0) if data.get('min_value') is not None else None,
+            max=_safe_float(data.get('max_value'), 10.0) if data.get('max_value') is not None else None,
+            unit=data.get('unit'),
+        )
+    except ValidationError:
+        return None
 
 
 def _metric_aliases(metric: Optional[GoalMetric]) -> dict[str, Any]:
@@ -260,7 +292,7 @@ def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = Non
                 if normalized.get('source') in {source.value for source in GoalSource}
                 else GoalSource.imported.value
             ),
-            'latest_progress_sequence': int(normalized.get('latest_progress_sequence', 0)),
+            'latest_progress_sequence': _safe_int(normalized.get('latest_progress_sequence', 0), 0),
             'is_active': status_value not in {GoalStatus.achieved.value, GoalStatus.abandoned.value},
         }
     )
@@ -340,7 +372,7 @@ def create_goal(
             .get(transaction=write_transaction)
         )
         account_generation = (
-            TaskWorkflowControl.model_validate(_snapshot_dict(control_snapshot)).account_generation
+            parse_snapshot_strict(TaskWorkflowControl, control_snapshot).account_generation
             if control_snapshot.exists
             else 0
         )
@@ -719,8 +751,7 @@ def _append_goal_progress_event(
             raise GoalNotFoundError(goal_id)
         existing = event_ref.get(transaction=write_transaction)
         if existing.exists:
-            stored = _snapshot_dict(existing)
-            record = GoalProgressEvent.model_validate(stored)
+            record = parse_snapshot_strict(GoalProgressEvent, existing)
             stored_proposal = GoalProgressEventCreate(
                 kind=record.kind,
                 summary=record.summary,
@@ -785,7 +816,7 @@ def list_goal_progress_events(
         .order_by('sequence', direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
-    return [GoalProgressEvent.model_validate(_snapshot_dict(snapshot)) for snapshot in query.stream()]
+    return parse_snapshots(GoalProgressEvent, query.stream())
 
 
 def update_goal_progress(

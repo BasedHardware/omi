@@ -1,5 +1,5 @@
-import XCTest
 import Vision
+import XCTest
 
 @testable import Omi_Computer
 

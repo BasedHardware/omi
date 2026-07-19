@@ -1,6 +1,22 @@
 import Accelerate
 import Foundation
 
+/// Which table an embedding-index entry came from. `action_items` and
+/// `staged_tasks` are separate SQLite tables whose autoincrement rowids both
+/// start at 1, so a raw-`Int64`-keyed index silently collides low ids across the
+/// two tables. Carrying the source makes the key unique and lets search results
+/// be resolved against the correct table deterministically.
+enum TaskEmbeddingSource: String, Sendable {
+  case actionItem
+  case staged
+}
+
+/// Composite key for the in-memory task-embedding index (source + row id).
+struct TaskEmbeddingKey: Hashable, Sendable {
+  let source: TaskEmbeddingSource
+  let id: Int64
+}
+
 /// Actor-based service for embeddings using Gemini (3072-dim)
 actor EmbeddingService {
   static let shared = EmbeddingService()
@@ -9,8 +25,10 @@ actor EmbeddingService {
   static let embeddingDimension = 3072
   static var modelName: String { ModelQoS.Gemini.embedding }
 
-  /// In-memory index: action_item.id -> normalized embedding
-  private var index: [Int64: [Float]] = [:]
+  /// In-memory index: (source, row id) -> normalized embedding. Keyed by source
+  /// so action_items and staged_tasks with the same rowid never overwrite each
+  /// other (see TaskEmbeddingSource).
+  private var index: [TaskEmbeddingKey: [Float]] = [:]
   private var isIndexLoaded = false
 
   /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
@@ -18,7 +36,7 @@ actor EmbeddingService {
 
   /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingCString: cString), !url.isEmpty {
       return url.hasSuffix("/") ? url : url + "/"
     }
     return ""
@@ -134,8 +152,18 @@ actor EmbeddingService {
       throw EmbeddingError.invalidResponse
     }
 
-    return embeddings.compactMap { embedding in
-      guard let values = embedding["values"] as? [Double] else { return nil }
+    // Gemini returns embeddings 1:1 in request order. Callers zip results back to
+    // their input texts by position (backfill, OCR indexing), so a dropped or
+    // extra entry would silently persist an embedding onto the WRONG task. Fail
+    // the batch on any count mismatch or malformed entry instead of compactMap-ing
+    // (which would shift every subsequent embedding by one).
+    guard embeddings.count == texts.count else {
+      throw EmbeddingError.invalidResponse
+    }
+    return try embeddings.map { embedding in
+      guard let values = embedding["values"] as? [Double] else {
+        throw EmbeddingError.invalidResponse
+      }
       return normalize(values.map { Float($0) })
     }
   }
@@ -150,7 +178,7 @@ actor EmbeddingService {
       // Only keep the most recent embeddings (suffix = highest IDs = newest)
       for (id, data) in rows.suffix(maxIndexSize) {
         if let floats = dataToFloats(data) {
-          index[id] = floats
+          index[TaskEmbeddingKey(source: .actionItem, id: id)] = floats
         }
       }
       let actionCount = index.count
@@ -161,7 +189,7 @@ actor EmbeddingService {
         let stagedRows = try await StagedTaskStorage.shared.getAllEmbeddings()
         for (id, data) in stagedRows.suffix(remaining) {
           if let floats = dataToFloats(data) {
-            index[id] = floats
+            index[TaskEmbeddingKey(source: .staged, id: id)] = floats
           }
         }
       }
@@ -175,32 +203,39 @@ actor EmbeddingService {
     }
   }
 
-  /// Add a single embedding to the in-memory index (respects maxIndexSize)
-  func addToIndex(id: Int64, embedding: [Float]) {
+  /// Add a single embedding to the in-memory index (respects maxIndexSize).
+  /// `source` disambiguates action_items vs staged_tasks so colliding rowids do
+  /// not overwrite each other.
+  func addToIndex(source: TaskEmbeddingSource, id: Int64, embedding: [Float]) {
+    let key = TaskEmbeddingKey(source: source, id: id)
     // If at capacity and this is a new key, evict the oldest (lowest ID)
-    if index[id] == nil && index.count >= maxIndexSize {
-      if let oldestKey = index.keys.min() {
+    if index[key] == nil && index.count >= maxIndexSize {
+      if let oldestKey = index.keys.min(by: { $0.id < $1.id }) {
         index.removeValue(forKey: oldestKey)
       }
     }
-    index[id] = embedding
+    index[key] = embedding
   }
 
   /// Remove an entry from the index
-  func removeFromIndex(id: Int64) {
-    index.removeValue(forKey: id)
+  func removeFromIndex(source: TaskEmbeddingSource, id: Int64) {
+    index.removeValue(forKey: TaskEmbeddingKey(source: source, id: id))
   }
 
-  /// Search for similar items using cosine similarity via Accelerate/vDSP
-  func searchSimilar(query: [Float], topK: Int = 10) -> [(id: Int64, similarity: Float)] {
+  /// Search for similar items using cosine similarity via Accelerate/vDSP.
+  /// Each result carries its `source` so the caller resolves it against the
+  /// correct table (action_items vs staged_tasks) instead of guessing.
+  func searchSimilar(query: [Float], topK: Int = 10)
+    -> [(source: TaskEmbeddingSource, id: Int64, similarity: Float)]
+  {
     guard !index.isEmpty else { return [] }
 
-    var results: [(id: Int64, similarity: Float)] = []
+    var results: [(source: TaskEmbeddingSource, id: Int64, similarity: Float)] = []
     results.reserveCapacity(index.count)
 
-    for (id, stored) in index {
+    for (key, stored) in index {
       let sim = cosineSimilarity(query, stored)
-      results.append((id, sim))
+      results.append((key.source, key.id, sim))
     }
 
     // Sort descending by similarity and take topK
@@ -218,23 +253,36 @@ actor EmbeddingService {
 
   /// Batch-embed all tasks missing embeddings (action_items + staged_tasks)
   func backfillIfNeeded() async {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      return
+    }
     let batchSize = 100
     var totalProcessed = 0
 
     do {
       // Backfill action_items
       while true {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let items = try await ActionItemStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         if items.isEmpty { break }
 
         let texts = items.map { $0.description }
         let embeddings = try await embedBatch(texts: texts)
 
         for (i, embedding) in embeddings.enumerated() where i < items.count {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
           let item = items[i]
           let data = floatsToData(embedding)
-          try await ActionItemStorage.shared.updateEmbedding(id: item.id, embedding: data)
-          addToIndex(id: item.id, embedding: embedding)
+          try await ActionItemStorage.shared.updateEmbedding(
+            id: item.id,
+            embedding: data,
+            authorization: LocalMutationAuthorization {
+              RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+            }
+          )
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+          addToIndex(source: .actionItem, id: item.id, embedding: embedding)
         }
 
         totalProcessed += items.count
@@ -246,6 +294,7 @@ actor EmbeddingService {
 
       // Backfill staged_tasks
       while true {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let items = try await StagedTaskStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
         if items.isEmpty { break }
 
@@ -256,7 +305,7 @@ actor EmbeddingService {
           let item = items[i]
           let data = floatsToData(embedding)
           try await StagedTaskStorage.shared.updateEmbedding(id: item.id, embedding: data)
-          addToIndex(id: item.id, embedding: embedding)
+          addToIndex(source: .staged, id: item.id, embedding: embedding)
         }
 
         totalProcessed += items.count
@@ -269,7 +318,9 @@ actor EmbeddingService {
         log("EmbeddingService: Backfill complete — \(totalProcessed) items embedded")
       }
     } catch let error as EmbeddingError where error.isExpectedBackendState {
-      log("EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)")
+      log(
+        "EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)"
+      )
     } catch {
       logError("EmbeddingService: Backfill failed after \(totalProcessed) items", error: error)
     }

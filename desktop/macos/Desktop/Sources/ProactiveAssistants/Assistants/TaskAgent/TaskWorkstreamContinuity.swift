@@ -95,9 +95,8 @@ enum TaskWorkstreamContinuity {
     workstreamId: String,
     taskIds: [String],
     checkpoints: [OmiAPI.ContinuationCheckpoint],
-    control: Control = { name, input in
-      try await TaskChatRuntime.controlTool(name: name, input: input)
-    }
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    control: Control? = nil
   ) async throws -> TaskKernelPrepareReceipt {
     var input: [String: Any] = [
       "workstreamId": workstreamId,
@@ -113,7 +112,12 @@ enum TaskWorkstreamContinuity {
         "updatedAtMs": epochMilliseconds(checkpoint.updatedAt),
       ]
     }
-    let raw = try await control("prepare_workstream_continuity", input)
+    let raw = try await invoke(
+      control,
+      authorizationSnapshot: authorizationSnapshot,
+      name: "prepare_workstream_continuity",
+      input: input
+    )
     guard let data = raw.data(using: .utf8) else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
     let response = try JSONDecoder().decode(PrepareResponse.self, from: data)
     guard response.ok else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
@@ -138,11 +142,11 @@ enum TaskWorkstreamContinuity {
     workstream: TaskThreadProjection,
     queryResult: AgentBridge.QueryResult,
     chatMessageId: String,
-    control: Control = { name, input in
-      try await TaskChatRuntime.controlTool(name: name, input: input)
-    }
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    control: Control? = nil
   ) async throws -> TaskKernelContinuityReceipt {
-    let artifacts = (queryResult.completionDeltaArtifacts.isEmpty
+    let artifacts =
+      (queryResult.completionDeltaArtifacts.isEmpty
       ? queryResult.artifacts
       : queryResult.completionDeltaArtifacts)
       .filter(\.isUserFacingResult)
@@ -174,7 +178,12 @@ enum TaskWorkstreamContinuity {
       "context": try kernelContext(projection: workstream),
       "artifacts": artifactInputs,
     ]
-    let raw = try await control("persist_workstream_continuity", input)
+    let raw = try await invoke(
+      control,
+      authorizationSnapshot: authorizationSnapshot,
+      name: "persist_workstream_continuity",
+      input: input
+    )
     guard let data = raw.data(using: .utf8) else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
     let response = try JSONDecoder().decode(PersistResponse.self, from: data)
     guard response.ok else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
@@ -195,9 +204,8 @@ enum TaskWorkstreamContinuity {
     contentHash: String,
     evidenceRefs: [OmiAPI.EvidenceRef],
     grantId: String,
-    control: Control = { name, input in
-      try await TaskChatRuntime.controlTool(name: name, input: input)
-    }
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    control: Control? = nil
   ) async throws -> TaskKernelPreparedArtifactReceipt {
     guard !evidenceRefs.isEmpty else { throw TaskWorkstreamContinuityError.missingRevisionEvidence }
     let input: [String: Any] = [
@@ -210,7 +218,12 @@ enum TaskWorkstreamContinuity {
       "sourceArtifactId": "proactive-prepared:\(contentHash)",
       "grantId": grantId,
     ]
-    let raw = try await control("persist_prepared_workstream_artifact", input)
+    let raw = try await invoke(
+      control,
+      authorizationSnapshot: authorizationSnapshot,
+      name: "persist_prepared_workstream_artifact",
+      input: input
+    )
     guard let data = raw.data(using: .utf8) else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
     struct Response: Decodable {
       let ok: Bool
@@ -230,9 +243,8 @@ enum TaskWorkstreamContinuity {
     delivered: Bool,
     receipt: [String: Any]? = nil,
     error: Error? = nil,
-    control: Control = { name, input in
-      try await TaskChatRuntime.controlTool(name: name, input: input)
-    }
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    control: Control? = nil
   ) async throws {
     var input: [String: Any] = [
       "deliveryId": id,
@@ -245,26 +257,60 @@ enum TaskWorkstreamContinuity {
         "message": error.localizedDescription,
       ]
     }
-    _ = try await control("resolve_workstream_continuity_delivery", input)
+    _ = try await invoke(
+      control,
+      authorizationSnapshot: authorizationSnapshot,
+      name: "resolve_workstream_continuity_delivery",
+      input: input
+    )
   }
 
   static func project(
     workstreamId: String,
-    control: Control = { name, input in
-      try await TaskChatRuntime.controlTool(name: name, input: input)
-    }
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    control: Control? = nil
   ) async throws -> TaskKernelContinuityProjection {
     struct Response: Decodable {
       let ok: Bool
       let projection: TaskKernelContinuityProjection
     }
-    let raw = try await control("project_workstream_continuity", ["workstreamId": workstreamId])
+    let raw = try await invoke(
+      control,
+      authorizationSnapshot: authorizationSnapshot,
+      name: "project_workstream_continuity",
+      input: ["workstreamId": workstreamId]
+    )
     guard let data = raw.data(using: .utf8) else {
       throw TaskWorkstreamContinuityError.invalidRuntimeResponse
     }
     let response = try JSONDecoder().decode(Response.self, from: data)
     guard response.ok else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
     return response.projection
+  }
+
+  private static func invoke(
+    _ control: Control?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    name: String,
+    input: [String: Any]
+  ) async throws -> String {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw LocalMutationAuthorizationError.revoked
+    }
+    let raw: String
+    if let control {
+      raw = try await control(name, input)
+    } else {
+      raw = try await TaskChatRuntime.controlTool(
+        name: name,
+        input: input,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      throw LocalMutationAuthorizationError.revoked
+    }
+    return raw
   }
 
   static func continuityEvidence(
@@ -274,7 +320,8 @@ enum TaskWorkstreamContinuity {
     let canonical = projection.recentEvents
       .filter { $0.sensitivity == .normal }
       .flatMap { $0.evidenceRefs ?? [] }
-    let task = projection.scopedTasks
+    let task =
+      projection.scopedTasks
       .first(where: { $0.id == projection.activeTaskID })?
       .provenance ?? []
     let localTurn = OmiAPI.EvidenceRef(
@@ -299,7 +346,8 @@ enum TaskWorkstreamContinuity {
     {
       return sanitizeLogicalKey(String(metadataKey))
     }
-    let candidate = artifact.displayName?.isEmpty == false
+    let candidate =
+      artifact.displayName?.isEmpty == false
       ? artifact.displayName!
       : URL(string: artifact.uri)?.lastPathComponent ?? artifact.kind
     return sanitizeLogicalKey(candidate)

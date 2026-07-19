@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/integrations.dart';
@@ -13,7 +11,7 @@ abstract class BaseIntegrationService {
   BaseIntegrationService({required this.appKey, required this.prefKey});
 
   bool get isAuthenticated {
-    return SharedPreferencesUtil().getBool(prefKey) ?? false;
+    return SharedPreferencesUtil().getBool(prefKey);
   }
 
   Future<void> refreshConnectionStatus() async {

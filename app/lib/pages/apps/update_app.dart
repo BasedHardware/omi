@@ -477,7 +477,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                     () async {
                                       Navigator.pop(context);
                                       bool ok = await provider.updateApp();
-                                      if (ok) {
+                                      if (ok && context.mounted) {
                                         Navigator.pop(context);
                                       }
                                     },

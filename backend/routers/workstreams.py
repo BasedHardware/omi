@@ -1,6 +1,6 @@
 """Thread-behind-a-task APIs; workstream creation is intentionally intent-only."""
 
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
@@ -29,7 +29,7 @@ IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1,
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
 
-def _raise_store_error(exc: Exception) -> None:
+def _raise_store_error(exc: Exception) -> NoReturn:
     if isinstance(exc, workstreams_db.WorkstreamNotFoundError):
         raise HTTPException(status_code=404, detail='Workflow resource not found') from exc
     if isinstance(
@@ -60,7 +60,6 @@ def resolve_work_intent(
         return receipt
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
-        raise AssertionError('unreachable')
 
 
 @router.get('/v1/workstreams/{workstream_id}', tags=['tasks'], response_model=WorkstreamDetailProjection)
@@ -72,7 +71,6 @@ def get_workstream_detail(
         return workstreams_db.get_workstream_detail(uid, workstream_id)
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
-        raise AssertionError('unreachable')
 
 
 @router.patch('/v1/workstreams/{workstream_id}', tags=['tasks'], response_model=Workstream)
@@ -95,7 +93,6 @@ def update_workstream(
         return workstream
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
-        raise AssertionError('unreachable')
 
 
 @router.post('/v1/workstreams/{workstream_id}/events', tags=['tasks'], response_model=WorkstreamEvent)
@@ -116,7 +113,6 @@ def append_workstream_event(
         )
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
-        raise AssertionError('unreachable')
 
 
 @router.get('/v1/workstreams/{workstream_id}/events', tags=['tasks'], response_model=list[WorkstreamEvent])
@@ -152,7 +148,6 @@ def create_artifact_descriptor(
         )
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
-        raise AssertionError('unreachable')
 
 
 @router.patch(
@@ -179,7 +174,6 @@ def transition_artifact_status(
         )
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
-        raise AssertionError('unreachable')
 
 
 @router.get('/v1/workstreams/{workstream_id}/artifacts', tags=['tasks'], response_model=list[ArtifactDescriptor])
@@ -216,7 +210,6 @@ def upsert_continuation_checkpoint(
         )
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
-        raise AssertionError('unreachable')
 
 
 @router.get(
@@ -247,7 +240,6 @@ def import_task_goal_links(
         )
     except workstreams_db.WorkstreamStoreError as exc:
         _raise_store_error(exc)
-        raise AssertionError('unreachable')
 
 
 __all__ = ['router']

@@ -4,8 +4,7 @@ import XCTest
 
 @MainActor
 final class AgentRuntimeStatusStoreTests: XCTestCase {
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     AgentRuntimeStatusStore.shared.reset()
     TaskAgentStatusRegistry.shared.reset()
   }
@@ -26,6 +25,34 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertEqual(projection?.adapterSessionId, "native-1")
     XCTAssertEqual(projection?.status, .succeeded)
     XCTAssertEqual(store.projection(for: surface)?.sessionId, "ses-1")
+  }
+
+  func testUnknownResultTerminalStatusFailsClosed() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.workstream(workstreamId: "workstream-unknown")
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"result","protocolVersion":2,"requestId":"req","sessionId":"ses-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"future_terminal","text":"done"}"#
+    )!
+
+    store.ingest(message: message, surface: surface)
+
+    XCTAssertEqual(store.projection(for: surface)?.status, .failed)
+    XCTAssertEqual(
+      store.projection(for: surface)?.errorMessage,
+      "Agent returned an invalid terminal status")
+  }
+
+  func testCancelledResultNeverProjectsSuccess() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.workstream(workstreamId: "workstream-cancelled")
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"result","protocolVersion":2,"requestId":"req","sessionId":"ses-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"cancelled","text":"stopped"}"#
+    )!
+
+    store.ingest(message: message, surface: surface)
+
+    XCTAssertEqual(store.projection(for: surface)?.status, .cancelled)
+    XCTAssertNotEqual(store.projection(for: surface)?.status, .succeeded)
   }
 
   func testPresentationStartDoesNotFabricateTerminalSuccess() {
