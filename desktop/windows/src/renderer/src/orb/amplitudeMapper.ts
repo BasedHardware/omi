@@ -43,9 +43,9 @@
 // Typical mapping on a normal mic (floor ≈ -50 dBFS → floor+margin -40, clamped
 // to the gate band's top: gate -44; ceiling ≈ -13):
 //   room silence / breath  (< -44 dB) → 0        resting dots
-//   quiet speech           (≈ -32 dB) → ~0.36    clearly visible, well below max
-//   normal speech syllables(-25..-13) → ~0.52–0.78  mid-to-high, live dynamics
-//   loud speech            (ceiling..+7dB over) → ~0.78–0.92; only a >7dB
+//   quiet speech           (≈ -32 dB) → ~0.34    clearly visible, well below max
+//   normal speech syllables(-25..-13) → ~0.49–0.75  mid-to-high, live dynamics
+//   loud speech            (ceiling..+9dB over) → ~0.75–0.92; only a >9dB
 //                          outlier touches the 0.92 cap — never pinned there
 
 /** Raw linear levels at/below this (≈ −80 dBFS) are "no signal": output 0 and
@@ -86,8 +86,14 @@ export const GATE_HI_DB = -44
 /** Initial ceiling (dBFS) — normal-speech peaks on a typical mic. */
 export const CEIL_INIT_DB = -14
 /** Tau (s) pulling the ceiling UP toward a louder observation (fast, so the
- *  first loud sentence recalibrates within a breath). */
-export const CEIL_ATTACK_TAU = 0.25
+ *  first loud sentence recalibrates within a breath). 0.25 → 0.12 in the
+ *  round-2 trim (live data from the user's hot AGC-free mic): every emphasized
+ *  syllable sits above the tracked ceiling until the ceiling catches up, and
+ *  that catch-up window is exactly how long the bars pin near the top — halving
+ *  the attack halves the pin dwell. Cost: a transient plosive recalibrates the
+ *  ceiling faster too (following speech reads a touch lower until the 12s
+ *  decay), which points the same direction as the "too sensitive" complaint. */
+export const CEIL_ATTACK_TAU = 0.12
 /** Tau (s) letting the ceiling decay DOWN toward quieter speech (slow, so one
  *  soft sentence doesn't crush the range). */
 export const CEIL_DECAY_TAU = 12
@@ -106,8 +112,17 @@ export const CEIL_ABS_MAX_DB = -4
  *  emphasized syllable (typically 4–6dB over the tracked ceiling) clamped u to
  *  1 and slammed the cap; 7dB keeps those riding 0.8–0.9 and reserves the cap
  *  for genuine outliers. AMP_GAMMA dropped in the same change so the quiet end
- *  stays where it was (the headroom scales u down across the whole range). */
-export const CEIL_HEADROOM_DB = 7
+ *  stays where it was (the headroom scales u down across the whole range).
+ *  Round 2 (same day, "maxes out a lot" persisting on the user's REAL mic):
+ *  7 → 9. Live sampling showed his AGC-free mic runs ~12dB hotter than the
+ *  harness fixtures (normal speech peaks −8..−12dBFS — where the harness's
+ *  LOUD segment sat), so his ordinary emphasis was still clamping. Replaying
+ *  his captured stream: headroom 9 puts env p50 ≈ 0.68 / p90 ≈ 0.76 with time
+ *  ≥0.8 down from 7.1% to under 2% — "loud lives ~0.6–0.75, the cap is a rare
+ *  visitor". (The dominant fix landed at the PRODUCER: the hub lane published
+ *  256ms-chunk peaks held at 4Hz — no inter-syllable dips — now it relays the
+ *  capture's real 64ms/30Hz level; see voiceHubTurnDriver.onCaptureLevel.) */
+export const CEIL_HEADROOM_DB = 9
 
 // --- Output shaping ---------------------------------------------------------
 /** Perceptual exponent on the normalized level (dB normalization already does
