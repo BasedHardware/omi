@@ -55,8 +55,6 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return Consumer3<SyncProvider, UserProvider, DeviceProvider>(
       builder: (context, syncProvider, userProvider, deviceProvider, _) {
         final syncState = syncProvider.syncState;
-        final pendingWals = syncProvider.pendingWals;
-        final syncedWals = syncProvider.syncedWals;
         final hasAnyRecording = syncProvider.allWals.isNotEmpty;
         // Compute the filtered list once per build and pass it down — the
         // SliverList.builder uses it via index, so calling it again inside
@@ -82,7 +80,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 icon: FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
                 onPressed: () => _showInfoSheet(context),
               ),
-              if (pendingWals.isNotEmpty || syncedWals.isNotEmpty)
+              if (syncProvider.clearableWalsCount > 0)
                 IconButton(
                   icon: FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
                   onPressed: () => _showManageStorageSheet(context, syncProvider),
@@ -526,6 +524,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   Widget _buildWalListItem(SyncProvider syncProvider, List<Wal> wals, int i) {
     final wal = wals[i];
+    final state = wal.syncDisplayState;
     final isFirst = i == 0;
     final isLast = i == wals.length - 1;
     return Container(
@@ -544,7 +543,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             // Index suffix because `wal.id` (device_timerStart) is not unique
             // across SD-card + on-phone copies of the same recording.
             key: ValueKey('${wal.id}#$i'),
-            direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
+            direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return OmiConfirmDialog.show(
@@ -820,8 +819,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             confirmColor: Colors.red,
           );
           if (confirmed == true && context.mounted) {
-            await provider.deleteAllSyncedWals();
-            await provider.deleteAllPendingWals();
+            await provider.deleteAllClearableWals();
             if (context.mounted) {
               ScaffoldMessenger.of(
                 context,
@@ -883,7 +881,7 @@ class _ManageStorageSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final syncedCount = provider.syncedWals.length;
     final pendingCount = provider.pendingDeletableWals.length;
-    final totalCount = syncedCount + pendingCount;
+    final totalCount = provider.clearableWalsCount;
 
     return Container(
       decoration: const BoxDecoration(
