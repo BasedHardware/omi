@@ -38,6 +38,7 @@ class LockContract:
 LOCK_CONTRACTS = {
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
     "desktop_promote_prod.yml": LockContract("desktop-backend-promote-prod"),
+    "deploy-release-ring.yml": LockContract("deploy-release-ring-${{ inputs.ring }}"),
     "gcp_admin.yml": LockContract(
         "deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
@@ -84,6 +85,14 @@ LOCK_CONTRACTS = {
 # closed if that isolation is removed.
 RUN_SCOPED_EXEMPTIONS = {
     "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
+}
+
+# The record builder reads the serving public ConfigMap so that a record carries
+# deployable public values. It never runs Helm, kubectl apply, or a Cloud Run
+# mutation; classifying credential acquisition alone as a writer would hide
+# that distinction and force a meaningless deploy lock.
+READ_ONLY_WORKFLOW_EXEMPTIONS = {
+    "release-record.yml": 'kubectl -n "${ring}-omi-backend" get configmap "${ring}-omi-backend-config" -o json',
 }
 
 # Firestore index creation is a schema migration, not ordinary deploy work.
@@ -417,6 +426,10 @@ def pusher_preflight_step_is_valid(name: str, step: list[str]) -> bool:
 def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
     """Require an active ConfigMap check in the pusher deploy job before Helm."""
 
+    if name in READ_ONLY_WORKFLOW_EXEMPTIONS:
+        return []
+    if not is_persistent_writer(text):
+        return []
     if PUSHER_CHART_MARKER not in text:
         return []
     block = job_block(text, "deploy")
@@ -509,7 +522,7 @@ def check_repository() -> list[str]:
     errors.extend(validate_firestore_schema_writers(workflow_text))
 
     detected = {name for name, text in workflow_text.items() if is_persistent_writer(text)}
-    expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS)
+    expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS) | set(READ_ONLY_WORKFLOW_EXEMPTIONS)
     for name in sorted(detected - expected):
         errors.append(f"{name}: persistent deployment writer is missing from the lock policy")
     for name in sorted(expected - detected):
@@ -533,6 +546,14 @@ def check_repository() -> list[str]:
         text = workflow_text.get(name, "")
         if marker not in text:
             errors.append(f"{name}: run-scoped deploy-lock exemption lost required marker {marker!r}")
+
+    for name, marker in READ_ONLY_WORKFLOW_EXEMPTIONS.items():
+        text = workflow_text.get(name, "")
+        if marker not in text:
+            errors.append(f"{name}: read-only workflow exemption lost required marker {marker!r}")
+        for mutation in ("kubectl apply", "helm upgrade", "gcloud run deploy", "gcloud run services update"):
+            if mutation in text:
+                errors.append(f"{name}: read-only workflow exemption contains mutating command {mutation!r}")
 
     identity_markers = (
         'SHORT_SHA="$(git rev-parse --short=7 HEAD)"',
@@ -774,6 +795,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
       - run: helm upgrade ./backend/charts/pusher
 """
@@ -783,6 +805,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - name: Preflight pusher ConfigMap and Secret references
         run: |
           python3 -m pip install -q pyyaml
@@ -803,6 +826,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: helm upgrade backend/charts/pusher
 """
     if not validate_pusher_config_preflight("fixture.yml", equivalent_chart_path):
@@ -812,6 +836,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: helm upgrade ./backend/charts/pusher
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
 """
@@ -825,6 +850,7 @@ jobs:
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: helm upgrade ./backend/charts/pusher
 """
     if not validate_pusher_config_preflight("fixture.yml", cross_job_preflight):
@@ -834,6 +860,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - name: Disabled preflight
         if: false
         run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
@@ -846,6 +873,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - name: Nonfatal preflight
         continue-on-error: true
         run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
@@ -858,6 +886,7 @@ jobs:
 jobs:
   deploy:
     steps:
+      - uses: google-github-actions/get-gke-credentials@v3
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null || true
       - run: helm upgrade ./backend/charts/pusher
 """
