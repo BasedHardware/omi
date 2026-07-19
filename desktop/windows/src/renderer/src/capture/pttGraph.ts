@@ -64,6 +64,12 @@ export type PttCaptureOptions = {
  *  converts to Int16 once and fans out to the pre-roll ring + attached captures. */
 type MicGraph = {
   stream: MediaStream
+  /** AGC-free second stream feeding the orb analyser, hot-swapped in by
+   *  attachOrbTap AFTER the graph is live (null until then / on failure — the
+   *  orb analyser reads the processed `stream` meanwhile). */
+  orbStream: MediaStream | null
+  /** Set by destroyGraph so a late-resolving orb tap knows to discard itself. */
+  destroyed: boolean
   ctx: AudioContext
   source: MediaStreamAudioSourceNode
   processor: ScriptProcessorNode
@@ -86,12 +92,17 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
   analyser.smoothingTimeConstant = 0.85 // smooth, springy bars
   source.connect(analyser)
 
-  // A second, (near-)zero-smoothing analyser dedicated to the orb: the bars'
-  // 0.85 smoothing lags ~600ms and mutes syllable transients. This one passes
-  // the raw per-poll level through; the orb's own envelope does the shaping.
+  // A second analyser dedicated to the orb: the bars' 0.85 smoothing lags
+  // ~600ms and mutes syllable transients. The host reads this one's TIME-DOMAIN
+  // window (getFloatTimeDomainData) for a true linear peak — the canonical
+  // orbLevel unit, matching the hub driver's pcmPeakLevel — so fftSize sets the
+  // peak window: 1024 samples @16kHz ≈ 64ms, fully covering the ~33ms level
+  // poll. (smoothingTimeConstant only affects frequency data — irrelevant here.)
   const orbAnalyser = ctx.createAnalyser()
-  orbAnalyser.fftSize = 64
-  orbAnalyser.smoothingTimeConstant = 0.2
+  orbAnalyser.fftSize = 1024
+
+  // Until (and unless) the AGC-free tap below lands, the orb analyser reads the
+  // processed stream — compressed but working levels, never a gap.
   source.connect(orbAnalyser)
 
   const processor = ctx.createScriptProcessor(4096, 1, 1)
@@ -99,6 +110,8 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
 
   const graph: MicGraph = {
     stream,
+    orbStream: null,
+    destroyed: false,
     ctx,
     source,
     processor,
@@ -108,6 +121,11 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
     ring: [],
     ringSamples: 0
   }
+
+  // Fire-and-forget: the AGC-free orb tap is a visual upgrade and must NEVER
+  // gate capture readiness — the graph returns immediately on the fallback
+  // wiring and the tap hot-swaps in when (if) it resolves.
+  void attachOrbTap(graph)
 
   const ringCap = (PRE_ROLL_MS / 1000) * SAMPLE_RATE
   processor.onaudioprocess = (e): void => {
@@ -125,7 +143,110 @@ async function createGraph(trackRing: boolean): Promise<MicGraph> {
   return graph
 }
 
+/** Ceiling on the orb tap's device open. The fallback catch fires on REJECT —
+ *  a driver wedged on a concurrent same-device open would otherwise hang the
+ *  tap forever (harmless to capture, which never waits on it, but the orb
+ *  would silently stay on compressed levels with no diagnostic). */
+const ORB_TAP_TIMEOUT_MS = 3000
+
+/**
+ * Hot-swap the orb analyser onto its OWN AGC-free stream on the SAME device.
+ * The main stream keeps getUserMedia's default processing (echoCancellation +
+ * noiseSuppression + autoGainControl) — right for STT, but AGC compresses away
+ * exactly the loudness dynamics the orb visualizes (measured through VB-Cable:
+ * -26dB and -10dB inputs both surfaced ≈ -9dBFS after AGC). EC/NS stay on so
+ * playback echo and room hiss don't draw bars; only the gain flattening is
+ * removed. STT audio is untouched.
+ *
+ * Runs DETACHED from graph creation (see the `void attachOrbTap` call site):
+ * capture readiness never waits on this acquire, any failure/timeout leaves
+ * the fallback wiring (processed-stream levels) in place, and a resolution
+ * that arrives after the graph was destroyed discards itself.
+ */
+async function attachOrbTap(graph: MicGraph): Promise<void> {
+  let acquire: Promise<MediaStream> | null = null
+  let tap: MediaStream | null = null
+  try {
+    // Open by the CONCRETE device id, never the 'default'/'communications'
+    // alias: Chrome shares one input source per device-id STRING, and a second
+    // open of the SAME id silently inherits the first open's processing — the
+    // requested autoGainControl:false is ignored and getSettings() reports
+    // agc:true (measured). The concrete id forces a separate source with its
+    // own processing chain.
+    const settings = graph.stream.getAudioTracks()[0]?.getSettings()
+    let deviceId = settings?.deviceId
+    if (deviceId === 'default' || deviceId === 'communications') {
+      const concrete = (await navigator.mediaDevices.enumerateDevices()).find(
+        (d) =>
+          d.kind === 'audioinput' &&
+          d.groupId === settings?.groupId &&
+          d.deviceId !== 'default' &&
+          d.deviceId !== 'communications'
+      )
+      if (concrete) deviceId = concrete.deviceId
+    }
+    acquire = navigator.mediaDevices.getUserMedia({
+      audio: {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: false
+      }
+    })
+    tap = await Promise.race([
+      acquire,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`orb tap timed out after ${ORB_TAP_TIMEOUT_MS}ms`)),
+          ORB_TAP_TIMEOUT_MS
+        )
+      )
+    ])
+    if (graph.destroyed) {
+      for (const t of tap.getTracks()) t.stop()
+      return
+    }
+    // Honesty check: if the source still got shared, the constraint silently
+    // didn't take — that's a failed tap, not a working one.
+    if (tap.getAudioTracks()[0]?.getSettings().autoGainControl === true) {
+      throw new Error('autoGainControl still on (source was shared)')
+    }
+    // Swap: connect the tap first, then drop the fallback edge — no gap frame.
+    graph.ctx.createMediaStreamSource(tap).connect(graph.orbAnalyser)
+    graph.source.disconnect(graph.orbAnalyser)
+    graph.orbStream = tap
+    console.log(
+      '[audio] orb tap active:',
+      JSON.stringify(tap.getAudioTracks()[0]?.getSettings() ?? {})
+    )
+  } catch (e) {
+    // Loud on purpose: with the fallback the orb sees AGC-flattened levels, so
+    // "the visualizer barely tracks loudness" bugs start here.
+    console.warn('[audio] orb AGC-free tap failed — orb levels will be AGC-compressed:', e)
+    try {
+      tap?.getTracks().forEach((t) => t.stop())
+    } catch {
+      /* best effort */
+    }
+    // A timed-out open that resolves LATER must still be stopped — never leak
+    // a live mic stream.
+    acquire
+      ?.then((s) => {
+        if (s !== tap) for (const t of s.getTracks()) t.stop()
+      })
+      .catch(() => {})
+  }
+}
+
 function destroyGraph(graph: MicGraph): void {
+  graph.destroyed = true
+  // The orb's AGC-free stream is not part of the shared teardown shape — stop
+  // its tracks explicitly or the mic stays open (in-use indicator) after release.
+  try {
+    graph.orbStream?.getTracks().forEach((t) => t.stop())
+  } catch {
+    /* already stopped */
+  }
   teardownAudioGraph({
     nodes: [graph.processor, graph.source],
     stream: graph.stream,

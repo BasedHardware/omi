@@ -64,18 +64,20 @@ export type OrbProps = {
   className?: string
 }
 
-/** Raw voice level for the orb, ~0..1+. Prefers the source's fast `getOrbLevel`
- *  (a low-smoothing tap that tracks syllables; the bar bins are too smoothed to
- *  wave the blob); falls back to RMS of the frequency bins for a plain analyser.
- *  Either way the choreography envelope + soft-knee bound it downstream. */
+/** Raw voice level for the orb — the canonical linear amplitude 0..1 of full
+ *  scale. Prefers the source's fast `getOrbLevel` (already linear: the hub's
+ *  pcmPeakLevel or the capture window's time-domain peak). A plain analyser
+ *  source falls back to an APPROXIMATE linear level: invert the AnalyserNode
+ *  default byte↔dB mapping ([-100,-30] dBFS → [0,255]) on the hottest bin.
+ *  Either way the animator's adaptive mapper calibrates + bounds it downstream. */
 function sampleAmplitude(source: WaveformSource, scratch: Uint8Array): number {
   const fast = source.getOrbLevel?.()
   if (fast !== undefined) return fast
   source.getByteFrequencyData(scratch)
-  let sum = 0
-  for (let i = 0; i < scratch.length; i++) sum += scratch[i] * scratch[i]
-  const rms = Math.sqrt(sum / scratch.length) / 255
-  return rms * 2.2
+  let maxByte = 0
+  for (let i = 0; i < scratch.length; i++) if (scratch[i] > maxByte) maxByte = scratch[i]
+  if (maxByte === 0) return 0
+  return Math.pow(10, (-100 + (maxByte / 255) * 70) / 20)
 }
 
 export function Orb({

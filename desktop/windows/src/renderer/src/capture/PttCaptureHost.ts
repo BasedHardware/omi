@@ -49,25 +49,36 @@ function stopLevels(job: PttJob): void {
   }
 }
 
-/** Fast-response loudness 0..1: RMS of the (low-smoothing) orb analyser's bins,
- *  lifted the same ×2.2 the orb applied to the bar bins so downstream shaping is
- *  unchanged — only fresher. */
-function orbLevelFrom(bins: Uint8Array): number {
-  let sum = 0
-  for (let i = 0; i < bins.length; i++) sum += bins[i] * bins[i]
-  return (Math.sqrt(sum / bins.length) / 255) * 2.2
+/** Canonical orb loudness: linear peak amplitude 0..1 over the orb analyser's
+ *  time-domain window (fftSize 1024 ≈ 64ms @16kHz) — the SAME unit as the hub
+ *  driver's pcmPeakLevel, so the orb's adaptive AmplitudeMapper sees one scale
+ *  regardless of which voice path produced the level. (The old byte-frequency
+ *  RMS ×2.2 was a dB-domain quantity on a different scale entirely — the curve
+ *  calibrated to it silently broke when the hub path shipped linear peaks.) */
+function orbLevelFrom(analyser: AnalyserNode, scratch: Float32Array<ArrayBuffer>): number {
+  analyser.getFloatTimeDomainData(scratch)
+  let peak = 0
+  for (let i = 0; i < scratch.length; i++) {
+    const v = scratch[i] < 0 ? -scratch[i] : scratch[i]
+    if (v > peak) peak = v
+  }
+  return peak
 }
 
 function startLevels(captureId: string, job: PttJob): void {
   const analyser = job.capture!.analyser
   const orbAnalyser = job.capture!.orbAnalyser
   const bins = new Uint8Array(analyser.frequencyBinCount) // 32 bins (fftSize 64)
-  const orbBins = new Uint8Array(orbAnalyser.frequencyBinCount)
+  const orbScratch = new Float32Array(orbAnalyser.fftSize)
   job.levelsTimer = setInterval(() => {
     analyser.getByteFrequencyData(bins)
-    orbAnalyser.getByteFrequencyData(orbBins)
     emit(
-      { type: 'ptt-levels', captureId, bins: Array.from(bins), orbLevel: orbLevelFrom(orbBins) },
+      {
+        type: 'ptt-levels',
+        captureId,
+        bins: Array.from(bins),
+        orbLevel: orbLevelFrom(orbAnalyser, orbScratch)
+      },
       job.ownerId
     )
   }, LEVELS_INTERVAL_MS)

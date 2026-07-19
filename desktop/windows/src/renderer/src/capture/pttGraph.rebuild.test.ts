@@ -277,6 +277,89 @@ describe('rebuild ↔ warm race — no orphaned graph under PTT stress', () => {
   })
 })
 
+describe('orb AGC-free tap — never gates capture readiness', () => {
+  // The tap (attachOrbTap) is a fire-and-forget visual upgrade. The regression
+  // this guards: an awaited tap acquire put a second getUserMedia on the
+  // capture-readiness critical path — a driver wedged on the concurrent
+  // same-device open would have hung warm/capture forever.
+  const tapCapableStream = (): MediaStream =>
+    ({
+      getTracks: () => [],
+      getAudioTracks: () => [{ getSettings: () => ({ deviceId: 'default', groupId: 'g1' }) }]
+    }) as unknown as MediaStream
+
+  it('warm + capture complete while the tap getUserMedia is still PENDING; a late resolve after timeout is stopped, not leaked', async () => {
+    let resolveTap: ((s: MediaStream) => void) | undefined
+    const getUserMedia = vi.fn(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          resolveTap = resolve
+        })
+    )
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        enumerateDevices: vi.fn(async () => []),
+        getUserMedia
+      }
+    })
+    h.acquire.mockReset().mockResolvedValue(tapCapableStream())
+
+    const mod = await freshModule()
+    await mod.warmPttMic() // must resolve with the tap acquire parked forever
+    const cap = await mod.startPttCapture({}) // capture attaches on the fallback wiring
+    expect(cap).toBeTruthy()
+    // The tap attempt WAS made (async, off the critical path) and is still pending.
+    await vi.advanceTimersByTimeAsync(0)
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    // The timeout converts the hang into the loud fallback…
+    await vi.advanceTimersByTimeAsync(3000)
+    // …and a LATE resolution of the wedged open is stopped, never leaked.
+    const stop = vi.fn()
+    resolveTap!({
+      getTracks: () => [{ stop }],
+      getAudioTracks: () => [{ getSettings: () => ({}) }]
+    } as unknown as MediaStream)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(stop).toHaveBeenCalled()
+
+    cap.dispose()
+  })
+
+  it('a tap resolving after the graph was destroyed discards itself (no live mic left behind)', async () => {
+    let resolveTap: ((s: MediaStream) => void) | undefined
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        enumerateDevices: vi.fn(async () => []),
+        getUserMedia: vi.fn(
+          () =>
+            new Promise<MediaStream>((resolve) => {
+              resolveTap = resolve
+            })
+        )
+      }
+    })
+    h.acquire.mockReset().mockResolvedValue(tapCapableStream())
+
+    const mod = await freshModule()
+    await mod.warmPttMic()
+    await vi.advanceTimersByTimeAsync(0) // let attachOrbTap reach the acquire await
+    mod.releasePttMic() // destroys the warm graph while the tap is in flight
+
+    const stop = vi.fn()
+    resolveTap!({
+      getTracks: () => [{ stop }],
+      getAudioTracks: () => [{ getSettings: () => ({ autoGainControl: false }) }]
+    } as unknown as MediaStream)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(stop).toHaveBeenCalled()
+  })
+})
+
 describe('rebuild safety — never yanks an active hold', () => {
   it('defers when a hold is already attached, then runs on detach', async () => {
     const mod = await freshModule()
