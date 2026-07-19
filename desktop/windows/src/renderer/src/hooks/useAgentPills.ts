@@ -248,7 +248,9 @@ export function useAgentPills(activePillId: string | null): AgentPillsApi {
     // an already-in-flight poll can't resurrect it before that write lands. We
     // dismiss both the run and the session subject: the serializer's filter is an
     // OR over `run:<id>` / `session:<id>`, so covering both is resurrection-proof
-    // even if the session's projected run changes.
+    // even if the session's projected run changes. Dismissing the session is
+    // intentionally pill-wide, not over-broad: a floating_bar session is created
+    // per spawn, so it never hosts a second, unrelated pill.
     const pill = pillsRef.current.find((p) => p.id === id)
     if (pill?.runId) {
       rememberDismissed(dismissedRef.current, pill.runId)
