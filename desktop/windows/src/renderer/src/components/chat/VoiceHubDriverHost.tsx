@@ -88,6 +88,7 @@ export function VoiceHubDriverHost(): null {
         Promise.resolve('Error: tools are not available'),
       muteForCapture: muteSystemAudioForHubCapture
     })
+  // eslint-disable-next-line react-hooks/refs -- buildDriver only wires latest-refs into the driver's injected seams; they are read at event time, never during render
   const [driver, setDriver] = useState(buildDriver)
   // Latest-refs so the once-registered reset listener always disposes the LIVE
   // driver and builds with the freshest closures.
