@@ -1,6 +1,5 @@
-ROOT := $(shell git rev-parse --show-toplevel)
 HOOKS_DIR := $(shell git rev-parse --git-path hooks)
-PYTHON ?= $(shell bash -c 'source "$(ROOT)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
 
