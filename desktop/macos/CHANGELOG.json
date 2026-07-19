@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.84",
+      "date": "2026-07-19",
+      "changes": [
+        "Fixed a desktop memory search edge case so newly added memories remain searchable and their visibility can be updated.",
+        "Fixed AI-extracted task updates targeting the wrong task"
+      ]
+    },
+    {
       "version": "0.12.83",
       "date": "2026-07-19",
       "changes": [
