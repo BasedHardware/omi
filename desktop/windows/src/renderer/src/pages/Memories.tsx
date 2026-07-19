@@ -5,6 +5,7 @@ import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 import { BrainGraph } from '../components/graph/LazyBrainGraph'
+import { capGraph, DEFAULT_NODE_CAP } from '../lib/graphDisplay'
 import { useMemoryGraph } from '../hooks/useMemoryGraph'
 import { toast } from '../lib/toast'
 import { fetchAllMemories, deleteMemoriesPaced } from '../lib/memoriesBulk'
@@ -46,6 +47,16 @@ export function Memories(): React.JSX.Element {
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
   const { graph: brainGraph, centerNodeId } = useMemoryGraph(memories)
+  // The inline preview card decluttered to match the full-screen viewer's resting
+  // look: the same DEFAULT_NODE_CAP most-connected nodes (edges pruned to that set)
+  // and declutter labels. Without this the card rendered the whole graph with every
+  // node named — an unreadable wall of overlapping text at a real-account's ~188
+  // nodes. The card is non-interactive (no hover/select), so declutter shows the
+  // top-K hubs' labels only; the full-screen map is one click away for everything.
+  const previewGraph = useMemo(
+    () => capGraph(brainGraph, DEFAULT_NODE_CAP, centerNodeId),
+    [brainGraph, centerNodeId]
+  )
   // The brain map lazy-loads a ~1MB three.js chunk and then spins up WebGL, so
   // the container can otherwise sit blank for seconds with no hint anything is
   // coming. Track readiness via BrainGraph's onCreated signal, with a bounded
@@ -466,9 +477,10 @@ export function Memories(): React.JSX.Element {
                 className={`h-full w-full transition-opacity duration-500 ${graphReady ? 'opacity-100' : 'opacity-0'}`}
               >
                 <BrainGraph
-                  graph={brainGraph}
+                  graph={previewGraph}
                   centerNodeId={centerNodeId}
                   interactive={false}
+                  labelMode="declutter"
                   pauseWhenHidden
                   frameLoop="demand"
                   onReady={() => setGraphReady(true)}
