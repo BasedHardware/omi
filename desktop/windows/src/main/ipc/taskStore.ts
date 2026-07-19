@@ -835,6 +835,42 @@ export function hardDeleteAbsentTasksOn(d: TaskStoreDb, apiIds: string[]): numbe
   })
 }
 
+/** Hard-delete synced, COMPLETED local tasks whose backend_id is NOT in `apiIds`
+ *  (the backend's full completed listing). This is the completed-row twin of
+ *  hardDeleteAbsentTasks: it removes a locally-completed row whose backend
+ *  counterpart is gone (deleted on another surface), the one divergence the
+ *  incomplete reconcile can never reach because it only scans `completed = 0`.
+ *  Three guards make delete-by-absence safe (see the gauntlet data-loss lesson):
+ *    - EMPTY `apiIds` is a NO-OP — never wipe on an empty/failed completed listing;
+ *    - only synced rows (backend_synced = 1 AND backend_id set) are candidates, so
+ *      an unsynced local-completed create is never dropped (that is retry's job);
+ *    - a `recencyMs` window spares a just-toggled row whose completion PATCH is
+ *      still in flight (its backend_id has not yet appeared in the completed list),
+ *      mirroring syncTaskActionItems' 60s conflict window.
+ *  FIX (ii): returns the deleted local ids for embedding-index eviction. */
+export function hardDeleteAbsentCompletedTasksOn(
+  d: TaskStoreDb,
+  apiIds: string[],
+  now: number,
+  recencyMs = 60_000
+): number[] {
+  if (apiIds.length === 0) return []
+  return tx(d, () => {
+    const candidates = cachedStmt(
+      d,
+      `SELECT id, backend_id AS backendId FROM action_items
+           WHERE completed = 1 AND deleted = 0 AND backend_id IS NOT NULL
+             AND backend_synced = 1 AND updated_at < ?`
+    ).all(now - recencyMs) as { id: number; backendId: string | null }[]
+    const keep = new Set(apiIds)
+    const toDelete = candidates
+      .filter((c) => c.backendId && !keep.has(c.backendId))
+      .map((c) => c.id)
+    for (const id of toDelete) cachedStmt(d, 'DELETE FROM action_items WHERE id = ?').run(id)
+    return toDelete
+  })
+}
+
 /** Unsynced local action items (backend_synced = 0 AND backend_id NULL/''), active,
  *  oldest-first. By default excludes rows created in the last 30s (an API call may be
  *  in-flight); `includeRecent` skips that age filter. */

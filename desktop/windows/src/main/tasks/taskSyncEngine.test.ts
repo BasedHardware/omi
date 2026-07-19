@@ -31,13 +31,16 @@ const h = vi.hoisted(() => {
     markSyncedActionItem: vi.fn(() => ({ merged: false, keptId: 0 })),
     syncTaskActionItems: vi.fn(() => ({ skipped: 0, adopted: 0, inserted: 0, updated: 0 })),
     hardDeleteAbsentTasks: vi.fn((): number[] => []),
+    hardDeleteAbsentCompletedTasks: vi.fn((): number[] => []),
     getAppMeta: vi.fn((): string | null => '1'), // full-sync flag set → skip full sync by default
     setAppMeta: vi.fn(),
     // Event-driven promotion trigger (create.ts) — mocked so the engine's toggle/
     // delete promote calls are observable without pulling create's real deps.
     promoteIfNeeded: vi.fn(async () => {}),
     // `tasks:changed` broadcast spy — a fake window's webContents.send.
-    send: vi.fn()
+    send: vi.fn(),
+    // 429-degraded signal — the completed-reconcile guard. Default: healthy.
+    isBackendDegraded: vi.fn(() => false)
   }
 })
 
@@ -59,11 +62,19 @@ vi.mock('../ipc/db', () => ({
   markSyncedActionItem: h.markSyncedActionItem,
   syncTaskActionItems: h.syncTaskActionItems,
   hardDeleteAbsentTasks: h.hardDeleteAbsentTasks,
+  hardDeleteAbsentCompletedTasks: h.hardDeleteAbsentCompletedTasks,
   getAppMeta: h.getAppMeta,
   setAppMeta: h.setAppMeta
 }))
 
 vi.mock('../assistants/tasks/create', () => ({ promoteIfNeeded: h.promoteIfNeeded }))
+// The REAL core/session (used here) also imports noteBackendStatus from this
+// module and calls it after every fetch — mock it as a no-op so the shared module
+// mock doesn't strip it out and break session.ts's apiFetch.
+vi.mock('../observability/backendDegraded', () => ({
+  isBackendDegraded: h.isBackendDegraded,
+  noteBackendStatus: vi.fn()
+}))
 
 // Firebase-ish token: payload decodes to a uid (used only to key the full-sync flag).
 const TOKEN = `x.${Buffer.from(JSON.stringify({ user_id: 'u1' })).toString('base64')}.y`
@@ -117,6 +128,8 @@ beforeEach(() => {
   h.getAppMeta.mockReturnValue('1')
   h.getLocalActionItems.mockReturnValue([])
   h.hardDeleteAbsentTasks.mockReturnValue([])
+  h.hardDeleteAbsentCompletedTasks.mockReturnValue([])
+  h.isBackendDegraded.mockReturnValue(false)
   defaultRoute()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -216,6 +229,94 @@ describe('reconcile (hardDeleteAbsentTasks)', () => {
     nowSpy.mockReturnValue(t0 + 6 * 60_000) // +6 min, past throttle
     await engine.hydrateIncomplete()
     expect(h.hardDeleteAbsentTasks).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('completed-phantom reconcile (hardDeleteAbsentCompletedTasks)', () => {
+  it('hydrateCompleted reconciles a completed row absent from the backend completed list + evicts it', async () => {
+    h.hardDeleteAbsentCompletedTasks.mockReturnValue([77])
+    const { engine } = await freshEngine()
+    const evicted: unknown[] = []
+    engine.setTaskDeletionListener((d) => evicted.push(...d))
+
+    await engine.hydrateCompleted()
+
+    // Called with the backend's completed ids (the fetched list), and its deletions
+    // are evicted from the embedding index + broadcast.
+    expect(h.hardDeleteAbsentCompletedTasks).toHaveBeenCalledWith(['b1'], expect.any(Number))
+    expect(evicted).toEqual([{ source: 'action_item', id: 77 }])
+    expect(h.send).toHaveBeenCalledWith('tasks:changed')
+  })
+
+  it('empty-guard: a deletion of nothing does not fire the listener or broadcast', async () => {
+    h.hardDeleteAbsentCompletedTasks.mockReturnValue([])
+    const { engine } = await freshEngine()
+    const listener = vi.fn()
+    engine.setTaskDeletionListener(listener)
+
+    await engine.hydrateCompleted()
+
+    expect(h.hardDeleteAbsentCompletedTasks).toHaveBeenCalledWith(['b1'], expect.any(Number))
+    expect(listener).not.toHaveBeenCalled()
+    expect(h.send).not.toHaveBeenCalledWith('tasks:changed')
+  })
+
+  // The mass-flip guard: a 429 storm can return a thin/partial completed list, so the
+  // delete-by-absence sweep MUST be skipped entirely while degraded.
+  it('SKIPS the completed reconcile in the 429-degraded state', async () => {
+    h.isBackendDegraded.mockReturnValue(true)
+    h.hardDeleteAbsentCompletedTasks.mockReturnValue([77]) // would delete if it ran
+    const { engine } = await freshEngine()
+    const listener = vi.fn()
+    engine.setTaskDeletionListener(listener)
+
+    await engine.hydrateCompleted()
+
+    expect(h.hardDeleteAbsentCompletedTasks).not.toHaveBeenCalled()
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  // THE mass-flip regression: the sweep must NEVER run against a partial completed
+  // list. A multi-page fetch whose 2nd page rejects (500/429) makes fetchAll throw,
+  // so doHydrateCompleted's catch skips the reconcile entirely — no delete-by-absence
+  // off a truncated snapshot. This guards the invariant (fetchPage throws on !ok →
+  // fetchAll propagates) a refactor could silently break with an otherwise-green suite.
+  it('mass-flip guard: a page-2 failure in the completed fetch skips the reconcile (no delete)', async () => {
+    h.hardDeleteAbsentCompletedTasks.mockReturnValue([99]) // would delete a real row if ever called
+    h.netFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+      if ((init?.method ?? 'GET') !== 'GET') return h.jsonResponse({})
+      // Page 1 (offset=0): a page that signals more. Page 2 (offset=500): reject.
+      if (String(url).includes('offset=0'))
+        return h.jsonResponse({ action_items: [backendItem({ id: 'b1' })], has_more: true })
+      return h.jsonResponse({}, false, 500)
+    })
+    const { engine } = await freshEngine()
+    const listener = vi.fn()
+    engine.setTaskDeletionListener(listener)
+
+    await engine.hydrateCompleted() // swallows the fetch error
+
+    // fetchAll threw on page 2 → neither the sync nor the reconcile is reached.
+    expect(h.hardDeleteAbsentCompletedTasks).not.toHaveBeenCalled()
+    expect(h.syncTaskActionItems).not.toHaveBeenCalled()
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('throttles the completed reconcile to once per 5 minutes', async () => {
+    const t0 = 1_700_000_000_000
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(t0)
+    const { engine } = await freshEngine()
+
+    await engine.hydrateCompleted()
+    expect(h.hardDeleteAbsentCompletedTasks).toHaveBeenCalledTimes(1)
+
+    nowSpy.mockReturnValue(t0 + 60_000) // within throttle
+    await engine.hydrateCompleted()
+    expect(h.hardDeleteAbsentCompletedTasks).toHaveBeenCalledTimes(1)
+
+    nowSpy.mockReturnValue(t0 + 6 * 60_000) // past throttle
+    await engine.hydrateCompleted()
+    expect(h.hardDeleteAbsentCompletedTasks).toHaveBeenCalledTimes(2)
   })
 })
 

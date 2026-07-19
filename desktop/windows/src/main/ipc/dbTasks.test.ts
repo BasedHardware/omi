@@ -23,6 +23,7 @@ import {
   markSyncedActionItemOn,
   syncTaskActionItemsOn,
   hardDeleteAbsentTasksOn,
+  hardDeleteAbsentCompletedTasksOn,
   getUnsyncedActionItemsOn,
   getAllActionItemEmbeddingsOn,
   updateActionItemEmbeddingOn,
@@ -398,6 +399,64 @@ describe('hardDeleteAbsentTasks (empty-guard + returns ids)', () => {
       db.prepare('SELECT id FROM action_items ORDER BY id').all() as { id: number }[]
     ).map((r) => r.id)
     expect(remaining).toEqual([present.id, unsynced.id])
+  })
+})
+
+describe('hardDeleteAbsentCompletedTasks (completed-phantom convergence)', () => {
+  // A synced, COMPLETED row whose updated_at is safely older than the recency window.
+  const NOW = 2_000_000
+  const OLD = NOW - 120_000 // > default 60s recency
+  function completedSynced(desc: string, backendId: string, updatedAt = OLD): number {
+    const rec = insertLocalActionItemOn(
+      db,
+      ai({ description: desc, backendId, completed: true, createdAt: OLD, updatedAt })
+    )
+    markSyncedActionItemOn(db, rec.id, backendId, updatedAt) // sets updated_at = updatedAt
+    return rec.id
+  }
+
+  it('empty apiIds is a NO-OP (never wipes on an empty/failed completed listing)', () => {
+    completedSynced('keep', 'b1')
+    const deleted = hardDeleteAbsentCompletedTasksOn(db, [], NOW)
+    expect(deleted).toEqual([])
+    expect(db.prepare('SELECT COUNT(*) AS n FROM action_items').get()).toEqual({ n: 1 })
+  })
+
+  it('deletes completed synced rows absent from the backend completed list, keeps present', () => {
+    const present = completedSynced('present', 'present')
+    const absent = completedSynced('absent', 'absent')
+
+    const deleted = hardDeleteAbsentCompletedTasksOn(db, ['present'], NOW)
+    expect(deleted).toEqual([absent])
+    const remaining = (
+      db.prepare('SELECT id FROM action_items ORDER BY id').all() as { id: number }[]
+    ).map((r) => r.id)
+    expect(remaining).toEqual([present])
+  })
+
+  it('never touches incomplete rows, unsynced rows, or just-toggled (recent) rows', () => {
+    // An incomplete synced row absent from the completed list — the active reconcile's
+    // job, NOT this one; must survive.
+    const incompleteAbsent = insertLocalActionItemOn(
+      db,
+      ai({ description: 'active', backendId: 'active', completed: false, createdAt: OLD })
+    )
+    markSyncedActionItemOn(db, incompleteAbsent.id, 'active', OLD)
+    // A completed row with no backend_id (unsynced create) — retry's job; must survive.
+    const unsynced = insertLocalActionItemOn(
+      db,
+      ai({ description: 'unsynced', completed: true, createdAt: OLD, updatedAt: OLD })
+    )
+    // A completed synced row toggled just now (PATCH may still be in flight) — the
+    // recency window must spare it even though it is absent from the list.
+    const recent = completedSynced('recent', 'recent', NOW - 5_000)
+
+    const deleted = hardDeleteAbsentCompletedTasksOn(db, ['someOther'], NOW)
+    expect(deleted).toEqual([]) // nothing eligible
+    const remaining = (
+      db.prepare('SELECT id FROM action_items ORDER BY id').all() as { id: number }[]
+    ).map((r) => r.id)
+    expect(remaining).toEqual([incompleteAbsent.id, unsynced.id, recent])
   })
 })
 
