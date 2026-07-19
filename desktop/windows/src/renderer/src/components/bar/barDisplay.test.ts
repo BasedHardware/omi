@@ -7,7 +7,6 @@ import {
   isBarBusy,
   isPlaybackLevelFresh,
   PLAYBACK_LEVEL_FRESH_MS,
-  omiChatListStatus,
   deriveAgentRows,
   agentRowStatus,
   pillLabel,
@@ -17,14 +16,7 @@ import {
 } from './barDisplay'
 // Imported (not edited) to prove the seed actually triggers agent delegation.
 import { detectAgentTask } from '../../lib/agentTask'
-import type { BarChatState, CodingAgentInfo } from '../../../../shared/types'
-
-const chat = (partial: Partial<BarChatState> = {}): BarChatState => ({
-  messages: [],
-  sending: false,
-  status: 'idle',
-  ...partial
-})
+import type { CodingAgentInfo } from '../../../../shared/types'
 
 describe('deriveTurnPhase (the ONE precedence ladder orb + pill derive from)', () => {
   const base = {
@@ -247,32 +239,6 @@ describe('isBarBusy (pill retract-hold)', () => {
 
   it('is idle when nothing is in flight (the pill may retract)', () => {
     expect(isBarBusy({ recording: false, transcribing: false, status: 'idle' })).toBe(false)
-  })
-})
-
-describe('omiChatListStatus', () => {
-  it('reflects the live activity first', () => {
-    expect(omiChatListStatus(chat({ status: 'speaking' }))).toBe('Speaking…')
-    expect(omiChatListStatus(chat({ status: 'sending' }))).toBe('Thinking…')
-  })
-
-  it('previews the last turn (prefixing the user’s own line)', () => {
-    expect(
-      omiChatListStatus(chat({ messages: [{ role: 'assistant', content: 'Here is the answer' }] }))
-    ).toBe('Here is the answer')
-    expect(omiChatListStatus(chat({ messages: [{ role: 'user', content: 'what is next' }] }))).toBe(
-      'You: what is next'
-    )
-  })
-
-  it('collapses whitespace so a multi-line reply stays one line', () => {
-    expect(
-      omiChatListStatus(chat({ messages: [{ role: 'assistant', content: 'a\n\n  b   c' }] }))
-    ).toBe('a b c')
-  })
-
-  it('invites when the thread is empty', () => {
-    expect(omiChatListStatus(chat())).toBe('Ask me anything')
   })
 })
 
