@@ -90,4 +90,42 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
     let after = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: surfacedId)
     XCTAssertEqual(after?.description, "edited description", "edit by surfaced local_ id must persist")
   }
+
+  /// Undoing the delete of a local-only task must re-insert exactly one UNSYNCED
+  /// row — not fabricate a synced backend id from the "local_<rowid>" placeholder
+  /// and not create a duplicate. The pending create-sync remains the single
+  /// writer that gives it a real backend id.
+  func testRestoreLocalOnlyTaskReinsertsSingleUnsyncedRow() async throws {
+    let inserted = try await ActionItemStorage.shared.insertLocalActionItem(
+      ActionItemRecord(description: "offline completed task", source: "test"),
+      authorization: .unrestricted)
+    let surfacedId = inserted.toTaskActionItem().id
+    XCTAssertTrue(surfacedId.hasPrefix("local_"))
+
+    // Completed offline, before any sync.
+    try await ActionItemStorage.shared.updateCompletionStatus(
+      backendId: surfacedId, completed: true, authorization: .unrestricted)
+    guard let taskToRestore = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: surfacedId)
+    else { return XCTFail("expected the completed local-only task") }
+    XCTAssertTrue(taskToRestore.completed)
+
+    // Delete removes the local row (deleteTask hard-deletes for a local_ id).
+    try await ActionItemStorage.shared.deleteActionItemByBackendId(
+      surfacedId, deletedBy: "user", authorization: .unrestricted)
+
+    // Restore via the store's local-only restore record.
+    let record = TasksStore.localOnlyRestoreRecord(from: taskToRestore)
+    XCTAssertNil(record.backendId, "must not carry the local_ placeholder as a backend id")
+    XCTAssertFalse(record.backendSynced, "restored local-only task stays unsynced")
+    XCTAssertEqual(record.completed, true, "completion state is preserved across restore")
+    try await ActionItemStorage.shared.insertLocalActionItem(record, authorization: .unrestricted)
+
+    let restored = try await ActionItemStorage.shared.getLocalActionItems(
+      limit: 100, offset: 0, completed: true)
+    let matches = restored.filter { $0.description == "offline completed task" }
+    XCTAssertEqual(matches.count, 1, "restore must produce exactly one row, never a duplicate")
+    XCTAssertTrue(
+      matches[0].id.hasPrefix("local_"),
+      "restored task stays an unsynced local_ task, not a fabricated backend id")
+  }
 }

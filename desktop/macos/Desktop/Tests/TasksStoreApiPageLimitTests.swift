@@ -27,4 +27,20 @@ final class TasksStoreApiPageLimitTests: XCTestCase {
     XCTAssertEqual(TasksStore.clampedApiPageLimit(0), 1)
     XCTAssertEqual(TasksStore.clampedApiPageLimit(-5), 1)
   }
+
+  /// Auto-refresh must clamp only the API page, never the local-cache reload.
+  /// A user paginated past 500 incomplete tasks previously had the clamped
+  /// limit reused for the local reload, so `mergeWithoutAdding` dropped every
+  /// row beyond 500 and the list collapsed back to 500 on app activation/Cmd+R.
+  func testRefreshLimitsClampApiButPreserveLoadedRows() {
+    let limits = TasksStore.refreshLimits(pageSize: 50, loadedCount: 620)
+    XCTAssertEqual(limits.api, TasksStore.apiPageLimitCap, "API page must stay within the backend 422 cap")
+    XCTAssertEqual(limits.local, 620, "local reload must keep every loaded row, not be capped to 500")
+  }
+
+  func testRefreshLimitsUsePageSizeFloorWhenListIsSmall() {
+    let limits = TasksStore.refreshLimits(pageSize: 50, loadedCount: 10)
+    XCTAssertEqual(limits.api, 50)
+    XCTAssertEqual(limits.local, 50)
+  }
 }
