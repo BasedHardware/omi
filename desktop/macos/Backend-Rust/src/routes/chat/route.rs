@@ -60,6 +60,7 @@ pub(super) fn chat_metering_response(decision: &RateDecision) -> Option<Response
 const CHAT_COMPLETIONS_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
 async fn chat_completions(
     State(state): State<AppState>,
+    deadline: crate::request_deadline::RequestDeadline,
     user: PaywalledAuthUser,
     headers: HeaderMap,
     Json(req): Json<ChatCompletionRequest>,
@@ -175,6 +176,7 @@ async fn chat_completions(
             &user,
             &state,
             is_byok,
+            &deadline,
         )
         .await
     } else if req.stream {
@@ -186,6 +188,7 @@ async fn chat_completions(
             &user,
             &state,
             is_byok,
+            &deadline,
         )
         .await
     } else {
@@ -197,6 +200,7 @@ async fn chat_completions(
             &user,
             &state,
             is_byok,
+            &deadline,
         )
         .await
     }
@@ -206,4 +210,9 @@ pub(crate) fn chat_completions_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/chat/completions", post(chat_completions))
         .layer(DefaultBodyLimit::max(CHAT_COMPLETIONS_MAX_BODY_SIZE))
+        // Outermost for this route: the budget must exist before extractors and
+        // body extraction so auth/paywall waits are inside it (#9835).
+        .layer(axum::middleware::from_fn(
+            crate::request_deadline::attach_chat_request_deadline,
+        ))
 }
