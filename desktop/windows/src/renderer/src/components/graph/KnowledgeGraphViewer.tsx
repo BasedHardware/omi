@@ -52,7 +52,11 @@ export function KnowledgeGraphViewer(props: {
           interactive
           graph={visibleGraph}
           centerNodeId={centerNodeId}
-          frameLoop="always"
+          // demand + GraphPulseThrottle caps the render rate (~30fps idle / ~60fps
+          // while orbiting or hovering) instead of the display refresh rate. On a
+          // 240Hz monitor 'always' rendered a gentle pulse 240x/sec for no benefit;
+          // the pulse choreography is unchanged, just capped. See GraphPulseThrottle.
+          frameLoop="demand"
           labelMode="declutter"
         />
       ) : (

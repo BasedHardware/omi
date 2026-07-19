@@ -153,6 +153,12 @@ function GraphNodes({
   }, [count])
   useEffect(
     () => () => {
+      // Dispose the meshes too, not just geometry/material: instanceMatrix /
+      // instanceColor are InstancedBufferAttributes owned by the MESH, so their
+      // GPU buffers only free on mesh.dispose(). The layer set is rebuilt whenever
+      // the node COUNT changes (e.g. the Show all / Show key toggle), so leaking
+      // them there would accumulate.
+      for (const m of [layers.core, layers.glow, layers.bloom]) m.dispose()
       for (const g of [layers.coreGeo, layers.glowGeo, layers.bloomGeo]) g.dispose()
       for (const m of [layers.coreMat, layers.glowMat, layers.bloomMat]) m.dispose()
     },
@@ -192,6 +198,14 @@ function GraphNodes({
     const store = stateRef.current
     const t = frame.clock.elapsedTime
     let anyMoving = false
+
+    // Drop animation state for nodes that left the visible set (e.g. Show all →
+    // Show key), so a node re-added later flies in from its seed again instead of
+    // gliding from a stale on-screen spot. Cheap guard: only when the size drifts.
+    if (store.size !== nodes.length) {
+      const present = new Set(nodes.map((n) => n.id))
+      for (const id of [...store.keys()]) if (!present.has(id)) store.delete(id)
+    }
 
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i]
@@ -246,7 +260,12 @@ function GraphNodes({
     core.instanceMatrix.needsUpdate = true
     glow.instanceMatrix.needsUpdate = true
     bloom.instanceMatrix.needsUpdate = true
-    if (frameLoop === 'demand' && (anyMoving || !reduced)) invalidate()
+    // Keep repainting only while something is actually moving (position not
+    // settled or still growing in) — the faithful port of the per-mesh loop's
+    // `shouldContinue`. The continuous pulse is driven separately (GraphPulseThrottle
+    // for the interactive scene); the inline Memories card has no such driver, so it
+    // correctly idles after settle (its pulse freezes, as it did before this work).
+    if (frameLoop === 'demand' && anyMoving) invalidate()
   })
   /* eslint-enable react-hooks/immutability */
 
@@ -561,6 +580,15 @@ function GraphScene({
     if (frameLoop === 'demand') invalidate()
   }, [graph, frameLoop, invalidate])
 
+  // Diagnostic: publish the count of nodes actually fed to the scene so the perf
+  // harness can assert the cap round-trip (Show all → Show key drops it back).
+  // Interactive scene only, like the other probes.
+  useEffect(() => {
+    if (interactive) {
+      ;(window as unknown as { __omiGraphNodeCount?: number }).__omiGraphNodeCount = nodes.length
+    }
+  }, [interactive, nodes])
+
   // Advance the physics in the render loop (only while warm). Nothing here
   // touches React state, so the scene never re-renders frame to frame.
   useFrame(() => {
@@ -594,6 +622,7 @@ function GraphScene({
           fade in GraphNodeLabel. */}
       {interactive && <AdaptiveFog />}
       {interactive && <DrawCallProbe />}
+      {interactive && frameLoop === 'demand' && <GraphPulseThrottle active={hoveredId !== null} />}
       <GraphEdges sim={sim} edges={graph.edges} posMap={posMap} />
       <GraphNodes
         sim={sim}
@@ -622,15 +651,67 @@ function GraphScene({
 }
 
 // Diagnostic (interactive scene only): publish the live three.js draw-call count
-// on window so the perf harness can assert draw calls stay independent of graph
-// size after batching/instancing. Reading renderer.info is free; writing one
-// number per frame is negligible and never affects rendering.
+// AND a monotonically increasing render counter on window, so the perf harness can
+// assert (a) draw calls stay independent of graph size after batching/instancing,
+// and (b) the demand-mode throttle actually caps the render RATE (renders/sec) when
+// idle. Reading renderer.info is free; two number writes per frame are negligible.
 function DrawCallProbe(): null {
   const gl = useThree((s) => s.gl)
   useFrame(() => {
-    ;(window as unknown as { __omiGraphDrawCalls?: number }).__omiGraphDrawCalls =
-      gl.info.render.calls
+    const w = window as unknown as { __omiGraphDrawCalls?: number; __omiGraphRenders?: number }
+    w.__omiGraphDrawCalls = gl.info.render.calls
+    w.__omiGraphRenders = (w.__omiGraphRenders ?? 0) + 1
   })
+  return null
+}
+
+// Interactive-scene idle throttle (Option A). The brain map's per-node emissive
+// pulse animates forever, so the scene never truly settles — but with
+// frameLoop='demand' nothing repaints unless something calls invalidate(). This
+// driver keeps the pulse alive at a CAPPED rate instead of the display refresh
+// rate (which is 240Hz on a 240Hz monitor = 240 wasted render passes/sec of a
+// gentle pulse): ~30fps when idle, ~60fps while the user hovers or orbits. On a
+// 60Hz display it is a no-op. The pulse choreography is untouched — this bounds
+// HOW OFTEN it renders, it never freezes it (do NOT "optimize" this to 0; the
+// continuous pulse is deliberate animation). Mirrors OrbitControls'/OrbAnimator's
+// idle-throttle precedent. Only mounted for the interactive scene; the inline card
+// intentionally has no driver and idles after settle.
+function GraphPulseThrottle({ active }: { active: boolean }): null {
+  const invalidate = useThree((s) => s.invalidate)
+  const controls = useThree((s) => s.controls) as {
+    addEventListener?: (e: string, f: () => void) => void
+    removeEventListener?: (e: string, f: () => void) => void
+  } | null
+  const lastInteract = useRef(0)
+  const activeRef = useRef(active)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref: the rAF loop below reads the newest `active` without re-subscribing each render
+  activeRef.current = active
+
+  useEffect(() => {
+    if (!controls?.addEventListener) return
+    const onChange = (): void => {
+      lastInteract.current = performance.now()
+    }
+    controls.addEventListener('change', onChange)
+    return () => controls.removeEventListener?.('change', onChange)
+  }, [controls])
+
+  useEffect(() => {
+    let raf = 0
+    let last = 0
+    const tick = (now: number): void => {
+      raf = requestAnimationFrame(tick)
+      const hot = activeRef.current || now - lastInteract.current < 400
+      const interval = hot ? 1000 / 60 : 1000 / 30
+      // -1ms tolerance so a frame that lands a hair early still counts.
+      if (now - last >= interval - 1) {
+        last = now
+        invalidate()
+      }
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [invalidate])
   return null
 }
 

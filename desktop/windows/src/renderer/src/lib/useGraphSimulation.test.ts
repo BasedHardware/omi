@@ -153,4 +153,29 @@ describe('GraphSimulation', () => {
     // A cache hit on the 2D layout would leave every z exactly 0.
     expect(Math.max(...zs)).toBeGreaterThan(5)
   })
+
+  it('prunes nodes absent from a shrinking graph (Show all → Show key round-trip)', () => {
+    // Regression: setGraph only ever ADDED nodes (fine for grow-only onboarding),
+    // so when the knowledge-graph viewer's cap shrank the set — toggling
+    // "Show all 188" back to "Show key 120" — getPositions() kept reporting the
+    // 188-node high-water mark and the scene never shed the dropped spheres.
+    const sim = new GraphSimulation('user')
+    sim.setGraph(gBig)
+    sim.settle(60)
+    const full = sim.getPositions().length
+    expect(full).toBe(gBig.nodes.length)
+
+    // Feed a strict subset (drop everything but the center + one node).
+    const kept = gBig.nodes.slice(0, 2).map((n) => n.id)
+    const shrunk: KnowledgeGraph = {
+      nodes: gBig.nodes.filter((n) => kept.includes(n.id)),
+      edges: gBig.edges.filter((e) => kept.includes(e.sourceId) && kept.includes(e.targetId))
+    }
+    sim.setGraph(shrunk)
+    const after = sim.getPositions()
+    expect(after.length).toBe(2)
+    expect(after.map((p) => p.id).sort()).toEqual([...kept].sort())
+    // The dropped nodes must be gone from the live map too, not just the report.
+    expect(sim.liveNode(gBig.nodes[3].id)).toBeUndefined()
+  })
 })

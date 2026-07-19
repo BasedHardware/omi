@@ -91,6 +91,17 @@ const measureFps = (page, ms) =>
     ms
   )
 
+// Actual three.js RENDER rate (renders/sec) over `ms`, from the probe's render
+// counter. This is what the demand-mode throttle caps — distinct from the rAF/
+// compositor rate above. Idle (no hover/orbit) should sit near the ~30fps cap.
+const measureRenderRate = async (page, ms) => {
+  const start = await page.evaluate(() => window.__omiGraphRenders ?? 0)
+  await page.waitForTimeout(ms)
+  const end = await page.evaluate(() => window.__omiGraphRenders ?? 0)
+  return Math.round(((end - start) * 1000) / ms)
+}
+const nodeCount = (page) => page.evaluate(() => window.__omiGraphNodeCount ?? -1)
+
 describe('Brain-map performance at real-account scale', () => {
   test('measure draw calls + fps, default view and show-all', async (t) => {
     mkdirSync(shotsDir, { recursive: true })
@@ -122,11 +133,23 @@ describe('Brain-map performance at real-account scale', () => {
 
     const drawCalls = (p) => p.evaluate(() => window.__omiGraphDrawCalls ?? -1)
 
+    // Move the pointer well off the canvas so nothing is hovered → true idle.
+    await page.mouse.move(5, 5)
+    await page.waitForTimeout(500)
     const fpsDefault = await measureFps(page, 4000)
     const callsDefault = await drawCalls(page)
+    const idleRenderRate = await measureRenderRate(page, 2000)
+    const nodesDefault = await nodeCount(page)
     await page.screenshot({ path: path.join(shotsDir, 'default-view.png') })
     console.log(
-      `[kg-perf] DEFAULT nodes=${GRAPH.nodes.length} edges=${GRAPH.edges.length} fps=${fpsDefault} drawCalls=${callsDefault}`
+      `[kg-perf] DEFAULT nodes=${nodesDefault} edges=${GRAPH.edges.length} fps=${fpsDefault} drawCalls=${callsDefault} idleRenderRate=${idleRenderRate}/s`
+    )
+    // The idle throttle must cap renders well below the compositor rate (the pulse
+    // is continuous, so it never hits 0 — ~30fps by design). Generous ceiling to
+    // stay non-flaky under headless load; the point is "not the 180+ rAF rate".
+    assert.ok(
+      idleRenderRate > 0 && idleRenderRate <= 70,
+      `idle render rate should be throttled (got ${idleRenderRate}/s vs ~${fpsDefault} rAF)`
     )
 
     // Picking after instancing: hovering a node must still name it (instanceId
@@ -149,15 +172,28 @@ describe('Brain-map performance at real-account scale', () => {
     assert.ok(hovered, 'hovering a node must set the pointer cursor (instanceId picking works)')
     console.log(`[kg-perf] PICKING hover→pointer OK (canvas ${box ? `${Math.round(box.width)}x${Math.round(box.height)}` : 'n/a'})`)
 
-    // Escape hatch: if a "Show all" control exists (post-change), exercise it.
+    // Escape hatch + cap ROUND-TRIP (the audit's Major-1 regression): default is
+    // capped, "Show all" renders the full set, and "Show key" must drop it BACK —
+    // the sim has to prune, or it stays stuck at the 188 high-water mark.
     const showAll = page.getByRole('button', { name: /show all/i })
     if ((await showAll.count()) > 0) {
+      assert.equal(nodesDefault, 120, `default view should be capped to 120, got ${nodesDefault}`)
+
       await showAll.first().click()
       await page.waitForTimeout(3000)
+      const nodesAll = await nodeCount(page)
       const fpsAll = await measureFps(page, 4000)
       const callsAll = await drawCalls(page)
       await page.screenshot({ path: path.join(shotsDir, 'show-all-view.png') })
-      console.log(`[kg-perf] SHOW_ALL fps=${fpsAll} drawCalls=${callsAll}`)
+      console.log(`[kg-perf] SHOW_ALL nodes=${nodesAll} fps=${fpsAll} drawCalls=${callsAll}`)
+      assert.equal(nodesAll, GRAPH.nodes.length, `Show all should render every node, got ${nodesAll}`)
+
+      // Toggle BACK — the path the screenshot pass never tested.
+      await page.getByRole('button', { name: /show key/i }).click()
+      await page.waitForTimeout(3000)
+      const nodesBack = await nodeCount(page)
+      console.log(`[kg-perf] ROUND_TRIP show-key-again nodes=${nodesBack}`)
+      assert.equal(nodesBack, 120, `Show key must drop the sphere count back to 120, got ${nodesBack} (setGraph prune)`)
     } else {
       console.log('[kg-perf] SHOW_ALL control absent (baseline / capless build)')
     }
