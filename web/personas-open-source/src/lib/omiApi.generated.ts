@@ -6973,6 +6973,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/users/daily-summaries/by-date": {
+    get: {
+      operationId: "get_daily_summary_for_date_v1_users_daily_summaries_by_date_get";
+      responses: {
+        "200": DailySummaryResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/users/daily-summaries/{summary_id}": {
     get: {
       operationId: "get_daily_summary_v1_users_daily_summaries__summary_id__get";
@@ -13346,6 +13356,28 @@ export async function get_daily_summaries_v1_users_daily_summaries_get(query: { 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_daily_summary_for_date_v1_users_daily_summaries_by_date_get(query: { date: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummaryResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/daily-summaries/by-date`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_daily_summary_v1_users_daily_summaries__summary_id__get(path: { summary_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummaryResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summaries/${path.summary_id}`;
@@ -15539,4 +15571,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 382 client methods generated.

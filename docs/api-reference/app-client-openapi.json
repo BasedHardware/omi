@@ -45888,6 +45888,95 @@
         ]
       }
     },
+    "/v1/users/daily-summaries/by-date": {
+      "get": {
+        "description": "Get the daily summary (recap) for a specific date, so a client can fetch a\npast day's recap directly instead of paging the whole list to find it.",
+        "operationId": "get_daily_summary_for_date_v1_users_daily_summaries_by_date_get",
+        "parameters": [
+          {
+            "description": "Date in YYYY-MM-DD format",
+            "in": "query",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "description": "Date in YYYY-MM-DD format",
+              "title": "Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Daily Summary For Date",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
     "/v1/users/daily-summaries/{summary_id}": {
       "delete": {
         "description": "Delete a daily summary by ID.",

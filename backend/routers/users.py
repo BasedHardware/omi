@@ -1592,6 +1592,26 @@ def get_daily_summaries(
     return {'summaries': summaries}
 
 
+# Declared before /daily-summaries/{summary_id} so "by-date" is not read as a summary id.
+@router.get('/v1/users/daily-summaries/by-date', tags=['v1'], response_model=DailySummaryResponse)
+def get_daily_summary_for_date(
+    date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Get the daily summary (recap) for a specific date, so a client can fetch a
+    past day's recap directly instead of paging the whole list to find it.
+    """
+    try:
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        raise HTTPException(status_code=400, detail='date must be in YYYY-MM-DD format')
+    summary = daily_summaries_db.get_daily_summary_by_date(uid, date)
+    if not summary:
+        raise HTTPException(status_code=404, detail='No daily summary found for that date')
+    return summary
+
+
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
 def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """

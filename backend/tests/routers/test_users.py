@@ -373,3 +373,24 @@ def test_export_all_user_data_keeps_streaming_headers():
         return ''.join(parts)
 
     assert asyncio.run(_consume()) == '{"ok": true}\n'
+
+
+def test_daily_summary_by_date_rejects_bad_format():
+    with pytest.raises(HTTPException) as exc:
+        users_router.get_daily_summary_for_date(date='07-01-2026', uid='uid1')
+    assert exc.value.status_code == 400
+
+
+def test_daily_summary_by_date_returns_404_when_missing():
+    with patch.object(users_router.daily_summaries_db, 'get_daily_summary_by_date', return_value=None):
+        with pytest.raises(HTTPException) as exc:
+            users_router.get_daily_summary_for_date(date='2026-07-01', uid='uid1')
+    assert exc.value.status_code == 404
+
+
+def test_daily_summary_by_date_returns_summary():
+    summary = {'id': 's1', 'date': '2026-07-01', 'content': 'recap'}
+    with patch.object(users_router.daily_summaries_db, 'get_daily_summary_by_date', return_value=summary) as mock_get:
+        result = users_router.get_daily_summary_for_date(date='2026-07-01', uid='uid1')
+    assert result == summary
+    mock_get.assert_called_once_with('uid1', '2026-07-01')
