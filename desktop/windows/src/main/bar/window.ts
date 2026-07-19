@@ -368,19 +368,23 @@ function unparkWindow(win: BrowserWindow, bounds: Rect): void {
   // the drift synchronously. No-op on a normal reveal (the first setBounds
   // matches), so the #193 staging path and every other reveal are unchanged.
   //
-  // This corrective branch is UNVERIFIED in the real exclusive-fullscreen trigger
-  // (it could not be reproduced on the dev hardware — a borderless-fullscreen app
-  // does not de-composite the monitor). The pre/post getBounds in the diag below
-  // settles it the next time the bug is hit live: if `now` matches the request the
-  // re-apply worked (Theory A); if `now` is still drifted the destination monitor
-  // stayed de-composited and the re-apply is a harmless no-op (Theory B).
+  // This corrective branch is UNVERIFIED in the real trigger (it could not be
+  // reproduced on the dev hardware — the observed triggers, a borderless-fullscreen
+  // app AND fullscreening/maximizing an Omi window itself, do NOT de-composite the
+  // monitor). The pre/post getBounds is logged at WARN (NOT the dev-only diag —
+  // the bug hits production builds where diag is silent) so the next live encounter
+  // settles it: if `corrected` matches the request the re-apply worked (Theory A);
+  // if it is still drifted the destination monitor stayed de-composited and the
+  // re-apply is a harmless no-op (Theory B). This branch never runs on a normal
+  // reveal, so the WARN is only emitted when the actual bug fires.
   const revealed = win.getBounds()
   if (boundsSizeDrifted(bounds, revealed)) {
     win.setBounds(bounds)
     const corrected = win.getBounds()
-    diag(
-      `unpark size drift ${revealed.width}x${revealed.height}: re-applied ` +
-        `${bounds.width}x${bounds.height} -> now ${corrected.width}x${corrected.height}`
+    console.warn(
+      `[bar] reveal size drift ${revealed.width}x${revealed.height} vs requested ` +
+        `${bounds.width}x${bounds.height} (cross-DPI); re-applied -> now ` +
+        `${corrected.width}x${corrected.height}`
     )
   }
   if (PARK_MODE === 'opacity') win.setOpacity(1)
