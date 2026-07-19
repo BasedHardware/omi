@@ -1,0 +1,3 @@
+{
+  "change": "Improved Rewind reliability so a newly started recording is not lost during cleanup"
+}

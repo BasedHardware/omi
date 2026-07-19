@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from database import conversation_finalization_jobs as jobs_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
 from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
@@ -120,6 +121,17 @@ def test_required_cloud_tasks_rejects_rest_admission_before_outbox_mutation(monk
         )
 
     create.assert_not_called()
+
+
+def test_durable_finalization_maps_exhausted_firestore_contention_to_retryable_admission_failure(monkeypatch):
+    create = MagicMock(side_effect=FirestoreContentionExhausted('contention'))
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', create)
+
+    with pytest.raises(lifecycle_service.FinalizationDispatchUnavailable) as raised:
+        lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
+
+    assert isinstance(raised.value.__cause__, FirestoreContentionExhausted)
+    create.assert_called_once()
 
 
 def test_listen_finalization_dispatch_configuration_requires_every_static_binding(monkeypatch):

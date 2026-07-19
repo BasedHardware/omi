@@ -42,6 +42,11 @@ PYTHON = BACKEND / '.venv' / 'bin' / 'python'
 ADMIN_KEY = 'omi-listen-pusher-stack-admin-'
 PROJECT = 'demo-omi-listen-stack'
 LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'
+REST_FINALIZATION_RACE_ENV = (
+    'OMI_STACK_FINALIZATION_RACE_UID',
+    'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID',
+    'OMI_STACK_FINALIZATION_RACE_PARTIES',
+)
 
 
 class StackFailure(AssertionError):
@@ -115,13 +120,26 @@ class Stack:
         *,
         finalization_mode: str = 'inline',
         finalizer_failures: dict[str, int] | None = None,
+        rest_finalization_race_uid: str | None = None,
+        rest_finalization_race_parties: int = 0,
     ):
         if finalization_mode not in {'inline', 'cloud_tasks'}:
             raise ValueError(f'unsupported finalization mode: {finalization_mode}')
+        if rest_finalization_race_parties and not rest_finalization_race_uid:
+            raise ValueError('REST finalization race requires a target user')
+        if rest_finalization_race_parties < 0:
+            raise ValueError('REST finalization race party count cannot be negative')
+        if rest_finalization_race_uid and rest_finalization_race_parties < 2:
+            raise ValueError('REST finalization race requires at least two parties')
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.finalization_mode = finalization_mode
         self.finalizer_failures = finalizer_failures or {}
+        self.rest_finalization_race_uid = rest_finalization_race_uid
+        self.rest_finalization_race_parties = rest_finalization_race_parties
+        self.rest_finalization_race_conversation_id = (
+            str(uuid.uuid4()) if rest_finalization_race_uid is not None else None
+        )
         self.redis_port = _free_port()
         self.backend_port = _free_port()
         self.finalization_worker_port = _free_port()
@@ -190,20 +208,37 @@ class Stack:
                     'OMI_STACK_FINALIZATION_FAILURES': json.dumps(self.finalizer_failures, sort_keys=True),
                 }
             )
+        if self.rest_finalization_race_uid is not None and self.rest_finalization_race_conversation_id is not None:
+            env.update(
+                {
+                    'OMI_STACK_FINALIZATION_RACE_UID': self.rest_finalization_race_uid,
+                    'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID': self.rest_finalization_race_conversation_id,
+                    'OMI_STACK_FINALIZATION_RACE_PARTIES': str(self.rest_finalization_race_parties),
+                }
+            )
         return env
 
     @property
     def finalization_handler_url(self) -> str:
         return f'http://127.0.0.1:{self.finalization_worker_port}{FINALIZATION_HANDLER_PATH}'
 
-    def _start(self, name: str, command: list[str], *, extra_env: dict[str, str] | None = None) -> Child:
+    def _start(
+        self,
+        name: str,
+        command: list[str],
+        *,
+        extra_env: dict[str, str] | None = None,
+        unset_env: tuple[str, ...] = (),
+    ) -> Child:
         if name in self.children:
             raise StackFailure(f'{name} is already running')
         log_path = self.state_dir / f'{name}.log'
         process_env = self.env.copy()
+        for key in unset_env:
+            process_env.pop(key, None)
         if extra_env:
             process_env.update(extra_env)
-        output = log_path.open('wb')
+        output = log_path.open('ab')
         process = subprocess.Popen(
             command,
             cwd=BACKEND,
@@ -269,14 +304,7 @@ class Stack:
             extra_env=pusher_env,
         )
         _wait_for_port(self.pusher_port, label='pusher', child=pusher_child)
-        backend_app = (
-            'testing.listen_pusher_stack.listener_app:app' if self.finalization_mode == 'cloud_tasks' else 'main:app'
-        )
-        backend_child = self._start(
-            'backend',
-            [str(PYTHON), '-m', 'uvicorn', backend_app, '--host', '127.0.0.1', '--port', str(self.backend_port)],
-        )
-        _wait_for_port(self.backend_port, label='listen backend', timeout=45.0, child=backend_child)
+        self._start_backend()
         if self.finalization_mode == 'cloud_tasks':
             worker_child = self._start(
                 'finalization-worker',
@@ -298,6 +326,17 @@ class Stack:
                 child=worker_child,
             )
 
+    def _start_backend(self, *, enable_rest_finalization_race: bool = True) -> None:
+        backend_app = (
+            'testing.listen_pusher_stack.listener_app:app' if self.finalization_mode == 'cloud_tasks' else 'main:app'
+        )
+        backend_child = self._start(
+            'backend',
+            [str(PYTHON), '-m', 'uvicorn', backend_app, '--host', '127.0.0.1', '--port', str(self.backend_port)],
+            unset_env=() if enable_rest_finalization_race else REST_FINALIZATION_RACE_ENV,
+        )
+        _wait_for_port(self.backend_port, label='listen backend', timeout=45.0, child=backend_child)
+
     def restart_pusher(self, *, drop_opcode: int | None = None) -> None:
         self.stop('pusher')
         pusher_env = {'OMI_STACK_DROP_PUBLISHING_ON_OPCODE': str(drop_opcode)} if drop_opcode is not None else None
@@ -316,6 +355,13 @@ class Stack:
             extra_env=pusher_env,
         )
         _wait_for_port(self.pusher_port, label='restarted pusher', child=pusher_child)
+
+    def restart_backend(self) -> None:
+        """Prove the durable task survives loss of its originating listener."""
+        self.stop('backend')
+        # The controlled stale-read race belongs only to the first listener;
+        # normal post-restart status reads must use the unmodified entrypoint.
+        self._start_backend(enable_rest_finalization_race=False)
 
     def stop(self, name: str) -> None:
         child = self.children.pop(name, None)
@@ -343,10 +389,12 @@ class Stack:
         return _read_events(self.state_dir / 'finalizer.jsonl')
 
     @property
+    def finalization_task_events(self) -> list[dict[str, Any]]:
+        return _read_events(self.state_dir / TASK_EVENTS_FILE)
+
+    @property
     def finalization_tasks(self) -> list[dict[str, Any]]:
-        return [
-            event for event in _read_events(self.state_dir / TASK_EVENTS_FILE) if event.get('event') == 'task_enqueued'
-        ]
+        return [event for event in self.finalization_task_events if event.get('event') == 'task_enqueued']
 
     def wait_for_finalization_task(self, *, count: int = 1, timeout: float = 20.0) -> dict[str, Any]:
         tasks: list[dict[str, Any]] = []
@@ -359,7 +407,9 @@ class Stack:
         _wait_until(enqueued, label='loopback Cloud Tasks enqueue', timeout=timeout)
         return tasks[count - 1]
 
-    async def deliver_finalization_task(self, task: dict[str, Any], *, retry_count: int) -> tuple[int, dict[str, Any]]:
+    async def deliver_finalization_task(
+        self, task: dict[str, Any], *, retry_count: int, authenticated: bool = True
+    ) -> tuple[int, dict[str, Any]]:
         if self.finalization_mode != 'cloud_tasks':
             raise StackFailure('only the Cloud Tasks stack can deliver finalization tasks')
         if task.get('url') != self.finalization_handler_url:
@@ -367,14 +417,14 @@ class Stack:
         payload = task.get('payload')
         if not isinstance(payload, dict) or set(payload) != {'job_id', 'dispatch_generation'}:
             raise StackFailure('loopback task payload was not opaque durable routing data')
+        headers = {'X-CloudTasks-TaskRetryCount': str(retry_count)}
+        if authenticated:
+            headers['Authorization'] = f'Bearer {LOCAL_TASK_TOKEN}'
         async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
             response = await client.post(
                 self.finalization_handler_url,
                 json=payload,
-                headers={
-                    'Authorization': f'Bearer {LOCAL_TASK_TOKEN}',
-                    'X-CloudTasks-TaskRetryCount': str(retry_count),
-                },
+                headers=headers,
             )
         try:
             body = response.json()
@@ -510,6 +560,27 @@ async def _record_audio(websocket: Any) -> None:
         lambda payload: isinstance(payload, list) and bool(payload) and payload[0].get('id') == 'stack-segment-1',
         label='streamed transcript',
     )
+
+
+async def _request_rest_finalization(
+    stack: Stack, conversation_id: str, uid: str, *, requests: int = 4
+) -> list[httpx.Response]:
+    """Issue one or more public REST admissions through the durable outbox."""
+    if requests < 1:
+        raise ValueError('REST finalization requires at least one request')
+    limits = httpx.Limits(max_connections=requests, max_keepalive_connections=requests)
+    async with httpx.AsyncClient(timeout=15.0, trust_env=False, limits=limits) as client:
+        return list(
+            await asyncio.gather(
+                *(
+                    client.post(
+                        f'http://127.0.0.1:{stack.backend_port}/v1/conversations/{conversation_id}/finalize',
+                        headers={'Authorization': f'Bearer {ADMIN_KEY}{uid}'},
+                    )
+                    for _ in range(requests)
+                )
+            )
+        )
 
 
 def _wait_for_job(
@@ -706,6 +777,129 @@ def _provider_events(stack: Stack, conversation_id: str, stage: str, outcome: st
     ]
 
 
+async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
+    """#10000's task seam also covers REST admission after the listener is lost."""
+    if stack.finalization_mode != 'cloud_tasks':
+        raise StackFailure('REST finalization recovery requires the Cloud Tasks stack')
+
+    uid = 'stack-cloud-rest-restart'
+    conversation_id = stack.rest_finalization_race_conversation_id
+    if conversation_id is None:
+        raise StackFailure('REST finalization race was not configured before listener startup')
+    stack.seed_user(uid)
+    websocket, session = await _connect(stack, uid, conversation_id)
+    if session.get('conversation_id') != conversation_id:
+        raise StackFailure('REST finalization recording did not preserve its native session identity')
+    await _record_audio(websocket)
+
+    def content_persisted() -> bool:
+        conversation = stack.conversation(uid, conversation_id)
+        return bool(conversation and conversation.get('has_content'))
+
+    _wait_until(content_persisted, label='persisted content before REST finalization')
+    responses = await _request_rest_finalization(
+        stack, conversation_id, uid, requests=stack.rest_finalization_race_parties
+    )
+    for response in responses:
+        if response.status_code != 200:
+            raise StackFailure(f'REST finalization returned HTTP {response.status_code}: {response.text[:120]}')
+        body = response.json()
+        conversation = body.get('conversation') if isinstance(body, dict) else None
+        if not isinstance(conversation, dict) or conversation.get('status') != 'processing':
+            raise StackFailure('REST finalization did not return the admitted processing snapshot')
+
+    task = stack.wait_for_finalization_task()
+    job = _wait_for_job(stack, uid, conversation_id, 'queued')
+    _assert_opaque_task(task, job, stack)
+    duplicate_task_events = [
+        event for event in stack.finalization_task_events if event.get('event') == 'task_already_exists'
+    ]
+    expected_duplicates = stack.rest_finalization_race_parties - 1
+    if len(duplicate_task_events) != expected_duplicates:
+        raise StackFailure(
+            f'concurrent REST finalization expected {expected_duplicates} named-task AlreadyExists events, '
+            f'observed {len(duplicate_task_events)}'
+        )
+    if any(
+        event.get('task_name') != task.get('task_name') or event.get('payload') != task.get('payload')
+        for event in duplicate_task_events
+    ):
+        raise StackFailure('duplicate REST admission changed the durable Cloud Tasks identity')
+    if len(stack.finalization_tasks) != 1 or len(stack.jobs_for(uid, conversation_id)) != 1:
+        raise StackFailure('duplicate REST finalization created more than one durable handoff')
+    if job.get('attempt_count') != 0:
+        raise StackFailure('duplicate REST finalization claimed work before worker delivery')
+
+    queued_status = await stack.finalization_status(uid, conversation_id)
+    if (
+        queued_status.get('job_id') != job.get('id')
+        or queued_status.get('status') != 'queued'
+        or queued_status.get('terminal')
+        or not queued_status.get('retryable')
+        or queued_status.get('attempt_count') != 0
+    ):
+        raise StackFailure(f'queued REST finalization projection was incorrect: {queued_status}')
+
+    denied_status, _ = await stack.deliver_finalization_task(task, retry_count=0, authenticated=False)
+    if denied_status != 403:
+        raise StackFailure(f'worker accepted an unauthenticated Cloud Tasks delivery: HTTP {denied_status}')
+    if _wait_for_job(stack, uid, conversation_id, 'queued').get('attempt_count') != 0:
+        raise StackFailure('unauthenticated delivery changed the queued durable job')
+
+    # The task and Firestore job must survive a listener-process loss. The
+    # detached worker process is the sole delivery owner after this point.
+    stack.restart_backend()
+    restarted_tasks = stack.finalization_tasks
+    if len(restarted_tasks) != 1 or restarted_tasks[0] != task:
+        raise StackFailure('listener restart did not retain the exact opaque Cloud Tasks handoff')
+    restarted_task = restarted_tasks[0]
+    delivered = await stack.deliver_finalization_task(restarted_task, retry_count=0)
+    if delivered != (200, {'status': 'done'}):
+        raise StackFailure(f'restarted-listener task delivery did not complete: {delivered}')
+
+    completed = _wait_for_job(stack, uid, conversation_id, 'completed')
+    if completed.get('attempt_count') != 1 or completed.get('fanout_status') != 'completed':
+        raise StackFailure('detached worker did not complete the exact REST-finalization job once')
+    completed_status = await stack.finalization_status(uid, conversation_id)
+    if (
+        completed_status.get('job_id') != job.get('id')
+        or completed_status.get('status') != 'completed'
+        or not completed_status.get('terminal')
+        or completed_status.get('retryable')
+        or completed_status.get('attempt_count') != 1
+    ):
+        raise StackFailure(f'completed REST finalization projection was incorrect: {completed_status}')
+
+    process_events = _provider_events(stack, conversation_id, 'process', 'completed')
+    if len(process_events) != 1:
+        raise StackFailure('REST finalizer did not process the durable job exactly once')
+    completed_conversation = stack.conversation(uid, conversation_id)
+    if not completed_conversation or completed_conversation.get('status') != 'completed':
+        raise StackFailure('restarted-listener delivery did not complete the user-visible conversation')
+    if (
+        not process_events[0].get('persisted')
+        or not process_events[0].get('force_process')
+        or not process_events[0].get('defer_memory_extraction')
+    ):
+        raise StackFailure('REST finalization lost its persisted processing and extraction policy')
+    if len(_provider_events(stack, conversation_id, 'integration', 'completed')) != 1:
+        raise StackFailure('REST finalization did not complete durable integration fanout exactly once')
+
+    provider_event_count = len(stack.finalizer_events)
+    duplicate = await stack.deliver_finalization_task(restarted_task, retry_count=1)
+    if duplicate != (200, {'status': 'acked', 'job_status': 'completed'}):
+        raise StackFailure(f'duplicate REST task delivery was not safely acknowledged: {duplicate}')
+    if (
+        len(stack.finalization_tasks) != 1
+        or _wait_for_job(stack, uid, conversation_id, 'completed').get('attempt_count') != 1
+        or len(stack.finalizer_events) != provider_event_count
+    ):
+        raise StackFailure('duplicate REST task delivery repeated durable work')
+
+    with suppress(Exception):
+        await websocket.close(code=1000)
+
+
 async def _shutdown_window_retries_through_cloud_tasks(stack: Stack) -> None:
     """#9960's early shutdown wake must redispatch the timed-out recording."""
     uid = 'stack-cloud-shutdown-retry'
@@ -861,12 +1055,16 @@ def _run_stack_scenario(
     *,
     finalization_mode: str,
     finalizer_failures: dict[str, int] | None,
+    rest_finalization_race_uid: str | None = None,
+    rest_finalization_race_parties: int = 0,
     scenario: Callable[[Stack], Any],
 ) -> None:
     stack = Stack(
         state_dir,
         finalization_mode=finalization_mode,
         finalizer_failures=finalizer_failures,
+        rest_finalization_race_uid=rest_finalization_race_uid,
+        rest_finalization_race_parties=rest_finalization_race_parties,
     )
     try:
         stack.start()
@@ -890,6 +1088,14 @@ def main() -> int:
             finalization_mode='inline',
             finalizer_failures=None,
             scenario=run_inline_scenarios,
+        )
+        _run_stack_scenario(
+            state_dir / 'cloud-rest-restart',
+            finalization_mode='cloud_tasks',
+            finalizer_failures=None,
+            rest_finalization_race_uid='stack-cloud-rest-restart',
+            rest_finalization_race_parties=4,
+            scenario=_rest_finalization_survives_listener_restart,
         )
         _run_stack_scenario(
             state_dir / 'cloud-shutdown-retry',

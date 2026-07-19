@@ -22,6 +22,7 @@ on:
       - "desktop/macos/e2e/**"
       - "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
       - "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
+      - "desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
 
 jobs:
   desktop-core-e2e-t0:
