@@ -61,7 +61,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
   final VoiceMessageTranscriber _transcribeVoiceMessage;
 
   VoiceRecorderProvider({VoiceMessageTranscriber? transcriber})
-    : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage;
+      : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage;
 
   VoiceRecorderState get state => _state;
   String get transcript => _transcript;

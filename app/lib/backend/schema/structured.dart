@@ -140,7 +140,11 @@ class ActionItem {
 
   static fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedActionItem.fromJson(json);
-    return ActionItem(generated.description, completed: generated.completed, deleted: json['deleted'] ?? false);
+    return ActionItem(
+      generated.description,
+      completed: generated.completed,
+      deleted: json['deleted'] ?? false,
+    );
   }
 
   wire.GeneratedActionItem toGenerated() {

@@ -14,7 +14,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
-        home: const Scaffold(backgroundColor: Color(0xFF000000), body: NotificationsSettingsLoadingShimmer()),
+        home: const Scaffold(
+          backgroundColor: Color(0xFF000000),
+          body: NotificationsSettingsLoadingShimmer(),
+        ),
       ),
     );
 

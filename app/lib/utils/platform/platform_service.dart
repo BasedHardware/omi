@@ -14,7 +14,11 @@ class PlatformService {
   static bool get isCrashlyticsSupported => true;
 
   /// Execute a function only if the platform supports it
-  static T? executeIfSupported<T>(bool isSupported, T Function() function, {T? fallback}) {
+  static T? executeIfSupported<T>(
+    bool isSupported,
+    T Function() function, {
+    T? fallback,
+  }) {
     if (isSupported) {
       return function();
     }
@@ -22,7 +26,11 @@ class PlatformService {
   }
 
   /// Execute a future function only if the platform supports it
-  static Future<T?> executeIfSupportedAsync<T>(bool isSupported, Future<T> Function() function, {T? fallback}) async {
+  static Future<T?> executeIfSupportedAsync<T>(
+    bool isSupported,
+    Future<T> Function() function, {
+    T? fallback,
+  }) async {
     if (isSupported) {
       return await function();
     }

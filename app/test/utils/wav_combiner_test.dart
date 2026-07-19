@@ -81,6 +81,9 @@ void main() {
     final bad1 = _write('b1.wav', List.filled(200, 7));
     final bad2 = _write('b2.wav', List.filled(10, 3));
 
-    expect(() => WavCombiner.combineWavFiles([bad1, bad2], '${dir.path}/out.wav'), throwsException);
+    expect(
+      () => WavCombiner.combineWavFiles([bad1, bad2], '${dir.path}/out.wav'),
+      throwsException,
+    );
   });
 }
