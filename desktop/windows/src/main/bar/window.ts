@@ -946,6 +946,11 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
   ipcMain.on('voiceHub:publishState', (_e, state: unknown) => {
     send('voiceHub:state', state)
   })
+  // Main window → bar: the loudness of Omi's own audible reply (PCM player
+  // worklet peak, ~30Hz while playing) for the orb's playback-amplitude lane.
+  ipcMain.on('voiceHub:publishPlaybackLevel', (_e, level: unknown) => {
+    if (typeof level === 'number') send('voiceHub:playbackLevel', level)
+  })
   // Screen-share privacy toggle (persisted; applied live).
   ipcMain.handle('bar:getContentProtection', () => getAppSettings().hudContentProtection)
   ipcMain.handle('bar:setContentProtection', (_e, enabled: boolean) => {

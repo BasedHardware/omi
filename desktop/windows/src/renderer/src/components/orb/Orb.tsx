@@ -4,7 +4,7 @@
 // and wires REAL app signals: state, speech activity (PTT capturing / VAD
 // gate), and a live amplitude source sampled while speech is active.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { OrbAnimator } from '../../orb/orbAnimator'
+import { OrbAnimator, type AmplitudeLane } from '../../orb/orbAnimator'
 import { ORB_PRESETS, DEFAULT_ORB_PARAMS, type OrbState } from '../../orb/choreography'
 import type { WaveformSource } from '../../../../shared/types'
 import { useWebglRecovery } from '../../lib/useWebglRecovery'
@@ -54,6 +54,11 @@ export type OrbProps = {
    *  resolved per sample — the PTT analyser attaches shortly AFTER recording
    *  flips true, so a snapshotted value would be stale-null. */
   amplitudeSource?: WaveformSource | (() => WaveformSource | null) | null
+  /** Which adaptive mapper calibrates the sampled level: 'mic' (default — the
+   *  user's capture) or 'playback' (Omi's own audible reply, via the player
+   *  tap). Separate mapper instances keep the two families' AGC trackers from
+   *  cross-contaminating (a loud reply must not dampen the next mic hold). */
+  amplitudeLane?: AmplitudeLane
   /** Bump to replay the genesis spring (materialize from scale 0). */
   genesisNonce?: number
   /** Bump to play the "failed voice turn" gesture (a brief horizontal tremor). */
@@ -87,6 +92,7 @@ export function Orb({
   state,
   speechActive = false,
   amplitudeSource = null,
+  amplitudeLane = 'mic',
   genesisNonce = 0,
   failNonce = 0,
   visible = true,
@@ -108,6 +114,9 @@ export function Orb({
   const sourceRef = useRef(amplitudeSource)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the sampling interval
   sourceRef.current = amplitudeSource
+  const laneRef = useRef(amplitudeLane)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the sampling interval
+  laneRef.current = amplitudeLane
 
   // Runtime context-loss recovery, via the same shared hook BrainGraph uses.
   // A context lost AFTER a successful build (GPU-process crash / SwiftShader
@@ -209,7 +218,7 @@ export function Orb({
     const timer = setInterval(() => {
       const raw = sourceRef.current
       const src = typeof raw === 'function' ? raw() : raw
-      if (src) animatorRef.current?.setAmplitude(sampleAmplitude(src, scratch))
+      if (src) animatorRef.current?.setAmplitude(sampleAmplitude(src, scratch), laneRef.current)
     }, 33)
     return () => clearInterval(timer)
   }, [speechLive])
