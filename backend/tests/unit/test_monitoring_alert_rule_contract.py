@@ -33,6 +33,12 @@ PARAKEET_STREAMS_PER_READY_REPLICA = (
     '/ clamp_min(sum(kube_deployment_status_replicas_ready{deployment="prod-omi-parakeet", '
     'namespace="prod-omi-backend"}), 1)'
 )
+PARAKEET_STREAM_CAPACITY_RUNBOOK = "backend/docs/runbooks/parakeet-stream-capacity.md"
+PARAKEET_CAPACITY_DASHBOARD = MONITORING / "dashboards/gke/parakeet-asr-monitoring.json"
+LIVE_TRANSCRIPTION_FAILURE_RULE = "omi-journey-live-transcription-fail"
+LIVE_TRANSCRIPTION_FAILURE_EXPR = (
+    'sum(increase(omi_journey_terminal_total{journey="live_transcription",outcome=~"success|failure"}[30m]))'
+)
 
 
 def _rules(path: Path) -> dict[str, dict]:
@@ -126,6 +132,32 @@ def test_parakeet_stream_capacity_alerts_preserve_per_ready_replica_headroom():
         assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [threshold]
 
 
+def test_parakeet_stream_capacity_alerts_link_the_matching_dashboard_and_runbook():
+    """The alert, dashboard, and operator response use the same per-replica signal."""
+    rules = _rules(ALERT_SOURCES / "parakeet.json")
+    dashboard = json.loads(PARAKEET_CAPACITY_DASHBOARD.read_text(encoding="utf-8"))
+    panel = next(panel for panel in dashboard["panels"] if panel["id"] == 3)
+    runbook = (REPO / PARAKEET_STREAM_CAPACITY_RUNBOOK).read_text(encoding="utf-8")
+
+    assert panel["title"] == "Streaming capacity per ready replica"
+    assert panel["targets"][0]["expr"] == PARAKEET_STREAMS_PER_READY_REPLICA
+    assert panel["fieldConfig"]["defaults"]["thresholds"]["steps"] == [
+        {"color": "green", "value": 0},
+        {"color": "yellow", "value": 15},
+        {"color": "red", "value": 20},
+    ]
+
+    for uid, (severity, threshold) in PARAKEET_STREAM_CAPACITY_RULES.items():
+        rule = rules[uid]
+        assert rule["labels"]["severity"] == severity
+        assert rule["annotations"]["__dashboardUid__"] == dashboard["uid"]
+        assert rule["annotations"]["__panelId__"] == str(panel["id"])
+        assert rule["annotations"]["runbook"] == PARAKEET_STREAM_CAPACITY_RUNBOOK
+        assert f"{threshold} active streams per ready replica" in runbook
+
+    assert PARAKEET_STREAMS_PER_READY_REPLICA in runbook
+
+
 def test_pusher_degradation_uses_listener_emitter_metrics():
     """The reconnect degradation gauge is emitted by backend-listen, not Pusher."""
     rule = _rules(ALERT_SOURCES / "pusher.json")["bfobs1pusherdeg01"]
@@ -155,3 +187,14 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     endpoint_rule = split["omi-llm-gateway-no-ready-endpoints"]
     assert endpoint_rule["noDataState"] == "Alerting"
     assert "kube_endpoint_address_available" in endpoint_rule["data"][0]["model"]["expr"]
+
+
+def test_live_transcription_alert_is_traffic_gated_and_ignores_idle_no_data():
+    """The real-traffic alert must not page before any live sessions exist."""
+    for rules in _all_rule_exports().values():
+        rule = rules[LIVE_TRANSCRIPTION_FAILURE_RULE]
+        assert rule["noDataState"] == "OK"
+        assert rule["data"][0]["model"]["expr"] == LIVE_TRANSCRIPTION_FAILURE_EXPR
+        assert rule["data"][2]["model"]["expression"] == "$A >= 20 && $B > 0.10"
+        assert rule["annotations"]["__dashboardUid__"] == "omi-resilience-fallbacks"
+        assert rule["annotations"]["__panelId__"] == "7"

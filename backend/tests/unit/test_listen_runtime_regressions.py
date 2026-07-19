@@ -1,11 +1,14 @@
 """Behavioral regression coverage for the extracted listen runtime."""
 
+import asyncio
+from collections import deque
 from types import SimpleNamespace
 
 import pytest
 
 from routers.listen.contracts import ListenRequest
 from routers.listen.runtime import ListenSessionRuntime
+from routers.listen.transcripts import TranscriptProcessor
 from utils.listen_session_bootstrap import ListenConnectBase
 
 
@@ -152,6 +155,163 @@ def test_runtime_emits_speaker_suggestion_event():
     assert emitted_events[0].event_type == 'speaker_label_suggestion'
     assert emitted_events[0].speaker_id == 4
     assert emitted_events[0].person_name == 'Avery'
+
+
+class _JourneyAttempt:
+    instances = []
+
+    def __init__(self, journey):
+        self.journey = journey
+        self.finished = False
+        self.outcomes = []
+        self.__class__.instances.append(self)
+
+    def finish(self, outcome):
+        if self.finished:
+            return
+        self.finished = True
+        self.outcomes.append(outcome)
+
+
+def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, live_transcription_failed=False):
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.state = SimpleNamespace(
+        close_code=close_code,
+        stt_terminal_failure=stt_terminal_failure,
+        live_transcription_failed=live_transcription_failed,
+        live_transcription_attempt=None,
+    )
+    return runtime
+
+
+def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    _JourneyAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'JourneyAttempt', _JourneyAttempt)
+    runtime = _live_transcription_runtime(close_code=1011, stt_terminal_failure=True)
+
+    runtime.start_live_transcription()
+    runtime.start_live_transcription()
+    runtime.complete_live_transcription()
+    runtime._finish_live_transcription()
+
+    assert len(_JourneyAttempt.instances) == 1
+    assert _JourneyAttempt.instances[0].journey == 'live_transcription'
+    assert _JourneyAttempt.instances[0].outcomes == ['success']
+
+
+@pytest.mark.parametrize(
+    ('close_code', 'stt_terminal_failure', 'live_transcription_failed', 'expected'),
+    [
+        (1000, False, False, 'cancelled'),
+        (1011, False, False, 'failure'),
+        (1001, True, False, 'failure'),
+        (1001, False, True, 'failure'),
+    ],
+)
+def test_live_transcription_teardown_classifies_unsent_attempts_once(
+    monkeypatch, close_code, stt_terminal_failure, live_transcription_failed, expected
+):
+    import routers.listen.runtime as runtime_module
+
+    _JourneyAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'JourneyAttempt', _JourneyAttempt)
+    runtime = _live_transcription_runtime(
+        close_code=close_code,
+        stt_terminal_failure=stt_terminal_failure,
+        live_transcription_failed=live_transcription_failed,
+    )
+
+    runtime.start_live_transcription()
+    runtime._finish_live_transcription()
+    runtime._finish_live_transcription()
+
+    assert _JourneyAttempt.instances[0].outcomes == [expected]
+
+
+@pytest.mark.anyio
+async def test_transcript_delivery_marks_live_transcription_success_only_after_a_nonempty_client_send(monkeypatch):
+    import routers.listen.transcripts as transcripts_module
+
+    class Segment:
+        def __init__(self, **data):
+            self.id = data['id']
+            self.text = data['text']
+            self.start = data['start']
+            self.end = data['end']
+            self.speech_profile_processed = data['speech_profile_processed']
+            self.is_user = False
+
+        def model_dump(self):
+            return {'id': self.id, 'text': self.text}
+
+        @staticmethod
+        def combine_segments(_existing, new_segments):
+            return new_segments, [], []
+
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    state = SimpleNamespace(
+        active=True,
+        first_audio_byte_timestamp=100.0,
+        last_transcript_time=None,
+        words_transcribed_since_last_record=0,
+        current_conversation_id='conversation-1',
+        speaker_id_done=asyncio.Event(),
+    )
+    state.speaker_id_done.set()
+    websocket = WebSocket()
+    delivered = []
+
+    async def wait(_seconds):
+        state.active = False
+        return False
+
+    async def cache_get(_conversation_id):
+        return {'transcript_segments': []}
+
+    async def update(_conversation, segments, _photos, _finished_at, _started_at):
+        return SimpleNamespace(id='conversation-1'), segments, []
+
+    async def no_op(*_args, **_kwargs):
+        return None
+
+    host = SimpleNamespace(
+        state=state,
+        wait=wait,
+        request=SimpleNamespace(uid='user-1', onboarding_mode=False, websocket=websocket),
+        transcript_send=None,
+        user_has_credits=True,
+        pusher_enabled=True,
+        onboarding_handler=None,
+        send_event=lambda _event: None,
+        speakers=SimpleNamespace(drain=no_op),
+        complete_live_transcription=lambda: delivered.append(True),
+    )
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = host
+    processor.segment_buffer = deque([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}])
+    processor.photo_buffer = deque()
+    processor.cache = SimpleNamespace(get=cache_get)
+    processor.current_session_segments = {}
+    processor._update_live_conversation = update
+    processor._translate = no_op
+    processor._speaker_detection = no_op
+    processor.flush_speaker_assignments = no_op
+
+    monkeypatch.setattr(transcripts_module, 'TranscriptSegment', Segment)
+    monkeypatch.setattr(transcripts_module, 'deserialize_conversation', lambda _data: SimpleNamespace())
+
+    await processor.process_loop()
+
+    assert websocket.sent == [[{'id': 'segment-1', 'text': 'Hello'}]]
+    assert delivered == [True]
 
 
 async def _async_result(value):

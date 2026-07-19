@@ -45,6 +45,7 @@ from utils.listen_session_bootstrap import finalize_listen_connect_context, load
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
+from utils.observability.journeys import JourneyAttempt, JourneyOutcome
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.stt.streaming import STTService, get_stt_service_for_language
 from config.stt_provider_policy import PARAKEET_PROVIDER, STTServingSurface, provider_is_enabled
@@ -182,6 +183,28 @@ class ListenSessionRuntime:
                 segment_id=segment_id,
             )
         )
+
+    def start_live_transcription(self) -> None:
+        """Accept the journey once the listen socket has received real audio."""
+        if self.state.live_transcription_attempt is None:
+            self.state.live_transcription_attempt = JourneyAttempt('live_transcription')
+
+    def complete_live_transcription(self) -> None:
+        """Record the first nonempty transcript successfully delivered to the client."""
+        if self.state.live_transcription_attempt is not None:
+            self.state.live_transcription_attempt.finish('success')
+
+    def _finish_live_transcription(self) -> None:
+        """Terminalize an accepted attempt that never delivered a transcript."""
+        attempt = self.state.live_transcription_attempt
+        if attempt is None:
+            return
+        outcome: JourneyOutcome = (
+            'failure'
+            if self.state.live_transcription_failed or self.state.stt_terminal_failure or self.state.close_code == 1011
+            else 'cancelled'
+        )
+        attempt.finish(outcome)
 
     async def _admit(self) -> bool:
         if not self.request.uid:
@@ -539,6 +562,8 @@ class ListenSessionRuntime:
             self.send_event(MessageServiceStatusEvent(status='ready'))
             result = await self.task_supervisor.supervise(receive_task=receive_task)
             logger.info('Listen supervisor exited reason=%s task=%s', result.reason, result.task_name)
+            if result.reason in {'crash', 'lifetime_done'}:
+                self.state.live_transcription_failed = True
             if receive_task.done() and not receive_task.cancelled():
                 receive_error = receive_task.exception()
                 if receive_error is not None:
@@ -554,12 +579,14 @@ class ListenSessionRuntime:
             await self.task_supervisor.drain_monitored(timeout=self.limits.bg_drain_timeout, cancel=False)
         except Exception as error:
             logger.error('Listen WebSocket operation failed type=%s', type(error).__name__)
+            self.state.live_transcription_failed = True
         finally:
             await self._teardown()
 
     async def _teardown(self) -> None:
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
+        self._finish_live_transcription()
         try:
             await self.transcripts.flush_translations()
         except Exception as error:

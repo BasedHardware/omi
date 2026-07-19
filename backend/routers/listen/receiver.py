@@ -417,6 +417,7 @@ class ListenReceiver:
                     if self.host.state.first_audio_byte_timestamp is None:
                         self.host.state.first_audio_byte_timestamp = now
                         self.host.state.last_usage_record_timestamp = now
+                        self.host.start_live_transcription()
                     if self.host.is_multi_channel:
                         await self._handle_multi_channel_audio(data)
                         continue

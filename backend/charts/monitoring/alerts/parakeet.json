@@ -837,7 +837,8 @@
       "scope": "Production Parakeet streaming pods; active streams are averaged across ready replicas.",
       "verification": "Compare active streams and ready replicas in the Parakeet dashboard and confirm the condition persists for the alert duration.",
       "safe_next_action": "Allow the HPA to add healthy replicas first; investigate capacity only after checking replica readiness and the dashboard.",
-      "threshold": "15 active streams per ready replica"
+      "threshold": "15 active streams per ready replica",
+      "runbook": "backend/docs/runbooks/parakeet-stream-capacity.md"
     },
     "labels": {
       "instatus_component": "speech-processing",
@@ -979,7 +980,8 @@
       "scope": "Production Parakeet streaming pods; active streams are averaged across ready replicas.",
       "verification": "Compare active streams and ready replicas in the Parakeet dashboard and confirm the condition persists for the alert duration.",
       "safe_next_action": "Allow the HPA to add healthy replicas first; investigate capacity only after checking replica readiness and the dashboard.",
-      "threshold": "20 active streams per ready replica"
+      "threshold": "20 active streams per ready replica",
+      "runbook": "backend/docs/runbooks/parakeet-stream-capacity.md"
     },
     "labels": {
       "instatus_component": "speech-processing",

@@ -31,11 +31,11 @@ def _install_journey_metrics(monkeypatch):
 def test_journey_contract_uses_only_closed_privacy_safe_labels(monkeypatch):
     accepted, terminal, latency, reconciliations = _install_journey_metrics(monkeypatch)
 
-    journeys.record_journey_accepted('chat_response')
+    journeys.record_journey_accepted('live_transcription')
     journeys.record_journey_terminal('pusher_session', 'cancelled', 1.5)
     journeys.record_capture_finalization_reconciliation('requeued')
 
-    accepted.labels.assert_called_once_with(journey='chat_response')
+    accepted.labels.assert_called_once_with(journey='live_transcription')
     terminal.labels.assert_called_once_with(journey='pusher_session', outcome='cancelled')
     latency.labels.assert_called_once_with(journey='pusher_session', outcome='cancelled')
     reconciliations.labels.assert_called_once_with(outcome='requeued')
@@ -79,6 +79,7 @@ def test_terminal_finalization_failure_records_once_after_dead_letter(monkeypatc
 def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing_scrape_source():
     exported = metrics.generate_latest().decode()
     assert 'omi_journey_accepted_total{journey="chat_response"}' in exported
+    assert 'omi_journey_accepted_total{journey="live_transcription"}' in exported
     assert 'omi_journey_terminal_total{journey="pusher_session",outcome="success"}' in exported
     assert 'omi_capture_finalization_reconciliations_total{outcome="requeued"}' in exported
 
@@ -88,17 +89,28 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
     expected_ids = {
         'omi-journey-chat-fail',
         'omi-journey-pusher-fail',
+        'omi-journey-live-transcription-fail',
         'omi-journey-capture-fail',
         'omi-journey-scrape-missing',
     }
     assert expected_ids <= {rule['uid'] for rule in split_alerts}
     assert expected_ids <= {rule['uid'] for rule in combined_alerts}
 
-    product_rules = [rule for rule in split_alerts if rule['uid'] in expected_ids - {'omi-journey-scrape-missing'}]
-    assert {rule['noDataState'] for rule in product_rules} == {'NoData'}
+    product_rule_ids = expected_ids - {'omi-journey-scrape-missing'}
+    product_rules = [rule for rule in split_alerts if rule['uid'] in product_rule_ids]
     for rule in product_rules:
         assert 'outcome=~"success|failure"' in rule['data'][0]['model']['expr']
         assert '$A >= 20 && $B > 0.10' in rule['data'][2]['model']['expression']
+    live_transcription_rule = next(
+        rule for rule in product_rules if rule['uid'] == 'omi-journey-live-transcription-fail'
+    )
+    assert live_transcription_rule['noDataState'] == 'OK'
+    assert live_transcription_rule['annotations']['__panelId__'] == '7'
+    assert all(
+        rule['noDataState'] == 'NoData'
+        for rule in product_rules
+        if rule['uid'] != 'omi-journey-live-transcription-fail'
+    )
     scrape_rule = next(rule for rule in split_alerts if rule['uid'] == 'omi-journey-scrape-missing')
     assert scrape_rule['noDataState'] == 'Alerting'
     assert 'count by (job)' in scrape_rule['data'][0]['model']['expr']

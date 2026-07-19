@@ -594,7 +594,8 @@ sum(parakeet_active_streams{container="parakeet", namespace="prod-omi-backend"})
 This avoids a cluster-total threshold that would become misleading as HPA replica count changes. The warning threshold is
 15 streams per ready replica for five minutes and the critical threshold is 20 for two minutes, both below the known
 approximately 25–30 stream per-replica capability. No-data is healthy for these capacity rules: absent metrics are not
-evidence of saturation.
+evidence of saturation. Operator response is in
+[`parakeet-stream-capacity.md`](../../docs/runbooks/parakeet-stream-capacity.md).
 
 ## Dashboard & Metrics Lifecycle
 
