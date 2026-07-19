@@ -114,7 +114,7 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
       surfacedId, deletedBy: "user", authorization: .unrestricted)
 
     // Restore via the store's local-only restore record.
-    let record = TasksStore.localOnlyRestoreRecord(from: taskToRestore)
+    let record = await TasksStore.localOnlyRestoreRecord(from: taskToRestore)
     XCTAssertNil(record.backendId, "must not carry the local_ placeholder as a backend id")
     XCTAssertFalse(record.backendSynced, "restored local-only task stays unsynced")
     XCTAssertEqual(record.completed, true, "completion state is preserved across restore")
