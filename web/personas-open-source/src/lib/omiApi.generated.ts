@@ -2623,10 +2623,6 @@ export interface RecordLlmUsageBucketRequest {
   total_tokens?: number;
 }
 
-export interface RenamePhoneNumberRequest {
-  friendly_name: string;
-}
-
 export interface ReorderFoldersRequest {
   folder_ids: Array<string>;
 }
@@ -4056,7 +4052,6 @@ export interface OmiApiSchemas {
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
-  "RenamePhoneNumberRequest": RenamePhoneNumberRequest;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
@@ -6589,31 +6584,12 @@ export interface OmiApiPaths {
     };
   };
   "/v1/phone/numbers/{phone_number_id}": {
-    patch: {
-      operationId: "rename_phone_number_v1_phone_numbers__phone_number_id__patch";
-      responses: {
-        "200": PhoneNumberResponse;
-        "401": void;
-        "404": void;
-        "422": HTTPValidationError;
-      };
-    };
     delete: {
       operationId: "remove_phone_number_v1_phone_numbers__phone_number_id__delete";
       responses: {
         "200": PhoneMutationResponse;
         "401": void;
         "404": void;
-        "422": HTTPValidationError;
-      };
-    };
-  };
-  "/v1/phone/numbers/{phone_number_id}/primary": {
-    post: {
-      operationId: "make_phone_number_primary_v1_phone_numbers__phone_number_id__primary_post";
-      responses: {
-        "200": PhoneNumberResponse;
-        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -12632,52 +12608,12 @@ export async function check_phone_verification_v1_phone_numbers_verify_check_pos
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function rename_phone_number_v1_phone_numbers__phone_number_id__patch(path: { phone_number_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RenamePhoneNumberRequest, init?: OmiApiClientInit): Promise<PhoneNumberResponse> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/phone/numbers/${path.phone_number_id}`;
-  const _search = "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "PATCH",
-    headers: {
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
-}
-
 export async function remove_phone_number_v1_phone_numbers__phone_number_id__delete(path: { phone_number_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PhoneMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/phone/numbers/${path.phone_number_id}`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
-    headers: {
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
-}
-
-export async function make_phone_number_primary_v1_phone_numbers__phone_number_id__primary_post(path: { phone_number_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PhoneNumberResponse> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/phone/numbers/${path.phone_number_id}/primary`;
-  const _search = "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "POST",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -15603,4 +15539,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 383 client methods generated.
+// Total: 381 client methods generated.

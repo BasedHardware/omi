@@ -8831,7 +8831,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get billingYearly => '年付';
 
   @override
-  String get savePercent => '节省约17%';
+  String savePercent(int percent) {
+    return '节省约$percent%';
+  }
 
   @override
   String get popular => '热门';

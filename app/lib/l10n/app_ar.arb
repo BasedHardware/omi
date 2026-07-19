@@ -2902,7 +2902,7 @@
     "upgradePlan": "ترقية الخطة",
     "billingMonthly": "شهري",
     "billingYearly": "سنوي",
-    "savePercent": "وفّر ~17%",
+    "savePercent": "وفّر ~{percent}%",
     "popular": "شائع",
     "currentPlan": "الحالي",
     "neoSubtitle": "{count} سؤال شهرياً",

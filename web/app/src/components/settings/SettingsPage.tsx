@@ -933,7 +933,10 @@ function UsageSectionContent({
   };
 
   const getPlanDisplayName = (plan: string) => {
-    if (plan === 'unlimited') return 'Unlimited';
+    if (plan === 'unlimited' || plan === 'unlimited_v2') return 'Unlimited';
+    if (plan === 'plus') return 'Plus';
+    if (plan === 'operator') return 'Operator';
+    if (plan === 'architect') return 'Architect';
     if (plan === 'basic') return 'Free';
     return plan || 'Free';
   };

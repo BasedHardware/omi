@@ -9038,7 +9038,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get billingYearly => 'సంవత్సరానికి';
 
   @override
-  String get savePercent => '~17% ఆదా చేయండి';
+  String savePercent(int percent) {
+    return '~$percent% ఆదా చేయండి';
+  }
 
   @override
   String get popular => 'ప్రజాదరణ';

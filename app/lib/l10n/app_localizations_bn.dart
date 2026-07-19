@@ -8997,7 +8997,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get billingYearly => 'বার্ষিক';
 
   @override
-  String get savePercent => '~17% সাশ্রয়';
+  String savePercent(int percent) {
+    return '~$percent% সাশ্রয়';
+  }
 
   @override
   String get popular => 'জনপ্রিয়';

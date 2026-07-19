@@ -9041,7 +9041,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get billingYearly => 'Anual';
 
   @override
-  String get savePercent => 'Estalvia ~17%';
+  String savePercent(int percent) {
+    return 'Estalvia ~$percent%';
+  }
 
   @override
   String get popular => 'Popular';

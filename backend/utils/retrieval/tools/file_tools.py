@@ -69,7 +69,7 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id')
         chat_session_id = configurable.get('chat_session_id')
-    except (KeyError, TypeError) as e:
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ search_files_tool - error accessing config: {e}")
         import traceback
 
