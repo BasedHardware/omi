@@ -47,7 +47,8 @@ export default defineConfig({
         input: {
           index: resolve('src/renderer/index.html'),
           glow: resolve('src/renderer/glow.html'),
-          'insight-toast': resolve('src/renderer/insight-toast.html')
+          'insight-toast': resolve('src/renderer/insight-toast.html'),
+          capture: resolve('src/renderer/capture.html')
         }
       }
     },

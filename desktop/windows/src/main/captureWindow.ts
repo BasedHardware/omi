@@ -114,12 +114,16 @@ export function createCaptureWindow(): BrowserWindow {
     console.error('[capture] did-fail-load', code, desc, url)
   )
 
+  // Slim per-window entry (capture.html) instead of the full-app index.html — see
+  // perf/win-slim-aux-windows. The `#/capture` hash is preserved so window-role
+  // detection (windowRole.ts) and IPC sender labeling (voicePlaneIpc.ts) are
+  // unchanged.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/capture`)
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/capture.html#/capture`)
   } else if (rendererBaseUrl()) {
-    win.loadURL(`${rendererBaseUrl()}/index.html#/capture`)
+    win.loadURL(`${rendererBaseUrl()}/capture.html#/capture`)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'capture' })
+    win.loadFile(join(__dirname, '../renderer/capture.html'), { hash: 'capture' })
   }
 
   captureWindow = win
