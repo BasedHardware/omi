@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import re
 from typing import Any, cast
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from google.cloud.firestore import transactional
 
@@ -11,6 +12,7 @@ from database._client import get_firestore_client
 
 CHANNELS_COLLECTION = "desktop_update_channels"
 MANIFESTS_COLLECTION = "desktop_release_manifests"
+ROLLBACK_AUDITS_COLLECTION = "desktop_update_channel_rollback_audits"
 VALID_CHANNELS = frozenset({"stable", "beta"})
 VALID_PLATFORMS = frozenset({"macos", "windows", "linux"})
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
@@ -182,6 +184,46 @@ def _build_channel_pointer(
     }
 
 
+def _build_beta_rollback_pointer(
+    current: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    release_id: str,
+    expected_current_release_id: str,
+    expected_generation: int,
+    updated_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Build the sole permitted non-monotonic pointer transition: macOS beta rollback."""
+    if manifest["platform"] != "macos":
+        raise ValueError("rollback target must be a macos release manifest")
+    qualification = cast(dict[str, Any], manifest["qualification"])
+    if qualification.get("passed") is not True or str(qualification.get("tier", "")).upper() != "T2":
+        raise ValueError("rollback target is missing passed T2 qualification evidence")
+
+    current_release_id = current.get("release_id")
+    if current_release_id != expected_current_release_id:
+        raise ValueError(
+            f"current release mismatch: expected {expected_current_release_id}, current {current_release_id or 'missing'}"
+        )
+    current_generation = _generation(current.get("generation", 0))
+    if expected_generation != current_generation:
+        raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
+
+    current_build = _generation(current.get("build_number"))
+    if release_id == current_release_id or manifest["build_number"] >= current_build:
+        raise ValueError("rollback target must be an earlier qualified beta release")
+
+    return {
+        "platform": "macos",
+        "channel": "beta",
+        "release_id": release_id,
+        "version": manifest["version"],
+        "build_number": manifest["build_number"],
+        "generation": current_generation + 1,
+        "updated_at": updated_at or datetime.now(timezone.utc),
+    }
+
+
 @transactional
 def _promote_channel_transaction(
     transaction: Any,
@@ -246,6 +288,92 @@ def promote_channel(
         channel=channel,
         release_id=release_id,
         expected_generation=expected_generation,
+    )
+
+
+@transactional
+def _rollback_macos_beta_transaction(
+    transaction: Any,
+    pointer_ref: Any,
+    manifest_ref: Any,
+    audit_ref: Any,
+    *,
+    release_id: str,
+    expected_current_release_id: str,
+    expected_generation: int,
+    audit_id: str,
+    occurred_at: datetime,
+) -> dict[str, Any]:
+    manifest_snapshot = manifest_ref.get(transaction=transaction)
+    if not getattr(manifest_snapshot, "exists", False):
+        raise ValueError("rollback target release manifest does not exist")
+    raw_manifest: object = manifest_snapshot.to_dict()
+    manifest_data = cast(dict[str, Any], raw_manifest) if isinstance(raw_manifest, dict) else {}
+    manifest = normalize_release_manifest(manifest_data)
+
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
+    if not getattr(pointer_snapshot, "exists", False):
+        raise ValueError("current macos beta pointer does not exist")
+    current_raw: object = pointer_snapshot.to_dict()
+    current = cast(dict[str, Any], current_raw) if isinstance(current_raw, dict) else {}
+    pointer = _build_beta_rollback_pointer(
+        current,
+        manifest,
+        release_id=release_id,
+        expected_current_release_id=expected_current_release_id,
+        expected_generation=expected_generation,
+        updated_at=occurred_at,
+    )
+    audit = {
+        "audit_id": audit_id,
+        "operation": "macos_beta_rollback",
+        "platform": "macos",
+        "channel": "beta",
+        "previous_release_id": expected_current_release_id,
+        "previous_generation": expected_generation,
+        "target_release_id": release_id,
+        "generation": pointer["generation"],
+        "occurred_at": occurred_at,
+    }
+    # create() provides an immutable, append-only audit record. All reads above
+    # occur before this first transactional write.
+    transaction.create(audit_ref, audit)
+    transaction.set(pointer_ref, pointer)
+    return {"pointer": pointer, "audit": audit}
+
+
+def rollback_macos_beta_channel(
+    release_id: str,
+    *,
+    expected_current_release_id: str,
+    expected_generation: int,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Atomically roll macOS beta back to an earlier, qualified registered release only."""
+    release_id = release_id.strip()
+    expected_current_release_id = expected_current_release_id.strip()
+    if not release_id:
+        raise ValueError("release_id is required")
+    if not expected_current_release_id:
+        raise ValueError("expected_current_release_id is required")
+    if expected_generation < 0:
+        raise ValueError("expected_generation must be a non-negative integer")
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    pointer_ref = client.collection(CHANNELS_COLLECTION).document("macos-beta")
+    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
+    audit_id = uuid4().hex
+    audit_ref = client.collection(ROLLBACK_AUDITS_COLLECTION).document(audit_id)
+    return _rollback_macos_beta_transaction(
+        client.transaction(),
+        pointer_ref,
+        manifest_ref,
+        audit_ref,
+        release_id=release_id,
+        expected_current_release_id=expected_current_release_id,
+        expected_generation=expected_generation,
+        audit_id=audit_id,
+        occurred_at=datetime.now(timezone.utc),
     )
 
 
