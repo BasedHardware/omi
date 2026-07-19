@@ -12,17 +12,15 @@ import XCTest
 /// keeping one that did.
 @MainActor
 final class WALServiceOrphanSdCardTests: XCTestCase {
-  private var walDir: URL!
-  private var service: WALService!
+  private let walDir = FileManager.default.temporaryDirectory
+    .appendingPathComponent("wal-orphan-test-\(UUID().uuidString)", isDirectory: true)
+  private lazy var service = WALService(
+    apiClient: APIClient(session: URLSession(configuration: .ephemeral)),
+    walDirectoryForTesting: walDir
+  )
 
   override func setUp() async throws {
-    walDir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("wal-orphan-test-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: walDir, withIntermediateDirectories: true)
-    service = WALService(
-      apiClient: APIClient(session: URLSession(configuration: .ephemeral)),
-      walDirectoryForTesting: walDir
-    )
     service.setWalsForTesting([])
   }
 

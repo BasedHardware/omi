@@ -11,23 +11,23 @@ import XCTest
 /// delete matched zero rows and silently no-opped (the "deleted" task
 /// resurrected on next launch), and toggle/update threw `recordNotFound`.
 final class ActionItemLocalIdentityMutationTests: XCTestCase {
-  private var testUserId: String!
-  private var userDir: URL!
-
-  override func setUp() async throws {
-    try await super.setUp()
-
-    testUserId = "local-identity-test-\(UUID().uuidString)"
-    try await RewindDatabase.shared.switchUser(to: testUserId)
-    await ActionItemStorage.shared.invalidateCache()
-
-    let appSupport = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    userDir =
+  private let testUserId = "local-identity-test-\(UUID().uuidString)"
+  private lazy var userDir: URL? = {
+    guard
+      let appSupport = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    else { return nil }
+    return
       appSupport
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
+  }()
+
+  override func setUp() async throws {
+    try await super.setUp()
+    try await RewindDatabase.shared.switchUser(to: testUserId)
+    await ActionItemStorage.shared.invalidateCache()
   }
 
   override func tearDown() async throws {

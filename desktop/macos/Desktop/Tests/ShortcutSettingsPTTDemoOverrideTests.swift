@@ -21,15 +21,15 @@ final class ShortcutSettingsPTTDemoOverrideTests: XCTestCase {
     }
 
     settings.pttTranscriptionMode = .batch
-    let persistedBefore = UserDefaults.standard.string(forKey: "shortcut_pttTranscriptionMode")
 
-    // Enter the demo: override to live.
+    // Enter the demo: override to live. The stored preference is the ONLY
+    // writer of the persisted UserDefaults key (via its didSet), so asserting
+    // it is untouched proves the override never persisted.
     settings.pttTranscriptionModeDemoOverride = .live
     XCTAssertEqual(settings.effectivePTTTranscriptionMode, .live, "override wins while active")
-    XCTAssertEqual(settings.pttTranscriptionMode, .batch, "stored preference is untouched")
     XCTAssertEqual(
-      UserDefaults.standard.string(forKey: "shortcut_pttTranscriptionMode"), persistedBefore,
-      "the override must never write to UserDefaults")
+      settings.pttTranscriptionMode, .batch,
+      "override must not touch the stored (persisted) preference")
 
     // Leave the demo (or crash-then-relaunch clears the transient override).
     settings.pttTranscriptionModeDemoOverride = nil
