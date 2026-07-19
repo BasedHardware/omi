@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { ContextMenuParams } from 'electron'
 import {
+  BAR_RESET_VOICE_LABEL,
   BAR_SNOOZE_LABEL,
   buildBarContextMenuTemplate,
   type BarContextMenuDeps
@@ -36,15 +37,24 @@ const deps = (over: Partial<BarContextMenuDeps> = {}): BarContextMenuDeps => ({
   copyText: vi.fn(),
   openExternal: vi.fn(),
   snooze: vi.fn(),
+  resetVoicePlane: vi.fn(),
   ...over
 })
 
 const ids = (t: Item[]): (string | undefined)[] => t.map((i) => i.role ?? i.type ?? i.label)
 
 describe('buildBarContextMenuTemplate', () => {
-  it('offers only the snooze on a right-click over empty bar chrome', () => {
+  it('offers the snooze + Reset voice on a right-click over empty bar chrome', () => {
     const t = buildBarContextMenuTemplate(params(), deps()) as Item[]
-    expect(ids(t)).toEqual([BAR_SNOOZE_LABEL])
+    expect(ids(t)).toEqual([BAR_SNOOZE_LABEL, BAR_RESET_VOICE_LABEL])
+  })
+
+  it('runs the injected resetVoicePlane when Reset voice is clicked', () => {
+    const d = deps()
+    const t = buildBarContextMenuTemplate(params(), d) as Item[]
+    t.find((i) => i.label === BAR_RESET_VOICE_LABEL)?.click?.()
+    expect(d.resetVoicePlane).toHaveBeenCalledTimes(1)
+    expect(d.snooze).not.toHaveBeenCalled()
   })
 
   it('runs the injected snooze when the snooze item is clicked', () => {
@@ -80,12 +90,19 @@ describe('buildBarContextMenuTemplate', () => {
       'separator',
       'selectAll',
       'separator',
-      BAR_SNOOZE_LABEL
+      BAR_SNOOZE_LABEL,
+      BAR_RESET_VOICE_LABEL
     ])
   })
 
   it('appends the snooze after a link menu on a right-clicked http/https link', () => {
     const t = buildBarContextMenuTemplate(params({ linkURL: 'https://omi.me/x' }), deps()) as Item[]
-    expect(ids(t)).toEqual(['Open Link', 'Copy Link Address', 'separator', BAR_SNOOZE_LABEL])
+    expect(ids(t)).toEqual([
+      'Open Link',
+      'Copy Link Address',
+      'separator',
+      BAR_SNOOZE_LABEL,
+      BAR_RESET_VOICE_LABEL
+    ])
   })
 })

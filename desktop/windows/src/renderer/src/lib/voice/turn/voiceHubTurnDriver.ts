@@ -194,6 +194,10 @@ export class VoiceHubTurnDriver {
   /** Armed at release (end/cancel); force-finalizes a turn the machine failed to
    *  free (see RELEASE_WATCHDOG_MS). Cancelled on terminal reconciliation. */
   private watchdog: { cancel(): void } | null = null
+  /** Set by `dispose()` (resetVoicePlane): this instance is dead — a fresh driver
+   *  replaces it. Guards the entry points so a stale IPC listener or late
+   *  callback can never resurrect a disposed stack's capture or socket. */
+  private disposed = false
 
   // Projection state ----------------------------------------------------------
   private lastProjection: VoiceTurnUIProjection = IDLE_PROJECTION
@@ -261,6 +265,7 @@ export class VoiceHubTurnDriver {
    *  the flag is off. Warming is what makes `hub.isAvailable()` true so the next
    *  press routes to the hub instead of falling straight to the cascade. */
   warm(): void {
+    if (this.disposed) return
     if (this.prefs().pttHubEnabled !== true) return
     // Eager warm is best-effort fire-and-forget: swallow the rejection so a failed
     // mint (both providers down) OR a teardown-during-warm abort (HubWarmAbortedError,
@@ -276,6 +281,7 @@ export class VoiceHubTurnDriver {
    *  disabled hub; the controller further no-ops when there's no session or a turn is
    *  active (deferring the refresh to that turn's termination). */
   requestSessionRefresh(reason: string): void {
+    if (this.disposed) return
     if (this.prefs().pttHubEnabled !== true) return
     this.hub.requestSessionRefresh(reason)
   }
@@ -288,9 +294,77 @@ export class VoiceHubTurnDriver {
     this.hub.teardownSession()
   }
 
+  /** resetVoicePlane: release EVERYTHING this driver may hold at any moment —
+   *  mid-turn, mid-reply, healthy or wedged — and leave the instance inert (the
+   *  host swaps in a fresh driver; a disposed one never runs again). Two layers,
+   *  mirroring `fireReleaseWatchdog`: the coordinator's own reset first (the
+   *  graceful path — cleanup terminal drives the host's full teardown through
+   *  effects), then belt-and-braces manual releases for the wedge class where
+   *  the machinery itself is broken. Every call is idempotent. */
+  dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+    this.flightRecord('driver_dispose', {
+      hadTurn: this.turnID !== null,
+      route: this.route.kind
+    })
+    const turnID = this.turnID
+    this.watchdog?.cancel()
+    this.watchdog = null
+    try {
+      // cleanup+reset terminal: cancels all deadlines, runs the host teardown
+      // (stopCapture, cancelHub, output lease, system-audio restore), publishes
+      // the idle projection.
+      this.coordinator.reset()
+    } catch {
+      /* the machinery may be the broken thing — fall through to manual cleanup */
+    }
+    try {
+      this.disposeCapture()
+    } catch {
+      /* keep going — release everything we can */
+    }
+    if (turnID !== null) {
+      try {
+        this.output.endTurn(turnID)
+      } catch {
+        /* keep going */
+      }
+      try {
+        this.hub.voiceTurnDidTerminate(turnID)
+      } catch {
+        /* keep going */
+      }
+    }
+    try {
+      this.hub.teardownSession()
+    } catch {
+      /* keep going */
+    }
+    try {
+      this.restoreAudio()
+    } catch {
+      /* keep going */
+    }
+    this.turnID = null
+    this.captureID = null
+    this.route = { kind: 'undecided' }
+    this.sessionID = null
+    this.capture = null
+    this.cascadeBuffer = []
+    this.cascadeBufferBytes = 0
+    this.orbLevel = 0
+    this.turnTranscript = ''
+    this.assistantText = ''
+    this.lastProjection = IDLE_PROJECTION
+    // Tell the bar to drop back to its local idle orb.
+    this.emit(true)
+  }
+
   /** A bar hold delegated its turn to this driver (flag on). Begins a main-owned
    *  turn: barge-in, route selection, hub begin, and main-owned capture. */
   begin(payload: { backfillMs: number }): void {
+    if (this.disposed) return
     // Barge-in seam (Mac `PushToTalkManager.startListening` → interruptCurrentResponse):
     // a new hold cuts off a still-playing cascade/TTS reply. Safe no-op when idle.
     // Hub playback is instead cancelled by the superseding `beginTurn(interrupting)`.

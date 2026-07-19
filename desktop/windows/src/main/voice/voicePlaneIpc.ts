@@ -12,8 +12,18 @@
 
 import { app, BrowserWindow, ipcMain, type IpcMainEvent } from 'electron'
 import path from 'path'
+import type { VoiceHubBarState } from '../../shared/types'
 import { systemAudioMuteBridge } from '../audio/systemAudioMute'
 import { dumpVoiceFlight, initVoiceFlightRecorder, recordVoiceFlight } from './flightRecorder'
+
+const IDLE_HUB_BAR_STATE: VoiceHubBarState = {
+  active: false,
+  isListening: false,
+  isThinking: false,
+  isResponseActive: false,
+  orbLevel: 0,
+  hint: ''
+}
 
 /** Which renderer sent an event, from its hash route ('#/bar' → 'bar'). */
 function senderLabel(e: IpcMainEvent): string {
@@ -57,6 +67,11 @@ export function resetVoicePlane(trigger: string, from = 'main'): void {
   // unconditional and idempotent (a no-op when it holds no mute).
   void systemAudioMuteBridge.restoreSystemAudio()
   for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed()) w.webContents.send('voice:planeReset', { trigger })
+    if (w.isDestroyed()) continue
+    w.webContents.send('voice:planeReset', { trigger })
+    // Force the bar's hub orb to idle DIRECTLY from main: the normal idle
+    // projection rides the main window's driver, which is exactly the thing
+    // that may be too wedged to emit it. Only the bar listens on this channel.
+    w.webContents.send('voiceHub:state', IDLE_HUB_BAR_STATE)
   }
 }

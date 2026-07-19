@@ -59,6 +59,7 @@ function makeFakeHub() {
     seedProduced: [] as string[],
     seedRefresh: 0,
     ensureWarm: 0,
+    teardown: 0,
     sendToolResult: [] as { callId: string; name: string; output: string }[]
   }
   let warmError: unknown = null
@@ -82,6 +83,9 @@ function makeFakeHub() {
     cancelTurn: (turnID: VoiceTurnID) => calls.cancelTurn.push(turnID),
     handoffWarmWaitToCascade: (turnID: VoiceTurnID) => calls.handoff.push(turnID),
     voiceTurnDidTerminate: (turnID: VoiceTurnID) => calls.didTerminate.push(turnID),
+    teardownSession: () => {
+      calls.teardown++
+    },
     markSeedKeyProduced: (key: string) => calls.seedProduced.push(key),
     refreshSeedContext: () => {
       calls.seedRefresh++
@@ -972,5 +976,96 @@ describe('release watchdog', () => {
 
     expect(h.states.at(-1)!.active).toBe(true)
     expect(h.states.every((s) => s.hint !== RELEASE_WATCHDOG_HINT)).toBe(true)
+  })
+})
+
+// ---- dispose (resetVoicePlane) --------------------------------------------
+
+describe('dispose (resetVoicePlane)', () => {
+  it('mid-recording: releases capture + socket + mute, publishes idle, and is inert after', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+
+    h.driver.dispose()
+
+    expect(h.capture.cap.dispose).toHaveBeenCalled()
+    expect(h.hub.calls.teardown).toBe(1)
+    expect(h.spies.restoreSystemAudio).toHaveBeenCalled()
+    const last = h.states.at(-1)!
+    expect(last.active).toBe(false)
+    expect(last.isListening).toBe(false)
+
+    // A disposed driver never runs again: no new capture, no warm, no hub turn.
+    h.driver.begin({ backfillMs: 0 })
+    expect(h.capture.start).toHaveBeenCalledTimes(1)
+    h.driver.warm()
+    expect(h.hub.calls.ensureWarm).toBe(0)
+  })
+
+  it('mid-reply (playing): stops playback and still releases everything', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end()
+    const ev = h.hub.events()
+    ev.onSpeakingStart?.()
+
+    h.driver.dispose()
+
+    // The cleanup terminal's stopPlayback effect reached the interrupt seam.
+    expect(h.spies.interruptPlayback).toHaveBeenCalled()
+    expect(h.hub.calls.teardown).toBe(1)
+    expect(h.states.at(-1)!.active).toBe(false)
+  })
+
+  it('post-release (watchdog armed): dispose cancels the watchdog and frees the turn', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end()
+    expect(h.watchdog.armed).toBe(true)
+
+    h.driver.dispose()
+
+    expect(h.watchdog.cancelled).toBe(true)
+    expect(h.states.at(-1)!.active).toBe(false)
+  })
+
+  it('idle: dispose is safe and idempotent', () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    expect(() => {
+      h.driver.dispose()
+      h.driver.dispose()
+    }).not.toThrow()
+    expect(h.hub.calls.teardown).toBe(1)
+  })
+
+  it('after a reset, a FRESH driver runs a full turn to success (working plane)', async () => {
+    const old = makeDriver({ pttHubEnabled: true })
+    old.hub.setAvailability(true)
+    old.driver.begin({ backfillMs: 0 })
+    await flush()
+    old.driver.dispose()
+
+    // The host swaps in a fresh driver (VoiceHubDriverHost.onVoicePlaneReset).
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end()
+    const ev = h.hub.events()
+    ev.onSpeakingStart?.()
+    ev.onTurnDone?.(null)
+    ev.onSpeakingEnd?.()
+    expect(h.states.at(-1)!.active).toBe(false)
+    expect(h.spies.onRecordTurn).not.toHaveBeenCalledWith('', '', expect.anything(), expect.anything())
   })
 })
