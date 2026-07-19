@@ -5,6 +5,7 @@ import { rewindRoot } from './paths'
 import { rewindImagePathsBetween, insertRewindFrame } from '../ipc/db'
 import { deriveKeepSetWindow, parseFrameTs } from './orphanSelection'
 import { selectFramesToReindex, type DiskFrameFile } from './rebuildSelection'
+import { signalRewindOcrPending } from './ocrService'
 
 /**
  * Windows-specific recovery: re-create `rewind_frames` rows from the JPEGs still on
@@ -127,6 +128,14 @@ async function runRebuild(): Promise<number> {
   }
   let total = 0
   for (const day of dayNames) total += await rebuildDayDir(day)
-  if (total > 0) console.log(`[rewind] index rebuild inserted ${total} row(s) from disk`)
+  if (total > 0) {
+    console.log(`[rewind] index rebuild inserted ${total} row(s) from disk`)
+    // These rows are inserted indexed=0 for the OCR backlog sweep to re-OCR. The
+    // sweep is gated on an in-memory "work pending" latch, so a producer other
+    // than the capture hot path must arm it too — otherwise a rebuild triggered
+    // while the sweep is idle (capture paused, backlog already drained) would sit
+    // un-OCR'd until the next capture or restart.
+    signalRewindOcrPending()
+  }
   return total
 }

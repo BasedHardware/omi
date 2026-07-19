@@ -107,6 +107,11 @@ let enabled = true
 function make(over: Partial<CoordinatorDeps> = {}): AssistantCoordinator {
   return new AssistantCoordinator({
     latestFrame: () => latest,
+    // The capture-layer signal advances whenever a genuinely new frame is stored.
+    // In production it is captureService's last-captured timestamp; here the
+    // current frame's identity is the faithful analogue (a new frame → new key),
+    // so the coordinator's DB-read gate sees exactly the changes the test makes.
+    captureSignal: () => (latest ? (latest.id ?? latest.ts) : null),
     now: () => now,
     isOnBattery: () => onBattery,
     isScreenAnalysisEnabled: () => enabled,
@@ -366,7 +371,10 @@ describe('distribution gate (the expensive one)', () => {
     // 201 distinct frames, but only the first + one per 60s fallback. Ungated,
     // this would be 201 screenshots on their way to a cloud model.
     expect(a.analyzed).toHaveLength(11)
-  })
+    // 201 real microtask flushes make this the suite's slowest coordinator test
+    // (~3s solo); give it headroom so full-suite CPU contention can't tip it past
+    // the 5s default and flake.
+  }, 20_000)
 
   // A debounce that restarts on every frame would never fire. Titles that churn
   // in a way the normalizer doesn't strip (a live word count, an edit counter)
@@ -556,6 +564,108 @@ describe('context switch + analysis delay', () => {
     c.tick()
     await flush()
     expect(a.analyzed).toHaveLength(2) // the 60s fallback, not a "switch"
+  })
+})
+
+describe('DB-read gate (idle burn)', () => {
+  it('skips the latestFrame() DB read while the capture signal has not advanced', () => {
+    const reader = vi.fn(() => latest)
+    let signal: number | null = 100
+    const c = make({ latestFrame: reader, captureSignal: () => signal })
+    c.register(new TestAssistant())
+
+    latest = frame({ id: 1 })
+    c.tick() // signal 100 → reads once
+    c.tick() // signal unchanged → skipped
+    c.tick() // still unchanged → skipped
+    expect(reader).toHaveBeenCalledTimes(1)
+
+    // Capture stores a new frame → signal advances → the read happens again.
+    signal = 101
+    latest = frame({ id: 2, ts: T0 + 3_000 })
+    c.tick()
+    expect(reader).toHaveBeenCalledTimes(2)
+  })
+
+  it('always reads when no capture signal source is wired (gate disabled)', () => {
+    const reader = vi.fn(() => latest)
+    const c = make({ latestFrame: reader, captureSignal: undefined })
+    c.register(new TestAssistant())
+
+    latest = frame({ id: 1 })
+    c.tick()
+    c.tick()
+    c.tick()
+    // No signal → the optimization is off; the lastFrameKey dedup still prevents
+    // re-analysis, but every tick pays the DB read.
+    expect(reader).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not read while screen analysis is off, before even consulting the signal', () => {
+    const reader = vi.fn(() => latest)
+    const signal = vi.fn(() => 100)
+    const c = make({ latestFrame: reader, captureSignal: signal })
+    c.register(new TestAssistant())
+    enabled = false
+
+    c.tick()
+
+    expect(reader).not.toHaveBeenCalled()
+    expect(signal).not.toHaveBeenCalled()
+  })
+
+  // The gate must not change WHICH ticks reach the time-based settling logic
+  // (the pendingFlushAt debounce + starvation fallback). That block already sits
+  // AFTER the pre-existing `key === lastFrameKey` guard, so it only ever runs when
+  // a new frame arrives — never on a pure clock tick. Since the signal advances
+  // iff a new frame was stored, gating on it is equivalent to that guard. This
+  // pins the equivalence: the same debounce-then-idle-then-new-frame script must
+  // produce IDENTICAL analysis whether the gate is on or off.
+  it('leaves the debounce/starvation settling behavior identical to the ungated loop', async () => {
+    // Schedule a debounce (context switch), then hold capture idle (same frame,
+    // flat signal) while the clock runs far past DEBOUNCE_MS and the fallback,
+    // then deliver one genuinely new frame.
+    async function run(useGate: boolean): Promise<number[]> {
+      now = T0
+      latest = null
+      const c = make(useGate ? {} : { captureSignal: undefined })
+      const a = new TestAssistant()
+      a.needsDelayFrames = true // isolate the debounce/starve block from the quiet window
+      c.register(a)
+
+      latest = frame({ id: 1, app: 'Slack', windowTitle: 'general' })
+      c.tick() // first frame → distributed
+      await flush()
+
+      now = T0 + 1_000
+      latest = frame({ id: 2, ts: now, app: 'Chrome', windowTitle: 'Docs' })
+      c.tick() // context switch → schedules the debounce (pendingFlushAt set)
+      await flush()
+
+      // Capture goes idle: the SAME frame keeps coming back, the signal is flat,
+      // and the clock sails past the debounce + fallback. No flush must fire.
+      for (const t of [30_000, 60_000, 90_000, 120_000]) {
+        now = T0 + t
+        latest = frame({ id: 2, ts: T0 + 1_000, app: 'Chrome', windowTitle: 'Docs' })
+        c.tick()
+        await flush()
+      }
+
+      // A genuinely new frame arrives → the pending flush lands now.
+      now = T0 + 130_000
+      latest = frame({ id: 3, ts: now, app: 'Chrome', windowTitle: 'Docs' })
+      c.tick()
+      await flush()
+
+      return a.analyzed.map((f) => f.id ?? f.ts)
+    }
+
+    const gated = await run(true)
+    const ungated = await run(false)
+    expect(gated).toEqual(ungated)
+    // And concretely: frame 1, then frame 3 — never a timer-driven flush during
+    // the idle stretch (which would have inserted an analysis of frame 2).
+    expect(gated).toEqual([1, 3])
   })
 })
 

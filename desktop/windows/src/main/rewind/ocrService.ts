@@ -8,12 +8,32 @@ const BATCH = 5
 
 let timer: NodeJS.Timeout | null = null
 let running = false
+// Whether an un-OCR'd frame MAY exist. The capture hot path OCRs almost every
+// frame inline (marking it indexed=1); a frame only reaches this backlog sweep
+// when the hot path skipped or failed it (see captureService.refreshCurrentScreen,
+// which calls signalRewindOcrPending in exactly those cases). While this is false
+// there is demonstrably nothing to do, so the 4s tick skips the DB read entirely —
+// the mirror of embeddingService's queue-empty tick gate. Starts true so a
+// pre-existing backlog from a previous session is drained on launch.
+let pending = true
+
+/** Wake the backlog sweep: an un-OCR'd frame may now exist. Cheap + idempotent;
+ *  safe to call from the capture hot path. */
+export function signalRewindOcrPending(): void {
+  pending = true
+}
 
 async function backfill(): Promise<void> {
-  if (running) return
+  if (running || !pending) return
   running = true
+  // Clear optimistically BEFORE the query: a frame captured mid-sweep re-arms
+  // `pending` via signalRewindOcrPending, so work is never lost by clearing early.
+  pending = false
   try {
     const frames = unindexedRewindFrames(BATCH)
+    // A full page means more may remain — keep sweeping on the next tick. A short
+    // page drained the backlog, so stay gated until capture signals again.
+    if (frames.length === BATCH) pending = true
     for (const f of frames) {
       if (f.id == null) continue
       // The app context stored on the frame at capture time; it is embedded with
@@ -43,6 +63,17 @@ async function backfill(): Promise<void> {
 }
 
 export function startRewindOcr(): void {
+  // Drain any backlog left by a previous session on (re)start.
+  pending = true
   if (timer) clearInterval(timer)
   timer = setInterval(() => void backfill(), BACKFILL_INTERVAL_MS)
+}
+
+/** Test seam: run one sweep synchronously and drive/inspect the pending latch. */
+export const __rewindOcrTestHooks = {
+  backfill,
+  setPending: (v: boolean): void => {
+    pending = v
+  },
+  getPending: (): boolean => pending
 }
