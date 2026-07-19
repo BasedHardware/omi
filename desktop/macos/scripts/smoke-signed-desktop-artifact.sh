@@ -83,7 +83,7 @@ Options:
 
 Optional live-probe environment:
   OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1
-      Required before --launch can launch com.omi.computer-macos.
+      Required before --launch can launch a production-family bundle id.
   OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND='...'
       Required for --auth. Runs after --launch and must prove app-level auth
       persistence/Keychain restore/restart behavior for the launched artifact.
