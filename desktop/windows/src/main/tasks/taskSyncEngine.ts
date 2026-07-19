@@ -37,6 +37,7 @@ import {
   getLocalActionItems,
   getUnsyncedActionItems,
   hardDeleteAbsentTasks,
+  hardDeleteAbsentCompletedTasks,
   insertLocalActionItem,
   markSyncedActionItem,
   setAppMeta,
@@ -63,6 +64,11 @@ import type {
 // cycle-safe: create.ts imports only ipc/db, taskEmbeddingService, core/session,
 // electron, and shared types — none of which import this engine.
 import { promoteIfNeeded } from '../assistants/tasks/create'
+// The 429-storm signal (backendDegraded.ts imports only electron/tracker/fallback —
+// never this engine). The completed-row reconcile consults it as a belt-and-
+// suspenders guard: a storm normally makes the completed fetch throw (skipping the
+// reconcile), but a thin/partial list must never drive a delete-by-absence.
+import { isBackendDegraded } from '../observability/backendDegraded'
 
 // --- Tunables ---------------------------------------------------------------
 const REQUEST_TIMEOUT_MS = 15_000
@@ -102,6 +108,7 @@ function emitDeletions(ids: number[]): void {
 
 // --- Module state ------------------------------------------------------------
 let lastReconcileAt = 0
+let lastCompletedReconcileAt = 0
 let retrying = false
 let hydrateIncompleteInFlight: Promise<void> | null = null
 let hydrateCompletedInFlight: Promise<void> | null = null
@@ -378,6 +385,28 @@ function maybeReconcile(apiIds: string[], now: number, force = false): void {
   }
 }
 
+/** The completed-list twin of maybeReconcile: hard-delete locally-completed synced
+ *  tasks absent from the backend's full completed listing (`apiIds`) — the phantom
+ *  a dropped write leaves when the row is later deleted server-side, which the
+ *  incomplete reconcile can never reach. This CONVERGES the "local N completed,
+ *  backend fewer" divergence. Guarded three ways against a spurious wipe:
+ *    - skipped entirely in the 429-degraded state (a storm can truncate the list);
+ *    - the storage layer treats an EMPTY `apiIds` as a no-op (never wipe on an
+ *      empty/failed listing) and spares just-toggled rows via a recency window;
+ *    - the caller only reaches here after `fetchAll(true)` returned the COMPLETE
+ *      list (it throws on any page failure) with a stable session epoch.
+ *  Throttled to the same 5-min cadence as maybeReconcile. */
+function maybeReconcileCompleted(apiIds: string[], now: number, force = false): void {
+  if (isBackendDegraded()) return
+  if (!force && now - lastCompletedReconcileAt < RECONCILE_THROTTLE_MS) return
+  lastCompletedReconcileAt = now
+  const deleted = hardDeleteAbsentCompletedTasks(apiIds, now)
+  if (deleted.length > 0) {
+    emitDeletions(deleted)
+    broadcastTasksChanged()
+  }
+}
+
 // --- One-time versioned full sync -------------------------------------------
 
 /** Derive the uid from the Firebase token's `user_id`/`sub` claim (decode, not
@@ -418,9 +447,16 @@ async function maybeFullSync(
       isTombstoned
     }
   )
-  // The one-time full sync forces a reconcile regardless of the 5-min throttle.
+  // The one-time full sync forces a reconcile regardless of the 5-min throttle —
+  // both the incomplete (active) and completed sweeps, so the initial populate also
+  // clears any completed phantom left by a prior install's dropped write.
   maybeReconcile(
     incomplete.map((i) => i.id),
+    now,
+    true
+  )
+  maybeReconcileCompleted(
+    completed.map((i) => i.id),
     now,
     true
   )
@@ -494,6 +530,13 @@ async function doHydrateCompleted(): Promise<void> {
     const res = syncTaskActionItems(
       items.map((i) => mapBackendItem(i, now)),
       { now, isTombstoned }
+    )
+    // Reconcile completed phantoms: a locally-completed row absent from the backend's
+    // full completed listing was deleted server-side and must be dropped locally.
+    // maybeReconcileCompleted broadcasts on its own iff it deletes something.
+    maybeReconcileCompleted(
+      items.map((i) => i.id),
+      now
     )
     // Broadcast only on an actual change — see doHydrateIncomplete for why a silent
     // no-op hydrate is mandatory (renderer re-read → hydrate → broadcast loop).
