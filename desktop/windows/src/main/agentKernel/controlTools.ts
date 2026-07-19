@@ -34,6 +34,7 @@ import type {
 import type { AgentRuntimeKernel } from './kernel'
 import type { DesktopAwarenessSnapshot, ExecuteAgentRunInput } from './kernelTypes'
 import { agentControlCapabilityManifest, agentControlInputSchema } from './controlToolManifest'
+import { agentCardStampMetadata } from './agentThreadCards'
 import { evaluateDesktopToolPolicy, type DesktopCoordinatorBundle } from './desktopToolPolicy'
 import {
   assertAgentSpawningAllowed,
@@ -888,6 +889,26 @@ export async function handleAgentControlToolCall(
           : parsed.externalRefId
         const childSurfaceKind = parsed.visible ? 'floating_bar' : 'delegated_agent'
         const childExternalRefKind = parsed.visible ? 'pill' : undefined
+        // Shared-thread agent cards (B4, INV-CHAT-1): stamp the background run with
+        // the PRODUCING surface (the caller's chat/voice conversation), so the
+        // terminal subscriber can materialize the completion card long after this
+        // call returned. Resolved from the caller session — a trusted-direct-control
+        // spawn with no originating chat gets no stamp (and thus no cards). The
+        // stamp only records provenance; it never widens spawn authority.
+        const cardTitle = parsed.title ?? `Background: ${parsed.objective.slice(0, 80)}`
+        const producingSurface = context.callerSessionId
+          ? context.kernel.getProducingCardSurface(context.callerSessionId)
+          : null
+        const cardStampMetadata = producingSurface
+          ? agentCardStampMetadata({
+              producingConversationId: producingSurface.conversationId,
+              producingChatId: producingSurface.chatId,
+              producingSurfaceKind: producingSurface.surfaceKind,
+              pillId: visiblePillExternalRefId ?? null,
+              title: cardTitle,
+              objective: parsed.objective
+            })
+          : {}
         if (delegateUnderParent && parsed.parentRunId) {
           const result = await context.kernel.delegateAgent({
             ...controlRunRecovery(context, adapterId),
@@ -906,7 +927,7 @@ export async function handleAgentControlToolCall(
             model: parsed.model,
             runMode: 'act',
             clientId: parsed.clientId,
-            metadata: { ...(parsed.metadata ?? {}), visible: parsed.visible }
+            metadata: { ...(parsed.metadata ?? {}), visible: parsed.visible, ...cardStampMetadata }
           })
           return stringifyToolResult({
             delegation: serializeDelegation(result.delegation),
@@ -937,7 +958,8 @@ export async function handleAgentControlToolCall(
             provider: parsed.provider ?? null,
             // Kept for traceability when a managed-cloud parent rerouted the
             // delegation into a top-level background spawn (see above).
-            requestedParentRunId: parsed.parentRunId ?? null
+            requestedParentRunId: parsed.parentRunId ?? null,
+            ...cardStampMetadata
           }
         })
         return stringifyToolResult({

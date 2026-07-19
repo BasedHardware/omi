@@ -21,6 +21,7 @@ import {
 } from './surfaceSession'
 import {
   clearOwnerMainChatTurns,
+  conversationIdForSession,
   getMainChatTurnTail,
   importConversationTurnsForSurface,
   projectCrossSurfaceTurn,
@@ -28,9 +29,19 @@ import {
   type ConversationTurnImportEntry,
   type RecordSurfaceTurnResult
 } from './conversationTurns'
+import {
+  AGENT_CARD_SCAN_LIMIT,
+  listAgentThreadCards,
+  materializeAgentCompletionCard,
+  materializeAgentSpawnCard,
+  readAgentCardStamp,
+  type AgentCardStamp,
+  type AgentThreadCardRecord,
+  type MaterializedAgentCard
+} from './agentThreadCards'
 import { getVoiceSeedContext, getVoiceSeedSnapshot } from './turnContext'
-import { boundedLimit, placeholders, sessionFromRow } from './kernelSupport'
-import type { AgentSession, ConversationTurn } from './types'
+import { boundedLimit, parseJsonObject, placeholders, sessionFromRow } from './kernelSupport'
+import type { AgentRun, AgentSession, ConversationTurn } from './types'
 import type {
   InvalidateBindingsInput,
   InvalidateBindingsResult,
@@ -249,6 +260,96 @@ export class KernelSessions extends KernelArtifacts {
         nowMs: Date.now()
       })
     )
+  }
+
+  // === Shared-thread agent cards (B4, INV-CHAT-1) ============================
+  // Exactly two authoritative artifacts per background run land on the producing
+  // surface's kernel conversation: an agentSpawn card at launch and one
+  // agentCompletion card at terminal. See agentThreadCards.ts for the contract.
+
+  /** The producing conversation for a caller session, or null when the session has
+   *  no surface conversation. */
+  conversationIdForSession(sessionId: string): string | null {
+    return conversationIdForSession(this.store, sessionId)
+  }
+
+  /** Resolve the stamp inputs a spawn writes onto a background run so its terminal
+   *  can find the producing surface. Null when the caller session has no surface
+   *  conversation (e.g. trusted-direct-control spawns with no originating chat) —
+   *  those simply get no shared-thread cards. */
+  getProducingCardSurface(
+    sessionId: string
+  ): { conversationId: string; chatId: string | null; surfaceKind: string } | null {
+    const conversationId = conversationIdForSession(this.store, sessionId)
+    if (!conversationId) return null
+    const session = this.readSession(sessionId)
+    return {
+      conversationId,
+      chatId: session.externalRefKind === 'chat' ? session.externalRefId : null,
+      surfaceKind: session.surfaceKind
+    }
+  }
+
+  /** Materialize the launch card for a background run, once (idempotent on runId).
+   *  Null when the run was not spawned from a card-producing surface or the card
+   *  already exists. */
+  materializeAgentSpawnCard(runId: string): MaterializedAgentCard | null {
+    const carded = this.readCardRun(runId)
+    if (!carded) return null
+    const { run, stamp } = carded
+    const record = this.withTransaction(() =>
+      materializeAgentSpawnCard(this.store, {
+        runId: run.runId,
+        sessionId: run.sessionId,
+        stamp,
+        nowMs: Date.now()
+      })
+    )
+    return record ? { record, chatId: stamp.producingChatId } : null
+  }
+
+  /** Materialize the terminal card for a background run, once (idempotent on runId
+   *  — exactly one completion even under terminal retry / duplicate terminal
+   *  event). Null when the run is not card-producing or the card already exists. */
+  materializeAgentCompletionCard(runId: string): MaterializedAgentCard | null {
+    const carded = this.readCardRun(runId)
+    if (!carded) return null
+    const { run, stamp } = carded
+    const record = this.withTransaction(() =>
+      materializeAgentCompletionCard(this.store, {
+        run: {
+          runId: run.runId,
+          sessionId: run.sessionId,
+          status: run.status,
+          finalText: run.finalText,
+          errorMessage: run.errorMessage
+        },
+        stamp,
+        nowMs: Date.now()
+      })
+    )
+    return record ? { record, chatId: stamp.producingChatId } : null
+  }
+
+  /** The shared-thread agent cards for a main_chat thread, oldest-first — the
+   *  renderer projection read (survives a completion that landed while the chat UI
+   *  window was closed). */
+  listAgentThreadCardsForMainChat(ownerId: string, chatId = 'default'): AgentThreadCardRecord[] {
+    const { conversationId } = getMainChatTurnTail(this.store, ownerId, 1, chatId)
+    if (!conversationId) return []
+    return listAgentThreadCards(this.store, conversationId, AGENT_CARD_SCAN_LIMIT)
+  }
+
+  private readCardRun(runId: string): { run: AgentRun; stamp: AgentCardStamp } | null {
+    let run: AgentRun
+    try {
+      run = this.readRun(runId)
+    } catch {
+      return null
+    }
+    const metadata = (parseJsonObject(run.inputJson) as { metadata?: unknown }).metadata
+    const stamp = readAgentCardStamp(metadata)
+    return stamp ? { run, stamp } : null
   }
 
   invalidateBindings(input: InvalidateBindingsInput): InvalidateBindingsResult {

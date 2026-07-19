@@ -1,5 +1,6 @@
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
+import type { ChatContentBlock } from './chatContent'
 import type {
   McpConnectorId,
   McpExportsSnapshot,
@@ -1261,6 +1262,15 @@ export type OmiBridgeApi = {
   mainChatCancel: (runId: string) => Promise<boolean>
   /** Subscribe to streaming main-chat events. Returns an unsubscribe function. */
   onMainChatEvent: (cb: (event: MainChatEvent) => void) => () => void
+  // --- shared-thread agent cards (B4, INV-CHAT-1) ---
+  /** The durable spawn/completion cards for a main_chat thread, oldest-first. Read
+   *  on chat load so a completion that landed while the window was closed still
+   *  shows. Projection of the kernel store; never the authoritative copy. */
+  getAgentCardsForChat: (chatId: string) => Promise<AgentThreadCardMsg[]>
+  /** Subscribe to live shared-thread agent card writes (spawn at launch, one
+   *  completion at terminal). The renderer appends the card when its `chatId`
+   *  matches the active thread. Returns an unsubscribe function. */
+  onAgentCardEvent: (cb: (card: AgentThreadCardMsg) => void) => () => void
   // --- realtime-hub voice turns → the one kernel-owned transcript (INV-CHAT-1) ---
   /** Record a completed native realtime-hub voice turn into the SAME
    *  main_chat/chat/<chatId> conversation typed chat reads, origin
@@ -1623,6 +1633,21 @@ export type MainChatResult = {
   terminalStatus: 'succeeded' | 'failed' | 'cancelled'
   costUsd?: number
   error?: string
+}
+
+/** The two ChatContent block kinds a shared-thread agent card carries (B4). */
+export type AgentThreadCardBlock = Extract<
+  ChatContentBlock,
+  { type: 'agentSpawn' | 'agentCompletion' }
+>
+
+/** One shared-thread agent card, as projected to the renderer (INV-CHAT-1). The
+ *  block is the authoritative artifact; `chatId` is the producing surface's chat
+ *  ref, matched against the renderer's active thread. */
+export type AgentThreadCardMsg = {
+  chatId: string | null
+  createdAtMs: number
+  block: AgentThreadCardBlock
 }
 
 // --- Screen activity → memories (Rewind OCR synthesis) ---

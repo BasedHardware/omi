@@ -4,6 +4,8 @@ import type { ChatMsg } from '../../hooks/useChat'
 import { RevealMarkdown } from './RevealMarkdown'
 import { ChatAttachmentStrip } from './ChatAttachmentStrip'
 import { OmiThinkingSpinner } from './OmiThinkingSpinner'
+import { AgentThreadCard } from './AgentThreadCard'
+import type { AgentThreadCardBlock } from '../../../../shared/types'
 
 const BUBBLE: Record<'main' | 'overlay', { user: string; assistant: string }> = {
   main: {
@@ -96,6 +98,25 @@ export function ChatMessages({
     <>
       {messages.map((m, i) => {
         const isLast = i === messages.length - 1
+        // Shared-thread agent cards (B4, INV-CHAT-1): an assistant message that
+        // carries spawn/completion blocks renders as card(s), not a text bubble.
+        // Handled before the spinner/copy logic so a card that lands as the last
+        // message mid-turn never shows the streaming placeholder or a copy button.
+        if (m.blocks?.length) {
+          const cards = m.blocks.filter(
+            (b): b is AgentThreadCardBlock =>
+              b.type === 'agentSpawn' || b.type === 'agentCompletion'
+          )
+          if (cards.length) {
+            return (
+              <div key={m.id ?? i} className="flex flex-col gap-1.5">
+                {cards.map((block) => (
+                  <AgentThreadCard key={block.id} block={block} compact={compact} />
+                ))}
+              </div>
+            )
+          }
+        }
         // Bar chat (overlay): while Omi's reply is still pending — the last
         // assistant turn exists as an empty placeholder — show a standalone
         // spinning Omi mark instead of a bubble of dots. A distinct key means the
