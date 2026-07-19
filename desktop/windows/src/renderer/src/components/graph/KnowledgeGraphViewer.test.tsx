@@ -7,11 +7,12 @@ import type { KnowledgeGraph } from '../../../../shared/types'
 // lazy wrapper. The stub records the props the viewer passes so we can assert the
 // full-screen scene is mounted INTERACTIVE (orbit/pan/zoom) with the graph data.
 vi.mock('./LazyBrainGraph', () => ({
-  BrainGraph: (props: { interactive?: boolean; graph: KnowledgeGraph }) => (
+  BrainGraph: (props: { interactive?: boolean; graph: KnowledgeGraph; labelMode?: string }) => (
     <div
       data-testid="brain-graph"
       data-interactive={String(!!props.interactive)}
       data-node-count={props.graph.nodes.length}
+      data-label-mode={props.labelMode ?? 'all'}
     />
   )
 }))
@@ -104,6 +105,50 @@ describe('KnowledgeGraphViewer', () => {
   it('does not show the density control when the graph is under the cap', () => {
     render(<KnowledgeGraphViewer graph={POPULATED} onClose={() => {}} />)
     expect(screen.queryByRole('button', { name: /show all/i })).toBeNull()
+  })
+
+  it('defaults to declutter labels and toggles to all labels via "Show all labels"', () => {
+    render(<KnowledgeGraphViewer graph={big} centerNodeId="n0" onClose={() => {}} />)
+    // Resting look: decluttered (only the top hubs stay named), same as the card.
+    expect(screen.getByTestId('brain-graph').getAttribute('data-label-mode')).toBe('declutter')
+    const toggle = screen.getByRole('button', { name: 'Show all labels' })
+    fireEvent.click(toggle)
+    // Now every visible node is named, and the control flips to collapse again.
+    expect(screen.getByTestId('brain-graph').getAttribute('data-label-mode')).toBe('all')
+    expect(screen.getByRole('button', { name: 'Show key labels' })).toBeTruthy()
+  })
+
+  it('composes the labels toggle with the node toggle independently (4 states)', () => {
+    render(<KnowledgeGraphViewer graph={big} centerNodeId="n0" onClose={() => {}} />)
+    const canvas = (): HTMLElement => screen.getByTestId('brain-graph')
+    const nodeToggle = (): HTMLElement =>
+      screen.getByRole('button', { name: /^Show (all \d+|key \d+)$/ })
+    const labelToggle = (): HTMLElement =>
+      screen.getByRole('button', { name: /^Show (all|key) labels$/ })
+
+    // State 1: key nodes + declutter labels (defaults).
+    expect(canvas().getAttribute('data-node-count')).toBe(String(DEFAULT_NODE_CAP))
+    expect(canvas().getAttribute('data-label-mode')).toBe('declutter')
+
+    // State 2: key nodes + all labels — flipping labels leaves the node set alone.
+    fireEvent.click(labelToggle())
+    expect(canvas().getAttribute('data-node-count')).toBe(String(DEFAULT_NODE_CAP))
+    expect(canvas().getAttribute('data-label-mode')).toBe('all')
+
+    // State 3: all nodes + all labels — flipping nodes leaves the label mode alone.
+    fireEvent.click(nodeToggle())
+    expect(canvas().getAttribute('data-node-count')).toBe(String(big.nodes.length))
+    expect(canvas().getAttribute('data-label-mode')).toBe('all')
+
+    // State 4: all nodes + declutter labels.
+    fireEvent.click(labelToggle())
+    expect(canvas().getAttribute('data-node-count')).toBe(String(big.nodes.length))
+    expect(canvas().getAttribute('data-label-mode')).toBe('declutter')
+  })
+
+  it('does not show the labels control when few enough nodes are visible', () => {
+    render(<KnowledgeGraphViewer graph={POPULATED} onClose={() => {}} />)
+    expect(screen.queryByRole('button', { name: /labels/i })).toBeNull()
   })
 
   it('never introduces off-brand purple chrome', () => {
