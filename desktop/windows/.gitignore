@@ -50,6 +50,7 @@ docs/*
 !docs/bar-gotchas.md
 !docs/multi-worktree-dev.md
 !docs/release-pipeline.md
+!docs/perf-startup-burst-2026-07-19.md
 !docs/mac-parity-audit
 !docs/perf-invisible-wins.md
 skills-lock.json
