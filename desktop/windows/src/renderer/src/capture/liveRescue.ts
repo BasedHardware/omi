@@ -10,12 +10,33 @@ import type { BackendSegment, SyncSegment } from '../../../shared/types'
 // terminal: 3 attempts, no resume, then error-stop.)
 export const MAX_RECONNECT_ATTEMPTS = 10
 const RECONNECT_MAX_MS = 32_000
+// A 429 is the server explicitly saying "slow down", so a rate-limited drop backs
+// off from at least this floor rather than the usual 2s first step.
+const RATE_LIMIT_FLOOR_MS = 5_000
+// Up-to jitter added to every reconnect delay, decorrelating retries during an
+// account-wide 429 storm so the lanes don't all wake at the same instant.
+const RECONNECT_JITTER_MS = 1_000
 
 /** Capped exponential backoff for the Nth reconnect attempt (1-based): 2s, 4s, 8s,
- *  16s, 32s, then 32s — matching the macOS reference (min(2^n, 32s), no jitter). */
+ *  16s, 32s, then 32s — matching the macOS reference (min(2^n, 32s), no jitter).
+ *  The base curve; the live loop uses reconnectDelayJitteredMs. */
 export function reconnectDelayMs(attempt: number): number {
   const n = Math.max(1, attempt)
   return Math.min(RECONNECT_MAX_MS, 2 ** n * 1000)
+}
+
+/** Reconnect delay actually used by the live loop: the capped-exponential base plus
+ *  decorrelating jitter, with a longer floor when the drop was a 429 so we don't
+ *  hammer a server that just rate-limited us. `rand` is injectable for tests. */
+export function reconnectDelayJitteredMs(
+  attempt: number,
+  opts: { rateLimited?: boolean; rand?: () => number } = {}
+): number {
+  const rand = opts.rand ?? Math.random
+  const base = opts.rateLimited
+    ? Math.min(RECONNECT_MAX_MS, Math.max(reconnectDelayMs(attempt), RATE_LIMIT_FLOOR_MS))
+    : reconnectDelayMs(attempt)
+  return Math.round(base + rand() * RECONNECT_JITTER_MS)
 }
 
 /** Whether a transcription error is worth reconnecting for. Quota/entitlement
@@ -25,6 +46,12 @@ export function reconnectDelayMs(attempt: number): number {
  *  timeouts, transient server closes) is retryable. */
 export function isRetryableDropError(message: string): boolean {
   return !isQuotaExhaustedMessage(message) && !/not signed in|requires sign-in/i.test(message)
+}
+
+/** Whether a retryable drop was a backend rate-limit. The ws handshake surfaces a
+ *  429 rejection as "Unexpected server response: 429", so match a standalone 429. */
+export function isRateLimitedDropError(message: string): boolean {
+  return /\b429\b/.test(message)
 }
 
 /**

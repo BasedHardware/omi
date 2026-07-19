@@ -23,6 +23,8 @@
 //     invalidated. The epoch already dooms the result; aborting stops us burning
 //     the call as well.
 
+import { noteBackendStatus } from '../../observability/backendDegraded'
+
 /** Credentials the renderer hands the main process to reach the backend. */
 export type BackendSession = {
   /** Python backend base (VITE_OMI_API_BASE) — user data + sync. */
@@ -37,6 +39,19 @@ let cached: BackendSession | null = null
 let epoch = 0
 let abortController: AbortController | null = null
 
+// Fired on sign-out (session cleared to null) so per-user main-process state that
+// isn't epoch-guarded — e.g. the tasks pending-delete tombstones and the degraded
+// tracker — is dropped before the next account signs in. Not fired on a same-user
+// token refresh (main can't distinguish that from a user switch, and sign-out is
+// always wipe-then-signout, so null is the safe, sufficient reset trigger).
+type SessionResetListener = () => void
+const sessionResetListeners = new Set<SessionResetListener>()
+
+/** Register a reset run when the session is cleared (sign-out). */
+export function onSessionReset(fn: SessionResetListener): void {
+  sessionResetListeners.add(fn)
+}
+
 /** Set/refresh (or clear, on null) the shared session. Every in-flight job for
  *  the previous session is invalidated: its epoch check now fails, and its
  *  network work is aborted. */
@@ -48,6 +63,16 @@ export function setBackendSession(session: BackendSession | null): void {
 
   abortController?.abort()
   abortController = session ? new AbortController() : null
+
+  if (!session) {
+    for (const fn of sessionResetListeners) {
+      try {
+        fn()
+      } catch (e) {
+        console.warn('[session] reset listener threw:', (e as Error)?.message)
+      }
+    }
+  }
 }
 
 /** The current session, or null when signed out / not yet relayed. */
@@ -190,6 +215,18 @@ export async function pullFreshSession(): Promise<void> {
  *  signal (getAbortSignal) into the request AND drops the result via its own epoch
  *  guard (getSessionEpoch pinned at entry). Callers must keep doing both. */
 export async function fetchWithFreshToken(
+  doFetch: (session: BackendSession) => Promise<Response>,
+  label?: string
+): Promise<Response> {
+  const res = await doFetchWithFreshToken(doFetch)
+  // Passive 429-storm telemetry: feed the outcome to the shared degraded-mode
+  // tracker (observation only — no retry/backoff here; each caller's semantics
+  // differ). `label` keys the distinct-path storm rule. Non-throwing.
+  noteBackendStatus(res.status, label)
+  return res
+}
+
+async function doFetchWithFreshToken(
   doFetch: (session: BackendSession) => Promise<Response>
 ): Promise<Response> {
   if (isSessionExpired()) await pullFreshSession()

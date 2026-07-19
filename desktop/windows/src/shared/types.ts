@@ -854,6 +854,15 @@ export type OmiBridgeApi = {
   /** main → renderer: the local task store changed (optimistic write or a
    *  background sync landed). Returns an unsubscribe fn. */
   onTasksChanged: (cb: () => void) => () => void
+  /** main → renderer: a task mutation the user saw did NOT stick (e.g. a delete
+   *  that failed and whose row was restored). Lets the renderer toast instead of
+   *  diverging silently. Returns an unsubscribe fn. */
+  onTasksOpFailed: (cb: (failure: TaskOpFailure) => void) => () => void
+  /** Current 429-storm degraded state — for a window that mounts mid-storm. */
+  backendDegradedState: () => Promise<boolean>
+  /** main → renderer: the backend is (true) / is no longer (false) in a 429 storm.
+   *  Debounced to one event per transition. Returns an unsubscribe fn. */
+  onBackendDegraded: (cb: (degraded: boolean) => void) => () => void
   /** Manual goal generation phase 1 (the Goals "Suggest" button). Client-side:
    *  assembles the on-device context bundle and generates ONE candidate goal via
    *  the Gemini proxy — WITHOUT creating it. The renderer previews the candidate;
@@ -2461,6 +2470,10 @@ export type TaskRerank = { backendId: string; newPosition: number }
 // The main-process `taskSyncEngine` owns local SQLite + backend REST; the renderer
 // is thin (IPC only). These are the payload shapes for the `tasks:*` channels
 // (see src/main/ipc/tasks.ts for the channel list + semantics).
+
+/** main → renderer signal that a task mutation the user saw did NOT stick. Carries
+ *  the op and a ready-to-display message (`onTasksOpFailed`). */
+export type TaskOpFailure = { op: 'delete'; message: string }
 
 /** Fields the renderer supplies to create a task (`tasks:create`). Only
  *  description/completed/dueAt/conversationId reach the backend; priority/category/

@@ -105,6 +105,9 @@ import {
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
 import { registerTaskHandlers } from './ipc/tasks'
+import { registerBackendDegradedIpc, resetBackendDegraded } from './observability/backendDegraded'
+import { resetPendingDeletes } from './tasks/taskSyncEngine'
+import { onSessionReset } from './assistants/core/session'
 import { setTaskDeletionListener } from './tasks/taskSyncEngine'
 import { removeFromIndex as removeTaskFromEmbeddingIndex } from './tasks/taskEmbeddingService'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
@@ -931,6 +934,15 @@ app.whenReady().then(async () => {
   // the engine reads the shared backend session (relayed by the renderer) and syncs
   // on demand when a list/reconcile channel is invoked.
   registerTaskHandlers()
+  // 429-storm degraded-mode: pull channel so a window that mounts mid-storm can sync
+  // the current state (the transitions themselves broadcast on `backend:degraded`).
+  registerBackendDegradedIpc()
+  // Cross-account hygiene: drop per-user tombstones + storm state on sign-out so they
+  // never bleed into the next account that signs in.
+  onSessionReset(() => {
+    resetPendingDeletes()
+    resetBackendDegraded()
+  })
   // FIX (ii): keep the in-memory task-embedding index consistent — every hard-delete
   // path in the sync engine (deleteTask + the reconcile sweep) hands the storage-
   // returned ids here so their vectors are evicted. DI seam, no hard import either way.

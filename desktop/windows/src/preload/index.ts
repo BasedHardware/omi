@@ -51,6 +51,7 @@ import type {
   TaskCreateFields,
   TaskUpdateFields,
   TaskDashboardSlices,
+  TaskOpFailure,
   LiveNote,
   GoalGenerateResult,
   GoalCandidateResult,
@@ -261,6 +262,17 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('tasks:changed', listener)
     return () => ipcRenderer.removeListener('tasks:changed', listener)
+  },
+  onTasksOpFailed: (cb: (failure: TaskOpFailure) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, failure: TaskOpFailure): void => cb(failure)
+    ipcRenderer.on('tasks:opFailed', listener)
+    return () => ipcRenderer.removeListener('tasks:opFailed', listener)
+  },
+  backendDegradedState: () => ipcRenderer.invoke('backend:degradedState') as Promise<boolean>,
+  onBackendDegraded: (cb: (degraded: boolean) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, degraded: boolean): void => cb(degraded)
+    ipcRenderer.on('backend:degraded', listener)
+    return () => ipcRenderer.removeListener('backend:degraded', listener)
   },
   goalsGenerateCandidate: () =>
     ipcRenderer.invoke('goals:generateCandidate') as Promise<GoalCandidateResult>,

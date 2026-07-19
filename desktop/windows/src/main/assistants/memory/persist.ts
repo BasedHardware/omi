@@ -10,6 +10,7 @@
 // between, so a session change during extraction cannot slip a departed user's
 // memory into the next user's DB or account.
 import { net } from 'electron'
+import { noteBackendStatus } from '../../observability/backendDegraded'
 import { getAbortSignal, getBackendSession, getSessionEpoch } from '../core/session'
 import { insertMemory, markMemorySynced } from '../../ipc/db'
 import type { MemoryCategory } from '../../../shared/types'
@@ -70,6 +71,7 @@ async function syncToBackend(
       }),
       signal: ctrl.signal
     })
+    noteBackendStatus(res.status, 'POST /v3/memories') // 429-storm telemetry (observe only)
     if (!res.ok) {
       console.warn(`[memory] sync HTTP ${res.status}`)
       return

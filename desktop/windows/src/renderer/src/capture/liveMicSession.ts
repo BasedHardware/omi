@@ -6,8 +6,9 @@ import { syncLocalConversation } from '../lib/sync/conversationSync'
 import { captureLiveStore } from './liveStore'
 import {
   MAX_RECONNECT_ATTEMPTS,
-  reconnectDelayMs,
+  reconnectDelayJitteredMs,
   isRetryableDropError,
+  isRateLimitedDropError,
   toSyncSegments,
   segmentsToTranscript,
   createSegmentRetainer
@@ -220,13 +221,19 @@ export function startLiveMicSession(): LiveMicController {
           }
           if (reconnectAttempt < MAX_RECONNECT_ATTEMPTS) {
             // Transient drop (or connect failure) — reconnect and RESUME the same
-            // conversation. The retainer + live store are preserved across this.
+            // conversation. The retainer + live store are preserved across this. A
+            // 429 handshake rejection backs off from a longer floor (don't hammer a
+            // server that just rate-limited us); jitter decorrelates lanes in a storm.
             reconnectAttempt++
+            const rateLimited = isRateLimitedDropError((e as Error).message)
             captureLiveStore.setStatus('connecting')
             timers.push(
-              setTimeout(() => {
-                if (!cancelled) connect()
-              }, reconnectDelayMs(reconnectAttempt))
+              setTimeout(
+                () => {
+                  if (!cancelled) connect()
+                },
+                reconnectDelayJitteredMs(reconnectAttempt, { rateLimited })
+              )
             )
           } else {
             // Exhausted — rescue the recording via from-segments, then surface the error.

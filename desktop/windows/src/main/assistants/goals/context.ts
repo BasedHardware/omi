@@ -19,6 +19,7 @@
 //     completion model (current >= target). Abandoned goals have no signal → None.
 //  2. Task linking is NOT persisted (no backend goal_id field) — see generate.ts.
 import { net } from 'electron'
+import { noteBackendStatus } from '../../observability/backendDegraded'
 import { getAbortSignal, getBackendSession, type BackendSession } from '../core/session'
 
 /** Mac's per-source caps (GoalsAIService.swift:150-247). No truncation beyond these. */
@@ -96,6 +97,7 @@ async function authedJson(session: BackendSession, path: string): Promise<unknow
           headers: { Authorization: `Bearer ${session.token}` },
           signal
         })
+        noteBackendStatus(res.status, `GET ${path.split('?')[0]}`) // 429-storm telemetry (observe only)
         if (!res.ok) {
           console.warn(`[goals] context GET ${path.split('?')[0]} HTTP ${res.status}`)
           return null

@@ -710,7 +710,14 @@ function applyActionUpdateFrom(
 export function syncTaskActionItemsOn(
   d: TaskStoreDb,
   items: SyncActionItem[],
-  opts: { overrideStagedDeletions?: boolean; now: number }
+  opts: {
+    overrideStagedDeletions?: boolean
+    now: number
+    /** Guard against resurrecting a just-deleted row: returns true for a backend_id
+     *  the user hard-deleted locally whose DELETE is still resolving. Consulted only
+     *  on the fresh-insert path (a tombstoned id has no local row to update). */
+    isTombstoned?: (backendId: string) => boolean
+  }
 ): { skipped: number; adopted: number; inserted: number; updated: number } {
   const overrideStagedDeletions = opts.overrideStagedDeletions ?? false
   const now = opts.now
@@ -734,6 +741,14 @@ export function syncTaskActionItemsOn(
         }
         applyActionUpdateFrom(d, existing, item)
         updated++
+        continue
+      }
+      // Pending-delete guard: the user hard-deleted this backend_id locally and its
+      // DELETE is still resolving. A stale/racing hydrate list must not resurrect it
+      // via a fresh insert (or orphan-adoption) — skip until the engine clears the
+      // tombstone (delete confirmed, or the row honestly restored).
+      if (opts.isTombstoned?.(item.backendId)) {
+        skipped++
         continue
       }
       const orphan = cachedStmt(

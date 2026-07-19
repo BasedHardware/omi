@@ -204,6 +204,15 @@ export function Tasks(): React.JSX.Element {
   // mount-refetch loop, window-focus refetch, and create→reload dance.
   useEffect(() => window.omi.onTasksChanged(() => void readTasks()), [readTasks])
 
+  // A background task mutation failed (e.g. a delete that the server rejected and
+  // whose row main restored). The delete IPC resolves before its HTTP call, so the
+  // deleteItem catch below never sees this — main signals it out-of-band. Toast it
+  // so the reappearing row is explained instead of looking like a silent glitch.
+  useEffect(
+    () => window.omi.onTasksOpFailed((failure) => toast(failure.message, { tone: 'error' })),
+    []
+  )
+
   const onRefresh = async (): Promise<void> => {
     if (refreshing) return
     setRefreshing(true)

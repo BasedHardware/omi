@@ -85,6 +85,9 @@ function latest(): Call {
 
 beforeEach(() => {
   vi.useFakeTimers()
+  // Reconnect delay now carries decorrelating jitter (rand()*1s). Pin rand to 0 so
+  // the delay equals the exact exponential base these timing assertions advance by.
+  vi.spyOn(Math, 'random').mockReturnValue(0)
   calls.length = 0
   storeSegments.length = 0
   stop.mockClear()

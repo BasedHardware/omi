@@ -12,6 +12,7 @@
 // missing/expired session makes background generation a soft no-op that defers
 // to the next renderer-driven trigger. See docs note in index.ts wiring.
 import { net } from 'electron'
+import { noteBackendStatus } from '../../observability/backendDegraded'
 import {
   deleteAiUserProfile,
   deleteAllAiUserProfiles,
@@ -138,6 +139,7 @@ async function authedGet(
         headers: { Authorization: `Bearer ${session.token}` },
         signal
       })
+      noteBackendStatus(res.status, `GET ${path.split('?')[0]}`) // 429-storm telemetry (observe only)
       // Distinguish an expired/invalid session from genuine no-data so generation
       // can abort with a clear signal instead of the misleading "not enough data".
       if (res.status === 401 || res.status === 403) throw new AuthExpiredError()
