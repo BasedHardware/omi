@@ -24,6 +24,7 @@ import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { app } from 'electron'
 import { providerBoundaryForAdapter } from './executionPolicy'
+import { cachedStmt } from '../ipc/stmtCache'
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -1551,8 +1552,13 @@ export class SqliteAgentStore implements AgentStore {
     }
   }
 
+  // execute/getRow/getOptionalRow/allRows are the choke points nearly every store
+  // query flows through, so caching the prepared statement here (keyed by the SQL
+  // text, per connection) hoists all of them at once. Every `sql` reaching these is
+  // a developer-authored literal or a constant-length placeholder expansion — never
+  // a runtime-variable-length string — so the per-connection cache stays bounded.
   execute(sql: string, values: unknown[] = []): number {
-    return Number(this.db.prepare(sql).run(...values).changes)
+    return Number(cachedStmt(this.db, sql).run(...values).changes)
   }
 
   getPragma(name: string): unknown {
@@ -1560,7 +1566,7 @@ export class SqliteAgentStore implements AgentStore {
   }
 
   getRow(sql: string, values: unknown[] = []): Row {
-    const row = this.db.prepare(sql).get(...values) as Row | undefined
+    const row = cachedStmt(this.db, sql).get(...values) as Row | undefined
     if (!row) {
       throw new Error(`Expected row for query: ${sql}`)
     }
@@ -1568,11 +1574,11 @@ export class SqliteAgentStore implements AgentStore {
   }
 
   getOptionalRow(sql: string, values: unknown[] = []): Row | undefined {
-    return this.db.prepare(sql).get(...values) as Row | undefined
+    return cachedStmt(this.db, sql).get(...values) as Row | undefined
   }
 
   allRows(sql: string, values: unknown[] = []): Row[] {
-    return Array.from(this.db.prepare(sql).iterate(...values)) as Row[]
+    return Array.from(cachedStmt(this.db, sql).iterate(...values)) as Row[]
   }
 
   private hasMigration(version: number): boolean {

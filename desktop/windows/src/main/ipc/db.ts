@@ -149,6 +149,7 @@ import type {
   VoiceTurnOutboxInput
 } from '../../shared/types'
 import { perfMark } from '../../shared/perf'
+import { cachedStmt } from './stmtCache'
 
 // Time a synchronous DB helper and emit a perf mark with its duration in ms.
 // Always-on (perfMark is a no-op unless OMI_PERF_LOG is set), so the bench can
@@ -176,7 +177,9 @@ let roDb: Database.Database | null = null
 // silently broke every INSERT. These tables are a derived cache with no user
 // data worth migrating, so recreating them is safe.
 function dropIfMissingColumn(d: Database.Database, table: string, col: string): void {
-  const exists = d.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)
+  const exists = cachedStmt(d, "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(
+    table
+  )
   if (!exists) return
   const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
   if (!cols.some((c) => c.name === col)) d.exec(`DROP TABLE ${table}`)
@@ -765,25 +768,24 @@ const LOCAL_CONVERSATION_COLUMNS =
   'sync_state AS syncState, segments_json AS segmentsJson, cloud_id AS cloudId, sync_attempts AS syncAttempts, sync_error AS syncError'
 
 export function insertLocalConversation(c: LocalConversation): void {
-  get()
-    .prepare(
-      'INSERT OR REPLACE INTO local_conversation (id, started_at, ended_at, transcript, created_at, kind, messages, title, sync_state, segments_json, cloud_id, sync_attempts, sync_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    )
-    .run(
-      c.id,
-      c.startedAt,
-      c.endedAt,
-      c.transcript,
-      c.createdAt,
-      c.kind ?? 'recording',
-      c.messages ? JSON.stringify(c.messages) : null,
-      c.title ?? null,
-      c.syncState ?? 'local_only',
-      c.segments && c.segments.length > 0 ? JSON.stringify(c.segments) : null,
-      c.cloudId ?? null,
-      c.syncAttempts ?? 0,
-      c.syncError ?? null
-    )
+  cachedStmt(
+    get(),
+    'INSERT OR REPLACE INTO local_conversation (id, started_at, ended_at, transcript, created_at, kind, messages, title, sync_state, segments_json, cloud_id, sync_attempts, sync_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    c.id,
+    c.startedAt,
+    c.endedAt,
+    c.transcript,
+    c.createdAt,
+    c.kind ?? 'recording',
+    c.messages ? JSON.stringify(c.messages) : null,
+    c.title ?? null,
+    c.syncState ?? 'local_only',
+    c.segments && c.segments.length > 0 ? JSON.stringify(c.segments) : null,
+    c.cloudId ?? null,
+    c.syncAttempts ?? 0,
+    c.syncError ?? null
+  )
 }
 
 /** Persist an outbox transition (see ConversationSyncState / lib/sync/outbox.ts).
@@ -857,9 +859,10 @@ export function deleteConversationFolder(id: string): void {
 }
 
 export function updateLocalConversationTitle(id: string, title: string): void {
-  get()
-    .prepare('UPDATE local_conversation SET title = ? WHERE id = ?')
-    .run(title.trim() || null, id)
+  cachedStmt(get(), 'UPDATE local_conversation SET title = ? WHERE id = ?').run(
+    title.trim() || null,
+    id
+  )
 }
 
 // --- PR8: LiveNotes CRUD ---
@@ -901,39 +904,43 @@ export function listLiveNotes(sessionId: string): LiveNote[] {
 
 export function getLocalConversation(id: string): LocalConversation | null {
   return timed('getLocalConversation', () => {
-    const row = get()
-      .prepare(`SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation WHERE id = ?`)
-      .get(id) as LocalConversationRow | undefined
+    const row = cachedStmt(
+      get(),
+      `SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation WHERE id = ?`
+    ).get(id) as LocalConversationRow | undefined
     return row ? mapLocalConversation(row) : null
   })
 }
 
 export function listLocalConversations(): LocalConversation[] {
   return timed('listLocalConversations', () => {
-    const rows = get()
-      .prepare(
-        `SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`
-      )
-      .all() as LocalConversationRow[]
+    const rows = cachedStmt(
+      get(),
+      `SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`
+    ).all() as LocalConversationRow[]
     return rows.map(mapLocalConversation)
   })
 }
 
 export function deleteLocalConversation(id: string): void {
-  get().prepare('DELETE FROM local_conversation WHERE id = ?').run(id)
+  cachedStmt(get(), 'DELETE FROM local_conversation WHERE id = ?').run(id)
 }
 
 export function remapConversationId(fromId: string, toId: string): number {
-  const r = get()
-    .prepare('UPDATE caption_event SET conversation_id = ? WHERE conversation_id = ?')
-    .run(toId, fromId)
+  const r = cachedStmt(
+    get(),
+    'UPDATE caption_event SET conversation_id = ? WHERE conversation_id = ?'
+  ).run(toId, fromId)
   return r.changes
 }
 
 // Load path → modified_at (ms) for the whole index. Drives both the retention
 // diff (which existing paths still exist on disk) and the incremental mtime-skip.
 export function loadIndexedFileMtimes(): Map<string, number> {
-  const rows = get().prepare('SELECT path, modified_at AS modifiedAt FROM indexed_files').all() as {
+  const rows = cachedStmt(
+    get(),
+    'SELECT path, modified_at AS modifiedAt FROM indexed_files'
+  ).all() as {
     path: string
     modifiedAt: number
   }[]
@@ -949,12 +956,13 @@ export function loadIndexedFileMtimes(): Map<string, number> {
 // its rows are absent from `toDelete`, so they survive untouched.
 export function applyFileIndexDiff(toUpsert: IndexedFileRecord[], toDelete: string[]): void {
   const d = get()
-  const insert = d.prepare(
+  const insert = cachedStmt(
+    d,
     `INSERT OR REPLACE INTO indexed_files
        (path, filename, extension, file_type, size_bytes, folder, depth, created_at, modified_at, target_path, indexed_at)
      VALUES (@path, @filename, @extension, @fileType, @sizeBytes, @folder, @depth, @createdAt, @modifiedAt, @targetPath, @indexedAt)`
   )
-  const del = d.prepare('DELETE FROM indexed_files WHERE path = ?')
+  const del = cachedStmt(d, 'DELETE FROM indexed_files WHERE path = ?')
   const indexedAt = Date.now()
   const apply = d.transaction(() => {
     for (const path of toDelete) del.run(path)
@@ -968,14 +976,14 @@ export function applyFileIndexDiff(toUpsert: IndexedFileRecord[], toDelete: stri
 // Kept out of USER_DATA_TABLES so values like the file-index last-run timestamp
 // persist across restarts (see the app_meta DDL + dbWipe rationale).
 export function getAppMeta(key: string): string | null {
-  const row = get().prepare('SELECT value FROM app_meta WHERE key = ?').get(key) as
+  const row = cachedStmt(get(), 'SELECT value FROM app_meta WHERE key = ?').get(key) as
     | { value: string | null }
     | undefined
   return row?.value ?? null
 }
 
 export function setAppMeta(key: string, value: string): void {
-  get().prepare('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)').run(key, value)
+  cachedStmt(get(), 'INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)').run(key, value)
 }
 
 // Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
@@ -1003,10 +1011,11 @@ export function wipeUserData(): void {
 }
 
 export function getFileIndexStats(): { filesIndexed: number; byType: Record<string, number> } {
-  const total = get().prepare('SELECT COUNT(*) AS n FROM indexed_files').get() as { n: number }
-  const rows = get()
-    .prepare('SELECT file_type AS t, COUNT(*) AS n FROM indexed_files GROUP BY file_type')
-    .all() as { t: string; n: number }[]
+  const total = cachedStmt(get(), 'SELECT COUNT(*) AS n FROM indexed_files').get() as { n: number }
+  const rows = cachedStmt(
+    get(),
+    'SELECT file_type AS t, COUNT(*) AS n FROM indexed_files GROUP BY file_type'
+  ).all() as { t: string; n: number }[]
   const byType: Record<string, number> = {}
   for (const r of rows) byType[r.t] = r.n
   return { filesIndexed: total.n, byType }
@@ -1023,15 +1032,14 @@ export function getIndexedApps(limit = 200): IndexedAppRecord[] {
   // analog of /Applications. file_type='application' also covers loose .exe/.msi
   // (installers in Downloads, venv script-shims, firmware updaters), which are
   // NOT installed apps and otherwise dominate by recency. Restrict to .lnk.
-  const rows = get()
-    .prepare(
-      `SELECT filename AS name, path, modified_at AS modifiedAt, target_path AS targetPath
+  const rows = cachedStmt(
+    get(),
+    `SELECT filename AS name, path, modified_at AS modifiedAt, target_path AS targetPath
          FROM indexed_files
         WHERE file_type = 'application' AND extension = 'lnk'
         ORDER BY modified_at DESC
         LIMIT ?`
-    )
-    .all(limit) as IndexedAppRow[]
+  ).all(limit) as IndexedAppRow[]
   return rows.map((r) => ({
     name: r.name,
     path: r.path,
@@ -1048,22 +1056,23 @@ export function getIndexedApps(limit = 200): IndexedAppRecord[] {
 export function addAppUsage(exePath: string, seconds: number, at: number): void {
   if (seconds <= 0) return
   const d = get()
-  const existing = d
-    .prepare(
-      'SELECT total_seconds AS totalSeconds, last_used AS lastUsed, distinct_days AS distinctDays FROM app_usage WHERE exe_path = ?'
-    )
-    .get(exePath) as { totalSeconds: number; lastUsed: number; distinctDays: number } | undefined
+  const existing = cachedStmt(
+    d,
+    'SELECT total_seconds AS totalSeconds, last_used AS lastUsed, distinct_days AS distinctDays FROM app_usage WHERE exe_path = ?'
+  ).get(exePath) as { totalSeconds: number; lastUsed: number; distinctDays: number } | undefined
   const exeName = basename(exePath)
   const category: UsageCategory = categorize(exeName)
   if (!existing) {
-    d.prepare(
+    cachedStmt(
+      d,
       `INSERT INTO app_usage (exe_path, exe_name, category, total_seconds, last_used, distinct_days, first_seen)
        VALUES (?, ?, ?, ?, ?, 1, ?)`
     ).run(exePath, exeName, category, Math.round(seconds), at, at)
     return
   }
   const days = existing.distinctDays + (isNewLocalDay(existing.lastUsed, at) ? 1 : 0)
-  d.prepare(
+  cachedStmt(
+    d,
     'UPDATE app_usage SET total_seconds = ?, last_used = ?, distinct_days = ?, category = ? WHERE exe_path = ?'
   ).run(existing.totalSeconds + Math.round(seconds), at, days, category, exePath)
 }
@@ -1078,29 +1087,27 @@ export function addAppUsage(exePath: string, seconds: number, at: number): void 
 // row. See usage/userAssist.ts.
 export function seedAppUsage(name: string, seconds: number, at: number): void {
   if (seconds <= 0 || !name.trim()) return
-  get()
-    .prepare(
-      `INSERT OR IGNORE INTO app_usage (exe_path, exe_name, category, total_seconds, last_used, distinct_days, first_seen)
+  cachedStmt(
+    get(),
+    `INSERT OR IGNORE INTO app_usage (exe_path, exe_name, category, total_seconds, last_used, distinct_days, first_seen)
        VALUES (?, ?, ?, ?, ?, 1, ?)`
-    )
-    .run(`userassist:${name}`, name, categorize(name), Math.round(seconds), at, at)
+  ).run(`userassist:${name}`, name, categorize(name), Math.round(seconds), at, at)
 }
 
 export function listAppUsage(): AppUsageRecord[] {
-  return get()
-    .prepare(
-      `SELECT exe_path AS exePath, exe_name AS exeName, category, total_seconds AS totalSeconds,
+  return cachedStmt(
+    get(),
+    `SELECT exe_path AS exePath, exe_name AS exeName, category, total_seconds AS totalSeconds,
               last_used AS lastUsed, distinct_days AS distinctDays
          FROM app_usage ORDER BY total_seconds DESC`
-    )
-    .all() as AppUsageRecord[]
+  ).all() as AppUsageRecord[]
 }
 
 // Drop app_usage rows last foregrounded before `cutoff` (ms epoch). Bounds table
 // growth and stops long-unused apps from influencing the ranking. Returns the
 // number of rows removed.
 export function pruneAppUsage(cutoff: number): number {
-  return get().prepare('DELETE FROM app_usage WHERE last_used < ?').run(cutoff).changes
+  return cachedStmt(get(), 'DELETE FROM app_usage WHERE last_used < ?').run(cutoff).changes
 }
 
 // --- Local knowledge graph (M2) ---
@@ -1110,17 +1117,19 @@ export function pruneAppUsage(cutoff: number): number {
 // future rollback of the worker approach does not require re-adding this.
 export function replaceLocalGraph(graph: LocalKnowledgeGraph): void {
   const d = get()
-  const insertNode = d.prepare(
+  const insertNode = cachedStmt(
+    d,
     `INSERT OR REPLACE INTO local_kg_nodes (id, label, node_type, summary, source, created_at, aliases_json, source_refs)
      VALUES (@id, @label, @nodeType, @summary, @source, @createdAt, @aliasesJson, @sourceRefs)`
   )
-  const insertEdge = d.prepare(
+  const insertEdge = cachedStmt(
+    d,
     `INSERT OR REPLACE INTO local_kg_edges (id, source_id, target_id, label, created_at)
      VALUES (@id, @sourceId, @targetId, @label, @createdAt)`
   )
   const write = d.transaction((g: LocalKnowledgeGraph) => {
-    d.prepare('DELETE FROM local_kg_edges').run()
-    d.prepare('DELETE FROM local_kg_nodes').run()
+    cachedStmt(d, 'DELETE FROM local_kg_edges').run()
+    cachedStmt(d, 'DELETE FROM local_kg_nodes').run()
     // Map each node to bind params: aliases/sourceRefs are arrays (not bindable),
     // so JSON-encode them (or null). Avoids passing extra object keys too, which
     // better-sqlite3 rejects.
@@ -1143,9 +1152,9 @@ export function replaceLocalGraph(graph: LocalKnowledgeGraph): void {
 
 export function getLocalKGStatus(): LocalKGStatus {
   const d = get()
-  const nodes = d.prepare('SELECT COUNT(*) AS n FROM local_kg_nodes').get() as { n: number }
-  const edges = d.prepare('SELECT COUNT(*) AS n FROM local_kg_edges').get() as { n: number }
-  const last = d.prepare('SELECT MAX(created_at) AS t FROM local_kg_nodes').get() as {
+  const nodes = cachedStmt(d, 'SELECT COUNT(*) AS n FROM local_kg_nodes').get() as { n: number }
+  const edges = cachedStmt(d, 'SELECT COUNT(*) AS n FROM local_kg_edges').get() as { n: number }
+  const last = cachedStmt(d, 'SELECT MAX(created_at) AS t FROM local_kg_nodes').get() as {
     t: number | null
   }
   return { nodeCount: nodes.n, edgeCount: edges.n, lastBuiltAt: last.t ?? null }
@@ -1216,9 +1225,9 @@ export function queryKgNodes(q: string, limit = 12): LocalKnowledgeGraph {
     .filter((t) => t.length >= 2)
   let nodeRows: LocalKGNodeRow[]
   if (tokens.length === 0) {
-    nodeRows = d
-      .prepare(`${SELECT_KG_NODE} ORDER BY created_at DESC LIMIT ?`)
-      .all(limit) as LocalKGNodeRow[]
+    nodeRows = cachedStmt(d, `${SELECT_KG_NODE} ORDER BY created_at DESC LIMIT ?`).all(
+      limit
+    ) as LocalKGNodeRow[]
   } else {
     const clause = tokens.map(() => '(label LIKE ? OR summary LIKE ?)').join(' OR ')
     const params: unknown[] = []
@@ -1282,33 +1291,30 @@ export function searchIndexedFiles(q: string, fileType?: string, limit = 20): In
 // listed separately via getIndexedApps.
 export function getFileIndexDigest(): FileIndexDigest {
   const d = get()
-  const total = d
-    .prepare("SELECT COUNT(*) AS n FROM indexed_files WHERE file_type != 'application'")
-    .get() as { n: number }
-  const typeRows = d
-    .prepare(
-      "SELECT file_type AS t, COUNT(*) AS n FROM indexed_files WHERE file_type != 'application' GROUP BY file_type"
-    )
-    .all() as { t: string; n: number }[]
-  const extRows = d
-    .prepare(
-      "SELECT extension AS e, COUNT(*) AS n FROM indexed_files WHERE file_type != 'application' AND extension != '' GROUP BY extension"
-    )
-    .all() as { e: string; n: number }[]
-  const folderRows = d
-    .prepare(
-      `SELECT folder, COUNT(*) AS count FROM indexed_files
+  const total = cachedStmt(
+    d,
+    "SELECT COUNT(*) AS n FROM indexed_files WHERE file_type != 'application'"
+  ).get() as { n: number }
+  const typeRows = cachedStmt(
+    d,
+    "SELECT file_type AS t, COUNT(*) AS n FROM indexed_files WHERE file_type != 'application' GROUP BY file_type"
+  ).all() as { t: string; n: number }[]
+  const extRows = cachedStmt(
+    d,
+    "SELECT extension AS e, COUNT(*) AS n FROM indexed_files WHERE file_type != 'application' AND extension != '' GROUP BY extension"
+  ).all() as { e: string; n: number }[]
+  const folderRows = cachedStmt(
+    d,
+    `SELECT folder, COUNT(*) AS count FROM indexed_files
         WHERE file_type != 'application'
         GROUP BY folder ORDER BY count DESC LIMIT 15`
-    )
-    .all() as { folder: string; count: number }[]
-  const sampleRows = d
-    .prepare(
-      `SELECT filename FROM indexed_files
+  ).all() as { folder: string; count: number }[]
+  const sampleRows = cachedStmt(
+    d,
+    `SELECT filename FROM indexed_files
         WHERE file_type != 'application'
         ORDER BY modified_at DESC LIMIT 20`
-    )
-    .all() as { filename: string }[]
+  ).all() as { filename: string }[]
   // Recently-active WORKING folders: the macOS-style "what are you working on
   // now" signal. Only folders whose CODE/DOCUMENT files were modified in the
   // last 30 days count, which filters out stale game/media folders (their
@@ -1317,17 +1323,16 @@ export function getFileIndexDigest(): FileIndexDigest {
   // can't masquerade as "recent".
   const now = Date.now()
   const since = now - 30 * 86_400_000
-  const activeRows = d
-    .prepare(
-      `SELECT folder, COUNT(*) AS recentCount, MAX(modified_at) AS lastModified
+  const activeRows = cachedStmt(
+    d,
+    `SELECT folder, COUNT(*) AS recentCount, MAX(modified_at) AS lastModified
          FROM indexed_files
         WHERE file_type IN ('code', 'document')
           AND modified_at <= ? AND modified_at > ?
         GROUP BY folder
         ORDER BY recentCount DESC, lastModified DESC
         LIMIT 15`
-    )
-    .all(now, since) as { folder: string; recentCount: number; lastModified: number }[]
+  ).all(now, since) as { folder: string; recentCount: number; lastModified: number }[]
   const byType: Record<string, number> = {}
   for (const r of typeRows) byType[r.t] = r.n
   const byExtension: Record<string, number> = {}
@@ -1350,12 +1355,14 @@ export function getFileIndexDigest(): FileIndexDigest {
 
 export function loadLocalGraph(): KnowledgeGraph {
   const d = get()
-  const nodeRows = d
-    .prepare('SELECT node_id, label, node_type, aliases_json FROM onboarding_kg_nodes')
-    .all() as { node_id: string; label: string; node_type: string; aliases_json: string | null }[]
-  const edgeRows = d
-    .prepare('SELECT edge_id, source_id, target_id, label FROM onboarding_kg_edges')
-    .all() as { edge_id: string; source_id: string; target_id: string; label: string }[]
+  const nodeRows = cachedStmt(
+    d,
+    'SELECT node_id, label, node_type, aliases_json FROM onboarding_kg_nodes'
+  ).all() as { node_id: string; label: string; node_type: string; aliases_json: string | null }[]
+  const edgeRows = cachedStmt(
+    d,
+    'SELECT edge_id, source_id, target_id, label FROM onboarding_kg_edges'
+  ).all() as { edge_id: string; source_id: string; target_id: string; label: string }[]
   return {
     nodes: nodeRows.map((r) => ({
       id: r.node_id,
@@ -1382,12 +1389,14 @@ export function upsertLocalGraph(
 ): KnowledgeGraph {
   const d = get()
   const now = Date.now()
-  const insertNode = d.prepare(
+  const insertNode = cachedStmt(
+    d,
     `INSERT INTO onboarding_kg_nodes (node_id, label, node_type, aliases_json, created_at, updated_at)
      VALUES (@id, @label, @nodeType, @aliasesJson, @now, @now)
      ON CONFLICT(node_id) DO UPDATE SET label=@label, node_type=@nodeType, aliases_json=@aliasesJson, updated_at=@now`
   )
-  const insertEdge = d.prepare(
+  const insertEdge = cachedStmt(
+    d,
     `INSERT INTO onboarding_kg_edges (edge_id, source_id, target_id, label, created_at)
      VALUES (@id, @sourceId, @targetId, @label, @now)
      ON CONFLICT(edge_id) DO UPDATE SET source_id=@sourceId, target_id=@targetId, label=@label`
@@ -1412,8 +1421,8 @@ export function upsertLocalGraph(
 
 export function clearLocalGraph(): void {
   const d = get()
-  d.prepare('DELETE FROM onboarding_kg_edges').run()
-  d.prepare('DELETE FROM onboarding_kg_nodes').run()
+  cachedStmt(d, 'DELETE FROM onboarding_kg_edges').run()
+  cachedStmt(d, 'DELETE FROM onboarding_kg_nodes').run()
 }
 
 // --- Rewind: screen-history timeline ---
@@ -1422,12 +1431,11 @@ const REWIND_COLUMNS =
   'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, image_path AS imagePath, width, height, indexed'
 
 export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
-  const r = get()
-    .prepare(
-      `INSERT INTO rewind_frames (ts, app, window_title, process_name, ocr_text, image_path, width, height, indexed)
+  const r = cachedStmt(
+    get(),
+    `INSERT INTO rewind_frames (ts, app, window_title, process_name, ocr_text, image_path, width, height, indexed)
        VALUES (@ts, @app, @windowTitle, @processName, @ocrText, @imagePath, @width, @height, @indexed)`
-    )
-    .run(f)
+  ).run(f)
   return r.lastInsertRowid as number
 }
 
@@ -1435,9 +1443,10 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
   return timed(
     'listRewindFrames',
     () =>
-      get()
-        .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
-        .all(from, to) as RewindFrame[]
+      cachedStmt(
+        get(),
+        `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`
+      ).all(from, to) as RewindFrame[]
   )
 }
 
@@ -1469,15 +1478,14 @@ export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
     const match = buildRewindFtsMatch(query)
     if (!match) return []
-    return get()
-      .prepare(
-        `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
+    return cachedStmt(
+      get(),
+      `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
            JOIN rewind_frames_fts ON rewind_frames.id = rewind_frames_fts.rowid
           WHERE rewind_frames_fts MATCH ?
           ORDER BY bm25(rewind_frames_fts) ASC, rewind_frames.ts DESC
           LIMIT ?`
-      )
-      .all(match, limit) as RewindFrame[]
+    ).all(match, limit) as RewindFrame[]
   })
 }
 
@@ -1485,12 +1493,15 @@ export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
  *  stat ribbon needs the number only, and listRewindFrames would drag full rows
  *  (OCR text included) across IPC just to take a length. */
 export function rewindFrameCount(): number {
-  const row = get().prepare('SELECT COUNT(*) AS n FROM rewind_frames').get() as { n: number }
+  const row = cachedStmt(get(), 'SELECT COUNT(*) AS n FROM rewind_frames').get() as { n: number }
   return row.n
 }
 
 export function rewindDayBounds(): { min: number; max: number } | null {
-  const row = get().prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames').get() as {
+  const row = cachedStmt(
+    get(),
+    'SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames'
+  ).get() as {
     min: number | null
     max: number | null
   }
@@ -1500,30 +1511,33 @@ export function rewindDayBounds(): { min: number; max: number } | null {
 /** The single most-recent captured frame (Omi's own windows are never captured),
  *  used by the chat to read "what's on screen right now". null if none yet. */
 export function latestRewindFrame(): RewindFrame | null {
-  const row = get()
-    .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames ORDER BY ts DESC LIMIT 1`)
-    .get() as RewindFrame | undefined
+  const row = cachedStmt(
+    get(),
+    `SELECT ${REWIND_COLUMNS} FROM rewind_frames ORDER BY ts DESC LIMIT 1`
+  ).get() as RewindFrame | undefined
   return row ?? null
 }
 
 export function unindexedRewindFrames(limit = 20): RewindFrame[] {
-  return get()
-    .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE indexed = 0 ORDER BY ts LIMIT ?`)
-    .all(limit) as RewindFrame[]
+  return cachedStmt(
+    get(),
+    `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE indexed = 0 ORDER BY ts LIMIT ?`
+  ).all(limit) as RewindFrame[]
 }
 
 // `ocrLinesJson` (Track 4) is the JSON-serialized per-line bounding boxes for the
 // on-image highlight overlay. Optional + additive: existing 2-arg callers keep
 // working (lines stored as NULL). The AFTER UPDATE trigger re-syncs the FTS index.
 export function setRewindFrameOcr(id: number, ocrText: string, ocrLinesJson?: string | null): void {
-  get()
-    .prepare('UPDATE rewind_frames SET ocr_text = ?, ocr_lines_json = ?, indexed = 1 WHERE id = ?')
-    .run(ocrText, ocrLinesJson ?? null, id)
+  cachedStmt(
+    get(),
+    'UPDATE rewind_frames SET ocr_text = ?, ocr_lines_json = ?, indexed = 1 WHERE id = ?'
+  ).run(ocrText, ocrLinesJson ?? null, id)
 }
 
 /** Per-line OCR bounding boxes for a frame (empty when none stored or malformed). */
 export function getRewindFrameOcrLines(id: number): OcrLine[] {
-  const row = get().prepare('SELECT ocr_lines_json FROM rewind_frames WHERE id = ?').get(id) as
+  const row = cachedStmt(get(), 'SELECT ocr_lines_json FROM rewind_frames WHERE id = ?').get(id) as
     | { ocr_lines_json: string | null }
     | undefined
   if (!row?.ocr_lines_json) return []
@@ -1539,16 +1553,17 @@ export function getRewindFrameOcrLines(id: number): OcrLine[] {
  *  sweep to tell a crash-orphaned file apart from one with a live DB row. */
 export function rewindImagePathsBetween(fromMs: number, toMs: number): string[] {
   return (
-    get()
-      .prepare('SELECT image_path FROM rewind_frames WHERE ts >= ? AND ts < ?')
-      .all(fromMs, toMs) as { image_path: string }[]
+    cachedStmt(get(), 'SELECT image_path FROM rewind_frames WHERE ts >= ? AND ts < ?').all(
+      fromMs,
+      toMs
+    ) as { image_path: string }[]
   ).map((r) => r.image_path)
 }
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const d = get()
-  const select = d.prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts < ?`)
-  const del = d.prepare('DELETE FROM rewind_frames WHERE ts < ?')
+  const select = cachedStmt(d, `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts < ?`)
+  const del = cachedStmt(d, 'DELETE FROM rewind_frames WHERE ts < ?')
   const pruneOlderThan = d.transaction((cutoff: number) => {
     const doomed = select.all(cutoff) as RewindFrame[]
     del.run(cutoff)
@@ -1588,12 +1603,11 @@ export function pruneOrphanedRewindEmbeddings(): number {
   // the startup log understate what had been cleaned.
   const count = (): number =>
     (
-      d
-        .prepare(
-          `SELECT (SELECT COUNT(*) FROM rewind_embeddings)
+      cachedStmt(
+        d,
+        `SELECT (SELECT COUNT(*) FROM rewind_embeddings)
                 + (SELECT COUNT(*) FROM rewind_embedding_vectors) AS n`
-        )
-        .get() as { n: number }
+      ).get() as { n: number }
     ).n
   const before = count()
   d.transaction(() => dropOrphanedEmbeddingsOn(d))()
@@ -1634,13 +1648,15 @@ export function upsertRewindEmbedding(
 ): void {
   const d = get()
   d.transaction(() => {
-    d.prepare(
+    cachedStmt(
+      d,
       `INSERT INTO rewind_embedding_vectors (hash, dim, model, vec, created_at)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(hash) DO UPDATE SET
          dim = excluded.dim, model = excluded.model, vec = excluded.vec, created_at = excluded.created_at`
     ).run(hash, vec.length, model, vectorToBuffer(vec), Date.now())
-    d.prepare(
+    cachedStmt(
+      d,
       `INSERT INTO rewind_embeddings (frame_id, hash) VALUES (?, ?)
        ON CONFLICT(frame_id) DO UPDATE SET hash = excluded.hash`
     ).run(frameId, hash)
@@ -1652,11 +1668,12 @@ export function upsertRewindEmbedding(
  *  when that vector is gone (retention pruned it), so the caller re-embeds. */
 export function linkRewindEmbedding(frameId: number, hash: string): boolean {
   const d = get()
-  const exists = d
-    .prepare('SELECT 1 AS ok FROM rewind_embedding_vectors WHERE hash = ?')
-    .get(hash) as { ok: number } | undefined
+  const exists = cachedStmt(d, 'SELECT 1 AS ok FROM rewind_embedding_vectors WHERE hash = ?').get(
+    hash
+  ) as { ok: number } | undefined
   if (!exists) return false
-  d.prepare(
+  cachedStmt(
+    d,
     `INSERT INTO rewind_embeddings (frame_id, hash) VALUES (?, ?)
      ON CONFLICT(frame_id) DO UPDATE SET hash = excluded.hash`
   ).run(frameId, hash)
@@ -1876,55 +1893,50 @@ function mapAiUserProfile(row: AiUserProfileRow): AiUserProfileRecord {
 }
 
 export function insertAiUserProfile(rec: AiUserProfileInput): number {
-  const info = get()
-    .prepare(
-      `INSERT INTO ai_user_profiles (profile_text, data_sources_used, generated_at, backend_synced)
+  const info = cachedStmt(
+    get(),
+    `INSERT INTO ai_user_profiles (profile_text, data_sources_used, generated_at, backend_synced)
        VALUES (?, ?, ?, ?)`
-    )
-    .run(
-      rec.profileText,
-      rec.dataSourcesUsed && rec.dataSourcesUsed.length
-        ? JSON.stringify(rec.dataSourcesUsed)
-        : null,
-      rec.generatedAt,
-      rec.backendSynced ? 1 : 0
-    )
+  ).run(
+    rec.profileText,
+    rec.dataSourcesUsed && rec.dataSourcesUsed.length ? JSON.stringify(rec.dataSourcesUsed) : null,
+    rec.generatedAt,
+    rec.backendSynced ? 1 : 0
+  )
   return info.lastInsertRowid as number
 }
 
 // Newest first, for the consolidation read (default 5).
 export function listAiUserProfiles(limit = 5): AiUserProfileRecord[] {
-  const rows = get()
-    .prepare(
-      `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT ?`
-    )
-    .all(limit) as AiUserProfileRow[]
+  const rows = cachedStmt(
+    get(),
+    `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT ?`
+  ).all(limit) as AiUserProfileRow[]
   return rows.map(mapAiUserProfile)
 }
 
 export function latestAiUserProfile(): AiUserProfileRecord | null {
-  const row = get()
-    .prepare(
-      `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT 1`
-    )
-    .get() as AiUserProfileRow | undefined
+  const row = cachedStmt(
+    get(),
+    `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT 1`
+  ).get() as AiUserProfileRow | undefined
   return row ? mapAiUserProfile(row) : null
 }
 
 export function updateAiUserProfileText(id: number, text: string): void {
-  get().prepare('UPDATE ai_user_profiles SET profile_text = ? WHERE id = ?').run(text, id)
+  cachedStmt(get(), 'UPDATE ai_user_profiles SET profile_text = ? WHERE id = ?').run(text, id)
 }
 
 export function markAiUserProfileSynced(id: number): void {
-  get().prepare('UPDATE ai_user_profiles SET backend_synced = 1 WHERE id = ?').run(id)
+  cachedStmt(get(), 'UPDATE ai_user_profiles SET backend_synced = 1 WHERE id = ?').run(id)
 }
 
 export function deleteAiUserProfile(id: number): void {
-  get().prepare('DELETE FROM ai_user_profiles WHERE id = ?').run(id)
+  cachedStmt(get(), 'DELETE FROM ai_user_profiles WHERE id = ?').run(id)
 }
 
 export function deleteAllAiUserProfiles(): void {
-  get().prepare('DELETE FROM ai_user_profiles').run()
+  cachedStmt(get(), 'DELETE FROM ai_user_profiles').run()
 }
 
 // --- Focus sessions ---
@@ -1967,24 +1979,23 @@ function mapFocusSession(row: FocusSessionRow): FocusSessionRecord {
 }
 
 export function insertFocusSession(rec: FocusSessionInput): number {
-  const info = get()
-    .prepare(
-      `INSERT INTO focus_sessions
+  const info = cachedStmt(
+    get(),
+    `INSERT INTO focus_sessions
          (screenshot_id, status, app_or_site, description, message, duration_seconds, backend_id, backend_synced, created_at, window_title)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      rec.screenshotId ?? null,
-      rec.status,
-      rec.appOrSite ?? null,
-      rec.description ?? null,
-      rec.message ?? null,
-      rec.durationSeconds ?? 0,
-      rec.backendId ?? null,
-      rec.backendSynced ? 1 : 0,
-      rec.createdAt,
-      rec.windowTitle ?? null
-    )
+  ).run(
+    rec.screenshotId ?? null,
+    rec.status,
+    rec.appOrSite ?? null,
+    rec.description ?? null,
+    rec.message ?? null,
+    rec.durationSeconds ?? 0,
+    rec.backendId ?? null,
+    rec.backendSynced ? 1 : 0,
+    rec.createdAt,
+    rec.windowTitle ?? null
+  )
   return info.lastInsertRowid as number
 }
 
@@ -2008,9 +2019,10 @@ export function listFocusSessions(sinceEpochMs?: number, limit?: number): FocusS
 }
 
 export function markFocusSessionSynced(id: number, backendId: string): void {
-  get()
-    .prepare('UPDATE focus_sessions SET backend_synced = 1, backend_id = ? WHERE id = ?')
-    .run(backendId, id)
+  cachedStmt(
+    get(),
+    'UPDATE focus_sessions SET backend_synced = 1, backend_id = ? WHERE id = ?'
+  ).run(backendId, id)
 }
 
 // --- Memories (screen-extracted) ---
@@ -2021,39 +2033,40 @@ export function markFocusSessionSynced(id: number, backendId: string): void {
 // so the "don't re-extract these" list survives an app restart.
 
 export function insertMemory(rec: MemoryInput): number {
-  const info = get()
-    .prepare(
-      `INSERT INTO memories
+  const info = cachedStmt(
+    get(),
+    `INSERT INTO memories
          (content, category, source_app, window_title, context_summary, confidence, screenshot_id, backend_id, backend_synced, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      rec.content,
-      rec.category,
-      rec.sourceApp ?? '',
-      rec.windowTitle ?? '',
-      rec.contextSummary ?? '',
-      rec.confidence ?? null,
-      rec.screenshotId ?? null,
-      rec.backendId ?? null,
-      rec.backendSynced ? 1 : 0,
-      rec.createdAt
-    )
+  ).run(
+    rec.content,
+    rec.category,
+    rec.sourceApp ?? '',
+    rec.windowTitle ?? '',
+    rec.contextSummary ?? '',
+    rec.confidence ?? null,
+    rec.screenshotId ?? null,
+    rec.backendId ?? null,
+    rec.backendSynced ? 1 : 0,
+    rec.createdAt
+  )
   return info.lastInsertRowid as number
 }
 
 export function markMemorySynced(id: number, backendId: string): void {
-  get()
-    .prepare('UPDATE memories SET backend_synced = 1, backend_id = ? WHERE id = ?')
-    .run(backendId, id)
+  cachedStmt(get(), 'UPDATE memories SET backend_synced = 1, backend_id = ? WHERE id = ?').run(
+    backendId,
+    id
+  )
 }
 
 // The extractor's dedup source: the most-recent memories, newest first, capped.
 // Only content + category leave this function — that is all the prompt lists.
 export function recentMemories(limit = 20): { content: string; category: string }[] {
-  return get()
-    .prepare('SELECT content, category FROM memories ORDER BY created_at DESC, id DESC LIMIT ?')
-    .all(limit) as { content: string; category: string }[]
+  return cachedStmt(
+    get(),
+    'SELECT content, category FROM memories ORDER BY created_at DESC, id DESC LIMIT ?'
+  ).all(limit) as { content: string; category: string }[]
 }
 
 // --- Track 3: Local task storage (action_items + staged_tasks) ---
