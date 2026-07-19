@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a crash that could occur while checking notification permission at startup"
+}
