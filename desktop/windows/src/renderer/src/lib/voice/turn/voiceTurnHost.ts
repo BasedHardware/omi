@@ -153,6 +153,15 @@ export class VoiceTurnHost {
     switch (effect.kind) {
       case 'stopCapture':
         this.deps.disposeCapture(effect.turnID, effect.captureID)
+        // A4 restore belongs to CAPTURE END, not turn end (2026-07-18 muted-reply
+        // fix). The helper mutes the DEFAULT OUTPUT ENDPOINT — the same device the
+        // hub reply plays through — and the mute exists only to keep other apps'
+        // audio out of the mic while it is open. Restoring here (release/cancel/
+        // teardown all emit stopCapture) re-opens the speakers BEFORE the provider
+        // reply starts; restoring only on `terminal` left the endpoint muted for
+        // the entire hub-route reply, so every reply played into a muted device
+        // and users heard nothing while every internal signal read healthy.
+        this.restoreSystemAudioOnce(effect.turnID)
         return
       case 'cancelHub':
         // The route is informational on Windows (single warm session) — dropped.
@@ -204,6 +213,9 @@ export class VoiceTurnHost {
   private handleTerminal(turnID: VoiceTurnID, reason: VoiceTurnTerminalReason): void {
     // Order matches the port plan: release the output lease, release the hub's
     // per-turn state (KEEPING the warm socket), restore system audio, clean up.
+    // The restore here is the idempotent BACKSTOP — the primary restore fires at
+    // `stopCapture` (capture end), so a turn that never opened a capture (or a
+    // teardown path that skipped stopCapture) is still never left muted.
     this.deps.outputCoordinator.endTurn(turnID)
     this.deps.hub.voiceTurnDidTerminate(turnID)
     this.restoreSystemAudioOnce(turnID)
@@ -223,10 +235,11 @@ export class VoiceTurnHost {
     }
   }
 
-  /** A4: exactly ONE restore per turn. `terminate()` emits `stopCapture` then
-   *  `terminal`, and a turn has a single terminal, so restoring on `terminal`
-   *  alone is already once-per-turn; the turn-ID guard makes it defensive against
-   *  any future host path that also restores. */
+  /** A4: exactly ONE restore per turn, fired at the FIRST capture-end signal.
+   *  `stopCapture` (release / cancel / teardown / orphan kill) is the primary
+   *  site; `terminal` is the backstop for turns that never opened a capture.
+   *  `terminate()` emits `stopCapture` then `terminal` back-to-back, so the
+   *  turn-ID guard is what keeps that pair a single restore. */
   private restoreSystemAudioOnce(turnID: VoiceTurnID): void {
     if (this.restoredTurnID === turnID) return
     this.restoredTurnID = turnID

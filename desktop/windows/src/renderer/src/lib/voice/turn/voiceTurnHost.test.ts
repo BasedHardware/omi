@@ -106,6 +106,26 @@ describe('VoiceTurnHost — effect mapping', () => {
     expect(spies.disposeCapture).toHaveBeenCalledTimes(1)
   })
 
+  // 2026-07-18 muted-reply regression: the A4 helper mutes the DEFAULT OUTPUT
+  // ENDPOINT — the same device the hub reply plays through. Restoring only on
+  // `terminal` kept the speakers muted for the ENTIRE hub reply (terminal fires
+  // after playback drains), so every reply was inaudible while all internal
+  // signals read healthy. The restore must ride capture end.
+  it('stopCapture restores system audio (before any reply playback can start)', () => {
+    const { host, spies } = makeHost()
+    host.effectHandler({ kind: 'stopCapture', turnID: T('a'), captureID: CAP(7) })
+    expect(spies.restoreSystemAudio).toHaveBeenCalledTimes(1)
+  })
+
+  it('A4: stopCapture then terminal for the SAME turn ⇒ exactly one restore', () => {
+    // terminate() emits this exact pair back-to-back; the turn-ID guard must
+    // collapse it to a single restore.
+    const { host, spies } = makeHost()
+    host.effectHandler({ kind: 'stopCapture', turnID: T('a'), captureID: CAP(7) })
+    host.effectHandler(terminal(T('a'), 'success'))
+    expect(spies.restoreSystemAudio).toHaveBeenCalledTimes(1)
+  })
+
   it('cancelHub calls hubController.cancelTurn(turnID) (route dropped)', () => {
     const { host, spies } = makeHost()
     const route: VoiceTurnRoute = { kind: 'hub', sessionID: null }
