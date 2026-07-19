@@ -372,7 +372,29 @@ export function BarApp(): React.JSX.Element {
       })
     })
   }, [])
-  useEffect(() => window.omiBar.onMode((m) => setMode(m)), [])
+  // A mode flip to expanded is the peek pill's click-to-expand (main-side
+  // click-detect or the bar:expand IPC — both land here via setBarMode →
+  // bar:mode). Land on the hub with the inline composer, exactly like a fresh
+  // reveal (onShow): the thing labeled "Ask Omi anything" must ALWAYS open at the
+  // input (Mac showAIConversation → .mainInput), never a stale conversation/agent
+  // surface left over from a prior expanded session. This renderer stays mounted
+  // across a collapse (bar:mode 'peek') — which does NOT reset view — so a
+  // collapse→expand cycle would otherwise re-expand into that stale view (the
+  // reported bug). The [expanded, view] focus effect in BarChatSurface then puts
+  // the cursor in the hub input. Switching views WITHIN an open expanded session
+  // is untouched: those are local setView calls, not a mode flip (setBarMode only
+  // emits bar:mode on a real peek⇄expanded edge).
+  useEffect(
+    () =>
+      window.omiBar.onMode((m) => {
+        setMode(m)
+        if (m === 'expanded') {
+          setView('list')
+          setActivePillId(null)
+        }
+      }),
+    []
+  )
   useEffect(
     () =>
       window.omiBar.onWillHide(() => {
