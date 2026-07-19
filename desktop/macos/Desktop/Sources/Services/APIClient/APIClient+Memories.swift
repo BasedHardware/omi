@@ -499,7 +499,8 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
-    deviceScope: String? = nil
+    deviceScope: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [ServerMemory] {
     var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
     if let category = category {
@@ -514,7 +515,7 @@ extension APIClient {
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
     }
-    return try await get(endpoint)
+    return try await get(endpoint, authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Fetches memories plus server-authoritative capability headers.

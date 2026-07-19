@@ -117,7 +117,9 @@ private final class StubSuggestionGenerator: HomeSuggestionGenerating, @unchecke
     continuation?.resume()
   }
 
-  func generatePersonalizedQuestions() async throws -> [String] {
+  func generatePersonalizedQuestions(
+    snapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> [String] {
     let (behavior, gated) = lock.withLock { () -> (Behavior, Bool) in
       _callCount += 1
       let gated = gateNextCall
@@ -140,17 +142,21 @@ private final class StubSuggestionGenerator: HomeSuggestionGenerating, @unchecke
 
 @MainActor
 final class HomeSuggestionsStoreTests: XCTestCase {
-  private func makeDefaults(owner: String?) throws -> (UserDefaults, () -> Void) {
+  private let ownerFixture = RuntimeOwnerAuthorityTestFixture()
+
+  override func tearDown() async throws {
+    await ownerFixture.restore()
+  }
+
+  private func makeDefaults() throws -> (UserDefaults, () -> Void) {
     let suite = "HomeSuggestionsStoreTests.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-    if let owner {
-      defaults.set(owner, forKey: .authUserId)
-    }
     return (defaults, { defaults.removePersistentDomain(forName: suite) })
   }
 
   func testRefreshGeneratesOncePerDayAndRepublishesFromCache() async throws {
-    let (defaults, cleanup) = try makeDefaults(owner: "owner-a")
+    await ownerFixture.establish(authOwnerID: "owner-a")
+    let (defaults, cleanup) = try makeDefaults()
     defer { cleanup() }
     let generator = StubSuggestionGenerator(
       behavior: .respond(["How do I unblock the Atlas launch?", "Is the EE hiring loop on track?"]))
@@ -178,7 +184,8 @@ final class HomeSuggestionsStoreTests: XCTestCase {
   }
 
   func testRefreshRegeneratesOnNextDay() async throws {
-    let (defaults, cleanup) = try makeDefaults(owner: "owner-a")
+    await ownerFixture.establish(authOwnerID: "owner-a")
+    let (defaults, cleanup) = try makeDefaults()
     defer { cleanup() }
     let generator = StubSuggestionGenerator(behavior: .respond(["Day one question?"]))
     var currentDay = Date(timeIntervalSince1970: 1_700_000_000)
@@ -195,7 +202,8 @@ final class HomeSuggestionsStoreTests: XCTestCase {
   }
 
   func testRefreshSkipsWhenSignedOut() async throws {
-    let (defaults, cleanup) = try makeDefaults(owner: nil)
+    await ownerFixture.establish(authOwnerID: nil)
+    let (defaults, cleanup) = try makeDefaults()
     defer { cleanup() }
     let generator = StubSuggestionGenerator(behavior: .respond(["Should not appear?"]))
     let store = HomeSuggestionsStore(defaults: defaults, generator: generator)
@@ -207,7 +215,8 @@ final class HomeSuggestionsStoreTests: XCTestCase {
   }
 
   func testTransportFailureRetriesButEmptySuccessHoldsForTheDay() async throws {
-    let (defaults, cleanup) = try makeDefaults(owner: "owner-a")
+    await ownerFixture.establish(authOwnerID: "owner-a")
+    let (defaults, cleanup) = try makeDefaults()
     defer { cleanup() }
     let generator = StubSuggestionGenerator(behavior: .fail)
     let day = Date(timeIntervalSince1970: 1_700_000_000)
@@ -229,8 +238,9 @@ final class HomeSuggestionsStoreTests: XCTestCase {
     XCTAssertEqual(store.personalizedQuestions, [])
   }
 
-  func testOwnerSwitchNeverPublishesAnotherOwnersQuestions() async throws {
-    let (defaults, cleanup) = try makeDefaults(owner: "owner-a")
+  func testOwnerSwitchDuringGenerationDropsResultEntirely() async throws {
+    await ownerFixture.establish(authOwnerID: "owner-a")
+    let (defaults, cleanup) = try makeDefaults()
     defer { cleanup() }
     let generator = StubSuggestionGenerator(behavior: .respond(["Owner A's private question?"]))
     let store = HomeSuggestionsStore(defaults: defaults, generator: generator)
@@ -238,23 +248,32 @@ final class HomeSuggestionsStoreTests: XCTestCase {
     generator.gateNext()
     let refreshTask = Task { await store.refreshIfNeeded() }
 
-    // Switch accounts while owner A's generation is in flight.
+    // Switch accounts while owner A's generation is in flight. The transition
+    // revokes the authorization snapshot captured at refresh start.
     while generator.callCount == 0 {
       await Task.yield()
     }
-    defaults.set("owner-b", forKey: .authUserId)
+    await ownerFixture.establish(authOwnerID: "owner-b")
     generator.resumeGatedCall()
     await refreshTask.value
 
     XCTAssertEqual(
       store.personalizedQuestions, [],
-      "owner A's late result must not be published for owner B"
+      "a result finishing after an account switch must not be published"
+    )
+    XCTAssertNil(
+      defaults.data(forKey: HomeSuggestionsStore.cacheKey(ownerID: "owner-a")),
+      "a result finishing after an account switch must not be cached under the original owner"
+    )
+    XCTAssertNil(
+      defaults.data(forKey: HomeSuggestionsStore.cacheKey(ownerID: "owner-b")),
+      "a result finishing after an account switch must not be cached under the new owner"
     )
 
-    // Owner A's result was still cached under owner A, so switching back
-    // publishes it without regenerating.
-    defaults.set("owner-a", forKey: .authUserId)
+    // The dropped attempt burned nothing: owner A regenerates on return.
+    await ownerFixture.establish(authOwnerID: "owner-a")
     await store.refreshIfNeeded()
+    XCTAssertEqual(generator.callCount, 2)
     XCTAssertEqual(store.personalizedQuestions, ["Owner A's private question?"])
   }
 }
