@@ -511,7 +511,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 Consumer<UsageProvider>(
                   builder: (context, usageProvider, child) {
                     final sp = usageProvider.subscription?.subscription.plan;
-                    final isUnlimited = sp == PlanType.unlimited || sp == PlanType.operator || sp == PlanType.architect;
+                    final isUnlimited = sp?.isPaid ?? false;
                     return _buildSettingsItem(
                       title: context.l10n.planAndUsage,
                       icon: FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),

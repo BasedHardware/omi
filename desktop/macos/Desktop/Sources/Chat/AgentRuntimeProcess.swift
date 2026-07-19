@@ -82,6 +82,18 @@ enum AgentRuntimeStartupAdmission {
   }
 }
 
+/// Firebase credentials are mandatory for every production and model runtime
+/// start. The sole exception is a non-production journal-control start, whose
+/// owner-bound RPCs deliberately operate without a model credential.
+enum AgentRuntimeCredentialPolicy {
+  static func requiresManagedCredentials(
+    requestedCredentials: Bool,
+    isNonProduction: Bool
+  ) -> Bool {
+    requestedCredentials || !isNonProduction
+  }
+}
+
 /// Serializes the pipe read and sequence assignment performed by Foundation's
 /// readability callback. The callback may be re-entered on different threads;
 /// sequencing only after `availableData` would still allow a later read to be
@@ -282,6 +294,14 @@ actor AgentRuntimeProcess {
     targetHasExtension: Bool
   ) -> Bool {
     useExtension && !token.isEmpty && targetHasExtension
+  }
+
+  nonisolated static func startupAuthHeader(
+    requiresCredentials: Bool,
+    fetchAuthHeader: () async throws -> String?
+  ) async throws -> String? {
+    guard requiresCredentials else { return nil }
+    return try await fetchAuthHeader()
   }
 
   nonisolated static func validateRuntimeHandshake(
@@ -628,7 +648,8 @@ actor AgentRuntimeProcess {
   func registerClient(
     clientId: String,
     harnessMode: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    requiresCredentials: Bool = true
   ) async throws {
     guard !isRestarting else {
       throw BridgeError.restarting
@@ -671,7 +692,8 @@ actor AgentRuntimeProcess {
       try await startProcess(
         preferredHarnessMode: harnessMode,
         authorizationSnapshot: authorizationSnapshot,
-        admissionAuthorityEpoch: admissionAuthorityEpoch)
+        admissionAuthorityEpoch: admissionAuthorityEpoch,
+        requiresCredentials: requiresCredentials)
       try assertAuthorization(authorizationSnapshot)
       try assertClientRegistration(clientId: clientId, registrationID: registrationID)
     } catch {
@@ -763,7 +785,8 @@ actor AgentRuntimeProcess {
       try await startProcess(
         preferredHarnessMode: harnessMode,
         authorizationSnapshot: authorizationSnapshot,
-        admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch)
+        admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch,
+        requiresCredentials: true)
       try assertAuthorization(authorizationSnapshot)
       try assertClientRegistration(clientId: clientId, registrationID: registrationID)
     } catch {
@@ -815,7 +838,9 @@ actor AgentRuntimeProcess {
   private func finishStopFlight(id: UUID) {
     guard let flight = stopFlight, flight.id == id else { return }
     stopFlight = nil
-    flight.waiters.forEach { $0.resume() }
+    for waiter in flight.waiters {
+      waiter.resume()
+    }
   }
 
   private func assertClientRegistration(
@@ -2401,7 +2426,8 @@ actor AgentRuntimeProcess {
   private func startProcess(
     preferredHarnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    admissionAuthorityEpoch: UInt64
+    admissionAuthorityEpoch: UInt64,
+    requiresCredentials: Bool
   ) async throws {
     let startupIsInFlight: Bool
     if bridgeLifecycle.state == .starting {
@@ -2428,7 +2454,8 @@ actor AgentRuntimeProcess {
         return try await self.performStartProcess(
           preferredHarnessMode: preferredHarnessMode,
           authorizationSnapshot: authorizationSnapshot,
-          admissionAuthorityEpoch: admissionAuthorityEpoch)
+          admissionAuthorityEpoch: admissionAuthorityEpoch,
+          requiresCredentials: requiresCredentials)
       }
     } catch {
       if [.starting, .failedStart].contains(bridgeLifecycle.state) {
@@ -2458,7 +2485,8 @@ actor AgentRuntimeProcess {
   private func performStartProcess(
     preferredHarnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    admissionAuthorityEpoch: UInt64
+    admissionAuthorityEpoch: UInt64,
+    requiresCredentials: Bool
   ) async throws -> StartupReceipt {
     // `startProcess` owns the launch through `startupSingleFlight`. Do not use
     // the reducer's `.starting` state as a join signal here: the launch owner
@@ -2563,11 +2591,20 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
     }
 
+    let requiresPiMonoCredentials =
+      preferredAdapterId == .piMono
+      && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: requiresCredentials,
+        isNonProduction: AppBuild.isNonProduction)
     let authService = await MainActor.run { AuthService.shared }
     let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
-    let authHeader = try? await authService.getAuthHeader(
-      forceRefresh: forceRefreshToken,
-      expectedUserId: authorizationSnapshot.ownerID)
+    let authHeader = try? await Self.startupAuthHeader(
+      requiresCredentials: requiresPiMonoCredentials,
+      fetchAuthHeader: {
+        try await authService.getAuthHeader(
+          forceRefresh: forceRefreshToken,
+          expectedUserId: authorizationSnapshot.ownerID)
+      })
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
@@ -2575,7 +2612,7 @@ actor AgentRuntimeProcess {
       let token = Self.bearerToken(from: authHeader)
     {
       env["OMI_AUTH_TOKEN"] = token
-    } else if preferredAdapterId == .piMono && env["OMI_AGENT_ALLOW_CONTROL_ONLY"] != "1" {
+    } else if requiresPiMonoCredentials {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     } else if preferredAdapterId == .piMono {
@@ -3332,7 +3369,9 @@ actor AgentRuntimeProcess {
   }
 
   private func cancelAuthorizedToolExecutionTasks() {
-    activeAuthorizedToolExecutionTasks.values.forEach { $0.cancel() }
+    for task in activeAuthorizedToolExecutionTasks.values {
+      task.cancel()
+    }
   }
 
   private func cancelAndDrainAuthorizedToolExecutionTasks() async {
@@ -3346,7 +3385,9 @@ actor AgentRuntimeProcess {
   nonisolated static func cancelAndAwaitPhysicalExecutionTasks(
     _ tasks: [Task<Void, Never>]
   ) async {
-    tasks.forEach { $0.cancel() }
+    for task in tasks {
+      task.cancel()
+    }
     for task in tasks { await task.value }
   }
 

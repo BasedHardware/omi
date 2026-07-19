@@ -2970,7 +2970,7 @@
     "upgradePlan": "Обновить план",
     "billingMonthly": "Ежемесячно",
     "billingYearly": "Ежегодно",
-    "savePercent": "Экономия ~17%",
+    "savePercent": "Экономия ~{percent}%",
     "popular": "Популярный",
     "currentPlan": "Текущий",
     "neoSubtitle": "{count} вопросов в месяц",
