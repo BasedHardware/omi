@@ -5,11 +5,11 @@
     "backend/routers/developer.py": 2184,
     "backend/routers/mcp_sse.py": 1857,
     "backend/routers/sync.py": 2024,
-    "backend/routers/users.py": 2046
+    "backend/routers/users.py": 2093
   },
   "raise_justifications": {
     "backend/routers/chat.py": "PTT stereo rejection keeps the serving STT provider boundary explicit in the established chat admission owner.",
-    "backend/routers/users.py": "GET /v1/users/subscription serializes the new mobile plus/max plans as `unlimited` for clients whose plan enum predates them, so day-one buyers read as paid instead of Free (mirrors the existing operator remap); real limits/grandfather are computed from the true plan first.",
+    "backend/routers/users.py": "GET /v1/users/developer/webhook/{wtype}/health lives with the other developer-webhook routes it shares auth, uid scoping and response serialization with; a separate module would split one health read away from the handlers that own that surface.",
     "backend/routers/sync.py": "Fresh Sync admission and final Cloud Tasks ledger recovery retain their coupled task, lock, ledger, and staged-blob lifecycle in the existing ingestion owner rather than a new module."
   },
   "threshold": 1500
