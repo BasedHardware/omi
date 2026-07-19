@@ -139,10 +139,15 @@ jobs:
           gh release download "$RELEASE_TAG" --repo "$REPO" \
             --pattern 'desktop-smoke-result.json' \
             --dir /tmp/desktop-beta-qualification
+          # Present only on releases that ship the side-by-side Omi Beta identity.
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern 'desktop-smoke-result-beta.json' \
+            --dir /tmp/desktop-beta-qualification 2>/dev/null || true
 
           python3 .github/scripts/check-desktop-auto-beta-candidate.py \
             --release-json /tmp/desktop-beta-qualification/release.json \
             --smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
+            --beta-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result-beta.json \
             --release-tag "$RELEASE_TAG" \
             --latest-tag "$LATEST_TAG" \
             --tag-sha "$TARGET_SHA" \
