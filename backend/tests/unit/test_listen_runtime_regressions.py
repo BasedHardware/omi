@@ -7,6 +7,7 @@ import pytest
 from routers.listen.contracts import ListenRequest
 from routers.listen.runtime import ListenSessionRuntime
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.stt.streaming import STTService
 
 
 @pytest.fixture
@@ -126,8 +127,8 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled, prefer_parakeet=False):
-        selected_multi_language_options.append((language, multi_lang_enabled))
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service))
         return 'test-stt', 'es', 'test-model'
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
@@ -138,7 +139,58 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     monkeypatch.setattr(runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace())
 
     assert await runtime._bootstrap() is True
-    assert selected_multi_language_options == [('es', False)]
+    assert selected_multi_language_options == [('es', False, None)]
+
+
+@pytest.mark.anyio
+async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selection(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(),
+        uid='language-routing-user',
+        language='es',
+        stt_service='parakeet',
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None)
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+        assert (language, multi_lang_enabled, preferred_service) == ('es', True, 'parakeet')
+        return STTService.modulate, 'multi', 'velma-2'
+
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.test')
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(runtime_module, 'get_stt_service_for_language', select_stt)
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    assert (runtime.stt_service, runtime.stt_language, runtime.stt_model) == (
+        STTService.modulate,
+        'multi',
+        'velma-2',
+    )
 
 
 def test_runtime_emits_speaker_suggestion_event():

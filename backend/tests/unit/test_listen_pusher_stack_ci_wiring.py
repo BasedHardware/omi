@@ -1,4 +1,4 @@
-"""Wiring contract for the blocking listen-to-pusher stack gauntlet."""
+"""Wiring contract for the listen-to-pusher stack gauntlet in PR CI."""
 
 from __future__ import annotations
 

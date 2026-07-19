@@ -19,7 +19,11 @@ from config.stt_provider_policy import (
     PARAKEET_PROVIDER,
     STTServingSurface,
     default_models_for_surface,
+    modulate_supports_language,
+    normalized_stt_language,
+    parakeet_supports_language,
     provider_is_enabled,
+    supports_live_multilingual_mode,
 )
 from utils.async_tasks import create_named_task
 from utils.executors import sync_executor, run_blocking
@@ -164,108 +168,9 @@ deepgram_nova3_languages = {
 }
 
 
-modulate_languages = {
-    'multi',
-    'en',
-    'af',
-    'sq',
-    'ar',
-    'az',
-    'eu',
-    'be',
-    'bn',
-    'bs',
-    'bg',
-    'ca',
-    'zh',
-    'hr',
-    'cs',
-    'da',
-    'nl',
-    'et',
-    'fi',
-    'fr',
-    'gl',
-    'de',
-    'el',
-    'gu',
-    'he',
-    'hi',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'kn',
-    'kk',
-    'ko',
-    'lv',
-    'lt',
-    'mk',
-    'ms',
-    'ml',
-    'mr',
-    'no',
-    'fa',
-    'pl',
-    'pt',
-    'pa',
-    'ro',
-    'ru',
-    'sr',
-    'sk',
-    'sl',
-    'es',
-    'sw',
-    'sv',
-    'tl',
-    'ta',
-    'te',
-    'th',
-    'tr',
-    'uk',
-    'ur',
-    'vi',
-    'cy',
-}
-
-parakeet_languages = {
-    'multi',
-    'bg',
-    'hr',
-    'cs',
-    'da',
-    'nl',
-    'en',
-    'et',
-    'fi',
-    'fr',
-    'de',
-    'el',
-    'hu',
-    'it',
-    'lt',
-    'lv',
-    'mt',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sl',
-    'es',
-    'sv',
-    'uk',
-}
-
 # Compatibility export for callers. Its value is owned by stt_provider_policy.
 DEFAULT_STT_SERVICE_MODELS = default_models_for_surface(STTServingSurface.STREAMING)
 stt_service_models = os.getenv('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS)).split(',')
-
-
-def _normalize_language(language: str | None) -> str:
-    if not language:
-        return ''
-    return language.split('-')[0].split('_')[0].lower()
 
 
 def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
@@ -276,11 +181,43 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     return 'none'
 
 
+def _requested_stt_language(
+    language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
+) -> str:
+    """Resolve the provider language while retaining PTT's explicit input language.
+
+    Live sessions with multi-language enabled must select a provider's auto-detect
+    mode. PTT does not load the user's transcription preference, so it keeps its
+    explicit language unless the client itself sends the ``multi`` sentinel.
+    """
+    if base_lang == 'multi' or (
+        surface == STTServingSurface.STREAMING
+        and multi_lang_enabled
+        and language
+        and supports_live_multilingual_mode(language)
+    ):
+        return 'multi'
+    return base_lang
+
+
+def _models_with_preferred_service(
+    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str]
+) -> Tuple[str, ...]:
+    """Honor a recognized client engine preference within the serving policy."""
+    normalized_preference = (preferred_service or '').strip().lower()
+    if normalized_preference != STTService.parakeet.value:
+        return tuple(models)
+    return tuple(model for model in models if model.strip() == STTService.parakeet.value) + tuple(
+        model for model in models if model.strip() != STTService.parakeet.value
+    )
+
+
 def get_stt_service_for_language(
     language: Optional[str],
     multi_lang_enabled: bool = True,
     *,
     surface: STTServingSurface = STTServingSurface.STREAMING,
+    preferred_service: Optional[str] = None,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a serving STT provider allowed for the requested product surface.
 
@@ -290,10 +227,19 @@ def get_stt_service_for_language(
     """
     # Missing language metadata historically meant English. Preserve that
     # behavior without opening a retired-provider fallback for unknown values.
-    base_lang = _normalize_language(language) or 'en'
+    base_lang = normalized_stt_language(language) or 'en'
+    requested_language = _requested_stt_language(
+        language,
+        base_lang,
+        multi_lang_enabled=multi_lang_enabled,
+        surface=surface,
+    )
 
-    def select(models: List[str] | Tuple[str, ...]) -> Optional[Tuple[STTService, str, str]]:
-        for model in models:
+    def select(
+        models: List[str] | Tuple[str, ...],
+    ) -> Tuple[Optional[Tuple[STTService, str, str]], Optional[str]]:
+        parakeet_fallback_reason: Optional[str] = None
+        for model in _models_with_preferred_service(models, preferred_service=preferred_service):
             model = model.strip()
             if (
                 model.startswith('dg-')
@@ -302,38 +248,60 @@ def get_stt_service_for_language(
             ):
                 dg_model = model.replace('dg-', '', 1)
                 if multi_lang_enabled and language in deepgram_nova3_multi_languages:
-                    return STTService.deepgram, 'multi', dg_model
+                    return (STTService.deepgram, 'multi', dg_model), parakeet_fallback_reason
                 if language in deepgram_nova3_languages:
-                    return STTService.deepgram, language, dg_model
+                    return (STTService.deepgram, language, dg_model), parakeet_fallback_reason
                 continue
-            if (
-                model == 'parakeet'
-                and provider_is_enabled(PARAKEET_PROVIDER, surface)
-                and os.getenv('HOSTED_PARAKEET_API_URL')
-            ):
-                if base_lang in parakeet_languages:
-                    return STTService.parakeet, base_lang or 'en', 'parakeet'
+            if model == 'parakeet':
+                if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
+                    if parakeet_supports_language(surface, requested_language):
+                        return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
+                    parakeet_fallback_reason = 'capability_mismatch'
+                else:
+                    parakeet_fallback_reason = 'config_incomplete'
             if (
                 model == 'modulate-velma-2'
                 and provider_is_enabled(MODULATE_PROVIDER, surface)
-                and base_lang in modulate_languages
+                and modulate_supports_language(requested_language)
             ):
-                return STTService.modulate, base_lang or 'en', 'velma-2'
-        return None
+                return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
+        return None, parakeet_fallback_reason
 
-    selected = select(stt_service_models)
+    prefers_parakeet = (preferred_service or '').strip().lower() == STTService.parakeet.value
+
+    def record_selected_fallback(
+        selected: Tuple[STTService, str, str], *, used_default: bool, parakeet_fallback_reason: Optional[str]
+    ) -> None:
+        if selected[0] != STTService.parakeet and (prefers_parakeet or parakeet_fallback_reason):
+            record_fallback(
+                component='stt_selection',
+                from_mode=STTService.parakeet.value,
+                to_mode=selected[0].value,
+                reason=parakeet_fallback_reason
+                or (
+                    'capability_mismatch'
+                    if not parakeet_supports_language(surface, requested_language)
+                    else 'config_incomplete'
+                ),
+                outcome='degraded',
+            )
+        elif used_default:
+            record_fallback(
+                component='stt_selection',
+                from_mode=_stt_selection_from_mode(language or '', base_lang),
+                to_mode=selected[0].value,
+                reason='config_incomplete',
+                outcome='degraded',
+            )
+
+    selected, parakeet_fallback_reason = select(stt_service_models)
     if selected is not None:
+        record_selected_fallback(selected, used_default=False, parakeet_fallback_reason=parakeet_fallback_reason)
         return selected
 
-    selected = select(default_models_for_surface(surface))
+    selected, parakeet_fallback_reason = select(default_models_for_surface(surface))
     if selected is not None:
-        record_fallback(
-            component='stt_selection',
-            from_mode=_stt_selection_from_mode(language or '', base_lang),
-            to_mode=selected[0].value,
-            reason='config_incomplete',
-            outcome='degraded',
-        )
+        record_selected_fallback(selected, used_default=True, parakeet_fallback_reason=parakeet_fallback_reason)
         return selected
 
     record_fallback(
