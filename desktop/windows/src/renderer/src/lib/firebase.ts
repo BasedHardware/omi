@@ -11,11 +11,13 @@ import {
   type User
 } from 'firebase/auth'
 
-const app = initializeApp({
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string
-})
+export const firebaseConfig = {
+  apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string) || 'AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8',
+  authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string) || 'based-hardware.firebaseapp.com',
+  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string) || 'based-hardware'
+}
+
+const app = initializeApp(firebaseConfig)
 
 // Initialize auth with persistence set SYNCHRONOUSLY at init so the saved session
 // is rehydrated deterministically. The previous getAuth(app) + async
