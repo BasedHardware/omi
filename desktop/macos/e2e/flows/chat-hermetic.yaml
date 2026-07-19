@@ -19,6 +19,7 @@ covers:
   - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+HarnessReset.swift
   - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
   - desktop/macos/Desktop/Sources/AnalyticsManager.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift

@@ -2903,7 +2903,7 @@
     "upgradePlan": "Plan upgraden",
     "billingMonthly": "Monatlich",
     "billingYearly": "Jährlich",
-    "savePercent": "~17% sparen",
+    "savePercent": "~{percent}% sparen",
     "popular": "Beliebt",
     "currentPlan": "Aktuell",
     "neoSubtitle": "{count} Fragen pro Monat",

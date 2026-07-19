@@ -37,6 +37,7 @@ from database.sync_jobs import (
     add_processed_segment_if_run_owner,
     delete_sync_job_run_lock_epoch,
     fenced_finalize_sync_job,
+    fenced_finalize_sync_job_from_durable_ledger,
     fenced_mark_job_failed,
     fenced_mark_job_processing,
     fenced_update_sync_job,
@@ -480,7 +481,9 @@ def bind_or_converge_sync_ledger_completion(
     if not binding.completed or not is_valid_completed_sync_content_result(binding.result):
         raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
 
-    finalized = _finalize_sync_job_for_run(job_id, run_lock_token, binding.result)
+    finalized = _require_run_owner(
+        fenced_finalize_sync_job_from_durable_ledger(job_id, run_lock_token, binding.result), job_id=job_id
+    )
     delete_sync_job_run_lock_epoch(job_id)
     return finalized
 

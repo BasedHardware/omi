@@ -273,6 +273,20 @@ enum AgentClient {
       )
     }
 
+    func listJournalTurnsForControl(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      afterTurnSeq: Int = 0,
+      limit: Int = 100
+    ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+      try await bridge.listJournalTurnsForControl(
+        surface: surface,
+        ownerID: ownerID,
+        afterTurnSeq: afterTurnSeq,
+        limit: limit
+      )
+    }
+
     func importRemoteJournalTurn(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
@@ -287,6 +301,18 @@ enum AgentClient {
       expectedGeneration: Int? = nil
     ) async throws -> Int {
       try await bridge.clearJournalTurns(
+        surface: surface,
+        ownerID: ownerID,
+        expectedGeneration: expectedGeneration
+      )
+    }
+
+    func clearJournalTurnsForControl(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      expectedGeneration: Int? = nil
+    ) async throws -> Int {
+      try await bridge.clearJournalTurnsForControl(
         surface: surface,
         ownerID: ownerID,
         expectedGeneration: expectedGeneration

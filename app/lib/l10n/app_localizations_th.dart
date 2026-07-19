@@ -8944,7 +8944,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get billingYearly => 'รายปี';
 
   @override
-  String get savePercent => 'ประหยัด ~17%';
+  String savePercent(int percent) {
+    return 'ประหยัด ~$percent%';
+  }
 
   @override
   String get popular => 'ยอดนิยม';
