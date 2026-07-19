@@ -146,7 +146,7 @@ export interface PricingOption {
 
 // Response from available-plans endpoint (matches backend AvailablePlansResponse)
 export interface AvailablePlansResponse {
-  plans: PricingOption[]; // Backend returns flat list of PricingOption, not nested SubscriptionPlan
+  plans: PricingOption[];  // Backend returns flat list of PricingOption, not nested SubscriptionPlan
 }
 
 // Response from checkout-session endpoint
@@ -199,8 +199,8 @@ export interface Integration {
 
 export interface DeveloperApiKey {
   id: string;
-  key_prefix: string; // For existing keys, only prefix is returned
-  key?: string; // Full key only returned when creating
+  key_prefix: string;  // For existing keys, only prefix is returned
+  key?: string;        // Full key only returned when creating
   name: string;
   created_at: string;
   last_used_at?: string;
@@ -217,13 +217,13 @@ export const API_KEY_SCOPES = [
   { id: 'action_items:write', label: 'Action Items', type: 'write' },
 ] as const;
 
-export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]['id'];
+export type ApiKeyScope = typeof API_KEY_SCOPES[number]['id'];
 
 // MCP API Key types
 export interface McpApiKey {
   id: string;
   key_prefix: string;
-  key?: string; // Full key only returned when creating
+  key?: string;  // Full key only returned when creating
   name: string;
   created_at: string;
   last_used_at?: string;
