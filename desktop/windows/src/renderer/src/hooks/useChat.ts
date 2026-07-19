@@ -3,6 +3,7 @@ import { auth } from '../lib/firebase'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { gatherLocalContext } from '../lib/localAgent'
 import { readCurrentScreen } from '../lib/screenContext'
+import { getScreenHistoryContext } from '../lib/screenHistoryContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
 import type { AutomationPlan } from '../../../shared/types'
@@ -249,12 +250,17 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       //     context to EVERY message. It's framed so the model ignores it unless the
       //     message is actually about the screen, so it doesn't bloat answers. This
       //     is an instant hot-cache read, so normal messages don't pay a capture cost;
+      //   • screen history — if asking about past screens ("5 minutes ago", "that error")
       //   • local KG/file context — apps/projects/tech the chat is grounded in.
-      const [screenContext, localContext] = await Promise.all([
+      const [screenContext, historyContext, localContext] = await Promise.all([
         readCurrentScreen(),
+        Promise.race([
+          getScreenHistoryContext(userMsg.content),
+          new Promise<string>((resolve) => setTimeout(() => resolve(''), 1500))
+        ]),
         gatherLocalContext(userMsg.content)
       ])
-      const contextParts = [screenContext, localContext].filter(Boolean)
+      const contextParts = [screenContext, historyContext, localContext].filter(Boolean)
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content

@@ -98,6 +98,14 @@ const omi: OmiBridgeApi = {
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
+  screenSearchHistory: (params: {
+    startTime: number
+    endTime: number
+    searchQuery?: string
+    limit?: number
+  }) => ipcRenderer.invoke('screen:searchHistory', params),
+  screenGetHistoryContext: (startTime: number, endTime: number, maxFrames?: number) =>
+    ipcRenderer.invoke('screen:getHistoryContext', startTime, endTime, maxFrames),
   screenSynthFramesSince: () => ipcRenderer.invoke('screenSynth:framesSince'),
   screenSynthGetState: () => ipcRenderer.invoke('screenSynth:getState'),
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),

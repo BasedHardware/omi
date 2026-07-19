@@ -750,6 +750,35 @@ export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   })
 }
 
+export function searchRewindFramesInTimeRange(
+  startTime: number,
+  endTime: number,
+  searchQuery?: string,
+  limit = 50
+): RewindFrame[] {
+  return timed('searchRewindFramesInTimeRange', () => {
+    if (searchQuery && searchQuery.trim()) {
+      const like = `%${searchQuery.trim()}%`
+      return get()
+        .prepare(
+          `SELECT ${REWIND_COLUMNS} FROM rewind_frames
+           WHERE ts BETWEEN ? AND ?
+           AND (ocr_text LIKE ? OR window_title LIKE ? OR app LIKE ?)
+           ORDER BY ts DESC LIMIT ?`
+        )
+        .all(startTime, endTime, like, like, like, limit) as RewindFrame[]
+    } else {
+      return get()
+        .prepare(
+          `SELECT ${REWIND_COLUMNS} FROM rewind_frames
+           WHERE ts BETWEEN ? AND ?
+           ORDER BY ts DESC LIMIT ?`
+        )
+        .all(startTime, endTime, limit) as RewindFrame[]
+    }
+  })
+}
+
 export function rewindDayBounds(): { min: number; max: number } | null {
   const row = get()
     .prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames')

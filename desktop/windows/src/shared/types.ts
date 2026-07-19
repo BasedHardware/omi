@@ -244,6 +244,21 @@ export type OmiBridgeApi = {
   /** Capture the primary screen once and OCR it, returning the recognized text
    *  (or '' on failure/timeout). Used by the chat to read the screen at send time. */
   screenReadText: () => Promise<string>
+  screenSearchHistory: (params: {
+    startTime: number
+    endTime: number
+    searchQuery?: string
+    limit?: number
+  }) => Promise<{
+    frames: RewindFrame[]
+    summary: string
+    timeRange: {
+      start: number
+      end: number
+      description: string
+    }
+  }>
+  screenGetHistoryContext: (startTime: number, endTime: number, maxFrames?: number) => Promise<string>
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
   insightAdd: (p: InsightPayload) => Promise<void>

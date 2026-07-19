@@ -24,6 +24,7 @@ import { registerOverlayHandlers } from './overlay/ipc'
 import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
+import { registerScreenHistoryHandlers } from './ipc/screenHistory'
 import { registerInsightHandlers } from './ipc/insight'
 import { createInsightToastWindow } from './insight/toastWindow'
 import { registerAutomationHandlers } from './ipc/automation'
@@ -351,6 +352,7 @@ app.whenReady().then(async () => {
   registerMemoryCleanupHandlers()
   registerRewindHandlers()
   registerScreenHandlers()
+  registerScreenHistoryHandlers()
   // Cross-window conversations refresh: any renderer that writes a local
   // conversation (main window OR overlay) notifies here; rebroadcast to every
   // window so each invalidates its own per-process conversations cache (e.g. an
