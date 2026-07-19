@@ -21,7 +21,8 @@ import { executeHostTool } from '../agentKernel/toolRelayBridge'
 import {
   createUpdateActionItemExecutor,
   createSearchTasksExecutor,
-  createCompleteTaskExecutor
+  createCompleteTaskExecutor,
+  parseTaskToolId
 } from '../agentKernel/productToolExecutors'
 import type { TaskSearchResult } from '../assistants/tasks/toolBackends'
 import type { ActionItemRecord } from '../../shared/types'
@@ -248,13 +249,12 @@ describe('search_tasks id ↔ mutation contract (end-to-end via the host-tool do
   // backendId) could never resolve, so the mutation silently no-op'd. This asserts the
   // id the search tool hands out is the SAME one the mutation tool resolves and applies.
   it('a task found via search_tasks can be completed by the id search_tasks returned', async () => {
-    // One shared in-memory task, synced (has a backendId).
-    const task: ActionItemRecord = {
-      backendId: 'srv-abc',
-      description: 'Reply to Jane',
-      completed: false
-    } as unknown as ActionItemRecord
-    const store = [{ id: 42, ...task }] // id 42 = local rowid (the old, wrong handle)
+    // One shared in-memory task, synced (has a backendId). id 42 = local rowid (the
+    // old, wrong handle search_tasks used to emit).
+    type Row = { id: number; backendId: string; description: string; completed: boolean }
+    const store: Row[] = [
+      { id: 42, backendId: 'srv-abc', description: 'Reply to Jane', completed: false }
+    ]
 
     const searchResults: TaskSearchResult[] = store.map((t) => ({
       id: t.id,
@@ -266,13 +266,15 @@ describe('search_tasks id ↔ mutation contract (end-to-end via the host-tool do
       source: 'action_item',
       backendId: t.backendId
     }))
-    // Resolve exactly as production does: backendId, or a local:<rowid> handle.
+    // Resolve exactly as production does — via the SAME shared parser realResolveTask
+    // uses, so this test can't drift from the resolver it is proving.
     const resolveTask = async (id: string): Promise<ActionItemRecord | null> => {
-      if (id.startsWith('local:')) {
-        const rowid = Number(id.slice('local:'.length))
-        return (store.find((t) => t.id === rowid) as ActionItemRecord | undefined) ?? null
-      }
-      return (store.find((t) => t.backendId === id) as ActionItemRecord | undefined) ?? null
+      const lookup = parseTaskToolId(id)
+      const hit =
+        lookup.by === 'rowid'
+          ? store.find((t) => t.id === lookup.rowid)
+          : store.find((t) => t.backendId === lookup.backendId)
+      return (hit as ActionItemRecord | undefined) ?? null
     }
     const toggleTask = vi.fn(async (backendId: string, completed: boolean) => {
       const t = store.find((s) => s.backendId === backendId)

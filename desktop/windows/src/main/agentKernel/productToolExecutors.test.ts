@@ -14,7 +14,8 @@ import {
   createCreateActionItemExecutor,
   createUpdateActionItemExecutor,
   createCompleteTaskExecutor,
-  createDeleteTaskExecutor
+  createDeleteTaskExecutor,
+  parseTaskToolId
 } from './productToolExecutors'
 import { defaultProductToolExecutors, WINDOWS_SERVICEABLE_PRODUCT_TOOLS } from './toolRelayBridge'
 
@@ -303,6 +304,34 @@ describe('create_action_item', () => {
       'Error: due_at must be ISO format'
     )
     expect(createTask).not.toHaveBeenCalled()
+  })
+})
+
+// --- parseTaskToolId (the shared id parser realResolveTask + the e2e test use) ---
+
+describe('parseTaskToolId', () => {
+  it('resolves a well-formed local:<rowid> handle by rowid', () => {
+    expect(parseTaskToolId('local:5')).toEqual({ by: 'rowid', rowid: 5 })
+    expect(parseTaskToolId('local:42')).toEqual({ by: 'rowid', rowid: 42 })
+  })
+
+  it('treats a backendId as a backendId lookup', () => {
+    expect(parseTaskToolId('srv-abc')).toEqual({ by: 'backendId', backendId: 'srv-abc' })
+  })
+
+  it('treats a BARE numeric rowid (no local: prefix) as a backendId — never a rowid', () => {
+    // This is the old buggy handle search_tasks used to emit; it must NOT resolve by
+    // rowid now, or it could hit an unrelated row.
+    expect(parseTaskToolId('42')).toEqual({ by: 'backendId', backendId: '42' })
+  })
+
+  it('falls through to backendId for a malformed local: suffix (empty / non-integer / negative / zero)', () => {
+    // Never mis-resolve to rowid 0 or a wrong row — the theoretical-misparse guard.
+    expect(parseTaskToolId('local:')).toEqual({ by: 'backendId', backendId: 'local:' })
+    expect(parseTaskToolId('local:abc')).toEqual({ by: 'backendId', backendId: 'local:abc' })
+    expect(parseTaskToolId('local:1.5')).toEqual({ by: 'backendId', backendId: 'local:1.5' })
+    expect(parseTaskToolId('local:-5')).toEqual({ by: 'backendId', backendId: 'local:-5' })
+    expect(parseTaskToolId('local:0')).toEqual({ by: 'backendId', backendId: 'local:0' })
   })
 })
 

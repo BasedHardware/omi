@@ -193,7 +193,7 @@ const SEARCH_TASKS_CAP = 10
  */
 function searchResultTaskId(r: TaskSearchResult): string | null {
   if (r.source === 'staged_task') return null
-  return r.backendId && r.backendId.length > 0 ? r.backendId : `local:${r.id}`
+  return r.backendId != null && r.backendId.length > 0 ? r.backendId : `local:${r.id}`
 }
 
 /**
@@ -358,21 +358,39 @@ export interface TaskMutateDeps {
 
 const LOCAL_ID_PREFIX = 'local:'
 
-/** Resolve a tool-facing task id to its local action item. Accepts both id namespaces
- *  the read tools emit: a `backendId` (synced tasks) or a `local:<rowid>` handle (an
- *  action item not yet synced — the form `get_action_items`/`search_tasks` use before
- *  a backendId exists). `local:` is resolved strictly against the action_items rowid
- *  space; a bare number or unknown id matches nothing (honest not-found), never the
- *  wrong row. Windows exposes no by-id getter, so scan a wide local page. */
+/** How a tool-facing task id resolves: by action_items rowid (a `local:<rowid>`
+ *  handle) or by backendId (a synced task's id). */
+export type TaskIdLookup = { by: 'rowid'; rowid: number } | { by: 'backendId'; backendId: string }
+
+/**
+ * Parse a tool-facing task id (from `search_tasks` / `get_action_items`) into how it
+ * should be resolved. A `local:<n>` handle resolves by the action_items rowid ONLY when
+ * the suffix is a valid POSITIVE integer (rowids start at 1); an empty, negative, or
+ * non-integer suffix — or any other id — is treated as a backendId, so a malformed
+ * handle misses honestly rather than mis-resolving to rowid 0 / a wrong row. Exported
+ * and unit-tested directly so `realResolveTask` and its tests share ONE parser (no
+ * hand-copied logic — the SQL/DDL-drift trap this repo has been burned by).
+ */
+export function parseTaskToolId(id: string): TaskIdLookup {
+  if (id.startsWith(LOCAL_ID_PREFIX)) {
+    const rowid = Number(id.slice(LOCAL_ID_PREFIX.length))
+    if (Number.isInteger(rowid) && rowid > 0) return { by: 'rowid', rowid }
+  }
+  return { by: 'backendId', backendId: id }
+}
+
+/** Resolve a tool-facing task id to its local action item, via the shared
+ *  `parseTaskToolId`. `local:<rowid>` resolves strictly against the action_items rowid
+ *  space; anything else (a backendId, or a malformed `local:` handle) resolves by
+ *  backendId and misses honestly if unknown — never the wrong row. Windows exposes no
+ *  by-id getter, so scan a wide local page. */
 async function realResolveTask(id: string): Promise<ActionItemRecord | null> {
   const { getLocalActionItems } = await import('../ipc/db')
   const items = getLocalActionItems({ limit: 5000 })
-  if (id.startsWith(LOCAL_ID_PREFIX)) {
-    const rowid = Number(id.slice(LOCAL_ID_PREFIX.length))
-    if (!Number.isInteger(rowid)) return null
-    return items.find((r) => r.id === rowid) ?? null
-  }
-  return items.find((r) => r.backendId === id) ?? null
+  const lookup = parseTaskToolId(id)
+  return lookup.by === 'rowid'
+    ? (items.find((r) => r.id === lookup.rowid) ?? null)
+    : (items.find((r) => r.backendId === lookup.backendId) ?? null)
 }
 
 function bindTaskMutateDeps(deps?: Partial<TaskMutateDeps>): TaskMutateDeps {
