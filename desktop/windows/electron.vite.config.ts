@@ -20,6 +20,29 @@ if (!devInstance.isPrimary && !process.env.OMI_SANDBOX) {
 export default defineConfig({
   main: {
     build: {
+      // Compile the main-process ENTRY to V8 bytecode in production builds so
+      // Electron skips parse/compile of the largest main bundle at boot. This is
+      // production-only — electron-vite gates bytecode to `electron-vite build`
+      // (NODE_ENV_ELECTRON_VITE==='production'), so `pnpm dev` is untouched — and
+      // CJS-only (main output is CJS; if it ever became ESM electron-vite would
+      // warn and silently skip). The bytecode is compiled by spawning the
+      // installed Electron (ELECTRON_RUN_AS_NODE), so it always matches the
+      // shipped V8: an Electron version bump regenerates it on the next build.
+      // There is no committed .jsc to go stale.
+      //
+      // chunkAlias LIMITS compilation to the `index` entry ONLY. It must NOT
+      // include:
+      //   - `kgWorker` — a SEPARATE entry loaded via `new Worker(kgWorker.js)`
+      //     (src/main/ipc/kg.ts). A worker thread has no bytecode loader
+      //     registered, so a bytecoded worker entry would fail to load. Keep it
+      //     plain JS. (The out/main/chunks/*.mjs ACP/MCP entries are emitted as
+      //     ?asset files — type:'asset', not 'chunk' — so bytecode already skips
+      //     them; they are spawned as plain-Node children and must stay ESM.)
+      //   - the lazy shared chunks (backendTools, mainChatPersonalization) — they
+      //     are dynamic imports off the startup path, so bytecoding them yields
+      //     ~no boot win and would need extra care that kgWorker never requires a
+      //     deleted plaintext chunk.
+      bytecode: { chunkAlias: 'index' },
       rollupOptions: {
         input: {
           index: resolve('src/main/index.ts'),
@@ -31,7 +54,16 @@ export default defineConfig({
       }
     }
   },
-  preload: {},
+  preload: {
+    build: {
+      // Preload runs with sandbox:false (see the BrowserWindow webPreferences in
+      // src/main/index.ts), which bytecode requires — it relies on Node's `vm`
+      // module, unavailable in a sandboxed preload. Single CJS entry, no worker,
+      // so plain `true` (compile the whole preload) is safe. Production-only, same
+      // as main.
+      bytecode: true
+    }
+  },
   renderer: {
     // Pin the dev server to this instance's port so the renderer's origin — and
     // therefore its localStorage (onboarding flag, preferences, Firebase session)
