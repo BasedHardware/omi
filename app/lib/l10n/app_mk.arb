@@ -10521,7 +10521,7 @@
     "upgradePlan": "Надгради план",
     "billingMonthly": "Месечно",
     "billingYearly": "Годишно",
-    "savePercent": "Заштедете ~17%",
+    "savePercent": "Заштедете ~{percent}%",
     "popular": "Популарно",
     "currentPlan": "Тековен",
     "neoSubtitle": "{count} прашања месечно",

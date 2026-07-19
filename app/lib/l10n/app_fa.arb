@@ -10521,7 +10521,7 @@
     "upgradePlan": "ارتقای طرح",
     "billingMonthly": "ماهانه",
     "billingYearly": "سالانه",
-    "savePercent": "~17% صرفه‌جویی",
+    "savePercent": "~{percent}% صرفه‌جویی",
     "popular": "محبوب",
     "currentPlan": "فعلی",
     "neoSubtitle": "{count} پرسش در ماه",

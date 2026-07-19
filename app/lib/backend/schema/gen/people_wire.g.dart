@@ -46,26 +46,6 @@ class GeneratedPerson {
   }
 }
 
-class GeneratedPeopleCountResponse {
-  final int count;
-
-  const GeneratedPeopleCountResponse({
-    required this.count,
-  });
-
-  factory GeneratedPeopleCountResponse.fromJson(Map<String, dynamic> json) {
-    return GeneratedPeopleCountResponse(
-      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: true, nullable: false), "count"),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'count': count,
-    };
-  }
-}
-
 class _WireField {
   final bool present;
   final dynamic value;

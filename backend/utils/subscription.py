@@ -464,19 +464,27 @@ LEGACY_PRICE_MAP = {
 # Platform identifiers for the two mobile clients (X-App-Platform header).
 _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 
+# The web storefront (X-App-Platform: web). It's an always-latest client that
+# renders the full new catalog (Plus + Unlimited + Operator + Architect) and is
+# the primary Stripe checkout surface; only deprecated Neo is hidden there.
+WEB_PLATFORMS = {'web'}
+
 
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     """Plans hidden from the purchase catalog per platform.
 
-    Mobile sells Plus + Unlimited; desktop sells Operator + Architect; Neo is
-    deprecated on both. Web is unfiltered. A subscriber on a hidden plan still
-    sees it via `filter_plans_for_user`'s current-plan / ever-purchased escapes.
+    Mobile sells Plus + Unlimited; desktop sells Operator + Architect; web sells
+    all four. Neo is deprecated everywhere and hidden on every platform. A
+    subscriber on a hidden plan still sees it via `filter_plans_for_user`'s
+    current-plan / ever-purchased escapes.
     """
     p = (platform or '').lower()
     if p in _MOBILE_PLATFORM_TOKENS:
         return {PlanType.unlimited, PlanType.operator, PlanType.architect}
     if p in DESKTOP_PLATFORMS:
         return {PlanType.unlimited, PlanType.plus, PlanType.unlimited_v2}
+    if p in WEB_PLATFORMS:
+        return {PlanType.unlimited}
     return set()
 
 
@@ -561,12 +569,16 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     Mobile (android/ios): any build at or above NEW_PLANS_MIN_MOBILE_VERSION
     qualifies; a missing or unparseable version defaults to the legacy catalog
     (old mobile builds crash on the operator enum).
+    Web: always the new catalog (it's an always-latest client, version-agnostic).
     Unknown platform: legacy catalog.
     """
     if not platform:
         return False
 
     platform_lower = platform.lower()
+
+    if platform_lower in WEB_PLATFORMS:
+        return True
 
     if platform_lower in DESKTOP_PLATFORMS:
         if not app_version:

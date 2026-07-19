@@ -425,7 +425,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     final plan = provider.subscription!.subscription.plan;
-    final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+    final isPaid = plan.isPaid;
+    // Plan names are product names; only the free/unlimited labels are localized.
+    final planLabel = plan == PlanType.plus ? 'Plus' : (isPaid ? context.l10n.unlimitedPlan : context.l10n.basicPlan);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -442,10 +444,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                isUnlimited ? context.l10n.unlimitedPlan : context.l10n.basicPlan,
+                planLabel,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              if (isUnlimited)
+              if (isPaid)
                 GestureDetector(
                   onTap: _isUpgrading ? null : _showPlansSheet,
                   child: Row(
@@ -458,7 +460,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 ),
             ],
           ),
-          if (!isUnlimited) ...[
+          if (!isPaid) ...[
             const SizedBox(height: 4),
             Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
             const SizedBox(height: 16),

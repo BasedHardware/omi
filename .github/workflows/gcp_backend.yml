@@ -504,6 +504,112 @@ jobs:
               --max-concurrent-dispatches=4
           fi
 
+      - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
+        id: deploy-backend-integration
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.SERVICE }}-integration
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          no_traffic: true
+          flags: >-
+            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            --remove-env-vars=HOSTED_PUSHER_API_URL
+            ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
+
+      - name: Capture ${{ env.SERVICE }}-integration revision
+        id: capture-backend-integration-revision
+        run: |
+          echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Cloud Run revisions to become ready
+        run: |
+          python3 backend/scripts/preflight-cloud-run-deploy.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }} \
+            --wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
+            --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
+
+      - name: Validate backend runtime env after deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+        run: |
+          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
+
+      # The manual development deployment runs this no-traffic probe before
+      # promotion, making it the required auth and route dry run for production.
+      #
+      # Development-only by construction. The probe reaches the candidate over a
+      # Cloud Run tag URL, which is a run.app URL. Production deliberately serves
+      # no run.app URL (`run.googleapis.com/default-url-disabled=true`, ingress
+      # `internal-and-cloud-load-balancing`), so a production tag resolves to no
+      # HTTPS endpoint and this runner sits outside the VPC that could reach one.
+      # Do not enable these steps for production without first giving the probe a
+      # route that does not depend on a public revision URL.
+      - name: Resolve transcription candidate URL
+        id: transcription-candidate
+        if: ${{ github.event.inputs.environment == 'development' }}
+        run: |
+          candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --service=${{ env.SERVICE }} \
+            --revision=${{ steps.capture-backend-revision.outputs.revision }} \
+            --tag="$TRANSCRIPTION_CANDIDATE_TAG")"
+          printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
+
+      - name: Gate backend candidate on known audio
+        if: ${{ github.event.inputs.environment == 'development' }}
+        uses: ./.github/actions/transcription-release-candidate-probe
+        with:
+          candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          firebase_auth_project_id: based-hardware
+
+      # This is the Cloud Run-only acceptance boundary. GKE config, secrets,
+      # and backend-listen stay untouched until every no-traffic revision is
+      # proven ready (and development has passed its known-audio candidate gate).
+      - name: Accept no-traffic Cloud Run candidate
+        run: |
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --candidate \
+            --cloud-run-only \
+            --commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment "${{ vars.ENV }}" \
+            --evidence-path artifacts/backend-cloud-run-candidate-release-vector.json
+
+      - name: Remove passed transcription candidate tag
+        if: ${{ success() && github.event.inputs.environment == 'development' }}
+        run: |
+          gcloud run services update-traffic ${{ env.SERVICE }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
+            --quiet
+
+      - name: Remove failed transcription candidate tag
+        # Tag is created at deploy-backend; clean it up on any later failure,
+        # not only after the candidate URL resolution step succeeds. Production
+        # never creates the tag, so there is nothing to remove there.
+        if: ${{ failure() && steps.deploy-backend.outcome == 'success' && github.event.inputs.environment == 'development' }}
+        run: |
+          gcloud run services update-traffic ${{ env.SERVICE }} \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
+            --quiet
+
       - name: Get GKE credentials
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         uses: google-github-actions/get-gke-credentials@v3
@@ -577,94 +683,31 @@ jobs:
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
-      - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
-        id: deploy-backend-integration
-        uses: google-github-actions/deploy-cloudrun@v3
-        with:
-          service: ${{ env.SERVICE }}-integration
-          region: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
-          no_traffic: true
-          flags: >-
-            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            --remove-env-vars=HOSTED_PUSHER_API_URL
-            ${{ steps.runtime-env.outputs.cloud_run_flags }}
-          env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
-          secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
-
-      - name: Capture ${{ env.SERVICE }}-integration revision
-        id: capture-backend-integration-revision
+      - name: Verify exact candidate composition
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
-          echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --candidate \
+            --commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment "${{ vars.ENV }}" \
+            --evidence-path artifacts/backend-deployment-composition.json
 
-      - name: Wait for Cloud Run revisions to become ready
+      - name: Capture Cloud Run pre-promotion traffic snapshot
+        id: cloud-run-traffic-snapshot
         run: |
-          python3 backend/scripts/preflight-cloud-run-deploy.py \
-            --env ${{ vars.ENV }} \
-            --project ${{ vars.GCP_PROJECT_ID }} \
-            --region ${{ env.REGION }} \
-            --wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }} \
-            --wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
-            --wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
-            --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
-
-      - name: Validate backend runtime env after deploy
-        env:
-          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
-        run: |
-          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
-
-      # The manual development deployment runs this no-traffic probe before
-      # promotion, making it the required auth and route dry run for production.
-      #
-      # Development-only by construction. The probe reaches the candidate over a
-      # Cloud Run tag URL, which is a run.app URL. Production deliberately serves
-      # no run.app URL (`run.googleapis.com/default-url-disabled=true`, ingress
-      # `internal-and-cloud-load-balancing`), so a production tag resolves to no
-      # HTTPS endpoint and this runner sits outside the VPC that could reach one.
-      # Do not enable these steps for production without first giving the probe a
-      # route that does not depend on a public revision URL.
-      - name: Resolve transcription candidate URL
-        id: transcription-candidate
-        if: ${{ github.event.inputs.environment == 'development' }}
-        run: |
-          candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
-            --project=${{ vars.GCP_PROJECT_ID }} \
-            --region=${{ env.REGION }} \
-            --service=${{ env.SERVICE }} \
-            --revision=${{ steps.capture-backend-revision.outputs.revision }} \
-            --tag="$TRANSCRIPTION_CANDIDATE_TAG")"
-          printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
-
-      - name: Gate backend candidate on known audio
-        if: ${{ github.event.inputs.environment == 'development' }}
-        uses: ./.github/actions/transcription-release-candidate-probe
-        with:
-          candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-          firebase_auth_project_id: based-hardware
-
-      - name: Remove passed transcription candidate tag
-        if: ${{ success() && github.event.inputs.environment == 'development' }}
-        run: |
-          gcloud run services update-traffic ${{ env.SERVICE }} \
-            --project=${{ vars.GCP_PROJECT_ID }} \
-            --region=${{ env.REGION }} \
-            --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
-            --quiet
-
-      - name: Remove failed transcription candidate tag
-        # Tag is created at deploy-backend; clean it up on any later failure,
-        # not only after the candidate URL resolution step succeeds. Production
-        # never creates the tag, so there is nothing to remove there.
-        if: ${{ failure() && steps.deploy-backend.outcome == 'success' && github.event.inputs.environment == 'development' }}
-        run: |
-          gcloud run services update-traffic ${{ env.SERVICE }} \
-            --project=${{ vars.GCP_PROJECT_ID }} \
-            --region=${{ env.REGION }} \
-            --remove-tags="$TRANSCRIPTION_CANDIDATE_TAG" \
-            --quiet
+          python3 backend/scripts/cloud_run_traffic_snapshot.py capture \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --service backend \
+            --service backend-sync \
+            --service backend-sync-backfill \
+            --service backend-integration \
+            --output artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json
 
       - name: Verify validated revisions are still current
         run: |
@@ -674,6 +717,7 @@ jobs:
           test "$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
       - name: Shift Cloud Run traffic to validated revisions
+        id: shift-cloud-run-traffic
         run: |
           gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
@@ -684,6 +728,7 @@ jobs:
       # shared deploy lock prevents competing writers, while this read-only
       # gate prevents a partial apply from being reported as a healthy release.
       - name: Verify serving backend release vector
+        id: verify-serving-release-vector
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
@@ -695,6 +740,13 @@ jobs:
             --region "${{ env.REGION }}" \
             --environment "${{ vars.ENV }}" \
             --evidence-path artifacts/backend-serving-release-vector.json
+
+      - name: Restore Cloud Run traffic snapshot after failed promotion
+        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') }}
+        run: |
+          python3 backend/scripts/cloud_run_traffic_snapshot.py restore \
+            --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
+            --evidence-path artifacts/backend-cloud-run-traffic-restore.json
 
       - name: Smoke What Matters Now datastore query
         if: ${{ github.event.inputs.environment == 'development' }}
@@ -737,11 +789,16 @@ jobs:
           fi
 
       - name: Upload backend release-vector evidence
-        if: ${{ always() && github.event.inputs.deploy_targets == 'all' }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: backend-serving-release-vector-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/backend-serving-release-vector.json
+          name: backend-deployment-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/backend-cloud-run-candidate-release-vector.json
+            artifacts/backend-deployment-composition.json
+            artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json
+            artifacts/backend-serving-release-vector.json
+            artifacts/backend-cloud-run-traffic-restore.json
           if-no-files-found: warn
 
       # If required, use the Cloud Run url output in later steps
