@@ -1,7 +1,7 @@
 // Omi product-tool manifest — Windows port of the macOS agent runtime's
 // omi-tool-manifest.ts (desktop/macos/agent/src/runtime/).
 //
-// Defines the 32 product ("swift") tool descriptors, merges in the 18 control
+// Defines the 33 product ("swift") tool descriptors, merges in the 18 control
 // tools from ./controlToolManifest via `controlEntry()`, and exposes the pure
 // projection functions (`toolsForAdapter`, `isToolAvailableForContext`,
 // `toolNamesForAdapter`, `mcpToolDefinitionsForAdapter`, `productManifestEntry`,
@@ -460,6 +460,17 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         },
         ['action_item_id']
       )
+    }
+  },
+  get_goals: {
+    surfaces: ['desktop_chat', 'realtime_voice'],
+    capabilityDoc: doc('Get Goals', "Read the user's goals and their progress.", [
+      "Use for questions about the user's goals: what they are, how they're progressing, or what to focus on.",
+      'Returns active and completed goals with current/target progress. No inputs.'
+    ]),
+    voice: {
+      realtimeDescription:
+        "Read the user's GOALS — the personal goals they set in Omi — with current progress toward each target (active + completed). Use this for 'what are my goals', 'how am I doing on my goals', 'my goal progress'. Goals are NOT tasks and NOT memories; never answer goal questions from get_action_items or get_memories. Fast synchronous read with NO inputs. Speak a short summary of what it returns."
     }
   },
   create_calendar_event: {
@@ -1081,6 +1092,21 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       ['action_item_id']
     ),
     annotations: localWrite,
+    timeoutClass: 'normal',
+    executor: { kind: 'swiftTool' },
+    intendedForAgents: true,
+    runtimePreconditions: ['Requires authenticated backend access.'],
+    adapters: piAndStdio()
+  },
+  {
+    name: 'get_goals',
+    label: 'Get Goals',
+    description:
+      "Read the user's goals with progress (active and completed) from the Omi backend. Use for questions about the user's goals or goal progress.",
+    promptSnippet: "get_goals - Read the user's goals and progress",
+    latency: 'fast network',
+    inputSchema: schema({}),
+    annotations: readOnlyLocal,
     timeoutClass: 'normal',
     executor: { kind: 'swiftTool' },
     intendedForAgents: true,

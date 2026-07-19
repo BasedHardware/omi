@@ -111,6 +111,7 @@ describe('buildVoiceHubToolCatalog — host-derived, role-gated (INV-AGENT)', ()
       'search_memories',
       'get_conversations',
       'search_conversations',
+      'get_goals',
       'semantic_search',
       'get_daily_recap',
       'get_work_context',
@@ -118,6 +119,19 @@ describe('buildVoiceHubToolCatalog — host-derived, role-gated (INV-AGENT)', ()
     ]) {
       expect(n).toContain(name)
     }
+  })
+
+  // Regression (2026-07-18): the assistant answered goal questions from MEMORIES
+  // and TASKS because no goals tool existed anywhere in the catalog. get_goals
+  // must stay advertised on the voice surface for BOTH roles (goal reads are
+  // role-neutral) and be NAMED in the voice instruction so the model reaches for
+  // it (the instruction-coverage guard is still 'pending' and would not fail).
+  it('get_goals is voice-advertised for both roles and named in the voice instruction', async () => {
+    expect(names('coordinator')).toContain('get_goals')
+    expect(names('leaf')).toContain('get_goals')
+    const { buildVoiceSystemInstruction } =
+      await import('../../renderer/src/lib/voice/systemInstruction')
+    expect(buildVoiceSystemInstruction()).toMatch(/\bget_goals\b/)
   })
 
   it('uses the voice realtimeDescription + schemaOverride when present', () => {
