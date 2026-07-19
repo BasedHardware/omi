@@ -29,7 +29,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
   private var buttonStreamSubject = PassthroughSubject<[UInt8], Never>()
 
   private var rxSubscription: Task<Void, Never>?
-  private var rawDataBuffer = [UInt8]()
 
   /// Fragment reassembly: index -> {seq -> payload}
   private var fragmentBuffer: [Int: [Int: [UInt8]]] = [:]
@@ -146,7 +145,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
       if isBatchMode {
         logger.debug("Batch mode - packet parse failed, data=\(data.count)b")
       }
-      rawDataBuffer.append(contentsOf: data)
       return
     }
 
@@ -951,7 +949,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     guard isInitialized else { return }
 
     do {
-      rawDataBuffer.removeAll()
       fragmentBuffer.removeAll()
       completedFlashPages.removeAll()
       isBatchMode = true
@@ -974,7 +971,6 @@ final class LimitlessDeviceConnection: BaseDeviceConnection {
     guard isInitialized else { return }
 
     do {
-      rawDataBuffer.removeAll()
       fragmentBuffer.removeAll()
       completedFlashPages.removeAll()
       firstFlashPageTimestampMs = nil
