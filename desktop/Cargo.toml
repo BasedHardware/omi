@@ -2,6 +2,7 @@
 members = [
     "shared-rust",
     "macos/Backend-Rust",
+    "windows/src-tauri",
 ]
 resolver = "2"
 
