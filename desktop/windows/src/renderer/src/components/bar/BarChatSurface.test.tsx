@@ -40,6 +40,9 @@ function makeProps(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSurface
     expanded: true,
     conversationTitle: 'Omi Chat',
     onOpenConversation: vi.fn(),
+    pills: [],
+    onOpenPill: vi.fn(),
+    onDismissPill: vi.fn(),
     onBack: vi.fn(),
     onClose: vi.fn(),
     draft: '',
@@ -77,6 +80,9 @@ function renderLiveSurface(
         expanded={true}
         conversationTitle="Omi Chat"
         onOpenConversation={vi.fn()}
+        pills={[]}
+        onOpenPill={vi.fn()}
+        onDismissPill={vi.fn()}
         onBack={vi.fn()}
         onClose={vi.fn()}
         draft={draft}

@@ -8,6 +8,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { ChatMessages } from '../chat/ChatMessages'
 import { agentRowStatus, type BarAgentRow } from './barDisplay'
+import { displayLabel, displayTintToken, isFinished, type AgentPill } from './agentPills'
+import { pillChipClasses } from './agentPillTranscript'
 import type { BarChatState } from '../../../../shared/types'
 
 function ChevronRight(): React.JSX.Element {
@@ -50,6 +52,70 @@ function RowStatusDot({ active }: { active: boolean }): React.JSX.Element {
         active ? 'animate-pulse bg-emerald-400' : 'bg-neutral-600'
       }`}
     />
+  )
+}
+
+/** One floating-agent-pill row in the bar list: title + status chip + live
+ *  one-liner, opening that run's OWN transcript on click. A finished pill offers
+ *  Dismiss; an active pill offers Stop (when a canceller is wired). The open,
+ *  Dismiss, and Stop targets are sibling buttons (the row itself has no click
+ *  handler), so an action click never also opens the pill. */
+function PillRow({
+  pill,
+  onOpen,
+  onDismiss,
+  onStop
+}: {
+  pill: AgentPill
+  onOpen: (id: string) => void
+  onDismiss: (id: string) => void
+  onStop?: (pill: AgentPill) => void
+}): React.JSX.Element {
+  const finished = isFinished(pill.displayStatus)
+  return (
+    <div className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.06]">
+      <button
+        type="button"
+        onClick={() => onOpen(pill.id)}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <RowStatusDot active={!finished} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium text-neutral-100">{pill.title}</span>
+            <span
+              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${pillChipClasses(
+                displayTintToken(pill.displayStatus)
+              )}`}
+            >
+              {displayLabel(pill.displayStatus)}
+            </span>
+          </div>
+          <div className="truncate text-xs text-neutral-500">{pill.latestActivity || '…'}</div>
+        </div>
+      </button>
+      {finished ? (
+        <button
+          type="button"
+          onClick={() => onDismiss(pill.id)}
+          aria-label="Dismiss agent"
+          title="Dismiss"
+          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"
+        >
+          Dismiss
+        </button>
+      ) : onStop ? (
+        <button
+          type="button"
+          onClick={() => onStop(pill)}
+          aria-label="Stop agent"
+          title="Stop"
+          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"
+        >
+          Stop
+        </button>
+      ) : null}
+    </div>
   )
 }
 
@@ -125,6 +191,16 @@ export type BarChatSurfaceProps = {
    *  click), or a clicked agent row (so the parent can title the header + seed the
    *  agent-delegation draft). */
   onOpenConversation: (target: BarAgentRow | null) => void
+  /** Live/recent floating agent pills — one per spawned kernel run (B3). They
+   *  COMPLEMENT the connected-agent summon rows above; a pill row opens that
+   *  run's OWN transcript (onOpenPill), never the shared Omi thread. */
+  pills: AgentPill[]
+  /** Open a pill's per-run transcript view (keyed by pill id). */
+  onOpenPill: (id: string) => void
+  /** Remove a finished pill from the bar. */
+  onDismissPill: (id: string) => void
+  /** Cancel a still-running pill's run. Absent ⇒ no stop control on the row. */
+  onStopPill?: (pill: AgentPill) => void
   onBack: () => void
   onClose: () => void
   draft: string
@@ -354,6 +430,28 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
             </span>
           </button>
         ))}
+        {/* Live/recent spawned agent runs (B3). Distinct from the summon rows
+            above: each opens its OWN run transcript, not the shared thread. A
+            thin rule sets them apart only when both sets are present. */}
+        {props.pills.length > 0 ? (
+          <div
+            className={
+              props.agents.length > 0
+                ? 'mt-1 flex flex-col gap-1 border-t border-white/[0.06] pt-1'
+                : 'flex flex-col gap-1'
+            }
+          >
+            {props.pills.map((pill) => (
+              <PillRow
+                key={pill.id}
+                pill={pill}
+                onOpen={props.onOpenPill}
+                onDismiss={props.onDismissPill}
+                onStop={props.onStopPill}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     )
   }

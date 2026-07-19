@@ -21,8 +21,11 @@ import { getPreferences, onPreferencesChange } from '../../lib/preferences'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { useVoicePlaneSupervisor } from '../../hooks/useVoicePlaneSupervisor'
 import { useCodingAgents } from '../../hooks/useCodingAgents'
+import { useAgentPills } from '../../hooks/useAgentPills'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
+import { AgentPillView } from './AgentPillView'
+import type { AgentPill } from './agentPills'
 import { BarHintStrip } from './BarHintStrip'
 import { createBarSender } from './barSend'
 import {
@@ -105,7 +108,19 @@ export function BarApp(): React.JSX.Element {
   // single global agentsActive; agent_selected names the adapter). At most one
   // row shows "Working…".
   const [activeAgentId, setActiveAgentId] = useState<CodingAgentId | null>(null)
-  const [view, setView] = useState<'list' | 'conversation'>('list')
+  const [view, setView] = useState<'list' | 'conversation' | 'agent'>('list')
+  // Which floating agent pill's transcript is open (view === 'agent'). Its id
+  // protects the pill from viewed-TTL expiry / soft-cap eviction while open.
+  const [activePillId, setActivePillId] = useState<string | null>(null)
+  // Live/recent spawned-agent pills (B3) — projected from the SAME kernel source
+  // the LLM reads (list_agent_sessions, surfaceKind 'floating_bar'); each opens
+  // its own client-synthesized transcript, never the shared Omi thread.
+  const {
+    pills,
+    markViewed: markPillViewed,
+    dismiss: dismissPill,
+    transcriptFor
+  } = useAgentPills(activePillId)
   // Which row the open conversation belongs to: null = the Omi Chat thread, else
   // the coding-agent row that opened it (drives the header title + draft seed).
   // The engine + history stay one shared thread (INV-CHAT-1) — this only steers
@@ -368,6 +383,7 @@ export function BarApp(): React.JSX.Element {
       // on the list, not a stale conversation) with no agent target carried over.
       setView('list')
       setTarget(null)
+      setActivePillId(null)
       // Signature motion: the orb materializes from nothing on every reveal.
       setGenesisNonce((n) => n + 1)
       // The bar persists across hide/show — re-pull the thread so it's current.
@@ -408,6 +424,7 @@ export function BarApp(): React.JSX.Element {
   // they equal the local ptt.* state, so this is unchanged.
   const escStateRef = useRef({
     view,
+    activePillId,
     recording: recordingNow,
     transcribing: thinkingNow,
     speaking: hubSpeaking
@@ -415,10 +432,17 @@ export function BarApp(): React.JSX.Element {
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-registered listener
   escStateRef.current = {
     view,
+    activePillId,
     recording: recordingNow,
     transcribing: thinkingNow,
     speaking: hubSpeaking
   }
+  // Latest-ref so the once-registered Esc listener can re-mark a pill viewed
+  // (markPillViewed is a stable useCallback, but route it through a ref to keep
+  // the empty-deps listener honest).
+  const markPillViewedRef = useRef(markPillViewed)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref
+  markPillViewedRef.current = markPillViewed
   const cancelPttRef = useRef(ptt.cancel)
   // eslint-disable-next-line react-hooks/refs -- latest-ref
   cancelPttRef.current = ptt.cancel
@@ -450,6 +474,11 @@ export function BarApp(): React.JSX.Element {
         // Esc aborts the turn — the supervisor must not expect a terminal.
         voiceSupNoteCancelRef.current()
         cancelPttRef.current()
+      } else if (s.view === 'agent') {
+        // Back out of a pill transcript to the list (arming its TTL if finished).
+        if (s.activePillId) markPillViewedRef.current(s.activePillId)
+        setActivePillId(null)
+        setView('list')
       } else if (s.view === 'conversation') setView('list')
       else window.omiOverlay.hide()
     }
@@ -566,6 +595,39 @@ export function BarApp(): React.JSX.Element {
     setView('conversation')
   }
 
+  // Open a spawned-agent pill's OWN transcript (the B3 fix — routes to that run's
+  // synthesized conversation keyed by pill id, never the shared Omi thread).
+  // markViewed stamps a finished pill's 10-min TTL; it no-ops while still active.
+  const openPill = (id: string): void => {
+    setActivePillId(id)
+    markPillViewed(id)
+    setView('agent')
+  }
+  // Back out of a pill view to the list. Re-mark viewed so a pill that FINISHED
+  // while open now arms its TTL (markViewed only stamps a finished pill).
+  const backFromPill = (): void => {
+    if (activePillId) markPillViewed(activePillId)
+    setActivePillId(null)
+    setView('list')
+  }
+  const dismissPillAndExit = (id: string): void => {
+    dismissPill(id)
+    if (activePillId === id) {
+      setActivePillId(null)
+      setView('list')
+    }
+  }
+  // Cancel a still-running pill's run via the trusted control door. Fire-and-
+  // forget: the next get_agent_run poll reflects the cancelled → stopped status.
+  const stopPill = (pill: AgentPill): void => {
+    void window.omi.agentControlCall('cancel_agent_run', { runId: pill.runId })
+  }
+  // The open pill (view === 'agent'). expireViewedFinished / trimForSoftCap both
+  // skip the active id, so an open pill never vanishes underneath; if it somehow
+  // resolves to null the render below coerces to the list, and Esc/dismiss reset
+  // the state — no reconcile effect (and no setState-in-effect) needed.
+  const activePill = activePillId ? (pills.find((p) => p.id === activePillId) ?? null) : null
+
   const surfaceStyle = expanded
     ? { width: PANEL_WIDTH, height: panelHeight }
     : { width: PILL.width, height: PILL.height }
@@ -610,14 +672,30 @@ export function BarApp(): React.JSX.Element {
                   <div className="px-4 pb-4 pt-2 text-sm text-neutral-400">Loading…</div>
                 ) : !user ? (
                   <SignedOutContent />
+                ) : view === 'agent' && activePill ? (
+                  // A spawned-agent pill's OWN transcript — keyed by pill id, a
+                  // SEPARATE message array from the shared Omi thread (INV-CHAT-1).
+                  <AgentPillView
+                    pill={activePill}
+                    transcript={transcriptFor(activePill.id)}
+                    onBack={backFromPill}
+                    onClose={() => window.omiOverlay.hide()}
+                    onDismiss={dismissPillAndExit}
+                    onStop={stopPill}
+                    maxListHeight={maxListHeight}
+                  />
                 ) : (
                   <BarChatSurface
                     chat={barChat}
                     agents={agentRows}
-                    view={view}
+                    view={view === 'conversation' ? 'conversation' : 'list'}
                     expanded={expanded}
                     conversationTitle={target ? target.displayName : 'Omi Chat'}
                     onOpenConversation={openConversation}
+                    pills={pills}
+                    onOpenPill={openPill}
+                    onDismissPill={dismissPillAndExit}
+                    onStopPill={stopPill}
                     onBack={() => setView('list')}
                     onClose={() => window.omiOverlay.hide()}
                     draft={draft}

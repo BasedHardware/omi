@@ -218,6 +218,22 @@ export interface AcpRuntimeAdapterOptions {
 }
 
 const DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS = 150_000
+// The first-party Claude Code bridge used to disable the no-progress watchdog
+// entirely (0 = never fires). A stalled turn — e.g. the child goes quiet after
+// a tool-permission and never sends another session/update — then hung forever,
+// leaving the kernel run pinned 'running' with no terminal event and no log:
+// invisible to list_agent_sessions and the bar. Give it a generous window
+// instead. Real work streams text/thinking/tool updates continuously (and ANY
+// inbound session/update now resets the clock, see executeAttempt), so multi-
+// minute total silence is a genuine stall, not a long tool run.
+//
+// 600s (not less): this adapter also serves the interactive in-chat lane, and a
+// single silent tool — npm install, a build, a long test run — can legitimately
+// emit no recognized session/update for several minutes. 600s bounds the actual
+// bug (an INFINITE hang) while making a false-cancel of real work rare. Tune per
+// environment via OMI_ACP_NO_PROGRESS_TIMEOUT_MS (or options.noProgressTimeoutMs,
+// which also accepts 0 to disable) — overridable in both directions.
+const DEFAULT_FIRST_PARTY_NO_PROGRESS_TIMEOUT_MS = 600_000
 
 function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined
@@ -240,6 +256,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private stdinWriter: ((line: string) => void) | null = null
   private responseHandlers = new Map<number, ResponseHandler>()
   private notificationHandler: AcpNotificationHandler | null = null
+  // While a prompt turn is in flight, resets that turn's no-progress watchdog
+  // clock. Lets inbound liveness that isn't a session/update — a permission
+  // request from the child — count as progress, so a permission round-trip is
+  // never mistaken for a stall. Null when no turn is running.
+  private markTurnProgress: (() => void) | null = null
   private nextRpcId = 1
   private initialized = false
   private initializePromise: Promise<void> | null = null
@@ -271,7 +292,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.noProgressTimeoutMs =
       options.noProgressTimeoutMs ??
       parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS) ??
-      (this.adapterId === 'acp' ? 0 : DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS)
+      (this.adapterId === 'acp'
+        ? DEFAULT_FIRST_PARTY_NO_PROGRESS_TIMEOUT_MS
+        : DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS)
     // Pin an explicit acting mode for the first-party Claude Code bridge so tool
     // access is predictable regardless of the machine's global ~/.claude mode.
     // External adapters keep whatever mode they negotiate themselves.
@@ -347,17 +370,22 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       })
     }
     const proc = this.process
+    const spawnedAt = Date.now()
+    // Post-mortem breadcrumb: a spawned pid + start time makes a later silent
+    // exit attributable (pair with the uptime logged in finalizeProcess).
+    this.log(`${this.adapterId} ACP subprocess started (pid=${proc.pid ?? 'n/a'})`)
     let finalized = false
     let recentStderr = ''
     const finalizeProcess = (error: Error): void => {
       if (finalized || this.process !== proc) return
       finalized = true
+      const uptimeMs = Date.now() - spawnedAt
       // A requested stop() also lands here via the exit handler — that's a
       // normal teardown, not a failure; don't log it as one.
       if (this.stopRequested) {
-        this.log(`${this.adapterId} ACP subprocess stopped`)
+        this.log(`${this.adapterId} ACP subprocess stopped (uptime=${uptimeMs}ms)`)
       } else {
-        this.log(error.message)
+        this.log(`${error.message} (uptime=${uptimeMs}ms)`)
       }
       this.process = null
       this.stdinWriter = null
@@ -587,7 +615,15 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const pendingTools: PendingToolActivity[] = []
     let syntheticToolIdCounter = 0
     const previousHandler = this.notificationHandler
+    const previousMarkTurnProgress = this.markTurnProgress
     let lastProgressAt = Date.now()
+    // Exposed so out-of-band liveness (a permission request from the child,
+    // handled in handleRequest) also resets the watchdog — a permission
+    // round-trip is not a stall. Saved/restored like notificationHandler so a
+    // nested turn on the same process can't clobber an outer turn's hook.
+    this.markTurnProgress = () => {
+      lastProgressAt = Date.now()
+    }
     this.notificationHandler = (method, params) => {
       previousHandler?.(method, params)
       if (signal.aborted || method !== 'session/update') return
@@ -596,13 +632,18 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       // without a session id (older adapters) are accepted as before.
       const updateSessionId = (params as { sessionId?: unknown } | undefined)?.sessionId
       if (typeof updateSessionId === 'string' && updateSessionId !== adapterSessionId) return
+      // ANY inbound update for our session is liveness. Reset the no-progress
+      // clock here, before translation — updates that don't render (usage_update,
+      // in-progress tool-call chunks) still prove the child is working, so a long
+      // tool run that streams only non-visible updates is never read as a stall.
+      lastProgressAt = Date.now()
       const update = (
         params as { update?: { sessionUpdate?: string; cost?: { amount?: unknown } } }
       )?.update
       if (update?.sessionUpdate === 'usage_update' && typeof update.cost?.amount === 'number') {
         latestCumulativeCostUsd = update.cost.amount
       }
-      const didProgress = this.translateSessionUpdate(
+      this.translateSessionUpdate(
         params as Record<string, unknown>,
         pendingTools,
         () => `acp-tool-${++syntheticToolIdCounter}`,
@@ -611,11 +652,12 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
           fullText += text
         }
       )
-      if (didProgress) {
-        lastProgressAt = Date.now()
-      }
     }
 
+    const startedAt = Date.now()
+    this.log(
+      `${this.adapterId} ACP prompt turn started (session=${adapterSessionId} cwd=${context.binding.cwd ?? 'n/a'})`
+    )
     try {
       const promptRequest = this.request('session/prompt', {
         sessionId: adapterSessionId,
@@ -647,6 +689,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         this.cumulativeCostUsdBySession.set(adapterSessionId, latestCumulativeCostUsd)
       }
 
+      this.log(
+        `${this.adapterId} ACP prompt turn ${signal.aborted ? 'cancelled' : 'succeeded'} (session=${adapterSessionId} ${Date.now() - startedAt}ms chars=${fullText.length})`
+      )
       return {
         text: fullText,
         adapterSessionId,
@@ -657,11 +702,26 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         cacheReadTokens: result.usage?.cachedReadTokens ?? 0,
         cacheWriteTokens: result.usage?.cachedWriteTokens ?? 0
       }
+    } catch (error) {
+      // A rejected turn (watchdog fired, child exited, provider error) must be
+      // observable — otherwise a stalled spawn's failure is silent. The kernel
+      // still records the failed run/attempt from the re-thrown error.
+      this.log(
+        `${this.adapterId} ACP prompt turn failed (session=${adapterSessionId} ${Date.now() - startedAt}ms): ${error instanceof Error ? error.message : String(error)}`
+      )
+      throw error
     } finally {
       this.notificationHandler = previousHandler
+      this.markTurnProgress = previousMarkTurnProgress
     }
   }
 
+  // The watchdog's guarantee is "not silent," NOT "always making progress": it
+  // fires only on TOTAL silence (no inbound session/update and no permission
+  // request for the whole window). A wedged-but-chatty adapter that keeps
+  // emitting updates while doing nothing useful will not trip it — that livelock
+  // is out of scope here; this guard exists solely to bound the INFINITE hang the
+  // 0-default allowed. Any inbound update resets the clock (see executeAttempt).
   private withNoProgressTimeout<T>(
     promise: Promise<T>,
     adapterSessionId: string,
@@ -721,6 +781,21 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
           this.log(
             `${this.adapterId} ACP session ${adapterSessionId} produced no recognized progress for ${idleMs}ms; cancelling`
           )
+          // Structured degrade breadcrumb so a watchdog kill is never a silent op.
+          // There is no shared Windows recordFallback emitter (see
+          // toolRelayBridge.ts — AGENTS.md emitters are Python/Swift/Rust only), so
+          // match its established pattern: one structured line, standard fields, no
+          // one-off counter. The terminal run failure is recorded separately by the
+          // kernel as a hard-failure event.
+          this.log(
+            `[fallback] ${JSON.stringify({
+              component: 'agent_kernel',
+              from: 'acp_turn',
+              to: 'none',
+              reason: 'no_progress_timeout',
+              outcome: 'degraded'
+            })}`
+          )
           this.notify('session/cancel', { sessionId: adapterSessionId })
           finish(() =>
             reject(
@@ -733,11 +808,21 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         Math.min(5_000, Math.max(1_000, Math.floor(timeoutMs / 6)))
       )
 
-      signal.addEventListener('abort', onAbort, { once: true })
+      // Observe the in-flight request FIRST so a pre-aborted attempt's later
+      // prompt rejection can't surface as an unhandled rejection (finish()
+      // guards double-settling).
       promise.then(
         (value) => finish(() => resolve(value)),
         (error) => finish(() => reject(error instanceof Error ? error : new Error(String(error))))
       )
+      // A signal already aborted at setup must settle now, not wait for the
+      // first watchdog tick (the 'abort' event has already fired and won't
+      // re-fire). Mirrors the no-watchdog branch above.
+      if (signal.aborted) {
+        onAbort()
+        return
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
     })
   }
 
@@ -801,6 +886,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const method = msg.method as string
 
     if (method === 'session/request_permission') {
+      // A permission request is the child asking us something — liveness, not a
+      // stall. Reset the in-flight turn's no-progress clock so the round-trip is
+      // never counted against the watchdog.
+      this.markTurnProgress?.()
       const params = msg.params as Record<string, unknown> | undefined
       const options = (params?.options as Array<{ kind: string; optionId: string }>) ?? []
       const decision =
