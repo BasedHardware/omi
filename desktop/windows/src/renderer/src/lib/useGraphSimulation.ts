@@ -322,15 +322,19 @@ export class GraphSimulation {
     }
   }
 
-  // Node-id-set + center id: two graphs with the same nodes settle to the same
-  // shape, so this is enough to detect "we've already laid this out" without
-  // hashing content that doesn't affect layout (labels, edge direction, etc).
+  // Dimensions + node-id-set + center id: two graphs with the same nodes settle
+  // to the same shape, so this is enough to detect "we've already laid this out"
+  // without hashing content that doesn't affect layout (labels, edge direction,
+  // etc). Dimensions MUST be part of the key: the 2D card and the 3D full-screen
+  // page render the same node set, and a 2D layout has every node at z=0 — a 3D
+  // sim adopting it would render the "interactive 3D" scene as a flat plane with
+  // zero parallax (orbiting reads as panning).
   private cacheKey(graph: KnowledgeGraph): string {
     const ids = graph.nodes
       .map((n) => n.id)
       .sort()
       .join(',')
-    return `${this.centerNodeId ?? ''}|${ids}`
+    return `${this.dimensions}|${this.centerNodeId ?? ''}|${ids}`
   }
 
   private seedPositionNear(id: string, graph: KnowledgeGraph): { x: number; y: number; z: number } {

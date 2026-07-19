@@ -391,7 +391,7 @@ function GraphScene({
           layer. Billboard labels use troika's own shader and ignore scene fog, so
           the far-label declutter is handled separately by the per-node distance
           fade in GraphNodeMesh. */}
-      {interactive && <fog attach="fog" args={[0x0a0a0f, 500, 1400]} />}
+      {interactive && <AdaptiveFog />}
       <GraphEdges sim={sim} edges={graph.edges} posMap={posMap} />
       {/* eslint-disable-next-line react-hooks/refs -- posMap is a lazy-init ref read here to glue edges/nodes to eased positions; intentional */}
       {nodes.map((n) => (
@@ -416,6 +416,29 @@ function GraphScene({
       )}
     </>
   )
+}
+
+// Interactive 3D only: depth fog whose near/far track the CAMERA'S CURRENT
+// DISTANCE from the cloud center every frame. Fixed distances cannot work here:
+// FitCamera places the camera at ~4.8× the graph's bounding radius (fov 28), so
+// with a real, dense graph the whole cloud sits far beyond any constant far
+// plane — 100% fogged, every node near-black at the default zoom (and zooming
+// with OrbitControls changes the distance anyway). Tracking the camera keeps the
+// front half of the cloud unfogged at ANY zoom while the back half recedes to
+// ~2/3 visibility — a depth cue, never a blackout.
+function AdaptiveFog(): React.JSX.Element {
+  const fogRef = useRef<THREE.Fog>(null)
+  const span = useMemo(() => fullGraphRadius(), [])
+  useFrame(({ camera }) => {
+    const f = fogRef.current
+    if (!f) return
+    const d = camera.position.length()
+    f.near = d
+    f.far = d + span * 3
+  })
+  // Initial args are immediately overwritten by the first frame; color matches
+  // the app's dark backdrop so fogged geometry blends into it, not to gray.
+  return <fog ref={fogRef} attach="fog" args={[0x0a0a0f, 500, 1400]} />
 }
 
 // Interactive 3D only: one-shot framing of the whole cloud. Pulls the camera back
