@@ -1,6 +1,25 @@
 import OmiTheme
 import SwiftUI
 
+/// Decides what a permission step does once its permission reads granted.
+///
+/// A restart-carrying step must only offer "Reopen Omi" for a grant that
+/// happened during this app run. When the permission was already granted the
+/// moment the step appeared, the restart it needed has already happened (macOS
+/// "Quit & Reopen", or our own relaunch) — prompting again would loop the user
+/// through endless restarts.
+enum OnboardingRestartAdvancePolicy {
+  enum Action: Equatable {
+    case advance
+    case promptRestart
+  }
+
+  static func action(requiresRestart: Bool, grantedWhenStepAppeared: Bool) -> Action {
+    guard requiresRestart, !grantedWhenStepAppeared else { return .advance }
+    return .promptRestart
+  }
+}
+
 struct OnboardingPermissionStepView: View {
   @Environment(\.scenePhase) private var scenePhase
 
@@ -26,6 +45,7 @@ struct OnboardingPermissionStepView: View {
   @State private var isRequesting = false
   @State private var showReopenPrompt = false
   @State private var hasAutoAdvanced = false
+  @State private var grantedWhenStepAppeared = false
   @State private var advanceTask: Task<Void, Never>?
   @State private var screenRecordingRefreshTask: Task<Void, Never>?
   private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -138,7 +158,12 @@ struct OnboardingPermissionStepView: View {
         }
       }
       .alert("Reopen Omi to finish", isPresented: $showReopenPrompt) {
-        Button("Reopen Omi") { appState.restartApp() }
+        Button("Reopen Omi") {
+          // Persist the step advance before relaunching, so the app resumes on
+          // the next step instead of re-entering this one and prompting again.
+          onContinue()
+          appState.restartApp()
+        }
         Button("Later", role: .cancel) { onContinue() }
       } message: {
         Text("Omi needs to reopen to apply the permissions you just granted.")
@@ -153,6 +178,7 @@ struct OnboardingPermissionStepView: View {
         screenRecordingRefreshTask?.cancel()
         coordinator.clearLastActionError()
         refreshPermissionState()
+        grantedWhenStepAppeared = isGranted
         if isGranted {
           scheduleAutoAdvance()
         }
@@ -184,11 +210,18 @@ struct OnboardingPermissionStepView: View {
       await MainActor.run {
         // The restart-carrying step (the last drag permission) offers the re-open
         // once granted, instead of silently advancing — one restart applies every
-        // deferred grant. Other steps just continue.
-        if requiresRestart {
+        // deferred grant. Other steps, and a step whose permission was already
+        // granted when it appeared (the restart already happened), just continue.
+        switch OnboardingRestartAdvancePolicy.action(
+          requiresRestart: requiresRestart, grantedWhenStepAppeared: grantedWhenStepAppeared)
+        {
+        case .promptRestart:
           PermissionDragGuidance.dismiss()
           showReopenPrompt = true
-        } else {
+        case .advance:
+          if requiresRestart {
+            PermissionDragGuidance.dismiss()
+          }
           onContinue()
         }
       }
