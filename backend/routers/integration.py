@@ -42,6 +42,10 @@ logger = logging.getLogger(__name__)
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
 MAX_NOTIFICATIONS_PER_HOUR = 10  # Maximum notifications per hour per app per user
 
+# Firestore 'in' filters accept at most 30 values (see database/apps.py, database/chat.py); keep
+# well under that so a caller-supplied statuses list can never blow the query up into a 500.
+MAX_STATUSES_FILTER_VALUES = 20
+
 router = APIRouter()
 
 
@@ -352,6 +356,9 @@ def get_conversations_via_integration(
     # Check if the app has the capability to read conversations
     if not apps_utils.app_can_read_conversations(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read conversations")
+
+    if len(statuses) > MAX_STATUSES_FILTER_VALUES:
+        raise HTTPException(status_code=400, detail=f"statuses accepts at most {MAX_STATUSES_FILTER_VALUES} values")
 
     # Convert string dates to datetime objects if needed
     if isinstance(start_date, str) and start_date:
