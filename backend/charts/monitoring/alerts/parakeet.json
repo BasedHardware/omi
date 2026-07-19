@@ -122,11 +122,19 @@
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "122",
-      "threshold": "0.1"
+      "threshold": "0.1",
+      "summary": "Omi speech processing alert: Parakeet - 5XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "speech-processing",
-      "severity": "critical"
+      "severity": "critical",
+      "alert_identity": "dfpgfzd3t1m9sf",
+      "component": "speech-processing",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -255,11 +263,18 @@
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "122",
       "summary": "5xx errors exceed 1% of Parakeet LB traffic (min 30 req/min gate)",
-      "threshold": "0.01"
+      "threshold": "0.01",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "speech-processing",
-      "severity": "critical"
+      "severity": "critical",
+      "alert_identity": "efpossz9hmsqod",
+      "component": "speech-processing",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -389,11 +404,19 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "21"
+      "__panelId__": "21",
+      "summary": "Omi speech processing alert: Parakeet - pod restart detected (possible OOMKill).",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "labels": {
       "instatus_component": "speech-processing",
-      "severity": "warning"
+      "severity": "warning",
+      "alert_identity": "efpnx71qc88aob",
+      "component": "speech-processing",
+      "impact": "infrastructure"
     },
     "isPaused": false,
     "notification_settings": {
@@ -524,11 +547,19 @@
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "123",
-      "threshold": "30000ms"
+      "threshold": "30000ms",
+      "summary": "Omi speech processing alert: Parakeet - request latency is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "speech-processing",
-      "severity": "warning"
+      "severity": "warning",
+      "alert_identity": "efpgg049laqyof",
+      "component": "speech-processing",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -659,11 +690,303 @@
     "annotations": {
       "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
       "__panelId__": "122",
-      "threshold": "5 req/s"
+      "threshold": "5 req/s",
+      "summary": "Omi speech processing alert: Parakeet RPS is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "labels": {
       "instatus_component": "speech-processing",
-      "severity": "warning"
+      "severity": "warning",
+      "alert_identity": "efpgg1kfjglj4d",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-parakeet-stream-capacity-warning",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet - streaming capacity headroom reduced",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  15
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-07-20T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
+      "__panelId__": "3",
+      "summary": "Parakeet streaming capacity is above the warning headroom per ready replica.",
+      "user_impact": "Live transcription may slow down or reject new streams if traffic continues to rise.",
+      "scope": "Production Parakeet streaming pods; active streams are averaged across ready replicas.",
+      "verification": "Compare active streams and ready replicas in the Parakeet dashboard and confirm the condition persists for the alert duration.",
+      "safe_next_action": "Allow the HPA to add healthy replicas first; investigate capacity only after checking replica readiness and the dashboard.",
+      "threshold": "15 active streams per ready replica"
+    },
+    "labels": {
+      "instatus_component": "speech-processing",
+      "severity": "warning",
+      "alert_identity": "omi-parakeet-stream-capacity-warning",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-parakeet-stream-capacity-critical",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet - streaming capacity near critical limit",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  20
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-07-20T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
+      "__panelId__": "3",
+      "summary": "Parakeet streaming capacity is near the critical per-replica limit.",
+      "user_impact": "Live transcription may be delayed or unable to accept new streams while existing sessions are protected.",
+      "scope": "Production Parakeet streaming pods; active streams are averaged across ready replicas.",
+      "verification": "Compare active streams and ready replicas in the Parakeet dashboard and confirm the condition persists for the alert duration.",
+      "safe_next_action": "Allow the HPA to add healthy replicas first; investigate capacity only after checking replica readiness and the dashboard.",
+      "threshold": "20 active streams per ready replica"
+    },
+    "labels": {
+      "instatus_component": "speech-processing",
+      "severity": "critical",
+      "alert_identity": "omi-parakeet-stream-capacity-critical",
+      "component": "speech-processing",
+      "impact": "infrastructure"
     },
     "isPaused": false,
     "notification_settings": {

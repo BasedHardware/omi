@@ -549,6 +549,53 @@ Alerting is configured through Grafana unified alerting (not Prometheus AlertMan
 
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
 
+### Human-Impact Alert Contract
+
+Grafana rules are operational runbook entries, not raw metric dumps. The split files in `alerts/*.json` are the
+maintained sources; `alert-rules.json` is the canonical combined Grafana import. They must contain the same rules
+with byte-for-byte equal objects when indexed by stable Grafana UID. The deterministic monitoring contract test checks
+both exports, including duplicate UIDs, before a change can land.
+
+Every rule carries these notification fields:
+
+| Field | Purpose |
+|---|---|
+| `labels.alert_identity` | Stable Grafana rule UID for deduplication and cross-export matching. |
+| `labels.component` | Static affected Omi component. |
+| `labels.impact` | One of `infrastructure`, `product`, or `user-experience`. |
+| `annotations.summary` | A short human description of the condition. |
+| `annotations.user_impact` | What an Omi user may experience; state uncertainty when impact is only potential. |
+| `annotations.scope` | The bounded service or user path covered by the signal. |
+| `annotations.verification` | The next evidence to confirm before intervention. |
+| `annotations.safe_next_action` | The reversible, documented operator action after verification. |
+
+The tiers describe evidence, not paging severity:
+
+- `infrastructure`: capacity, readiness, resource, or scrape signals. They may warn before a user is affected.
+- `product`: evidence that an Omi service capability may fail, be delayed, or be unavailable.
+- `user-experience`: observed degradation of a real Omi user path.
+
+Product and user-experience rules must use production, real-traffic evidence. Do not treat synthetic checks, load tests,
+staging traffic, or an inferred proxy metric as proof of user impact. Infrastructure rules may use service-health metrics,
+but their `user_impact` annotation must make potential impact clear rather than claim a confirmed user outage.
+
+Never place raw provider responses, exception text, stack traces, or dynamic Grafana error output in these annotations.
+Keep the message human-readable and direct the operator to the linked dashboard for bounded verification. Do not change
+Grafana credentials, contact points, or routing configuration while adding a rule.
+
+Parakeet stream-capacity alerts use the existing `parakeet_active_streams` gauge divided by ready Parakeet replicas:
+
+```promql
+sum(parakeet_active_streams{container="parakeet", namespace="prod-omi-backend"})
+  / clamp_min(sum(kube_deployment_status_replicas_ready{
+      deployment="prod-omi-parakeet", namespace="prod-omi-backend"}), 1)
+```
+
+This avoids a cluster-total threshold that would become misleading as HPA replica count changes. The warning threshold is
+15 streams per ready replica for five minutes and the critical threshold is 20 for two minutes, both below the known
+approximately 25–30 stream per-replica capability. No-data is healthy for these capacity rules: absent metrics are not
+evidence of saturation.
+
 ## Dashboard & Metrics Lifecycle
 
 ### Approach: UI-First, Git-Backed

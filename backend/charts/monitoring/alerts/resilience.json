@@ -100,14 +100,21 @@
     "annotations": {
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
       "severity": "ticket",
-      "summary": "Dependency health \u2014 elevated LLM gateway fallback rate, not a product outage by itself",
+      "summary": "Dependency health — elevated LLM gateway fallback rate, not a product outage by itself",
       "threshold": "0.05 (5% fallback share over 30m)",
       "__dashboardUid__": "omi-resilience-fallbacks",
-      "__panelId__": "5"
+      "__panelId__": "5",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi AI chat production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "severity": "warning",
-      "instatus_component": "ai-chat"
+      "instatus_component": "ai-chat",
+      "alert_identity": "bfobs1llmgfb01",
+      "component": "ai-chat",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -126,30 +133,104 @@
       {
         "refId": "A",
         "queryType": "",
-        "relativeTimeRange": {"from": 1800, "to": 0},
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
       },
       {
         "refId": "B",
         "queryType": "",
-        "relativeTimeRange": {"from": 1800, "to": 0},
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
       },
       {
         "refId": "C",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 20 && $B > 0.10", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B > 0.10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
       },
       {
         "refId": "D",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
       }
     ],
     "updated": "2026-07-15T00:00:00Z",
@@ -157,10 +238,27 @@
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
-    "annotations": {"__dashboardUid__": "omi-resilience-fallbacks", "__panelId__": "7", "summary": "Chat terminal failures exceed 10% with at least 20 terminal real requests in 30m", "threshold": "failure share > 0.10; terminal outcomes >= 20"},
-    "labels": {"severity": "warning", "instatus_component": "ai-chat"},
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "7",
+      "summary": "Chat terminal failures exceed 10% with at least 20 terminal real requests in 30m",
+      "threshold": "failure share > 0.10; terminal outcomes >= 20",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi AI chat production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-journey-chat-fail",
+      "component": "ai-chat",
+      "impact": "user-experience"
+    },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
     "record": null
   },
   {
@@ -174,30 +272,104 @@
       {
         "refId": "A",
         "queryType": "",
-        "relativeTimeRange": {"from": 1800, "to": 0},
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
       },
       {
         "refId": "B",
         "queryType": "",
-        "relativeTimeRange": {"from": 1800, "to": 0},
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
       },
       {
         "refId": "C",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 20 && $B > 0.10", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B > 0.10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
       },
       {
         "refId": "D",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
       }
     ],
     "updated": "2026-07-15T00:00:00Z",
@@ -205,10 +377,27 @@
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
-    "annotations": {"__dashboardUid__": "omi-resilience-fallbacks", "__panelId__": "7", "summary": "Pusher terminal failures exceed 10% with at least 20 terminal real sessions in 30m", "threshold": "failure share > 0.10; terminal outcomes >= 20"},
-    "labels": {"severity": "warning", "instatus_component": "live-transcription"},
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "7",
+      "summary": "Pusher terminal failures exceed 10% with at least 20 terminal real sessions in 30m",
+      "threshold": "failure share > 0.10; terminal outcomes >= 20",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi live transcription production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-journey-pusher-fail",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
     "record": null
   },
   {
@@ -222,30 +411,104 @@
       {
         "refId": "A",
         "queryType": "",
-        "relativeTimeRange": {"from": 1800, "to": 0},
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
       },
       {
         "refId": "B",
         "queryType": "",
-        "relativeTimeRange": {"from": 1800, "to": 0},
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m])), 1)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
       },
       {
         "refId": "C",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 20 && $B > 0.10", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B > 0.10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
       },
       {
         "refId": "D",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
       }
     ],
     "updated": "2026-07-15T00:00:00Z",
@@ -253,10 +516,27 @@
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
-    "annotations": {"__dashboardUid__": "omi-resilience-fallbacks", "__panelId__": "9", "summary": "Capture finalization terminal failures exceed 10% with at least 20 terminal real jobs in 30m", "threshold": "failure share > 0.10; terminal outcomes >= 20"},
-    "labels": {"severity": "warning", "instatus_component": "speech-processing"},
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "9",
+      "summary": "Capture finalization terminal failures exceed 10% with at least 20 terminal real jobs in 30m",
+      "threshold": "failure share > 0.10; terminal outcomes >= 20",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-journey-capture-fail",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
     "record": null
   },
   {
@@ -270,16 +550,66 @@
       {
         "refId": "A",
         "queryType": "",
-        "relativeTimeRange": {"from": 300, "to": 0},
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "(count(count by (job) (up{job=~\"backend-listen-metrics|pusher-metrics\"})) < bool 2) or (min(up{job=~\"backend-listen-metrics|pusher-metrics\"}) < bool 1)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(count(count by (job) (up{job=~\"backend-listen-metrics|pusher-metrics\"})) < bool 2) or (min(up{job=~\"backend-listen-metrics|pusher-metrics\"}) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
       },
       {
         "refId": "B",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
       }
     ],
     "updated": "2026-07-15T00:00:00Z",
@@ -287,10 +617,27 @@
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
-    "annotations": {"__dashboardUid__": "omi-resilience-fallbacks", "__panelId__": "6", "summary": "An expected real-traffic journey metrics scrape target is absent or unhealthy", "threshold": "either named scrape job absent or any target up < 1"},
-    "labels": {"severity": "warning", "instatus_component": "observability"},
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "An expected real-traffic journey metrics scrape target is absent or unhealthy",
+      "threshold": "either named scrape job absent or any target up < 1",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi observability production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-journey-scrape-missing",
+      "component": "observability",
+      "impact": "infrastructure"
+    },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
     "record": null
   },
   {
@@ -304,16 +651,65 @@
       {
         "refId": "A",
         "queryType": "",
-        "relativeTimeRange": {"from": 900, "to": 0},
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "(sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[15m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])), 1e-9) > bool 0.05) or (max(llm_gateway_circuit_open) > bool 0) or ((sum(increase(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])) >= bool 10) and (sum(increase(llm_gateway_chat_extraction_requests_total{mode=\"serving\",outcome=\"success\"}[15m])) == bool 0)) or (histogram_quantile(0.95, sum(rate(llm_gateway_client_first_byte_seconds_bucket[5m])) by (le)) > bool 5)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[15m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])), 1e-9) > bool 0.05) or (max(llm_gateway_circuit_open) > bool 0) or ((sum(increase(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])) >= bool 10) and (sum(increase(llm_gateway_chat_extraction_requests_total{mode=\"serving\",outcome=\"success\"}[15m])) == bool 0)) or (histogram_quantile(0.95, sum(rate(llm_gateway_client_first_byte_seconds_bucket[5m])) by (le)) > bool 5)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
       },
       {
         "refId": "B",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B", "type": "threshold"}
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
       }
     ],
     "updated": "2026-07-17T00:00:00Z",
@@ -321,10 +717,26 @@
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
-    "annotations": {"runbook": "backend/docs/runbooks/llm-gateway-fallback.md", "summary": "Client fallback, open circuit, zero gateway successes under traffic, or p95 first-byte latency indicates the gateway is unreachable or stalling", "threshold": "fallback >5%, circuit open, no serving success for 10 requests, or p95 first byte >5s"},
-    "labels": {"severity": "warning", "instatus_component": "ai-chat"},
+    "annotations": {
+      "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
+      "summary": "Client fallback, open circuit, zero gateway successes under traffic, or p95 first-byte latency indicates the gateway is unreachable or stalling",
+      "threshold": "fallback >5%, circuit open, no serving success for 10 requests, or p95 first byte >5s",
+      "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
+      "scope": "The Omi AI chat production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-llm-gateway-client-reachability",
+      "component": "ai-chat",
+      "impact": "user-experience"
+    },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
     "record": null
   },
   {
@@ -338,16 +750,65 @@
       {
         "refId": "A",
         "queryType": "",
-        "relativeTimeRange": {"from": 300, "to": 0},
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
         "datasourceUid": "prometheus",
-        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
       },
       {
         "refId": "B",
         "queryType": "",
-        "relativeTimeRange": {"from": 0, "to": 0},
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
         "datasourceUid": "__expr__",
-        "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B", "type": "threshold"}
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
       }
     ],
     "updated": "2026-07-17T00:00:00Z",
@@ -355,10 +816,26 @@
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
-    "annotations": {"runbook": "backend/docs/runbooks/llm-gateway-fallback.md", "summary": "The production LLM Gateway Service has no ready EndpointSlice address or kube-state-metrics is absent", "threshold": "ready endpoint count <1"},
-    "labels": {"severity": "warning", "instatus_component": "ai-chat"},
+    "annotations": {
+      "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
+      "summary": "The production LLM Gateway Service has no ready EndpointSlice address or kube-state-metrics is absent",
+      "threshold": "ready endpoint count <1",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi AI chat production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "ai-chat",
+      "alert_identity": "omi-llm-gateway-no-ready-endpoints",
+      "component": "ai-chat",
+      "impact": "product"
+    },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
     "record": null
   }
 ]
