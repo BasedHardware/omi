@@ -239,6 +239,12 @@ class SystemAudioMuteBridge {
     this.ensureStarted()
   }
 
+  /** Is an endpoint mute currently held? (INV-VOICE-1: this must never be true
+   *  while a reply playback window is active — see main/voice/invariants.ts.) */
+  isHoldingMute(): boolean {
+    return this.heldDeviceId !== null
+  }
+
   /** Mute the default output device (gated helper-side on audio-is-playing +
    *  not-already-user-muted, idempotent). Fire-and-forget: never throws, never
    *  blocks PTT — a missing/dead helper is swallowed. */

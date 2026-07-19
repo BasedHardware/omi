@@ -15,6 +15,16 @@ import path from 'path'
 import type { VoiceHubBarState } from '../../shared/types'
 import { systemAudioMuteBridge } from '../audio/systemAudioMute'
 import { dumpVoiceFlight, initVoiceFlightRecorder, recordVoiceFlight } from './flightRecorder'
+import { VoicePlaneInvariants } from './invariants'
+
+// Runtime cross-port invariant checks, fed event-driven off the recorder
+// stream (INV-VOICE-1: never muted while a reply plays). See invariants.ts.
+const invariants = new VoicePlaneInvariants({
+  isHoldingMute: () => systemAudioMuteBridge.isHoldingMute(),
+  restoreSystemAudio: () => void systemAudioMuteBridge.restoreSystemAudio(),
+  record: (type, data) => recordVoiceFlight('main', type, data),
+  dump: dumpVoiceFlight
+})
 
 const IDLE_HUB_BAR_STATE: VoiceHubBarState = {
   active: false,
@@ -49,6 +59,7 @@ export function registerVoicePlaneIpc(): void {
         ? (data as Record<string, unknown>)
         : undefined
     recordVoiceFlight(senderLabel(e), type, payload)
+    invariants.checkEvent(type, payload)
   })
 
   ipcMain.on('voice:resetPlane', (e, trigger: unknown) => {
