@@ -39,6 +39,9 @@ function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSur
     view: 'list',
     conversationTitle: 'Omi Chat',
     onOpenConversation: vi.fn(),
+    pills: [],
+    onOpenPill: vi.fn(),
+    onDismissPill: vi.fn(),
     onBack: vi.fn(),
     onClose: vi.fn(),
     draft: '',
@@ -71,6 +74,9 @@ function renderLiveSurface(
         view="conversation"
         conversationTitle="Omi Chat"
         onOpenConversation={vi.fn()}
+        pills={[]}
+        onOpenPill={vi.fn()}
+        onDismissPill={vi.fn()}
         onBack={vi.fn()}
         onClose={vi.fn()}
         draft={draft}
