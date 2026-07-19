@@ -907,8 +907,8 @@ routes:
       review_status: reviewed
       auth:
         mechanisms:
-          - firebase_id_token
-        placement: dependency
+          - public
+        placement: none
         scopes: []
       byok: not_applicable
       rate_limit:
@@ -917,8 +917,8 @@ routes:
         enforcement: none
         placement: none
       timeout_class: default_method
-      surface: first_party_app
-      visibility: first_party
+      surface: desktop_update
+      visibility: public_undocumented
       data_domain: desktop_updates
       deprecation:
         state: active
