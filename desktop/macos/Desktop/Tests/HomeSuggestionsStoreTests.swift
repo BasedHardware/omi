@@ -77,6 +77,54 @@ final class HomeSuggestionComposerTests: XCTestCase {
   }
 }
 
+// MARK: - Context classification
+
+final class GeminiHomeSuggestionGeneratorClassificationTests: XCTestCase {
+  func testAllFetchesFailedClassifiesAsUnavailable() {
+    XCTAssertEqual(
+      GeminiHomeSuggestionGenerator.classifyContext(
+        memories: nil, conversations: nil, tasks: nil, goals: nil),
+      .unavailable,
+      "an outage must throw upstream, not cache an empty day"
+    )
+  }
+
+  func testEmptySuccessesMixedWithFailuresClassifyAsUnavailable() {
+    XCTAssertEqual(
+      GeminiHomeSuggestionGenerator.classifyContext(
+        memories: "", conversations: nil, tasks: nil, goals: nil),
+      .unavailable,
+      "partial outage with no usable context must retry later"
+    )
+  }
+
+  func testAllFetchesSucceededEmptyClassifiesAsThin() {
+    XCTAssertEqual(
+      GeminiHomeSuggestionGenerator.classifyContext(
+        memories: "", conversations: "", tasks: "", goals: ""),
+      .thin,
+      "a genuinely empty account holds the daily slot"
+    )
+  }
+
+  func testPartialFailureWithRealContextClassifiesAsAvailable() {
+    XCTAssertEqual(
+      GeminiHomeSuggestionGenerator.classifyContext(
+        memories: nil, conversations: "Discussed the Atlas launch", tasks: "", goals: nil),
+      .available(memories: "", conversations: "Discussed the Atlas launch", tasks: "", goals: "")
+    )
+  }
+
+  func testFullContextClassifiesAsAvailable() {
+    XCTAssertEqual(
+      GeminiHomeSuggestionGenerator.classifyContext(
+        memories: "Nik runs Omi", conversations: "Hiring sync", tasks: "Ship v2", goals: "50k"),
+      .available(
+        memories: "Nik runs Omi", conversations: "Hiring sync", tasks: "Ship v2", goals: "50k")
+    )
+  }
+}
+
 // MARK: - Store
 
 private final class StubSuggestionGenerator: HomeSuggestionGenerating, @unchecked Sendable {
