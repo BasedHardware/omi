@@ -30,7 +30,10 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     assert 'uses: actions/setup-java@v5' in job
     assert "java-version: '21'" in job
     assert 'sudo apt-get install --yes redis-server' in job
-    assert 'npm run test:listen-pusher-stack:emulator' in job
+    assert 'npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
+    assert 'name: Show listen gauntlet backend logs on failure' in job
+    assert 'if: failure()' in job
+    assert 'find "$state_dir" -type f -name backend.log -print -exec tail -n 160 {} \\;' in job
 
     assert package['scripts']['test:listen-pusher-stack:emulator'] == 'backend/testing/listen_pusher_stack/run.sh'
     listen_contract = next(
