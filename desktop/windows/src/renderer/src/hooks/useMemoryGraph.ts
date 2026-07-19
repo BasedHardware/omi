@@ -32,9 +32,16 @@ export function useMemoryGraph(memories: Memory[]): {
   // unchanged.
   rebuild: () => Promise<void>
   rebuilding: boolean
+  // True until BOTH graph sources this hook merges have resolved: the persisted
+  // onboarding floor (localGraphLoad) AND the initial server-KG fetch. The inline
+  // preview gates its loading indicator on this (plus useMemories' own loading) so
+  // it reveals the FINAL merged graph once, instead of revealing the floor-only
+  // intermediate and then visibly gaining the server nodes a moment later.
+  loading: boolean
 } {
-  const { graph: kg, refetch, rebuild, rebuilding } = useKnowledgeGraph()
+  const { graph: kg, loading: kgLoading, refetch, rebuild, rebuilding } = useKnowledgeGraph()
   const [floor, setFloor] = useState<KnowledgeGraph>(EMPTY)
+  const [floorLoaded, setFloorLoaded] = useState(false)
   const memoryCount = memories.length
 
   // Load the persisted onboarding graph once. useOnboardingGraph only holds the
@@ -49,6 +56,9 @@ export function useMemoryGraph(memories: Memory[]): {
       })
       .catch(() => {
         /* no floor available — fall back to the server graph alone */
+      })
+      .finally(() => {
+        if (!cancelled) setFloorLoaded(true)
       })
     return () => {
       cancelled = true
@@ -82,5 +92,5 @@ export function useMemoryGraph(memories: Memory[]): {
     ? USER_NODE_ID
     : graph.nodes.find((n) => n.nodeType === 'person')?.id
 
-  return { graph, centerNodeId, rebuild, rebuilding }
+  return { graph, centerNodeId, rebuild, rebuilding, loading: kgLoading || !floorLoaded }
 }
