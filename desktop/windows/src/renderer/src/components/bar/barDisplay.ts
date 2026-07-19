@@ -4,7 +4,6 @@
 // the pill stays open while a voice exchange is in flight).
 import type { OrbState } from '../../orb/choreography'
 import type {
-  BarChatState,
   BarChatStatus,
   CodingAgentId,
   CodingAgentInfo,
@@ -152,19 +151,6 @@ export function deriveBarVoiceState(args: {
     hubSpeaking,
     status: hubSpeaking ? 'speaking' : chatStatus
   }
-}
-
-/** One-line status for the list's "Omi Chat" row: what Omi is doing, a preview
- *  of the last turn, or an invitation when the thread is empty. */
-export function omiChatListStatus(chat: BarChatState): string {
-  if (chat.status === 'speaking') return 'Speaking…'
-  if (chat.status === 'sending') return 'Thinking…'
-  const last = chat.messages[chat.messages.length - 1]
-  if (last?.content?.trim()) {
-    const who = last.role === 'user' ? 'You: ' : ''
-    return `${who}${last.content.replace(/\s+/g, ' ').trim()}`
-  }
-  return 'Ask me anything'
 }
 
 /** A coding-agent row in the bar's expanded list. */
