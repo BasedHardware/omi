@@ -157,3 +157,44 @@ def test_make_harness_does_not_execute_checkout_name_and_resolves_python(tmp_pat
     assert not marker.exists()
     assert result.returncode == 0, result.stderr
     assert calls.read_text(encoding="utf-8").splitlines() == ["scripts/dev-harness/list-memory-scenarios.py"]
+
+
+def test_make_harness_does_not_execute_double_quote_in_checkout_name(tmp_path: Path) -> None:
+    """A double quote in the checkout root must not break recipe shell quoting.
+
+    Recipes now use $$PYTHON (shell variable expansion) instead of $(PYTHON)
+    (Make text interpolation). Shell variable expansion treats the resolved
+    path as data, so quote characters cannot escape the recipe's quoting.
+    """
+    repo = tmp_path / 'omi "; touch double-quote-marker; #'
+    marker = repo / "double-quote-marker"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    shutil.copy2(MAKEFILE, repo / "Makefile")
+
+    resolver = repo / "scripts/dev-harness/_resolve_python.sh"
+    resolver.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(RESOLVER, resolver)
+
+    calls = repo / "python calls.log"
+    python = repo / "backend/.venv/bin/python"
+    python.parent.mkdir(parents=True, exist_ok=True)
+    python.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$HARNESS_PYTHON_CALLS"\n', encoding="utf-8")
+    python.chmod(python.stat().st_mode | stat.S_IXUSR)
+
+    env = os.environ.copy()
+    env.pop("PYTHON", None)
+    env["HARNESS_PYTHON_CALLS"] = str(calls)
+    result = subprocess.run(
+        ["make", "-C", str(repo), "list-memory-scenarios"],
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=False,
+    )
+
+    assert not marker.exists()
+    assert result.returncode == 0, result.stderr
+    assert calls.read_text(encoding="utf-8").splitlines() == ["scripts/dev-harness/list-memory-scenarios.py"]
