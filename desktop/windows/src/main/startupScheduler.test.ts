@@ -82,6 +82,20 @@ describe('scheduleStartupSteps', () => {
     expect(scheduled.map((s) => s.ms)).toEqual([0, DEFAULT_STEP_GAP_MS])
   })
 
+  it('skips steps while shouldStop returns true (e.g. app quitting mid-stagger)', () => {
+    const order: string[] = []
+    const steps: StartupStep[] = ['a', 'b', 'c'].map((name) => ({
+      name,
+      run: () => order.push(name)
+    }))
+    let quitting = false
+    const { setTimerFn, flush } = makeManualTimer()
+    scheduleStartupSteps(steps, 24, setTimerFn, () => quitting)
+    quitting = true // quit lands before any deferred step runs
+    flush()
+    expect(order).toEqual([]) // nothing ran against the tearing-down app
+  })
+
   it('handles an empty step list without scheduling anything', () => {
     const { scheduled, setTimerFn } = makeManualTimer()
     scheduleStartupSteps([], 24, setTimerFn)

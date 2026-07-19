@@ -37,15 +37,20 @@ export type TimerFn = (cb: () => void, ms: number) => unknown
  * delayed, then the remainder are spaced out.
  *
  * `setTimerFn` is injectable for tests (assert ordering + error isolation without
- * real timers). Returns immediately; steps run asynchronously.
+ * real timers). `shouldStop`, when it returns true, skips the step (and thus any
+ * later ones once it stays true) — wired to isQuitting() so a quit during the
+ * ~0.5s stagger window doesn't run a window-creation step against a tearing-down
+ * app. Returns immediately; steps run asynchronously.
  */
 export function scheduleStartupSteps(
   steps: StartupStep[],
   gapMs: number = DEFAULT_STEP_GAP_MS,
-  setTimerFn: TimerFn = setTimeout
+  setTimerFn: TimerFn = setTimeout,
+  shouldStop?: () => boolean
 ): void {
   steps.forEach((step, i) => {
     setTimerFn(() => {
+      if (shouldStop?.()) return
       try {
         timedStep(step.name, step.run)
       } catch (e) {
