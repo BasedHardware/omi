@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, Billboard, Text, Line } from '@react-three/drei'
+import { OrbitControls, Billboard, Text } from '@react-three/drei'
 import * as THREE from 'three'
+import { LineSegments2, LineSegmentsGeometry, LineMaterial } from 'three-stdlib'
 import type { KnowledgeGraph } from '../../../../shared/types'
 import {
   useGraphSimulation,
@@ -11,6 +12,7 @@ import {
   type NodePosition
 } from '../../lib/useGraphSimulation'
 import { nodeColor } from './nodeColor'
+import { labeledNodeIds, DEFAULT_LABEL_TOPK } from '../../lib/graphDisplay'
 import { useWebglRecovery } from '../../lib/useWebglRecovery'
 import { BrainGraphFallback } from './BrainGraphFallback'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
@@ -42,6 +44,16 @@ export type BrainGraphProps = {
   // lets it fall back to its loading state for that window instead of a blank
   // pane. Not called when pauseWhenHidden is false (the canvas never toggles).
   onVisibleChange?: (visible: boolean) => void
+  // Label strategy. 'all' (default) draws a title on every node — right for the
+  // small onboarding/inline-card graphs. 'declutter' draws titles only for the
+  // `labelTopK` most-connected nodes plus whatever the user hovers or selects,
+  // which is what keeps the large interactive brain map from becoming an
+  // unreadable wall of overlapping text. Interaction (hover/select) is only
+  // wired when interactive is true.
+  labelMode?: 'all' | 'declutter'
+  // How many of the most-connected nodes stay permanently labeled under
+  // 'declutter'. Ignored when labelMode is 'all'.
+  labelTopK?: number
 }
 
 // Must match GraphSimulation.nodeRadius so the spheres and the collision force
@@ -66,7 +78,11 @@ function GraphNodeMesh({
   reduced,
   posMap,
   frameLoop,
-  labelFade
+  labelFade,
+  showLabel,
+  interactive,
+  onHover,
+  onSelect
 }: {
   sim: GraphSimulation
   node: NodePosition
@@ -80,6 +96,15 @@ function GraphNodeMesh({
   // relative to the camera, so back-of-cloud titles recede instead of stacking
   // on the front ones. Off (labels full-opacity) on the flat 2D surfaces.
   labelFade: boolean
+  // Whether THIS node draws its title. Under 'all' every node is true; under
+  // 'declutter' only the top hubs + hovered/selected. False → no troika Text
+  // mesh is mounted at all (the single biggest per-node cost at scale).
+  showLabel: boolean
+  // Interactive scenes wire pointer hover/click so any node can be named on
+  // demand even when its permanent label is decluttered away.
+  interactive: boolean
+  onHover?: (id: string | null) => void
+  onSelect?: (id: string) => void
 }): React.JSX.Element {
   const groupRef = useRef<THREE.Group>(null)
   const coreMat = useRef<THREE.MeshStandardMaterial>(null)
@@ -162,13 +187,36 @@ function GraphNodeMesh({
     if (frameLoop === 'demand' && shouldContinue) invalidate()
   })
 
+  // Interactive pointer wiring: hovering names a node (and shows a pointer
+  // cursor); clicking pins its label as the selection. Handlers are attached only
+  // in interactive scenes so the fixed-camera onboarding/card graphs are
+  // untouched. stopPropagation keeps a hover from also hitting nodes behind it.
+  const hoverHandlers = interactive
+    ? {
+        onPointerOver: (e: { stopPropagation: () => void }) => {
+          e.stopPropagation()
+          onHover?.(node.id)
+          document.body.style.cursor = 'pointer'
+        },
+        onPointerOut: (e: { stopPropagation: () => void }) => {
+          e.stopPropagation()
+          onHover?.(null)
+          document.body.style.cursor = ''
+        },
+        onPointerDown: (e: { stopPropagation: () => void }) => {
+          e.stopPropagation()
+          onSelect?.(node.id)
+        }
+      }
+    : {}
+
   return (
     <group
       ref={groupRef}
       position={[node.x, node.y, node.z]}
       scale={reduced ? [1, 1, 1] : [0, 0, 0]}
     >
-      <mesh>
+      <mesh {...hoverHandlers}>
         {/* 16×16 (down from 32×32): at the on-screen size these spheres actually
             render — small, glowing, and softened by the halo/bloom layers below
             — the extra polys were invisible but every one of them still had to
@@ -200,81 +248,40 @@ function GraphNodeMesh({
         <sphereGeometry args={[radius * 3, 8, 8]} />
         <meshBasicMaterial color={color} transparent opacity={0.04} depthWrite={false} />
       </mesh>
-      <Billboard position={[0, radius + labelSize * 0.9, 0]}>
-        <Text
-          ref={textRef as never}
-          // Font varies only ±20% with node size (matches collision/framing);
-          // the center label is bumped a bit larger.
-          fontSize={labelSize}
-          color="#ffffff"
-          anchorX="center"
-          anchorY="middle"
-          // Always on top of the lines/nodes so titles stay readable.
-          renderOrder={4}
-          depthOffset={-1}
-        >
-          {node.label}
-        </Text>
-      </Billboard>
+      {/* Under 'declutter' most nodes mount NO Text at all — troika text is the
+          heaviest per-node object, so not creating it (rather than hiding it) is
+          what buys back the frame budget at hundreds of nodes. */}
+      {showLabel && (
+        <Billboard position={[0, radius + labelSize * 0.9, 0]}>
+          <Text
+            ref={textRef as never}
+            // Font varies only ±20% with node size (matches collision/framing);
+            // the center label is bumped a bit larger.
+            fontSize={labelSize}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+            // Always on top of the lines/nodes so titles stay readable.
+            renderOrder={4}
+            depthOffset={-1}
+          >
+            {node.label}
+          </Text>
+        </Billboard>
+      )}
     </group>
   )
 }
 
-// A single connecting line, drawn as a fat (real pixel-width) line so it is
-// actually visible — plain THREE lines render at 1px and disappear against the
-// glowing nodes. Its two endpoints are rewritten every frame from the eased
-// on-screen positions, so the line stays glued to both spheres as they move.
-// Colored by its target (module) node, so each line matches its node.
-function GraphEdge({
-  sim,
-  edge,
-  color,
-  posMap
-}: {
-  sim: GraphSimulation
-  edge: KnowledgeGraph['edges'][number]
-  color: string
-  posMap: Map<string, THREE.Vector3>
-}): React.JSX.Element {
-  const ref = useRef<{ geometry: { setPositions(p: number[]): void } } | null>(null)
-  // Reused every frame instead of a fresh array literal each time — setPositions
-  // only reads these six values (it copies them into its own GPU buffer), so
-  // there's nothing gained by allocating a new array per edge per frame, only
-  // GC pressure from it.
-  const positions = useRef<number[]>([0, 0, 0, 0, 0, 0]).current
-  useFrame(() => {
-    const a = posMap.get(edge.sourceId) ?? sim.liveNode(edge.sourceId)
-    const b = posMap.get(edge.targetId) ?? sim.liveNode(edge.targetId)
-    if (!a || !b || !ref.current) return
-    positions[0] = a.x ?? 0
-    positions[1] = a.y ?? 0
-    positions[2] = a.z ?? 0
-    positions[3] = b.x ?? 0
-    positions[4] = b.y ?? 0
-    positions[5] = b.z ?? 0
-    ref.current.geometry.setPositions(positions)
-  })
-  return (
-    <Line
-      ref={ref as never}
-      points={[
-        [0, 0, 0],
-        [1, 0, 0]
-      ]}
-      color={color}
-      lineWidth={0.8}
-      transparent
-      opacity={0.5}
-      // Extra thin and underneath everything: depthTest on so the opaque node
-      // balls occlude the lines, negative renderOrder + depthWrite off so the
-      // glow and labels also sit on top.
-      renderOrder={-1}
-      depthTest={true}
-      depthWrite={false}
-    />
-  )
-}
-
+// ALL connecting lines, drawn as a SINGLE batched fat-line object (LineSegments2)
+// instead of one drei <Line> per edge. At real-account scale this collapses ~474
+// separate draw calls (and ~474 per-frame closures) into one geometry whose whole
+// position buffer is rewritten in a single pass each frame — the dominant draw-
+// call win. The look is preserved: same ~0.8px translucent lines, colored by each
+// edge's target node, sitting under the glowing nodes/labels. Endpoints track the
+// eased on-screen positions so lines stay glued to the spheres as they move; an
+// edge whose endpoint isn't placed yet collapses to a zero-length (invisible)
+// segment until it is.
 function GraphEdges({
   sim,
   edges,
@@ -283,22 +290,87 @@ function GraphEdges({
   sim: GraphSimulation
   edges: KnowledgeGraph['edges']
   posMap: Map<string, THREE.Vector3>
-}): React.JSX.Element {
-  // Only draw edges whose endpoints both exist in the sim yet.
-  const drawn = edges.filter((e) => sim.liveNode(e.sourceId) && sim.liveNode(e.targetId))
-  return (
-    <>
-      {drawn.map((e) => (
-        <GraphEdge
-          key={e.id}
-          sim={sim}
-          edge={e}
-          color={nodeColor(sim.liveNode(e.targetId)?.nodeType ?? 'concept', false)}
-          posMap={posMap}
-        />
-      ))}
-    </>
+}): React.JSX.Element | null {
+  const size = useThree((s) => s.size)
+  // One geometry + material + object, rebuilt only when the edge SET changes
+  // (cap toggle / graph change). Buffers are sized to the edge count; positions
+  // update every frame, colors once (per-edge, by target node type).
+  const batch = useMemo(() => {
+    const geom = new LineSegmentsGeometry()
+    const mat = new LineMaterial({
+      linewidth: 0.8,
+      transparent: true,
+      opacity: 0.5,
+      vertexColors: true,
+      depthTest: true,
+      depthWrite: false
+    })
+    const seg = new LineSegments2(geom, mat)
+    seg.renderOrder = -1
+    seg.frustumCulled = false
+    return {
+      geom,
+      mat,
+      seg,
+      positions: new Float32Array(Math.max(1, edges.length) * 6),
+      colors: new Float32Array(Math.max(1, edges.length) * 6),
+      colorsSet: false
+    }
+  }, [edges])
+  // Dispose GPU resources when the batch is replaced or the component unmounts.
+  useEffect(
+    () => () => {
+      batch.geom.dispose()
+      batch.mat.dispose()
+    },
+    [batch]
   )
+
+  useFrame(() => {
+    const { positions, colors, geom, mat } = batch
+    const scratch = new THREE.Color()
+    let allPlaced = true
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i]
+      const a = posMap.get(e.sourceId) ?? sim.liveNode(e.sourceId)
+      const b = posMap.get(e.targetId) ?? sim.liveNode(e.targetId)
+      const o = i * 6
+      if (!a || !b) {
+        // Not placed yet → zero-length segment (draws nothing) until it is.
+        positions[o] = positions[o + 1] = positions[o + 2] = 0
+        positions[o + 3] = positions[o + 4] = positions[o + 5] = 0
+        allPlaced = false
+        continue
+      }
+      positions[o] = a.x ?? 0
+      positions[o + 1] = a.y ?? 0
+      positions[o + 2] = a.z ?? 0
+      positions[o + 3] = b.x ?? 0
+      positions[o + 4] = b.y ?? 0
+      positions[o + 5] = b.z ?? 0
+    }
+    geom.setPositions(positions)
+    // Color each edge by its target node once its type is known (same scheme as
+    // before). Done once, when every endpoint has resolved, so a first-frame race
+    // can't bake in a default color for a node still being added.
+    if (!batch.colorsSet && allPlaced && edges.length > 0) {
+      for (let i = 0; i < edges.length; i++) {
+        const t = sim.liveNode(edges[i].targetId)?.nodeType ?? 'concept'
+        scratch.set(nodeColor(t, false))
+        const o = i * 6
+        colors[o] = colors[o + 3] = scratch.r
+        colors[o + 1] = colors[o + 4] = scratch.g
+        colors[o + 2] = colors[o + 5] = scratch.b
+      }
+      geom.setColors(colors)
+      batch.colorsSet = true
+    }
+    // Fat-line width is in screen pixels, so the material needs the viewport size.
+    mat.resolution.set(size.width, size.height)
+  })
+
+  if (edges.length === 0) return null
+  return <primitive object={batch.seg} />
 }
 
 // Empty-space margin around the graph. >1 pulls the camera back so there is a
@@ -339,7 +411,9 @@ function GraphScene({
   centerNodeId,
   interactive,
   shuffleKey,
-  frameLoop = 'always'
+  frameLoop = 'always',
+  labelMode = 'all',
+  labelTopK = DEFAULT_LABEL_TOPK
 }: BrainGraphProps): React.JSX.Element {
   // The interactive full-screen brain map runs the layout in 3D (OrbitControls lets
   // the user rotate to read depth, mirroring macOS's SceneKit MemoryGraphPage); the
@@ -347,6 +421,18 @@ function GraphScene({
   // never overlap with no way to rotate them apart.
   const { sim, nodes, reduced } = useGraphSimulation(graph, centerNodeId, interactive ? 3 : 2)
   const invalidate = useThree((state) => state.invalidate)
+
+  // Label declutter + interaction. Under 'all' every node is labeled (small
+  // graphs). Under 'declutter' only the top-K hubs are permanently labeled, plus
+  // whatever the user hovers or clicks — so a large graph reads cleanly but any
+  // node still names itself on demand. Hover/select changes here re-render the
+  // node list (cheap: a Set membership flip), and frameLoop='always' repaints.
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const labeledIds = useMemo(() => {
+    if (labelMode === 'all') return null
+    return labeledNodeIds(graph, labelTopK, { centerNodeId, hoveredId, selectedId })
+  }, [labelMode, graph, labelTopK, centerNodeId, hoveredId, selectedId])
 
   // Eased on-screen position of each node, written by the meshes and read by the
   // edges so the lines stay glued to the spheres. Owned here (not on the sim) and
@@ -404,6 +490,10 @@ function GraphScene({
           posMap={posMap}
           frameLoop={frameLoop}
           labelFade={interactive === true}
+          showLabel={labeledIds === null ? true : labeledIds.has(n.id)}
+          interactive={interactive === true}
+          onHover={setHoveredId}
+          onSelect={setSelectedId}
         />
       ))}
       {interactive ? (
@@ -488,7 +578,9 @@ export function BrainGraph({
   pauseWhenHidden = false,
   frameLoop = 'always',
   onReady,
-  onVisibleChange
+  onVisibleChange,
+  labelMode = 'all',
+  labelTopK
 }: BrainGraphProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(true)
@@ -702,6 +794,8 @@ export function BrainGraph({
               interactive={interactive}
               shuffleKey={shuffleKey}
               frameLoop={frameLoop}
+              labelMode={labelMode}
+              labelTopK={labelTopK}
             />
           </Canvas>
         </ErrorBoundary>

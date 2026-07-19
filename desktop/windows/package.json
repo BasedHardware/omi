@@ -54,6 +54,7 @@
     "test:e2e:sidebar": "node scripts/run-sidebar-e2e.mjs",
     "test:e2e:conv-detail": "node scripts/run-conv-detail-e2e.mjs",
     "test:e2e:kg-viewer": "node scripts/run-kg-viewer-e2e.mjs",
+    "test:e2e:kg-perf": "node scripts/run-kg-perf-e2e.mjs",
     "orb:sheet": "node scripts/orb/contact-sheet.mjs",
     "orb:check": "node scripts/orb/check-invariants.mjs && node scripts/orb/check-motion.mjs && node scripts/orb/check-transitions.mjs",
     "orb:throttle": "node scripts/orb/check-throttle.mjs",
