@@ -13,6 +13,10 @@ import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
+from config.parakeet_admission import (
+    release,
+    try_admit,
+)
 from config.stt_provider_policy import (
     DEEPGRAM_SELF_HOSTED_PROVIDER,
     MODULATE_PROVIDER,
@@ -255,8 +259,12 @@ def get_stt_service_for_language(
             if model == 'parakeet':
                 if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
                     if parakeet_supports_language(surface, requested_language):
-                        return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
-                    parakeet_fallback_reason = 'capability_mismatch'
+                        admitted, admit_reason = try_admit()
+                        if admitted:
+                            return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
+                        parakeet_fallback_reason = admit_reason
+                    else:
+                        parakeet_fallback_reason = 'capability_mismatch'
                 else:
                     parakeet_fallback_reason = 'config_incomplete'
             if (
@@ -978,6 +986,7 @@ class ParakeetStreamingSocket(STTSocket):
         # Backstop: if the pump died early (and left audio buffered), drain it here so the
         # tail is never silently lost. No-op when the pump already emptied the buffer.
         await self._flush(force=True)
+        release()
 
     # --- internals ---
     async def _pump(self) -> None:
@@ -1190,6 +1199,7 @@ class ParakeetWebSocketSocket(STTSocket):
                 await asyncio.wait_for(self._receiver_task, timeout=10)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 self._cancel_task(self._receiver_task)
+        release()
 
     def _mark_dead(self, reason: str) -> None:
         self._dead = True

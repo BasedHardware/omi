@@ -41,6 +41,9 @@ ALLOWED_REASONS = frozenset(
         'dispatch_disabled',
         'byok',
         'malformed_doc',
+        'capacity_full',
+        'allocation_zero',
+        'allocation_rejected',
         'other',
         'none',
     }
