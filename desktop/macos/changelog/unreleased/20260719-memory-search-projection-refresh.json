@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a desktop memory search edge case so newly added memories remain searchable and their visibility can be updated."
+}

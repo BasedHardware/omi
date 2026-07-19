@@ -1435,13 +1435,13 @@ class MemoriesViewModel: ObservableObject {
     guard !didRegisterAutomationActions else { return }
     didRegisterAutomationActions = true
     let registry = DesktopAutomationActionRegistry.shared
-
     registry.register(
       name: "memories_search",
       summary: "Set memories search query and return filtered result count",
       params: ["query"]
     ) { [weak self] params in
       guard let self else { return ["error": "memories view model deallocated"] }
+      await self.refreshMemoriesIfNeeded()
       let query = params["query"] ?? ""
       self.searchText = query
       let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
