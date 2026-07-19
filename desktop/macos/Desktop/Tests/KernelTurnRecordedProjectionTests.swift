@@ -490,7 +490,6 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertTrue(provider.messages.isEmpty)
   }
 
-
   func testClearFailsClosedWhenGenerationBootstrapFails() async throws {
     struct BootstrapFailure: Error {}
 
