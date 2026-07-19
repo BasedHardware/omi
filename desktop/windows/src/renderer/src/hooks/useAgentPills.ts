@@ -100,6 +100,58 @@ async function callRun(runId: string): Promise<AgentRunDetail | null> {
 }
 
 /**
+ * Durably mark a pill's underlying run/session dismissed in the kernel — Mac's
+ * "attention overrides" mechanism. `serializeAgentSessionsList` (controlTools.ts)
+ * excludes dismissed `run:<id>` / `session:<id>` subjects from
+ * `floating_agent_pills`, so once this commits the list poll never re-projects
+ * the pill, and it stays gone across app restarts AND other windows (the override
+ * lives in the kernel's SQLite `desktop_attention_overrides` table, a
+ * main-process singleton). Without this, dismiss only mutated the renderer's
+ * in-memory array and the very next 2s poll resurrected the pill.
+ */
+async function callDismissOverride(
+  subjectKind: 'run' | 'session',
+  subjectId: string
+): Promise<void> {
+  try {
+    await window.omi?.agentControlCall('set_desktop_attention_override', {
+      subjectKind,
+      subjectId,
+      dismissed: true
+    })
+  } catch {
+    // Fail-open: the in-memory dismissed-set guard still hides the pill for this
+    // session, and a later dismissal or poll reconciles. A failed durable write
+    // only risks the pill reappearing after a restart — never a crash into render.
+  }
+}
+
+// Upper bound on the in-memory dismissed-subject guard (below). It resets every
+// session — the kernel override is the durable record — so this only caps a
+// pathological single-session dismissal spree. Set iteration is insertion order,
+// so evicting the first entry is FIFO.
+const DISMISSED_GUARD_CAP = 500
+
+function rememberDismissed(set: Set<string>, id: string): void {
+  if (set.has(id)) return
+  if (set.size >= DISMISSED_GUARD_CAP) {
+    const oldest = set.values().next().value
+    if (oldest !== undefined) set.delete(oldest)
+  }
+  set.add(id)
+}
+
+/** True when a freshly projected row was dismissed this session (by run or
+ *  session id) before the kernel override took effect — used to drop it from an
+ *  in-flight poll snapshot so a stale fetch can't re-create a just-dismissed pill. */
+function isRowDismissed(dismissed: Set<string>, row: PillProjectionRow): boolean {
+  return (
+    (typeof row.runId === 'string' && dismissed.has(row.runId)) ||
+    (typeof row.sessionId === 'string' && dismissed.has(row.sessionId))
+  )
+}
+
+/**
  * @param activePillId The pill whose transcript is currently open (or null).
  *   It is protected from viewed-TTL expiry and soft-cap eviction while open.
  */
@@ -116,6 +168,12 @@ export function useAgentPills(activePillId: string | null): AgentPillsApi {
   // eslint-disable-next-line react-hooks/refs -- latest-ref for interval closures
   activePillIdRef.current = activePillId
 
+  // Run/session ids the user dismissed this session. The kernel override
+  // (callDismissOverride) is the durable, restart-proof record; this in-memory
+  // set is only a race guard, consulted synchronously by the list poll so a
+  // snapshot fetched BEFORE the override committed can't re-create the pill.
+  const dismissedRef = useRef<Set<string>>(new Set())
+
   useEffect(() => {
     let cancelled = false
 
@@ -124,8 +182,12 @@ export function useAgentPills(activePillId: string | null): AgentPillsApi {
     const runListPoll = async (): Promise<void> => {
       const rows = await callList()
       if (cancelled || rows === null) return
+      // Drop rows for pills dismissed this session but not yet filtered by the
+      // kernel (its override may not have committed before this snapshot was
+      // fetched) — closes the in-flight-poll resurrection race.
+      const visibleRows = rows.filter((row) => !isRowDismissed(dismissedRef.current, row))
       const now = Date.now()
-      const merged = mergeProjectedPills(pillsRef.current, rows, now).pills
+      const merged = mergeProjectedPills(pillsRef.current, visibleRows, now).pills
       const expired = expireViewedFinished(
         merged,
         now,
@@ -179,6 +241,21 @@ export function useAgentPills(activePillId: string | null): AgentPillsApi {
   }, [])
 
   const dismiss = useCallback((id: string): void => {
+    // Persist the dismissal in the kernel so the list poll stops projecting this
+    // pill (durable across restarts + windows), and seed the in-memory guard so
+    // an already-in-flight poll can't resurrect it before that write lands. We
+    // dismiss both the run and the session subject: the serializer's filter is an
+    // OR over `run:<id>` / `session:<id>`, so covering both is resurrection-proof
+    // even if the session's projected run changes.
+    const pill = pillsRef.current.find((p) => p.id === id)
+    if (pill?.runId) {
+      rememberDismissed(dismissedRef.current, pill.runId)
+      void callDismissOverride('run', pill.runId)
+    }
+    if (pill?.sessionId) {
+      rememberDismissed(dismissedRef.current, pill.sessionId)
+      void callDismissOverride('session', pill.sessionId)
+    }
     setPills((prev) => prev.filter((p) => p.id !== id))
     setFinalTextByPillId((prev) => {
       if (!(id in prev)) return prev
