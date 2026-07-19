@@ -1094,14 +1094,6 @@ app.whenReady().then(async () => {
   // instead of delaying the window from appearing. None are needed before the UI
   // is up; their IPC handlers are already registered above.
   win.once('ready-to-show', () => {
-    // The hidden always-alive capture window: owns all audio + Rewind capture,
-    // independent of any UI window. Created after first paint (ready-to-show fires
-    // for --hidden tray-only login starts too, so continuous recording still works
-    // before the user opens the window) rather than alongside createWindow, so a
-    // second full renderer eval doesn't contend with the main window's first paint.
-    // Capture starts ~0.5-1s later as a result, which the 2s PTT pre-roll and the
-    // 30s silence finalizer tolerate. Skipped under the dev perf bench, whose
-    // startup measurement must not include a second renderer.
     // Stagger the background-service starts + auxiliary-window creations across the
     // first ~second instead of running them all in this one tick. They used to
     // block the main thread ~1s and spawn 3 renderers + churn the DWM compositor
