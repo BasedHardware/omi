@@ -1,3 +1,0 @@
-{
-  "change": "Fixed proactive task capture occasionally trying to update a non-existent task when a new capture matched an already-staged one"
-}

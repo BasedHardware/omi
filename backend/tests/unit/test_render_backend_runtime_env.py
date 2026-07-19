@@ -48,6 +48,23 @@ def test_provisional_env_var_present_is_rendered(monkeypatch):
     assert rendered == 'OMI_LLM_GATEWAY_URL=http://10.0.0.1'
 
 
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    [
+        ('parakeet,modulate-velma-2', r'parakeet\,modulate-velma-2'),
+        (r'C:\models', r'C:\\models'),
+        ('first\nsecond', 'first\\\nsecond'),
+        ('first\rsecond', 'first\\\rsecond'),
+        ('first\u2028second', 'first\\\u2028second'),
+        ('first\u2029second', 'first\\\u2029second'),
+    ],
+)
+def test_render_env_vars_escapes_deploy_cloudrun_separators(value, expected):
+    rendered = _MODULE['_render_env_vars']({'VALUE': {'value': value}})
+
+    assert rendered == f'VALUE={expected}'
+
+
 def test_network_flags_still_required(monkeypatch):
     monkeypatch.delenv('CLOUD_RUN_VPC_NETWORK', raising=False)
     with pytest.raises(ValueError, match='requires'):
@@ -96,6 +113,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     out = capsys.readouterr().out
 
     memory_env = _job_env_block(out, 'memory_maintenance_job')
+    assert r'STT_PRERECORDED_MODEL=parakeet\,modulate-velma-2' in out
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true' in memory_env
     assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env

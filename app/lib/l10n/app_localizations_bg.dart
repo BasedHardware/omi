@@ -9022,7 +9022,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get billingYearly => 'Годишно';
 
   @override
-  String get savePercent => 'Спестете ~17%';
+  String savePercent(int percent) {
+    return 'Спестете ~$percent%';
+  }
 
   @override
   String get popular => 'Популярен';

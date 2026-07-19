@@ -9001,7 +9001,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get billingYearly => 'Yıllık';
 
   @override
-  String get savePercent => '~%17 tasarruf';
+  String savePercent(int percent) {
+    return '~%$percent tasarruf';
+  }
 
   @override
   String get popular => 'Popüler';
