@@ -1,4 +1,4 @@
-"""Wiring contract for the blocking listen-to-pusher stack gauntlet."""
+"""Static wiring contracts for the backend hermetic CI gate."""
 
 from __future__ import annotations
 
@@ -13,8 +13,6 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     package = json.loads((_REPO_ROOT / 'package.json').read_text(encoding='utf-8'))
     contracts = json.loads((_REPO_ROOT / 'backend' / 'testing' / 'workflow_contracts.json').read_text(encoding='utf-8'))
 
-    assert "- 'package.json'" in workflow
-    assert "- 'package-lock.json'" in workflow
     assert '  listen-pusher-stack-gauntlet:' in workflow
     job = workflow.split('  listen-pusher-stack-gauntlet:\n', 1)[1]
 
@@ -38,3 +36,39 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     )
     assert 'backend/testing/listen_pusher_stack/**' in listen_contract['sources']
     assert 'tests/unit/test_listen_pusher_stack_ci_wiring.py' in listen_contract['tests']
+
+
+def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
+    workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+    trigger = workflow.split('jobs:', 1)[0]
+
+    assert "  pull_request:\n    branches: main\n" in trigger
+    assert "  merge_group:\n    types: [checks_requested]\n" in trigger
+    assert 'paths:' not in trigger
+
+    assert '  scope:\n' in workflow
+    scope = workflow.split('  scope:\n', 1)[1].split('\n  hermetic-e2e:\n', 1)[0]
+    assert 'github.event.pull_request.base.sha' in scope
+    assert 'github.event.merge_group.base_sha' in scope
+    assert 'git diff --name-only "$base_sha"...HEAD' in scope
+    assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
+
+    for job_name in ('hermetic-e2e', 'listen-pusher-stack-gauntlet', 'sync-cloud-tasks-stack-gauntlet'):
+        job = workflow.split(f'  {job_name}:\n', 1)[1]
+        assert 'needs: scope' in job
+        assert "if: needs.scope.outputs.applies == 'true'" in job
+
+    gate = workflow.split('  merge-gate:\n', 1)[1]
+    assert 'name: Backend Hermetic Merge Gate' in gate
+    assert 'if: ${{ always() }}' in gate
+    assert 'needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet]' in gate
+    assert "true) required_result='success'" in gate
+    assert "false) required_result='skipped'" in gate
+    for result_name in (
+        'SCOPE_RESULT',
+        'SCOPE_APPLIES',
+        'HERMETIC_E2E_RESULT',
+        'LISTEN_PUSHER_RESULT',
+        'SYNC_CLOUD_TASKS_RESULT',
+    ):
+        assert result_name in gate
