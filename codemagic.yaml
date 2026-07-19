@@ -2804,6 +2804,7 @@ workflows:
               --tag "$CM_TAG" \
               --expected-channel beta \
               --expected-bundle-id "$BETA_BUNDLE_ID" \
+              --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
               --auth-storage-canary \
               --result-json "$BUILD_DIR/desktop-smoke-result-beta.json"
           fi
