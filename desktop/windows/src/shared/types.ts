@@ -527,6 +527,15 @@ export type OmiBarApi = {
   onShow: (cb: (p: BarShowPayload) => void) => () => void
   onMode: (cb: (mode: BarMode) => void) => () => void
   onWillHide: (cb: () => void) => () => void
+  /** Whether the bar window is parked off-screen (main's park state). The bar is a
+   *  persistent always-on-top overlay that Electron never marks `document.hidden`
+   *  while parked (window-occlusion tracking is macOS-only), so a renderer loop
+   *  gated only on document visibility keeps running at display rate forever after
+   *  the first summon. Main pushes this on every park/unpark transition so the orb
+   *  can fold it into its 0fps-hidden gate and truly stop while parked. Fires ONLY
+   *  in the bar window; every other orb mount never receives it. Returns an
+   *  unsubscribe fn. */
+  onParked: (cb: (parked: boolean) => void) => () => void
   /** Summon-hotkey physical hold state, driven by main's gesture machine.
    *  'down' arms the existing PTT machine; 'up' releases it. */
   onPtt: (cb: (phase: 'down' | 'up') => void) => () => void

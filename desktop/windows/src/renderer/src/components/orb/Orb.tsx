@@ -8,6 +8,7 @@ import { OrbAnimator, type AmplitudeLane } from '../../orb/orbAnimator'
 import { ORB_PRESETS, DEFAULT_ORB_PARAMS, type OrbState } from '../../orb/choreography'
 import type { WaveformSource } from '../../../../shared/types'
 import { useWebglRecovery } from '../../lib/useWebglRecovery'
+import { useBarParked } from '../../orb/useBarParked'
 import omiLogo from '../../assets/omi-logo.png'
 
 // WebGL/SwiftShader can be transiently unavailable while the GPU process spins up
@@ -131,6 +132,11 @@ export function Orb({
   // Stable identity so it doesn't re-run the hook's effect on every render.
   const handleContextLost = useCallback(() => setReady(false), [])
   const recoveryKey = useWebglRecovery(hostRef, handleContextLost)
+  // In the floating bar, main parks the window off-screen to "hide" it without
+  // going document.hidden (occlusion tracking is macOS-only), so this is the only
+  // honest signal that the orb is invisible — fold it into the 0fps gate below.
+  // Always `false` for every non-bar mount. See useBarParked.
+  const barParked = useBarParked()
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -193,11 +199,12 @@ export function Orb({
   }, [state, speechActive, ready])
 
   useEffect(() => {
-    animatorRef.current?.setVisible(visible && !document.hidden)
-    const onVis = (): void => animatorRef.current?.setVisible(visible && !document.hidden)
-    document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
-  }, [visible, ready])
+    const apply = (): void =>
+      animatorRef.current?.setVisible(visible && !document.hidden && !barParked)
+    apply()
+    document.addEventListener('visibilitychange', apply)
+    return () => document.removeEventListener('visibilitychange', apply)
+  }, [visible, barParked, ready])
 
   useEffect(() => {
     if (genesisNonce > 0) animatorRef.current?.summon()
