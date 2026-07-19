@@ -60,13 +60,13 @@ dev-logs:
 	bash scripts/dev-harness/dev-logs.sh
 
 list-memory-scenarios:
-	$(PYTHON) scripts/dev-harness/list-memory-scenarios.py
+	"$(PYTHON)" scripts/dev-harness/list-memory-scenarios.py
 
 seed-memory-scenario:
-	$(PYTHON) scripts/dev-harness/seed-memory-scenario.py $(SCENARIO)
+	"$(PYTHON)" scripts/dev-harness/seed-memory-scenario.py $(SCENARIO)
 
 reset-memory-scenario:
-	$(PYTHON) scripts/dev-harness/reset-memory-scenario.py $(SCENARIO)
+	"$(PYTHON)" scripts/dev-harness/reset-memory-scenario.py $(SCENARIO)
 
 desktop-run-local:
 	@if [ -n "$(DESKTOP_APP_NAME)" ]; then \
@@ -76,4 +76,4 @@ desktop-run-local:
 	fi
 
 run-canonical-promotion:
-	PYTHON="$(PYTHON)" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" $(PYTHON) scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"
+	PYTHON="$(PYTHON)" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" "$(PYTHON)" scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"
