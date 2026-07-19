@@ -27,6 +27,8 @@ function input(over: Partial<GlowTargetInput>): GlowTargetInput {
     maximized: false,
     minimized: false,
     visible: true,
+    cloaked: false,
+    ownWindow: false,
     ...over
   }
 }
@@ -191,7 +193,15 @@ describe('planGlow — every failed gate draws nothing', () => {
       'an exclusive-fullscreen app (never paint over a game)',
       { targetDip: { x: 0, y: 0, width: 1920, height: 1080 } },
       'fullscreen'
-    ]
+    ],
+    // The ghost-ring bug: a DWM-cloaked window (suspended UWP host, another virtual
+    // desktop) reports visible + a valid on-display frame, so it passed every gate
+    // and rang empty desktop. Rejected even though it is otherwise a perfect target.
+    ['a DWM-cloaked (composited-away) window', { cloaked: true }, 'cloaked'],
+    // Omi's own window as foreground (the bar goes focusable:true when expanded):
+    // Chrome_WidgetWin_1 is a real, non-shell class that passed every gate, so a
+    // verdict firing while the bar was up ringed Omi's own UI.
+    ['Omi framing its own window', { ownWindow: true }, 'own-window']
   ])('draws nothing for %s', (_label, over, reason) => {
     const decision = planGlow(input(over as Partial<GlowTargetInput>))
     expect(decision.ok).toBe(false)

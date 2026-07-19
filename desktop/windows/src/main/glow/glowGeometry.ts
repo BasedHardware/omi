@@ -103,7 +103,9 @@ const near = (a: number, b: number): boolean => Math.abs(a - b) <= EDGE_TOL
 export type GlowRejectReason =
   | 'no-window'
   | 'shell-window'
+  | 'own-window'
   | 'not-visible'
+  | 'cloaked'
   | 'minimized'
   | 'too-small'
   | 'offscreen'
@@ -119,6 +121,12 @@ export type GlowTargetInput = {
   maximized: boolean
   minimized: boolean
   visible: boolean
+  /** DWM-cloaked: WS_VISIBLE yet composited away, so it paints nothing on screen
+   *  (suspended UWP host, another virtual desktop). Framing it rings empty desktop. */
+  cloaked: boolean
+  /** The foreground window belongs to Omi itself (the bar goes focusable when
+   *  expanded). Never frame our own UI — the halo is feedback ABOUT another app. */
+  ownWindow: boolean
 }
 
 export type GlowPlan = {
@@ -223,10 +231,16 @@ export function cornerRadiusFor(state: { maximized: boolean; snapped: boolean })
  * i.e. our geometry source is wrong. Draw nothing rather than paint a fragment.
  */
 export function planGlow(input: GlowTargetInput): GlowDecision {
-  const { targetDip, displays, className, maximized, minimized, visible } = input
+  const { targetDip, displays, className, maximized, minimized, visible, cloaked, ownWindow } =
+    input
   if (!targetDip || displays.length === 0) return { ok: false, reason: 'no-window' }
   if (isShellClass(className)) return { ok: false, reason: 'shell-window' }
+  if (ownWindow) return { ok: false, reason: 'own-window' }
   if (!visible) return { ok: false, reason: 'not-visible' }
+  // A cloaked window reports visible + valid bounds but paints nothing where those
+  // bounds are — the direct cause of a ring around empty desktop. Reject it here,
+  // right after the WS_VISIBLE gate whose blind spot it is.
+  if (cloaked) return { ok: false, reason: 'cloaked' }
   if (minimized || targetDip.x <= PARKED_COORD || targetDip.y <= PARKED_COORD) {
     return { ok: false, reason: 'minimized' }
   }

@@ -180,6 +180,16 @@ function clearTimers(): void {
  *  null when ANY gate fails — the caller then draws nothing, never a fragment. */
 function currentPlan(): { plan: GlowPlan; handle: string | null } | null {
   const frame = getForegroundWindowFrame()
+  // Env-gated decision dump for reproducing ghost-ring reports: everything the
+  // gates key on, at the moment we decide. GLOW_DIAG=1 to enable in any build.
+  if (process.env['GLOW_DIAG']) {
+    console.warn(
+      `[glow-diag] target hwnd=${frame.handle} class=${frame.className} pid=${frame.pid} ` +
+        `own=${frame.pid != null && frame.pid === process.pid} cloaked=${frame.cloaked} ` +
+        `visible=${frame.visible} min=${frame.minimized} max=${frame.maximized} ` +
+        `rect=${frame.rect ? `${frame.rect.x},${frame.rect.y} ${frame.rect.width}x${frame.rect.height}` : 'null'}`
+    )
+  }
   if (!frame.rect) return null
   // Physical → DIP. screenToDipRect scales relative to the display nearest the
   // rect, which is the only multi-monitor-correct conversion Electron exposes
@@ -198,7 +208,11 @@ function currentPlan(): { plan: GlowPlan; handle: string | null } | null {
     className: frame.className,
     maximized: frame.maximized,
     minimized: frame.minimized,
-    visible: frame.visible
+    visible: frame.visible,
+    cloaked: frame.cloaked,
+    // All of Omi's BrowserWindows are owned by this (the main/browser) process, so
+    // a foreground window sharing our pid is our own UI — never frame it.
+    ownWindow: frame.pid != null && frame.pid === process.pid
   })
   if (!decision.ok) {
     diag(`no halo: ${decision.reason}`)
