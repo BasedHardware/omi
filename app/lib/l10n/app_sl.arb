@@ -10521,7 +10521,7 @@
     "upgradePlan": "Nadgradi načrt",
     "billingMonthly": "Mesečno",
     "billingYearly": "Letno",
-    "savePercent": "Prihranite ~17%",
+    "savePercent": "Prihranite ~{percent}%",
     "popular": "Priljubljeno",
     "currentPlan": "Trenutni",
     "neoSubtitle": "{count} vprašanj na mesec",

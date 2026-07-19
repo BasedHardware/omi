@@ -10521,7 +10521,7 @@
     "upgradePlan": "I-upgrade ang plan",
     "billingMonthly": "Buwanan",
     "billingYearly": "Taunan",
-    "savePercent": "Makatipid ~17%",
+    "savePercent": "Makatipid ~{percent}%",
     "popular": "Sikat",
     "currentPlan": "Kasalukuyan",
     "neoSubtitle": "{count} tanong bawat buwan",
