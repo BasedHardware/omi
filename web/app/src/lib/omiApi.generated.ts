@@ -3322,11 +3322,23 @@ export interface TtsSynthesizeRequest {
   voice_settings?: TtsVoiceSettings | null;
 }
 
+export interface TtsVoice {
+  category?: string | null;
+  labels?: Record<string, unknown>;
+  name?: string | null;
+  preview_url?: string | null;
+  voice_id: string;
+}
+
 export interface TtsVoiceSettings {
   similarity_boost?: number | null;
   stability?: number | null;
   style?: number | null;
   use_speaker_boost?: boolean | null;
+}
+
+export interface TtsVoicesResponse {
+  voices: Array<TtsVoice>;
 }
 
 export interface UnapprovedPublicAppResponse {
@@ -4150,7 +4162,9 @@ export interface OmiApiSchemas {
   "TrialMetadata": TrialMetadata;
   "TriggerType": TriggerType;
   "TtsSynthesizeRequest": TtsSynthesizeRequest;
+  "TtsVoice": TtsVoice;
   "TtsVoiceSettings": TtsVoiceSettings;
+  "TtsVoicesResponse": TtsVoicesResponse;
   "UnapprovedPublicAppResponse": UnapprovedPublicAppResponse;
   "UpdateAIUserProfileRequest": UpdateAIUserProfileRequest;
   "UpdateActionItemDescriptionRequest": UpdateActionItemDescriptionRequest;
@@ -7852,6 +7866,16 @@ export interface OmiApiPaths {
       operationId: "tts_synthesize_v2_tts_synthesize_post";
       responses: {
         "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/tts/voices": {
+    get: {
+      operationId: "get_voices_v2_tts_voices_get";
+      responses: {
+        "200": TtsVoicesResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15185,6 +15209,25 @@ export async function get_sync_job_status_v2_sync_local_files__job_id__get(path:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_voices_v2_tts_voices_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<TtsVoicesResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/tts/voices`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function transcribe_voice_message_v2_voice_message_transcribe_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<VoiceMessageTranscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/voice-message/transcribe`;
@@ -15539,4 +15582,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 382 client methods generated.
