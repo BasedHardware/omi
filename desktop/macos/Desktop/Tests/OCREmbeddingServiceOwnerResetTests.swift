@@ -52,4 +52,80 @@ final class OCREmbeddingServiceOwnerResetTests: XCTestCase {
     let pending = await OCREmbeddingService.shared.pendingCount
     XCTAssertEqual(pending, 0)
   }
+
+  /// The re-entrancy window: a flush that is already mid-embed when the owner
+  /// retargets must NOT resume and write the previous owner's rowids into the
+  /// next owner's database. `reset()` clearing the queue is not enough because
+  /// actors are re-entrant and an in-flight flush already captured its batch.
+  ///
+  /// Drives the exact interleave deterministically: the injected embedder
+  /// suspends the flush at its await, the test runs `reset()` during that
+  /// suspension, then releases the embedder. The generation fence must drop the
+  /// batch before the writer runs.
+  func testResetDuringInFlightFlushDropsStaleBatchBeforeWrite() async {
+    let dimension = EmbeddingService.embeddingDimension
+    let flushSuspended = AsyncGate()
+    let releaseEmbed = AsyncGate()
+    let writes = WriteSpy()
+
+    let service = OCREmbeddingService(
+      batchEmbedderForTesting: { texts, _ in
+        // Signal that the flush is now parked inside the embed await, then wait
+        // until the test has run reset() before returning results.
+        await flushSuspended.open()
+        await releaseEmbed.wait()
+        return texts.map { _ in [Float](repeating: 0, count: dimension) }
+      },
+      embeddingWriterForTesting: { screenshotId, _ in
+        await writes.record(screenshotId)
+      }
+    )
+
+    await service.embedScreenshot(
+      id: 500, ocrText: String(repeating: "previous owner text ", count: 3),
+      appName: "Notes", windowTitle: nil)
+
+    let flush = Task { await service.flushPendingEmbeddings() }
+
+    // Wait until the flush is suspended inside the embedder (batch + generation
+    // already captured), then retarget the owner.
+    await flushSuspended.wait()
+    await service.reset()
+
+    // Let the embed return. The fence must abandon the stale batch.
+    await releaseEmbed.open()
+    await flush.value
+
+    let recorded = await writes.ids
+    XCTAssertTrue(
+      recorded.isEmpty,
+      "a flush interrupted mid-embed by an owner reset must not write the previous owner's embeddings")
+    let pending = await service.pendingCount
+    XCTAssertEqual(pending, 0, "the stale batch must be dropped, not re-queued into the new owner's buffer")
+  }
+}
+
+/// One-shot async gate: `wait()` suspends until the first `open()`.
+private actor AsyncGate {
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func open() {
+    guard !isOpen else { return }
+    isOpen = true
+    let pending = waiters
+    waiters.removeAll()
+    for waiter in pending { waiter.resume() }
+  }
+
+  func wait() async {
+    if isOpen { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+}
+
+/// Records screenshot rowids handed to the injected embedding writer.
+private actor WriteSpy {
+  private(set) var ids: [Int64] = []
+  func record(_ id: Int64) { ids.append(id) }
 }
