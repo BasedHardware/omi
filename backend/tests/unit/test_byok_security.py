@@ -668,10 +668,13 @@ class TestBYOKCustomProvider:
         assert activate_byok_endpoint(BYOKActivateRequest(fingerprints=fps), uid='u') == {"active": True}
         mock_users_db.set_byok_active.assert_called_once_with('u', fps)
 
-    def test_custom_in_optional_providers(self):
-        from routers.users import _BYOK_OPTIONAL_PROVIDERS
+    def test_custom_is_known_but_not_required(self):
+        from routers.users import _BYOK_KNOWN_PROVIDERS, _BYOK_REQUIRED_PROVIDERS
 
-        assert 'custom' in _BYOK_OPTIONAL_PROVIDERS
+        # Enrollable, so it passes the unknown-provider gate, but never demanded by the
+        # missing-fingerprints check.
+        assert 'custom' in _BYOK_KNOWN_PROVIDERS
+        assert 'custom' not in _BYOK_REQUIRED_PROVIDERS
 
     # --- enrollment gating in _check_byok_validity ---
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
