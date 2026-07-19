@@ -57,19 +57,27 @@ function buildQuery(query: BackendToolRequest['query']): string {
   return s ? `?${s}` : ''
 }
 
+/** Parsed-JSON result for endpoints outside the ToolResponse envelope. */
+export type BackendJsonResult = { ok: true; data: unknown } | { ok: false; error: string }
+
 /**
- * Call one `/v1/tools/*` endpoint and return its `result_text`. Fail-open to an
+ * Shared request plumbing: host-session auth, combined caller/session abort, and
+ * the per-call timeout. Resolves to the parsed JSON body, or a fail-open
  * `Error: …` string (never a throw) on no-session, timeout, abort, non-2xx, or a
- * malformed body, so the tool loop continues.
+ * malformed body.
  */
-export async function backendToolFetch(req: BackendToolRequest): Promise<string> {
+async function backendFetchJson(req: BackendToolRequest): Promise<BackendJsonResult> {
   const session = getBackendSession()
-  if (!session) return 'Error: not signed in to Omi. Ask the user to sign in, then retry.'
+  if (!session) {
+    return { ok: false, error: 'Error: not signed in to Omi. Ask the user to sign in, then retry.' }
+  }
 
   const external = req.signal
   const sessionSignal = getAbortSignal()
   // Already gone (socket disconnected / signed out) — don't even open the request.
-  if (external?.aborted || sessionSignal?.aborted) return 'Error: request was cancelled.'
+  if (external?.aborted || sessionSignal?.aborted) {
+    return { ok: false, error: 'Error: request was cancelled.' }
+  }
 
   const ctrl = new AbortController()
   const onAbort = (): void => ctrl.abort()
@@ -90,17 +98,42 @@ export async function backendToolFetch(req: BackendToolRequest): Promise<string>
     if (req.method === 'POST') init.body = JSON.stringify(req.body ?? {})
 
     const res = await net.fetch(url, init)
-    if (!res.ok) return `Error: backend tool request failed (HTTP ${res.status})`
-    const data = (await res.json()) as ToolResponseEnvelope
-    const text = typeof data.result_text === 'string' ? data.result_text : ''
-    if (!text) return 'No results.'
-    return text
+    if (!res.ok)
+      return { ok: false, error: `Error: backend tool request failed (HTTP ${res.status})` }
+    return { ok: true, data: (await res.json()) as unknown }
   } catch (e) {
-    if (ctrl.signal.aborted) return 'Error: request was cancelled.'
-    return `Error: ${e instanceof Error ? e.message : 'backend tool request failed'}`
+    if (ctrl.signal.aborted) return { ok: false, error: 'Error: request was cancelled.' }
+    return {
+      ok: false,
+      error: `Error: ${e instanceof Error ? e.message : 'backend tool request failed'}`
+    }
   } finally {
     clearTimeout(timer)
     external?.removeEventListener('abort', onAbort)
     sessionSignal?.removeEventListener('abort', onAbort)
   }
+}
+
+/**
+ * Call one `/v1/tools/*` endpoint and return its `result_text`. Fail-open to an
+ * `Error: …` string (never a throw) on no-session, timeout, abort, non-2xx, or a
+ * malformed body, so the tool loop continues.
+ */
+export async function backendToolFetch(req: BackendToolRequest): Promise<string> {
+  const result = await backendFetchJson(req)
+  if (!result.ok) return result.error
+  const data = result.data as ToolResponseEnvelope
+  const text = typeof data?.result_text === 'string' ? data.result_text : ''
+  if (!text) return 'No results.'
+  return text
+}
+
+/**
+ * Call a backend endpoint that returns plain JSON (NOT the `/v1/tools/*`
+ * ToolResponse envelope) — e.g. `/v1/goals/all` — under the same host-session
+ * auth, abort, and timeout rules as `backendToolFetch`. The executor formats the
+ * data itself.
+ */
+export async function backendJsonFetch(req: BackendToolRequest): Promise<BackendJsonResult> {
+  return backendFetchJson(req)
 }

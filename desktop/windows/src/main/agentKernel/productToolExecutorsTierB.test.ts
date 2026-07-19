@@ -23,6 +23,7 @@ import {
   createSearchMemoriesExecutor,
   createGetConversationsExecutor,
   createSearchConversationsExecutor,
+  createGetGoalsExecutor,
   createGetWorkContextExecutor,
   createGetDailyRecapExecutor,
   createSaveKnowledgeGraphExecutor
@@ -205,6 +206,67 @@ describe('search_conversations', () => {
     expect(req.body!.query).toBe('the offsite')
     expect(req.body!.limit).toBe(5)
     expect(req.body!.end_date).toBe('2026-03-01T00:00:00Z')
+  })
+})
+
+// --- get_goals ----------------------------------------------------------------
+
+describe('get_goals', () => {
+  it('GETs /v1/goals/all and renders active + completed goals with progress', async () => {
+    const call = vi.fn(async (_req: BackendToolRequest) => ({
+      ok: true as const,
+      data: [
+        {
+          id: 'g1',
+          title: 'Ship 2 features per week',
+          target_value: 2,
+          current_value: 1,
+          is_active: true
+        },
+        {
+          id: 'g2',
+          title: 'Read 12 books',
+          target_value: 12,
+          current_value: 12,
+          unit: 'books',
+          is_active: false
+        }
+      ]
+    }))
+    const exec = createGetGoalsExecutor(call)
+    const out = await exec({}, ctx())
+    const req = call.mock.calls[0][0]
+    expect(req.method).toBe('GET')
+    expect(req.path).toBe('/v1/goals/all')
+    expect(out).toContain('Found 2 goal(s) (1 active, 1 completed):')
+    expect(out).toContain('Active:')
+    expect(out).toContain('1. Ship 2 features per week — progress: 1/2 (50%) (id: g1)')
+    expect(out).toContain('Completed:')
+    expect(out).toContain('1. Read 12 books — progress: 12/12 books (100%) (id: g2)')
+  })
+
+  it('explains an empty goal list instead of erroring', async () => {
+    const call = vi.fn(async (_req: BackendToolRequest) => ({ ok: true as const, data: [] }))
+    const exec = createGetGoalsExecutor(call)
+    expect(await exec({}, ctx())).toContain('No goals set yet')
+  })
+
+  it('relays a backend failure as the Error string', async () => {
+    const call = vi.fn(async (_req: BackendToolRequest) => ({
+      ok: false as const,
+      error: 'Error: backend tool request failed (HTTP 500)'
+    }))
+    const exec = createGetGoalsExecutor(call)
+    expect(await exec({}, ctx())).toBe('Error: backend tool request failed (HTTP 500)')
+  })
+
+  it('rejects a non-array body', async () => {
+    const call = vi.fn(async (_req: BackendToolRequest) => ({
+      ok: true as const,
+      data: { nope: 1 }
+    }))
+    const exec = createGetGoalsExecutor(call)
+    expect(await exec({}, ctx())).toBe('Error: unexpected goals response from the backend')
   })
 })
 
@@ -440,6 +502,7 @@ describe('Tier-B tools are registered + serviceable', () => {
     'search_memories',
     'get_conversations',
     'search_conversations',
+    'get_goals',
     'get_work_context',
     'get_daily_recap',
     'save_knowledge_graph'

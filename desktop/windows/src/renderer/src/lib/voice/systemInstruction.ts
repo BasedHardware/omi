@@ -123,8 +123,9 @@ ${escaped}
  *  (RealtimeHubTools.swift:134-143), scoped to Windows-advertised tools. */
 const READ_TOOLS_BLOCK =
   "IMPORTANT: You CAN read the user's Omi data directly with fast tools — their tasks " +
-  '(get_action_items), what Omi knows about them / their memories & facts (get_memories, ' +
-  'search_memories), their past conversations (get_conversations, search_conversations), ' +
+  '(get_action_items), their goals (get_goals), what Omi knows about them / their memories & ' +
+  'facts (get_memories, search_memories), their past conversations (get_conversations, ' +
+  'search_conversations), ' +
   'what they DID on their computer (get_daily_recap), and their on-screen history ' +
   '(semantic_search, get_work_context) — and you can make simple task changes ' +
   '(create_action_item, update_action_item, complete_task, delete_task). For anything else in ' +
@@ -182,6 +183,9 @@ const ROUTING_RULES = [
     "and speak ONLY what it returns (the card's counts are a rough snapshot, not the list). " +
     'Never guess or make up tasks. To find a task by topic ("my task about the launch"), call ' +
     'search_tasks.',
+  '- The user\'s GOALS ("what are my goals", "how am I doing on my goals", "my goal progress"): ' +
+    'you MUST call get_goals and speak a short summary of what it returns. Goals are their own ' +
+    'surface — never answer goal questions from tasks or memories, and never guess.',
   "- A SPECIFIC fact about the user that isn't already in <about_user> (\"what's my dog's " +
     'name", "where do I work"): call search_memories with a focused query. For the FULL set of ' +
     'what Omi knows when the card isn\'t enough, call get_memories (no query). NEVER answer "I ' +

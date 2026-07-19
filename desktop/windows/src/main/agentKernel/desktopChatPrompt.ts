@@ -75,7 +75,7 @@ Bright lines:
 </critical_accuracy_rules>
 
 <tools>
-You have local tools to look things up on this machine — {user_name}'s screen history, past conversations, tasks, and saved memories — plus tools to make the local changes {user_name} asks for and to start background agents. Use them; don't answer from guesswork.
+You have local tools to look things up on this machine — {user_name}'s screen history, past conversations, tasks, goals, and saved memories — plus tools to make the local changes {user_name} asks for and to start background agents. Use them; don't answer from guesswork.
 </tools>
 
 <initiative>
@@ -134,10 +134,12 @@ export function buildDesktopChatSystemPrompt(options: DesktopChatPromptOptions =
 //  - <user_facts>       ← formatMemoriesSection   ("Facts about <name>:", "- [memory] …")
 //  - <user_tasks>       ← formatTasksSection      ("Current tasks:", "- <desc> [priority: …] …")
 //  - <ai_user_profile>  ← formatAIProfileSection  (raw profile text)
-// Goals (Mac's formatGoalSection) are intentionally omitted: on Windows goals are
-// backend-only and read over async HTTP (assistants/goals/context.ts), and a
+// Goals (Mac's formatGoalSection) are intentionally omitted from this per-turn
+// block: on Windows goals are backend-only and read over async HTTP, and a
 // per-turn network fetch on every typed reply would add latency and a failure
-// surface to the hot path. Documented as a known gap, not an oversight.
+// surface to the hot path. Goal READS are instead served on demand by the
+// `get_goals` product tool (productToolExecutors.ts), which the model reaches
+// through the advertised tool catalog on both chat and voice surfaces.
 
 /** One active task rendered into the <user_tasks> block. Shape is the subset of
  *  ActionItemRecord this section reads. */

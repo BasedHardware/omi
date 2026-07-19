@@ -33,7 +33,7 @@ import type {
 } from '../../shared/types'
 import type { TaskSearchResult } from '../assistants/tasks/toolBackends'
 import { executeReadOnlySql } from '../assistants/insight/sql'
-import type { BackendToolRequest } from './backendTools'
+import type { BackendJsonResult, BackendToolRequest } from './backendTools'
 
 // --- shared arg helpers ------------------------------------------------------
 
@@ -602,6 +602,71 @@ export function createSearchConversationsExecutor(caller?: BackendToolCaller): P
   }
 }
 
+// --- get_goals (backend /v1/goals/all) ----------------------------------------
+
+export type BackendJsonCaller = (req: BackendToolRequest) => Promise<BackendJsonResult>
+
+function bindBackendJsonCaller(caller?: BackendJsonCaller): BackendJsonCaller {
+  return caller ?? (async (req) => (await import('./backendTools')).backendJsonFetch(req))
+}
+
+/** The subset of the backend's GoalResponse (backend/models/goal.py) this
+ *  formatter reads. `/v1/goals/all` returns a plain JSON array of these. */
+interface BackendGoal {
+  id?: unknown
+  title?: unknown
+  target_value?: unknown
+  current_value?: unknown
+  unit?: unknown
+  is_active?: unknown
+}
+
+function formatGoalLine(index: number, g: BackendGoal): string {
+  const title = typeof g.title === 'string' && g.title.trim() ? g.title.trim() : 'Untitled goal'
+  const target = typeof g.target_value === 'number' ? g.target_value : null
+  const current = typeof g.current_value === 'number' ? g.current_value : 0
+  const unit = typeof g.unit === 'string' && g.unit.trim() ? ` ${g.unit.trim()}` : ''
+  let progress = ''
+  if (target != null && target > 0) {
+    const pct = Math.round((current / target) * 100)
+    progress = ` — progress: ${current}/${target}${unit} (${pct}%)`
+  }
+  const id = typeof g.id === 'string' ? ` (id: ${g.id})` : ''
+  return `${index}. ${title}${progress}${id}`
+}
+
+/**
+ * `get_goals`. Reads the user's goals from the SAME backend feed the Goals page
+ * uses (`GET /v1/goals/all`, split active/completed by `is_active` — Goals.tsx)
+ * under the HOST session token, and renders them as prose. No inputs.
+ */
+export function createGetGoalsExecutor(caller?: BackendJsonCaller): ProductToolExecutor {
+  const call = bindBackendJsonCaller(caller)
+  return async (_input, ctx) => {
+    const result = await call({ method: 'GET', path: '/v1/goals/all', signal: ctx.signal })
+    if (!result.ok) return result.error
+    if (!Array.isArray(result.data)) return 'Error: unexpected goals response from the backend'
+    const goals = result.data as BackendGoal[]
+    if (goals.length === 0) {
+      return 'No goals set yet. The user can create goals on the Goals page (or ask you to help pick one).'
+    }
+    const active = goals.filter((g) => g.is_active !== false)
+    const completed = goals.filter((g) => g.is_active === false)
+    const lines: string[] = [
+      `Found ${goals.length} goal(s) (${active.length} active, ${completed.length} completed):`
+    ]
+    if (active.length > 0) {
+      lines.push('', 'Active:')
+      active.forEach((g, i) => lines.push(formatGoalLine(i + 1, g)))
+    }
+    if (completed.length > 0) {
+      lines.push('', 'Completed:')
+      completed.forEach((g, i) => lines.push(formatGoalLine(i + 1, g)))
+    }
+    return lines.join('\n')
+  }
+}
+
 // --- get_work_context (composition) ------------------------------------------
 
 /** Latest finalized frame is "fresh" up to this age; older is flagged stale. */
@@ -1016,6 +1081,7 @@ export function tierBProductToolExecutors(): [string, ProductToolExecutor][] {
     ['search_memories', createSearchMemoriesExecutor()],
     ['get_conversations', createGetConversationsExecutor()],
     ['search_conversations', createSearchConversationsExecutor()],
+    ['get_goals', createGetGoalsExecutor()],
     ['get_work_context', createGetWorkContextExecutor()],
     ['get_daily_recap', createGetDailyRecapExecutor()],
     ['save_knowledge_graph', createSaveKnowledgeGraphExecutor()]
