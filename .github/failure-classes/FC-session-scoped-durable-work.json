@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-session-scoped-durable-work",
+  "violated_contract": "Durable ledger-owned work, once claimed, must not inherit the lifetime of the connection or session that dispatched it.",
+  "canonical_prevention": "Execute claimed durable jobs in an owner detached from dispatcher teardown, and convert any residual cancellation into an explicit lease release instead of letting CancelledError bypass recovery handlers.",
+  "evidence_prs": [
+    9648,
+    9704
+  ],
+  "scope_hints": [
+    "backend/routers/pusher.py",
+    "backend/routers/listen/**",
+    "backend/routers/conversation_finalization.py",
+    "backend/database/conversation_finalization_jobs.py"
+  ],
+  "status": "open"
+}
