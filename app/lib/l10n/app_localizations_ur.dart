@@ -1466,7 +1466,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get payYourSttProvider => 'Omi کو آزادانہ استعمال کریں۔ آپ صرف اپنے STT فراہم کنندہ کو براہ راست ادا کریں۔';
 
   @override
-  String get freeMinutesMonth => 'ہر ماہ 600 منٹ مفت شامل ہیں۔ آن لائن کریں ';
+  String get freeMinutesMonth => 'ہر ماہ 300 منٹ مفت شامل ہیں۔ آن لائن کریں ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4716,7 +4716,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'کوئی مخصوص ڈیٹا رسائی ترتیب نہیں دی گئی ہے۔';
 
   @override
-  String get basicPlanDescription => '600 پریمیم منٹ + آن ڈیوائس پر لامحدود';
+  String get basicPlanDescription => '300 پریمیم منٹ + آن ڈیوائس پر لامحدود';
 
   @override
   String get minutes => 'منٹ';
@@ -6007,7 +6007,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get cloudProvider => 'کلاؤڈ فراہم کنندہ';
 
   @override
-  String get premiumMinutesInfo => 'ماہانہ 600 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔';
+  String get premiumMinutesInfo => 'ماہانہ 300 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔';
 
   @override
   String get viewUsage => 'استعمال دیکھیں';
@@ -6088,7 +6088,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get batteryDrainSignificantly => 'بیٹری کی ڈرین میں نمایاں اضافہ ہوگا۔';
 
   @override
-  String get premiumMinutesMonth => 'ماہانہ 600 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔ ';
+  String get premiumMinutesMonth => 'ماہانہ 300 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔ ';
 
   @override
   String get audioProcessedLocally =>
@@ -9003,7 +9003,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get billingYearly => 'سالانہ';
 
   @override
-  String get savePercent => '~17% بچائیں';
+  String savePercent(int percent) {
+    return '~$percent% بچائیں';
+  }
 
   @override
   String get popular => 'مقبول';
@@ -9612,4 +9614,8 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'کوئی کنکشن نہیں — مقامی طور پر ریکارڈنگ ہو رہی ہے۔ جب آپ دوبارہ آن لائن ہوں گے تو اسے نقل کر دیا جائے گا۔';
+
+  @override
+  String get dataEncryptedBanner =>
+      'آپ کا ڈیٹا بطورِ ڈیفالٹ مضبوط خفیہ کاری سے محفوظ ہے، اور یہ کیسے محفوظ اور استعمال کیا جاتا ہے اس پر آپ کا کنٹرول رہتا ہے۔';
 }

@@ -1466,7 +1466,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get payYourSttProvider => 'Kasutage Omi-d vabalt. Maksite ainult oma STT pakkujale otse.';
 
   @override
-  String get freeMinutesMonth => '600 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
+  String get freeMinutesMonth => '300 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4707,7 +4707,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Konkreetset andmetele juurdepääsu pole seadistatud.';
 
   @override
-  String get basicPlanDescription => '600 premium minutit + piiramatu seadmes';
+  String get basicPlanDescription => '300 premium minutit + piiramatu seadmes';
 
   @override
   String get minutes => 'minutit';
@@ -5999,7 +5999,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
+      '300 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
 
   @override
   String get viewUsage => 'Vaata kasutust';
@@ -6081,7 +6081,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
+      '300 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8986,7 +8986,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get billingYearly => 'Aastane';
 
   @override
-  String get savePercent => 'Säästa ~17%';
+  String savePercent(int percent) {
+    return 'Säästa ~$percent%';
+  }
 
   @override
   String get popular => 'Populaarne';
@@ -9595,4 +9597,8 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Sinu andmed on vaikimisi kaitstud tugeva krüptimisega ja sina kontrollid, kuidas neid salvestatakse ja kasutatakse.';
 }

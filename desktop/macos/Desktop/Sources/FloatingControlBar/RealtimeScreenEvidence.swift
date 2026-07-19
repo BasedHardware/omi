@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import CryptoKit
 import Foundation
+import VoiceTurnDomain
 
 /// The in-memory, single-turn source of truth for a PTT current-screen answer.
 ///
@@ -11,6 +12,13 @@ import Foundation
 enum RealtimeScreenEvidenceTarget: String, Equatable, Sendable {
   case frontmostDisplay = "frontmost_display"
   case unavailable
+}
+
+/// A physical capture failure that the realtime tool and local spoken fallback can explain
+/// without treating a missing image as visual evidence (for example, a black screen).
+enum RealtimeScreenEvidenceCaptureFailure: String, Equatable, Sendable {
+  case screenRecordingPermissionRequired = "screen_recording_permission_required"
+  case captureUnavailable = "capture_unavailable"
 }
 
 struct RealtimeScreenEvidenceDescriptor: Equatable, Sendable {
@@ -24,6 +32,35 @@ struct RealtimeScreenEvidenceDescriptor: Equatable, Sendable {
   let displayID: UInt32?
   let imageByteCount: Int
   let imageDigest: String?
+  /// Present only when the PTT-bound physical capture could not produce pixels.
+  /// This is bounded capability state, never a description of the user's screen.
+  let captureFailure: RealtimeScreenEvidenceCaptureFailure?
+
+  init(
+    evidenceID: String,
+    turnID: VoiceTurnID,
+    capturedAt: Date,
+    target: RealtimeScreenEvidenceTarget,
+    frontmostApp: String?,
+    frontmostBundleID: String?,
+    windowID: UInt32?,
+    displayID: UInt32?,
+    imageByteCount: Int,
+    imageDigest: String?,
+    captureFailure: RealtimeScreenEvidenceCaptureFailure? = nil
+  ) {
+    self.evidenceID = evidenceID
+    self.turnID = turnID
+    self.capturedAt = capturedAt
+    self.target = target
+    self.frontmostApp = frontmostApp
+    self.frontmostBundleID = frontmostBundleID
+    self.windowID = windowID
+    self.displayID = displayID
+    self.imageByteCount = imageByteCount
+    self.imageDigest = imageDigest
+    self.captureFailure = captureFailure
+  }
 
   var canVerifyCurrentScreen: Bool {
     target != .unavailable
@@ -303,8 +340,31 @@ enum RealtimeScreenEvidenceToolExecutionPolicy {
 
 /// Pure policy for locally enforcing current-screen provenance. The model may propose a
 /// screen observation, but it cannot make one user-visible until this policy validates it.
+enum RealtimeScreenEvidenceFailureDisposition: Equatable {
+  /// The provider received a recoverable tool error and should answer in its
+  /// normal native voice lane (for example, by offering Screen Recording).
+  case providerContinuation
+  /// No provider continuation can safely explain the failure, so the local
+  /// deterministic result remains the terminal answer.
+  case authoritativeLocalResult
+}
+
 enum RealtimeScreenGroundingPolicy {
-  static let failureText = "I couldn't verify the current screen."
+  static func failureDisposition(
+    for evidence: RealtimeScreenEvidenceDescriptor?
+  ) -> RealtimeScreenEvidenceFailureDisposition {
+    evidence?.captureFailure == .screenRecordingPermissionRequired
+      ? .providerContinuation
+      : .authoritativeLocalResult
+  }
+
+  static func failureText(for evidence: RealtimeScreenEvidenceDescriptor?) -> String {
+    guard evidence?.captureFailure == .screenRecordingPermissionRequired else {
+      return "I couldn't verify the current screen."
+    }
+    return
+      "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request."
+  }
 
   /// Mints the local presentation receipt only after the session reports that it accepted the
   /// exact image/function-response wire. The caller owns waiting for that asynchronous transport
@@ -350,16 +410,18 @@ enum RealtimeScreenGroundingPolicy {
     }
     let evidence = receipt.descriptor
     guard evidence.canVerifyCurrentScreen else { return .transportNotDispatched }
-    guard receipt.isCurrent(
-      sourceObjectID: sourceObjectID,
-      activeTurnID: activeTurnID,
-      activeResponseID: activeResponseID,
-      currentTurnEpoch: currentTurnEpoch)
+    guard
+      receipt.isCurrent(
+        sourceObjectID: sourceObjectID,
+        activeTurnID: activeTurnID,
+        activeResponseID: activeResponseID,
+        currentTurnEpoch: currentTurnEpoch)
     else { return .staleReceipt }
     guard !observation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
-    guard !observationClaimsDifferentApplication(
-      observation,
-      frontmostApp: evidence.frontmostApp ?? "")
+    guard
+      !observationClaimsDifferentApplication(
+        observation,
+        frontmostApp: evidence.frontmostApp ?? "")
     else { return .contradictoryApplication }
     return .accepted
   }
@@ -380,9 +442,10 @@ enum RealtimeScreenGroundingPolicy {
     // The frozen descriptor is the only app identity that belongs to this receipt.
     // Sampling the current process list here made a valid capture depend on a later
     // focus change, which is the same ambient-state leak this protocol exists to avoid.
-    let candidates = Set(commonDesktopApps
-      .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
-      .filter { !$0.isEmpty && $0 != normalizedFrontmost })
+    let candidates = Set(
+      commonDesktopApps
+        .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
+        .filter { !$0.isEmpty && $0 != normalizedFrontmost })
     // Only reject a direct statement about which app is foreground. A screenshot description
     // naturally says things such as "application windows" or can mention an app visible inside
     // content; neither statement contradicts the native frontmost-app fact. This guard protects
@@ -417,7 +480,16 @@ enum RealtimeScreenEvidenceCapture {
     let displayID = displayContaining(windowID: frontmostWindowID) ?? onlyActiveDisplay()
     // A PTT evidence capture must never silently fall back to the mouse-selected display.
     // On an ambiguous multi-display desktop we fail closed instead of describing the wrong one.
-    let image = displayID.flatMap { ScreenCaptureManager.captureScreenImage(displayID: $0) }
+    let captureFailure: RealtimeScreenEvidenceCaptureFailure?
+    let image: CGImage?
+    if !CGPreflightScreenCaptureAccess() {
+      log("RealtimeScreenEvidenceCapture: Screen Recording permission not granted at PTT capture")
+      image = nil
+      captureFailure = .screenRecordingPermissionRequired
+    } else {
+      image = displayID.flatMap { ScreenCaptureManager.captureScreenImage(displayID: $0) }
+      captureFailure = image == nil ? .captureUnavailable : nil
+    }
     let target: RealtimeScreenEvidenceTarget = image == nil ? .unavailable : .frontmostDisplay
     let descriptor = RealtimeScreenEvidenceDescriptor(
       evidenceID: UUID().uuidString.lowercased(),
@@ -429,7 +501,8 @@ enum RealtimeScreenEvidenceCapture {
       windowID: frontmostWindowID.map { UInt32($0) },
       displayID: displayID.map { UInt32($0) },
       imageByteCount: 0,
-      imageDigest: nil
+      imageDigest: nil,
+      captureFailure: captureFailure
     )
     return RealtimeScreenEvidence(
       descriptor: descriptor,
@@ -458,7 +531,8 @@ enum RealtimeScreenEvidenceCapture {
       windowID: evidence.descriptor.windowID,
       displayID: evidence.descriptor.displayID,
       imageByteCount: jpeg.count,
-      imageDigest: sha256(jpeg)
+      imageDigest: sha256(jpeg),
+      captureFailure: evidence.descriptor.captureFailure
     )
     return RealtimeScreenEvidence(
       descriptor: descriptor,
@@ -471,8 +545,9 @@ enum RealtimeScreenEvidenceCapture {
   /// block the first turn. The compositor's front-to-back list is enough to identify the
   /// frontmost on-screen window for the already-known foreground process.
   private static func frontmostOnScreenWindowID(ownedBy pid: pid_t) -> CGWindowID? {
-    guard let windows = CGWindowListCopyWindowInfo(
-      [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+    guard
+      let windows = CGWindowListCopyWindowInfo(
+        [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
     else { return nil }
     for window in windows {
       guard let ownerPID = window[kCGWindowOwnerPID as String] as? NSNumber,

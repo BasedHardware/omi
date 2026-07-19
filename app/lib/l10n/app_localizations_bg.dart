@@ -6020,7 +6020,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
+      '300 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
 
   @override
   String get viewUsage => 'Преглед на използването';
@@ -6103,7 +6103,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
+      '300 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9022,7 +9022,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get billingYearly => 'Годишно';
 
   @override
-  String get savePercent => 'Спестете ~17%';
+  String savePercent(int percent) {
+    return 'Спестете ~$percent%';
+  }
 
   @override
   String get popular => 'Популярен';
@@ -9635,4 +9637,8 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Няма връзка — записва се локално. Ще бъде транскрибирано, когато отново сте онлайн.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Вашите данни са защитени по подразбиране със силно криптиране и вие контролирате как се съхраняват и използват.';
 }

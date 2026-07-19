@@ -1446,7 +1446,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get payYourSttProvider => 'Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.';
 
   @override
-  String get freeMinutesMonth => '월 600분 무료 포함. ';
+  String get freeMinutesMonth => '월 300분 무료 포함. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4625,7 +4625,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '특정 데이터 액세스가 구성되지 않았습니다.';
 
   @override
-  String get basicPlanDescription => '600 프리미엄 분 + 무제한 온디바이스';
+  String get basicPlanDescription => '300 프리미엄 분 + 무제한 온디바이스';
 
   @override
   String get minutes => '분';
@@ -5895,7 +5895,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cloudProvider => '클라우드 제공자';
 
   @override
-  String get premiumMinutesInfo => '월 600분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
+  String get premiumMinutesInfo => '월 300분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
 
   @override
   String get viewUsage => '사용량 보기';
@@ -5973,7 +5973,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryDrainSignificantly => '배터리 소모가 크게 증가합니다.';
 
   @override
-  String get premiumMinutesMonth => '월 600 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
+  String get premiumMinutesMonth => '월 300 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
 
   @override
   String get audioProcessedLocally => '오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.';
@@ -8846,7 +8846,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get billingYearly => '연간';
 
   @override
-  String get savePercent => '~17% 절약';
+  String savePercent(int percent) {
+    return '~$percent% 절약';
+  }
 
   @override
   String get popular => '인기';
@@ -9441,4 +9443,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get phoneMicOfflineFallbackMessage => '연결 없음 — 로컬에 녹음 중입니다. 다시 온라인 상태가 되면 텍스트로 변환됩니다.';
+
+  @override
+  String get dataEncryptedBanner => '귀하의 데이터는 기본적으로 강력한 암호화로 보호되며, 저장 및 사용 방식은 귀하가 관리합니다.';
 }

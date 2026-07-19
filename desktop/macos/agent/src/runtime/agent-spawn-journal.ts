@@ -18,6 +18,8 @@ export interface AgentSpawnProducerJournalDescriptor {
   };
   continuityKey: string;
   pillId: string;
+  /** Canonical run producing the assistant turn, when the turn is journal-bound. */
+  producerRunId?: string;
   producerTurnId?: string;
   userText: string;
   assistantText: string;
@@ -568,7 +570,11 @@ export function ensureAgentSpawnJournal(
         conversationId,
         producerSessionId: String(surface.agent_session_id),
         producerTurnId: descriptor.producerTurnId,
-        parentRunId: child.parent_run_id == null ? null : String(child.parent_run_id),
+        // A local-provider child can be execution-independent while its pill
+        // remains anchored to the coordinator's typed assistant turn.  Prefer
+        // the kernel-stamped producer run for that provenance; legacy
+        // delegated children keep their execution parent as the fallback.
+        parentRunId: descriptor.producerRunId ?? (child.parent_run_id == null ? null : String(child.parent_run_id)),
       });
       const blocks = mergeSpawnBlocks(assistantTurn.contentBlocks, spawnBlock, completionBlock);
       const resources = mergeResources(assistantTurn.resources, artifactResources);
@@ -707,6 +713,9 @@ export function parseAgentSpawnProducerJournalDescriptor(value: unknown): AgentS
     ...(raw.producerTurnId === undefined
       ? {}
       : { producerTurnId: boundedText(raw.producerTurnId, "producerJournal.producerTurnId", 512) }),
+    ...(raw.producerRunId === undefined
+      ? {}
+      : { producerRunId: boundedText(raw.producerRunId, "producerJournal.producerRunId", 512) }),
     userText: boundedText(raw.userText, "producerJournal.userText", 64 * 1024),
     assistantText: boundedText(raw.assistantText, "producerJournal.assistantText", 64 * 1024),
     objective: boundedText(raw.objective, "producerJournal.objective", 64 * 1024),

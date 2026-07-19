@@ -98,22 +98,24 @@ func ensureLogDirectoryOwnerOnly(atPath path: String) -> Bool {
     let isOwnedByUs = info.st_uid == getuid()
     guard isDirectory, isOwnedByUs else {
       guard (try? fileManager.removeItem(atPath: path)) != nil else { return false }
-      return (try? fileManager.createDirectory(
-        atPath: path,
-        withIntermediateDirectories: false,
-        attributes: [.posixPermissions: 0o700])) != nil
+      return
+        (try? fileManager.createDirectory(
+          atPath: path,
+          withIntermediateDirectories: false,
+          attributes: [.posixPermissions: 0o700])) != nil
     }
     return (try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)) != nil
   }
-  return (try? fileManager.createDirectory(
-    atPath: path,
-    withIntermediateDirectories: false,
-    attributes: [.posixPermissions: 0o700])) != nil
+  return
+    (try? fileManager.createDirectory(
+      atPath: path,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: 0o700])) != nil
 }
 
 /// Guards the one-time permission normalization. Mutated only on the serial
 /// `logQueue` (every writer hops through it), so it needs no extra locking.
-private var didEnsureLogFilePermissions = false
+private nonisolated(unsafe) var didEnsureLogFilePermissions = false
 
 private func ensureLogParentDirectories() -> Bool {
   // Non-production logs live as owner-only files directly under private tmp.
@@ -131,7 +133,8 @@ private func writeToLogFile(_ data: Data) {
     // Latch only when normalization actually succeeds, so a transient failure
     // (e.g. a racing create) is retried on the next write instead of leaving
     // the log permanently world-readable.
-    didEnsureLogFilePermissions = ensureLogParentDirectories()
+    didEnsureLogFilePermissions =
+      ensureLogParentDirectories()
       && ensureLogFileOwnerOnly(atPath: logFile)
   }
   if FileManager.default.fileExists(atPath: logFile) {
@@ -208,7 +211,7 @@ func measurePerf<T>(_ name: String, logCPU: Bool = false, _ block: () -> T) -> T
 }
 
 /// Async version of measurePerf
-func measurePerfAsync<T>(_ name: String, logCPU: Bool = false, _ block: () async -> T) async -> T {
+func measurePerfAsync<T>(_ name: String, logCPU: Bool = false, _ block: @Sendable () async -> T) async -> T {
   let timer = PerfTimer(name, logCPU: logCPU)
   let result = await block()
   timer.stop()
@@ -272,12 +275,18 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
   // insight extraction) after exhausting retries. Backend overload, not an app bug
   // (OMI-COMPUTER-6JK/6JR/6JM/6NC). Real auth/config/parse errors stay captured.
   if let geminiError = error as? GeminiClient.GeminiClientError,
-     geminiError.isTransient || geminiError.isExpectedProductState { return true }
+    geminiError.isTransient || geminiError.isExpectedProductState
+  {
+    return true
+  }
   // Embedding backfills/searches can hit expected backend/product states (trial
   // expired/BYOK required, rate limit, 5xx). Keep those local-only so screenshot
   // backfill loops don't create high-volume Sentry issues.
   if let embeddingError = error as? EmbeddingService.EmbeddingError,
-     embeddingError.isNonActionableForSentry { return true }
+    embeddingError.isNonActionableForSentry
+  {
+    return true
+  }
   // Rewind encoder disk failures wrap the underlying OS error — inspect that so a
   // full/read-only disk ("The file couldn't be saved") is classified below rather
   // than captured as an opaque storage-error cluster (OMI-DESKTOP-28/29).
@@ -306,15 +315,16 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
     // permission) surface here as "The file couldn't be saved". Not app bugs —
     // keep them as local logs + breadcrumbs instead of Sentry error clusters.
     let storageExhausted: Set<Int> = [
-      NSFileWriteOutOfSpaceError,      // 640 — disk full
+      NSFileWriteOutOfSpaceError,  // 640 — disk full
       NSFileWriteVolumeReadOnlyError,  // 642 — read-only volume
-      NSFileWriteNoPermissionError,    // 513 — no write permission
+      NSFileWriteNoPermissionError,  // 513 — no write permission
     ]
     if storageExhausted.contains(nsError.code) { return true }
     // Cocoa file errors often wrap a POSIX cause in NSUnderlyingErrorKey.
     if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
-       underlying.domain == NSPOSIXErrorDomain,
-       [28, 69, 30].contains(underlying.code) {
+      underlying.domain == NSPOSIXErrorDomain,
+      [28, 69, 30].contains(underlying.code)
+    {
       return true
     }
     return false
@@ -328,7 +338,7 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
 /// emit the same error thousands of times. We collapse them by a digit-normalized
 /// key so a single root cause produces ~one Sentry event per window, not thousands.
 private let sentryDedupLock = NSLock()
-private var sentryLastCaptured: [String: Date] = [:]
+private nonisolated(unsafe) var sentryLastCaptured: [String: Date] = [:]
 private let sentryDedupWindow: TimeInterval = 300  // 5 minutes per unique error
 
 private func shouldCaptureToSentry(_ message: String) -> Bool {

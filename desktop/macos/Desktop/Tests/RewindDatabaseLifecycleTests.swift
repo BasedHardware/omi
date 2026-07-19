@@ -149,14 +149,15 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
   private func makeTestFrameImage() throws -> CGImage {
     let width = 96
     let height = 64
-    let context = try XCTUnwrap(CGContext(
-      data: nil,
-      width: width,
-      height: height,
-      bitsPerComponent: 8,
-      bytesPerRow: width * 4,
-      space: CGColorSpaceCreateDeviceRGB(),
-      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    let context = try XCTUnwrap(
+      CGContext(
+        data: nil,
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
     context.setFillColor(NSColor.systemBlue.cgColor)
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
     return try XCTUnwrap(context.makeImage())

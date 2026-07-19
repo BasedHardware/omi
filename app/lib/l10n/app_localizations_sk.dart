@@ -8977,7 +8977,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get billingYearly => 'Ročne';
 
   @override
-  String get savePercent => 'Ušetrite ~17%';
+  String savePercent(int percent) {
+    return 'Ušetrite ~$percent%';
+  }
 
   @override
   String get popular => 'Obľúbené';
@@ -9590,4 +9592,8 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Bez pripojenia – nahráva sa lokálne. Prepíše sa, keď budete znova online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Vaše údaje sú predvolene zabezpečené silným šifrovaním a vy máte kontrolu nad tým, ako sa ukladajú a používajú.';
 }

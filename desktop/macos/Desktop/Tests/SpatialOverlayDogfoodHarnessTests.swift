@@ -8,10 +8,11 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
     let fixture = SpatialOverlayDogfoodFixture.claudeAddExplicit
     let addButton = fixture.targetRect
 
-    let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: fixture.windowFrame,
-      candidates: fixture.candidates
-    ))
+    let placement = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: fixture.windowFrame,
+        candidates: fixture.candidates
+      ))
 
     assertCallout(placement, pointsAt: addButton, doesNotCover: addButton)
     assertTopLeftCallout(placement, fixture: fixture)
@@ -21,10 +22,11 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
   func testClaudeAddGuidanceFixtureFallsBackWithoutCoveringEstimatedButton() throws {
     let fixture = SpatialOverlayDogfoodFixture.claudeAddHeuristic
 
-    let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: fixture.windowFrame,
-      candidates: fixture.candidates
-    ))
+    let placement = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: fixture.windowFrame,
+        candidates: fixture.candidates
+      ))
 
     let estimatedButton = try XCTUnwrap(fixture.candidates.first?.targetRect)
     assertCallout(placement, pointsAt: estimatedButton, doesNotCover: estimatedButton)
@@ -35,10 +37,11 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
   func testClaudeAddGuidanceFixtureCanInferAddButtonFromCancel() throws {
     let fixture = SpatialOverlayDogfoodFixture.claudeAddInferredFromCancel
 
-    let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: fixture.windowFrame,
-      candidates: fixture.candidates
-    ))
+    let placement = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: fixture.windowFrame,
+        candidates: fixture.candidates
+      ))
 
     assertCallout(placement, pointsAt: fixture.targetRect, doesNotCover: fixture.targetRect)
     assertTopLeftCallout(placement, fixture: fixture)

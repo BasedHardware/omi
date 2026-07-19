@@ -754,6 +754,7 @@ describe("external realtime surface authority", () => {
         schemaVersion: 1,
         surface: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "typed-spawn" },
         continuityKey: `agent_spawn:${invocationId}`,
+        producerRunId: authorized.runId,
         producerTurnId: "typed-spawn-assistant",
         userText: "DEFER_TYPED_PARENT_9515 research the release plan",
         assistantText: "I started a background agent for that.",
@@ -1147,7 +1148,7 @@ describe("external realtime surface authority", () => {
     store.close();
   });
 
-  it("starts an explicitly requested OpenClaw realtime child independently while preserving its producer journal", async () => {
+  it("starts an explicitly requested OpenClaw child independently when its primary producer turn is journaled", async () => {
     const root = newRoot();
     const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
     const registry = new AdapterRegistry();
@@ -1165,6 +1166,30 @@ describe("external realtime surface authority", () => {
       ...beginInput(session.agentSessionId),
       prompt: "Ask OpenClaw to check the release notes in the background",
     });
+    const producerTurnId = "typed-openclaw-producer-turn";
+    recordJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: session.conversationId,
+      turnId: producerTurnId,
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "Starting OpenClaw.",
+      contentBlocks: [],
+      resources: [],
+      producingRunId: run.runId,
+      producingAttemptId: run.attemptId,
+      createdAtMs: 2,
+    });
+    const parentInput = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE run_id = ?",
+      [run.runId],
+    ).input_json));
+    store.execute(
+      "UPDATE runs SET input_json = ? WHERE run_id = ?",
+      [JSON.stringify({ ...parentInput, producingTurnId: producerTurnId }), run.runId],
+    );
     const routed = kernel.routeExternalSurfaceToolInvocation({
       ownerId: "owner",
       sessionId: session.agentSessionId,
@@ -1183,6 +1208,8 @@ describe("external realtime surface authority", () => {
     const producerJournal = parseAgentSpawnProducerJournalDescriptor(
       ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
     );
+    expect(producerJournal.producerTurnId).toBe(producerTurnId);
+    expect(producerJournal.producerRunId).toBe(run.runId);
 
     const started = JSON.parse(await handleAgentControlToolCall({
       kernel,
@@ -1192,6 +1219,12 @@ describe("external realtime surface authority", () => {
       defaultAdapterId: "pi-mono",
       authorizedProducerJournal: producerJournal,
       authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-openclaw-spawn",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
       getOwnerId: () => "owner",
     }, "spawn_agent", routed.toolInput)) as Record<string, any>;
 
@@ -1279,6 +1312,12 @@ describe("external realtime surface authority", () => {
       defaultAdapterId: "pi-mono",
       authorizedProducerJournal: producerJournal,
       authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-openclaw-unavailable",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
       getOwnerId: () => "owner",
     }, "spawn_agent", routed.toolInput));
 

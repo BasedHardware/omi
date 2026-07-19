@@ -9,7 +9,8 @@ enum PostOnboardingPromptSuggestions {
   static func save(_ suggestions: [String]) {
     let cleaned = Array(
       NSOrderedSet(
-        array: suggestions
+        array:
+          suggestions
           .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
           .filter { !$0.isEmpty }
       ).array as? [String] ?? suggestions

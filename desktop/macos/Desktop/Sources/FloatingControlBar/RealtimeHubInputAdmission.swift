@@ -1,4 +1,5 @@
 import Foundation
+import VoiceTurnDomain
 
 /// Physical PCM held while a replacement socket authenticates. Logical turn
 /// state remains in `VoiceTurnCoordinator`.
@@ -180,5 +181,23 @@ enum RealtimeVoiceContextRefreshPolicy {
     sessionSnapshotIdentity: String
   ) -> Bool {
     currentSnapshotIdentity != sessionSnapshotIdentity
+  }
+}
+
+/// A physical realtime socket is useful only after the kernel supplies the
+/// owner-bound context identity it must carry. Starting one earlier creates an
+/// empty session which has to be torn down just as the first PTT capture starts.
+enum RealtimeWarmSessionStartPolicy {
+  static func canStart(requirementIsResolved: Bool) -> Bool {
+    requirementIsResolved
+  }
+}
+
+/// Gemini's completed-turn boundary already schedules a persistence-fenced context refresh.
+/// Starting a second refresh from journal finalization tears down the newly warming session and
+/// makes the next PTT press buffer behind redundant reconnects.
+enum RealtimePersistedVoiceContextRefreshPolicy {
+  static func shouldHandoffImmediately(provider: RealtimeHubProvider?) -> Bool {
+    provider != .gemini
   }
 }

@@ -46,8 +46,7 @@ final class TaskChatCoordinator: ObservableObject {
 
   private let chatProvider: ChatProvider
   private let workstreamAPI: any TaskWorkstreamAPI
-  private let persistWorkstreamLink:
-    @MainActor (String, String, String, LocalMutationAuthorization) async -> Void
+  private let persistWorkstreamLink: @MainActor (String, String, String, LocalMutationAuthorization) async -> Void
   private let ownerIDProvider: @MainActor () -> String?
 
   init(
@@ -56,15 +55,16 @@ final class TaskChatCoordinator: ObservableObject {
     ownerIDProvider: @escaping @MainActor () -> String? = {
       RuntimeOwnerIdentity.currentOwnerId()
     },
-    persistWorkstreamLink: @escaping @MainActor (
-      String, String, String, LocalMutationAuthorization
-    ) async -> Void = { taskId, workstreamId, _, authorization in
-      try? await ActionItemStorage.shared.updateActionItemFields(
-        backendId: taskId,
-        workstreamId: workstreamId,
-        authorization: authorization
-      )
-    }
+    persistWorkstreamLink:
+      @escaping @MainActor (
+        String, String, String, LocalMutationAuthorization
+      ) async -> Void = { taskId, workstreamId, _, authorization in
+        try? await ActionItemStorage.shared.updateActionItemFields(
+          backendId: taskId,
+          workstreamId: workstreamId,
+          authorization: authorization
+        )
+      }
   ) {
     self.chatProvider = chatProvider
     self.workstreamAPI = workstreamAPI
@@ -73,9 +73,10 @@ final class TaskChatCoordinator: ObservableObject {
     activeOwnerID = Self.normalizedOwnerID(ownerIDProvider())
     UserDefaults.standard.removeObject(forKey: Self.legacyUnreadTaskIdsKey)
     if let ownerID = activeOwnerID,
-       let saved = UserDefaults.standard.array(
+      let saved = UserDefaults.standard.array(
         forKey: Self.unreadTaskIdsKey(ownerID: ownerID)
-       ) as? [String] {
+      ) as? [String]
+    {
       unreadTaskIds = Set(saved)
     }
     runtimeStatusCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
@@ -162,9 +163,11 @@ final class TaskChatCoordinator: ObservableObject {
       )
       suppressUnreadPersistence = false
     }
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: ownerID
-    ) else { return nil }
+    guard
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: ownerID
+      )
+    else { return nil }
     return TaskChatOwnerLease(
       authorizationSnapshot: authorizationSnapshot,
       generation: ownerGeneration
@@ -470,7 +473,8 @@ final class TaskChatCoordinator: ObservableObject {
         state = existing
       } else {
         let configuredPath = TaskAgentSettings.shared.workingDirectory
-        let workspace = configuredPath.isEmpty
+        let workspace =
+          configuredPath.isEmpty
           ? FileManager.default.homeDirectoryForCurrentUser.path
           : configuredPath
 
@@ -494,7 +498,8 @@ final class TaskChatCoordinator: ObservableObject {
             )
             guard isCurrent(lease) else { return }
             guard page.rows.count == TaskChatLegacyCompatibilityMetadata.pageSize,
-                  let nextCursor = page.nextCursor else { break }
+              let nextCursor = page.nextCursor
+            else { break }
             cursor = nextCursor
           }
           UserDefaults.standard.set(true, forKey: legacyImportCheckpoint)
@@ -601,201 +606,207 @@ final class TaskChatCoordinator: ObservableObject {
   /// Deterministic non-production projection used by the named scenario-13
   /// harness. It enters through the same coordinator/view state as live data;
   /// only the network fetch is replaced by the frozen fixture.
-#if DEBUG
-  func loadScenario13Fixture(
-    activeTaskID: String,
-    detail: OmiAPI.WorkstreamDetailProjection
-  ) {
-    guard let lease = captureOwnerLease() else { return }
-    let workstreamId = detail.workstream.workstreamId
-    guard detail.tasks.contains(where: { $0.id == activeTaskID }) else { return }
-    register(detail: detail)
-    activeTaskId = activeTaskID
-    activeWorkstreamId = workstreamId
-    activeThreadProjection = TaskThreadProjection(detail: detail, activeTaskID: activeTaskID)
-    let state = workstreamStates[workstreamId] ?? TaskChatState(
-      taskId: activeTaskID,
-      workstreamId: workstreamId,
-      workspacePath: FileManager.default.homeDirectoryForCurrentUser.path,
-      authorizationSnapshot: lease.authorizationSnapshot,
-      ownerIDProvider: ownerIDProvider
-    )
-    state.selectTask(activeTaskID)
-    workstreamStates[workstreamId] = state
-    activeTaskState = state
-    errorMessage = nil
-    isPanelOpen = true
-  }
-
-  func registerAutomationActions() {
-    DesktopAutomationActionRegistry.shared.register(
-      name: "task_thread_scenario_13",
-      summary: "Exercise live task-backed thread continuity through the app kernel",
-      params: ["task", "resume"]
-    ) { [weak self] params in
-      guard let self else { return ["error": "task thread coordinator unavailable"] }
-      guard let lease = self.captureOwnerLease() else {
-        return ["error": "task thread owner unavailable"]
-      }
-      let activeTaskID = params["task"] == "second"
-        ? TaskThreadScenario13Fixture.secondTaskID
-        : TaskThreadScenario13Fixture.firstTaskID
-      do {
-        let runtime = try await self.buildScenario13RuntimeProjection(
-          resumeOnly: params["resume"] == "true",
-          authorizationSnapshot: lease.authorizationSnapshot
+  #if DEBUG
+    func loadScenario13Fixture(
+      activeTaskID: String,
+      detail: OmiAPI.WorkstreamDetailProjection
+    ) {
+      guard let lease = captureOwnerLease() else { return }
+      let workstreamId = detail.workstream.workstreamId
+      guard detail.tasks.contains(where: { $0.id == activeTaskID }) else { return }
+      register(detail: detail)
+      activeTaskId = activeTaskID
+      activeWorkstreamId = workstreamId
+      activeThreadProjection = TaskThreadProjection(detail: detail, activeTaskID: activeTaskID)
+      let state =
+        workstreamStates[workstreamId]
+        ?? TaskChatState(
+          taskId: activeTaskID,
+          workstreamId: workstreamId,
+          workspacePath: FileManager.default.homeDirectoryForCurrentUser.path,
+          authorizationSnapshot: lease.authorizationSnapshot,
+          ownerIDProvider: ownerIDProvider
         )
-        guard self.isCurrent(lease) else {
-          return ["error": "task thread owner changed"]
+      state.selectTask(activeTaskID)
+      workstreamStates[workstreamId] = state
+      activeTaskState = state
+      errorMessage = nil
+      isPanelOpen = true
+    }
+
+    func registerAutomationActions() {
+      DesktopAutomationActionRegistry.shared.register(
+        name: "task_thread_scenario_13",
+        summary: "Exercise live task-backed thread continuity through the app kernel",
+        params: ["task", "resume"]
+      ) { [weak self] params in
+        guard let self else { return ["error": "task thread coordinator unavailable"] }
+        guard let lease = self.captureOwnerLease() else {
+          return ["error": "task thread owner unavailable"]
         }
-        self.loadScenario13Fixture(activeTaskID: activeTaskID, detail: runtime.detail)
-        TaskThreadScenario13HarnessWindow.show(coordinator: self)
-        let projection = self.activeThreadProjection
-        return [
-          "workstream_id": projection?.workstreamID ?? "",
-          "active_task_id": projection?.activeTaskID ?? "",
-          "kernel_surface": "workstream",
-          "artifact_versions": projection?.artifactVersions.map { "v\($0.version)" }.joined(separator: ",") ?? "",
-          "cited_v2": projection?.artifactVersions.first(where: { $0.version == 2 })?.evidenceRefs?.isEmpty == false ? "true" : "false",
-          "external_send_decision": runtime.externalSendDecision,
-          "runtime_bridge": "live_app_kernel",
-          "kernel_session_id": runtime.kernelSessionID,
-        ]
-      } catch {
-        return ["error": String(describing: error)]
+        let activeTaskID =
+          params["task"] == "second"
+          ? TaskThreadScenario13Fixture.secondTaskID
+          : TaskThreadScenario13Fixture.firstTaskID
+        do {
+          let runtime = try await self.buildScenario13RuntimeProjection(
+            resumeOnly: params["resume"] == "true",
+            authorizationSnapshot: lease.authorizationSnapshot
+          )
+          guard self.isCurrent(lease) else {
+            return ["error": "task thread owner changed"]
+          }
+          self.loadScenario13Fixture(activeTaskID: activeTaskID, detail: runtime.detail)
+          TaskThreadScenario13HarnessWindow.show(coordinator: self)
+          let projection = self.activeThreadProjection
+          return [
+            "workstream_id": projection?.workstreamID ?? "",
+            "active_task_id": projection?.activeTaskID ?? "",
+            "kernel_surface": "workstream",
+            "artifact_versions": projection?.artifactVersions.map { "v\($0.version)" }.joined(separator: ",") ?? "",
+            "cited_v2": projection?.artifactVersions.first(where: { $0.version == 2 })?.evidenceRefs?.isEmpty == false
+              ? "true" : "false",
+            "external_send_decision": runtime.externalSendDecision,
+            "runtime_bridge": "live_app_kernel",
+            "kernel_session_id": runtime.kernelSessionID,
+          ]
+        } catch {
+          return ["error": String(describing: error)]
+        }
       }
     }
-  }
 
-  private func buildScenario13RuntimeProjection(
-    resumeOnly: Bool,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) async throws -> (
-    detail: OmiAPI.WorkstreamDetailProjection,
-    externalSendDecision: String,
-    kernelSessionID: String
-  ) {
-    let control: TaskWorkstreamContinuity.Control = { name, input in
-      try await TaskChatRuntime.debugAutomationControlTool(name: name, input: input)
-    }
-    let versions: [TaskKernelArtifactVersion]
-    if resumeOnly {
-      let resumed = try await TaskWorkstreamContinuity.project(
+    private func buildScenario13RuntimeProjection(
+      resumeOnly: Bool,
+      authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async throws -> (
+      detail: OmiAPI.WorkstreamDetailProjection,
+      externalSendDecision: String,
+      kernelSessionID: String
+    ) {
+      let control: TaskWorkstreamContinuity.Control = { name, input in
+        try await TaskChatRuntime.debugAutomationControlTool(name: name, input: input)
+      }
+      let versions: [TaskKernelArtifactVersion]
+      if resumeOnly {
+        let resumed = try await TaskWorkstreamContinuity.project(
+          workstreamId: TaskThreadScenario13Fixture.workstreamID,
+          authorizationSnapshot: authorizationSnapshot,
+          control: control
+        )
+        guard resumed.agentSessionId != nil, resumed.artifactVersions.count >= 2 else {
+          throw TaskWorkstreamContinuityError.missingRestartProjection
+        }
+        versions = resumed.artifactVersions
+      } else {
+        let base = TaskThreadScenario13Fixture.baseDetail
+        _ = try await TaskWorkstreamContinuity.prepare(
+          workstreamId: TaskThreadScenario13Fixture.workstreamID,
+          taskIds: [TaskThreadScenario13Fixture.firstTaskID, TaskThreadScenario13Fixture.secondTaskID],
+          checkpoints: [],
+          authorizationSnapshot: authorizationSnapshot,
+          control: control
+        )
+        let projection = TaskThreadProjection(
+          detail: base,
+          activeTaskID: TaskThreadScenario13Fixture.secondTaskID
+        )
+        let v1 = try await TaskWorkstreamContinuity.persist(
+          workstream: projection,
+          queryResult: scenario13QueryResult(version: 1),
+          chatMessageId: "scenario-13-chat-v1",
+          authorizationSnapshot: authorizationSnapshot,
+          control: control
+        )
+        let v2 = try await TaskWorkstreamContinuity.persist(
+          workstream: projection,
+          queryResult: scenario13QueryResult(version: 2),
+          chatMessageId: "scenario-13-chat-v2",
+          authorizationSnapshot: authorizationSnapshot,
+          control: control
+        )
+        versions = [v1.artifactVersions.first, v2.artifactVersions.first].compactMap { $0 }
+      }
+      let descriptors = versions.map { version in
+        OmiAPI.ArtifactDescriptor(
+          artifactId: version.artifact.artifactId,
+          contentHash: version.artifact.contentHash ?? "sha256:scenario13-email-v\(version.version)",
+          createdAt: version.version == 1 ? "2026-07-09T11:00:00Z" : "2026-07-09T12:00:00Z",
+          evidenceEventIds: version.version == 1 ? [] : ["event-friday"],
+          evidenceRefs: version.evidenceRefs,
+          kind: version.artifact.kind,
+          logicalKey: version.logicalKey,
+          sourceRunId: nil,
+          status: version.version == 1 ? .superseded : .awaiting_review,
+          supersedesArtifactId: version.supersedesArtifactId,
+          uri: version.artifact.uri,
+          version: version.version,
+          workstreamId: TaskThreadScenario13Fixture.workstreamID
+        )
+      }
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw LocalMutationAuthorizationError.revoked
+      }
+      let policyRaw = try await control(
+        "evaluate_desktop_tool_policy",
+        [
+          "requestedBundles": ["external.write_send"],
+          "selectedBundles": ["external.write_send"],
+          "externalSend": true,
+          "operation": "send_email",
+          "resourceRef": "workstream:\(TaskThreadScenario13Fixture.workstreamID)",
+        ])
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        throw LocalMutationAuthorizationError.revoked
+      }
+      struct PolicyResponse: Decodable {
+        struct Policy: Decodable { let decision: String }
+        let ok: Bool
+        let policy: Policy
+      }
+      let policy = try JSONDecoder().decode(PolicyResponse.self, from: Data(policyRaw.utf8))
+      guard policy.ok else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
+      let kernelProjection = try await TaskWorkstreamContinuity.project(
         workstreamId: TaskThreadScenario13Fixture.workstreamID,
         authorizationSnapshot: authorizationSnapshot,
         control: control
       )
-      guard resumed.agentSessionId != nil, resumed.artifactVersions.count >= 2 else {
+      guard let kernelSessionID = kernelProjection.agentSessionId else {
         throw TaskWorkstreamContinuityError.missingRestartProjection
       }
-      versions = resumed.artifactVersions
-    } else {
-      let base = TaskThreadScenario13Fixture.baseDetail
-      _ = try await TaskWorkstreamContinuity.prepare(
-        workstreamId: TaskThreadScenario13Fixture.workstreamID,
-        taskIds: [TaskThreadScenario13Fixture.firstTaskID, TaskThreadScenario13Fixture.secondTaskID],
-        checkpoints: [],
-        authorizationSnapshot: authorizationSnapshot,
-        control: control
-      )
-      let projection = TaskThreadProjection(
-        detail: base,
-        activeTaskID: TaskThreadScenario13Fixture.secondTaskID
-      )
-      let v1 = try await TaskWorkstreamContinuity.persist(
-        workstream: projection,
-        queryResult: scenario13QueryResult(version: 1),
-        chatMessageId: "scenario-13-chat-v1",
-        authorizationSnapshot: authorizationSnapshot,
-        control: control
-      )
-      let v2 = try await TaskWorkstreamContinuity.persist(
-        workstream: projection,
-        queryResult: scenario13QueryResult(version: 2),
-        chatMessageId: "scenario-13-chat-v2",
-        authorizationSnapshot: authorizationSnapshot,
-        control: control
-      )
-      versions = [v1.artifactVersions.first, v2.artifactVersions.first].compactMap { $0 }
-    }
-    let descriptors = versions.map { version in
-      OmiAPI.ArtifactDescriptor(
-        artifactId: version.artifact.artifactId,
-        contentHash: version.artifact.contentHash ?? "sha256:scenario13-email-v\(version.version)",
-        createdAt: version.version == 1 ? "2026-07-09T11:00:00Z" : "2026-07-09T12:00:00Z",
-        evidenceEventIds: version.version == 1 ? [] : ["event-friday"],
-        evidenceRefs: version.evidenceRefs,
-        kind: version.artifact.kind,
-        logicalKey: version.logicalKey,
-        sourceRunId: nil,
-        status: version.version == 1 ? .superseded : .awaiting_review,
-        supersedesArtifactId: version.supersedesArtifactId,
-        uri: version.artifact.uri,
-        version: version.version,
-        workstreamId: TaskThreadScenario13Fixture.workstreamID
+      return (
+        TaskThreadScenario13Fixture.detail(artifacts: descriptors),
+        policy.policy.decision,
+        kernelSessionID
       )
     }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
-      throw LocalMutationAuthorizationError.revoked
-    }
-    let policyRaw = try await control("evaluate_desktop_tool_policy", [
-      "requestedBundles": ["external.write_send"],
-      "selectedBundles": ["external.write_send"],
-      "externalSend": true,
-      "operation": "send_email",
-      "resourceRef": "workstream:\(TaskThreadScenario13Fixture.workstreamID)",
-    ])
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
-      throw LocalMutationAuthorizationError.revoked
-    }
-    struct PolicyResponse: Decodable {
-      struct Policy: Decodable { let decision: String }
-      let ok: Bool
-      let policy: Policy
-    }
-    let policy = try JSONDecoder().decode(PolicyResponse.self, from: Data(policyRaw.utf8))
-    guard policy.ok else { throw TaskWorkstreamContinuityError.invalidRuntimeResponse }
-    let kernelProjection = try await TaskWorkstreamContinuity.project(
-      workstreamId: TaskThreadScenario13Fixture.workstreamID,
-      authorizationSnapshot: authorizationSnapshot,
-      control: control
-    )
-    guard let kernelSessionID = kernelProjection.agentSessionId else {
-      throw TaskWorkstreamContinuityError.missingRestartProjection
-    }
-    return (
-      TaskThreadScenario13Fixture.detail(artifacts: descriptors),
-      policy.policy.decision,
-      kernelSessionID
-    )
-  }
 
-  private func scenario13QueryResult(version: Int) -> AgentBridge.QueryResult {
-    let artifact = AgentArtifactProjection(
-      artifactId: "scenario-13-source-v\(version)",
-      sessionId: "scenario-13-source-session",
-      runId: nil,
-      attemptId: nil,
-      kind: "email_draft",
-      role: "result",
-      uri: "file:///tmp/omi-scenario-13-email-v\(version).md",
-      displayName: "launch-email",
-      mimeType: "text/markdown",
-      contentHash: "sha256:scenario13-email-v\(version)",
-      sizeBytes: nil,
-      lifecycleState: "retained",
-      lifecycleUpdatedAtMs: nil,
-      metadataRows: ["logicalKey: launch-email"],
-      createdAtMs: nil
-    )
-    return AgentBridge.QueryResult.debugFixture(
-      text: "Scenario artifact v\(version)",
-      runId: "scenario-13-run-v\(version)",
-      attemptId: "scenario-13-attempt-v\(version)",
-      artifacts: [artifact]
-    )
-  }
-#endif
+    private func scenario13QueryResult(version: Int) -> AgentBridge.QueryResult {
+      let artifact = AgentArtifactProjection(
+        artifactId: "scenario-13-source-v\(version)",
+        sessionId: "scenario-13-source-session",
+        runId: nil,
+        attemptId: nil,
+        kind: "email_draft",
+        role: "result",
+        uri: "file:///tmp/omi-scenario-13-email-v\(version).md",
+        displayName: "launch-email",
+        mimeType: "text/markdown",
+        contentHash: "sha256:scenario13-email-v\(version)",
+        sizeBytes: nil,
+        lifecycleState: "retained",
+        lifecycleUpdatedAtMs: nil,
+        metadataRows: ["logicalKey: launch-email"],
+        createdAtMs: nil
+      )
+      return AgentBridge.QueryResult.debugFixture(
+        text: "Scenario artifact v\(version)",
+        runId: "scenario-13-run-v\(version)",
+        attemptId: "scenario-13-attempt-v\(version)",
+        artifacts: [artifact]
+      )
+    }
+  #endif
 
   private func register(detail: OmiAPI.WorkstreamDetailProjection) {
     let workstreamId = detail.workstream.workstreamId
@@ -814,7 +825,8 @@ final class TaskChatCoordinator: ObservableObject {
   ) async {
     guard isCurrent(lease) else { return }
     guard let detail = detailByWorkstream[workstreamId] else { return }
-    let selectedTaskId = activeWorkstreamId == workstreamId
+    let selectedTaskId =
+      activeWorkstreamId == workstreamId
       ? activeTaskId ?? detail.tasks.first?.id ?? ""
       : detail.tasks.first?.id ?? ""
     let projection = TaskThreadProjection(detail: detail, activeTaskID: selectedTaskId)
@@ -1027,41 +1039,41 @@ final class TaskChatCoordinator: ObservableObject {
 /// Non-production visual harness for scenario 13. Registration is gated by
 /// DesktopAutomationLaunchOptions, so production builds have no path to show it.
 #if DEBUG
-@MainActor
-private enum TaskThreadScenario13HarnessWindow {
-  private static var window: NSWindow?
+  @MainActor
+  private enum TaskThreadScenario13HarnessWindow {
+    private static var window: NSWindow?
 
-  static func show(coordinator: TaskChatCoordinator) {
-    guard let taskState = coordinator.activeTaskState else { return }
-    let panel = TaskChatPanel(
-      taskState: taskState,
-      coordinator: coordinator,
-      task: nil,
-      onClose: {
-        coordinator.closeChat()
-        window?.close()
+    static func show(coordinator: TaskChatCoordinator) {
+      guard let taskState = coordinator.activeTaskState else { return }
+      let panel = TaskChatPanel(
+        taskState: taskState,
+        coordinator: coordinator,
+        task: nil,
+        onClose: {
+          coordinator.closeChat()
+          window?.close()
+        }
+      )
+      let hostingView = NSHostingView(rootView: panel)
+      if let existing = window {
+        existing.close()
+        window = nil
       }
-    )
-    let hostingView = NSHostingView(rootView: panel)
-    if let existing = window {
-      existing.close()
-      window = nil
+      let created = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 440, height: 760),
+        styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+        backing: .buffered,
+        defer: false
+      )
+      created.title = "Omi — Task thread scenario"
+      created.isReleasedWhenClosed = false
+      created.contentView = hostingView
+      created.center()
+      created.makeKeyAndOrderFront(nil)
+      window = created
+      NSApp.activate(ignoringOtherApps: true)
     }
-    let created = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 440, height: 760),
-      styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
-      backing: .buffered,
-      defer: false
-    )
-    created.title = "Omi — Task thread scenario"
-    created.isReleasedWhenClosed = false
-    created.contentView = hostingView
-    created.center()
-    created.makeKeyAndOrderFront(nil)
-    window = created
-    NSApp.activate(ignoringOtherApps: true)
   }
-}
 #endif
 
 enum TaskThreadError: LocalizedError {

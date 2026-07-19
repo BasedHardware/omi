@@ -501,6 +501,7 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 | `flows/refer-external.yaml` | Profile menu → affiliate URL | 3/3 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/Jz8ymviOy1.html) |
 | `flows/screen-recording-permission.yaml` | RewindPage, ScreenCaptureService, PermissionsPage | 7/7 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/3WoXUG6xkT.html) |
 | `flows/audio-recording.yaml` | ConversationsPage, AudioCaptureService, AppState | 7/7 PASS | [report](https://flow-walker.beastoin.workers.dev/runs/UdkzB-dYG_.html) |
+| `flows/recording-finalization.yaml` | AppState, TranscriptionStorage, ConversationDetailView | 7 steps | - |
 
 When you modify a Swift file, check if any flow's `covers:` includes it. That flow describes the user journey your change affects.
 

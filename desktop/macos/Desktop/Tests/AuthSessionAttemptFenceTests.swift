@@ -1,5 +1,5 @@
-import XCTest
 import OmiSupport
+import XCTest
 
 @testable import Omi_Computer
 
@@ -74,7 +74,6 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
   private var createdOwnerIDs: [String] = []
 
   override func setUp() async throws {
-    try await super.setUp()
     originalPhase = AuthState.shared.sessionPhase
     clearAuthDefaults()
     auth = AuthService()
@@ -101,7 +100,6 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     }
     createdOwnerIDs = []
     AuthState.shared.transition(to: originalPhase)
-    try await super.tearDown()
   }
 
   func testNewSignInTokensSurviveSupersededSignOutWaitingOnOwnerTransition() async throws {

@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -11,19 +12,55 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
   private func evidence(
     id: String = "evidence-1",
     app: String? = "Codex",
-    bytes: Int = 900_000
+    bytes: Int = 900_000,
+    target: RealtimeScreenEvidenceTarget = .frontmostDisplay,
+    captureFailure: RealtimeScreenEvidenceCaptureFailure? = nil
   ) -> RealtimeScreenEvidenceDescriptor {
     RealtimeScreenEvidenceDescriptor(
       evidenceID: id,
       turnID: turnID,
       capturedAt: Date(timeIntervalSince1970: 1_000),
-      target: .frontmostDisplay,
+      target: target,
       frontmostApp: app,
       frontmostBundleID: "com.openai.codex",
       windowID: 7,
       displayID: 3,
       imageByteCount: bytes,
-      imageDigest: bytes > 0 ? "digest" : nil)
+      imageDigest: bytes > 0 ? "digest" : nil,
+      captureFailure: captureFailure)
+  }
+
+  func testScreenRecordingDenialIsNotTreatedAsAVisualObservation() {
+    let denied = evidence(
+      bytes: 0,
+      target: .unavailable,
+      captureFailure: .screenRecordingPermissionRequired)
+
+    XCTAssertFalse(denied.canVerifyCurrentScreen)
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.failureText(for: denied),
+      "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request."
+    )
+  }
+
+  func testScreenRecordingDenialContinuesThroughTheNormalVoiceProvider() {
+    let denied = evidence(
+      bytes: 0,
+      target: .unavailable,
+      captureFailure: .screenRecordingPermissionRequired)
+    let unavailable = evidence(
+      bytes: 0,
+      target: .unavailable,
+      captureFailure: .captureUnavailable)
+
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.failureDisposition(for: denied),
+      .providerContinuation
+    )
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.failureDisposition(for: unavailable),
+      .authoritativeLocalResult
+    )
   }
 
   private func request(
@@ -205,17 +242,18 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         enqueuedTurnEpoch: 7,
         callID: "different-screenshot-call"),
       .notAdmitted)
-    guard case .accepted(let receipt) =
-      RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
-        state: state,
-        attachment: attachment,
-        sourceObjectID: sessionObjectID,
-        activeTurnID: turnID,
-        activeResponseID: responseID,
-        currentTurnEpoch: 7,
-        enqueuedTurnEpoch: 7,
-        callID: "screenshot-1",
-        now: Date(timeIntervalSince1970: 1_004.999))
+    guard
+      case .accepted(let receipt) =
+        RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+          state: state,
+          attachment: attachment,
+          sourceObjectID: sessionObjectID,
+          activeTurnID: turnID,
+          activeResponseID: responseID,
+          currentTurnEpoch: 7,
+          enqueuedTurnEpoch: 7,
+          callID: "screenshot-1",
+          now: Date(timeIntervalSince1970: 1_004.999))
     else {
       return XCTFail("Expected the matching transport enqueue to mint a receipt")
     }
@@ -285,11 +323,11 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
       state: .awaitingReport(receipt(descriptor: descriptor)),
       observation: "You are in Cursor.",
-        sourceObjectID: sessionObjectID,
-        activeTurnID: turnID,
-        activeResponseID: responseID,
-        currentTurnEpoch: 7,
-        now: freshNow)
+      sourceObjectID: sessionObjectID,
+      activeTurnID: turnID,
+      activeResponseID: responseID,
+      currentTurnEpoch: 7,
+      now: freshNow)
     XCTAssertEqual(decision, .contradictoryApplication)
   }
 

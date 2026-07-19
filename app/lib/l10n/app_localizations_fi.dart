@@ -8988,7 +8988,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get billingYearly => 'Vuosittain';
 
   @override
-  String get savePercent => 'Säästä ~17%';
+  String savePercent(int percent) {
+    return 'Säästä ~$percent%';
+  }
 
   @override
   String get popular => 'Suosittu';
@@ -9599,4 +9601,8 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Ei yhteyttä – tallennetaan paikallisesti. Litterointi tehdään, kun olet taas verkossa.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Tietosi on oletuksena suojattu vahvalla salauksella, ja sinä hallitset, miten niitä säilytetään ja käytetään.';
 }

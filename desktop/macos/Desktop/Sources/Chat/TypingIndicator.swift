@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OmiThinkingMark: View {
   @State private var angle: Double = 0

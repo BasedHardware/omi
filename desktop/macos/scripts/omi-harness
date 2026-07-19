@@ -115,12 +115,19 @@ def automation_port_from_base_url(base_url: str) -> int:
     return int(base_url.rsplit(":", 1)[1])
 
 
-def request_json(base_url: str, method: str, route: str, body: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]:
+def request_json(
+    base_url: str,
+    method: str,
+    route: str,
+    body: dict[str, typing.Any] | None = None,
+    authenticate: bool = True,
+) -> dict[str, typing.Any]:
     data = None
     headers = {"Accept": "application/json"}
-    token = automation_token(automation_port_from_base_url(base_url))
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    if authenticate:
+        token = automation_token(automation_port_from_base_url(base_url))
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -155,7 +162,7 @@ def log_path_from_health(health: dict[str, typing.Any], explicit_log: str | None
 
 
 def resolve_log_path(base_url: str, explicit_log: str | None = None) -> Path:
-    health = request_json(base_url, "GET", "/health")
+    health = request_json(base_url, "GET", "/health", authenticate=False)
     if not health.get("ok"):
         raise RuntimeError(f"unable to resolve bundle log path: {health.get('error', health)}")
     return log_path_from_health(health, explicit_log)

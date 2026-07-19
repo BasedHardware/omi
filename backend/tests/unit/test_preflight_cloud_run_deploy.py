@@ -71,6 +71,7 @@ def test_runtime_binding_check_accepts_manifest_literal_and_secret_bindings_read
         '''\
 environments:
   dev:
+    gcp_project: based-hardware-dev
     cloud_run:
       services:
         backend:
@@ -141,6 +142,7 @@ def test_runtime_binding_check_reports_manifest_declared_secret_missing_from_liv
         '''\
 environments:
   dev:
+    gcp_project: based-hardware-dev
     cloud_run:
       services:
         backend:
@@ -174,6 +176,7 @@ def test_runtime_binding_check_rejects_multi_container_live_service_shape(tmp_pa
         '''\
 environments:
   dev:
+    gcp_project: based-hardware-dev
     cloud_run:
       services:
         backend:
@@ -214,6 +217,7 @@ def test_runtime_binding_check_propagates_gcloud_describe_failure(tmp_path: Path
         '''\
 environments:
   dev:
+    gcp_project: based-hardware-dev
     cloud_run:
       services:
         backend:
@@ -246,6 +250,7 @@ def test_remove_secret_then_pre_candidate_check_accepts_absent_public_binding(tm
         '''\
 environments:
   dev:
+    gcp_project: based-hardware-dev
     cloud_run:
       services:
         backend:
@@ -326,6 +331,7 @@ def test_runtime_binding_check_ignores_undeclared_live_bindings(tmp_path: Path) 
         '''\
 environments:
   dev:
+    gcp_project: based-hardware-dev
     cloud_run:
       services:
         backend:
@@ -394,6 +400,7 @@ def test_runtime_binding_check_reports_declared_type_mismatches_only(tmp_path: P
         '''\
 environments:
   dev:
+    gcp_project: based-hardware-dev
     cloud_run:
       services:
         backend:

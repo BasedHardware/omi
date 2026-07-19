@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -18,9 +17,15 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
+from config.stt_provider_policy import STTServingSurface, canonical_model_config  # noqa: E402
 from scripts.firestore_workflow_policy import (  # noqa: E402
     has_direct_firestore_mutation,
     reconciliation_invocations,
+)
+from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
+    ValidationError,
+    validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
+    validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
@@ -46,16 +51,6 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
-_ACCOUNT_DELETION_PROD_CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
-_ACCOUNT_DELETION_LITERAL_ENV = {
-    'ACCOUNT_DELETION_DISPATCH_MODE': 'cloud_tasks',
-    'ACCOUNT_DELETION_TASKS_QUEUE': 'account-deletion',
-    'SYNC_TASKS_PROJECT': 'based-hardware',
-    'SYNC_TASKS_LOCATION': 'us-central1',
-}
-_ACCOUNT_DELETION_DYNAMIC_ENV = frozenset(
-    {'ACCOUNT_DELETION_HANDLER_URL', 'SYNC_TASKS_INVOKER_SA', 'SYNC_TASKS_HANDLER_URL'}
-)
 _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
     '--task-timeout': '3600s',
     '--cpu': '2',
@@ -69,12 +64,6 @@ def _as_config_dict(value: object) -> ConfigDict | None:
 
 def _as_config_list(value: object) -> list[Any] | None:
     return cast(list[Any], value) if isinstance(value, list) else None
-
-
-@dataclass(frozen=True)
-class ValidationError:
-    scope: str
-    message: str
 
 
 def main() -> int:
@@ -144,9 +133,11 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     errors.extend(_validate_account_deletion_dispatch_contract(env, env_config))
+    errors.extend(_validate_listen_finalization_dispatch_contract(env, env_config))
     if check_workflows:
         errors.extend(
             _validate_cloud_run_workflows(
@@ -212,7 +203,41 @@ def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
                 }
             )
         services[str(service_name)] = {'env': env_entries, 'flags': dict(network_flags)}
-    return {'services': services}
+    jobs: ConfigDict = {}
+    job_configs = _as_config_dict(cloud_run.get('jobs')) or {}
+    for job_name, raw_job_config in job_configs.items():
+        job_config = _as_config_dict(raw_job_config) or {}
+        env_entries = []
+        for env_name, raw_entry in (job_config.get('env') or {}).items():
+            entry = _as_config_dict(raw_entry)
+            if entry is None:
+                continue
+            if 'value' in entry:
+                env_entries.append({'name': str(env_name), 'value': str(entry['value'])})
+            elif 'env_var' in entry:
+                env_entries.append(
+                    {
+                        'name': str(env_name),
+                        'value': str(entry.get('default', f'__rendered_{env_name}__')),
+                    }
+                )
+        for secret_name, raw_entry in (job_config.get('secrets') or {}).items():
+            entry = _as_config_dict(raw_entry)
+            if entry is None or 'secret' not in entry:
+                continue
+            env_entries.append(
+                {
+                    'name': str(secret_name),
+                    'valueFrom': {
+                        'secretKeyRef': {
+                            'name': str(entry['secret']),
+                            'key': str(entry.get('version', 'latest')),
+                        }
+                    },
+                }
+            )
+        jobs[str(job_name)] = {'env': env_entries, 'flags': dict(job_config.get('flags') or {})}
+    return {'services': services, 'jobs': jobs}
 
 
 def _rendered_network_flags(env_config: ConfigDict) -> StringMap:
@@ -346,6 +371,45 @@ def _manifest_env_binding_is_configured(env_map: ConfigDict, secrets_map: Config
             return True
     secret_entry = _as_config_dict(secrets_map.get(key))
     return secret_entry is not None and bool(str(secret_entry.get('secret', '')).strip())
+
+
+def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require deployable model values to match the code-owned serving policy."""
+    errors: list[ValidationError] = []
+    model_policy = {
+        'STT_PRERECORDED_MODEL': canonical_model_config(STTServingSurface.PRERECORDED),
+        'STT_SERVICE_MODELS': canonical_model_config(STTServingSurface.STREAMING),
+    }
+    surfaces: list[tuple[str, ConfigDict]] = []
+
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    for service, raw_service in gke.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append((f'{env}/gke/{service}', _as_config_dict(service_config.get('env')) or {}))
+
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
+    for service, raw_service in cloud_run_services.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append((f'{env}/cloud_run/{service}', _as_config_dict(service_config.get('env')) or {}))
+
+    for scope, env_map in surfaces:
+        for env_name, expected_value in model_policy.items():
+            if env_name not in env_map:
+                continue
+            actual_value = _manifest_literal_env_value(env_map, env_name)
+            if actual_value is None:
+                errors.append(
+                    ValidationError(scope, f'{env_name} must be a literal value owned by stt_provider_policy')
+                )
+            elif actual_value != expected_value:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'{env_name} must match stt_provider_policy: expected {expected_value!r}, got {actual_value!r}',
+                    )
+                )
+    return errors
 
 
 def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
@@ -625,70 +689,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     return errors
 
 
-def _validate_account_deletion_dispatch_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Keep every production API host out of the inline deletion execution path."""
-    if env != 'prod':
-        return []
-
-    errors: list[ValidationError] = []
-    gke = _as_config_dict(env_config.get('gke')) or {}
-    backend_listen = _as_config_dict(gke.get('backend-listen')) or {}
-    _validate_account_deletion_env_entries(
-        errors,
-        scope='prod/gke/backend-listen',
-        env_entries=_as_config_dict(backend_listen.get('env')) or {},
-        dynamic_binding='config_map',
-    )
-
-    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
-    services = _as_config_dict(cloud_run.get('services')) or {}
-    for service in _ACCOUNT_DELETION_PROD_CLOUD_RUN_SERVICES:
-        service_config = _as_config_dict(services.get(service)) or {}
-        _validate_account_deletion_env_entries(
-            errors,
-            scope=f'prod/cloud_run/{service}',
-            env_entries=_as_config_dict(service_config.get('env')) or {},
-            dynamic_binding='env_var',
-        )
-    return errors
-
-
-def _validate_account_deletion_env_entries(
-    errors: list[ValidationError],
-    *,
-    scope: str,
-    env_entries: ConfigDict,
-    dynamic_binding: str,
-) -> None:
-    for name, expected_value in _ACCOUNT_DELETION_LITERAL_ENV.items():
-        entry = _as_config_dict(env_entries.get(name))
-        if entry is None:
-            errors.append(ValidationError(scope, f'missing required account-deletion env {name}'))
-        elif entry.get('value') != expected_value:
-            errors.append(
-                ValidationError(
-                    scope,
-                    f'account-deletion env {name} must be literal {expected_value!r}',
-                )
-            )
-
-    for name in _ACCOUNT_DELETION_DYNAMIC_ENV:
-        entry = _as_config_dict(env_entries.get(name))
-        if entry is None:
-            errors.append(ValidationError(scope, f'missing required account-deletion env {name}'))
-        elif dynamic_binding == 'env_var' and entry.get('env_var') != name:
-            errors.append(ValidationError(scope, f'account-deletion env {name} must bind ${name}'))
-        elif dynamic_binding == 'config_map':
-            config_map = _as_config_dict(entry.get('config_map')) or {}
-            if config_map.get('name') != 'prod-omi-backend-config' or config_map.get('key') != name:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'account-deletion env {name} must bind prod-omi-backend-config/{name}',
-                    )
-                )
-
-
 def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[ValidationError]:
     errors: list[ValidationError] = []
     gke_config = _as_config_dict(env_config.get('gke')) or {}
@@ -743,6 +743,13 @@ def _validate_cloud_run(
             )
         )
         errors.extend(
+            _validate_forbidden_env_entries(
+                scope=f'cloud_run/{service}',
+                forbidden=service_config.get('forbidden_env'),
+                actual=actual_env,
+            )
+        )
+        errors.extend(
             _validate_cloud_run_secret_entries(
                 scope=f'cloud_run/{service}',
                 expected=service_config.get('secrets', {}),
@@ -757,6 +764,38 @@ def _validate_cloud_run(
                 strict_provisional=strict_provisional,
             )
         )
+    state_jobs = _as_config_dict(cloud_run_state.get('jobs'))
+    if state_jobs is not None:
+        job_configs = _as_config_dict(cloud_run.get('jobs')) or {}
+        for job, raw_job_config in job_configs.items():
+            job_config = _as_config_dict(raw_job_config) or {}
+            job_state = _as_config_dict(state_jobs.get(job))
+            if job_state is None:
+                errors.append(ValidationError(f'cloud_run/{job}', 'missing job state'))
+                continue
+            actual_env = _env_entries_by_name(job_state.get('env', []))
+            errors.extend(
+                _validate_env_entries(
+                    scope=f'cloud_run/{job}',
+                    expected=job_config.get('env', {}),
+                    actual=actual_env,
+                    strict_provisional=strict_provisional,
+                )
+            )
+            errors.extend(
+                _validate_forbidden_env_entries(
+                    scope=f'cloud_run/{job}',
+                    forbidden=job_config.get('forbidden_env'),
+                    actual=actual_env,
+                )
+            )
+            errors.extend(
+                _validate_cloud_run_secret_entries(
+                    scope=f'cloud_run/{job}',
+                    expected=job_config.get('secrets', {}),
+                    actual=actual_env,
+                )
+            )
     return errors
 
 
@@ -806,6 +845,21 @@ def _validate_cloud_run_workflows(
                 strict_provisional=strict_provisional,
             )
         )
+        errors.extend(
+            _validate_forbidden_env_entries(
+                scope=f'cloud_run_workflow/{service}',
+                forbidden=service_config.get('forbidden_env'),
+                actual=actual_env,
+            )
+        )
+        service_flags = _substitute_values(service_state.get('flags', {}), variables=workflow_vars)
+        errors.extend(
+            _validate_forbidden_workflow_removals(
+                scope=f'cloud_run_workflow/{service}',
+                forbidden=service_config.get('forbidden_env'),
+                flags=service_flags,
+            )
+        )
         actual_secrets = _workflow_secret_entries_by_name(service_state.get('secrets', {}))
         errors.extend(
             _validate_cloud_run_secret_entries(
@@ -835,6 +889,21 @@ def _validate_cloud_run_workflows(
                 expected=job_config.get('env', {}),
                 actual=actual_env,
                 strict_provisional=strict_provisional,
+            )
+        )
+        errors.extend(
+            _validate_forbidden_env_entries(
+                scope=f'cloud_run_workflow/{job}',
+                forbidden=job_config.get('forbidden_env'),
+                actual=actual_env,
+            )
+        )
+        job_flags = _substitute_values(job_state.get('flags', {}), variables=workflow_vars)
+        errors.extend(
+            _validate_forbidden_workflow_removals(
+                scope=f'cloud_run_workflow/{job}',
+                forbidden=job_config.get('forbidden_env'),
+                flags=job_flags,
             )
         )
         actual_secrets = _workflow_secret_entries_by_name(job_state.get('secrets', {}))
@@ -878,45 +947,66 @@ def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow
     expected_path = (
         '${{ runner.temp }}/firestore-schema-proposal-' '${{ github.run_id }}-${{ github.run_attempt }}.json'
     )
+    is_manual_deploy = Path(workflow_file).name == 'gcp_backend.yml'
     permissions = _as_config_dict(readiness_job.get('permissions')) or {}
-    if permissions != {'contents': 'read'}:
-        errors.append(ValidationError(scope, 'Firestore readiness job permissions must be contents: read only'))
+    expected_permissions = {'actions': 'read', 'contents': 'read'} if is_manual_deploy else {'contents': 'read'}
+    if permissions != expected_permissions:
+        errors.append(
+            ValidationError(scope, 'Firestore readiness job permissions must be limited to its release-proof boundary')
+        )
 
     steps = _as_config_list(readiness_job.get('steps')) or []
     parsed_steps = [_as_config_dict(step) or {} for step in steps]
     serialized_readiness_job = json.dumps(readiness_job, sort_keys=True)
     if 'secrets.GCP_CREDENTIALS' in serialized_readiness_job:
         errors.append(ValidationError(scope, 'Firestore readiness must not receive backend deployment credentials'))
-    auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v2']
+    auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v3']
     if len(auth_steps) != 1 or (_as_config_dict(auth_steps[0].get('with')) or {}).get('credentials_json') != (
         '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
     ):
         errors.append(ValidationError(scope, 'Firestore readiness must use the dedicated read-only credentials'))
-    expected_readiness_ref = 'main' if Path(workflow_file).name == 'gcp_backend.yml' else '${{ github.sha }}'
-    checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v4']
-    if len(checkout_steps) != 1 or (_as_config_dict(checkout_steps[0].get('with')) or {}).get('ref') != (
-        expected_readiness_ref
-    ):
-        errors.append(ValidationError(scope, 'Firestore readiness must check out only the approved source commit'))
-    deploy_steps = [_as_config_dict(step) or {} for step in (_as_config_list(deploy_job.get('steps')) or [])]
-    deploy_checkout = [step for step in deploy_steps if step.get('uses') == 'actions/checkout@v4']
-    expected_deploy_ref = (
-        '${{ needs.firestore_readiness.outputs.candidate_sha }}'
-        if Path(workflow_file).name == 'gcp_backend.yml'
-        else '${{ github.sha }}'
+    checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v7']
+    admitted_readiness_ref = '${{ steps.admitted_source.outputs.admitted_sha }}'
+    admission_checkout_name = (
+        'Checkout current main for source admission'
+        if is_manual_deploy
+        else 'Checkout current main for automatic source admission'
     )
-    if len(deploy_checkout) != 1 or (_as_config_dict(deploy_checkout[0].get('with')) or {}).get('ref') != (
-        expected_deploy_ref
+    admission_error = (
+        f"{'manual' if is_manual_deploy else 'automatic'} Firestore readiness must check out "
+        f"{'main' if is_manual_deploy else 'current main'} then the admitted SHA"
+    )
+    admission_checkout = next((step for step in checkout_steps if step.get('name') == admission_checkout_name), None)
+    admitted_checkout = next(
+        (step for step in checkout_steps if step.get('name') == 'Checkout admitted Firestore source'), None
+    )
+    admission_with = _as_config_dict((admission_checkout or {}).get('with')) or {}
+    admitted_with = _as_config_dict((admitted_checkout or {}).get('with')) or {}
+    if (
+        len(checkout_steps) != 2
+        or admission_with.get('ref') != 'main'
+        or admission_with.get('fetch-depth') != 0
+        or admitted_with.get('ref') != admitted_readiness_ref
+    ):
+        errors.append(ValidationError(scope, admission_error))
+    deploy_steps = [_as_config_dict(step) or {} for step in (_as_config_list(deploy_job.get('steps')) or [])]
+    deploy_checkout = [step for step in deploy_steps if step.get('uses') == 'actions/checkout@v7']
+    if (
+        len(deploy_checkout) != 1
+        or (_as_config_dict(deploy_checkout[0].get('with')) or {}).get('ref')
+        != '${{ needs.firestore_readiness.outputs.admitted_sha }}'
     ):
         errors.append(
             ValidationError(scope, 'backend deploy checkout must remain bound to the readiness-approved commit')
         )
-    if Path(workflow_file).name == 'gcp_backend.yml':
-        outputs = _as_config_dict(readiness_job.get('outputs')) or {}
-        if outputs.get('candidate_sha') != '${{ steps.approved_source.outputs.candidate_sha }}':
-            errors.append(
-                ValidationError(scope, 'manual deploy must export the exact readiness-approved candidate SHA')
-            )
+    outputs = _as_config_dict(readiness_job.get('outputs')) or {}
+    if outputs.get('admitted_sha') != admitted_readiness_ref:
+        message = (
+            'manual deploy must export the exact release-proof-admitted SHA'
+            if is_manual_deploy
+            else 'automatic Firestore readiness must export the exact release-proof-admitted SHA'
+        )
+        errors.append(ValidationError(scope, message))
 
     readiness_steps: list[tuple[int, ConfigDict, Any]] = []
     validation_steps: list[tuple[int, ConfigDict, Any]] = []
@@ -959,7 +1049,7 @@ def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow
         errors.append(ValidationError(scope, 'proposal validation must bind the failed gate path, target, and outcome'))
 
     upload_steps = [
-        (index, step) for index, step in enumerate(parsed_steps) if step.get('uses') == 'actions/upload-artifact@v4'
+        (index, step) for index, step in enumerate(parsed_steps) if step.get('uses') == 'actions/upload-artifact@v7'
     ]
     expected_upload_if = (
         "${{ failure() && steps.firestore_readiness.outcome == 'failure' "
@@ -1137,6 +1227,41 @@ def _validate_env_entries(
             if actual_secret != expected_secret:
                 errors.append(ValidationError(scope, f'env {name} secret mismatch: expected {expected_secret!r}'))
     return errors
+
+
+def _validate_forbidden_env_entries(
+    *,
+    scope: str,
+    forbidden: object,
+    actual: EnvEntryMap,
+) -> list[ValidationError]:
+    if forbidden is None:
+        return []
+    forbidden_names = _as_config_list(forbidden)
+    if forbidden_names is None or any(not isinstance(name, str) or not name for name in forbidden_names):
+        return [ValidationError(scope, 'forbidden_env must be a list of non-empty env names')]
+    return [
+        ValidationError(scope, f'forbidden env {name} is present')
+        for name in sorted(set(forbidden_names).intersection(actual))
+    ]
+
+
+def _validate_forbidden_workflow_removals(
+    *,
+    scope: str,
+    forbidden: object,
+    flags: StringMap,
+) -> list[ValidationError]:
+    if forbidden is None:
+        return []
+    forbidden_names = _as_config_list(forbidden)
+    if forbidden_names is None or any(not isinstance(name, str) or not name for name in forbidden_names):
+        return []
+    removed = {name.strip() for name in flags.get('--remove-env-vars', '').split(',') if name.strip()}
+    return [
+        ValidationError(scope, f'forbidden env {name} must be listed in --remove-env-vars')
+        for name in sorted(set(forbidden_names).difference(removed))
+    ]
 
 
 def _validate_cloud_run_secret_entries(
@@ -1631,6 +1756,12 @@ def _cloud_run_secret_ref(entry: EnvEntry) -> StringMap | None:
 
 
 def _fetch_live_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
+    # This deploy pipeline (gcp_backend.yml) deploys Cloud Run *services* only — the declared
+    # Cloud Run jobs (memory-maintenance-job, notifications-job) ship via their own workflows,
+    # so their live state is owned elsewhere. Fetch and live-validate services only; validating
+    # a job this pipeline does not deploy produced false failures (a not-found job crashed the
+    # whole deploy, and notifications-job's separately-managed env legitimately differs). The
+    # job contract is still validated statically against the rendered state.
     services: ConfigDict = {}
     project = env_config['gcp_project']
     region = env_config['region']

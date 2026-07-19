@@ -11,7 +11,6 @@ final class TasksViewModelCompletedToggleTests: XCTestCase {
 
   override func tearDown() async throws {
     TasksStore.shared.resetSessionState()
-    try await super.tearDown()
   }
 
   func testToggleFlipsBetweenTodoAndDoneViews() {
@@ -57,6 +56,19 @@ final class TasksViewModelCompletedToggleTests: XCTestCase {
 
     XCTAssertTrue(vm.showCompleted)
     XCTAssertEqual(vm.displayTasks.map(\.id), ["done-1"])
+  }
+
+  func testTodoPresentationDoesNotUseDoneRowsAsItsLoadingState() {
+    let store = TasksStore.shared
+    store.resetSessionState()
+    store.completedTasks = [task(id: "done-1", completed: true)]
+    store.isLoadingIncomplete = true
+
+    let vm = TasksViewModel()
+
+    XCTAssertTrue(vm.activeTasks.isEmpty)
+    XCTAssertTrue(vm.isActiveViewLoading)
+    XCTAssertFalse(vm.hasLoadedActiveView)
   }
 
   private func task(id: String, completed: Bool) -> TaskActionItem {

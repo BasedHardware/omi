@@ -1468,7 +1468,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get payYourSttProvider => 'Omi मुक्तपणे वापरा. आपण केवळ आपल्या STT प्रदाता ला थेट भुगतान करा.';
 
   @override
-  String get freeMinutesMonth => '600 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ';
+  String get freeMinutesMonth => '300 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ';
 
   @override
   String get omiUnlimited => 'Omi अमर्यादित';
@@ -6008,7 +6008,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.';
+      '300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.';
 
   @override
   String get viewUsage => 'वापर पहा';
@@ -6090,7 +6090,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ';
+      '300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8999,7 +8999,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get billingYearly => 'वार्षिक';
 
   @override
-  String get savePercent => '~17% बचत करा';
+  String savePercent(int percent) {
+    return '~$percent% बचत करा';
+  }
 
   @override
   String get popular => 'लोकप्रिय';
@@ -9607,4 +9609,8 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'कनेक्शन नाही — स्थानिकरित्या रेकॉर्ड होत आहे. तुम्ही पुन्हा ऑनलाइन झाल्यावर याचे ट्रान्सक्रिप्शन केले जाईल.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'तुमचा डेटा डीफॉल्टनुसार मजबूत एन्क्रिप्शनने सुरक्षित आहे आणि तो कसा साठवला व वापरला जातो यावर तुमचे नियंत्रण असते.';
 }

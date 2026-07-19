@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 /// Settings page that wraps SettingsView with proper dark theme styling for the main window
 struct SettingsPage: View {
@@ -126,6 +126,7 @@ struct SettingsContentView: View {
 
   // Master monitoring state (screen analysis)
   @State var isMonitoring: Bool
+  @State var screenCaptureHealth: ScreenCaptureHealth
   @State var isToggling: Bool = false
   @State var permissionError: String?
 
@@ -307,8 +308,7 @@ struct SettingsContentView: View {
   @State var aiChatProjectClaudeMdPath: String?
   @State var aiChatDiscoveredSkills: [(name: String, description: String, path: String)] =
     []
-  @State var aiChatProjectDiscoveredSkills:
-    [(name: String, description: String, path: String)] = []
+  @State var aiChatProjectDiscoveredSkills: [(name: String, description: String, path: String)] = []
   @State var aiChatDisabledSkills: Set<String> = []
   @State var showFileViewer = false
   @State var fileViewerContent = ""
@@ -469,6 +469,7 @@ struct SettingsContentView: View {
     self.chatProvider = chatProvider
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
+    _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
     _isTranscribing = State(initialValue: appState.isTranscribing)
     _focusEnabled = State(initialValue: FocusAssistantSettings.shared.isEnabled)
     _cooldownInterval = State(initialValue: FocusAssistantSettings.shared.cooldownInterval)
@@ -583,12 +584,14 @@ struct SettingsContentView: View {
       chatProvider?.checkClaudeConnectionStatus()
       // Refresh notification permission state
       appState.checkNotificationPermission()
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
       if let userInfo = notification.userInfo, let state = userInfo["isMonitoring"] as? Bool {
         isMonitoring = state
       }
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onChange(of: appState.isTranscribing) { _, newValue in
       isTranscribing = newValue
@@ -619,8 +622,7 @@ struct SettingsContentView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSection = .floatingBar
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh notification permission when app becomes active (user may have changed it in System Settings)
       appState.checkNotificationPermission()
     }
@@ -647,7 +649,6 @@ struct SettingsContentView: View {
       .fixedSize()
     }
   }
-
 
   @ObservedObject var fontScaleSettings = FontScaleSettings.shared
   @ObservedObject var rewindSettings = RewindSettings.shared

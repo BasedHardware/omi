@@ -48,6 +48,23 @@ def test_provisional_env_var_present_is_rendered(monkeypatch):
     assert rendered == 'OMI_LLM_GATEWAY_URL=http://10.0.0.1'
 
 
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    [
+        ('parakeet,modulate-velma-2', r'parakeet\,modulate-velma-2'),
+        (r'C:\models', r'C:\\models'),
+        ('first\nsecond', 'first\\\nsecond'),
+        ('first\rsecond', 'first\\\rsecond'),
+        ('first\u2028second', 'first\\\u2028second'),
+        ('first\u2029second', 'first\\\u2029second'),
+    ],
+)
+def test_render_env_vars_escapes_deploy_cloudrun_separators(value, expected):
+    rendered = _MODULE['_render_env_vars']({'VALUE': {'value': value}})
+
+    assert rendered == f'VALUE={expected}'
+
+
 def test_network_flags_still_required(monkeypatch):
     monkeypatch.delenv('CLOUD_RUN_VPC_NETWORK', raising=False)
     with pytest.raises(ValueError, match='requires'):
@@ -96,6 +113,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     out = capsys.readouterr().out
 
     memory_env = _job_env_block(out, 'memory_maintenance_job')
+    assert r'STT_PRERECORDED_MODEL=parakeet\,modulate-velma-2' in out
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true' in memory_env
     assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
@@ -158,6 +176,11 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     monkeypatch.setenv(
         'ACCOUNT_DELETION_HANDLER_URL', 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run'
     )
+    monkeypatch.setenv(
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'https://backend-sync.example.com/v1/conversation-finalization-jobs/run',
+    )
+    monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
@@ -224,6 +247,8 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
+    assert 'Measure runner disk cleanup' in text
+    assert 'Duration: $((SECONDS - started_at))s' in text
 
 
 def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
@@ -232,3 +257,6 @@ def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
     assert 'render_backend_runtime_env.py --env dev --job memory-maintenance-job' in workflow.read_text(
         encoding='utf-8'
     )
+    text = workflow.read_text(encoding='utf-8')
+    assert 'Measure runner disk cleanup' in text
+    assert 'Duration: $((SECONDS - started_at))s' in text

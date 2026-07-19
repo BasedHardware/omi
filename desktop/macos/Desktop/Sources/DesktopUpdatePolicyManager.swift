@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 @MainActor
 final class DesktopUpdatePolicyManager: ObservableObject {

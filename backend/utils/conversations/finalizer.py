@@ -40,6 +40,7 @@ async def finalize_persisted_conversation(
     finalization_job_id: str,
     dispatch_generation: int,
     lease_epoch: int,
+    force_process: bool = False,
 ) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
 
@@ -97,6 +98,7 @@ async def finalize_persisted_conversation(
                 uid,
                 resolved_language,
                 conversation,
+                force_process=force_process,
                 defer_memory_extraction=True,
             )
         if not getattr(conversation, 'discarded', False):

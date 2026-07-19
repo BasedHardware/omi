@@ -1,7 +1,7 @@
 import AppKit
 import Combine
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Memory categories for filtering. Mirrors the mobile app: filtering is driven
 /// purely by the backend `category` field (no tag-derived pseudo-categories), so
@@ -884,11 +884,13 @@ class MemoriesViewModel: ObservableObject {
         isLoading = false
         return
       }
-      guard commitMemoryPageCapabilities(
-        page,
-        for: token,
-        deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
-      ) else {
+      guard
+        commitMemoryPageCapabilities(
+          page,
+          for: token,
+          deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
+        )
+      else {
         isLoading = false
         return
       }
@@ -941,7 +943,9 @@ class MemoriesViewModel: ObservableObject {
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
         hasMoreMemories = fetchedMemories.count >= pageSize
-        log("MemoriesViewModel: Showing \(visibleMemories.count) memories from \(wasDeviceScoped ? "device-scoped API" : "merged local cache")")
+        log(
+          "MemoriesViewModel: Showing \(visibleMemories.count) memories from \(wasDeviceScoped ? "device-scoped API" : "merged local cache")"
+        )
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
         // Fall back to API data if sync fails, preserving the desktop default-access guardrail.
@@ -1161,12 +1165,14 @@ class MemoriesViewModel: ObservableObject {
       )
       let page = fetchResult.page
       let newMemories = page.memories
-      guard commitMemoryPageCapabilities(
-        page,
-        for: token,
-        expectedOffset: requestedOffset,
-        deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
-      ) else { return }
+      guard
+        commitMemoryPageCapabilities(
+          page,
+          for: token,
+          expectedOffset: requestedOffset,
+          deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
+        )
+      else { return }
 
       // Sync to local cache first
       try await MemoryStorage.shared.syncServerMemories(newMemories)
@@ -1180,7 +1186,9 @@ class MemoriesViewModel: ObservableObject {
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
       hasMoreMemories = newMemories.count >= pageSize
-      log("MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))")
+      log(
+        "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
+      )
     } catch {
       logError("Failed to load more memories", error: error)
     }
@@ -1501,13 +1509,15 @@ class MemoriesViewModel: ObservableObject {
       }
       let memory: ServerMemory?
       if let id = params["id"]?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty {
-        memory = self.memories.first(where: { $0.id == id })
+        memory =
+          self.memories.first(where: { $0.id == id })
           ?? self.searchResults.first(where: { $0.id == id })
           ?? self.filteredFromDatabase.first(where: { $0.id == id })
       } else if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines),
         !marker.isEmpty
       {
-        memory = self.memories.first(where: { $0.content.contains(marker) })
+        memory =
+          self.memories.first(where: { $0.content.contains(marker) })
           ?? self.searchResults.first(where: { $0.content.contains(marker) })
           ?? self.filteredFromDatabase.first(where: { $0.content.contains(marker) })
       } else {
@@ -1518,7 +1528,8 @@ class MemoriesViewModel: ObservableObject {
       }
       let priorVisibility = memory.visibility
       await self.toggleVisibility(memory)
-      let updated = self.memories.first(where: { $0.id == memory.id })
+      let updated =
+        self.memories.first(where: { $0.id == memory.id })
         ?? self.searchResults.first(where: { $0.id == memory.id })
         ?? self.filteredFromDatabase.first(where: { $0.id == memory.id })
       let newVisibility = updated?.visibility ?? (priorVisibility == "public" ? "private" : "public")
@@ -1744,7 +1755,8 @@ struct MemoriesPage: View {
             Image(systemName: viewModel.selectedLayerFilter == .archive ? "archivebox" : "clock.badge.checkmark")
               .scaledFont(size: OmiType.caption)
             Text(viewModel.selectedLayerFilter.displayName)
-              .scaledFont(size: OmiType.body, weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
+              .scaledFont(
+                size: OmiType.body, weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
             Image(systemName: "chevron.down")
               .scaledFont(size: OmiType.micro)
           }
@@ -2088,8 +2100,13 @@ struct MemoriesPage: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
-      .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
+      .disabled(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+      )
+      .opacity(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+          ? 0.5 : 1
+      )
       .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
 
       Button {
@@ -2110,8 +2127,13 @@ struct MemoriesPage: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
-      .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
+      .disabled(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+      )
+      .opacity(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+          ? 0.5 : 1
+      )
       .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
 
       Divider()
@@ -2137,8 +2159,13 @@ struct MemoriesPage: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
-      .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
+      .disabled(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+      )
+      .opacity(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+          ? 0.5 : 1
+      )
       .help("Bulk memory deletion is disabled until the backend supports layer-scoped operations.")
     }
     .padding(.vertical, OmiSpacing.xxs)
@@ -2421,7 +2448,7 @@ private struct MemoryLayerBadge: View {
 }
 
 /// Reversible alias during WS-G client rename (Wave 36).
-fileprivate typealias MemoryTierBadge = MemoryLayerBadge
+private typealias MemoryTierBadge = MemoryLayerBadge
 
 private struct MemoryCardView: View {
   let memory: ServerMemory

@@ -1,5 +1,5 @@
-import XCTest
 import GRDB
+import XCTest
 
 @testable import Omi_Computer
 
@@ -150,11 +150,13 @@ final class LocalMutationAuthorizationTests: XCTestCase {
 
     await assertRevoked {
       try await ActionItemStorage.shared.syncTaskActionItems(
-        [TaskActionItem(
-          id: "incoming-owner-a",
-          description: "must not insert",
-          completed: false,
-          createdAt: Date())],
+        [
+          TaskActionItem(
+            id: "incoming-owner-a",
+            description: "must not insert",
+            completed: false,
+            createdAt: Date())
+        ],
         authorization: MutationAuthorizationGate().authorization())
     }
     let incoming = try await ActionItemStorage.shared.getLocalActionItem(

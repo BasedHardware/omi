@@ -591,6 +591,30 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     return {"action_items": response_items, "conversation_id": conversation_id}
 
 
+class ConversationActionItemsCountResponse(BaseModel):
+    total: int
+    completed: int
+    incomplete: int
+
+
+@router.get(
+    "/v1/conversations/{conversation_id}/action-items/count",
+    response_model=ConversationActionItemsCountResponse,
+    tags=['action-items'],
+)
+def get_conversation_action_items_count(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Return total / completed / incomplete action-item counts for one conversation.
+
+    A task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+    return action_items_db.get_action_items_count_by_conversation(uid, conversation_id)
+
+
 class ConversationActionItemsDeleteResponse(BaseModel):
     status: str
     deleted_count: int

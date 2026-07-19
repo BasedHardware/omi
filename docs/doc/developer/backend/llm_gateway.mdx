@@ -16,7 +16,8 @@ The gateway is intentionally narrow:
 - Resolve an auto lane to a versioned route artifact.
 - Validate request capabilities before execution.
 - Execute the primary provider/model and compatible fallbacks.
-- Return a normal provider-compatible response while recording route/fallback/cost metrics.
+- Return a normal provider-compatible response while recording bounded route/fallback terminal telemetry.
+- Write a durable, cache-aware usage ledger for each gateway provider attempt without retaining prompts or response bodies.
 
 Do not build a user-facing router product. Do not add sliders, per-user routing preferences, Firestore routing prefs, desktop route caches, or a public `/pick` endpoint for product clients.
 
@@ -34,19 +35,19 @@ For v1, this is the only supported OpenAI-compatible chat-completions interface.
 
 `chat-structured` is for non-streaming structured extraction and classification work, such as memory extraction, chat extraction helpers, conversation post-processing structure, and schema-bound feature decisions. It is the safest first lane because it has clear success checks: JSON/schema validity, parser repair rate, extraction precision/recall, latency, and cost.
 
-Backend structured callers can route non-BYOK requests through the gateway and fall back to their existing provider path if the gateway misses or fails. This keeps gateway adoption isolated from user-visible behavior changes unless a feature explicitly promotes the gateway result to authoritative serving.
+Backend structured callers can route non-BYOK requests through the gateway and use their existing provider path only for a hard gateway transport outage (timeout, connection failure, proxy 502/504) or an unusable completed structured result (for example invalid JSON). Gateway HTTP configuration, authentication, and capability failures remain errors; they do not silently select a direct provider. This keeps gateway adoption isolated from user-visible behavior changes unless a feature explicitly promotes the gateway result to authoritative serving.
 
 Non-BYOK requests call `/v1/chat/completions` with `model: "omi:auto:chat-structured"`, text-only messages, and a JSON schema response format. The caller sends low-cardinality feature metadata, not raw user text in logs or telemetry. Service auth uses the existing bearer-token contract; backend callers read `OMI_LLM_GATEWAY_SERVICE_TOKEN` first and then `LLM_GATEWAY_SERVICE_TOKEN` for local compatibility.
 
-BYOK requests skip gateway routing until BYOK forwarding is implemented for the lane. The application-level fallback is the safety mechanism: any gateway HTTP error, timeout, unsupported capability response, malformed JSON, missing or invalid content, Pydantic validation failure, or unexpected exception falls back to the existing legacy provider path and returns that result. Caller fallback does not depend on gateway route/LKG fallback; if the gateway internally returns an error after trying its configured policy, the caller still treats that as a miss and uses the existing path.
+BYOK requests skip gateway routing until BYOK forwarding is implemented for the lane. Gemini Developer API keys are never accepted as Vertex credentials; a Gemini BYOK request fails with `byok_unsupported_provider`. The application-level temporary legacy fallback is deliberately limited to hard transport failures (timeout, connection, proxy 502/504). Gateway configuration/authentication/capability failures remain visible instead of silently succeeding through the direct provider path.
 
-The backend exposes the Prometheus counter `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for structured gateway callers. Outcomes are bounded classes such as `success`, `fallback`, and `skipped`; reasons are bounded classes such as `ok`, `timeout`, `request_error`, `http_503`, `invalid_json`, `schema_validation`, `unexpected_error`, and `byok`.
+The backend exposes the Prometheus counter `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for structured gateway callers. Outcomes are bounded classes such as `success`, `fallback`, `error`, and `skipped`; reasons are bounded classes such as `ok`, `timeout`, `request_error`, `http_503`, `invalid_json`, `schema_validation`, `unexpected_error`, and `byok`.
 
 ## Deployment
 
 Development gateway deploys continue automatically from `main`. Production deployment is manual-only through the dedicated workflow and requires the independent production service-token secret before Helm can run.
 
-Gateway deploys must go through `backend/scripts/deploy-llm-gateway.sh`. The helper validates backend/gateway env wiring, deploys backend secrets through `backend/scripts/deploy-backend-secrets.sh`, adopts known gateway ingress resources if they predate Helm ownership, and then runs the Helm upgrade. Do not copy raw `helm upgrade` commands into workflows; that bypasses the required secret/env preflight.
+Gateway deploys must go through `backend/scripts/deploy-llm-gateway.sh`. The helper validates backend/gateway env wiring, requires `LLM_GATEWAY_GSA`, deploys backend secrets through `backend/scripts/deploy-backend-secrets.sh`, adopts known gateway ingress resources if they predate Helm ownership, and then runs the Helm upgrade. Do not copy raw `helm upgrade` commands into workflows; that bypasses the required identity/secret/env preflight.
 
 Primary user chat should follow later as a separate lane, likely:
 
@@ -79,8 +80,8 @@ flowchart TD
     G --> R["Lane resolver"]
     R --> V["Capability validator"]
     V --> E["Route executor"]
-    E --> O["OpenAI / Gemini / OpenRouter / Anthropic-compatible provider"]
-    E --> M["Metrics + cost + fallback events"]
+    E --> O["OpenAI / native Vertex Gemini / OpenRouter / Anthropic providers"]
+    E --> M["Bounded metrics + fallback events"]
 ```
 
 ## Language And Framework
@@ -203,9 +204,29 @@ Gateway env:
 | `LLM_GATEWAY_ALLOWED_CALLERS` | `backend` |
 | `OPENAI_API_KEY` | existing `*-omi-backend-secrets` key `OPENAI_API_KEY` |
 | `ANTHROPIC_API_KEY` | existing `*-omi-backend-secrets` key `ANTHROPIC_API_KEY` (required for managed Messages lanes) |
-| `GEMINI_API_KEY` | existing `*-omi-backend-secrets` key `GEMINI_API_KEY` (required for gemini-backed feature lanes) |
+| `GOOGLE_CLOUD_PROJECT` | Vertex project (`based-hardware-dev` / `based-hardware`) |
+| `GCP_LOCATION` | Vertex region (`us-central1`) |
 | `OPENROUTER_API_KEY` | existing `*-omi-backend-secrets` key `OPENROUTER_API_KEY` (required for openrouter-backed feature lanes) |
 | `METRICS_SECRET` | existing `*-omi-backend-secrets` key `METRICS_SECRET` |
+| `LLM_GATEWAY_ACCOUNTING_ENABLED` | `true` in deployed values; enables immutable Firestore usage-attempt events |
+| `LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS` | Bounded non-fatal Firestore-write timeout; `1` in deployed values |
+| `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Empty by default; enable a named, route-owned budget experiment only after its quality review |
+
+Gemini gateway lanes use native Vertex `generateContent` / `streamGenerateContent` with Application Default Credentials. The Kubernetes service account is annotated at deploy time from the environment-scoped GitHub variable `LLM_GATEWAY_GSA`; it must already be mapped through GKE Workload Identity to a dedicated Google service account with the required Vertex invocation permission (for example, `roles/aiplatform.user`) in the configured project. The exact dev/prod Google service-account identities and IAM bindings are an external platform prerequisite, not chart defaults or secrets.
+
+The same gateway Google service account must also have Firestore data access in the backend project (normally
+`roles/datastore.user`) before deployed accounting is enabled. The ledger collection is `llm_gateway_attempts`;
+each immutable event contains user/tier attribution, provider/model/route, normalized prompt/output/cache units, and
+an integer micro-USD estimate. It contains no prompts, completions, provider response bodies, headers, or API keys.
+Costs are estimates from versioned in-repo rate cards: cache hits and partial hits use the provider-reported cached
+input token count, while unpriced models and unreported/indeterminate usage remain explicitly non-zero-unknown rather
+than being treated as free. Cache storage charges and provider request/tool fees are intentionally out of scope for
+this first ledger. Image-generation cards are per generated image and explicitly exclude unreported prompt-input
+tokens. Firestore writes are detached from model responses and streaming tails; the configured accounting timeout
+bounds both each write and the graceful-shutdown drain. `LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES` bounds detached
+in-memory work (default `1000`); queue overflow is emitted as a `delivery=dropped` accounting metric, so this
+best-effort delivery path is observable rather than silently treated as free. Gateway calls without an authenticated
+user-usage context are recorded as unattributed rather than being assigned to a guessed user or subscription tier.
 
 ExternalSecrets expect a GCP Secret Manager secret named `OMI_LLM_GATEWAY_SERVICE_TOKEN` in both projects:
 
@@ -257,7 +278,7 @@ python backend/scripts/smoke-llm-gateway.py \
 
 DEV readiness order:
 
-1. Create or verify `OMI_LLM_GATEWAY_SERVICE_TOKEN` in `based-hardware-dev` Secret Manager.
+1. Create or verify `OMI_LLM_GATEWAY_SERVICE_TOKEN` in `based-hardware-dev` Secret Manager and set the `LLM_GATEWAY_GSA` environment variable after its Workload Identity / Vertex IAM binding exists.
 2. Run the values validation command above.
 3. Run focused gateway unit tests and preflight checks.
 4. Manually dispatch `gcp_llm_gateway.yml` to `development`.
@@ -266,7 +287,7 @@ DEV readiness order:
 
 PROD readiness order:
 
-1. Create or verify an independent `OMI_LLM_GATEWAY_SERVICE_TOKEN` in `based-hardware` Secret Manager.
+1. Create or verify an independent `OMI_LLM_GATEWAY_SERVICE_TOKEN` in `based-hardware` Secret Manager and the prod `LLM_GATEWAY_GSA` Workload Identity / Vertex IAM binding.
 2. Confirm DEV smoke passed with the same image/commit.
 3. Run the prod values validation command.
 4. Manually dispatch `gcp_llm_gateway.yml` to `prod`.

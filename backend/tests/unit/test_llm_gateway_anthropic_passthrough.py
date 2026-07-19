@@ -165,6 +165,49 @@ def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic
     assert fake.post_calls[0]['headers']['x-api-key'] == 'anthropic-test-key'
 
 
+def test_anthropic_messages_records_cache_read_and_write_usage(_reset_anthropic_client, monkeypatch):
+    fake: _FakeAsyncClient = _reset_anthropic_client
+    persisted = []
+
+    def capture_persist(context, trace):
+        persisted.append((context, trace))
+
+    monkeypatch.setattr(anthropic_messages, 'schedule_attempt_trace', capture_persist)
+    fake._post_response = httpx.Response(
+        200,
+        json={
+            'id': 'msg_2',
+            'type': 'message',
+            'role': 'assistant',
+            'content': [],
+            'model': 'claude-sonnet-5',
+            'usage': {
+                'input_tokens': 100,
+                'cache_read_input_tokens': 900,
+                'cache_creation_input_tokens': 50,
+                'output_tokens': 10,
+            },
+        },
+    )
+
+    response = TestClient(app).post(
+        '/v1/messages',
+        json=_agentic_request(),
+        headers={**_auth_headers(), 'x-omi-user-uid': 'user-123', 'x-omi-llm-feature': 'chat_agent'},
+    )
+
+    assert response.status_code == 200
+    assert len(persisted) == 1
+    context, trace = persisted[0]
+    assert context.user_uid == 'user-123'
+    assert context.feature == 'chat_agent'
+    assert trace.attempts[0].usage is not None
+    assert trace.attempts[0].usage.cached_input_tokens == 900
+    assert trace.attempts[0].usage.cache_write_tokens == 50
+    assert trace.attempts[0].usage.cache_write_ttl == '1h'
+    assert trace.attempts[0].usage.cache_status.value == 'partial_hit'
+
+
 def test_anthropic_messages_stream_passthrough_preserves_server_tool_sse(_reset_anthropic_client, monkeypatch):
     fake: _FakeAsyncClient = _reset_anthropic_client
     recorded: list[dict[str, Any]] = []

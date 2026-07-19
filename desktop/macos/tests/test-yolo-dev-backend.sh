@@ -62,4 +62,14 @@ grep -q 'BACKEND_LOG_FILE' "$RUN"
 grep -q 'mktemp -d' "$RUN"
 grep -q '>>"$BACKEND_LOG_FILE" 2>&1' "$RUN"
 
+# Backend-Rust/.env commonly carries the template PORT=10201. The launcher
+# must reassert its worktree-derived port after loading it so child/backend
+# ownership state cannot diverge.
+ENV_LOAD_LINE="$(grep -n 'set -a; source "\$BACKEND_DIR/.env"; set +a' "$RUN" | cut -d: -f1)"
+PORT_REASSERT_LINE="$(grep -n 'export PORT="\$BACKEND_PORT"' "$RUN" | tail -1 | cut -d: -f1)"
+if [[ -z "$ENV_LOAD_LINE" || -z "$PORT_REASSERT_LINE" || "$PORT_REASSERT_LINE" -le "$ENV_LOAD_LINE" ]]; then
+  echo "FAIL: run.sh must reassert its derived backend PORT after sourcing .env" >&2
+  exit 1
+fi
+
 echo "PASS: --yolo and implicit named bundles target development backends"

@@ -1,0 +1,83 @@
+name: Reconcile Firestore Indexes
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the Firestore environment to reconcile'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - prod
+      confirmation:
+        description: 'Type APPLY_FIRESTORE_INDEXES to approve this create-only schema migration'
+        required: true
+        type: string
+
+# Schema writes and backend deploy readiness inspect the same persistent
+# Firestore target, so serialize them in the backend stack's environment lock.
+concurrency:
+  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    # This is the explicit, human-approved writer. Backend deploy workflows
+    # remain read-only and can only gate on the serving schema.
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Validate Firestore migration input
+        env:
+          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          CONFIRMATION: ${{ github.event.inputs.confirmation }}
+        run: |
+          if [[ "$INPUT_ENVIRONMENT" != "development" && "$INPUT_ENVIRONMENT" != "prod" ]]; then
+            echo "Invalid environment: $INPUT_ENVIRONMENT. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          if [[ "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then
+            echo "Refusing Firestore schema mutation without APPLY_FIRESTORE_INDEXES confirmation."
+            exit 1
+          fi
+
+      - name: Checkout dispatched Firestore control plane
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify dispatched Firestore control plane
+        run: |
+          checked_sha="$(git rev-parse HEAD)"
+          if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then
+            echo "Expected dispatched commit $GITHUB_SHA, checked out $checked_sha."
+            exit 1
+          fi
+          echo "Reconciling Firestore indexes from dispatched commit $checked_sha."
+
+      - name: Google Auth for Firestore schema migration
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Show create-only Firestore schema plan
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --provision-missing \
+            --dry-run
+
+      - name: Apply approved Firestore schema plan and wait for readiness
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --provision-missing \
+            --timeout-seconds 3600

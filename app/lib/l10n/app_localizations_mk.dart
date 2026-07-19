@@ -1472,7 +1472,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get payYourSttProvider => 'Слободно користете omi. Плаќате директно на вашиот STT добавувач.';
 
   @override
-  String get freeMinutesMonth => '600 слободни минути/месец вклучени. Неограничено со ';
+  String get freeMinutesMonth => '300 слободни минути/месец вклучени. Неограничено со ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -9037,7 +9037,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get billingYearly => 'Годишно';
 
   @override
-  String get savePercent => 'Заштедете ~17%';
+  String savePercent(int percent) {
+    return 'Заштедете ~$percent%';
+  }
 
   @override
   String get popular => 'Популарно';
@@ -9650,4 +9652,8 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Нема врска — се снима локално. Ќе биде транскрибирано кога повторно ќе бидете онлајн.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Вашите податоци се стандардно заштитени со силна енкрипција, а вие контролирате како се складираат и користат.';
 }

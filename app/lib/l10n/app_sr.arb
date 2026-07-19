@@ -10521,7 +10521,7 @@
     "upgradePlan": "Надогради план",
     "billingMonthly": "Месечно",
     "billingYearly": "Годишње",
-    "savePercent": "Уштедите ~17%",
+    "savePercent": "Уштедите ~{percent}%",
     "popular": "Популарно",
     "currentPlan": "Тренутни",
     "neoSubtitle": "{count} питања месечно",
@@ -10727,5 +10727,6 @@
     "deviceStorageUsedOfTotal": "{used} од {total} искоришћено",
     "deviceStorageFree": "{free} слободно",
     "deviceStorageNearlyFull": "Уређај је скоро пун — синхронизујте да ослободите простор.",
-    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Biće transkribovano kada ponovo budete na mreži."
+    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Biće transkribovano kada ponovo budete na mreži.",
+    "dataEncryptedBanner": "Ваши подаци су подразумевано заштићени јаким шифровањем, а ви контролишете како се чувају и користе."
 }
