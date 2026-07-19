@@ -8,7 +8,7 @@ rust-version.workspace = true
 [dependencies]
 async-trait = "0.1"
 futures = "0.3"
-rx4 = { version = "=0.3.13", default-features = false, features = ["providers"] }
+rx4 = { version = "=0.3.16", default-features = false, features = ["providers"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
