@@ -347,16 +347,6 @@ def get_all_goals(
     return goals
 
 
-def get_goal(uid: str, goal_id: str) -> Optional[Dict[str, Any]]:
-    """Get a single goal by id for a user, or None if it does not exist."""
-    user_ref = db.collection(users_collection).document(uid)
-    goals_ref = user_ref.collection(goals_collection)
-    doc = goals_ref.document(goal_id).get()
-    if not doc.exists:
-        return None
-    return _goal_dict(doc)
-
-
 def create_goal(
     uid: str,
     goal_data: Dict[str, Any],

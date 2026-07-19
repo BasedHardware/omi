@@ -348,7 +348,7 @@ def get_goal_by_id(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) 
     already address a goal by id, so this exposes the matching read for one goal (404 if it does
     not exist or belongs to another user).
     """
-    goal = goals_db.get_goal(uid, goal_id)
+    goal = goals_db.get_goal_by_id(uid, goal_id)
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
     return normalize_goal_response(goal)
