@@ -22,6 +22,7 @@
 import { powerMonitor } from 'electron'
 import { getAppSettings, onAppSettingsChanged } from '../../appSettings'
 import { latestRewindFrame } from '../../ipc/db'
+import { lastRewindCaptureAtMs } from '../../rewind/captureSignal'
 import type { RewindFrame } from '../../../shared/types'
 import { didContextChange } from './contextDetection'
 import { DEBOUNCE_MS, distributionDecision, fallbackIntervalMs } from './distributionGate'
@@ -69,6 +70,13 @@ export interface ProactiveAssistant {
 
 export type CoordinatorDeps = {
   latestFrame: () => RewindFrame | null
+  /** Cheap "newest stored frame changed" signal (capture's last-stored timestamp),
+   *  read before `latestFrame` so the DB poll is skipped while capture is idle. A
+   *  value that has not advanced since the last read means `latestFrame` would
+   *  return the same row we already handled. Undefined disables the optimization
+   *  (the loop always reads) — the lastFrameKey dedup below is the correctness
+   *  authority regardless. */
+  captureSignal?: () => number | null
   now: () => number
   isOnBattery: () => boolean
   /** Master toggle. When false the loop does not run at all (not a per-frame gate). */
@@ -88,9 +96,14 @@ export const DEFAULT_BASE_INTERVAL_MS = 3_000
 export const DEFAULT_BATTERY_MULTIPLIER = 3
 export const DEFAULT_ANALYSIS_DELAY_MS = 60_000
 
+/** Sentinel for "no tick has read the DB yet" — distinct from any real capture
+ *  signal (number | null), so the first tick never short-circuits the DB read. */
+const NEVER_READ = Symbol('never-read')
+
 function defaultDeps(): CoordinatorDeps {
   return {
     latestFrame: latestRewindFrame,
+    captureSignal: lastRewindCaptureAtMs,
     now: () => Date.now(),
     // `onBatteryPower` is undefined on stubs / non-laptops — treat as mains.
     isOnBattery: () => powerMonitor.onBatteryPower === true,
@@ -116,6 +129,10 @@ export class AssistantCoordinator {
   /** Identity of the last frame distributed, so a re-read of the same row (idle
    *  user → capture paused) is not re-analyzed. */
   private lastFrameKey: number | null = null
+  /** Capture signal value at our last DB read. While it is unchanged, `latestFrame`
+   *  would return the same row, so the read is skipped. NEVER_READ until the first
+   *  read so that read always happens. */
+  private lastCaptureSignalAtRead: number | null | typeof NEVER_READ = NEVER_READ
   /** The last frame that PASSED the privacy gate — the only kind we ever hand to
    *  an assistant, including as a departing frame. */
   private lastAllowedFrame: RewindFrame | null = null
@@ -201,6 +218,7 @@ export class AssistantCoordinator {
     this.analyzing.clear()
     this.lastAnalysisAt.clear()
     this.lastFrameKey = null
+    this.lastCaptureSignalAtRead = NEVER_READ
     this.lastAllowedFrame = null
     this.lastDistributedAt = null
     this.pendingFlushAt = null
@@ -216,7 +234,19 @@ export class AssistantCoordinator {
    *  job is to call this. */
   tick(): void {
     if (!this.deps.isScreenAnalysisEnabled()) return
+
+    // Cheap pre-check before the DB read: capture is the sole writer of rewind
+    // frames, so when its "newest frame" signal has not advanced since our last
+    // read, latestFrame() would return the same row we already handled (and we'd
+    // short-circuit on lastFrameKey below anyway). Skip the DB read entirely.
+    // An undefined signal source disables this — we always read.
+    const sig = this.deps.captureSignal?.()
+    if (sig !== undefined && sig === this.lastCaptureSignalAtRead) return
+
     const frame = this.deps.latestFrame()
+    // Record the signal we read at (even on a null frame) so an unchanged signal
+    // skips the next read rather than re-polling a still-empty / still-same DB.
+    this.lastCaptureSignalAtRead = sig ?? null
     if (!frame) return
 
     const key = frame.id ?? frame.ts

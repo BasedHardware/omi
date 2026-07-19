@@ -6,6 +6,7 @@ import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
+import { LOCAL_CONVERSATION_SCHEMA } from './localConversationSchema'
 import {
   clearCorruptionFlags,
   isCorruptionError,
@@ -680,6 +681,11 @@ function get(): Database.Database {
   // Conversation starring + folder assignment (local mirror of the cloud fields).
   ensureColumn(db, 'local_conversation', 'starred', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'local_conversation', 'folder_id', 'TEXT')
+  // Index the created_at read order for listLocalConversations() (full scan +
+  // temp-b-tree sort without it). DDL lives in localConversationSchema.ts so prod
+  // and the query-plan test run the same statement. Runs after the base table +
+  // additive columns exist; created_at is a base column in every install.
+  db.exec(LOCAL_CONVERSATION_SCHEMA)
   // (rewind_embeddings is migrated by migrateRewindEmbeddingSchema, BEFORE the
   // exec above — an ensureColumn here would run far too late to save it.)
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive

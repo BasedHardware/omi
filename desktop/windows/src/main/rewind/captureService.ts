@@ -9,6 +9,8 @@ import { helperProcess } from '../ocr/helperProcess'
 import { insertRewindFrame } from '../ipc/db'
 import { persistFrameOcr, type FrameContext } from './ocrPersist'
 import { setCurrentScreen } from './currentScreen'
+import { markRewindCaptured } from './captureSignal'
+import { signalRewindOcrPending } from './ocrService'
 import { getPersistedRewindSettings, persistRewindSettings } from './rewindSettings'
 import { startCaptureDirective, setBaseCaptureInterval } from './captureDirective'
 import { BUILT_IN_EXCLUDED_APPS } from '../../shared/rewindExclusions'
@@ -62,7 +64,12 @@ async function refreshCurrentScreen(
   jpeg: Buffer,
   context: FrameContext
 ): Promise<void> {
-  if (screenOcrInFlight) return
+  // Skipped (an OCR is already running): this frame stays indexed=0, so the
+  // backlog sweep must handle it — wake it rather than let it poll blindly.
+  if (screenOcrInFlight) {
+    signalRewindOcrPending()
+    return
+  }
   screenOcrInFlight = true
   try {
     const res = await helperProcess.ocr(jpeg)
@@ -75,9 +82,15 @@ async function refreshCurrentScreen(
       // nothing would ever be embedded. persistFrameOcr fuses the two so they
       // cannot drift apart again.
       persistFrameOcr(frameId, res.fullText, context, res.lines)
+    } else {
+      // OCR ran but found nothing usable; the frame is still indexed=0, so the
+      // backlog sweep will retry it — wake it.
+      signalRewindOcrPending()
     }
   } catch {
     /* best-effort: keep the last good cached value */
+    // OCR threw; frame stays indexed=0 → the backlog sweep is the fallback.
+    signalRewindOcrPending()
   } finally {
     screenOcrInFlight = false
   }
@@ -169,6 +182,9 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
     })
     lastHash = hash
     lastCapturedAtMs = ts
+    // Publish the cheap "newest frame changed" signal so the assistant coordinator
+    // can skip its 3s DB poll while capture is idle/paused (nothing new to read).
+    markRewindCaptured(ts)
     // Update the chat's hot "current screen" cache from this fresh frame, in the
     // background (single-flight). Not awaited: capture cadence must not wait on OCR.
     // The foreground app/title we just resolved goes with it — it is embedded with

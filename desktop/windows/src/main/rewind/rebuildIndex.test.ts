@@ -22,11 +22,13 @@ const db = vi.hoisted(() => ({
 }))
 const electron = vi.hoisted(() => ({ nativeImage: { createFromBuffer: vi.fn() } }))
 const paths = vi.hoisted(() => ({ rewindRoot: vi.fn(() => ROOT) }))
+const ocr = vi.hoisted(() => ({ signalRewindOcrPending: vi.fn() }))
 
 vi.mock('fs/promises', () => fsMock)
 vi.mock('../ipc/db', () => db)
 vi.mock('electron', () => electron)
 vi.mock('./paths', () => paths)
+vi.mock('./ocrService', () => ocr)
 
 import { rebuildRewindIndexFromDisk } from './rebuildIndex'
 
@@ -113,6 +115,23 @@ describe('rebuildRewindIndexFromDisk', () => {
     expect(db.insertRewindFrame).not.toHaveBeenCalled()
   })
 
+  // The rebuilt rows are indexed=0 and the OCR backlog sweep is gated on an
+  // in-memory pending latch — so the rebuild (a second producer of un-OCR'd rows
+  // besides the capture hot path) MUST wake the sweep, or a rebuild done while the
+  // sweep is idle would leave those frames un-OCR'd until the next capture/restart.
+  it('signals the OCR sweep after inserting rebuilt rows', async () => {
+    seed({ days: { '2026-07-14': ['1000.jpg', '2000.jpg'] } })
+    await rebuildRewindIndexFromDisk()
+    expect(ocr.signalRewindOcrPending).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT signal the OCR sweep when it inserted nothing', async () => {
+    const p1 = join(ROOT, '2026-07-14', '1000.jpg')
+    seed({ days: { '2026-07-14': ['1000.jpg'] }, existingRows: [p1] })
+    await rebuildRewindIndexFromDisk()
+    expect(ocr.signalRewindOcrPending).not.toHaveBeenCalled()
+  })
+
   it('skips files that already have a row, inserting only the orphans', async () => {
     const rowed = join(ROOT, '2026-07-14', '1000.jpg')
     seed({ days: { '2026-07-14': ['1000.jpg', '2000.jpg'] }, existingRows: [rowed] })
@@ -175,10 +194,7 @@ describe('rebuildRewindIndexFromDisk', () => {
   // inserts, not 2.
   it('single-flights concurrent runs — each orphan inserted exactly once', async () => {
     seed({ days: { '2026-07-14': ['1000.jpg', '2000.jpg'] } })
-    const [a, b] = await Promise.all([
-      rebuildRewindIndexFromDisk(),
-      rebuildRewindIndexFromDisk()
-    ])
+    const [a, b] = await Promise.all([rebuildRewindIndexFromDisk(), rebuildRewindIndexFromDisk()])
     expect(a).toBe(2)
     expect(b).toBe(2) // the second caller joined the same run, same count
     expect(db.insertRewindFrame).toHaveBeenCalledTimes(2) // once per orphan, not per caller
