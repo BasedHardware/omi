@@ -236,22 +236,32 @@ async function apiFetch(
   body: unknown,
   external?: AbortSignal
 ): Promise<Response> {
-  return fetchWithFreshToken((session) =>
-    withTimeout(
-      REQUEST_TIMEOUT_MS,
-      (signal) =>
-        net.fetch(`${session.apiBase}${path}`, {
-          method,
-          headers: {
-            Authorization: `Bearer ${session.token}`,
-            'Content-Type': 'application/json'
-          },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
-          signal
-        }),
-      external
-    )
+  return fetchWithFreshToken(
+    (session) =>
+      withTimeout(
+        REQUEST_TIMEOUT_MS,
+        (signal) =>
+          net.fetch(`${session.apiBase}${path}`, {
+            method,
+            headers: {
+              Authorization: `Bearer ${session.token}`,
+              'Content-Type': 'application/json'
+            },
+            body: body !== undefined ? JSON.stringify(body) : undefined,
+            signal
+          }),
+        external
+      ),
+    rateLimitKey(method, path)
   )
+}
+
+/** Stable request key for the 429-storm tracker's distinct-path rule: method +
+ *  path with the query dropped and any trailing action-item id collapsed to :id,
+ *  so all deletes/patches share one key while list vs create vs by-id stay distinct. */
+function rateLimitKey(method: string, path: string): string {
+  const pathname = path.split('?')[0].replace(/(\/v1\/action-items)\/[^/]+$/, '$1/:id')
+  return `${method} ${pathname}`
 }
 
 /** Page one listing. `completed` undefined = all; the envelope is

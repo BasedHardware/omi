@@ -267,6 +267,12 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('tasks:opFailed', listener)
     return () => ipcRenderer.removeListener('tasks:opFailed', listener)
   },
+  backendDegradedState: () => ipcRenderer.invoke('backend:degradedState') as Promise<boolean>,
+  onBackendDegraded: (cb: (degraded: boolean) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, degraded: boolean): void => cb(degraded)
+    ipcRenderer.on('backend:degraded', listener)
+    return () => ipcRenderer.removeListener('backend:degraded', listener)
+  },
   goalsGenerateCandidate: () =>
     ipcRenderer.invoke('goals:generateCandidate') as Promise<GoalCandidateResult>,
   goalsCreateCandidate: (candidate: GoalCandidate) =>

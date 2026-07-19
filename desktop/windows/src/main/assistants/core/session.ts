@@ -23,6 +23,8 @@
 //     invalidated. The epoch already dooms the result; aborting stops us burning
 //     the call as well.
 
+import { noteBackendStatus } from '../../observability/backendDegraded'
+
 /** Credentials the renderer hands the main process to reach the backend. */
 export type BackendSession = {
   /** Python backend base (VITE_OMI_API_BASE) — user data + sync. */
@@ -190,6 +192,18 @@ export async function pullFreshSession(): Promise<void> {
  *  signal (getAbortSignal) into the request AND drops the result via its own epoch
  *  guard (getSessionEpoch pinned at entry). Callers must keep doing both. */
 export async function fetchWithFreshToken(
+  doFetch: (session: BackendSession) => Promise<Response>,
+  label?: string
+): Promise<Response> {
+  const res = await doFetchWithFreshToken(doFetch)
+  // Passive 429-storm telemetry: feed the outcome to the shared degraded-mode
+  // tracker (observation only — no retry/backoff here; each caller's semantics
+  // differ). `label` keys the distinct-path storm rule. Non-throwing.
+  noteBackendStatus(res.status, label)
+  return res
+}
+
+async function doFetchWithFreshToken(
   doFetch: (session: BackendSession) => Promise<Response>
 ): Promise<Response> {
   if (isSessionExpired()) await pullFreshSession()

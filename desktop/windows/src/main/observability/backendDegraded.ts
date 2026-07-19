@@ -12,11 +12,12 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { RateLimitDegradedTracker } from './rateLimitDegraded'
 import { recordFallback } from './fallback'
 
-/** Number of 429s within the window that flips to degraded. Tuned so a single
- *  retry-heavy operation's incidental 429 doesn't trip it, but a genuine storm
- *  (documented recurring on some accounts) does. */
-const THRESHOLD = 3
-const WINDOW_MS = 20_000
+// A storm = ≥ THRESHOLD 429s across ≥ MIN_DISTINCT_KEYS request paths within
+// WINDOW_MS. The distinct-key rule keeps one endpoint's retry loop from tripping
+// the indicator; only an account-wide rate-limit hits multiple paths at once.
+const THRESHOLD = 5
+const WINDOW_MS = 60_000
+const MIN_DISTINCT_KEYS = 2
 
 export type DegradedBroadcaster = (degraded: boolean) => void
 
@@ -38,6 +39,7 @@ function getTracker(): RateLimitDegradedTracker {
     tracker = new RateLimitDegradedTracker({
       threshold: THRESHOLD,
       windowMs: WINDOW_MS,
+      minDistinctKeys: MIN_DISTINCT_KEYS,
       now: clock,
       onChange: (degraded) => {
         broadcaster(degraded)
@@ -65,14 +67,15 @@ export function classifyForRateLimit(status: number | undefined): 'hit' | 'ok' |
 
 /**
  * Record the outcome of one backend request. Call after every main-process
- * backend fetch: pass the HTTP status, or `undefined` if the request threw
- * before a response. Safe to call from any lane; cheap and non-throwing.
+ * backend fetch: pass the HTTP status (or `undefined` if it threw before a
+ * response) and a stable request key (e.g. "GET /v1/action-items") so the
+ * distinct-path storm rule can work. Safe to call from any lane; non-throwing.
  */
-export function noteBackendStatus(status: number | undefined): void {
+export function noteBackendStatus(status: number | undefined, key = 'default'): void {
   const kind = classifyForRateLimit(status)
   if (kind === 'ignore') return
   const t = getTracker()
-  if (kind === 'hit') t.record429()
+  if (kind === 'hit') t.record429(key)
   else t.recordSuccess()
 }
 

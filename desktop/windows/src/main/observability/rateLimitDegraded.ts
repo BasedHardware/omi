@@ -7,34 +7,44 @@
 // window" into ONE subtle indicator that auto-clears on recovery, without spamming
 // during the storm.
 //
+// A storm requires BOTH a count threshold AND ≥ `minDistinctKeys` distinct request
+// keys within the window, so a single endpoint's retry loop can't trip the
+// indicator on its own — it takes a genuine account-wide rate-limit.
+//
 // Pure + clock-injected: no electron, no IPC. The wiring layer feeds it request
 // outcomes and reacts to onChange transitions (broadcast an IPC event, record a
 // fallback). Transition-only emission is the debounce: while already degraded,
 // further 429s don't re-fire; while healthy, successes don't re-fire.
 
 export interface RateLimitDegradedOptions {
-  /** Number of 429s within `windowMs` that flips the state to degraded. */
+  /** Number of 429s within `windowMs` that (with the distinct-key rule) flips to degraded. */
   threshold: number
   /** Sliding window (ms) over which 429s are counted. */
   windowMs: number
+  /** Minimum distinct request keys among the windowed 429s required to trip. Default 2. */
+  minDistinctKeys?: number
   /** Injected clock (ms). Defaults to Date.now. Tests pass a fake. */
   now?: () => number
   /** Fired ONLY on a healthy↔degraded transition, never on repeats. */
   onChange?: (degraded: boolean) => void
 }
 
+type Hit = { at: number; key: string }
+
 export class RateLimitDegradedTracker {
   private readonly threshold: number
   private readonly windowMs: number
+  private readonly minDistinctKeys: number
   private readonly now: () => number
   private readonly onChange?: (degraded: boolean) => void
-  /** Timestamps of recent 429s, oldest first, pruned to `windowMs`. */
-  private hits: number[] = []
+  /** Recent 429s, oldest first, pruned to `windowMs`. */
+  private hits: Hit[] = []
   private degraded = false
 
   constructor(opts: RateLimitDegradedOptions) {
     this.threshold = Math.max(1, opts.threshold)
     this.windowMs = Math.max(1, opts.windowMs)
+    this.minDistinctKeys = Math.max(1, opts.minDistinctKeys ?? 2)
     this.now = opts.now ?? Date.now
     this.onChange = opts.onChange
   }
@@ -43,12 +53,21 @@ export class RateLimitDegradedTracker {
     return this.degraded
   }
 
-  /** Record a 429 response. Returns true iff this flipped healthy→degraded. */
-  record429(): boolean {
+  /**
+   * Record a 429 response, keyed by request identity (e.g. "GET /v1/action-items").
+   * Returns true iff this flipped healthy→degraded. `key` defaults to a single
+   * bucket, which — with the distinct-key rule — means an unkeyed caller alone
+   * can never trip the storm (by design; callers that care pass a real key).
+   */
+  record429(key = 'default'): boolean {
     const t = this.now()
-    this.hits.push(t)
+    this.hits.push({ at: t, key })
     this.prune(t)
-    if (!this.degraded && this.hits.length >= this.threshold) {
+    if (
+      !this.degraded &&
+      this.hits.length >= this.threshold &&
+      this.distinctKeys() >= this.minDistinctKeys
+    ) {
       return this.setDegraded(true)
     }
     return false
@@ -70,12 +89,16 @@ export class RateLimitDegradedTracker {
     return false
   }
 
-  /** Drop 429 timestamps older than the window relative to `t`. */
+  private distinctKeys(): number {
+    return new Set(this.hits.map((h) => h.key)).size
+  }
+
+  /** Drop 429 hits older than the window relative to `t`. */
   private prune(t: number): void {
     const cutoff = t - this.windowMs
     // hits is time-ordered; drop from the front.
     let i = 0
-    while (i < this.hits.length && this.hits[i] < cutoff) i++
+    while (i < this.hits.length && this.hits[i].at < cutoff) i++
     if (i > 0) this.hits = this.hits.slice(i)
   }
 

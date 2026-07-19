@@ -8,6 +8,7 @@ import { MainViews } from './components/layout/MainViews'
 import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
 import { DbRecoveryNotice } from './components/ui/DbRecoveryNotice'
+import { DegradedModeNotice } from './components/ui/DegradedModeNotice'
 import { ToastHost } from './components/ui/ToastHost'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
@@ -117,6 +118,8 @@ function AppShellInner(): React.JSX.Element {
       <TitleBar onHome={isHome} />
       {/* Only renders when omi.db was found corrupt and repaired at startup. */}
       <DbRecoveryNotice />
+      {/* Only renders during a backend 429 storm; self-clears on recovery. */}
+      <DegradedModeNotice />
       <AppChrome>
         <MainViews />
       </AppChrome>

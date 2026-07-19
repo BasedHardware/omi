@@ -848,6 +848,11 @@ export type OmiBridgeApi = {
    *  that failed and whose row was restored). Lets the renderer toast instead of
    *  diverging silently. Returns an unsubscribe fn. */
   onTasksOpFailed: (cb: (failure: TaskOpFailure) => void) => () => void
+  /** Current 429-storm degraded state — for a window that mounts mid-storm. */
+  backendDegradedState: () => Promise<boolean>
+  /** main → renderer: the backend is (true) / is no longer (false) in a 429 storm.
+   *  Debounced to one event per transition. Returns an unsubscribe fn. */
+  onBackendDegraded: (cb: (degraded: boolean) => void) => () => void
   /** Manual goal generation phase 1 (the Goals "Suggest" button). Client-side:
    *  assembles the on-device context bundle and generates ONE candidate goal via
    *  the Gemini proxy — WITHOUT creating it. The renderer previews the candidate;
