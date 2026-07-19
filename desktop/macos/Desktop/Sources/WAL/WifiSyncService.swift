@@ -230,11 +230,30 @@ final class WifiSyncService: ObservableObject {
       await finishSync()
 
     } catch {
+      // A user Stop (or a superseding sync) surfaces as a CancellationError —
+      // directly from our `Task.checkCancellation()` / thrown CancellationError
+      // steps, or indirectly as another error thrown from an await that the
+      // cancellation interrupted (hence the `Task.isCancelled` fallback). An
+      // intentional cancellation is NOT a failure: it must not set errorMessage
+      // and surface a "Recording Error"-style banner in StorageSyncView.
+      if Self.isCancellation(error, taskWasCancelled: Task.isCancelled) {
+        logger.info("WiFi sync cancelled by user")
+        await cleanup()
+        throw CancellationError()
+      }
       logger.error("WiFi sync failed: \(error.localizedDescription)")
       errorMessage = error.localizedDescription
       await cleanup()
       throw error
     }
+  }
+
+  /// Classifies a thrown sync error. A user-initiated Stop or a superseding sync
+  /// is a cancellation (never a user-facing error); everything else is a real
+  /// failure that should surface `errorMessage`. Pure so the intentional-Stop
+  /// vs. failure boundary is unit-testable without live BLE/TCP.
+  static func isCancellation(_ error: Error, taskWasCancelled: Bool) -> Bool {
+    error is CancellationError || taskWasCancelled
   }
 
   /// Stop WiFi sync
