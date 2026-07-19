@@ -1047,6 +1047,8 @@ def get_user_usage_stats_endpoint(
 
 _SHA256_HEX_RE = re.compile(r'^[a-f0-9]{64}$')
 _BYOK_REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+# 'custom' is enrollable but not required: a user-hosted OpenAI-compatible endpoint (#6878).
+_BYOK_KNOWN_PROVIDERS = _BYOK_REQUIRED_PROVIDERS | {'custom'}
 
 
 class BYOKActivateRequest(BaseModel):
@@ -1072,7 +1074,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             detail=f"Missing fingerprints for providers: {sorted(missing)}",
         )
     for provider, fp in data.fingerprints.items():
-        if provider not in _BYOK_REQUIRED_PROVIDERS:
+        if provider not in _BYOK_KNOWN_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
         if not _SHA256_HEX_RE.match(fp):
             raise HTTPException(

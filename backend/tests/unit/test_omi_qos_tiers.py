@@ -106,7 +106,12 @@ _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticO
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
+_install_module(
+    'utils.byok',
+    get_byok_key=MagicMock(return_value=None),
+    get_byok_custom_provider=MagicMock(return_value=None),
+    get_byok_uid=MagicMock(return_value=None),
+)
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),

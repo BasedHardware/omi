@@ -22,7 +22,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.structured_extraction import StructuredExtraction
-from utils.byok import get_byok_key
+from utils.byok import get_byok_key, get_byok_custom_provider
 from utils.llm.byok_errors import handle_llm_error
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
@@ -404,10 +404,34 @@ def _create_byok_client(
     return None
 
 
+def _create_custom_byok_client(model: str, api_key: str, base_url: str, streaming: bool = False) -> ChatOpenAI:
+    """Build a ChatOpenAI pointed at a user's own OpenAI-compatible endpoint (#6878).
+
+    The model name and base URL come from the request, so the user's tasks run on
+    their provider (OpenRouter, Together, Groq, a local server, ...). The base URL
+    is validated upstream in ``get_byok_custom_provider``.
+    """
+    kwargs: Dict[str, Any] = {
+        'callbacks': [_usage_callback],
+        'request_timeout': 120,
+        'max_retries': 1,
+        'base_url': base_url,
+    }
+    if streaming:
+        kwargs['streaming'] = True
+        kwargs['stream_options'] = {"include_usage": True}
+    return _cached_openai_chat(model, api_key, kwargs)
+
+
 # Anthropic client for chat agent (module-level, BYOK-aware).
 # The proxy constructs the provider client at its first use so importing a
 # deployable entrypoint never needs provider credentials.
 anthropic_client = _AnthropicClientProxy()
+
+
+def get_anthropic_client() -> anthropic.AsyncAnthropic:
+    """Kept as a factory for callers that prefer explicit routing over the module proxy."""
+    return anthropic_client._resolve()
 
 
 def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
@@ -466,6 +490,21 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
+
+    # Custom OpenAI-compatible BYOK provider (#6878): when the request carries a
+    # fully configured custom provider (key + base URL + model), run this feature
+    # on the user's own endpoint instead of the default QoS provider. Opt-in per
+    # request; only set for BYOK-active users whose `custom` key passed fingerprint
+    # validation. The Anthropic agentic-chat path does not go through get_llm and
+    # is intentionally left on its own provider.
+    custom = get_byok_custom_provider()
+    if custom is not None:
+        result = _create_custom_byok_client(custom['model'], custom['api_key'], custom['base_url'], streaming)
+        # Apply the same prompt-cache binding the default path uses, so the two do
+        # not drift (a no-op unless the user's model is one that supports it).
+        if cache_key and supports_prompt_cache(custom['model']):
+            return result.bind(prompt_cache_key=cache_key)
+        return result
 
     model, provider = _get_model_config(feature)
 
