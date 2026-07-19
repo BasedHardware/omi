@@ -16,7 +16,6 @@ import XCTest
 final class BleAudioServiceStartStopRaceTests: XCTestCase {
   override func tearDown() async throws {
     BleAudioService.shared.stopProcessing()
-    try await super.tearDown()
   }
 
   func testStopDuringCodecReadAbortsResumedStart() async {
