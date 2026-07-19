@@ -111,12 +111,16 @@ function ensureWindow(): BrowserWindow {
   })
   // Same-origin as the main window (see overlay/window.ts) so the toast sees
   // the signed-in auth state.
+  // Slim per-window entry (insight-toast.html) instead of the full-app index.html
+  // — see perf/win-slim-aux-windows. The `#/insight-toast` hash is preserved so
+  // window-role detection (windowRole.ts) and IPC sender labeling
+  // (voicePlaneIpc.ts) are unchanged.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/insight-toast`)
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/insight-toast.html#/insight-toast`)
   } else if (rendererBaseUrl()) {
-    win.loadURL(`${rendererBaseUrl()}/index.html#/insight-toast`)
+    win.loadURL(`${rendererBaseUrl()}/insight-toast.html#/insight-toast`)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'insight-toast' })
+    win.loadFile(join(__dirname, '../renderer/insight-toast.html'), { hash: 'insight-toast' })
   }
   applyMaterial(win)
   toastWindow = win

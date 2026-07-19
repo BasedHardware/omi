@@ -46,7 +46,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/renderer/index.html'),
-          glow: resolve('src/renderer/glow.html')
+          glow: resolve('src/renderer/glow.html'),
+          'insight-toast': resolve('src/renderer/insight-toast.html')
         }
       }
     },
