@@ -2019,7 +2019,10 @@ def get_goals(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     limit = max(1, min(limit, 1000))
     if include_inactive:
-        goals = goals_db.get_all_goals(uid, include_inactive=True)
+        # Pass the clamp down so Firestore returns at most `limit` documents. Slicing the
+        # result here instead would bound the payload but still stream the whole collection,
+        # which is the cost the clamp above exists to prevent.
+        goals = goals_db.get_all_goals(uid, include_inactive=True, limit=limit)
     else:
         goals = goals_db.get_user_goals(uid, limit=limit)
 
