@@ -1079,3 +1079,118 @@ routes:
       deprecation:
         state: active
       owner: backend
+  - route_type: http
+    method: DELETE
+    path: /v1/mcp/folders/{folder_id}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/mcp/folders
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: PATCH
+    path: /v1/mcp/conversations/{conversation_id}/folder
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: PATCH
+    path: /v1/mcp/folders/{folder_id}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/mcp/folders
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend

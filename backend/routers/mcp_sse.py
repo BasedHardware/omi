@@ -43,6 +43,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+import utils.mcp_folders as mcp_folders
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     read_default_read_rollout,
@@ -60,8 +61,14 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_write,
 )
 from utils.memory.surface_routing import pin_memory_system
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 import utils.mcp_action_items as mcp_action_items
+from utils.mcp_data import (
+    clean_action_item,
+    clean_chat_message,
+    clean_folder,
+    clean_person,
+    clean_screen_activity_row,
+)
 from utils.mcp_memories import (
     McpVerifiedAuth,
     build_mcp_default_memory_read_context,
@@ -118,6 +125,8 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+FOLDERS_READ_SECURITY = [{"type": "oauth2", "scopes": ["folders.read"]}]
+FOLDERS_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["folders.write"]}]
 
 
 @dataclass
@@ -249,6 +258,11 @@ TOOL_REQUIRED_SCOPE = {
     "get_people": "people.read",
     "get_screen_activity": "screen_activity.read",
     "get_daily_summaries": "conversations.read",
+    "get_folders": "folders.read",
+    "create_folder": "folders.write",
+    "update_folder": "folders.write",
+    "delete_folder": "folders.write",
+    "move_conversation_to_folder": "folders.write",
 }
 
 
@@ -262,6 +276,8 @@ SCOPE_PERMISSION_TEXT = {
     "chat.read": "Read your Omi chat history",
     "screen_activity.read": "Read your Omi screen activity",
     "people.read": "Read people saved in your Omi account",
+    "folders.read": "Read your Omi conversation folders",
+    "folders.write": "Create, rename, delete, and organize your Omi conversation folders",
 }
 
 
@@ -373,6 +389,80 @@ MCP_TOOLS: List[Dict[str, Any]] = [
         },
     },
     {
+        "name": "get_folders",
+        "description": "List the user's folders for organizing conversations (system folders Work/Personal/Social plus any custom folders).",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": FOLDERS_READ_SECURITY,
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "create_folder",
+        "description": "Create a new custom folder for organizing conversations.",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": FOLDERS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The folder name"},
+                "description": {"type": "string", "description": "Optional description of what belongs in the folder"},
+                "color": {"type": "string", "description": "Optional hex color, e.g. #3B82F6"},
+                "icon": {"type": "string", "description": "Optional emoji icon"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "update_folder",
+        "description": "Update a folder's name, description, color, or icon.",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": FOLDERS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "folder_id": {"type": "string", "description": "The ID of the folder to update"},
+                "name": {"type": "string", "description": "New folder name"},
+                "description": {"type": "string", "description": "New description"},
+                "color": {"type": "string", "description": "New hex color"},
+                "icon": {"type": "string", "description": "New emoji icon"},
+            },
+            "required": ["folder_id"],
+        },
+    },
+    {
+        "name": "delete_folder",
+        "description": "Delete a folder. Its conversations move to the target folder, or to the default folder when none is given. System folders cannot be deleted.",
+        "annotations": DESTRUCTIVE_WRITE_ANNOTATIONS,
+        "securitySchemes": FOLDERS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "folder_id": {"type": "string", "description": "The ID of the folder to delete"},
+                "move_to_folder_id": {
+                    "type": "string",
+                    "description": "Optional folder to move this folder's conversations into",
+                },
+            },
+            "required": ["folder_id"],
+        },
+    },
+    {
+        "name": "move_conversation_to_folder",
+        "description": "Move a conversation into a folder. Omit folder_id to remove the conversation from any folder.",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": FOLDERS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "conversation_id": {"type": "string", "description": "The ID of the conversation to move"},
+                "folder_id": {
+                    "type": "string",
+                    "description": "The destination folder ID, or omit to remove from any folder",
+                },
+            },
+            "required": ["conversation_id"],
+        },
+    },
+    {
         "name": "get_conversations",
         "description": "Retrieve a list of conversation metadata. To get full transcripts, use get_conversation_by_id.",
         "annotations": READ_ONLY_ANNOTATIONS,
@@ -388,6 +478,7 @@ MCP_TOOLS: List[Dict[str, Any]] = [
                     "description": "Categories to filter by",
                     "default": [],
                 },
+                "folder_id": {"type": "string", "description": "Only return conversations in this folder"},
                 "limit": {"type": "integer", "description": "Number of conversations to retrieve", "default": 20},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
             },
@@ -773,6 +864,15 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
 
+def _folder_tool_error(error: mcp_folders.FolderError) -> ToolExecutionError:
+    """Map a folder orchestration error to the matching MCP/JSON-RPC error code."""
+    if isinstance(error, (mcp_folders.FolderNotFound, mcp_folders.ConversationNotFound)):
+        return ToolExecutionError(str(error), code=-32001)
+    if isinstance(error, mcp_folders.ConversationLocked):
+        return ToolExecutionError(str(error), code=-32002)
+    return ToolExecutionError(str(error), code=-32602)
+
+
 def execute_tool(
     user_id: str,
     tool_name: str,
@@ -993,6 +1093,7 @@ def execute_tool(
             offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
+        folder_id = arguments.get("folder_id")
 
         # Parse dates
         start_dt = None
@@ -1027,6 +1128,7 @@ def execute_tool(
             start_date=start_dt,
             end_date=end_dt,
             categories=valid_categories,
+            folder_id=folder_id,
         )
 
         # Simplify conversation data
@@ -1358,6 +1460,59 @@ def execute_tool(
             end_date=arguments.get("end_date"),
         )
         return {"daily_summaries": summaries}
+
+    elif tool_name == "get_folders":
+        return {"folders": [clean_folder(f) for f in mcp_folders.list_folders(user_id)]}
+
+    elif tool_name == "create_folder":
+        try:
+            folder = mcp_folders.create_folder(
+                user_id,
+                name=arguments.get("name"),
+                description=arguments.get("description"),
+                color=arguments.get("color"),
+                icon=arguments.get("icon"),
+            )
+        except mcp_folders.FolderError as e:
+            raise _folder_tool_error(e)
+        return {"success": True, "folder": clean_folder(folder)}
+
+    elif tool_name == "update_folder":
+        folder_id = arguments.get("folder_id")
+        if not folder_id:
+            raise ToolExecutionError("folder_id is required", code=-32602)
+        try:
+            folder = mcp_folders.update_folder(
+                user_id,
+                folder_id,
+                name=arguments.get("name"),
+                description=arguments.get("description"),
+                color=arguments.get("color"),
+                icon=arguments.get("icon"),
+            )
+        except mcp_folders.FolderError as e:
+            raise _folder_tool_error(e)
+        return {"success": True, "folder": clean_folder(folder)}
+
+    elif tool_name == "delete_folder":
+        folder_id = arguments.get("folder_id")
+        if not folder_id:
+            raise ToolExecutionError("folder_id is required", code=-32602)
+        try:
+            mcp_folders.delete_folder(user_id, folder_id, move_to_folder_id=arguments.get("move_to_folder_id"))
+        except mcp_folders.FolderError as e:
+            raise _folder_tool_error(e)
+        return {"success": True}
+
+    elif tool_name == "move_conversation_to_folder":
+        conversation_id = arguments.get("conversation_id")
+        if not conversation_id:
+            raise ToolExecutionError("conversation_id is required", code=-32602)
+        try:
+            mcp_folders.move_conversation(user_id, conversation_id, arguments.get("folder_id"))
+        except mcp_folders.FolderError as e:
+            raise _folder_tool_error(e)
+        return {"success": True}
 
     else:
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)

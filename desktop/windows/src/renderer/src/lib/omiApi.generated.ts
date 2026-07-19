@@ -2059,6 +2059,30 @@ export interface McpCreateActionItem {
   due_at?: string | null;
 }
 
+export interface McpCreateFolder {
+  color?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  name: string;
+}
+
+export interface McpFolder {
+  color?: string | null;
+  conversation_count?: number;
+  created_at?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  id?: string;
+  is_default?: boolean;
+  is_system?: boolean;
+  name?: string;
+  updated_at?: string | null;
+}
+
+export interface McpMoveConversation {
+  folder_id?: string | null;
+}
+
 export interface McpOauthGrantsResponse {
   grants?: Array<Record<string, unknown>>;
 }
@@ -2130,6 +2154,13 @@ export interface McpStatusResponse {
 export interface McpUpdateActionItem {
   description?: string | null;
   due_at?: string | null;
+}
+
+export interface McpUpdateFolder {
+  color?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  name?: string | null;
 }
 
 export interface MeetingParticipant {
@@ -3971,6 +4002,9 @@ export interface OmiApiSchemas {
   "McpApiKeyCreate": McpApiKeyCreate;
   "McpApiKeyCreated": McpApiKeyCreated;
   "McpCreateActionItem": McpCreateActionItem;
+  "McpCreateFolder": McpCreateFolder;
+  "McpFolder": McpFolder;
+  "McpMoveConversation": McpMoveConversation;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
   "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
@@ -3983,6 +4017,7 @@ export interface OmiApiSchemas {
   "McpSseInstructionsResponse": McpSseInstructionsResponse;
   "McpStatusResponse": McpStatusResponse;
   "McpUpdateActionItem": McpUpdateActionItem;
+  "McpUpdateFolder": McpUpdateFolder;
   "MeetingParticipant": MeetingParticipant;
   "Memory": Memory;
   "MemoryAssistantSettings": MemoryAssistantSettings;
@@ -6248,12 +6283,60 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/mcp/conversations/{conversation_id}/folder": {
+    patch: {
+      operationId: "mcp_move_conversation_to_folder_v1_mcp_conversations__conversation_id__folder_patch";
+      responses: {
+        "200": McpStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/mcp/daily-summaries": {
     get: {
       operationId: "get_daily_summaries_v1_mcp_daily_summaries_get";
       responses: {
         "200": Array<Record<string, unknown>>;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/folders": {
+    get: {
+      operationId: "mcp_get_folders_v1_mcp_folders_get";
+      responses: {
+        "200": Array<McpFolder>;
+        "401": void;
+      };
+    };
+    post: {
+      operationId: "mcp_create_folder_v1_mcp_folders_post";
+      responses: {
+        "200": McpFolder;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/folders/{folder_id}": {
+    patch: {
+      operationId: "mcp_update_folder_v1_mcp_folders__folder_id__patch";
+      responses: {
+        "200": McpFolder;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "mcp_delete_folder_v1_mcp_folders__folder_id__delete";
+      responses: {
+        "200": McpStatusResponse;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -11982,7 +12065,7 @@ export async function get_chat_messages_v1_mcp_chat_get(query: { limit?: number,
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversations_v1_mcp_conversations_get(query: { start_date?: string | null, end_date?: string | null, categories?: string | null, limit?: number, offset?: number }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
+export async function get_conversations_v1_mcp_conversations_get(query: { start_date?: string | null, end_date?: string | null, categories?: string | null, folder_id?: string | null, limit?: number, offset?: number }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/conversations`;
   const _params = query ? Object.entries(query)
@@ -12033,6 +12116,23 @@ export async function get_conversation_by_id_v1_mcp_conversations__conversation_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function mcp_move_conversation_to_folder_v1_mcp_conversations__conversation_id__folder_patch(path: { conversation_id: string }, body: McpMoveConversation, init?: OmiApiClientInit): Promise<McpStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/conversations/${path.conversation_id}/folder`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { limit?: number, offset?: number, start_date?: string | null, end_date?: string | null }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/daily-summaries`;
@@ -12042,6 +12142,73 @@ export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { li
   const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function mcp_get_folders_v1_mcp_folders_get(init?: OmiApiClientInit): Promise<Array<McpFolder>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/folders`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function mcp_create_folder_v1_mcp_folders_post(body: McpCreateFolder, init?: OmiApiClientInit): Promise<McpFolder> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/folders`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function mcp_update_folder_v1_mcp_folders__folder_id__patch(path: { folder_id: string }, body: McpUpdateFolder, init?: OmiApiClientInit): Promise<McpFolder> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/folders/${path.folder_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function mcp_delete_folder_v1_mcp_folders__folder_id__delete(path: { folder_id: string }, query: { move_to_folder_id?: string | null }, init?: OmiApiClientInit): Promise<McpStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/folders/${path.folder_id}`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -15539,4 +15706,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 386 client methods generated.

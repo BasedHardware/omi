@@ -53,6 +53,22 @@ def clean_person(person: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def clean_folder(folder: dict) -> dict:
+    """Shape a folder doc for MCP output."""
+    return {
+        "id": folder.get("id", ""),
+        "name": folder.get("name", "") or "",
+        "description": folder.get("description"),
+        "color": folder.get("color"),
+        "icon": folder.get("icon"),
+        "is_system": bool(folder.get("is_system", False)),
+        "is_default": bool(folder.get("is_default", False)),
+        "conversation_count": folder.get("conversation_count", 0),
+        "created_at": folder.get("created_at"),
+        "updated_at": folder.get("updated_at"),
+    }
+
+
 def clean_screen_activity_row(row: Dict[str, Any]) -> Dict[str, Any]:
     """Shape a screen_activity doc into snake_case fields."""
     return {
