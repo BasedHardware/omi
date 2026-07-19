@@ -137,6 +137,9 @@ class Wal {
   /// user. The sync page renders an explicit label + icon for every value so a
   /// not-yet-synced recording is never visually identical to a failed one.
   WalSyncDisplayState get syncDisplayState {
+    // Corruption is terminal. It must not be visually downgraded to an active
+    // upload if a transient flag was left behind by an interrupted attempt.
+    if (status == WalStatus.corrupted) return WalSyncDisplayState.corrupted;
     if (isSyncing) return WalSyncDisplayState.syncing;
     switch (status) {
       case WalStatus.uploaded:
@@ -152,6 +155,16 @@ class Wal {
       case WalStatus.inProgress:
         return WalSyncDisplayState.waiting;
     }
+  }
+
+  /// Marks this recording as terminally unavailable and clears any transient
+  /// upload presentation left by an interrupted attempt.
+  void markCorrupted() {
+    status = WalStatus.corrupted;
+    isSyncing = false;
+    syncStartedAt = null;
+    syncEtaSeconds = null;
+    syncSpeedKBps = null;
   }
 
   Wal({
