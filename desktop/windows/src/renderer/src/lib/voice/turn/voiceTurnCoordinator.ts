@@ -19,6 +19,14 @@
 //     after the in-flight event has fully published — the call stack never
 //     recurses. The index-based loop over a growing array IS the mechanism; a
 //     `shift()`-based queue or a recursive call breaks it.
+//   * Collaborator callbacks are CONTAINED (2026-07-18 wedge fix): a throwing
+//     `effectHandler` / presenter / snapshot handler is caught per-call and the
+//     drain continues. Before this, one synchronous throw mid-drain skipped the
+//     remaining effects — INCLUDING deadline scheduling — and dropped every
+//     queued event (`finally` clears the queue), leaving a turn stranded in a
+//     capture phase with no timer to ever free it (the "stuck on Listening"
+//     PTT wedge). State transitions and timers are the coordinator's own and
+//     must never be hostage to a collaborator's exception.
 //   * `apply()` publishes one event atomically: reduce → assign model → timeline
 //     → effects (in emission order) → presenter → snapshot. No event is ever
 //     reduced against a half-applied model.
@@ -236,7 +244,7 @@ export class VoiceTurnCoordinator {
 
   configure(presenter: VoiceTurnPresenter | null): void {
     this.presenter = presenter
-    presenter?.apply(this.projection)
+    this.contain('presenter', () => presenter?.apply(this.projection))
   }
 
   setEffectHandler(handler: VoiceTurnEffectHandler | null): void {
@@ -245,7 +253,7 @@ export class VoiceTurnCoordinator {
 
   setSnapshotHandler(handler: VoiceTurnSnapshotHandler | null): void {
     this.snapshotHandler = handler
-    handler?.(this.model)
+    this.contain('snapshot_handler', () => handler?.(this.model))
   }
 
   /** The only place a `VoiceTurnID` is manufactured for a real PTT press. */
@@ -321,8 +329,27 @@ export class VoiceTurnCoordinator {
     this.model = reduction.model
     this.appendTimeline(event, before, this.model)
     this.process(reduction.effects)
-    this.presenter?.apply(this.projection)
-    this.snapshotHandler?.(this.model)
+    this.contain('presenter', () => this.presenter?.apply(this.projection))
+    this.contain('snapshot_handler', () => this.snapshotHandler?.(this.model))
+  }
+
+  /** Run one collaborator callback, containing any synchronous throw so it can
+   *  never abort the drain (skip deadline scheduling / later effects / the
+   *  projection publish) or drop queued events — the permanent-wedge class. */
+  private contain(kind: string, call: () => void): void {
+    try {
+      call()
+    } catch (err) {
+      console.error(
+        `[voice-turn] ${kind} threw; containing so the turn machine keeps running:`,
+        err
+      )
+      this.diagnostics?.recordVoiceTurnAnomaly({
+        kind: `${kind}_threw`,
+        phase: this.model.turn ? voiceTurnPhaseLabel(this.model.turn.phase) : 'idle',
+        route: this.model.turn ? voiceTurnRouteLabel(this.model.turn.route) : 'none'
+      })
+    }
   }
 
   /** The route this event's deadlines belong to. `selectRoute` and a fired
@@ -377,7 +404,7 @@ export class VoiceTurnCoordinator {
         default:
           break
       }
-      this.effectHandler?.(effect)
+      this.contain('effect_handler', () => this.effectHandler?.(effect))
     }
   }
 

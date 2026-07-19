@@ -540,19 +540,62 @@ describe('VoiceTurnCoordinator — production scheduler', () => {
 })
 
 describe('VoiceTurnCoordinator — drain robustness', () => {
-  it('a throwing effect handler does not wedge the drain (Swift `defer`)', () => {
-    const { coordinator } = manual()
-    coordinator.setEffectHandler(() => {
-      throw new Error('handler blew up')
-    })
+  it('a throwing effect handler is CONTAINED — deadlines still arm, presentation still publishes, the machine keeps working (2026-07-18 wedge fix)', () => {
+    // Before the fix, the throw escaped send(): the remaining effects of the batch
+    // (deadline scheduling included) were skipped, queued events were dropped, and
+    // the projection publish never ran — a turn could freeze in a capture phase
+    // with no timer to ever free it (the field "stuck on Listening" PTT wedge).
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { scheduler, coordinator } = manual()
+      const presenter = new RecordingPresenter()
+      coordinator.configure(presenter)
+      coordinator.setEffectHandler(() => {
+        throw new Error('handler blew up')
+      })
 
-    expect(() => coordinator.begin('hold')).toThrow('handler blew up')
+      // begin() must NOT throw, and the turn must be fully armed despite the
+      // handler blowing up on every effect.
+      const turnID = coordinator.begin('hold')
+      expect(coordinator.model.turn?.phase).toEqual({ kind: 'recording' })
+      expect(scheduler.delayFor('captureStart')).toBe(DEFAULT_VOICE_TURN_DEADLINES.captureStart)
+      expect(presenter.last.isListening).toBe(true)
 
-    // The queue was cleared and the draining flag unset, so PTT still works.
-    coordinator.setEffectHandler(null)
-    const turnID = coordinator.begin('hold')
-    coordinator.send({ type: 'lock', turnID })
-    expect(coordinator.model.turn?.phase).toEqual({ kind: 'lockedRecording' })
+      // The machine keeps working WITHOUT clearing the broken handler.
+      coordinator.send({ type: 'lock', turnID })
+      expect(coordinator.model.turn?.phase).toEqual({ kind: 'lockedRecording' })
+
+      // And a still-armed deadline can terminate the turn as designed.
+      scheduler.fire('captureStart')
+      expect(coordinator.model.turn?.phase).toEqual({
+        kind: 'terminal',
+        reason: 'captureFailed'
+      })
+      expect(coordinator.activeTurnID).toBeNull()
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+
+  it('a throwing presenter does not block the snapshot handler or the drain', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { coordinator } = manual()
+      const snapshots: VoiceTurnModel[] = []
+      coordinator.configure({
+        apply: () => {
+          throw new Error('presenter blew up')
+        }
+      })
+      coordinator.setSnapshotHandler((model) => snapshots.push(model))
+
+      const turnID = coordinator.begin('hold')
+      expect(coordinator.model.turn?.id).toBe(turnID)
+      expect(snapshots.length).toBeGreaterThan(0)
+      expect(snapshots.at(-1)?.turn?.phase).toEqual({ kind: 'recording' })
+    } finally {
+      errSpy.mockRestore()
+    }
   })
 
   it('a terminated turn ignores late transport callbacks', () => {
