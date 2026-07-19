@@ -544,6 +544,12 @@ export type OmiBarApi = {
    *  animates during a main-owned turn (no per-frame audio crosses — just the low-
    *  rate orb level + phase). `active:false` ⇒ the bar uses its local orb state. */
   onVoiceHubState: (cb: (state: VoiceHubBarState) => void) => () => void
+  /** Throttled loudness (canonical linear 0..1 peak) of Omi's own AUDIBLE reply,
+   *  tapped at the main window's PCM player worklet and pushed main → bar, so the
+   *  orb's speaking pose animates with the reply's real speech dynamics. ~30Hz
+   *  while audio is playing, a trailing 0 when the burst ends, silent otherwise.
+   *  Returns an unsubscribe fn. */
+  onVoicePlaybackLevel: (cb: (level: number) => void) => () => void
   /** Screen-share privacy toggle (persisted in main's app settings). */
   getContentProtection: () => Promise<boolean>
   setContentProtection: (enabled: boolean) => Promise<boolean>
@@ -1127,6 +1133,9 @@ export type OmiBridgeApi = {
   onVoiceHubWake: (cb: () => void) => () => void
   /** Push the projected warm-hub turn state to the bar orb (main → bar). */
   publishVoiceHubState: (state: VoiceHubBarState) => void
+  /** Push the loudness of Omi's own audible reply (PCM player worklet peak,
+   *  canonical linear 0..1) to the bar orb's playback-amplitude lane (main → bar). */
+  publishVoicePlaybackLevel: (level: number) => void
   // --- Voice-plane flight recorder + reset (2026-07-18 supervisor) ---
   /** Append one bounded event to the main-process voice flight recorder.
    *  Fire-and-forget; NO transcript text / PII — labels and numbers only. */

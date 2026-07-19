@@ -82,6 +82,23 @@ describe('AmplitudeMapper acceptance table', () => {
     expect(settled).toBeGreaterThan(0.7)
   })
 
+  // Regression for the 2026-07-18 top-end trim ("visualizer maxes out a bit"):
+  // with 4dB of headroom every emphasized syllable (a few dB over the tracked
+  // ceiling) clamped to the cap. Session-typical peaks must ride high but
+  // visibly OFF the cap, ordinary emphasis must keep margin, and only a genuine
+  // outlier (> CEIL_HEADROOM_DB over the session ceiling) reaches OUT_CEIL.
+  it('session-typical peaks ride high without slamming the cap', () => {
+    const m = warmedMapper()
+    run(m, lin(-13), 4) // let the ceiling settle onto this session's peaks
+    const typical = run(m, lin(-13), 0.3)
+    expect(typical).toBeGreaterThan(0.7)
+    expect(typical).toBeLessThan(0.85)
+    // Ordinary emphasis (+4dB over the session ceiling) still keeps margin…
+    expect(m.step(lin(-9), DT)).toBeLessThan(AMP_OUT_CEIL - 0.02)
+    // …only a genuine outlier (>7dB over) touches the cap.
+    expect(m.step(lin(-2), DT)).toBeCloseTo(AMP_OUT_CEIL, 5)
+  })
+
   it('a quiet→loud sweep grows monotonically', () => {
     const m = warmedMapper()
     let prev = -1
@@ -147,10 +164,13 @@ describe('AmplitudeMapper bounded-gain AGC properties', () => {
     const outHot = run(hotMic, lin(-14), 0.5)
     // Bounded adaptation can't fully erase a 12dB gain difference (by design —
     // full AGC is what caused the old "quiet input maxed the bars" era), but
-    // both must clearly read as normal speech in the upper half.
+    // both must clearly read as normal speech around the upper half. (0.6 →
+    // 0.55 with the 2026-07-18 top-end trim: the extra peak headroom scales the
+    // whole curve down a few percent; the quiet-mic scenario sits right at the
+    // min-span clamp so it feels the full shift.)
     expect(Math.abs(outQuiet - outHot)).toBeLessThan(0.25)
-    expect(outQuiet).toBeGreaterThan(0.6)
-    expect(outHot).toBeGreaterThan(0.6)
+    expect(outQuiet).toBeGreaterThan(0.55)
+    expect(outHot).toBeGreaterThan(0.55)
   })
 
   it('digital-silence floor clamps the gate at the low end of the band', () => {

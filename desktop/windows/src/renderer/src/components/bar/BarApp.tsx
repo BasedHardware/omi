@@ -26,9 +26,11 @@ import { BarChatSurface } from './BarChatSurface'
 import { BarHintStrip } from './BarHintStrip'
 import { createBarSender } from './barSend'
 import {
+  constantLevelWaveformSource,
   deriveOrbState,
   deriveBarVoiceState,
   isBarBusy,
+  isPlaybackLevelFresh,
   deriveAgentRows,
   pillLabel,
   nextConversationDraft,
@@ -260,13 +262,31 @@ export function BarApp(): React.JSX.Element {
   }, [hubOrb.hint])
   // A WaveformSource fed by the projected orb level (no per-frame audio crosses
   // windows — just the coarse loudness). Stable ref so the Orb reads the latest.
-  const hubWaveRef = useRef<WaveformSource>({
-    getByteFrequencyData: (dest) => {
-      const v = Math.round(Math.min(1, Math.max(0, hubOrbRef.current.orbLevel)) * 255)
-      for (let i = 0; i < dest.length; i++) dest[i] = v
-    },
-    getOrbLevel: () => hubOrbRef.current.orbLevel
-  })
+  const hubWaveRef = useRef<WaveformSource>(
+    // eslint-disable-next-line react-hooks/refs -- the getter runs at orb-sample time, never during render
+    constantLevelWaveformSource(() => hubOrbRef.current.orbLevel)
+  )
+  // Playback-amplitude lane: the latest loudness of Omi's OWN audible reply —
+  // the played-out PCM's linear peak, posted by the player worklet's tap and
+  // relayed over IPC (every PCM player is main-window-resident, D3 — the bar
+  // renderer never constructs one, so IPC is the sole feed). Ref-only: a ~31Hz
+  // numeric stream must not re-render the bar — the orb samples it through the
+  // WaveformSource getter below. The timestamp gates freshness
+  // (isPlaybackLevelFresh): an unfed lane (e.g. the `<audio>`-element cascade
+  // TTS, which has no tap) falls back to the pose-only speaking choreography
+  // instead of pinning dead-zero dots.
+  const playbackLevelRef = useRef({ level: 0, at: 0 })
+  useEffect(
+    () =>
+      window.omiBar.onVoicePlaybackLevel((level) => {
+        playbackLevelRef.current = { level, at: performance.now() }
+      }),
+    []
+  )
+  const playbackWaveRef = useRef<WaveformSource>(
+    // eslint-disable-next-line react-hooks/refs -- the getter runs at orb-sample time, never during render
+    constantLevelWaveformSource(() => playbackLevelRef.current.level)
+  )
   const hubActive = hubOrb.active
   // Effective bar voice signals — a main-owned warm-hub turn (when active) folds over
   // the local PTT/chat state. Crucially a hub SPOKEN reply lands as status 'speaking'
@@ -504,15 +524,33 @@ export function BarApp(): React.JSX.Element {
     agentsActive
   })
   const orbState = orb.state
-  // Pill wordmark → "Listening" whenever the user's voice is being captured
-  // (PTT hold or always-on), else "Omi". Activity-keyed, not orb-pose-keyed: a
-  // PTT hold derives as the 'speaking' pose but is still Omi listening to you.
-  const pillText = pillLabel({ recording: recordingNow, continuousListening })
-  const amplitudeSource: (() => WaveformSource | null) | null = orb.withAmplitude
-    ? hubActive
-      ? () => hubWaveRef.current
-      : () => ptt.analyserRef.current
-    : null
+  // Pill wordmark tracks the whole voice turn: "Listening" while the user's
+  // voice is captured (PTT hold or always-on), "Thinking" while finalizing /
+  // awaiting the reply, "Speaking" while the reply plays, else "Omi".
+  // Activity-keyed, not orb-pose-keyed: a PTT hold derives as the 'speaking'
+  // pose but is still Omi listening to you. barChat.status folds a hub spoken
+  // reply into 'speaking' (deriveBarVoiceState), so both voice routes match.
+  const pillText = pillLabel({
+    recording: recordingNow,
+    transcribing: thinkingNow,
+    status: barChat.status,
+    continuousListening,
+    agentsActive
+  })
+  // The orb's live level, by lane: the user's mic while capturing (hub-projected
+  // or local analyser), the reply's own played audio while Omi speaks (fresh
+  // playback tap only — stale ⇒ null ⇒ pose-only choreography), else none.
+  const amplitudeSource: (() => WaveformSource | null) | null =
+    orb.amplitude === 'mic'
+      ? hubActive
+        ? () => hubWaveRef.current
+        : () => ptt.analyserRef.current
+      : orb.amplitude === 'playback'
+        ? () =>
+            isPlaybackLevelFresh(playbackLevelRef.current.at, performance.now())
+              ? playbackWaveRef.current
+              : null
+        : null
 
   // Connected coding agents to list under "Omi Chat" (at most one "Working…").
   const agentRows = deriveAgentRows(agents, activeAgentId, agentsActive)
@@ -609,6 +647,7 @@ export function BarApp(): React.JSX.Element {
                 size={34}
                 state={orbState}
                 amplitudeSource={amplitudeSource}
+                amplitudeLane={orb.amplitude === 'playback' ? 'playback' : 'mic'}
                 genesisNonce={genesisNonce}
                 failNonce={failNonce}
                 visible={mode !== null}

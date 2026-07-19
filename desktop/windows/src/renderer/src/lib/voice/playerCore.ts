@@ -90,6 +90,55 @@ export class PlayerCore {
   }
 }
 
+// --- Playback level metering (the orb's speaking-pose amplitude tap) ---------
+
+/** Post cadence in render quanta: 6 × 128 samples at 24kHz ≈ 32ms ≈ 31Hz —
+ *  matches the orb's ~30Hz amplitude sampling, so a finer cadence would only
+ *  burn IPC without smoother dots. */
+export const LEVEL_POST_QUANTA = 6
+
+/**
+ * Aggregates per-quantum output peaks into throttled level posts so the orb's
+ * speaking pose can animate with the reply's REAL speech dynamics. Pure and
+ * worklet-free (the worklet stays thin — this is the node-tested math).
+ *
+ * The returned value is the orb's canonical amplitude unit: linear 0..1 peak of
+ * the recent window (exactly what the mic lanes emit — hub pcmPeakLevel /
+ * capture-window time-domain peak), so the adaptive mapper downstream needs no
+ * special casing. Returns `null` when there is nothing to post: between
+ * cadence windows, and while no real audio is flowing — except ONE trailing 0
+ * when a burst ends (drain or barge-in clear) so the consumer sees the dots
+ * come to rest instead of holding the last loud frame.
+ */
+export class PlaybackLevelMeter {
+  private peak = 0
+  private quanta = 0
+  private audible = false
+
+  /** Observe one pulled output frame. `wroteAudio` is PullResult.wroteAudio —
+   *  zero-padded underrun/idle frames must not read as playback. */
+  observe(frame: Float32Array, wroteAudio: boolean): number | null {
+    if (!wroteAudio) {
+      if (!this.audible) return null
+      this.audible = false
+      this.peak = 0
+      this.quanta = 0
+      return 0
+    }
+    this.audible = true
+    for (let i = 0; i < frame.length; i++) {
+      const a = Math.abs(frame[i])
+      if (a > this.peak) this.peak = a
+    }
+    this.quanta += 1
+    if (this.quanta < LEVEL_POST_QUANTA) return null
+    const level = this.peak
+    this.peak = 0
+    this.quanta = 0
+    return level
+  }
+}
+
 /** 16-bit little-endian PCM bytes → Float32 [-1, 1). The Gemini downlink wire
  *  format (inlineData base64 → bytes → here). */
 export function pcm16BytesToFloat32(bytes: Uint8Array): Float32Array {
