@@ -268,20 +268,11 @@ export function BarApp(): React.JSX.Element {
   // cascade TTS, which has no tap) falls back to the pose-only speaking
   // choreography instead of pinning dead-zero dots.
   const playbackLevelRef = useRef({ level: 0, at: 0 })
-  useEffect(
-    () =>
-      window.omiBar.onVoicePlaybackLevel((level) => {
-        playbackLevelRef.current = { level, at: performance.now() }
-      }),
-    []
-  )
-  useEffect(
-    () =>
-      subscribePlaybackLevel((level) => {
-        playbackLevelRef.current = { level, at: performance.now() }
-      }),
-    []
-  )
+  const onPlaybackLevel = useCallback((level: number): void => {
+    playbackLevelRef.current = { level, at: performance.now() }
+  }, [])
+  useEffect(() => window.omiBar.onVoicePlaybackLevel(onPlaybackLevel), [onPlaybackLevel])
+  useEffect(() => subscribePlaybackLevel(onPlaybackLevel), [onPlaybackLevel])
   const playbackWaveRef = useRef<WaveformSource>({
     getByteFrequencyData: (dest) => {
       const v = Math.round(Math.min(1, Math.max(0, playbackLevelRef.current.level)) * 255)
