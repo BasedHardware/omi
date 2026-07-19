@@ -15,5 +15,9 @@ const loadConnectionsPanel = (): Promise<{
 }> => import('./ConnectionsPanel').then((m) => ({ default: m.ConnectionsPanel }))
 
 registerHubConnectContent(lazy(loadConnectionsPanel), () => {
-  void loadConnectionsPanel()
+  // Swallow a preload failure: this eager warm-up has no render consumer, so a rejected
+  // import() (offline / deploy skew) would surface as an unhandledrejection. The actual
+  // Connect open still degrades correctly — React.lazy re-imports and the ErrorBoundary
+  // in HubConnectPanel catches a genuine chunk-load failure.
+  void loadConnectionsPanel().catch(() => {})
 })
