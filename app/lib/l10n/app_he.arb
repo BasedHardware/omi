@@ -10521,7 +10521,7 @@
     "upgradePlan": "שדרג תוכנית",
     "billingMonthly": "חודשי",
     "billingYearly": "שנתי",
-    "savePercent": "חסוך ~17%",
+    "savePercent": "חסוך ~{percent}%",
     "popular": "פופולרי",
     "currentPlan": "נוכחי",
     "neoSubtitle": "{count} שאלות בחודש",

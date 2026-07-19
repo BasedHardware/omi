@@ -385,6 +385,32 @@ class TestFencedJobMutations:
             assert redis_client.ttl(job_key) == terminal_ttl
         assert redis_client.smembers(f'{sync_jobs.PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}') == set()
 
+    def test_durable_ledger_finalizer_converges_a_current_queued_retry(self):
+        """A durable-ledger recovery may finish the queued retry that owns its new lease."""
+        redis_client = fakeredis.FakeRedis()
+        sync_jobs, _ = _load_sync_jobs(redis_client)
+        job_id = 'job-queued-recovery'
+        _seed_fenced_job(
+            redis_client,
+            sync_jobs,
+            job_id,
+            {'job_id': job_id, 'status': 'queued', 'lane': 'fresh', 'result': None},
+            owner='2:recovery-owner',
+        )
+        result = {'total_segments': 1, 'failed_segments': 0, 'provider': 'deepgram', 'model': 'nova-3'}
+
+        ordinary = sync_jobs.fenced_finalize_sync_job(job_id, '2:recovery-owner', result, now=101.0)
+        assert ordinary.outcome is sync_jobs.FencedSyncJobMutationOutcome.INVALID_STATE
+
+        converged = sync_jobs.fenced_finalize_sync_job_from_durable_ledger(
+            job_id,
+            '2:recovery-owner',
+            result,
+            now=102.0,
+        )
+        assert converged.applied is True
+        assert converged.job['status'] == 'completed'
+
     def test_fenced_failed_and_queued_retry_primitives_publish_while_owner_matches(self):
         redis_client = fakeredis.FakeRedis()
         sync_jobs, _ = _load_sync_jobs(redis_client)
@@ -1635,7 +1661,7 @@ async def test_post_terminal_retired_claim_cleanup_retries_through_terminal_bran
         )
         module._run_full_pipeline_background_async = _terminalize_then_fail_retired_cleanup
 
-        first = await module.run_sync_job(request, task_retry_count=0)
+        first = await module.run_sync_job(request, task_retry_count=2)
 
         assert first.status_code == 500
         assert json.loads(first.body) == {'status': 'terminal_cleanup_retry', 'job_status': 'partial_failure'}
@@ -1643,6 +1669,12 @@ async def test_post_terminal_retired_claim_cleanup_retries_through_terminal_bran
         module._finalize_sync_job_failure.assert_not_awaited()
         module.delete_sync_job_run_lock_epoch.assert_not_called()
         module._delete_staged_blobs_async.assert_not_awaited()
+        module.bind_or_converge_sync_ledger_completion.assert_called_once_with(
+            job_id='job-1',
+            uid='test-uid',
+            content_id='content-1',
+            run_lock_token='1:lock-token',
+        )
 
         module.release_sync_content_claim_after_job_retired.reset_mock()
         module.release_sync_content_claim_after_job_retired.side_effect = None
@@ -1796,6 +1828,93 @@ async def test_duplicate_terminal_task_releases_only_retryable_matching_claim(st
         else:
             module.release_sync_content_claim_after_job_retired.assert_not_called()
         module.release_sync_content_claim.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_final_attempt_converges_a_ledger_completed_by_the_failing_pipeline():
+    """A final Cloud Tasks delivery cannot overwrite its own durable completion."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('failure after durable ledger completion'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    try:
+        module.bind_or_converge_sync_ledger_completion = MagicMock(
+            side_effect=[None, {'total_segments': 1, 'outcome': 'success'}]
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=2)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'done', 'reconciled': True}
+        expected_bind = unittest.mock.call(
+            job_id='job-1',
+            uid='test-uid',
+            content_id='content-1',
+            run_lock_token='1:lock-token',
+        )
+        assert module.bind_or_converge_sync_ledger_completion.call_args_list == [expected_bind, expected_bind]
+        module._run_full_pipeline_background_async.assert_awaited_once()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+        module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_final_attempt_ledger_bind_loss_preserves_retry_material():
+    """A final recovery bind that loses ownership must not consume or clean the task."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('failure after a competing ledger update'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    try:
+        module.bind_or_converge_sync_ledger_completion = MagicMock(
+            side_effect=[None, module.SyncJobRunLeaseLost('newer ledger owner')]
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=2)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module._run_full_pipeline_background_async.assert_awaited_once()
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module.release_job_run_lock.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

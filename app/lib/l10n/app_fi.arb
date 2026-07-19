@@ -2935,7 +2935,7 @@
     "upgradePlan": "Päivitä suunnitelma",
     "billingMonthly": "Kuukausittain",
     "billingYearly": "Vuosittain",
-    "savePercent": "Säästä ~17%",
+    "savePercent": "Säästä ~{percent}%",
     "popular": "Suosittu",
     "currentPlan": "Nykyinen",
     "neoSubtitle": "{count} kysymystä kuukaudessa",

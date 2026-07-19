@@ -94,6 +94,25 @@ class DeveloperSuccessResponse(BaseModel):
     success: bool
 
 
+DEVELOPER_MEMORY_ACCESS_NOT_READY = 'developer_memory_access_not_ready'
+
+
+def _developer_memory_access_not_ready_detail(reason: Optional[str]) -> dict:
+    return {
+        'enabled': False,
+        'code': DEVELOPER_MEMORY_ACCESS_NOT_READY,
+        'message': (
+            'Developer Memory API access is not enabled for this account. '
+            'Your API key can be valid and correctly scoped; this endpoint also requires server-side memory '
+            'readiness. Try again after access is enabled, or contact Omi support if it remains unavailable.'
+        ),
+        'reason': reason,
+        'consumer': 'developer_api',
+        'archive_default_visible': False,
+        'archive_capability': False,
+    }
+
+
 def _developer_request_ip(request: Request) -> Optional[str]:
     client = getattr(request, 'client', None)
     if not client:
@@ -375,14 +394,7 @@ def get_memories(
         return [CleanerMemory.model_validate(memory) for memory in memory_result.memories]
     if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
         raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
     if memory_result.should_use_legacy_fallback:
         pass
@@ -487,25 +499,11 @@ def search_memories_vector(
     )
     if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
         raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
     if memory_result.should_use_legacy_fallback:
         raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
     return {
         'items': memory_result.memories,
