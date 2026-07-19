@@ -449,6 +449,47 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     )
   }
 
+  func testClearOwnerSurfaceStateUsesAuthoritativeJournalControlWhenModelReadinessIsUnavailable() async throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "visible-before-reset",
+        turnSeq: 1,
+        content: "This must be cleared only after the journal confirms it"
+      ))
+    var modelReadinessRequests = 0
+    var clearCalls: [(ownerID: String, generation: Int)] = []
+    let projection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: { "fault-harness-owner" },
+      journalListOperation: { _, _, ownerID, afterTurnSeq, limit in
+        XCTAssertEqual(ownerID, "fault-harness-owner")
+        XCTAssertEqual(afterTurnSeq, 0)
+        XCTAssertEqual(limit, 1)
+        return self.journalPage(conversationId: "fault-harness-conversation", turns: [], generation: 9)
+      },
+      journalClearOperation: { _, _, ownerID, expectedGeneration in
+        clearCalls.append((ownerID, expectedGeneration))
+        return 1
+      },
+      kernelReadyOperation: {
+        modelReadinessRequests += 1
+        return false
+      }
+    )
+
+    let cleared = await projection.clearOwnerSurfaceState(chatId: "default")
+
+    XCTAssertTrue(cleared)
+    XCTAssertEqual(modelReadinessRequests, 0)
+    XCTAssertEqual(clearCalls.map(\.ownerID), ["fault-harness-owner"])
+    XCTAssertEqual(clearCalls.map(\.generation), [9])
+    XCTAssertTrue(provider.messages.isEmpty)
+  }
+
   func testClearFailsClosedWhenGenerationBootstrapFails() async throws {
     struct BootstrapFailure: Error {}
 
