@@ -1276,7 +1276,7 @@ class ChatProvider: ObservableObject {
   /// Reset history-pagination state. Must accompany every clear/replace of
   /// `messages` outside the two loaders (`selectSession`,
   /// `loadDefaultChatMessages`), which set both fields from a fresh fetch.
-  private func resetMessagesPagination() {
+  func resetMessagesPagination() {
     messagesPaginationOffset = 0
     hasMoreMessages = false
   }
@@ -1704,7 +1704,7 @@ class ChatProvider: ObservableObject {
     RuntimeOwnerIdentity.currentOwnerId()
   }
 
-  private func mainChatRuntimeChatId(sessionId: String?) -> String {
+  func mainChatRuntimeChatId(sessionId: String?) -> String {
     guard let sessionId, !sessionId.isEmpty else {
       if let appId = selectedAppId, !appId.isEmpty {
         return "default|\(appId)"
@@ -5883,41 +5883,6 @@ class ChatProvider: ObservableObject {
     AnalyticsManager.shared.chatCleared()
   }
 
-  /// Harness-only chat reset that awaits backend deletion before returning.
-  /// Returns an error message when backend deletion fails so E2E flows don't
-  /// proceed against stale persisted messages.
-  func automationResetChatForHarness() async -> String? {
-    guard AppBuild.isNonProduction else { return nil }
-    isClearing = true
-    defer { isClearing = false }
-
-    if isInDefaultChat {
-      let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
-      let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
-      AgentRuntimeStatusStore.shared.clear(surface: surface)
-      guard await kernelTurnProjection.clear(surface: surface) else {
-        return "failed to clear default kernel journal"
-      }
-    } else {
-      let sessionToDelete = currentSession
-      if let session = sessionToDelete {
-        let surface = AgentSurfaceReference.mainChat(chatId: session.id)
-        AgentRuntimeStatusStore.shared.clear(surface: surface)
-        guard await kernelTurnProjection.clear(surface: surface) else {
-          return "failed to clear session kernel journal"
-        }
-      }
-      if let session = sessionToDelete {
-        sessions.removeAll { $0.id == session.id }
-      }
-      currentSession = nil
-      messages = []
-      resetMessagesPagination()
-      _ = await createNewSession()
-    }
-    return nil
-  }
-
   // MARK: - App Selection
 
   /// Select a chat app and load its sessions
@@ -6171,6 +6136,12 @@ class ChatProvider: ObservableObject {
     guard AppBuild.isNonProduction else {
       return ["error": "clear_owner_surface_state is disabled on production bundles"]
     }
+    return await clearOwnerSurfaceStateForAuthorizedHarness(chatId: chatId)
+  }
+
+  /// Performs the owner-scoped control clear after a non-production automation
+  /// entrypoint has established eligibility.
+  func clearOwnerSurfaceStateForAuthorizedHarness(chatId: String = "default") async -> [String: String] {
     kernelTurnProjection.attachControlClient(resolvedAgentClient())
     guard await kernelTurnProjection.clearOwnerSurfaceState(chatId: chatId) else {
       return ["error": "kernel owner surface clear failed", "chat_id": chatId]

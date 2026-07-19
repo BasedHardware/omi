@@ -490,6 +490,57 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertTrue(provider.messages.isEmpty)
   }
 
+  func testFaultHarnessResetUsesCredentialFreeControlClearOnceAndCompletesProjectionReset() async throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let statusStore = AgentRuntimeStatusStore.shared
+    statusStore.reset()
+    defer { statusStore.reset() }
+    statusStore.beginRequest(surface: surface)
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "visible-before-fault-reset",
+        turnSeq: 1,
+        content: "This must disappear after the authoritative control clear"
+      ))
+    var modelReadinessRequests = 0
+    var clearCalls: [(ownerID: String, generation: Int)] = []
+    provider.kernelTurnProjection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: {
+        RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true)
+      },
+      journalListOperation: { _, _, ownerID, afterTurnSeq, limit in
+        XCTAssertFalse(ownerID.isEmpty)
+        XCTAssertEqual(afterTurnSeq, 0)
+        XCTAssertEqual(limit, 1)
+        return self.journalPage(
+          conversationId: "fault-harness-conversation",
+          turns: [],
+          generation: 9
+        )
+      },
+      journalClearOperation: { _, _, ownerID, expectedGeneration in
+        clearCalls.append((ownerID, expectedGeneration))
+        return 1
+      },
+      kernelReadyOperation: {
+        modelReadinessRequests += 1
+        return false
+      }
+    )
+
+    let error = await provider.performMainChatHarnessResetTransaction()
+
+    XCTAssertNil(error)
+    XCTAssertEqual(modelReadinessRequests, 0)
+    XCTAssertEqual(clearCalls.map(\.generation), [9])
+    XCTAssertTrue(provider.messages.isEmpty)
+    XCTAssertNil(statusStore.projection(for: surface))
+  }
+
   func testClearFailsClosedWhenGenerationBootstrapFails() async throws {
     struct BootstrapFailure: Error {}
 
