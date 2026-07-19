@@ -30,6 +30,14 @@ import { parseDoneMessage, type DoneMessage } from '../lib/messagesSse'
 import { speakText } from '../lib/voice/voiceController'
 import { withByokHeadersIfActive } from '../lib/byokKeys'
 import { friendlyChatError } from '../lib/chat/chatErrorCopy'
+import {
+  CHAT_RATE_LIMIT_RETRIES,
+  CHAT_BUSY_RETRY_INTERIM,
+  chatRateLimitBackoffMs,
+  chatRateLimitFallbackProps,
+  isRetryableChatRateLimit
+} from '../lib/chat/chatRetry'
+import { trackEvent } from '../lib/analytics'
 import { mergeAgentCards } from '../lib/chat/agentThreadCards'
 import type { ChatContentBlock } from '../../../shared/chatContent'
 
@@ -852,6 +860,44 @@ export function useChat(): UseChat {
         result = await attempt(requestId, textToSend)
       }
 
+      // Transient rate-limit recovery: a backend 429 (this account sees 429 storms)
+      // is transient, so auto-retry with backoff instead of forcing the user to
+      // manually re-send. Reuses the SAME requestId — main's recordSurfaceTurn dedups
+      // the kernel user-turn on it, so a retry never double-records the human turn
+      // (same guarantee the not-ready retry above relies on). Bounded; when the
+      // retries are exhausted the friendly "busy" copy stands (terminal handling
+      // below). isCurrent()-gated so a reset() mid-backoff skips the next attempt —
+      // the lingering setTimeout is harmless because we bail before re-sending.
+      let rateLimitRetries = 0
+      for (
+        let rl = 1;
+        rl <= CHAT_RATE_LIMIT_RETRIES &&
+        !result.ok &&
+        isRetryableChatRateLimit(result.error) &&
+        isCurrent();
+        rl++
+      ) {
+        writeAssistant(CHAT_BUSY_RETRY_INTERIM)
+        await new Promise<void>((resolve) => setTimeout(resolve, chatRateLimitBackoffMs(rl)))
+        if (!isCurrent()) return
+        result = await attempt(requestId, textToSend)
+        rateLimitRetries = rl
+      }
+      // Silent UX healing is fine; silent OPS is not (AGENTS.md). A 429 retry is a
+      // degrade path — surface ONE fixed-field fallback event (never per-retry, so a
+      // storm can't spam): `recovered` if the retry landed, else `exhausted`. Only
+      // when a retry actually happened, and only for a still-current turn.
+      if (rateLimitRetries > 0 && isCurrent()) {
+        trackEvent(
+          'fallback_triggered',
+          chatRateLimitFallbackProps(
+            result.ok ? 'recovered' : 'exhausted',
+            'pi_mono',
+            rateLimitRetries
+          )
+        )
+      }
+
       if (result.ok) {
         if (result.text) assistantText = result.text
       } else if (result.error && PI_MONO_NOT_READY_RE.test(result.error)) {
@@ -1123,26 +1169,56 @@ export function useChat(): UseChat {
       const messagesUrl = sendAppId
         ? `${OMI_BASE}/v2/messages?app_id=${encodeURIComponent(sendAppId)}`
         : `${OMI_BASE}/v2/messages`
-      const res = await fetch(messagesUrl, {
-        method: 'POST',
-        // BYOK: attach X-BYOK-* (all-or-none) when active so managed chat runs on
-        // the user's own keys. This lane is a raw fetch, so it can't ride the
-        // axios interceptor — withByokHeadersIfActive covers it directly.
-        headers: withByokHeadersIfActive({
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          // Same convention as the macOS/Flutter clients — lets the backend give
-          // Windows-appropriate answers instead of defaulting to macOS steps.
-          'X-App-Platform': 'windows'
-        }),
-        // Only include file_ids when there are uploaded attachments; with none
-        // the body stays exactly `{ text }` (no key) — the backend defaults
-        // file_ids to [], so this preserves today's request byte-for-byte.
-        body: JSON.stringify(
-          sendFileIds.length ? { text: textToSend, file_ids: sendFileIds } : { text: textToSend }
-        ),
-        signal: ac.signal
-      })
+      const doFetch = (): Promise<Response> =>
+        fetch(messagesUrl, {
+          method: 'POST',
+          // BYOK: attach X-BYOK-* (all-or-none) when active so managed chat runs on
+          // the user's own keys. This lane is a raw fetch, so it can't ride the
+          // axios interceptor — withByokHeadersIfActive covers it directly.
+          headers: withByokHeadersIfActive({
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            // Same convention as the macOS/Flutter clients — lets the backend give
+            // Windows-appropriate answers instead of defaulting to macOS steps.
+            'X-App-Platform': 'windows'
+          }),
+          // Only include file_ids when there are uploaded attachments; with none
+          // the body stays exactly `{ text }` (no key) — the backend defaults
+          // file_ids to [], so this preserves today's request byte-for-byte.
+          body: JSON.stringify(
+            sendFileIds.length ? { text: textToSend, file_ids: sendFileIds } : { text: textToSend }
+          ),
+          signal: ac.signal
+        })
+      let res = await doFetch()
+      // Transient rate-limit recovery (same policy as the pi_mono door): a 429 here
+      // is a transient backend rate limit — not the user sending too fast — so back
+      // off and re-issue the POST a bounded number of times before surfacing an
+      // error. (Only 429 is retried, unlike apiClient which also retries 503 — a
+      // deliberately narrow scope for this path.) Nothing has been read from the
+      // stream yet, so re-fetching is safe. isCurrent()-gated so a reset()/dismiss
+      // mid-backoff bails before re-sending (its abort would otherwise reject it).
+      let rateLimitRetries = 0
+      for (let rl = 1; rl <= CHAT_RATE_LIMIT_RETRIES && res.status === 429 && isCurrent(); rl++) {
+        renderAssistant(assistantMsg(CHAT_BUSY_RETRY_INTERIM))
+        await new Promise<void>((resolve) => setTimeout(resolve, chatRateLimitBackoffMs(rl)))
+        if (!isCurrent()) return
+        res = await doFetch()
+        rateLimitRetries = rl
+      }
+      // Silent UX healing is fine; silent OPS is not (AGENTS.md). Surface ONE
+      // fixed-field fallback event when a 429 retry happened: `recovered` if the
+      // retry cleared the limit (2xx), else `exhausted` (the "busy" copy will show).
+      if (rateLimitRetries > 0 && isCurrent()) {
+        trackEvent(
+          'fallback_triggered',
+          chatRateLimitFallbackProps(
+            res.ok ? 'recovered' : 'exhausted',
+            'legacy_sse',
+            rateLimitRetries
+          )
+        )
+      }
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
       // Each SSE line arrives as `data: <chunk>` (with `done:` marking the end).

@@ -49,6 +49,12 @@ vi.mock('../lib/preferences', () => ({
 }))
 const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
+// Fallback/degrade telemetry — spied so the 429-retry tests can assert the ops
+// signal fires (recovered/exhausted) without a real PostHog fetch (hermetic).
+const trackEventSpy = vi.fn((_e: string, _p?: Record<string, unknown>) => {})
+vi.mock('../lib/analytics', () => ({
+  trackEvent: (e: string, p?: Record<string, unknown>) => trackEventSpy(e, p)
+}))
 // The INV-CHAT-1 shared-thread persistence — spied so we can assert the two turns.
 const saveSpy = vi.fn(async (_req: Record<string, unknown>) => ({
   id: 'srv',
@@ -66,6 +72,7 @@ import {
   CHAT_STREAM_TIMEOUT_MS,
   CHAT_STREAM_TIMEOUT_COPY
 } from './useChat'
+import { CHAT_BUSY_RETRY_INTERIM } from '../lib/chat/chatRetry'
 import { clearAttachments } from '../lib/chatAttachments'
 
 let persisted: ChatMessage[][] = []
@@ -615,6 +622,252 @@ describe('useChat — first-chat not ready (retry once)', () => {
       // The interim copy was never persisted as a zombie.
       const anyZombie = persisted.some((thread) =>
         thread.some((m) => m.content === CHAT_NOT_READY_INTERIM)
+      )
+      expect(anyZombie).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+// Rate-limit (429) auto-retry (pi_mono). The reported bug: a user typed their FIRST
+// message right after a voice session and got a scary "you're sending messages too
+// quickly" throttle — a backend 429 (this account hits 429 storms) surfaced raw with
+// no retry, so they had to manually re-send ~3 times. The fix: a bounded auto-retry
+// with backoff (reusing the SAME requestId, so main's recordSurfaceTurn never
+// double-records the human turn), and — only when exhausted — a non-blaming "busy"
+// line, NEVER the "too quickly" copy. Fake timers drive the backoff.
+describe('useChat — pi_mono rate-limit (429) auto-retry', () => {
+  const setSend = (
+    fn: (args: MainChatSendArgs) => Promise<MainChatResult>
+  ): ReturnType<typeof vi.fn> => {
+    const mock = vi.fn(fn)
+    ;(window as unknown as { omi: { mainChatSend: unknown } }).omi.mainChatSend = mock
+    return mock
+  }
+
+  async function mountFake(): Promise<
+    ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+  > {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    return result
+  }
+
+  async function pumpToInterim(
+    result: ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+  ): Promise<void> {
+    for (
+      let k = 0;
+      k < 50 && lastAssistant(result.current.history)?.content !== CHAT_BUSY_RETRY_INTERIM;
+      k++
+    ) {
+      await vi.advanceTimersByTimeAsync(1)
+    }
+  }
+
+  // Both wire formats a 429 can arrive in: legacy-style `HTTP 429` and the
+  // managed-cloud/axios `status code 429`. Either must trigger the retry.
+  it.each(['HTTP 429', 'Request failed with status code 429'])(
+    'auto-retries a first-send 429 and renders the reply — the throttle copy NEVER shows (%s)',
+    async (rateLimitError) => {
+      vi.useFakeTimers()
+      try {
+        let call = 0
+        const sendMock = setSend(async (args) => {
+          sendArgs = args
+          call++
+          return call === 1
+            ? {
+                runId: '',
+                requestId: args.requestId,
+                ok: false,
+                text: '',
+                terminalStatus: 'failed',
+                error: rateLimitError
+              }
+            : {
+                runId: 'run-ok',
+                requestId: args.requestId,
+                ok: true,
+                text: 'Hi there',
+                terminalStatus: 'succeeded'
+              }
+        })
+        const result = await mountFake()
+
+        let p!: Promise<void>
+        await act(async () => {
+          p = result.current.send('hi')
+          await pumpToInterim(result)
+        })
+        // Attempt 1 got a 429 → one send so far, the non-blaming interim shown.
+        expect(sendMock).toHaveBeenCalledTimes(1)
+        expect(lastAssistant(result.current.history)?.content).toBe(CHAT_BUSY_RETRY_INTERIM)
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5000) // fire the backoff → retry
+          await p
+        })
+        // Retried, the retry succeeded, and the reply won.
+        expect(sendMock).toHaveBeenCalledTimes(2)
+        // SAME requestId across attempts → recordSurfaceTurn dedups the human turn.
+        expect(sendMock.mock.calls[0][0].requestId).toBe(sendMock.mock.calls[1][0].requestId)
+        expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
+        // The user NEVER saw the throttle copy (the bug) nor any raw error.
+        const seen = result.current.history.map((m) => m.content).join(' | ')
+        expect(seen).not.toMatch(/too quickly/i)
+        expect(seen).not.toMatch(/^Error:/)
+        // INV-CHAT-1: the human turn saved exactly once (not double-saved by the
+        // retry), ai once on success.
+        expect(saveSpy).toHaveBeenCalledTimes(2)
+        expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human', text: 'hi' })
+        expect(saveSpy.mock.calls[1][0]).toMatchObject({ sender: 'ai', text: 'Hi there' })
+        // Silent-ops guard: the heal is NOT invisible — one fixed-field fallback
+        // event fired with outcome 'recovered' (never per-retry spam).
+        const fb = trackEventSpy.mock.calls.filter((c) => c[0] === 'fallback_triggered')
+        expect(fb).toHaveLength(1)
+        expect(fb[0][1]).toMatchObject({
+          component: 'chat_send',
+          reason: 'rate_limited',
+          outcome: 'recovered',
+          engine: 'pi_mono'
+        })
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
+
+  it('when every attempt 429s, shows the non-blaming "busy" copy — never "too quickly"', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendMock = setSend(async (args) => {
+        sendArgs = args
+        return {
+          runId: '',
+          requestId: args.requestId,
+          ok: false,
+          text: '',
+          terminalStatus: 'failed',
+          error: 'Request failed with status code 429'
+        }
+      })
+      const result = await mountFake()
+
+      let p!: Promise<void>
+      await act(async () => {
+        p = result.current.send('hi')
+        await pumpToInterim(result)
+      })
+      expect(sendMock).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000) // exhaust every bounded retry
+        await p
+      })
+      // Retried the bounded number of times (initial + CHAT_RATE_LIMIT_RETRIES).
+      expect(sendMock.mock.calls.length).toBeGreaterThanOrEqual(2)
+      // All attempts reused the one requestId (no double human-record).
+      const ids = new Set(sendMock.mock.calls.map((c) => c[0].requestId))
+      expect(ids.size).toBe(1)
+      // Terminal copy is the honest "servers busy" line — NOT the user-blaming one.
+      expect(lastAssistant(result.current.history)?.content).toBe(
+        'Omi’s servers are busy. Try again in a moment.'
+      )
+      expect(lastAssistant(result.current.history)?.content).not.toMatch(/too quickly/i)
+      // The friendly line is not written to the shared thread nor spoken.
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
+      expect(speakSpy).not.toHaveBeenCalled()
+      // Silent-ops guard: exhaustion surfaces ONE fallback event, outcome 'exhausted'.
+      const fb = trackEventSpy.mock.calls.filter((c) => c[0] === 'fallback_triggered')
+      expect(fb).toHaveLength(1)
+      expect(fb[0][1]).toMatchObject({
+        reason: 'rate_limited',
+        outcome: 'exhausted',
+        engine: 'pi_mono'
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does NOT retry a non-429 failure (unchanged fast-fail)', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendMock = setSend(async (args) => {
+        sendArgs = args
+        return {
+          runId: 'r',
+          requestId: args.requestId,
+          ok: false,
+          text: '',
+          terminalStatus: 'failed',
+          error: 'HTTP 500'
+        }
+      })
+      const result = await mountFake()
+
+      await act(async () => {
+        const p = result.current.send('hi')
+        await vi.advanceTimersByTimeAsync(20_000) // ample time for any (wrong) retry
+        await p
+      })
+      // A 5xx is a hard failure → exactly one send, mapped to the generic copy.
+      expect(sendMock).toHaveBeenCalledTimes(1)
+      expect(lastAssistant(result.current.history)?.content).toBe(
+        'Omi couldn’t answer right now. Try again.'
+      )
+      // No 429 retry happened → no fallback event (a hard failure is an error metric,
+      // not a fallback — AGENTS.md).
+      expect(trackEventSpy.mock.calls.filter((c) => c[0] === 'fallback_triggered')).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reset() DURING the backoff skips the retry (no second send, no zombie)', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendMock = setSend(async (args) => {
+        sendArgs = args
+        return {
+          runId: '',
+          requestId: args.requestId,
+          ok: false,
+          text: '',
+          terminalStatus: 'failed',
+          error: 'HTTP 429'
+        }
+      })
+      const result = await mountFake()
+
+      let p!: Promise<void>
+      await act(async () => {
+        p = result.current.send('hi')
+        await pumpToInterim(result)
+      })
+      expect(sendMock).toHaveBeenCalledTimes(1)
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_BUSY_RETRY_INTERIM)
+
+      // Dismiss while the backoff is pending — the post-await isCurrent() must bail.
+      act(() => result.current.reset())
+      expect(result.current.history).toEqual([])
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000)
+        await p
+      })
+      expect(sendMock).toHaveBeenCalledTimes(1) // retry was skipped
+      expect(result.current.history).toEqual([])
+      const anyZombie = persisted.some((t) =>
+        t.some(
+          (m) =>
+            m.content === CHAT_BUSY_RETRY_INTERIM || /too quickly|servers are busy/i.test(m.content)
+        )
       )
       expect(anyZombie).toBe(false)
     } finally {

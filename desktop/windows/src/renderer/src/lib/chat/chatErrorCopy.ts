@@ -12,20 +12,34 @@
 // means we reached the server (a sign-in problem), not that we're offline. When
 // no class is recognized the copy is the friendly generic, so an unmatched error
 // degrades to a safe message instead of leaking the raw text.
+/**
+ * Extract a structured HTTP status from a raw chat error string, or null when
+ * none is present. legacy_sse throws `HTTP <status>`; a managed-cloud (pi_mono)
+ * error may read `status code <n>`. Exported so the send-path retry policy
+ * (chatRetry.ts) classifies a 429 off the EXACT same parse this copy does — the
+ * two can never disagree about what is a rate limit.
+ */
+export function chatErrorStatus(raw: string | null | undefined): number | null {
+  const statusMatch = (raw ?? '').match(/(?:HTTP|status(?:\s+code)?)\s+(\d{3})/i)
+  return statusMatch ? Number(statusMatch[1]) : null
+}
+
 export function friendlyChatError(raw: string): string {
   const msg = raw ?? ''
 
-  // Prefer a structured HTTP status when the raw error carries one. legacy_sse
-  // throws `HTTP <status>`; a managed-cloud error may read `status code <n>`.
-  const statusMatch = msg.match(/(?:HTTP|status(?:\s+code)?)\s+(\d{3})/i)
-  const status = statusMatch ? Number(statusMatch[1]) : null
+  const status = chatErrorStatus(msg)
 
   if (status === 401 || status === 403) {
     // Mac authRequired parity — token expired / missing.
     return 'Please sign in to continue.'
   }
   if (status === 429) {
-    return 'You’re sending messages too quickly. Give it a moment and try again.'
+    // A 429 reaches this copy only AFTER the send path's bounded auto-retry is
+    // exhausted (chatRetry.ts), so it means a sustained rate limit — not a fast
+    // typer. Frame it as the server being busy (matching DegradedModeNotice),
+    // NOT as the user sending "too quickly", which wrongly blamed the user on
+    // their first message during one of this account's 429 storms.
+    return 'Omi’s servers are busy. Try again in a moment.'
   }
   if (status !== null && status >= 500 && status <= 599) {
     return 'Omi couldn’t answer right now. Try again.'

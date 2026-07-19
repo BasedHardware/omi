@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest'
-import { friendlyChatError } from './chatErrorCopy'
+import { friendlyChatError, chatErrorStatus } from './chatErrorCopy'
 
 // PR-C: a failed chat send/stream must render friendly, plain-English copy —
 // never a raw `Error: <technical string>`. Classify by pattern on the raw error
@@ -19,10 +19,13 @@ describe('friendlyChatError', () => {
     expect(friendlyChatError('HTTP 403')).toBe('Please sign in to continue.')
   })
 
-  it('maps HTTP 429 to the rate-limit copy', () => {
-    expect(friendlyChatError('HTTP 429')).toBe(
-      'You’re sending messages too quickly. Give it a moment and try again.'
-    )
+  it('maps HTTP 429 to the non-blaming "servers busy" copy (not "you\'re too quickly")', () => {
+    // A 429 reaches this copy only after the send path's auto-retry is exhausted, so
+    // it means a sustained rate limit — never a fast typer on their first message.
+    const BUSY = 'Omi’s servers are busy. Try again in a moment.'
+    expect(friendlyChatError('HTTP 429')).toBe(BUSY)
+    // Regression: the old copy blamed the user; it must be gone.
+    expect(friendlyChatError('HTTP 429')).not.toMatch(/too quickly/i)
   })
 
   it('maps a transport failure to the offline copy', () => {
@@ -42,8 +45,18 @@ describe('friendlyChatError', () => {
 
   it('recognizes a status inside an axios-style message', () => {
     expect(friendlyChatError('Request failed with status code 429')).toBe(
-      'You’re sending messages too quickly. Give it a moment and try again.'
+      'Omi’s servers are busy. Try again in a moment.'
     )
+  })
+
+  it('chatErrorStatus extracts the HTTP status both wire formats carry (or null)', () => {
+    // legacy_sse throws `HTTP <n>`; a managed-cloud (pi_mono) error reads `status code <n>`.
+    expect(chatErrorStatus('HTTP 429')).toBe(429)
+    expect(chatErrorStatus('Request failed with status code 429')).toBe(429)
+    expect(chatErrorStatus('status 503')).toBe(503)
+    expect(chatErrorStatus('the model exploded')).toBeNull()
+    expect(chatErrorStatus('')).toBeNull()
+    expect(chatErrorStatus(null)).toBeNull()
   })
 
   describe('with navigator.onLine === false', () => {
