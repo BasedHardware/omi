@@ -50,7 +50,12 @@ function CopyMessageButton({
         /* clipboard denied — nothing to fall back to */
       })
   }
-  const side = role === 'user' ? 'right-full mr-1' : 'left-full ml-1'
+  // Sit flush against the bubble (no margin gap) so the hover region stays
+  // contiguous: `right-full`/`left-full` abut the button's edge exactly against
+  // the bubble box. A margin here would open a dead gap where `group/msg:hover`
+  // drops — the button would flip back to pointer-events-none mid-traverse and
+  // vanish before the pointer could land on it.
+  const side = role === 'user' ? 'right-full' : 'left-full'
   const glyph = compact ? 'h-3 w-3' : 'h-3.5 w-3.5'
   return (
     <button
