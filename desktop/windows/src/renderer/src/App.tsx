@@ -8,6 +8,7 @@ import { MainViews } from './components/layout/MainViews'
 import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
 import { DbRecoveryNotice } from './components/ui/DbRecoveryNotice'
+import { ToastHost } from './components/ui/ToastHost'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
 import { useAppState } from './state/appState'
@@ -148,6 +149,11 @@ function AppShellInner(): React.JSX.Element {
           engine and raises it once when a send lands on an exhausted quota. */}
       <UsageLimitTriggerHost />
       <UsageLimitPopup />
+      {/* App-wide transient toasts (bottom-right). The toast() pub/sub had no host
+          mounted, so every toast() call across the app (~28 sites: connect/copy/
+          export feedback, mutation errors incl. the tasks failure signal) was a
+          silent no-op. Mounting it here, in the main window only, activates them. */}
+      <ToastHost />
       {/* "Upgrade to Omi Pro" upsell shown alongside the parallel Claude Code
           OAuth launch — ONLY on an in-chat auth_required event (Claude Code's
           token rejected mid-turn), matching macOS's isClaudeAuthRequired sheet.
