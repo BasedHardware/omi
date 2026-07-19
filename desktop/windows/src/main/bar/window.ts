@@ -44,6 +44,7 @@ import { isQuitting } from '../lifecycle'
 import {
   computeBarBounds,
   offscreenStageBounds,
+  boundsSizeDrifted,
   isCursorInPeekFootprint,
   isCursorOverPill,
   type DisplayLike,
@@ -359,6 +360,17 @@ function parkWindow(win: BrowserWindow): void {
  *  instant and un-animated, so only the intended CSS grow is ever visible. */
 function unparkWindow(win: BrowserWindow, bounds: Rect): void {
   win.setBounds(bounds)
+  // Windows cross-DPI setBounds guard: if this on-screen move sized the window
+  // under the wrong monitor's scale (oversized/blurry/off-center — happens when
+  // the target monitor isn't a normally-composited on-monitor position, e.g. it
+  // sits behind a fullscreen-exclusive app), the window is now geometrically ON
+  // the target, so a second setBounds sizes it correctly. getBounds reflects the
+  // drift synchronously. No-op on a normal reveal (the first setBounds matches),
+  // so the #193 staging path and every other reveal are unchanged.
+  if (boundsSizeDrifted(bounds, win.getBounds())) {
+    win.setBounds(bounds)
+    diag(`unpark size drift corrected -> ${bounds.width}x${bounds.height}`)
+  }
   if (PARK_MODE === 'opacity') win.setOpacity(1)
   barOnScreen = true
   diag(`unpark (${PARK_MODE}) -> ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`)

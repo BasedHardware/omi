@@ -182,6 +182,42 @@ test('summon hotkey reveals the pill (peek), never the expanded chat (C5)', asyn
   assert.equal(s.focused, false, 'the summoned pill must not steal focus')
 })
 
+// Reveal-size guard (fullscreen cross-DPI bug): a summoned bar must reveal at the
+// computed size for its target monitor, never oversized. The live bug was a bar
+// summoned while another app was FULLSCREEN on a mixed-DPI multi-monitor setup
+// revealing ~1.5× too large (off-center + blurry) — Windows sized the final
+// on-screen setBounds under the parked corner's monitor scale. unparkWindow now
+// re-applies setBounds when the size drifted. This asserts the revealed window is
+// not oversized relative to BAR_WINDOW_WIDTH/MAX_HEIGHT (+rounding slack); the
+// drift predicate itself is unit-tested in placement.test.ts (boundsSizeDrifted).
+test('summon reveals the bar at the computed size, never oversized (fullscreen DPI)', async (t) => {
+  const { app, cleanup } = await launch()
+  t.after(cleanup)
+  await app.firstWindow()
+
+  await app.evaluate(() => globalThis.__omiE2E.barEnable())
+  await findBarPage(app)
+  await app.evaluate(() => globalThis.__omiE2E.barSummonFire())
+
+  let st = null
+  for (let i = 0; i < 100; i++) {
+    st = await app.evaluate(() => globalThis.__omiE2E.barState())
+    if (st.visible) break
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  assert.ok(st && st.visible, 'summon should reveal the bar')
+
+  const b = await app.evaluate(({ BrowserWindow }, id) => {
+    const win = id != null ? BrowserWindow.fromId(id) : null
+    return win ? win.getBounds() : null
+  }, st.id)
+  assert.ok(b, 'bar window bounds should be readable')
+  // BAR_WINDOW_WIDTH = 560, BAR_WINDOW_MAX_HEIGHT = 640; +4px absorbs the ±1px
+  // rounding a fractional (1.5×) monitor produces. The bug revealed 840×960.
+  assert.ok(b.width <= 564, `bar revealed oversized: width ${b.width} (expected ≤ 564)`)
+  assert.ok(b.height <= 644, `bar revealed oversized: height ${b.height} (expected ≤ 644)`)
+})
+
 // Regression for the blank-bar paint race (C11): main used to showInactive()
 // the HWND BEFORE the renderer had painted the revealing frame, so the compositor
 // flashed the previous un-revealed frame — a blank window on first hover. The fix
