@@ -8998,7 +8998,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get billingYearly => 'Tahunan';
 
   @override
-  String get savePercent => 'Hemat ~17%';
+  String savePercent(int percent) {
+    return 'Hemat ~$percent%';
+  }
 
   @override
   String get popular => 'Populer';

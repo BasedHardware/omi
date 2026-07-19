@@ -2,6 +2,13 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# At the 40-pod HPA ceiling, Pusher needs fourteen waves. The committed probe
+# and availability settings make that a 8960s healthy-rollout budget; retain
+# one 640s per-pod allowance of scheduler headroom above it. CI recalculates
+# this bound from the chart whenever any rollout input changes.
+minReadySeconds: 0
+progressDeadlineSeconds: 9600
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
@@ -319,7 +326,9 @@ readinessProbe:
     path: /health
     port: 8080
   failureThreshold: 3
+  initialDelaySeconds: 0
   periodSeconds: 10
+  successThreshold: 1
   timeoutSeconds: 5
 
 startupProbe:
@@ -327,6 +336,7 @@ startupProbe:
     path: /health
     port: 8080
   failureThreshold: 60
+  initialDelaySeconds: 0
   periodSeconds: 10
   timeoutSeconds: 5
 

@@ -149,6 +149,38 @@ def test_cloud_run_clone_removes_retired_source_env():
     assert 'REDIS_DB_HOST=10.0.0.1' in env_vars
 
 
+def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_overlay():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'STT_PRERECORDED_MODEL',
+                                    'value': r'parakeet,modulate-velma-2\primary',
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, _ = clone_environment(
+        service,
+        r'RENDERED_STT=parakeet\,modulate-velma-2',
+        '',
+    )
+
+    assert env_vars.splitlines() == [
+        r'RENDERED_STT=parakeet\,modulate-velma-2',
+        r'STT_PRERECORDED_MODEL=parakeet\,modulate-velma-2\\primary',
+    ]
+
+
 def test_deploy_contract_routes_both_backfill_budget_alerts():
     action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
     manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()

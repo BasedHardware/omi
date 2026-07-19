@@ -8990,7 +8990,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get billingYearly => 'سالانه';
 
   @override
-  String get savePercent => '~17% صرفه‌جویی';
+  String savePercent(int percent) {
+    return '~$percent% صرفه‌جویی';
+  }
 
   @override
   String get popular => 'محبوب';

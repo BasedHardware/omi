@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+_DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029'})
+
 
 def _pairs(value: str) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -43,7 +45,7 @@ def clone_environment(
         if name in remove_names:
             continue
         if 'value' in entry:
-            literals[name] = str(entry['value'])
+            literals[name] = _escape_deploy_cloud_run_env_value(str(entry['value']))
             continue
         secret_ref = entry.get('valueFrom', {}).get('secretKeyRef', {})
         secret_name = secret_ref.get('name')
@@ -63,6 +65,14 @@ def clone_environment(
     return (
         '\n'.join(f'{name}={value}' for name, value in sorted(literals.items())),
         '\n'.join(f'{name}={value}' for name, value in sorted(secrets.items())),
+    )
+
+
+def _escape_deploy_cloud_run_env_value(value: str) -> str:
+    """Encode raw live Cloud Run literals for deploy-cloudrun's input grammar."""
+    return ''.join(
+        f'\\{character}' if character == '\\' or character in _DEPLOY_CLOUD_RUN_ENV_SEPARATORS else character
+        for character in value
     )
 
 

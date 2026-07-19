@@ -2977,7 +2977,7 @@
     "upgradePlan": "Upgrade paket",
     "billingMonthly": "Bulanan",
     "billingYearly": "Tahunan",
-    "savePercent": "Hemat ~17%",
+    "savePercent": "Hemat ~{percent}%",
     "popular": "Populer",
     "currentPlan": "Saat ini",
     "neoSubtitle": "{count} pertanyaan per bulan",

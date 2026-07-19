@@ -241,7 +241,12 @@ def _restore_developer_module():
 
 def _auth_context():
     return ProductAuthorizationContext(
-        uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
+        uid='uid1',
+        consumer='developer_api',
+        surface='developer_api',
+        app_id='test-app',
+        key_id='test-key',
+        scopes=('memories.read',),
     )
 
 
@@ -368,6 +373,59 @@ def test_get_memories_allowed_grant_canonical_lists():
     assert resp.status_code == 200
     assert len(resp.json()) == 1
     assert resp.json()[0]['id'] == 'canon-1'
+
+
+def test_get_memories_missing_rollout_state_has_actionable_contract():
+    """A valid memory-read key must not look invalid when account rollout is absent."""
+    client = _build()
+
+    developer_module.search_memory_default_developer_memories = MagicMock(
+        return_value=type(
+            'DeniedMemoryResult',
+            (),
+            {
+                'read_decision': developer_module.MemoryReadDecision.DENY_MEMORY,
+                'memories': [],
+                'fallback_reason': 'missing_rollout_state',
+                'should_use_legacy_fallback': False,
+            },
+        )()
+    )
+
+    resp = client.get('/v1/dev/user/memories')
+
+    assert resp.status_code == 403
+    detail = resp.json()['detail']
+    assert detail['code'] == 'developer_memory_access_not_ready'
+    assert detail['reason'] == 'missing_rollout_state'
+    assert 'key can be valid and correctly scoped' in detail['message']
+    assert developer_module.authorize_memory_external_default_memory_read.called
+
+
+def test_search_memories_vector_missing_rollout_state_has_actionable_contract():
+    """Vector search uses the same account-readiness error after a valid key grant."""
+    client = _build()
+
+    developer_module.search_memory_default_developer_memories_vector = MagicMock(
+        return_value=type(
+            'DeniedVectorMemoryResult',
+            (),
+            {
+                'read_decision': developer_module.MemoryReadDecision.DENY_MEMORY,
+                'memories': [],
+                'fallback_reason': 'missing_rollout_state',
+                'should_use_legacy_fallback': False,
+            },
+        )()
+    )
+
+    resp = client.get('/v1/dev/user/memories/vector/search', params={'query': 'memory'})
+
+    assert resp.status_code == 403
+    detail = resp.json()['detail']
+    assert detail['code'] == 'developer_memory_access_not_ready'
+    assert detail['reason'] == 'missing_rollout_state'
+    assert 'key can be valid and correctly scoped' in detail['message']
 
 
 # =============================================================================
