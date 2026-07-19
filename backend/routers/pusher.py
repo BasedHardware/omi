@@ -90,6 +90,30 @@ def pusher_session_outcome(close_code: int, *, application_failed: bool = False)
     return 'cancelled'
 
 
+# Claimed finalization jobs are durable work owned by the Firestore job ledger,
+# not connection-scoped I/O. They run detached from the session's cancellable
+# task set so the origin listen socket closing right after the opcode-104
+# handoff cannot cancel them mid-lease and strand the job leased until lease
+# expiry (#9995).
+_detached_finalization_tasks: Set[asyncio.Task[Any]] = set()
+
+
+def _spawn_detached_finalization(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
+    task = asyncio.create_task(coro)
+    _detached_finalization_tasks.add(task)
+
+    def on_done(t: asyncio.Task[Any]) -> None:
+        _detached_finalization_tasks.discard(t)
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc:
+            logger.error(f"Unhandled exception in detached finalization task: {exc}")
+
+    task.add_done_callback(on_done)
+    return task
+
+
 class _SpeakerSampleRequest(TypedDict):
     person_id: str
     conversation_id: str
@@ -135,10 +159,25 @@ async def _process_conversation_task(
         set_byok_uid(uid)
 
     async def send_result(result: Dict[str, Any]) -> None:
+        # Best-effort: the origin session may close at any point after the
+        # opcode-104 handoff. The job ledger is the durable outcome; a later
+        # session's re-request observes it via claim status.
+        if (
+            websocket.client_state != WebSocketState.CONNECTED
+            or websocket.application_state != WebSocketState.CONNECTED
+        ):
+            return
         data = bytearray()
         data.extend(struct.pack("I", 201))
         data.extend(bytes(json.dumps(result), "utf-8"))
-        await websocket.send_bytes(bytes(data))
+        try:
+            await websocket.send_bytes(bytes(data))
+        except Exception:
+            logger.info(
+                'pusher finalization result not delivered (session closed) uid=%s conversation=%s',
+                uid,
+                conversation_id,
+            )
 
     job_id: Optional[str] = None
     generation: Optional[int] = None
@@ -269,6 +308,25 @@ async def _process_conversation_task(
             return
         record_capture_finalization_terminal('success', claim.get('created_at'))
         await send_result({'conversation_id': conversation_id, 'success': True})
+    except asyncio.CancelledError:
+        # Detached tasks are only cancelled at process shutdown. Requeue a held
+        # lease now instead of leaving the job leased until lease expiry; the
+        # lease-epoch guard makes this a no-op after completion.
+        if job_id is not None and generation is not None and lease_epoch is not None:
+            try:
+                await asyncio.shield(
+                    run_blocking(
+                        db_executor,
+                        finalization_jobs_db.mark_finalization_retryable,
+                        job_id,
+                        generation,
+                        lease_epoch,
+                        'worker_shutdown',
+                    )
+                )
+            except Exception:
+                logger.error('pusher finalization cancel-release failed uid=%s conversation=%s', uid, conversation_id)
+        raise
     except ConversationFinalizationError:
         terminal = await record_failure('processing_failed')
         logger.error(
@@ -332,25 +390,6 @@ async def _websocket_util_trigger(
     except Exception:
         journey_attempt.finish('failure')
         raise
-
-    # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
-    bg_tasks: Set[asyncio.Task[Any]] = set()
-
-    def spawn(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
-        """Create a tracked background task that will be cancelled on cleanup."""
-        task = asyncio.create_task(coro)
-        bg_tasks.add(task)
-
-        def on_done(t: asyncio.Task[Any]) -> None:
-            bg_tasks.discard(t)
-            if t.cancelled():
-                return
-            exc = t.exception()
-            if exc:
-                logger.error(f"Unhandled exception in background task: {exc} {uid}")
-
-        task.add_done_callback(on_done)
-        return task
 
     # Bounded queues — prevent unbounded memory growth during backpressure
     speaker_sample_queue: deque[_SpeakerSampleRequest] = deque(maxlen=SPEAKER_SAMPLE_QUEUE_WARN_SIZE)
@@ -672,7 +711,9 @@ async def _websocket_util_trigger(
                     dispatch_generation = res.get('dispatch_generation')
                     if conversation_id:
                         logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
-                        spawn(
+                        # Detached on purpose: session cleanup must not cancel a
+                        # claimed finalization job (#9995).
+                        _spawn_detached_finalization(
                             _process_conversation_task(
                                 uid,
                                 conversation_id,
@@ -855,9 +896,9 @@ async def _websocket_util_trigger(
         shutdown_event.set()
         websocket_active = False
 
-        all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
+        # Detached finalization tasks are deliberately absent here (#9995).
+        all_to_cancel = [t for t in bg_main_tasks if not t.done()]
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
-        bg_tasks.clear()
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
 

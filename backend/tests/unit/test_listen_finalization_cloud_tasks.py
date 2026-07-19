@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import struct
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -292,6 +293,8 @@ class _Request:
 class _PusherWebSocket:
     def __init__(self):
         self.sent: list[bytes] = []
+        self.client_state = pusher_router.WebSocketState.CONNECTED
+        self.application_state = pusher_router.WebSocketState.CONNECTED
 
     async def send_bytes(self, payload: bytes) -> None:
         self.sent.append(payload)
@@ -728,6 +731,117 @@ async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
         'error': 'processing_failed',
         'terminal': False,
     }
+
+
+class _CloseAfterHandoffWebSocket:
+    """One opcode-104 frame, then a clean remote close (#9995)."""
+
+    def __init__(self, frame: bytes):
+        self._frames = [frame]
+        self.accepted = False
+        self.sent: list[bytes] = []
+        self.client_state = pusher_router.WebSocketState.DISCONNECTED
+        self.application_state = pusher_router.WebSocketState.DISCONNECTED
+
+    async def accept(self) -> None:
+        self.accepted = True
+
+    async def receive_bytes(self) -> bytes:
+        if self._frames:
+            return self._frames.pop(0)
+        raise pusher_router.WebSocketDisconnect(1000)
+
+    async def send_bytes(self, payload: bytes) -> None:
+        self.sent.append(payload)
+
+
+def _finalization_frame(conversation_id: str, job_id: str, dispatch_generation: int) -> bytes:
+    payload = {
+        'conversation_id': conversation_id,
+        'language': 'en',
+        'finalization_job_id': job_id,
+        'dispatch_generation': dispatch_generation,
+    }
+    return struct.pack('<I', 104) + json.dumps(payload).encode('utf-8')
+
+
+@pytest.mark.anyio
+async def test_pusher_finalization_survives_session_close_after_handoff(monkeypatch):
+    """Close-after-104: the claimed job must converge without a later live session.
+
+    Regression for #9995 — session cleanup used to cancel the connection-scoped
+    finalizer task; CancelledError bypassed retry/dead-letter handling and left
+    the claimed job leased until a later session or lease expiry.
+    """
+    _PusherJourneyAttempt.outcomes = []
+    _patch_pusher_session_dependencies(monkeypatch)
+
+    claim = MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1})
+    completed = MagicMock(return_value=True)
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
+
+    session_torn_down = asyncio.Event()
+
+    async def finalize(*_args, **_kwargs):
+        # Simulate LLM finalization still running while the origin session
+        # finishes its teardown, including the old cancel-everything drain.
+        await asyncio.wait_for(session_torn_down.wait(), timeout=5)
+        return ConversationFinalizationDisposition.completed
+
+    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', finalize)
+
+    async def supervisor(*, receive_task, **_kwargs):
+        await receive_task
+        return SimpleNamespace(reason='disconnect', task_name='ws:uid-1:receive')
+
+    monkeypatch.setattr(pusher_router, 'supervise_tasks', supervisor)
+
+    websocket = _CloseAfterHandoffWebSocket(_finalization_frame('conversation-1', 'job-1', 3))
+    await pusher_router._websocket_util_trigger(websocket, 'uid-1')
+
+    detached = list(pusher_router._detached_finalization_tasks)
+    assert len(detached) == 1, 'finalization must keep running after session cleanup'
+    session_torn_down.set()
+    await asyncio.wait_for(detached[0], timeout=5)
+
+    claim.assert_called_once()
+    completed.assert_called_once_with('job-1', 3, 7)
+    # The origin socket is gone; the result frame is dropped, not raised.
+    assert websocket.sent == []
+
+
+@pytest.mark.anyio
+async def test_pusher_cancelled_finalization_requeues_the_held_lease(monkeypatch):
+    """Process shutdown mid-lease releases the job instead of stranding it leased."""
+    websocket = _PusherWebSocket()
+    retryable = MagicMock(return_value=True)
+    claimed = asyncio.Event()
+    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1},
+    )
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+
+    async def finalize(*_args, **_kwargs):
+        claimed.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', finalize)
+
+    task = asyncio.create_task(
+        pusher_router._process_conversation_task(
+            'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
+        )
+    )
+    await asyncio.wait_for(claimed.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    retryable.assert_called_once_with('job-1', 3, 7, 'worker_shutdown')
 
 
 @pytest.mark.anyio
