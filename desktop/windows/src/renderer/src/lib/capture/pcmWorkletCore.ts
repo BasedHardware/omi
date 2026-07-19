@@ -44,6 +44,8 @@ export class StreamingResampler {
     // Upper bound on samples emitted (positions frac, frac+step, … that stay < n):
     // ceil covers the fractional tail, +2 absorbs float slop so the fill can never
     // run past the scratch. Overestimating only affects capacity, not the result.
+    // cap can be ≤ 0 when step > n (frac ≥ n ⇒ the loop runs zero times, returns
+    // empty) — inert: a non-positive cap never trips the grow guard (length ≥ 64).
     const cap = Math.ceil((n - this.frac) / step) + 2
     if (cap > this.scratch.length) this.scratch = new Float32Array(cap)
     const out = this.scratch
