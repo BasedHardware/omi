@@ -39,13 +39,34 @@ export interface HubConnectSlotProps {
 }
 
 let registered: ComponentType<HubConnectSlotProps> | null = null
+let preload: (() => void) | null = null
 
-/** Track 3: register the connector tray. Call once at startup. */
-export function registerHubConnectContent(component: ComponentType<HubConnectSlotProps>): void {
+/**
+ * Track 3: register the connector tray. Call once at startup.
+ *
+ * `preload` (optional) warms a lazily-imported tray's chunk. When the tray is a
+ * `React.lazy` component (it is — see connections/register.ts), the Hub can call
+ * `preloadHubConnectContent()` ahead of first open so the chunk is already resolved
+ * and the Connect stage renders instantly instead of flashing the Suspense fallback.
+ */
+export function registerHubConnectContent(
+  component: ComponentType<HubConnectSlotProps>,
+  preloadContent?: () => void
+): void {
   registered = component
+  preload = preloadContent ?? null
 }
 
 /** Read the registered tray (or null → the Hub renders the resting "coming soon"). */
 export function getHubConnectContent(): ComponentType<HubConnectSlotProps> | null {
   return registered
+}
+
+/**
+ * Warm the registered tray's lazy chunk so the first Connect open renders instantly.
+ * Safe to call repeatedly (the underlying dynamic import is memoized) and a no-op when
+ * nothing is registered or the registrant supplied no preloader.
+ */
+export function preloadHubConnectContent(): void {
+  preload?.()
 }
