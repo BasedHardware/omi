@@ -3,8 +3,11 @@ import { routeCaptureEvent, isOwnedCaptureEvent } from './captureBridge'
 import type { CaptureEvent } from '../../shared/types'
 
 // The bridge's routing decision is pure: owned events (audio errors, PTT) go to
-// the single UI window that issued the command; everything else broadcasts to
-// every non-capture window. These tests pin that decision without Electron.
+// the single UI window that issued the command; every other event through this
+// path (live-store mirror, meeting-capture-status) is consumed only by the main
+// window, so it targets the main window rather than fanning out to the
+// bar/glow/toast windows that just drop it. These tests pin that decision without
+// Electron.
 
 const owned: CaptureEvent[] = [
   { type: 'audio-source-error', sessionId: 's', name: 'NotAllowedError', message: 'x' },
@@ -15,41 +18,52 @@ const owned: CaptureEvent[] = [
   { type: 'ptt-levels', captureId: 'c', bins: [1, 2] }
 ]
 
-const broadcast: CaptureEvent[] = [
+// Non-owned events that flow through routeCaptureEvent in production.
+// (capture-window-restarted is non-owned too, but never reaches this path — it
+// originates in main via emitCaptureEventFromMain — so it isn't exercised here.)
+const mainWindowOnly: CaptureEvent[] = [
   { type: 'live', op: { op: 'reset' } },
+  { type: 'meeting-capture-status', meetingId: 'm', status: 'started' },
   { type: 'capture-window-restarted' }
 ]
 
 describe('isOwnedCaptureEvent', () => {
-  it('classifies owned vs broadcast events', () => {
+  it('classifies owned vs non-owned events', () => {
     for (const e of owned) expect(isOwnedCaptureEvent(e)).toBe(true)
-    for (const e of broadcast) expect(isOwnedCaptureEvent(e)).toBe(false)
+    for (const e of mainWindowOnly) expect(isOwnedCaptureEvent(e)).toBe(false)
   })
 })
 
 describe('routeCaptureEvent', () => {
   it('routes an owned event to its owner only', () => {
     for (const e of owned) {
-      expect(routeCaptureEvent(e, 2, [1, 2, 3])).toEqual([2])
+      // main window id present but irrelevant for owned events.
+      expect(routeCaptureEvent(e, 2, [1, 2, 3], 1)).toEqual([2])
     }
   })
 
   it('drops an owned event when its owner window is gone', () => {
     for (const e of owned) {
-      expect(routeCaptureEvent(e, 9, [1, 2, 3])).toEqual([])
-      expect(routeCaptureEvent(e, undefined, [1, 2, 3])).toEqual([])
+      expect(routeCaptureEvent(e, 9, [1, 2, 3], 1)).toEqual([])
+      expect(routeCaptureEvent(e, undefined, [1, 2, 3], 1)).toEqual([])
     }
   })
 
-  it('broadcasts non-owned events to every candidate window', () => {
-    for (const e of broadcast) {
-      expect(routeCaptureEvent(e, undefined, [1, 2, 3])).toEqual([1, 2, 3])
-      // An ownerId on a broadcast event is ignored — it still fans out.
-      expect(routeCaptureEvent(e, 2, [1, 2, 3])).toEqual([1, 2, 3])
+  it('routes a non-owned event to the main window only', () => {
+    for (const e of mainWindowOnly) {
+      expect(routeCaptureEvent(e, undefined, [1, 2, 3], 1)).toEqual([1])
+      // An ownerId on a non-owned event is ignored — it still goes to main only.
+      expect(routeCaptureEvent(e, 2, [1, 2, 3], 1)).toEqual([1])
     }
   })
 
-  it('broadcasts to nobody when there are no candidate windows', () => {
-    expect(routeCaptureEvent(broadcast[0], undefined, [])).toEqual([])
+  it('drops a non-owned event when the main window is gone or unknown', () => {
+    // main window not among the candidates (e.g. destroyed) → dropped, not fanned out.
+    expect(routeCaptureEvent(mainWindowOnly[0], undefined, [2, 3], 1)).toEqual([])
+    expect(routeCaptureEvent(mainWindowOnly[0], undefined, [1, 2, 3], undefined)).toEqual([])
+  })
+
+  it('routes to nobody when there are no candidate windows', () => {
+    expect(routeCaptureEvent(mainWindowOnly[0], undefined, [], 1)).toEqual([])
   })
 })

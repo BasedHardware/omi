@@ -8,14 +8,18 @@ import type { CaptureCommand, CaptureEvent } from '../../shared/types'
 //                         id (ownerId), so owned events can be routed back.
 //   'omi-capture:event' — the capture window emits a CaptureEvent; main accepts
 //                         it ONLY from the capture window (spoof guard) and either
-//                         routes it to its owner (audio errors, PTT) or broadcasts
-//                         it to every non-capture window (live-store, vad-status).
+//                         routes it to its owner (audio errors, PTT) or to the
+//                         MAIN window (live-store mirror, meeting-capture-status).
 // The main process still owns every listen WebSocket, so audio origin (capture
 // window) and transcript destination (any UI window) stay decoupled.
 
-// CaptureEvent types that target a single owning UI window rather than being
-// broadcast to all of them. Everything else (live, vad-status,
-// capture-window-restarted) fans out to every non-capture window.
+// CaptureEvent types that target a single owning UI window (the window that
+// issued the originating command). Everything else that flows through this path
+// (`live`, `meeting-capture-status`) is consumed only by the MAIN window's hosts
+// (LiveMirrorHost) or by main's own event tap, so it is routed to the main window
+// rather than fanned out to the bar/glow/toast/capture windows that just drop it.
+// (`capture-window-restarted` does NOT flow through here — it originates in main
+// and uses emitCaptureEventFromMain below.)
 const OWNED_EVENT_TYPES = new Set<CaptureEvent['type']>([
   'audio-source-error',
   'ptt-chunk',
@@ -41,20 +45,22 @@ export function onCaptureEventInMain(cb: (event: CaptureEvent) => void): () => v
 
 /**
  * Pure routing decision: given an event, the ownerId the capture window tagged it
- * with (if any), and the ids of the candidate (non-capture) windows, return the
- * window ids that should receive it. Owned events go to their owner only (dropped
- * if that window is gone); all others broadcast. Kept pure so it's unit-testable
- * without Electron.
+ * with (if any), the ids of the candidate (non-capture) windows, and the main
+ * window's id, return the window ids that should receive it. Owned events go to
+ * their owner only; every other event through this path is main-window-only
+ * (LiveMirrorHost / main's tap are the sole consumers) — both are dropped if their
+ * target window is gone. Kept pure so it's unit-testable without Electron.
  */
 export function routeCaptureEvent(
   event: CaptureEvent,
   ownerId: number | undefined,
-  windowIds: number[]
+  windowIds: number[],
+  mainWindowId: number | undefined
 ): number[] {
   if (isOwnedCaptureEvent(event)) {
     return ownerId !== undefined && windowIds.includes(ownerId) ? [ownerId] : []
   }
-  return windowIds
+  return mainWindowId !== undefined && windowIds.includes(mainWindowId) ? [mainWindowId] : []
 }
 
 /**
@@ -74,7 +80,10 @@ export function emitCaptureEventFromMain(event: CaptureEvent, captureWcId: numbe
  * webContents (or null before it exists / after teardown) — it's read live on
  * every message so a recreated capture window is picked up automatically.
  */
-export function registerCaptureBridge(getCaptureWc: () => WebContents | null): void {
+export function registerCaptureBridge(
+  getCaptureWc: () => WebContents | null,
+  getMainWc: () => WebContents | null
+): void {
   ipcMain.on('omi-capture:cmd', (e, cmd: CaptureCommand) => {
     const wc = getCaptureWc()
     if (!wc || wc.isDestroyed()) return
@@ -103,10 +112,13 @@ export function registerCaptureBridge(getCaptureWc: () => WebContents | null): v
     const targets = BrowserWindow.getAllWindows().filter(
       (w) => !w.isDestroyed() && w.webContents.id !== wc.id
     )
+    const mainWc = getMainWc()
+    const mainWindowId = mainWc && !mainWc.isDestroyed() ? mainWc.id : undefined
     const targetIds = routeCaptureEvent(
       payload.event,
       payload.ownerId,
-      targets.map((w) => w.webContents.id)
+      targets.map((w) => w.webContents.id),
+      mainWindowId
     )
     for (const w of targets) {
       if (targetIds.includes(w.webContents.id))

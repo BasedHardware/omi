@@ -807,7 +807,9 @@ app.whenReady().then(async () => {
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
   // command/event is missed. Reads the capture wc live so a respawn is picked up.
-  registerCaptureBridge(getCaptureWc)
+  registerCaptureBridge(getCaptureWc, () =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+  )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
   registerSoak()
