@@ -85,6 +85,7 @@ import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { initClaudeAgentConfigDir } from './codingAgent/agentConfigDir'
 import { registerMainChatHandlers } from './ipc/mainChat'
+import { registerAgentCardHandlers } from './ipc/agentCards'
 import { registerVoiceHubHandlers } from './ipc/voiceHub'
 import { registerVoiceToolHandlers } from './ipc/voiceTool'
 import { registerByokHandlers } from './ipc/byok'
@@ -899,6 +900,10 @@ app.whenReady().then(async () => {
   // Main-chat (kernel-routed pi-mono) IPC. DARK: the door exists but nothing in the
   // renderer calls it yet; default typed chat still routes through /v2/messages.
   registerMainChatHandlers()
+  // Shared-thread agent cards (B4, INV-CHAT-1): the always-alive writer that
+  // materializes exactly two artifacts per background run (spawn + one completion)
+  // onto the producing surface's kernel conversation, plus the renderer read.
+  registerAgentCardHandlers()
   // Realtime-hub voice turns → the one kernel transcript (INV-CHAT-1): record a
   // completed hub turn into the typed conversation + read the continuity seed back.
   registerVoiceHubHandlers()

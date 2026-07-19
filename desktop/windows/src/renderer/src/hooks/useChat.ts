@@ -30,6 +30,8 @@ import { parseDoneMessage, type DoneMessage } from '../lib/messagesSse'
 import { speakText } from '../lib/voice/voiceController'
 import { withByokHeadersIfActive } from '../lib/byokKeys'
 import { friendlyChatError } from '../lib/chat/chatErrorCopy'
+import { mergeAgentCards } from '../lib/chat/agentThreadCards'
+import type { ChatContentBlock } from '../../../shared/chatContent'
 
 export type ChatMsg = {
   id?: string
@@ -48,6 +50,11 @@ export type ChatMsg = {
   /** Files attached to this (user) message — rendered as chips in the thread and
    *  round-tripped through the persisted messages JSON. */
   attachments?: ChatAttachment[]
+  /** Shared-thread agent cards (B4, INV-CHAT-1): an assistant message that renders
+   *  a spawn/completion card instead of text. Projected from the kernel store (the
+   *  authoritative transcript) — NEVER persisted into the local-conversation store,
+   *  so it re-projects cleanly on every load and can't drift. */
+  blocks?: ChatContentBlock[]
 }
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
@@ -269,6 +276,25 @@ export function useChat(): UseChat {
     setSending(busy)
   }
 
+  // Project the shared-thread agent cards (B4, INV-CHAT-1) for a thread into
+  // `history`, merging by block id so a card seen both on load and via the live
+  // event de-dupes. Generation-guarded so a slower load a newer switch/reset
+  // supersedes never paints stale cards over the current thread. Fail-open: no
+  // cards == empty. Declared here (above its first use in the mount loader) so the
+  // load sites can call it after they replace `history`.
+  const loadAgentCards = (chatId: string, isCurrent: () => boolean): void => {
+    const getCards = window.omi.getAgentCardsForChat
+    if (typeof getCards !== 'function') return
+    void getCards(chatId)
+      .then((cards) => {
+        if (!isCurrent() || !cards.length) return
+        setHistory((h) => mergeAgentCards(h, cards))
+      })
+      .catch(() => {
+        /* fail-open — a card projection failure never blocks the chat */
+      })
+  }
+
   // In infinite mode the ongoing thread is loaded once on mount (and legacy
   // id-less messages get backfilled ids so the merge can match them). This hook
   // is the app's single chat engine now (the bar is a viewport over it via the
@@ -300,6 +326,13 @@ export function useChat(): UseChat {
       })
       .catch(() => {
         /* no prior conversation — start empty */
+      })
+      .finally(() => {
+        // Project this thread's shared-thread agent cards AFTER the history load has
+        // settled, so the load's setHistory can't clobber the merged cards.
+        if (!cancelled && genRef.current === myGen && !sendingRef.current && chatIdRef.current) {
+          loadAgentCards(chatIdRef.current, () => !cancelled && genRef.current === myGen)
+        }
       })
     return () => {
       cancelled = true
@@ -336,6 +369,11 @@ export function useChat(): UseChat {
       chatIdRef.current = `chat-${crypto.randomUUID()}`
     }
     if (!startedAtRef.current) startedAtRef.current = Date.now()
+
+    // Shared-thread agent cards (B4) live only in the kernel store and are
+    // re-projected on load; never write them into the local-conversation store, or
+    // the two stores would drift and a card would double-render on the next launch.
+    thread = thread.filter((m) => !(m.blocks && m.blocks.length))
 
     // In infinite mode, read the current stored thread and MERGE by message id
     // instead of overwriting — this updates (not duplicates) a streamed assistant
@@ -374,6 +412,23 @@ export function useChat(): UseChat {
       console.error('Failed to persist chat conversation:', e)
     }
   }
+
+  // Subscribe to live shared-thread agent card writes (spawn at launch, one
+  // completion at terminal). The subscription reads chatIdRef.current so it stays
+  // correct across thread switches; a card whose producing chatId doesn't match the
+  // active thread is ignored here and picked up by loadAgentCards when that thread
+  // later opens. Initial loads happen in each thread's history-load path (below),
+  // AFTER that path replaces `history`, so a card is never clobbered by the load.
+  useEffect(() => {
+    const onEvent = window.omi.onAgentCardEvent
+    if (typeof onEvent !== 'function') return
+    const off = onEvent((card) => {
+      if (card.chatId && card.chatId === chatIdRef.current) {
+        setHistory((h) => mergeAgentCards(h, [card]))
+      }
+    })
+    return () => off()
+  }, [])
 
   // Desktop-automation pre-step. Returns:
   //   'planned' — produced a valid plan (parked in pendingPlan for approval);
@@ -1391,6 +1446,9 @@ export function useChat(): UseChat {
               ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
+          // Project this thread's shared-thread agent cards after the load replaced
+          // history, so the load can't clobber them (B4, INV-CHAT-1).
+          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
         })
         .catch(() => {
           /* leave the thread empty on a load failure */
@@ -1409,6 +1467,9 @@ export function useChat(): UseChat {
               ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
+          // Project this thread's shared-thread agent cards after the load replaced
+          // history, so the load can't clobber them (B4, INV-CHAT-1).
+          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
         })
         .catch(() => {
           /* leave the thread empty on a load failure */
@@ -1429,6 +1490,9 @@ export function useChat(): UseChat {
               ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
+          // Project this thread's shared-thread agent cards after the load replaced
+          // history, so the load can't clobber them (B4, INV-CHAT-1).
+          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
         })
         .catch(() => {
           /* no prior conversation — start empty */
@@ -1484,6 +1548,9 @@ export function useChat(): UseChat {
               ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
+          // Project this thread's shared-thread agent cards after the load replaced
+          // history, so the load can't clobber them (B4, INV-CHAT-1).
+          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
         })
         .catch(() => {
           /* leave the thread empty on a load failure */
@@ -1504,6 +1571,9 @@ export function useChat(): UseChat {
               ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
+          // Project this thread's shared-thread agent cards after the load replaced
+          // history, so the load can't clobber them (B4, INV-CHAT-1).
+          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
         })
         .catch(() => {
           /* no prior conversation — start empty */

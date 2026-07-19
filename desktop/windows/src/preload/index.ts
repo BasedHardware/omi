@@ -38,6 +38,7 @@ import type {
   CodingAgentEvent,
   CodingAgentId,
   CodingAgentRunArgs,
+  AgentThreadCardMsg,
   MainChatEvent,
   MainChatSendArgs,
   VoiceHubRecordTurnArgs,
@@ -378,6 +379,12 @@ const omi: OmiBridgeApi = {
     const listener = (_e: Electron.IpcRendererEvent, event: MainChatEvent): void => cb(event)
     ipcRenderer.on('mainChat:event', listener)
     return () => ipcRenderer.removeListener('mainChat:event', listener)
+  },
+  getAgentCardsForChat: (chatId: string) => ipcRenderer.invoke('agentCards:get', chatId),
+  onAgentCardEvent: (cb: (card: AgentThreadCardMsg) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, card: AgentThreadCardMsg): void => cb(card)
+    ipcRenderer.on('agentCards:event', listener)
+    return () => ipcRenderer.removeListener('agentCards:event', listener)
   },
   voiceHubRecordTurn: (args: VoiceHubRecordTurnArgs) =>
     ipcRenderer.invoke('voiceHub:recordTurn', args),

@@ -161,3 +161,89 @@ describe.each(['main', 'overlay'] as const)('ChatMessages [%s] — attachments',
     expect((container.firstElementChild as HTMLElement).className).toContain('group/msg')
   })
 })
+
+// Shared-thread agent cards (B4, INV-CHAT-1): an assistant message carrying an
+// agentSpawn / agentCompletion block renders as a card, not a text bubble.
+const spawnCard = (): ChatMsg => ({
+  id: 'spawn-1',
+  role: 'assistant',
+  content: '',
+  blocks: [
+    {
+      type: 'agentSpawn',
+      id: 'spawn-1',
+      pillId: 'pill-1',
+      sessionId: 'sess_1',
+      runId: 'run_1',
+      title: 'Build the report',
+      objective: 'Assemble the weekly report and email it'
+    }
+  ]
+})
+
+const completionCard = (status: string, output: string): ChatMsg => ({
+  id: 'done-1',
+  role: 'assistant',
+  content: '',
+  blocks: [
+    {
+      type: 'agentCompletion',
+      id: 'done-1',
+      pillId: 'pill-1',
+      sessionId: 'sess_1',
+      runId: 'run_1',
+      title: 'Build the report',
+      promptSnippet: 'Assemble the weekly report',
+      output,
+      status
+    }
+  ]
+})
+
+describe('ChatMessages — shared-thread agent cards (B4)', () => {
+  it('renders the spawn card with its title + objective (not a text bubble)', () => {
+    render(<ChatMessages messages={[spawnCard()]} sending={false} variant="main" />)
+    expect(screen.getByText('Build the report')).not.toBeNull()
+    expect(screen.getByText('Assemble the weekly report and email it')).not.toBeNull()
+    expect(screen.getByText('Running')).not.toBeNull()
+    // A card is not a copyable text bubble.
+    expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull()
+  })
+
+  it('renders the completion card with a status label and its output', () => {
+    render(
+      <ChatMessages
+        messages={[completionCard('succeeded', 'All done — sent.')]}
+        sending={false}
+        variant="main"
+      />
+    )
+    expect(screen.getByText('Build the report')).not.toBeNull()
+    expect(screen.getByText('Done')).not.toBeNull()
+    expect(screen.getByText('All done — sent.')).not.toBeNull()
+  })
+
+  it('maps stopped + failed statuses to their labels', () => {
+    const { rerender } = render(
+      <ChatMessages messages={[completionCard('stopped', '')]} sending={false} variant="overlay" />
+    )
+    expect(screen.getByText('Stopped')).not.toBeNull()
+    rerender(
+      <ChatMessages
+        messages={[completionCard('failed', 'it broke')]}
+        sending={false}
+        variant="overlay"
+      />
+    )
+    expect(screen.getByText('Failed')).not.toBeNull()
+  })
+
+  it('a card as the last message while sending does NOT show the pending spinner', () => {
+    // Regression: a spawn card can land as the last message mid-turn; the card
+    // branch must precede the overlay pending-spinner branch (empty content +
+    // last + sending), or the card would be swallowed by the thinking spinner.
+    render(<ChatMessages messages={[user('go'), spawnCard()]} sending={true} variant="overlay" />)
+    expect(screen.queryByRole('status', { name: 'Omi is thinking' })).toBeNull()
+    expect(screen.getByText('Build the report')).not.toBeNull()
+  })
+})
