@@ -2,6 +2,11 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class Box<T>: @unchecked Sendable {
+  var value: T
+  init(_ value: T) { self.value = value }
+}
+
 private actor SuspendedJournalListGate {
   private var ownerAStarted = false
   private var ownerAStartedWaiters: [CheckedContinuation<Void, Never>] = []
@@ -80,13 +85,14 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       objective: "Finish after the user changes chats"
     )
 
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "assistant-pinned-spawn",
-      turnSeq: 1,
-      content: "I started a background agent.",
-      blocks: [spawn]
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "assistant-pinned-spawn",
+        turnSeq: 1,
+        content: "I started a background agent.",
+        blocks: [spawn]
+      ))
 
     XCTAssertEqual(
       pillsManager.producingJournalSurface(for: pillID),
@@ -128,17 +134,18 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       resources: [originalResource]
     )
 
-    let first = try XCTUnwrap(KernelAgentLifecycleMutation.completion(
-      in: [producingTurn],
-      pillID: pillID,
-      sessionID: "session-1",
-      runID: "run-1",
-      title: "Research",
-      promptSnippet: "Find the answer",
-      output: "The answer is 42.",
-      status: "completed",
-      resources: [producedResource]
-    ))
+    let first = try XCTUnwrap(
+      KernelAgentLifecycleMutation.completion(
+        in: [producingTurn],
+        pillID: pillID,
+        sessionID: "session-1",
+        runID: "run-1",
+        title: "Research",
+        promptSnippet: "Find the answer",
+        output: "The answer is 42.",
+        status: "completed",
+        resources: [producedResource]
+      ))
     XCTAssertEqual(first.message.id, "assistant-producing-spawn")
     XCTAssertEqual(first.message.text, "I started a background agent.")
     XCTAssertEqual(first.message.resources.map(\.id), ["artifact-original", "artifact-result"])
@@ -159,22 +166,24 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       blocks: first.message.contentBlocks,
       resources: first.message.resources
     )
-    let repeated = try XCTUnwrap(KernelAgentLifecycleMutation.completion(
-      in: [producingTurn, revisedTurn],
-      pillID: pillID,
-      sessionID: "session-1",
-      runID: "run-1",
-      title: "Research",
-      promptSnippet: "Find the answer",
-      output: "The answer is 42.",
-      status: "completed",
-      resources: [producedResource]
-    ))
+    let repeated = try XCTUnwrap(
+      KernelAgentLifecycleMutation.completion(
+        in: [producingTurn, revisedTurn],
+        pillID: pillID,
+        sessionID: "session-1",
+        runID: "run-1",
+        title: "Research",
+        promptSnippet: "Find the answer",
+        output: "The answer is 42.",
+        status: "completed",
+        resources: [producedResource]
+      ))
     XCTAssertEqual(repeated.message.id, producingTurn.turnId)
-    XCTAssertEqual(repeated.message.contentBlocks.filter {
-      if case .agentCompletion = $0 { return true }
-      return false
-    }.count, 1)
+    XCTAssertEqual(
+      repeated.message.contentBlocks.filter {
+        if case .agentCompletion = $0 { return true }
+        return false
+      }.count, 1)
     XCTAssertEqual(repeated.message.resources.map(\.id), ["artifact-original", "artifact-result"])
   }
 
@@ -186,30 +195,31 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       turnSeq: 1,
       content: "No child was started"
     )
-    XCTAssertNil(KernelAgentLifecycleMutation.completion(
-      in: [ordinary],
-      pillID: UUID(),
-      sessionID: nil,
-      runID: nil,
-      title: "Agent",
-      promptSnippet: "Task",
-      output: "Done",
-      status: "completed",
-      resources: []
-    ))
+    XCTAssertNil(
+      KernelAgentLifecycleMutation.completion(
+        in: [ordinary],
+        pillID: UUID(),
+        sessionID: nil,
+        runID: nil,
+        title: "Agent",
+        promptSnippet: "Task",
+        output: "Done",
+        status: "completed",
+        resources: []
+      ))
   }
 
   func testLegacyBackendCollectorReadsEveryBoundedPageBeforeCheckpoint() async throws {
-    var requested: [(limit: Int, offset: Int)] = []
+    let requested = Box<[(limit: Int, offset: Int)]>([])
     let rows = try await ChatLegacyPageCollector.all { limit, offset in
-      requested.append((limit, offset))
+      requested.value.append((limit, offset))
       let end = min(offset + limit, 235)
       return offset < end ? Array(offset..<end) : []
     }
 
     XCTAssertEqual(rows, Array(0..<235))
-    XCTAssertEqual(requested.map(\.limit), [100, 100, 100])
-    XCTAssertEqual(requested.map(\.offset), [0, 100, 200])
+    XCTAssertEqual(requested.value.map(\.limit), [100, 100, 100])
+    XCTAssertEqual(requested.value.map(\.offset), [0, 100, 200])
     XCTAssertEqual(ChatLegacyCompatibilityMetadata.owner, "desktop-main-chat")
     XCTAssertFalse(ChatLegacyCompatibilityMetadata.removalCondition.isEmpty)
     XCTAssertEqual(ChatLegacyCompatibilityMetadata.removeBy, "2026-10-01")
@@ -240,20 +250,22 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
   func testJournalProjectionUpsertsMutationByCanonicalTurnID() throws {
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "assistant-1",
-      turnSeq: 1,
-      content: "Part",
-      status: .streaming
-    ))
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "assistant-1",
-      turnSeq: 2,
-      content: "Part complete",
-      status: .completed
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "assistant-1",
+        turnSeq: 1,
+        content: "Part",
+        status: .streaming
+      ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "assistant-1",
+        turnSeq: 2,
+        content: "Part complete",
+        status: .completed
+      ))
 
     XCTAssertEqual(provider.messages.count, 1)
     XCTAssertEqual(provider.messages[0].id, "assistant-1")
@@ -394,17 +406,153 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(clearCalls.map(\.generation), [7])
   }
 
+  func testTemporaryAutomationOwnerKeepsFaultResetOnKernelBoundary() async {
+    let suiteName = "KernelTurnRecordedProjectionTests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suiteName) else {
+      return XCTFail("failed to create isolated defaults")
+    }
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    var clearCalls: [(ownerID: String, generation: Int)] = []
+    let projection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: {
+        RuntimeOwnerIdentity.currentOwnerId(defaults: defaults, allowAutomationOverride: true)
+      },
+      journalListOperation: { _, _, ownerID, _, _ in
+        self.journalPage(conversationId: "fault-conversation", turns: [], generation: 9)
+      },
+      journalClearOperation: { _, _, ownerID, generation in
+        clearCalls.append((ownerID, generation))
+        return 0
+      },
+      kernelReadyOperation: { true }
+    )
+
+    XCTAssertNil(RuntimeOwnerIdentity.currentOwnerId(defaults: defaults, allowAutomationOverride: true))
+    let cleared = await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
+      "desktop-harness-reset-omi-fault",
+      defaults: defaults
+    ) {
+      await projection.clear(surface: surface)
+    }
+
+    XCTAssertTrue(cleared)
+    XCTAssertEqual(clearCalls.map(\.ownerID), ["desktop-harness-reset-omi-fault"])
+    XCTAssertEqual(clearCalls.map(\.generation), [9])
+    XCTAssertNil(
+      RuntimeOwnerIdentity.currentOwnerId(defaults: defaults, allowAutomationOverride: true),
+      "the temporary owner must not turn an auth-recovery fault bundle into a signed-in session"
+    )
+  }
+
+  func testClearOwnerSurfaceStateUsesAuthoritativeJournalControlWhenModelReadinessIsUnavailable() async throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "visible-before-reset",
+        turnSeq: 1,
+        content: "This must be cleared only after the journal confirms it"
+      ))
+    var modelReadinessRequests = 0
+    var clearCalls: [(ownerID: String, generation: Int)] = []
+    let projection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: { "fault-harness-owner" },
+      journalListOperation: { _, _, ownerID, afterTurnSeq, limit in
+        XCTAssertEqual(ownerID, "fault-harness-owner")
+        XCTAssertEqual(afterTurnSeq, 0)
+        XCTAssertEqual(limit, 1)
+        return self.journalPage(conversationId: "fault-harness-conversation", turns: [], generation: 9)
+      },
+      journalClearOperation: { _, _, ownerID, expectedGeneration in
+        clearCalls.append((ownerID, expectedGeneration))
+        return 1
+      },
+      kernelReadyOperation: {
+        modelReadinessRequests += 1
+        return false
+      }
+    )
+
+    let cleared = await projection.clearOwnerSurfaceState(chatId: "default")
+
+    XCTAssertTrue(cleared)
+    XCTAssertEqual(modelReadinessRequests, 0)
+    XCTAssertEqual(clearCalls.map(\.ownerID), ["fault-harness-owner"])
+    XCTAssertEqual(clearCalls.map(\.generation), [9])
+    XCTAssertTrue(provider.messages.isEmpty)
+  }
+
+  func testFaultHarnessResetUsesCredentialFreeControlClearOnceAndCompletesProjectionReset() async throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let statusStore = AgentRuntimeStatusStore.shared
+    statusStore.reset()
+    defer { statusStore.reset() }
+    statusStore.beginRequest(surface: surface)
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "visible-before-fault-reset",
+        turnSeq: 1,
+        content: "This must disappear after the authoritative control clear"
+      ))
+    var modelReadinessRequests = 0
+    var clearCalls: [(ownerID: String, generation: Int)] = []
+    provider.kernelTurnProjection = KernelTurnProjection(
+      host: provider,
+      client: AgentClient.Session(harnessMode: "piMono"),
+      ownerIDProvider: {
+        RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true)
+      },
+      journalListOperation: { _, _, ownerID, afterTurnSeq, limit in
+        XCTAssertFalse(ownerID.isEmpty)
+        XCTAssertEqual(afterTurnSeq, 0)
+        XCTAssertEqual(limit, 1)
+        return self.journalPage(
+          conversationId: "fault-harness-conversation",
+          turns: [],
+          generation: 9
+        )
+      },
+      journalClearOperation: { _, _, ownerID, expectedGeneration in
+        clearCalls.append((ownerID, expectedGeneration))
+        return 1
+      },
+      kernelReadyOperation: {
+        modelReadinessRequests += 1
+        return false
+      }
+    )
+
+    let error = await provider.performMainChatHarnessResetTransaction()
+
+    XCTAssertNil(error)
+    XCTAssertEqual(modelReadinessRequests, 0)
+    XCTAssertEqual(clearCalls.map(\.generation), [9])
+    XCTAssertTrue(provider.messages.isEmpty)
+    XCTAssertNil(statusStore.projection(for: surface))
+  }
+
   func testClearFailsClosedWhenGenerationBootstrapFails() async throws {
     struct BootstrapFailure: Error {}
 
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "owner-b-visible",
-      turnSeq: 1,
-      content: "Keep visible when clear is rejected"
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "owner-b-visible",
+        turnSeq: 1,
+        content: "Keep visible when clear is rejected"
+      ))
     var clearCallCount = 0
     let projection = KernelTurnProjection(
       host: provider,
@@ -427,12 +575,13 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
   func testRuntimeOwnerNotificationSynchronouslyInvalidatesVisibleProjection() throws {
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "owner-a-visible",
-      turnSeq: 1,
-      content: "Owner A history"
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "owner-a-visible",
+        turnSeq: 1,
+        content: "Owner A history"
+      ))
     XCTAssertEqual(provider.messages.map(\.id), ["owner-a-visible"])
 
     NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
@@ -491,20 +640,22 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
   func testIdenticalTextWithDistinctTurnIDsRemainsDistinct() throws {
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "user-1",
-      turnSeq: 1,
-      role: "user",
-      content: "Same text"
-    ))
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "user-2",
-      turnSeq: 2,
-      role: "user",
-      content: "Same text"
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "user-1",
+        turnSeq: 1,
+        role: "user",
+        content: "Same text"
+      ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "user-2",
+        turnSeq: 2,
+        role: "user",
+        content: "Same text"
+      ))
 
     XCTAssertEqual(provider.messages.map(\.id), ["user-1", "user-2"])
     XCTAssertEqual(provider.messages.map(\.text), ["Same text", "Same text"])
@@ -523,7 +674,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
         promptSnippet: "Find the answer",
         output: "42",
         status: "completed"
-      ),
+      )
     ]
     let resources = [
       ChatResource(
@@ -539,17 +690,18 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
         sessionId: "session-1",
         runId: "run-1",
         state: .ready
-      ),
+      )
     ]
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "assistant-structured",
-      turnSeq: 1,
-      content: "Finished",
-      blocks: blocks,
-      resources: resources,
-      metadata: #"{"continuityKey":"continuity-1","notificationContext":"context"}"#
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "assistant-structured",
+        turnSeq: 1,
+        content: "Finished",
+        blocks: blocks,
+        resources: resources,
+        metadata: #"{"continuityKey":"continuity-1","notificationContext":"context"}"#
+      ))
 
     let projected = try XCTUnwrap(provider.messages.first)
     XCTAssertEqual(projected.clientTurnId, "continuity-1")
@@ -564,9 +716,10 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(journalTurn.producerId, "producer:identity-check")
     XCTAssertEqual(journalTurn.payloadHash, "sha256:identity-check")
     guard let firstBlock = projected.contentBlocks.first,
-          case .agentCompletion(
-      "completion-1", _, "session-1", "run-1", "Research complete", "Find the answer", "42", "completed"
-    ) = firstBlock else {
+      case .agentCompletion(
+        "completion-1", _, "session-1", "run-1", "Research complete", "Find the answer", "42", "completed"
+      ) = firstBlock
+    else {
       return XCTFail("Expected structured completion block to round-trip through the journal codec")
     }
 
@@ -584,33 +737,36 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
   func testFailedEmptyPlaceholderIsRemovedFromProjection() throws {
     let provider = ChatProvider()
     let surface = provider.mainChatSurfaceReference()
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "assistant-empty",
-      turnSeq: 1,
-      content: "",
-      status: .streaming
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "assistant-empty",
+        turnSeq: 1,
+        content: "",
+        status: .streaming
+      ))
     XCTAssertEqual(provider.messages.count, 1)
 
-    provider.projectJournalTurn(try turn(
-      surface: surface,
-      turnId: "assistant-empty",
-      turnSeq: 2,
-      content: "",
-      status: .failed
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: surface,
+        turnId: "assistant-empty",
+        turnSeq: 2,
+        content: "",
+        status: .failed
+      ))
     XCTAssertTrue(provider.messages.isEmpty)
   }
 
   func testProjectionRejectsAnotherSurface() throws {
     let provider = ChatProvider()
-    provider.projectJournalTurn(try turn(
-      surface: .workstream(workstreamId: "workstream-1"),
-      turnId: "wrong-surface",
-      turnSeq: 1,
-      content: "Do not project"
-    ))
+    provider.projectJournalTurn(
+      try turn(
+        surface: .workstream(workstreamId: "workstream-1"),
+        turnId: "wrong-surface",
+        turnSeq: 1,
+        content: "Do not project"
+      ))
     XCTAssertTrue(provider.messages.isEmpty)
   }
 
@@ -704,20 +860,21 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
   }
 
   func testBackendSyncRejectsOwnerChangeBeforeHTTP() async throws {
-    let request = try XCTUnwrap(KernelJournalBackendSyncDriver.Request(payload: [
-      "ownerId": "impossible-owner-\(UUID().uuidString)",
-      "turnId": "turn-1",
-      "conversationId": "conversation-1",
-      "clientMessageId": "turn-1",
-      "conversationGeneration": 3,
-      "attemptCount": 2,
-      "deliveryGeneration": 4,
-      "payloadHash": "sha256:payload",
-      "journalRevision": 11,
-      "text": "hello",
-      "sender": "human",
-      "messageSource": "desktop_chat",
-    ]))
+    let request = try XCTUnwrap(
+      KernelJournalBackendSyncDriver.Request(payload: [
+        "ownerId": "impossible-owner-\(UUID().uuidString)",
+        "turnId": "turn-1",
+        "conversationId": "conversation-1",
+        "clientMessageId": "turn-1",
+        "conversationGeneration": 3,
+        "attemptCount": 2,
+        "deliveryGeneration": 4,
+        "payloadHash": "sha256:payload",
+        "journalRevision": 11,
+        "text": "hello",
+        "sender": "human",
+        "messageSource": "desktop_chat",
+      ]))
 
     do {
       _ = try await KernelJournalBackendSyncDriver.shared.sync(request)
@@ -765,7 +922,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     let taskState = try sourceFile(
       "ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
     let taskStorage = try sourceFile("Rewind/Core/TaskChatMessageStorage.swift")
-    let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let realtime = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let runtime = try sourceFile("Chat/AgentRuntimeProcess.swift")
 
     XCTAssertFalse(provider.contains("APIClient.shared.saveMessage("))
@@ -820,31 +977,34 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     resources: [ChatResource] = [],
     metadata: String = "{}"
   ) throws -> KernelJournalTurn {
-    let contentBlocks = ChatContentBlockCodec.encode(blocks)
+    let contentBlocks =
+      ChatContentBlockCodec.encode(blocks)
       .flatMap(Self.jsonArray) ?? []
-    let encodedResources = ChatResource.encodeResourcesForPersistence(resources)
+    let encodedResources =
+      ChatResource.encodeResourcesForPersistence(resources)
       .flatMap(Self.jsonArray) ?? []
-    return try XCTUnwrap(KernelJournalTurn(dictionary: [
-      "conversationId": "conversation-1",
-      "turnId": turnId,
-      "turnSeq": turnSeq,
-      "conversationGeneration": 1,
-      "generationBaseTurnSeq": 0,
-      "producerId": "producer:\(turnId)",
-      "payloadHash": "sha256:\(turnId)",
-      "role": role,
-      "surfaceKind": surface.surfaceKind,
-      "externalRefKind": surface.externalRefKind,
-      "externalRefId": surface.externalRefId,
-      "content": content,
-      "origin": "test",
-      "status": status.rawValue,
-      "contentBlocks": contentBlocks,
-      "resources": encodedResources,
-      "metadataJson": metadata,
-      "createdAtMs": 1_700_000_000_000 + turnSeq,
-      "updatedAtMs": 1_700_000_000_000 + turnSeq,
-    ]))
+    return try XCTUnwrap(
+      KernelJournalTurn(dictionary: [
+        "conversationId": "conversation-1",
+        "turnId": turnId,
+        "turnSeq": turnSeq,
+        "conversationGeneration": 1,
+        "generationBaseTurnSeq": 0,
+        "producerId": "producer:\(turnId)",
+        "payloadHash": "sha256:\(turnId)",
+        "role": role,
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
+        "content": content,
+        "origin": "test",
+        "status": status.rawValue,
+        "contentBlocks": contentBlocks,
+        "resources": encodedResources,
+        "metadataJson": metadata,
+        "createdAtMs": 1_700_000_000_000 + turnSeq,
+        "updatedAtMs": 1_700_000_000_000 + turnSeq,
+      ]))
   }
 
   private static func jsonArray(_ raw: String) -> [Any]? {

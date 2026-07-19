@@ -218,7 +218,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
           children: [
             Expanded(
               child: Container(
-                height: 44,
+                height: 48,
                 decoration: BoxDecoration(
                   color: AppStyles.backgroundSecondary,
                   borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
@@ -228,7 +228,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             const SizedBox(width: 8),
             Container(
               width: 44,
-              height: 44,
+              height: 48,
               decoration: BoxDecoration(
                 color: AppStyles.backgroundSecondary,
                 borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
@@ -554,10 +554,10 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               }
                                               provider.applyFilters();
                                             },
-                                            icon: FaIcon(
-                                              FontAwesomeIcons.magnifyingGlass,
-                                              color: Colors.white70,
-                                              size: 14,
+                                            icon: const Icon(
+                                              Icons.search,
+                                              color: Colors.white60,
+                                              size: 20,
                                             ),
                                             padding: EdgeInsets.zero,
                                           ),
@@ -570,12 +570,12 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               height: 44,
                                               child: SearchBar(
                                                 hintText: context.l10n.searchAppsPlaceholder,
-                                                leading: Padding(
+                                                leading: const Padding(
                                                   padding: EdgeInsets.only(left: 6.0),
-                                                  child: FaIcon(
-                                                    FontAwesomeIcons.magnifyingGlass,
-                                                    color: Colors.white70,
-                                                    size: 14,
+                                                  child: Icon(
+                                                    Icons.search,
+                                                    color: Colors.white60,
+                                                    size: 20,
                                                   ),
                                                 ),
                                                 backgroundColor: WidgetStateProperty.all(

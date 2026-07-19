@@ -14,6 +14,10 @@ covers:
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+PushToTalk.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+VoiceOutput.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeScreenEvidence.swift
@@ -24,7 +28,9 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/ScreenCaptureManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
+  - desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
+  - desktop/macos/Desktop/Sources/VADGateService.swift
 preconditions:
   - automation_bridge_ready
 

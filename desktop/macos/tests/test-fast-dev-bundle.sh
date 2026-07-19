@@ -75,6 +75,23 @@ if grep -qE 'Killing existing instances|Cleaning up conflicting app bundles|Star
   exit 1
 fi
 
+# A requested Rewind reseed must take the full install path. Fast-only is an
+# inspection path and therefore rejects the combination before any side effect.
+rewind_seed_fast_only_output="$TMP_ROOT/rewind-seed-fast-only.log"
+if HOME="$TMP_ROOT/home" OMI_APP_NAME="omi-rewind-seed-fast-only-$$" OMI_FORCE_REWIND_SEED=1 \
+  "$MACOS_DIR/run.sh" --yolo --fast-only >"$rewind_seed_fast_only_output" 2>&1; then
+  echo "--fast-only unexpectedly accepted a forced Rewind seed" >&2
+  exit 1
+else
+  rewind_seed_fast_only_status=$?
+fi
+test "$rewind_seed_fast_only_status" = "2"
+grep -q -- '--fast-only cannot be combined' "$rewind_seed_fast_only_output"
+if grep -qE 'Killing existing instances|Cleaning up conflicting app bundles|Starting Cloudflare|Starting Rust backend|Preparing agent runtime' "$rewind_seed_fast_only_output"; then
+  echo "forced Rewind seed performed launch side effects before rejecting --fast-only" >&2
+  exit 1
+fi
+
 # A detached launcher cannot own a tunnel: cleanup would terminate it as the
 # script exits, leaving the relaunched app with a dead endpoint. Reject this
 # configuration before probing or starting anything.
@@ -90,6 +107,24 @@ test "$no_wait_status" = "2"
 grep -q 'requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1' "$no_wait_output"
 if grep -qE 'Killing existing instances|Starting Cloudflare|Starting Rust backend' "$no_wait_output"; then
   echo "--no-wait performed launch side effects before rejecting its tunnel lifecycle" >&2
+  exit 1
+fi
+
+# The documented environment form must have exactly the same detached-launch
+# contract as --no-wait. This lets agent-driven loops avoid a lingering
+# launcher after the named bundle is ready for manual QA.
+no_wait_env_output="$TMP_ROOT/no-wait-env-launcher.log"
+if HOME="$TMP_ROOT/home" OMI_APP_NAME="omi-no-wait-env-contract-$$" OMI_SKIP_BACKEND=1 NO_WAIT=1 \
+  "$MACOS_DIR/run.sh" --fast-only >"$no_wait_env_output" 2>&1; then
+  echo "NO_WAIT=1 unexpectedly accepted a launcher-owned tunnel" >&2
+  exit 1
+else
+  no_wait_env_status=$?
+fi
+test "$no_wait_env_status" = "2"
+grep -q 'requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1' "$no_wait_env_output"
+if grep -qE 'Killing existing instances|Starting Cloudflare|Starting Rust backend' "$no_wait_env_output"; then
+  echo "NO_WAIT=1 performed launch side effects before rejecting its tunnel lifecycle" >&2
   exit 1
 fi
 

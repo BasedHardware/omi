@@ -2940,7 +2940,7 @@
     "upgradePlan": "Nâng cấp gói",
     "billingMonthly": "Hàng tháng",
     "billingYearly": "Hàng năm",
-    "savePercent": "Tiết kiệm ~17%",
+    "savePercent": "Tiết kiệm ~{percent}%",
     "popular": "Phổ biến",
     "currentPlan": "Hiện tại",
     "neoSubtitle": "{count} câu hỏi mỗi tháng",
@@ -3154,5 +3154,6 @@
     "deviceStorageUsedOfTotal": "Đã dùng {used} trong {total}",
     "deviceStorageFree": "Còn trống {free}",
     "deviceStorageNearlyFull": "Thiết bị gần đầy — đồng bộ để giải phóng dung lượng.",
-    "phoneMicOfflineFallbackMessage": "Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại."
+    "phoneMicOfflineFallbackMessage": "Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại.",
+    "dataEncryptedBanner": "Dữ liệu của bạn được bảo mật mặc định bằng mã hóa mạnh, và bạn kiểm soát cách nó được lưu trữ và sử dụng."
 }

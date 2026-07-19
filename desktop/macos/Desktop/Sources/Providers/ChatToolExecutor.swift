@@ -1,8 +1,8 @@
+@preconcurrency import AVFoundation
 import AppKit
-import AVFoundation
 import Foundation
-import GRDB
-import UserNotifications
+@preconcurrency import GRDB
+@preconcurrency import UserNotifications
 
 private enum ChatToolOwnerAuthorization {
   @TaskLocal static var snapshot: RuntimeOwnerAuthorizationSnapshot?
@@ -140,15 +140,17 @@ class ChatToolExecutor {
     backendAPIClient: APIClient = .shared
   ) async -> String {
     let pinnedOwnerID = expectedOwnerID ?? RuntimeOwnerIdentity.currentOwnerId()
-    let allowsSignedOutOnboardingPermission = isOnboardingSurface
+    let allowsSignedOutOnboardingPermission =
+      isOnboardingSurface
       && ["request_permission", "check_permission_status"].contains(toolCall.name)
     guard pinnedOwnerID != nil || allowsSignedOutOnboardingPermission else {
       return authorizedOwnerChangedResult()
     }
     let pinnedAuthorization: RuntimeOwnerAuthorizationSnapshot?
     if let pinnedOwnerID {
-      guard let authorization = authorizationSnapshot
-        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: pinnedOwnerID),
+      guard
+        let authorization = authorizationSnapshot
+          ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: pinnedOwnerID),
         authorization.ownerID == pinnedOwnerID,
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
       else {
@@ -251,9 +253,10 @@ class ChatToolExecutor {
               authorizationSnapshot: permissionAuthorization)
           })
       else { return authorizedOwnerChangedResult() }
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: permissionAuthorization)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: permissionAuthorization)
       else { return authorizedOwnerChangedResult() }
       let permType = toolCall.arguments["type"] as? String ?? "unknown"
       let granted = permissionToolResultGranted(result)
@@ -280,9 +283,10 @@ class ChatToolExecutor {
         toolCall.arguments,
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: permissionAuthorization)
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: permissionAuthorization)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: permissionAuthorization)
       else { return authorizedOwnerChangedResult() }
       AnalyticsManager.shared.onboardingChatToolUsed(tool: "check_permission_status")
       return result
@@ -453,7 +457,7 @@ class ChatToolExecutor {
   }
 
   @MainActor
-  static func performOwnerBoundPhysicalEffect<T>(
+  static func performOwnerBoundPhysicalEffect<T: Sendable>(
     expectedOwnerID: String?,
     ownerIsCurrent: (String?) -> Bool = { isExpectedOwnerCurrent($0) },
     effect: () -> T
@@ -463,16 +467,17 @@ class ChatToolExecutor {
   }
 
   @MainActor
-  static func performOwnerBoundAsyncPhysicalEffect<T>(
+  static func performOwnerBoundAsyncPhysicalEffect<T: Sendable>(
     expectedOwnerID: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     ownerIsCurrent: ((String?) -> Bool)? = nil,
     prepare: () async -> Void = {},
     effect: () async -> T
   ) async -> T? {
-    let validateOwner = ownerIsCurrent ?? {
-      isExpectedOwnerCurrent($0, authorizationSnapshot: authorizationSnapshot)
-    }
+    let validateOwner =
+      ownerIsCurrent ?? {
+        isExpectedOwnerCurrent($0, authorizationSnapshot: authorizationSnapshot)
+      }
     guard validateOwner(expectedOwnerID) else { return nil }
     await prepare()
     guard validateOwner(expectedOwnerID) else { return nil }
@@ -520,13 +525,14 @@ class ChatToolExecutor {
     reason: String,
     message: String
   ) -> String {
-    let payload = [
-      "ok": false,
-      "code": "execution_precondition_failed",
-      "reason": reason,
-      "tool": toolName,
-      "message": message,
-    ] as [String: Any]
+    let payload =
+      [
+        "ok": false,
+        "code": "execution_precondition_failed",
+        "reason": reason,
+        "tool": toolName,
+        "message": message,
+      ] as [String: Any]
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
       let json = String(data: data, encoding: .utf8)
@@ -541,15 +547,16 @@ class ChatToolExecutor {
     permission: String,
     message: String
   ) -> String {
-    let payload = [
-      "ok": false,
-      "code": "permission_required",
-      "tool": toolName,
-      "permission": permission,
-      "message": message,
-      "next_tool": "request_permission",
-      "next_tool_arguments": ["type": permission],
-    ] as [String: Any]
+    let payload =
+      [
+        "ok": false,
+        "code": "permission_required",
+        "tool": toolName,
+        "permission": permission,
+        "message": message,
+        "next_tool": "request_permission",
+        "next_tool_arguments": ["type": permission],
+      ] as [String: Any]
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
       let json = String(data: data, encoding: .utf8)
@@ -652,7 +659,8 @@ class ChatToolExecutor {
     expectedOwnerID: String?
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-    let payload = await ScreenContextWorkContextBuilder.payload(arguments: arguments)
+    let payloadBox = await ScreenContextWorkContextBuilder.payloadBox(arguments: RuntimeJSONPayloadBox(arguments))
+    let payload = payloadBox.value
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     let telemetry = ScreenContextWorkContextBuilder.telemetryValues(from: payload)
     ScreenContextToolTelemetry.trackToolResult(
@@ -883,51 +891,53 @@ class ChatToolExecutor {
     }
 
     let query = finalQuery
-    let rows = try await dbQueue.read { db in
-      try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
+    let formatted = try await dbQueue.read { db -> (text: String, count: Int) in
+      let rows = try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
+
+      if rows.isEmpty {
+        return ("No results", 0)
+      }
+
+      // Get column names from first row
+      let columns = Array(rows[0].columnNames)
+      var lines: [String] = []
+
+      // Header
+      lines.append(columns.joined(separator: " | "))
+      lines.append(String(repeating: "-", count: min(columns.count * 20, 120)))
+
+      // Rows (max 200) — Row is RandomAccessCollection of (String, DatabaseValue)
+      for row in rows.prefix(200) {
+        let values = row.map { (_, dbValue) -> String in
+          let value: String
+          switch dbValue.storage {
+          case .null:
+            value = "NULL"
+          case .int64(let i):
+            value = String(i)
+          case .double(let d):
+            value = String(d)
+          case .string(let s):
+            value = s
+          case .blob(let data):
+            value = "<\(data.count) bytes>"
+          }
+          // Truncate long cell values
+          if value.count > 500 {
+            return String(value.prefix(500)) + "..."
+          }
+          return value
+        }
+        lines.append(values.joined(separator: " | "))
+      }
+
+      lines.append("\n\(rows.count) row(s)")
+      return (lines.joined(separator: "\n"), rows.count)
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-    if rows.isEmpty {
-      return "No results"
-    }
-
-    // Get column names from first row
-    let columns = Array(rows[0].columnNames)
-    var lines: [String] = []
-
-    // Header
-    lines.append(columns.joined(separator: " | "))
-    lines.append(String(repeating: "-", count: min(columns.count * 20, 120)))
-
-    // Rows (max 200) — Row is RandomAccessCollection of (String, DatabaseValue)
-    for row in rows.prefix(200) {
-      let values = row.map { (_, dbValue) -> String in
-        let value: String
-        switch dbValue.storage {
-        case .null:
-          value = "NULL"
-        case .int64(let i):
-          value = String(i)
-        case .double(let d):
-          value = String(d)
-        case .string(let s):
-          value = s
-        case .blob(let data):
-          value = "<\(data.count) bytes>"
-        }
-        // Truncate long cell values
-        if value.count > 500 {
-          return String(value.prefix(500)) + "..."
-        }
-        return value
-      }
-      lines.append(values.joined(separator: " | "))
-    }
-
-    lines.append("\n\(rows.count) row(s)")
-    log("Tool execute_sql returned \(rows.count) rows")
-    return lines.joined(separator: "\n")
+    log("Tool execute_sql returned \(formatted.count) rows")
+    return formatted.text
   }
 
   /// Execute a write (INSERT/UPDATE/DELETE) query
@@ -1189,7 +1199,7 @@ class ChatToolExecutor {
           for app in apps.prefix(20) {
             let name = app["appName"] as? String ?? "Unknown"
             let minutes = app["minutes"] as? Double ?? 0
-            let screenshots = app["screenshots"] as? Int ?? 0
+            let screenshots = Self.rowInt(app["screenshots"]) ?? 0
             let firstSeen = app["first_seen"] as? String ?? ""
             let lastSeen = app["last_seen"] as? String ?? ""
             out +=
@@ -1218,7 +1228,7 @@ class ChatToolExecutor {
         } else {
           for task in tasks {
             let desc = task["description"] as? String ?? ""
-            let completed = (task["completed"] as? Int ?? 0) == 1
+            let completed = (Self.rowInt(task["completed"]) ?? 0) == 1
             let priority = task["priority"] as? String ?? ""
             let check = completed ? "[x]" : "[ ]"
             let pri = priority.isEmpty ? "" : " (\(priority))"
@@ -1235,7 +1245,7 @@ class ChatToolExecutor {
             let status = session["status"] as? String ?? ""
             let app = session["appOrSite"] as? String ?? ""
             let desc = session["description"] as? String ?? ""
-            let dur = session["durationSeconds"] as? Int ?? 0
+            let dur = Self.rowInt(session["durationSeconds"]) ?? 0
             let durStr = dur > 0 ? " (\(dur / 60)m)" : ""
             let icon = status == "focused" ? "+" : "-"
             out += "- \(icon) \(app)\(durStr): \(desc)\n"
@@ -1399,7 +1409,8 @@ class ChatToolExecutor {
         No matching screen-history results for "\(query)" in the last \(days) day(s)\(appText). Local history exists (\(stats.total) screenshot(s), \(stats.indexed) indexed), so try a broader query, a wider days window, or use execute_sql for exact app/window/OCR filters.
         """
     } catch {
-      return "No screenshots found matching \"\(query)\" in the last \(days) day(s). Local status could not be read: \(error.localizedDescription)"
+      return
+        "No screenshots found matching \"\(query)\" in the last \(days) day(s). Local status could not be read: \(error.localizedDescription)"
     }
   }
 
@@ -1408,6 +1419,16 @@ class ChatToolExecutor {
     if let value = value as? Double { return Int(value) }
     if let value = value as? String { return Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) }
     return nil
+  }
+
+  /// Reads an integer value out of a GRDB `Row`. GRDB decodes SQLite INTEGER
+  /// columns to `Int64`, and `Int64 as? Int` is ALWAYS nil in Swift (no numeric
+  /// bridging), so a bare `row["col"] as? Int` silently falls through to its
+  /// default. Prefer `Int64`, fall back to `Int` for any already-Int value.
+  /// `nonisolated` so non-main-actor tests (and callers) can use this pure
+  /// helper without hopping the actor.
+  nonisolated static func rowInt(_ value: Any?) -> Int? {
+    (value as? Int64).map(Int.init) ?? (value as? Int)
   }
 
   // MARK: - Task Search
@@ -1497,7 +1518,8 @@ class ChatToolExecutor {
       }
 
       if lines.isEmpty {
-        return "No tasks found matching \"\(query)\". The embedding index may not be loaded yet, or no tasks have embeddings."
+        return
+          "No tasks found matching \"\(query)\". The embedding index may not be loaded yet, or no tasks have embeddings."
       }
 
       lines.insert("Found \(count) task(s) matching \"\(query)\":", at: 0)
@@ -1609,9 +1631,10 @@ class ChatToolExecutor {
     expectedOwnerID: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async -> String {
-    guard isPermissionAuthorizationCurrent(
-      expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot)
+    guard
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     else { return authorizedOwnerChangedResult() }
     guard let type = permissionType(from: args) else {
       return permissionJSON([
@@ -1627,25 +1650,29 @@ class ChatToolExecutor {
 
     switch type {
     case "screen_recording":
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       appState?.screenRecordingGrantAttempts += 1
       let requestResult = await awaitCancellablePermissionRequest { completion in
         Task { @MainActor in
-          guard isPermissionAuthorizationCurrent(
-            expectedOwnerID,
-            authorizationSnapshot: authorizationSnapshot)
+          guard
+            isPermissionAuthorizationCurrent(
+              expectedOwnerID,
+              authorizationSnapshot: authorizationSnapshot)
           else {
             completion(false)
             return
           }
-          let granted = await ScreenCaptureService
+          let granted =
+            await ScreenCaptureService
             .requestAllScreenCapturePermissionsAwaitingScreenCaptureKit()
-          guard isPermissionAuthorizationCurrent(
-            expectedOwnerID,
-            authorizationSnapshot: authorizationSnapshot)
+          guard
+            isPermissionAuthorizationCurrent(
+              expectedOwnerID,
+              authorizationSnapshot: authorizationSnapshot)
           else {
             completion(false)
             return
@@ -1663,9 +1690,10 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
       try? await Task.sleep(nanoseconds: 2_000_000_000)
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       appState?.checkScreenRecordingPermission()
       return permissionRequestResult(
@@ -1677,9 +1705,10 @@ class ChatToolExecutor {
       )
 
     case "microphone":
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       NSApp.activate()
       guard let granted = await requestMicrophonePermissionDirectly(),
@@ -1689,9 +1718,10 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       appState?.hasMicrophonePermission = granted
       if granted, let appState, appState.hasCompletedOnboarding {
-        guard isPermissionAuthorizationCurrent(
-          expectedOwnerID,
-          authorizationSnapshot: authorizationSnapshot)
+        guard
+          isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
         else { return authorizedOwnerChangedResult() }
         appState.startTranscription()
       }
@@ -1703,9 +1733,10 @@ class ChatToolExecutor {
       )
 
     case "notifications":
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       guard let granted = await requestNotificationPermissionDirectly(),
         isPermissionAuthorizationCurrent(
@@ -1727,17 +1758,19 @@ class ChatToolExecutor {
       )
 
     case "accessibility":
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       requestAccessibilityPermissionDirectly(
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
       try? await Task.sleep(nanoseconds: 2_000_000_000)
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       appState?.checkAccessibilityPermission()
       return permissionRequestResult(
@@ -1748,9 +1781,10 @@ class ChatToolExecutor {
       )
 
     case "automation":
-      guard let status = await triggerAutomationPermissionDirectly(
-        expectedOwnerID: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot),
+      guard
+        let status = await triggerAutomationPermissionDirectly(
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot),
         isPermissionAuthorizationCurrent(
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
@@ -1771,9 +1805,10 @@ class ChatToolExecutor {
       )
 
     case "full_disk_access":
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       _ = openPermissionPrivacySettings(
         pane: "Privacy_AllFiles",
@@ -1783,9 +1818,10 @@ class ChatToolExecutor {
       // Full Disk Access list to add and enable it in one gesture.
       Task { await PermissionDragGuidance.presentDragToGrantHelper() }
       try? await Task.sleep(nanoseconds: 3_000_000_000)
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
+      guard
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       let granted = checkFullDiskAccessDirectly()
       appState?.hasFullDiskAccess = granted
@@ -1814,19 +1850,22 @@ class ChatToolExecutor {
     expectedOwnerID: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async -> String {
-    guard isPermissionAuthorizationCurrent(
-      expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot)
+    guard
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     else { return authorizedOwnerChangedResult() }
     let appState = onboardingAppState ?? AppState.current
-    guard let statuses = await currentPermissionStatuses(
-      appState: appState,
-      expectedOwnerID: expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot)
+    guard
+      let statuses = await currentPermissionStatuses(
+        appState: appState,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     else { return authorizedOwnerChangedResult() }
-    guard isPermissionAuthorizationCurrent(
-      expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot)
+    guard
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     else { return authorizedOwnerChangedResult() }
     if let type = permissionType(from: args), onboardingPermissionTypes.contains(type) {
       return permissionJSON([
@@ -1896,9 +1935,10 @@ class ChatToolExecutor {
     let accessibilityGranted = AXIsProcessTrusted()
     let automationStatus = AppState.queryAutomationPermissionStatus()
     let fullDiskAccessGranted = checkFullDiskAccessDirectly()
-    guard isPermissionAuthorizationCurrent(
-      expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot)
+    guard
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     else { return nil }
 
     appState?.hasScreenRecordingPermission = ScreenRecordingPermissionPolicy.uiPermissionGranted(
@@ -1949,9 +1989,10 @@ class ChatToolExecutor {
     expectedOwnerID: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) {
-    guard isPermissionAuthorizationCurrent(
-      expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot)
+    guard
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     else { return }
     let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     let granted = AXIsProcessTrustedWithOptions(options)
@@ -1973,9 +2014,10 @@ class ChatToolExecutor {
       // request outside the tracked parent, but fence every step and route its
       // completion through the once-resume cancellation adapter above.
       Task { @MainActor in
-        guard isPermissionAuthorizationCurrent(
-          expectedOwnerID,
-          authorizationSnapshot: authorizationSnapshot)
+        guard
+          isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
         else {
           completion(OSStatus(errAEEventNotPermitted))
           return
@@ -1984,9 +2026,10 @@ class ChatToolExecutor {
         var launchError: NSDictionary?
         launchScript?.executeAndReturnError(&launchError)
         try? await Task.sleep(nanoseconds: 500_000_000)
-        guard isPermissionAuthorizationCurrent(
-          expectedOwnerID,
-          authorizationSnapshot: authorizationSnapshot)
+        guard
+          isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
         else {
           completion(OSStatus(errAEEventNotPermitted))
           return
@@ -1999,9 +2042,10 @@ class ChatToolExecutor {
             """)
         var error: NSDictionary?
         script?.executeAndReturnError(&error)
-        guard isPermissionAuthorizationCurrent(
-          expectedOwnerID,
-          authorizationSnapshot: authorizationSnapshot)
+        guard
+          isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
         else {
           completion(OSStatus(errAEEventNotPermitted))
           return
@@ -2022,9 +2066,10 @@ class ChatToolExecutor {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     open: (URL) -> Bool = { NSWorkspace.shared.open($0) }
   ) -> Bool {
-    guard isPermissionAuthorizationCurrent(
-      expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot),
+    guard
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot),
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
     else { return false }
@@ -2037,13 +2082,15 @@ class ChatToolExecutor {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     open: (URL) -> Bool = { NSWorkspace.shared.open($0) }
   ) -> Bool {
-    guard isPermissionAuthorizationCurrent(
-      expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot)
+    guard
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     else { return false }
     let bundleID = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
-    guard let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)")
+    guard
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleID)")
     else { return false }
     return open(url)
   }
@@ -2055,12 +2102,14 @@ class ChatToolExecutor {
     ownerIsCurrent: ((String?) -> Bool)? = nil,
     open: (URL) -> Bool = { NSWorkspace.shared.open($0) }
   ) -> Bool {
-    let validateOwner = ownerIsCurrent ?? {
-      isPermissionAuthorizationCurrent($0, authorizationSnapshot: authorizationSnapshot)
-    }
+    let validateOwner =
+      ownerIsCurrent ?? {
+        isPermissionAuthorizationCurrent($0, authorizationSnapshot: authorizationSnapshot)
+      }
     guard validateOwner(expectedOwnerID) else { return false }
-    guard let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+    guard
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
     else { return false }
     return open(url)
   }
@@ -2072,9 +2121,11 @@ class ChatToolExecutor {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     callback: ((String) -> Void)?
   ) {
-    guard isPermissionAuthorizationCurrent(
-      expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot) else { return }
+    guard
+      isPermissionAuthorizationCurrent(
+        expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
+    else { return }
     callback?(permissionType)
   }
 
@@ -2291,7 +2342,7 @@ class ChatToolExecutor {
         out += "## File Types\n"
         for row in typeBreakdown {
           let type = row["fileType"] as? String ?? "unknown"
-          let count = row["count"] as? Int ?? 0
+          let count = Self.rowInt(row["count"]) ?? 0
           out += "- \(type): \(count) files\n"
         }
 

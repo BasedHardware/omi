@@ -30,6 +30,30 @@ final class FileIndexerRetentionTests: XCTestCase {
     XCTAssertFalse(toDelete.contains("~/Documents/notes/todo.txt"))
   }
 
+  func testSubtreeUnderAnUnstattableDirectoryIsProtected() {
+    // A per-item `resourceValues` failure (transient stat/permission error)
+    // leaves a subdirectory's type indeterminate. scanDirectory now inserts that
+    // directory's relative path into the protected set instead of dropping it, so
+    // its entire nested subtree must survive the retention diff even though none
+    // of its files were seen this scan.
+    let existing: Set<String> = [
+      "~/Projects/app/Package.swift",
+      "~/Projects/app/Sources/main.swift",
+      "~/Projects/app/Sources/util/helper.swift",
+      "~/Projects/other/readme.md",
+    ]
+    let scanned: Set<String> = ["~/Projects/other/readme.md"]
+    let protectedPrefixes: Set<String> = ["~/Projects/app"]
+
+    let toDelete = FileIndexerService.pathsToDelete(
+      scannedPaths: scanned,
+      existingPaths: existing,
+      protectedPrefixes: protectedPrefixes
+    )
+
+    XCTAssertTrue(toDelete.isEmpty, "nested files under the unstattable dir must not be purged")
+  }
+
   func testGenuinelyRemovedFilesAreStillDeleted() {
     // No failed directories: a previously-indexed file not seen this scan is a
     // real deletion and must be purged.

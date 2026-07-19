@@ -15,6 +15,7 @@ import database.conversations as conversations_db
 from utils.executors import db_executor, run_blocking
 from utils.llm.clients import get_llm
 from utils.llm.model_config import get_model, get_provider
+from utils.llm.usage_tracker import Features, track_usage
 
 logger = logging.getLogger(__name__)
 
@@ -225,13 +226,14 @@ CONVERSATIONS:
 
 Respond with ONLY the JSON output, no other text."""
 
-        classifier_llm = _classifier_llm or get_llm('fair_use')
-        response = await classifier_llm.ainvoke(
-            [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ]
-        )
+        with track_usage(uid, Features.OTHER):
+            classifier_llm = _classifier_llm or get_llm('fair_use')
+            response = await classifier_llm.ainvoke(
+                [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_message},
+                ]
+            )
 
         content = cast(str, cast(Any, response).content) if hasattr(response, 'content') else str(response)
 

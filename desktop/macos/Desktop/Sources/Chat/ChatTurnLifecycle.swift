@@ -117,6 +117,16 @@ struct ChatTerminalTargetRegistry<T> {
 /// actor, so no later streaming callback can enqueue after terminalization has
 /// taken ownership; an already queued write is drained before the caller sends
 /// the terminal mutation to the kernel.
+///
+/// Only *supersedable* writes — the coalesced `status: .streaming` token/tool
+/// flushes — are gated by terminalization, because letting one land after the
+/// terminal mutation would regress a terminalized turn back to `streaming`.
+/// Durable content mutations (discovery cards, tool-call finalization, orphan
+/// finalization, kernel resource refreshes) carry no streaming status and so
+/// cannot regress the turn; they stay journalable for the whole turn lifetime.
+/// The set is only cleared on `cancelAll()` (auth change), so a permanent gate
+/// on *every* write would silently drop those durable updates for the rest of
+/// the session.
 @MainActor
 final class ChatJournalWriteCoordinator {
   private var updateTasks: [String: Task<Void, Never>] = [:]
@@ -125,9 +135,10 @@ final class ChatJournalWriteCoordinator {
   @discardableResult
   func schedule(
     messageID: String,
+    supersededByTerminalization: Bool = true,
     operation: @escaping @MainActor @Sendable () async -> Void
   ) -> Bool {
-    guard !terminalizingMessageIDs.contains(messageID) else { return false }
+    if supersededByTerminalization, terminalizingMessageIDs.contains(messageID) { return false }
     let previous = updateTasks[messageID]
     let task = Task { @MainActor in
       _ = await previous?.value

@@ -1586,7 +1586,7 @@
     "port": "Prievadas",
     "preferences": "Nuostatos",
     "premiumMinsLeft": "Liko {count} premium minučių.",
-    "premiumMinutesMonth": "600 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ",
+    "premiumMinutesMonth": "300 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ",
     "premiumMinutesUsed": "Premium minutės išnaudotos.",
     "preparingAudioCapture": "Ruošiamas garso įrašymas",
     "preparingFormForYou": "Ruošiama forma jums...",
@@ -2935,7 +2935,7 @@
     "upgradePlan": "Atnaujinti planą",
     "billingMonthly": "Mėnesinis",
     "billingYearly": "Metinis",
-    "savePercent": "Sutaupykite ~17%",
+    "savePercent": "Sutaupykite ~{percent}%",
     "popular": "Populiarus",
     "currentPlan": "Dabartinis",
     "neoSubtitle": "{count} klausimų per mėnesį",
@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "panaudota {used} iš {total}",
     "deviceStorageFree": "{free} laisva",
     "deviceStorageNearlyFull": "Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos.",
-    "phoneMicOfflineFallbackMessage": "Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę."
+    "phoneMicOfflineFallbackMessage": "Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę.",
+    "dataEncryptedBanner": "Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami."
 }

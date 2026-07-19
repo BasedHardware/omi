@@ -99,28 +99,97 @@ private actor GatedRuntimeStartupHarness {
   func launches() -> Int { launchCount }
 }
 
+private enum CredentialRefreshShouldNotRun: Error {
+  case invoked
+}
+
+private actor CredentialFreeControlStartProbe {
+  private var startupCredentialFetches = 0
+  private var runtimeCredentialRefreshes = 0
+  private var ownerSynchronizations = 0
+
+  func attemptStartupCredentialFetch() throws -> String? {
+    startupCredentialFetches += 1
+    throw CredentialRefreshShouldNotRun.invoked
+  }
+
+  func attemptRuntimeCredentialRefresh() throws -> Bool {
+    runtimeCredentialRefreshes += 1
+    throw CredentialRefreshShouldNotRun.invoked
+  }
+
+  func synchronizeOwner() {
+    ownerSynchronizations += 1
+  }
+
+  func snapshot() -> (startupCredentialFetches: Int, runtimeCredentialRefreshes: Int, ownerSynchronizations: Int) {
+    (startupCredentialFetches, runtimeCredentialRefreshes, ownerSynchronizations)
+  }
+}
+
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testNonProductionJournalControlStartDoesNotRefreshCredentials() async throws {
+    let probe = CredentialFreeControlStartProbe()
+
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: true))
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: false),
+      "production must never permit a credential-free runtime start")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: true),
+      "normal model starts must remain credential-required")
+
+    let authHeader = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: false,
+      fetchAuthHeader: {
+        try await probe.attemptStartupCredentialFetch()
+      })
+    XCTAssertNil(authHeader)
+
+    await AgentBridge.synchronizeAuthorityForStart(
+      requiresCredentials: false,
+      refreshCredentials: {
+        try await probe.attemptRuntimeCredentialRefresh()
+      },
+      refreshOwner: {
+        await probe.synchronizeOwner()
+      })
+
+    let snapshot = await probe.snapshot()
+    XCTAssertEqual(snapshot.startupCredentialFetches, 0)
+    XCTAssertEqual(snapshot.runtimeCredentialRefreshes, 0)
+    XCTAssertEqual(snapshot.ownerSynchronizations, 1)
+  }
+
   func testKernelJournalMutationClosesTheRuntimeReplayBoundary() async throws {
     let runtime = AgentRuntimeProcess()
-    let turn = try XCTUnwrap(KernelJournalTurn(dictionary: [
-      "conversationId": "conversation",
-      "turnId": "turn-terminal",
-      "turnSeq": 1,
-      "conversationGeneration": 1,
-      "generationBaseTurnSeq": 0,
-      "producerId": "producer",
-      "payloadHash": "hash",
-      "role": "assistant",
-      "surfaceKind": "main_chat",
-      "content": "Done",
-      "status": "completed",
-      "origin": "chat",
-      "contentBlocks": [],
-      "resources": [],
-      "metadataJson": "{}",
-      "createdAtMs": 1,
-      "updatedAtMs": 1,
-    ]))
+    let turn = try XCTUnwrap(
+      KernelJournalTurn(dictionary: [
+        "conversationId": "conversation",
+        "turnId": "turn-terminal",
+        "turnSeq": 1,
+        "conversationGeneration": 1,
+        "generationBaseTurnSeq": 0,
+        "producerId": "producer",
+        "payloadHash": "hash",
+        "role": "assistant",
+        "surfaceKind": "main_chat",
+        "content": "Done",
+        "status": "completed",
+        "origin": "chat",
+        "contentBlocks": [],
+        "resources": [],
+        "metadataJson": "{}",
+        "createdAtMs": 1,
+        "updatedAtMs": 1,
+      ]))
 
     await runtime.dispatchJournalTurnChangedForTesting(turn)
 
@@ -132,21 +201,24 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
-    let valid = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability"]}"#
-    ))
+    let valid = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability"]}"#
+      ))
     let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
     XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
     XCTAssertTrue(handshake.capabilities.contains("journal_import_remote_turn"))
 
-    let stale = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[]}"#
-    ))
+    let stale = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[]}"#
+      ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(stale))
 
-    let wrongProtocol = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
-    ))
+    let wrongProtocol = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
+      ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
   }
 
@@ -238,7 +310,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     // Both actions must be behind the non-prod guard.
     let suspendIdx = bridgeSource.range(of: "name: \"suspend_agent_stream\"")!.lowerBound
     let afterSuspend = String(bridgeSource[suspendIdx...].prefix(600))
-    XCTAssertTrue(afterSuspend.contains("AppBuild.isNonProduction"),
+    XCTAssertTrue(
+      afterSuspend.contains("AppBuild.isNonProduction"),
       "suspend_agent_stream must be gated to non-production bundles")
   }
 
@@ -252,7 +325,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.kind, .result)
     XCTAssertEqual(message?.requestId, "req-1")
     XCTAssertEqual(message?.clientId, "client-1")
-    XCTAssertEqual(message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "req-1"))
+    XCTAssertEqual(
+      message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "req-1"))
     XCTAssertEqual(message?.payload["sessionId"] as? String, "omi-1")
     XCTAssertEqual(message?.payload["adapterSessionId"] as? String, "acp-1")
     XCTAssertEqual(message?.payload["terminalStatus"] as? String, "succeeded")
@@ -264,7 +338,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     )
 
     XCTAssertEqual(message?.kind, .cancelAck)
-    XCTAssertEqual(message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "cancel-me"))
+    XCTAssertEqual(
+      message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "cancel-me"))
     XCTAssertEqual(message?.payload["accepted"] as? Bool, true)
     XCTAssertEqual(message?.payload["adapterAcknowledged"] as? Bool, false)
   }
@@ -275,7 +350,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     )
 
     XCTAssertEqual(message?.kind, .initMessage)
-    XCTAssertEqual(message?.payload["agentControlTools"] as? [String], ["list_agent_sessions", "spawn_background_agent"])
+    XCTAssertEqual(
+      message?.payload["agentControlTools"] as? [String], ["list_agent_sessions", "spawn_background_agent"])
   }
 
   func testControlToolResultRoutesByRequestId() {
@@ -284,7 +360,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     )
 
     XCTAssertEqual(message?.kind, .controlToolResult)
-    XCTAssertEqual(message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "control-1"))
+    XCTAssertEqual(
+      message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "control-1"))
     XCTAssertEqual(message?.payload["ownerId"] as? String, "owner-1")
     XCTAssertEqual(message?.payload["name"] as? String, "inspect_agent_artifacts")
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
@@ -300,36 +377,41 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertEqual(request["type"] as? String, "direct_control_tool")
     XCTAssertEqual(request["ownerId"] as? String, "owner-a")
-    XCTAssertTrue(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
-      expectedOwnerId: "owner-a",
-      expectedOwnerEpoch: 1,
-      resultOwnerId: "owner-a",
-      currentOwnerId: "owner-a",
-      currentOwnerEpoch: 1))
-    XCTAssertFalse(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
-      expectedOwnerId: "owner-a",
-      expectedOwnerEpoch: 1,
-      resultOwnerId: nil,
-      currentOwnerId: "owner-a",
-      currentOwnerEpoch: 1))
-    XCTAssertFalse(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
-      expectedOwnerId: "owner-a",
-      expectedOwnerEpoch: 1,
-      resultOwnerId: "owner-b",
-      currentOwnerId: "owner-a",
-      currentOwnerEpoch: 1))
-    XCTAssertFalse(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
-      expectedOwnerId: "owner-a",
-      expectedOwnerEpoch: 1,
-      resultOwnerId: "owner-a",
-      currentOwnerId: "owner-b",
-      currentOwnerEpoch: 2))
-    XCTAssertFalse(AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
-      expectedOwnerId: "owner-a",
-      expectedOwnerEpoch: 1,
-      resultOwnerId: "owner-a",
-      currentOwnerId: "owner-a",
-      currentOwnerEpoch: 3))
+    XCTAssertTrue(
+      AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+        expectedOwnerId: "owner-a",
+        expectedOwnerEpoch: 1,
+        resultOwnerId: "owner-a",
+        currentOwnerId: "owner-a",
+        currentOwnerEpoch: 1))
+    XCTAssertFalse(
+      AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+        expectedOwnerId: "owner-a",
+        expectedOwnerEpoch: 1,
+        resultOwnerId: nil,
+        currentOwnerId: "owner-a",
+        currentOwnerEpoch: 1))
+    XCTAssertFalse(
+      AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+        expectedOwnerId: "owner-a",
+        expectedOwnerEpoch: 1,
+        resultOwnerId: "owner-b",
+        currentOwnerId: "owner-a",
+        currentOwnerEpoch: 1))
+    XCTAssertFalse(
+      AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+        expectedOwnerId: "owner-a",
+        expectedOwnerEpoch: 1,
+        resultOwnerId: "owner-a",
+        currentOwnerId: "owner-b",
+        currentOwnerEpoch: 2))
+    XCTAssertFalse(
+      AgentRuntimeProcess.isDirectControlResultOwnerCurrent(
+        expectedOwnerId: "owner-a",
+        expectedOwnerEpoch: 1,
+        resultOwnerId: "owner-a",
+        currentOwnerId: "owner-a",
+        currentOwnerEpoch: 3))
   }
 
   func testLocalProviderRuntimeOwnerHandshakePrecedesOwnerScopedStartupWork() throws {
@@ -340,19 +422,23 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     // omi-test-quality: source-inspection -- static contract: every harness must synchronize daemon owner authority before owner-scoped legacy migration; wire and resource-layout behavior are tested directly beside this ordering guard
     let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
-    let startRange = try XCTUnwrap(bridgeSource.range(
-      of: "private func start(\n    authorizationSnapshot:"))
-    let restartRange = try XCTUnwrap(bridgeSource.range(
-      of: "\n  func restart() async throws",
-      range: startRange.upperBound..<bridgeSource.endIndex))
+    let startRange = try XCTUnwrap(
+      bridgeSource.range(
+        of: "private func start(\n    authorizationSnapshot:"))
+    let restartRange = try XCTUnwrap(
+      bridgeSource.range(
+        of: "\n  func restart() async throws",
+        range: startRange.upperBound..<bridgeSource.endIndex))
     let startBody = String(bridgeSource[startRange.lowerBound..<restartRange.lowerBound])
-    let handshakeRange = try XCTUnwrap(startBody.range(
-      of: "await synchronizeRuntimeAuthority(authorizationSnapshot: authorizationSnapshot)"))
-    let migrationRange = try XCTUnwrap(startBody.range(
-      of: "await migrateLegacyMainChatSessionsIfNeeded("))
+    let handshakeRange = try XCTUnwrap(
+      startBody.range(
+        of: "await synchronizeRuntimeAuthority(\n          authorizationSnapshot: authorizationSnapshot,"))
+    let migrationRange = try XCTUnwrap(
+      startBody.range(
+        of: "await migrateLegacyMainChatSessionsIfNeeded("))
     XCTAssertLessThan(handshakeRange.lowerBound, migrationRange.lowerBound)
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else"))
-    XCTAssertTrue(bridgeSource.contains("await runtime.refreshRuntimeOwner("))
+    XCTAssertTrue(bridgeSource.contains("synchronizeAuthorityForStart("))
+    XCTAssertTrue(bridgeSource.contains("runtime.refreshRuntimeOwner("))
   }
 
   func testRuntimeStartupSingleFlightLaunchesExactlyOnceForConcurrentSameKey() async throws {
@@ -464,16 +550,18 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(authorized?["type"] as? String, "refresh_token")
     XCTAssertEqual(authorized?["token"] as? String, "owner-a-token")
     XCTAssertEqual(authorized?["ownerId"] as? String, "owner-a")
-    XCTAssertNil(AgentRuntimeProcess.refreshTokenWireMessage(
-      token: "owner-a-token",
-      expectedOwnerId: "owner-a",
-      currentOwnerId: "owner-b"
-    ))
-    XCTAssertNil(AgentRuntimeProcess.refreshTokenWireMessage(
-      token: "owner-a-token",
-      expectedOwnerId: "owner-a",
-      currentOwnerId: nil
-    ))
+    XCTAssertNil(
+      AgentRuntimeProcess.refreshTokenWireMessage(
+        token: "owner-a-token",
+        expectedOwnerId: "owner-a",
+        currentOwnerId: "owner-b"
+      ))
+    XCTAssertNil(
+      AgentRuntimeProcess.refreshTokenWireMessage(
+        token: "owner-a-token",
+        expectedOwnerId: "owner-a",
+        currentOwnerId: nil
+      ))
   }
 
   func testOwnerRuntimeRevocationWireAndCorrelatedReceiptShape() {
@@ -488,7 +576,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(wire["ownerId"] as? String, "owner-a")
 
     let receipt = AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"owner_runtime_revoked","protocolVersion":2,"requestId":"revoke-1","clientId":"runtime-owner-transition","ownerId":"owner-a","ok":true,"duplicate":false,"revokedRunIds":["run-1"],"invalidatedBindingIds":["binding-1"]}"#)
+      #"{"type":"owner_runtime_revoked","protocolVersion":2,"requestId":"revoke-1","clientId":"runtime-owner-transition","ownerId":"owner-a","ok":true,"duplicate":false,"revokedRunIds":["run-1"],"invalidatedBindingIds":["binding-1"]}"#
+    )
     XCTAssertEqual(receipt?.kind, .ownerRuntimeRevoked)
     XCTAssertEqual(
       receipt?.requestKey,
@@ -503,17 +592,20 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testRuntimeNodeResourceLookupSupportsAppAndSwiftPMTestLayoutsWithoutFatalAccessor() {
     let appBundle = URL(fileURLWithPath: "/Applications/omi-test.app")
     let testBundle = URL(fileURLWithPath: "/tmp/debug/Omi ComputerPackageTests.xctest")
-    let executable = testBundle
+    let executable =
+      testBundle
       .appendingPathComponent("Contents/MacOS/Omi ComputerPackageTests")
     let candidates = AgentRuntimeProcess.runtimeResourceExecutableCandidates(
       named: "node",
       bundleURLs: [appBundle, testBundle],
       executableURL: executable)
 
-    XCTAssertTrue(candidates.contains(
-      "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"))
-    XCTAssertTrue(candidates.contains(
-      "/tmp/debug/Omi Computer_Omi Computer.bundle/node"))
+    XCTAssertTrue(
+      candidates.contains(
+        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"))
+    XCTAssertTrue(
+      candidates.contains(
+        "/tmp/debug/Omi Computer_Omi Computer.bundle/node"))
     XCTAssertFalse(candidates.isEmpty)
   }
 
@@ -550,7 +642,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
   func testAuthorizedToolExecutionCarriesLedgerIdentityWithoutRequestScope() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"authorized_tool_execution","protocolVersion":2,"invocationId":"invoke-1","ownerId":"owner-1","sessionId":"session-1","runId":"run-1","attemptId":"attempt-1","profileGeneration":2,"manifestVersion":1,"manifestDigest":"sha256:test","daemonBootEpoch":"boot-1","executionGeneration":3,"toolName":"get_memories","input":{},"inputHash":"sha256:e3b0","effectClass":"read_only","retryPolicy":"safe_retry","surfaceKind":"background_agent","externalRefKind":null,"externalRefId":null,"originatingUserText":"find memories","precedingAssistantText":null,"runMode":"act","chatMode":null}"#)
+      #"{"type":"authorized_tool_execution","protocolVersion":2,"invocationId":"invoke-1","ownerId":"owner-1","sessionId":"session-1","runId":"run-1","attemptId":"attempt-1","profileGeneration":2,"manifestVersion":1,"manifestDigest":"sha256:test","daemonBootEpoch":"boot-1","executionGeneration":3,"toolName":"get_memories","input":{},"inputHash":"sha256:e3b0","effectClass":"read_only","retryPolicy":"safe_retry","surfaceKind":"background_agent","externalRefKind":null,"externalRefId":null,"originatingUserText":"find memories","precedingAssistantText":null,"runMode":"act","chatMode":null}"#
+    )
 
     XCTAssertEqual(message?.kind, .authorizedToolExecution)
     XCTAssertNil(message?.requestKey)
@@ -598,7 +691,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
 
-    XCTAssertTrue(processSource.contains("let preferredAdapterId = AgentRuntimeRouting.adapterId(for: preferredHarness)"))
+    XCTAssertTrue(
+      processSource.contains("let preferredAdapterId = AgentRuntimeRouting.adapterId(for: preferredHarness)"))
     XCTAssertTrue(processSource.contains("preferredAdapterId == .piMono"))
     XCTAssertFalse(processSource.contains(#"preferredHarnessMode == "piMono""#))
 
@@ -608,11 +702,16 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentBridge.swift")
     let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
 
-    XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else"))
+    XCTAssertTrue(
+      bridgeSource.contains(
+        "AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
+    XCTAssertTrue(
+      bridgeSource.contains(
+        "isPiMonoHarness\n      && AgentRuntimeCredentialPolicy.requiresManagedCredentials"))
     XCTAssertTrue(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(bridgeSource.contains(
-      "ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
+    XCTAssertTrue(
+      bridgeSource.contains(
+        "if requiresCredentials {\n      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
     XCTAssertFalse(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
   }
@@ -776,8 +875,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
     XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
     XCTAssertTrue(source.contains(#""\(home)/.hermes/hermes-agent/venv/bin""#))
-    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init) + trustedPathDirs"))
-    XCTAssertTrue(source.contains("+ adapterPathDirs"))
+    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init) + adapterPathDirs"))
+    XCTAssertFalse(source.contains("+ trustedPathDirs + adapterPathDirs"))
     XCTAssertFalse(source.contains("adapterPathPrefixDirs + existingPath.split"))
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
@@ -875,11 +974,14 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
     XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
-    XCTAssertTrue(source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
+    XCTAssertTrue(
+      source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
     XCTAssertTrue(source.contains("getAuthHeader("))
     XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
     XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))
-    XCTAssertFalse(source.contains("log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
+    XCTAssertFalse(
+      source.contains(
+        "log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
     XCTAssertTrue(source.contains("forwarding \\(byok.values.count) usable user keys"))
   }
 
@@ -921,7 +1023,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("openclaw-fnm-home-\(UUID().uuidString)", isDirectory: true)
     defer { try? FileManager.default.removeItem(at: home) }
 
-    let bin = home
+    let bin =
+      home
       .appendingPathComponent(".local/share/fnm/node-versions/v24.12.0/installation/bin", isDirectory: true)
     try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
     let openClaw = bin.appendingPathComponent("openclaw")
@@ -959,9 +1062,11 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   func testStdoutChunksAreReorderedBeforeJSONLFraming() {
-    let frame = Data(
-      #"{"type":"context_snapshot","protocolVersion":2,"requestId":"context-1","clientId":"client-1","ownerId":"owner-1","snapshot":{}}"#.utf8
-    ) + Data([UInt8(ascii: "\n")])
+    let frame =
+      Data(
+        #"{"type":"context_snapshot","protocolVersion":2,"requestId":"context-1","clientId":"client-1","ownerId":"owner-1","snapshot":{}}"#
+          .utf8
+      ) + Data([UInt8(ascii: "\n")])
     let split = frame.count / 2
     let first = Data(frame[..<split])
     let second = Data(frame[split...])
@@ -1036,19 +1141,23 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   func testStartupAdmissionLaunchesTheFirstBridgeAndJoinsOnlyAnActiveFlight() {
-    XCTAssertFalse(AgentRuntimeStartupAdmission.shouldJoin(
-      lifecycleState: .stopped,
-      hasActiveStartupAttempt: false))
-    XCTAssertFalse(AgentRuntimeStartupAdmission.shouldJoin(
-      lifecycleState: .starting,
-      hasActiveStartupAttempt: false),
+    XCTAssertFalse(
+      AgentRuntimeStartupAdmission.shouldJoin(
+        lifecycleState: .stopped,
+        hasActiveStartupAttempt: false))
+    XCTAssertFalse(
+      AgentRuntimeStartupAdmission.shouldJoin(
+        lifecycleState: .starting,
+        hasActiveStartupAttempt: false),
       "the launch owner marks the reducer starting before its flight is installed")
-    XCTAssertTrue(AgentRuntimeStartupAdmission.shouldJoin(
-      lifecycleState: .starting,
-      hasActiveStartupAttempt: true))
-    XCTAssertTrue(AgentRuntimeStartupAdmission.shouldJoin(
-      lifecycleState: .running,
-      hasActiveStartupAttempt: false))
+    XCTAssertTrue(
+      AgentRuntimeStartupAdmission.shouldJoin(
+        lifecycleState: .starting,
+        hasActiveStartupAttempt: true))
+    XCTAssertTrue(
+      AgentRuntimeStartupAdmission.shouldJoin(
+        lifecycleState: .running,
+        hasActiveStartupAttempt: false))
   }
 
   func testAppSurfacesUseDirectControlToolOnly() throws {
@@ -1156,7 +1265,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)"))
+    XCTAssertTrue(
+      source.contains("let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)")
+    )
     XCTAssertFalse(source.contains("exitCode == 134"))
     XCTAssertFalse(source.contains("exitCode == 133"))
   }
@@ -1181,11 +1292,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    let stopStart = try XCTUnwrap(source.range(
-      of: "private func stopProcess(resumeRequestsWith error: BridgeError) async"))
-    let stopEnd = try XCTUnwrap(source.range(
-      of: "private func startReadingStdout()",
-      range: stopStart.upperBound..<source.endIndex))
+    let stopStart = try XCTUnwrap(
+      source.range(
+        of: "private func stopProcess(resumeRequestsWith error: BridgeError) async"))
+    let stopEnd = try XCTUnwrap(
+      source.range(
+        of: "private func startReadingStdout()",
+        range: stopStart.upperBound..<source.endIndex))
     let stopBody = String(source[stopStart.lowerBound..<stopEnd.lowerBound])
     XCTAssertTrue(stopBody.contains("await cancelAndDrainAuthorizedToolExecutionTasks()"))
     XCTAssertTrue(stopBody.contains("markRuntimeOwnerAuthorityDirty()"))
@@ -1301,28 +1414,31 @@ final class AgentRuntimeProcessTests: XCTestCase {
         .isContextSnapshotProjectionMismatch
     )
     XCTAssertFalse(
-      BridgeError.agentRuntimeFailure(AgentRuntimeFailure(
-        code: "runtime_query_failed",
-        userMessage: "context_snapshot_projection_mismatch",
-        technicalMessage: nil,
-        source: "adapter_execution",
-        adapterId: nil,
-        provider: nil,
-        retryable: false
-      )).isContextSnapshotProjectionMismatch
+      BridgeError.agentRuntimeFailure(
+        AgentRuntimeFailure(
+          code: "runtime_query_failed",
+          userMessage: "context_snapshot_projection_mismatch",
+          technicalMessage: nil,
+          source: "adapter_execution",
+          adapterId: nil,
+          provider: nil,
+          retryable: false
+        )
+      ).isContextSnapshotProjectionMismatch
     )
   }
 
   private func contextProjectionMismatchError() -> BridgeError {
-    .agentRuntimeFailure(AgentRuntimeFailure(
-      code: "runtime_query_failed",
-      userMessage: "context_snapshot_projection_mismatch",
-      technicalMessage: "context_snapshot_projection_mismatch",
-      source: "runtime",
-      adapterId: nil,
-      provider: nil,
-      retryable: false
-    ))
+    .agentRuntimeFailure(
+      AgentRuntimeFailure(
+        code: "runtime_query_failed",
+        userMessage: "context_snapshot_projection_mismatch",
+        technicalMessage: "context_snapshot_projection_mismatch",
+        source: "runtime",
+        adapterId: nil,
+        provider: nil,
+        retryable: false
+      ))
   }
 
   private func agentRuntimeSource() throws -> String {

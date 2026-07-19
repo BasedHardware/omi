@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 struct AppleNoteRecord: Identifiable, Sendable {
   let id: Int64
@@ -20,7 +20,8 @@ enum AppleNotesReaderError: LocalizedError {
     case .storeNotFound:
       return "Apple Notes data store not found."
     case .authorizationDenied:
-      return "Omi needs permission to read Apple Notes. Select the Apple Notes folder or grant Full Disk Access, then try again."
+      return
+        "Omi needs permission to read Apple Notes. Select the Apple Notes folder or grant Full Disk Access, then try again."
     case .invalidSelectedFolder:
       return "Choose the Apple Notes folder named group.com.apple.notes."
     case .schemaUnavailable:
@@ -156,7 +157,9 @@ actor AppleNotesReaderService {
       throw error
     } catch {
       let classified = Self.classifyReadError(error, path: storeURL.path)
-      log("AppleNotesReaderService: Selected folder validation failed code=\(classified.reasonCode) path=\(storeURL.path): \(error)")
+      log(
+        "AppleNotesReaderService: Selected folder validation failed code=\(classified.reasonCode) path=\(storeURL.path): \(error)"
+      )
       throw classified
     }
   }
@@ -166,7 +169,8 @@ actor AppleNotesReaderService {
     fileManager: FileManager = .default,
     homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
   ) throws -> URL {
-    let groupContainersURL = homeDirectory
+    let groupContainersURL =
+      homeDirectory
       .appendingPathComponent("Library/Group Containers", isDirectory: true)
 
     if selectedURL.path == groupContainersURL.path {
@@ -234,18 +238,18 @@ actor AppleNotesReaderService {
       let rows = try Row.fetchAll(
         db,
         sql: """
-              SELECT
-                Z_PK,
-                ZTITLE,
-                ZSUMMARY,
-                ZMODIFICATIONDATE
-              FROM ZICCLOUDSYNCINGOBJECT
-              WHERE ZNOTE IS NOT NULL
-                AND ZMARKEDFORDELETION = 0
-                AND ZTITLE IS NOT NULL
-              ORDER BY ZMODIFICATIONDATE DESC
-              LIMIT ?
-            """,
+            SELECT
+              Z_PK,
+              ZTITLE,
+              ZSUMMARY,
+              ZMODIFICATIONDATE
+            FROM ZICCLOUDSYNCINGOBJECT
+            WHERE ZNOTE IS NOT NULL
+              AND ZMARKEDFORDELETION = 0
+              AND ZTITLE IS NOT NULL
+            ORDER BY ZMODIFICATIONDATE DESC
+            LIMIT ?
+          """,
         arguments: [maxResults * 3]
       )
 
@@ -283,12 +287,12 @@ actor AppleNotesReaderService {
       try Int.fetchOne(
         db,
         sql: """
-          SELECT COUNT(*)
-          FROM ZICCLOUDSYNCINGOBJECT
-          WHERE ZNOTE IS NOT NULL
-            AND ZMARKEDFORDELETION = 0
-            AND ZTITLE IS NOT NULL
-        """
+            SELECT COUNT(*)
+            FROM ZICCLOUDSYNCINGOBJECT
+            WHERE ZNOTE IS NOT NULL
+              AND ZMARKEDFORDELETION = 0
+              AND ZTITLE IS NOT NULL
+          """
       ) ?? 0
     }
   }
@@ -333,69 +337,71 @@ actor AppleNotesReaderService {
     // dropping the whole import. Each attempt uses a fresh bridge.
     let maxAttempts = 2
     for attempt in 1...maxAttempts {
-    do {
-      if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-        || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
-        throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
-      }
-      let result = try await AgentClient.run(
-        surface: .service("apple_notes_reader"),
-        prompt: synthesisPrompt,
-        model: ModelQoS.Claude.synthesis,
-        systemPrompt:
-          "You extract high-signal user facts from Apple Notes. Output only valid JSON.",
-        onTextDelta: { @Sendable _ in },
-        onToolCall: { @Sendable _, _, _ in "" },
-        onToolActivity: { @Sendable _, _, _, _ in }
-      )
+      do {
+        if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
+          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+        {
+          throw NSError(
+            domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
+        }
+        let result = try await AgentClient.run(
+          surface: .service("apple_notes_reader"),
+          prompt: synthesisPrompt,
+          model: ModelQoS.Claude.synthesis,
+          systemPrompt:
+            "You extract high-signal user facts from Apple Notes. Output only valid JSON.",
+          onTextDelta: { @Sendable _ in },
+          onToolCall: { @Sendable _, _, _ in "" },
+          onToolActivity: { @Sendable _, _, _, _ in }
+        )
 
-      let responseText = Self.extractJSONObject(from: result.text)
-      guard
-        let jsonData = responseText.data(using: .utf8),
-        let parsed = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-      else {
-        log("AppleNotesReaderService: Failed to parse synthesis response")
-        return (0, "")
-      }
+        let responseText = Self.extractJSONObject(from: result.text)
+        guard
+          let jsonData = responseText.data(using: .utf8),
+          let parsed = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+        else {
+          log("AppleNotesReaderService: Failed to parse synthesis response")
+          return (0, "")
+        }
 
-      let memoryStrings = (parsed["memories"] as? [String] ?? []).filter {
-        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }
-      let profileSummary = parsed["profile"] as? String ?? ""
+        let memoryStrings = (parsed["memories"] as? [String] ?? []).filter {
+          !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let profileSummary = parsed["profile"] as? String ?? ""
 
-      let artifacts = memoryStrings.map { memory in
-        ImportEvidenceBatchItem(
+        let artifacts = memoryStrings.map { memory in
+          ImportEvidenceBatchItem(
             title: "Apple Notes Insight",
             snippet: memory,
             content: memory,
             metadata: ["import_kind": "profile"]
+          )
+        }
+        let legacyMemories = memoryStrings.map { memory in
+          MemoryBatchItem(
+            content: memory,
+            tags: ["apple_notes", "onboarding"],
+            headline: "Apple Notes Insight",
+            source: "apple_notes"
+          )
+        }
+        let saveResult = await OnboardingImportEvidenceService.save(
+          artifacts,
+          sourceType: "apple_notes",
+          logPrefix: "AppleNotesReaderService",
+          legacyMemories: legacyMemories
         )
-      }
-      let legacyMemories = memoryStrings.map { memory in
-        MemoryBatchItem(
-          content: memory,
-          tags: ["apple_notes", "onboarding"],
-          headline: "Apple Notes Insight",
-          source: "apple_notes"
-        )
-      }
-      let saveResult = await OnboardingImportEvidenceService.save(
-        artifacts,
-        sourceType: "apple_notes",
-        logPrefix: "AppleNotesReaderService",
-        legacyMemories: legacyMemories
-      )
 
-      return (saveResult.saved, profileSummary)
-    } catch {
-      if attempt < maxAttempts {
-        log("AppleNotesReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
-        try? await Task.sleep(nanoseconds: 800_000_000)
-        continue
+        return (saveResult.saved, profileSummary)
+      } catch {
+        if attempt < maxAttempts {
+          log("AppleNotesReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
+          try? await Task.sleep(nanoseconds: 800_000_000)
+          continue
+        }
+        log("AppleNotesReaderService: Synthesis failed after \(attempt) attempts: \(error)")
+        return (0, "")
       }
-      log("AppleNotesReaderService: Synthesis failed after \(attempt) attempts: \(error)")
-      return (0, "")
-    }
     }
     return (0, "")
   }
@@ -464,7 +470,9 @@ actor AppleNotesReaderService {
       let selectedFolderURL = URL(fileURLWithPath: selectedFolderPath)
       if selectedFolderURL.lastPathComponent == "NoteStore.sqlite" {
         candidates.append(selectedFolderURL)
-      } else if let resolvedFolder = try? Self.resolveSelectedFolder(selectedFolderURL, fileManager: fm, homeDirectory: home) {
+      } else if let resolvedFolder = try? Self.resolveSelectedFolder(
+        selectedFolderURL, fileManager: fm, homeDirectory: home)
+      {
         candidates.append(
           resolvedFolder.appendingPathComponent("NoteStore.sqlite", isDirectory: false)
         )

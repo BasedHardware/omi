@@ -13,7 +13,6 @@ import pytest
 
 from deepgram import LiveTranscriptionEvents
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg
-from utils.stt.streaming import deepgram_options, deepgram_cloud_options
 from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words
 
 
@@ -324,12 +323,13 @@ async def test_returns_none_after_all_none_retries_exhausted():
     assert len(sleep_calls) == 2  # slept between retries
 
 
-def test_deepgram_options_no_keepalive():
-    """SDK keepalive option must not be present — it spawns a dangerous background thread (#5870)."""
-    for name, opts in [('deepgram_options', deepgram_options), ('deepgram_cloud_options', deepgram_cloud_options)]:
-        # DeepgramClientOptions stores options dict — keepalive key must be absent
-        if hasattr(opts, 'options') and isinstance(opts.options, dict):
-            assert 'keepalive' not in opts.options, f'{name} must not contain "keepalive" key'
+def test_self_hosted_deepgram_options_never_enable_keepalive():
+    """The retained self-hosted socket must not create a keepalive thread (#5870)."""
+    from utils.stt.streaming import _self_hosted_deepgram_options
+
+    opts = _self_hosted_deepgram_options('https://dg.example.test')
+    assert 'keepalive' not in opts.options
+    assert opts.url == 'https://dg.example.test'
 
 
 @pytest.mark.asyncio
@@ -1010,104 +1010,48 @@ def test_gated_socket_death_reason_delegates_none_when_alive():
 
 
 # ---------------------------------------------------------------------------
-# get_stt_service_for_language — Nova-3 unified model selection (#6382)
+# get_stt_service_for_language — non-Deepgram serving selection
 # ---------------------------------------------------------------------------
 
 
 class TestGetSttServiceForLanguage:
-    """Verify get_stt_service_for_language returns nova-3 for all languages."""
+    """Verify serving selection cannot reactivate retired Deepgram models."""
 
-    def test_english_multi_enabled(self):
-        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=True)
-        assert service == STTService.deepgram
-        assert lang == 'multi'
-        assert model == 'nova-3'
+    def test_english_prefers_parakeet(self):
+        with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
+            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+        ):
+            service, lang, model = get_stt_service_for_language('en')
 
-    def test_english_multi_disabled(self):
-        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
-        assert service == STTService.deepgram
-        assert lang == 'en'
-        assert model == 'nova-3'
+        assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
 
-    def test_chinese_returns_nova3(self):
-        service, lang, model = get_stt_service_for_language('zh', multi_lang_enabled=False)
-        assert service == STTService.deepgram
-        assert lang == 'zh'
-        assert model == 'nova-3'
+    def test_cjk_uses_modulate_when_parakeet_is_not_capable(self):
+        with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'modulate-velma-2']), patch.dict(
+            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+        ):
+            service, lang, model = get_stt_service_for_language('zh-TW')
 
-    def test_chinese_traditional_returns_nova3(self):
-        service, lang, model = get_stt_service_for_language('zh-TW', multi_lang_enabled=False)
-        assert service == STTService.deepgram
-        assert lang == 'zh-TW'
-        assert model == 'nova-3'
+        assert (service, lang, model) == (STTService.modulate, 'zh', 'velma-2')
 
-    def test_thai_returns_nova3(self):
-        service, lang, model = get_stt_service_for_language('th', multi_lang_enabled=False)
-        assert service == STTService.deepgram
-        assert lang == 'th'
-        assert model == 'nova-3'
+    def test_retired_configuration_uses_non_deepgram_defaults(self):
+        with patch('utils.stt.streaming.stt_service_models', ['dg-nova-3']), patch.dict(
+            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+        ):
+            service, lang, model = get_stt_service_for_language('en')
 
-    def test_arabic_returns_nova3(self):
-        service, lang, model = get_stt_service_for_language('ar', multi_lang_enabled=False)
-        assert service == STTService.deepgram
-        assert lang == 'ar'
-        assert model == 'nova-3'
+        assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
 
-    def test_tamil_returns_nova3(self):
-        service, lang, model = get_stt_service_for_language('ta', multi_lang_enabled=False)
-        assert service == STTService.deepgram
-        assert lang == 'ta'
-        assert model == 'nova-3'
+    def test_unsupported_language_fails_closed(self):
+        with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2']):
+            assert get_stt_service_for_language('xx-INVALID') == (None, None, None)
 
-    def test_urdu_returns_nova3(self):
-        service, lang, model = get_stt_service_for_language('ur', multi_lang_enabled=False)
-        assert service == STTService.deepgram
-        assert lang == 'ur'
-        assert model == 'nova-3'
+    def test_missing_language_defaults_to_english(self):
+        with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
+            'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
+        ):
+            service, lang, model = get_stt_service_for_language(None)
 
-    def test_hebrew_returns_nova3(self):
-        service, lang, model = get_stt_service_for_language('he', multi_lang_enabled=False)
-        assert service == STTService.deepgram
-        assert lang == 'he'
-        assert model == 'nova-3'
-
-    def test_unsupported_falls_back_to_english(self):
-        service, lang, model = get_stt_service_for_language('xx-INVALID')
-        assert service == STTService.deepgram
-        assert lang == 'en'
-        assert model == 'nova-3'
-
-    def test_multi_language_returns_multi(self):
-        service, lang, model = get_stt_service_for_language('multi')
-        assert service == STTService.deepgram
-        assert lang == 'multi'
-        assert model == 'nova-3'
-
-    def test_french_multi_enabled(self):
-        """French is in the multi set — should return 'multi' when multi_lang_enabled."""
-        service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
-        assert lang == 'multi'
-        assert model == 'nova-3'
-
-    def test_french_multi_disabled(self):
-        """French with multi disabled — should return 'fr' directly."""
-        service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
-        assert lang == 'fr'
-        assert model == 'nova-3'
-
-    def test_empty_string_falls_back_to_english(self):
-        """Empty string language should fall back to English nova-3."""
-        service, lang, model = get_stt_service_for_language('')
-        assert service == STTService.deepgram
-        assert lang == 'en'
-        assert model == 'nova-3'
-
-    def test_none_language_falls_back_to_english(self):
-        """None language should fall back to English nova-3."""
-        service, lang, model = get_stt_service_for_language(None)
-        assert service == STTService.deepgram
-        assert lang == 'en'
-        assert model == 'nova-3'
+        assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
 
 
 class TestFillerWordsLanguageBehavior:

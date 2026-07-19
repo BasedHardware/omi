@@ -55,12 +55,14 @@ final class TaskAgentStatusRegistry {
   }
 
   func registerTask(taskId: String, title: String?) {
-    var entry = entries[taskId] ?? Entry(
-      taskId: taskId,
-      title: nil,
-      statusText: nil,
-      lastError: nil,
-      updatedAt: Date())
+    var entry =
+      entries[taskId]
+      ?? Entry(
+        taskId: taskId,
+        title: nil,
+        statusText: nil,
+        lastError: nil,
+        updatedAt: Date())
     if let title, !title.isEmpty {
       entry.title = title
     }
@@ -155,7 +157,8 @@ final class TaskAgentStatusRegistry {
   }
 
   private func snapshots() -> [Snapshot] {
-    let projectionSnapshots = AgentRuntimeStatusStore.shared.taskProjections(limit: maxSnapshotEntries).map { projection in
+    let projectionSnapshots = AgentRuntimeStatusStore.shared.taskProjections(limit: maxSnapshotEntries).map {
+      projection in
       let taskId = projection.surface.externalRefId
       let entry = entries[taskId]
       return Snapshot(
@@ -191,12 +194,14 @@ final class TaskAgentStatusRegistry {
     statusText: String?,
     lastError: String?
   ) {
-    var entry = entries[taskId] ?? Entry(
-      taskId: taskId,
-      title: nil,
-      statusText: nil,
-      lastError: nil,
-      updatedAt: Date())
+    var entry =
+      entries[taskId]
+      ?? Entry(
+        taskId: taskId,
+        title: nil,
+        statusText: nil,
+        lastError: nil,
+        updatedAt: Date())
     if let title, !title.isEmpty {
       entry.title = title
     }

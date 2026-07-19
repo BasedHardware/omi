@@ -1,6 +1,8 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
+
+private struct AnySendableBox: @unchecked Sendable { let value: Any? }
 
 // MARK: - NSHostingView sizingOptions access
 
@@ -214,6 +216,20 @@ struct DesktopHomeView: View {
                 )
                 // Push true to server so syncFromServer() doesn't revert it
                 Task { await SettingsSyncManager.shared.syncToServer() }
+              }
+
+              // Named development bundles used to seed screen analysis off to
+              // avoid permission prompts. Screen capture no longer requests
+              // TCC during startup, so restore the default once: a granted
+              // named-bundle permission must actually begin storing frames.
+              let quietBundleCaptureMigrationKey = "screenAnalysisAutoStartFixed_v3"
+              if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
+                usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
+                migrationApplied: UserDefaults.standard.bool(forKey: quietBundleCaptureMigrationKey)
+              ) {
+                AssistantSettings.shared.screenAnalysisEnabled = true
+                UserDefaults.standard.set(true, forKey: quietBundleCaptureMigrationKey)
+                log("DesktopHomeView: Restored screen capture default for quiet named bundle")
               }
 
               // Start proactive assistants monitoring if enabled in settings.
@@ -457,13 +473,11 @@ struct DesktopHomeView: View {
     .onChange(of: authState.isSignedIn) { _, _ in reportAutomationState() }
     .onChange(of: authState.isRestoringAuth) { _, _ in reportAutomationState() }
     .onChange(of: appState.hasCompletedOnboarding) { _, _ in reportAutomationState() }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       enforceMainWindowMinimumSize()
       reportAutomationState()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationNavigateRequested)) {
@@ -510,15 +524,18 @@ struct DesktopHomeView: View {
     let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
     NotificationCenter.default.addObserver(
       forName: NSWindow.didResizeNotification, object: nil, queue: .main
-    ) { note in
-      guard let window = note.object as? NSWindow,
-        window.title.lowercased().hasPrefix("omi")
-      else { return }
-      let frameMin = window.frameRect(
-        forContentRect: NSRect(origin: .zero, size: minimumContentSize)
-      ).size
-      if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
-      if window.minSize != frameMin { window.minSize = frameMin }
+    ) { notification in
+      let objectBox = AnySendableBox(value: notification.object)
+      MainActor.assumeIsolated {
+        guard let window = objectBox.value as? NSWindow,
+          window.title.lowercased().hasPrefix("omi")
+        else { return }
+        let frameMin = window.frameRect(
+          forContentRect: NSRect(origin: .zero, size: minimumContentSize)
+        ).size
+        if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
+        if window.minSize != frameMin { window.minSize = frameMin }
+      }
     }
   }
 
@@ -803,9 +820,9 @@ struct DesktopHomeView: View {
       log("DesktopHomeView: Running delayed background file scan for existing user")
       await FileIndexerService.shared.backgroundRescan()
       guard !Task.isCancelled,
-            sessionScope.matches(
-              currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
-              isSignedIn: AuthState.shared.isSignedIn)
+        sessionScope.matches(
+          currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+          isSignedIn: AuthState.shared.isSignedIn)
       else {
         initialFileIndexingBackfill.releaseReservation()
         return
@@ -1226,8 +1243,8 @@ private struct ConversationsPageHost: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  DesktopHomeView()
-    .environmentObject(AppState())
-}
+  #Preview {
+    DesktopHomeView()
+      .environmentObject(AppState())
+  }
 #endif

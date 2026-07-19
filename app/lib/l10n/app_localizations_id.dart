@@ -8998,7 +8998,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get billingYearly => 'Tahunan';
 
   @override
-  String get savePercent => 'Hemat ~17%';
+  String savePercent(int percent) {
+    return 'Hemat ~$percent%';
+  }
 
   @override
   String get popular => 'Populer';
@@ -9608,4 +9610,8 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Tidak ada koneksi — merekam secara lokal. Akan ditranskripsikan saat Anda kembali daring.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Data Anda diamankan secara default dengan enkripsi kuat, dan Anda mengendalikan bagaimana data disimpan dan digunakan.';
 }

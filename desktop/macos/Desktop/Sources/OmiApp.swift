@@ -1,10 +1,10 @@
 import FirebaseAuth
 import FirebaseCore
 import OmiSupport
+import OmiTheme
 import Sentry
 import Sparkle
 import SwiftUI
-import OmiTheme
 
 // MARK: - Launch Mode
 /// Determines which UI to show based on command-line arguments
@@ -96,21 +96,21 @@ struct OMIApp: App {
   @StateObject private var authState = AuthState.shared
   @Environment(\.openWindow) private var openWindow
 
-  /// Launch mode determined at startup from command-line arguments
   static let launchMode = LaunchMode.fromCommandLine()
 
-  /// Window title with version number (different for rewind mode)
   private var windowTitle: String {
-    // Keep a distinct title in non-production builds so custom test apps are easy to identify.
-    if AppBuild.isNonProduction {
-      let baseName = AppBuild.displayName
-      return Self.launchMode == .rewind ? "\(baseName) Rewind" : baseName
-    }
+    Self.windowTitle(
+      displayName: AppBuild.displayName,
+      version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+      launchMode: Self.launchMode,
+      isNonProduction: AppBuild.isNonProduction)
+  }
 
-    let version =
-      Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-    let baseName = Self.launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
-    return version.isEmpty ? baseName : "\(baseName) v\(version)"
+  static func windowTitle(displayName: String, version: String, launchMode: LaunchMode, isNonProduction: Bool) -> String
+  {
+    let baseName = isNonProduction ? displayName : launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
+    let title = isNonProduction && launchMode == .rewind ? "\(baseName) Rewind" : baseName
+    return version.isEmpty ? title : "\(title) v\(version)"
   }
 
   /// Window size based on launch mode
@@ -230,11 +230,11 @@ struct OMIApp: App {
   }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-  static var openMainWindow: (() -> Void)?
-  private static var appIsActive = false
-  private static var mainWindowIsKey = false
-  private static var lastMainWindowForegroundAt: Date?
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
+  nonisolated(unsafe) static var openMainWindow: (() -> Void)?
+  private nonisolated(unsafe) static var appIsActive = false
+  private nonisolated(unsafe) static var mainWindowIsKey = false
+  private nonisolated(unsafe) static var lastMainWindowForegroundAt: Date?
 
   private var sentryHeartbeatTimer: Timer?
   private var globalHotkeyMonitor: Any?
@@ -440,9 +440,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
     if let attempt = pendingUpdateRelaunch?.attempt {
-      let installedVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+      let installedVersion =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
         as? String ?? "unknown"
-      let installedBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+      let installedBuild =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         ?? "unknown"
       if installedBuild == attempt.targetBuild {
         AnalyticsManager.shared.updateInstalled(
@@ -531,7 +533,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      MainActor.assumeIsolated {
+        self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      }
     }
 
     // Register for Apple Events to handle URL scheme
@@ -561,7 +565,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Safety net for any edge case (macOS Sequoia bugs, activation policy races) that
     // causes the status bar item to vanish while the process keeps running.
     Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-      DispatchQueue.main.async {
+      MainActor.assumeIsolated {
         guard let self = self else { return }
         let item = self.statusBarItem
         let button = item?.button
@@ -675,17 +679,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private static func recordForegroundState(now: Date = Date()) {
-    appIsActive = NSApp.isActive
-    mainWindowIsKey = NSApp.keyWindow.map(isMainOmiWindow) ?? false
+    MainActor.assumeIsolated {
+      appIsActive = NSApp.isActive
+      mainWindowIsKey = NSApp.keyWindow.map(isMainOmiWindow) ?? false
 
-    if UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
-      appIsActive: appIsActive,
-      frontmostBundleMatches: frontmostApplicationMatchesBundle(),
-      mainWindowIsKey: mainWindowIsKey,
-      lastMainWindowForegroundAt: nil,
-      now: now
-    ) {
-      lastMainWindowForegroundAt = now
+      if UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
+        appIsActive: appIsActive,
+        frontmostBundleMatches: frontmostApplicationMatchesBundle(),
+        mainWindowIsKey: mainWindowIsKey,
+        lastMainWindowForegroundAt: nil,
+        now: now
+      ) {
+        lastMainWindowForegroundAt = now
+      }
     }
   }
 
@@ -694,7 +700,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private static func isMainOmiWindow(_ window: NSWindow) -> Bool {
-    window.title.lowercased().hasPrefix("omi")
+    MainActor.assumeIsolated { window.title.lowercased().hasPrefix("omi") }
   }
 
   /// Strip com.apple.provenance extended attributes from our own bundle.
@@ -1088,7 +1094,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   // MARK: - Menu Bar Toggle Items
 
   /// Create a custom NSView for a menu item with an icon, label, and toggle switch
-  private func makeToggleItemView(title: String, iconName: String, isOn: Bool, action: Selector)
+  @MainActor private func makeToggleItemView(title: String, iconName: String, isOn: Bool, action: Selector)
     -> NSView
   {
     let height: CGFloat = 36
@@ -1216,16 +1222,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   func menuDidClose(_ menu: NSMenu) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-      for window in NSApp.windows where self.isMenuPopupWindow(window) && window.isVisible {
-        log("AppDelegate: [MENUBAR] Cleaning up lingering menu popup window: \(window.frame)")
-        window.orderOut(nil)
+      MainActor.assumeIsolated {
+        for window in NSApp.windows where self.isMenuPopupWindow(window) && window.isVisible {
+          log("AppDelegate: [MENUBAR] Cleaning up lingering menu popup window: \(window.frame)")
+          window.orderOut(nil)
+        }
       }
     }
   }
 
   private func isMenuPopupWindow(_ window: NSWindow) -> Bool {
     // AppKit menu popup windows use private classes/titles like "NSPopupMenuWindow" and "Item-0".
-    window.title.hasPrefix("Item-") && window.className.contains("PopupMenuWindow")
+    MainActor.assumeIsolated {
+      window.title.hasPrefix("Item-") && window.className.contains("PopupMenuWindow")
+    }
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -1238,8 +1248,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     return shouldTerminate
   }
 
-  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
-  {
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     // Always try to show the main Omi window when dock icon is clicked
     for window in sender.windows where window.title.hasPrefix("Omi") {
       if window.isMiniaturized {
@@ -1258,7 +1267,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   /// not from this durable file.
   private func publishNamedBundleRuntimeManifest() {
     guard DesktopLocalProfile.isNamedDevelopmentBundle,
-          let bundleID = Bundle.main.bundleIdentifier
+      let bundleID = Bundle.main.bundleIdentifier
     else { return }
 
     let manifest = DesktopDevRuntimeManifest(
@@ -1413,28 +1422,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Only the production/beta bundle (com.omi.computer-macos) should relaunch on login.
     // Dev and named test bundles must always opt out — otherwise every local build that was
     // open at shutdown gets relaunched on the next restart, swarming the screen with dev apps.
-    guard AppBuild.isProductionBundle else {
+    MainActor.assumeIsolated {
+      guard AppBuild.isProductionBundle else {
+        guard !relaunchOnLoginSuppressedForOnboarding else { return }
+        NSApp.disableRelaunchOnLogin()
+        relaunchOnLoginSuppressedForOnboarding = true
+        log("AppDelegate: Disabled relaunch on login for non-production bundle (\(reason))")
+        return
+      }
+
+      let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+
+      if hasCompletedOnboarding {
+        guard relaunchOnLoginSuppressedForOnboarding else { return }
+        NSApp.enableRelaunchOnLogin()
+        relaunchOnLoginSuppressedForOnboarding = false
+        log("AppDelegate: Re-enabled relaunch on login after onboarding completed (\(reason))")
+        return
+      }
+
       guard !relaunchOnLoginSuppressedForOnboarding else { return }
       NSApp.disableRelaunchOnLogin()
       relaunchOnLoginSuppressedForOnboarding = true
-      log("AppDelegate: Disabled relaunch on login for non-production bundle (\(reason))")
-      return
+      log("AppDelegate: Disabled relaunch on login while onboarding is incomplete (\(reason))")
     }
-
-    let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-
-    if hasCompletedOnboarding {
-      guard relaunchOnLoginSuppressedForOnboarding else { return }
-      NSApp.enableRelaunchOnLogin()
-      relaunchOnLoginSuppressedForOnboarding = false
-      log("AppDelegate: Re-enabled relaunch on login after onboarding completed (\(reason))")
-      return
-    }
-
-    guard !relaunchOnLoginSuppressedForOnboarding else { return }
-    NSApp.disableRelaunchOnLogin()
-    relaunchOnLoginSuppressedForOnboarding = true
-    log("AppDelegate: Disabled relaunch on login while onboarding is incomplete (\(reason))")
   }
 
   private func migrateAppName() {

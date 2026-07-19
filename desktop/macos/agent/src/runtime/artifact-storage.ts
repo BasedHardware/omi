@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { AdapterArtifactReference } from "../adapters/interface.js";
@@ -16,13 +16,23 @@ export interface ArtifactStorageScope {
 
 export interface ArtifactStorageOptions {
   rootDir?: string;
+  /** Overrides the signed-in Desktop root in isolated integration tests. */
+  reportedDesktopRoots?: readonly string[];
 }
 
 export class OmiArtifactStorage {
   readonly rootDir: string;
+  private readonly temporaryArtifactRoots: readonly string[];
+  private readonly reportedDesktopRoots: readonly string[];
 
   constructor(options: ArtifactStorageOptions = {}) {
     this.rootDir = resolve(options.rootDir ?? defaultArtifactRoot());
+    this.reportedDesktopRoots = uniqueResolvedPaths(options.reportedDesktopRoots ?? [join(homedir(), "Desktop")]);
+    this.temporaryArtifactRoots = uniqueResolvedPaths([
+      "/tmp",
+      "/private/tmp",
+      tmpdir(),
+    ]);
   }
 
   normalizeArtifact(
@@ -152,6 +162,90 @@ export class OmiArtifactStorage {
     return discovered;
   }
 
+  /**
+   * Some ACP providers report a finished local deliverable only in their final
+   * prose; they do not emit the structured artifact event used by the normal
+   * adapter path. Recover that narrow, user-visible case without treating every
+   * pathname mentioned in model text as an artifact.
+   *
+   * Absolute paths are eligible under a temporary directory or Omi's managed
+   * artifact root. The latter covers nested agents that report a file from
+   * their assigned Omi workspace rather than emitting the structured event.
+   * Desktop uses its own stricter delivery grammar ("I built file.html on your
+   * Desktop" or "file.html was built on the Desktop"), which resolves only a
+   * simple filename beneath the signed-in user's Desktop.
+   * Neither path lets a completion import arbitrary user files merely because
+   * it names their paths.
+   */
+  discoverReportedTerminalArtifacts(
+    finalText: string,
+    existingArtifacts: readonly Pick<AdapterArtifactReference, "uri">[] = []
+  ): AdapterArtifactReference[] {
+    const existingUris = new Set(existingArtifacts.map((artifact) => artifact.uri));
+    const discovered: AdapterArtifactReference[] = [];
+    const seenPaths = new Set<string>();
+
+    const lines = finalText.slice(0, MAX_REPORTED_TERMINAL_TEXT_CHARS).split(/\r?\n/);
+    for (const [lineIndex, line] of lines.entries()) {
+      const desktopCandidates = reportedDesktopFileCandidates(line, this.reportedDesktopRoots);
+      // ACP providers commonly put an explicit "file created" receipt and
+      // its absolute path on separate lines (often inside a Markdown code
+      // block). Keep the acceptance signal local to that receipt rather than
+      // treating an arbitrary managed-workspace pathname as an artifact.
+      const explicitDelivery = hasExplicitArtifactDeliveryContext(lines, lineIndex);
+      if (!explicitDelivery && desktopCandidates.length === 0) continue;
+
+      const candidates = [
+        ...reportedLocalFileCandidates(line).map((candidate) => ({
+          candidate,
+          allowedRoots: [
+            ...this.temporaryArtifactRoots,
+            this.rootDir,
+          ],
+        })),
+        ...desktopCandidates.map((candidate) => ({
+          candidate,
+          allowedRoots: this.reportedDesktopRoots,
+        })),
+      ];
+      for (const { candidate, allowedRoots } of candidates) {
+        const path = localPathFromReportedCandidate(candidate);
+        if (!path || !this.isReportableArtifactPath(path, allowedRoots) || seenPaths.has(path)) continue;
+        seenPaths.add(path);
+
+        const uri = pathToFileURL(path).toString();
+        if (existingUris.has(uri)) continue;
+
+        try {
+          const stat = lstatSync(path);
+          if ((!stat.isFile() && !stat.isDirectory()) || stat.isSymbolicLink()) continue;
+          const displayName = basename(path);
+          if (!displayName || isDeniedManagedRunArtifactBasename(displayName)) continue;
+          discovered.push({
+            kind: stat.isDirectory() ? "directory" : kindForFileName(displayName),
+            role: "result",
+            uri,
+            displayName,
+            mimeType: stat.isDirectory() ? "inode/directory" : mimeTypeForFileName(displayName),
+            contentHash: stat.isDirectory() ? null : fileHash(path),
+            sizeBytes: stat.isDirectory() ? null : stat.size,
+            metadata: { discoveredFromTerminalReport: true },
+          });
+        } catch {
+          // A terminal report is advisory. Skip files that disappeared or cannot
+          // be read between the provider's completion and kernel finalization.
+        }
+
+        if (discovered.length >= MAX_REPORTED_TERMINAL_ARTIFACTS) return discovered;
+      }
+    }
+    return discovered;
+  }
+
+  private isReportableArtifactPath(path: string, allowedRoots: readonly string[]): boolean {
+    return allowedRoots.some((root) => path !== root && isInside(path, root));
+  }
+
   directoryFor(scope: ArtifactStorageScope): string {
     return join(
       this.rootDir,
@@ -196,6 +290,64 @@ function shouldKeepExternalLocation(artifact: AdapterArtifactReference): boolean
   return metadata.userSpecifiedPath === true
     || metadata.keepExternalLocation === true
     || metadata.omiManaged === false;
+}
+
+const MAX_REPORTED_TERMINAL_TEXT_CHARS = 64 * 1024;
+const MAX_REPORTED_TERMINAL_ARTIFACTS = 8;
+const EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE = /(?:\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b[^\n]{0,120}\b(?:lives?|saved|written|created|generated|produced|ready|available|located)\b|\b(?:saved|written|created|generated|produced)\b[^\n]{0,120}\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b|\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b\s*:)/i;
+const REPORTED_LOCAL_FILE_CANDIDATE = /file:\/\/[^\s`<>"']+|\/(?:[^\s`<>"']+)/g;
+const REPORTED_CODE_PATH_CANDIDATE = /`([^`\n]+)`/g;
+const REPORTED_DESKTOP_FILE_CANDIDATE = /\b(?:built|created|generated|saved|wrote)\b[^\n]{0,120}?\b([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?:[`*_]+)?\s+on\s+(?:your|the)\s+desktop\b/gi;
+const REPORTED_DESKTOP_PASSIVE_FILE_CANDIDATE = /\b([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?:[`*_]+)?\s+(?:was\s+)?(?:built|created|generated|saved|written)\s+on\s+(?:your|the)\s+desktop\b/gi;
+
+function reportedLocalFileCandidates(line: string): string[] {
+  const inline: string[] = [...(line.match(REPORTED_LOCAL_FILE_CANDIDATE) ?? [])];
+  for (const match of line.matchAll(REPORTED_CODE_PATH_CANDIDATE)) {
+    const candidate = match[1]?.trim();
+    if (candidate?.startsWith("/") || candidate?.startsWith("file://")) {
+      inline.push(candidate);
+    }
+  }
+  // A result path is often alone in a fenced Markdown line. Preserve spaces
+  // in managed directory names such as "Application Support", whether the
+  // provider reports it in a table cell, a fenced block, or plain line.
+  const standalone = line.trim();
+  if (standalone.startsWith("/") || standalone.startsWith("file://")) {
+    inline.push(standalone);
+  }
+  return [...new Set(inline)];
+}
+
+function hasExplicitArtifactDeliveryContext(lines: readonly string[], lineIndex: number): boolean {
+  // Keep this bounded to one compact terminal receipt. Markdown dividers and
+  // fenced paths add several otherwise-empty lines between the confirmation
+  // and the path, so a three-line window misses normal provider formatting.
+  const first = Math.max(0, lineIndex - 8);
+  return EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE.test(lines.slice(first, lineIndex + 1).join("\n"));
+}
+
+function reportedDesktopFileCandidates(line: string, desktopRoots: readonly string[]): string[] {
+  return [
+    ...line.matchAll(REPORTED_DESKTOP_FILE_CANDIDATE),
+    ...line.matchAll(REPORTED_DESKTOP_PASSIVE_FILE_CANDIDATE),
+  ].flatMap((match) => {
+    const fileName = match[1];
+    return fileName ? desktopRoots.map((root) => join(root, fileName)) : [];
+  });
+}
+
+function localPathFromReportedCandidate(candidate: string): string | null {
+  const trimmed = candidate.trim().replace(/^`+|`+$/g, "").replace(/[),.;:!?\]}]+$/g, "");
+  try {
+    const path = trimmed.startsWith("file://") ? fileURLToPath(trimmed) : trimmed;
+    return isAbsolute(path) ? resolve(path) : null;
+  } catch {
+    return null;
+  }
+}
+
+function uniqueResolvedPaths(paths: readonly string[]): string[] {
+  return [...new Set(paths.map((path) => resolve(path)))];
 }
 
 function sanitizePathComponent(value: string): string {

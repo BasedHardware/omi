@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct TryAskingPopupView: View {
   let suggestions: [String]
@@ -173,9 +173,11 @@ struct PromptSuggestionBanner: View {
             .font(.system(size: 20, weight: .semibold, design: .serif))
             .foregroundColor(bannerPrimaryText)
 
-          Text("Use your real screen and your existing context to get value quickly. Tap to open a few suggested questions.")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(bannerSecondaryText)
+          Text(
+            "Use your real screen and your existing context to get value quickly. Tap to open a few suggested questions."
+          )
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(bannerSecondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }

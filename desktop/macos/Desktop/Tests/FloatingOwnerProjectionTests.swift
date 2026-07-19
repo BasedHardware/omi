@@ -29,6 +29,13 @@ private final class FloatingOwnerBox {
   }
 }
 
+private enum SpawnOutcome: Sendable, Equatable {
+  case rejectedBeforeDispatch
+  case staleReceipt(String)
+  case accepted(String)
+}
+
+@MainActor
 final class FloatingOwnerProjectionTests: XCTestCase {
   @MainActor
   func testLateNotificationWorkflowCannotPresentOrScheduleJournalForReplacementOwner() async {
@@ -161,13 +168,21 @@ final class FloatingOwnerProjectionTests: XCTestCase {
     let gate = FloatingOwnerPauseGate()
 
     let operation = Task { @MainActor in
-      await AgentPillsManager.performOwnerBoundSpawn(
+      let result = await AgentPillsManager.performOwnerBoundSpawn(
         ownerID: "owner-a",
         currentOwnerID: { owner.value },
         dispatch: {
           await gate.pause()
           return "owner-a-run"
         })
+      switch result {
+      case .rejectedBeforeDispatch:
+        return SpawnOutcome.rejectedBeforeDispatch
+      case .staleReceipt(let runID):
+        return .staleReceipt(runID)
+      case .accepted(let runID):
+        return .accepted(runID)
+      }
     }
     await gate.waitUntilStarted()
     owner.value = "owner-b"

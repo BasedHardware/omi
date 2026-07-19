@@ -1483,7 +1483,7 @@
     "exportConfiguration": "कॉन्फिगरेशन निर्यात करा",
     "bringYourOwn": "आपले स्वतःचे आणा",
     "payYourSttProvider": "Omi मुक्तपणे वापरा. आपण केवळ आपल्या STT प्रदाता ला थेट भुगतान करा.",
-    "freeMinutesMonth": "600 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ",
+    "freeMinutesMonth": "300 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ",
     "omiUnlimited": "Omi अमर्यादित",
     "hostRequired": "होस्ट आवश्यक आहे",
     "validPortRequired": "वैध पोर्ट आवश्यक आहे",
@@ -7281,7 +7281,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.",
+    "premiumMinutesInfo": "300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7392,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ",
+    "premiumMinutesMonth": "300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10521,7 +10521,7 @@
     "upgradePlan": "प्लॅन अपग्रेड करा",
     "billingMonthly": "मासिक",
     "billingYearly": "वार्षिक",
-    "savePercent": "~17% बचत करा",
+    "savePercent": "~{percent}% बचत करा",
     "popular": "लोकप्रिय",
     "currentPlan": "सध्याचा",
     "neoSubtitle": "दरमहा {count} प्रश्न",
@@ -10727,5 +10727,6 @@
     "deviceStorageUsedOfTotal": "{total} पैकी {used} वापरले",
     "deviceStorageFree": "{free} रिकामे",
     "deviceStorageNearlyFull": "डिव्हाइस जवळजवळ भरले आहे — जागा मोकळी करण्यासाठी सिंक करा.",
-    "phoneMicOfflineFallbackMessage": "कनेक्शन नाही — स्थानिकरित्या रेकॉर्ड होत आहे. तुम्ही पुन्हा ऑनलाइन झाल्यावर याचे ट्रान्सक्रिप्शन केले जाईल."
+    "phoneMicOfflineFallbackMessage": "कनेक्शन नाही — स्थानिकरित्या रेकॉर्ड होत आहे. तुम्ही पुन्हा ऑनलाइन झाल्यावर याचे ट्रान्सक्रिप्शन केले जाईल.",
+    "dataEncryptedBanner": "तुमचा डेटा डीफॉल्टनुसार मजबूत एन्क्रिप्शनने सुरक्षित आहे आणि तो कसा साठवला व वापरला जातो यावर तुमचे नियंत्रण असते."
 }

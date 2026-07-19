@@ -201,7 +201,7 @@ enum AgentClient {
       outcome: AgentContextSourceOutcome,
       capturedAtMs: Int,
       expiresAtMs: Int? = nil,
-      payload: [String: Any]
+      payload: RuntimeJSONPayloadBox
     ) async throws -> AgentContextSourceUpdateReceipt {
       try await bridge.updateContextSource(
         sessionId: sessionId,
@@ -273,6 +273,20 @@ enum AgentClient {
       )
     }
 
+    func listJournalTurnsForControl(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      afterTurnSeq: Int = 0,
+      limit: Int = 100
+    ) async throws -> AgentRuntimeProcess.JournalOperationResult {
+      try await bridge.listJournalTurnsForControl(
+        surface: surface,
+        ownerID: ownerID,
+        afterTurnSeq: afterTurnSeq,
+        limit: limit
+      )
+    }
+
     func importRemoteJournalTurn(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,
@@ -287,6 +301,18 @@ enum AgentClient {
       expectedGeneration: Int? = nil
     ) async throws -> Int {
       try await bridge.clearJournalTurns(
+        surface: surface,
+        ownerID: ownerID,
+        expectedGeneration: expectedGeneration
+      )
+    }
+
+    func clearJournalTurnsForControl(
+      surface: AgentSurfaceReference,
+      ownerID: String? = nil,
+      expectedGeneration: Int? = nil
+    ) async throws -> Int {
+      try await bridge.clearJournalTurnsForControl(
         surface: surface,
         ownerID: ownerID,
         expectedGeneration: expectedGeneration
@@ -351,33 +377,34 @@ enum AgentClient {
       onAuthSuccess: @escaping AuthSuccessHandler = {}
     ) async throws -> QueryResult {
       let bridge = bridge
-      return QueryResult(try await AgentContextAdmissionRetry.run(
-        expectedContext: expectedContext,
-        refresh: {
-          try await bridge.getContextSnapshot(
-            sessionId: session.sessionId,
-            surfaceKind: surface.surfaceKind
-          ).freshness
-        },
-        attempt: { admittedContext in
-          try await bridge.query(
-            prompt: prompt,
-            session: session,
-            surface: surface,
-            mode: mode,
-            imageData: imageData,
-            attachments: attachments,
-            producingTurnId: producingTurnId,
-            expectedContext: admittedContext,
-            onTextDelta: onTextDelta,
-            onToolActivity: onToolActivity,
-            onThinkingDelta: onThinkingDelta,
-            onToolResultDisplay: onToolResultDisplay,
-            onAuthRequired: onAuthRequired,
-            onAuthSuccess: onAuthSuccess
-          )
-        }
-      ))
+      return QueryResult(
+        try await AgentContextAdmissionRetry.run(
+          expectedContext: expectedContext,
+          refresh: {
+            try await bridge.getContextSnapshot(
+              sessionId: session.sessionId,
+              surfaceKind: surface.surfaceKind
+            ).freshness
+          },
+          attempt: { admittedContext in
+            try await bridge.query(
+              prompt: prompt,
+              session: session,
+              surface: surface,
+              mode: mode,
+              imageData: imageData,
+              attachments: attachments,
+              producingTurnId: producingTurnId,
+              expectedContext: admittedContext,
+              onTextDelta: onTextDelta,
+              onToolActivity: onToolActivity,
+              onThinkingDelta: onThinkingDelta,
+              onToolResultDisplay: onToolResultDisplay,
+              onAuthRequired: onAuthRequired,
+              onAuthSuccess: onAuthSuccess
+            )
+          }
+        ))
     }
   }
 
@@ -409,65 +436,65 @@ enum AgentClient {
     try await bridge.start()
     do {
 
-    guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
-      throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
-    }
-    let usesNativeModelChoice = ["hermes", "openclaw"].contains(harnessMode)
-    let creationProfile = AgentSessionCreationProfile(
-      adapterId: requestedAdapter,
-      modelProfile: model ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
-      workingDirectory: cwd?.isEmpty == false ? cwd! : AgentRuntimeProcess.defaultArtifactsDirectory()
-    )
-    let session = try await bridge.resolveSurfaceSession(
-      surface,
-      creationProfile: creationProfile
-    )
-    var snapshot = try await bridge.getContextSnapshot(
-      sessionId: session.sessionId,
-      surfaceKind: surface.surfaceKind)
-    let contextInputs: [(AgentContextSource, AgentContextSourceOutcome, [String: Any])] = [
-      (
-        .surface,
-        systemPrompt.isEmpty ? .empty : .available,
-        systemPrompt.isEmpty ? [:] : ["experienceContext": systemPrompt]
-      ),
-      (
-        .workspace,
-        cwd?.isEmpty == false ? .available : .empty,
-        cwd?.isEmpty == false ? ["workingDirectory": cwd!] : [:]
-      ),
-    ]
-    for (source, outcome, payload) in contextInputs {
-      let revision = try AgentContextRevision.make(source: source, payload: payload, outcome: outcome)
-      guard snapshot.sourceRevision(for: source) != revision else { continue }
-      _ = try await bridge.updateContextSource(
-        sessionId: session.sessionId,
-        surfaceKind: surface.surfaceKind,
-        source: source,
-        sourceRevision: revision,
-        outcome: outcome,
-        capturedAtMs: Int(Date().timeIntervalSince1970 * 1_000),
-        payload: payload
+      guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
+        throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
+      }
+      let usesNativeModelChoice = ["hermes", "openclaw"].contains(harnessMode)
+      let creationProfile = AgentSessionCreationProfile(
+        adapterId: requestedAdapter,
+        modelProfile: model ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+        workingDirectory: cwd?.isEmpty == false ? cwd! : AgentRuntimeProcess.defaultArtifactsDirectory()
       )
-      snapshot = try await bridge.getContextSnapshot(
+      let session = try await bridge.resolveSurfaceSession(
+        surface,
+        creationProfile: creationProfile
+      )
+      var snapshot = try await bridge.getContextSnapshot(
         sessionId: session.sessionId,
         surfaceKind: surface.surfaceKind)
-    }
-    await bridge.warmupSession(session)
+      let contextInputs: [(AgentContextSource, AgentContextSourceOutcome, [String: Any])] = [
+        (
+          .surface,
+          systemPrompt.isEmpty ? .empty : .available,
+          systemPrompt.isEmpty ? [:] : ["experienceContext": systemPrompt]
+        ),
+        (
+          .workspace,
+          cwd?.isEmpty == false ? .available : .empty,
+          cwd?.isEmpty == false ? ["workingDirectory": cwd!] : [:]
+        ),
+      ]
+      for (source, outcome, payload) in contextInputs {
+        let revision = try AgentContextRevision.make(source: source, payload: payload, outcome: outcome)
+        guard snapshot.sourceRevision(for: source) != revision else { continue }
+        _ = try await bridge.updateContextSource(
+          sessionId: session.sessionId,
+          surfaceKind: surface.surfaceKind,
+          source: source,
+          sourceRevision: revision,
+          outcome: outcome,
+          capturedAtMs: Int(Date().timeIntervalSince1970 * 1_000),
+          payload: RuntimeJSONPayloadBox(payload)
+        )
+        snapshot = try await bridge.getContextSnapshot(
+          sessionId: session.sessionId,
+          surfaceKind: surface.surfaceKind)
+      }
+      await bridge.warmupSession(session)
 
-    let result = try await bridge.query(
-      prompt: prompt,
-      session: session,
-      surface: surface,
-      mode: mode,
-      expectedContext: snapshot.freshness,
-      onTextDelta: onTextDelta,
-      onToolActivity: onToolActivity,
-      onThinkingDelta: onThinkingDelta,
-      onToolResultDisplay: onToolResultDisplay,
-      onAuthRequired: onAuthRequired,
-      onAuthSuccess: onAuthSuccess
-    )
+      let result = try await bridge.query(
+        prompt: prompt,
+        session: session,
+        surface: surface,
+        mode: mode,
+        expectedContext: snapshot.freshness,
+        onTextDelta: onTextDelta,
+        onToolActivity: onToolActivity,
+        onThinkingDelta: onThinkingDelta,
+        onToolResultDisplay: onToolResultDisplay,
+        onAuthRequired: onAuthRequired,
+        onAuthSuccess: onAuthSuccess
+      )
       let output = try QueryResult(result).requireSucceeded()
       await bridge.stop()
       return output

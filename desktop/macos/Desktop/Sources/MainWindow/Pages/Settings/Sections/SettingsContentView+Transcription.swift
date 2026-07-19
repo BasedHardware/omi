@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var transcriptionSection: some View {
@@ -369,10 +369,12 @@ private struct VoiceAssistantLanguagesCard: View {
             .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
 
-          Text("Languages you speak to Omi over push-to-talk — the first is your primary. Omi identifies which one you're speaking each turn.")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
+          Text(
+            "Languages you speak to Omi over push-to-talk — the first is your primary. Omi identifies which one you're speaking each turn."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
         }
 
         Spacer()

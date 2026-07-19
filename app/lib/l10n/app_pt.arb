@@ -2971,7 +2971,7 @@
     "upgradePlan": "Fazer upgrade",
     "billingMonthly": "Mensal",
     "billingYearly": "Anual",
-    "savePercent": "Economize ~17%",
+    "savePercent": "Economize ~{percent}%",
     "popular": "Popular",
     "currentPlan": "Atual",
     "neoSubtitle": "{count} perguntas por mês",
@@ -3185,5 +3185,6 @@
     "deviceStorageUsedOfTotal": "{used} de {total} usado",
     "deviceStorageFree": "{free} livre",
     "deviceStorageNearlyFull": "Dispositivo quase cheio — sincronize para liberar espaço.",
-    "phoneMicOfflineFallbackMessage": "Sem conexão — gravando localmente. Será transcrito quando você voltar a ficar online."
+    "phoneMicOfflineFallbackMessage": "Sem conexão — gravando localmente. Será transcrito quando você voltar a ficar online.",
+    "dataEncryptedBanner": "Seus dados são protegidos por padrão com criptografia forte, e você controla como são armazenados e usados."
 }

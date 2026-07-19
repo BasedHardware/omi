@@ -1,9 +1,9 @@
 import AppKit
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 enum SettingsControlMetrics {
   static let steppedSliderThumbDiameter: CGFloat = 22

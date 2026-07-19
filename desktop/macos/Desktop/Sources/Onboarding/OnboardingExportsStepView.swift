@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingExportsStepView: View {
   @ObservedObject var graphViewModel: MemoryGraphViewModel

@@ -1467,7 +1467,7 @@ class AppLocalizationsBn extends AppLocalizations {
       'Omi অবাধে ব্যবহার করুন। আপনি শুধুমাত্র আপনার STT প্রদানকারীকে সরাসরি অর্থ প্রদান করেন।';
 
   @override
-  String get freeMinutesMonth => 'প্রতি মাসে 600 বিনামূল্যে মিনিট অন্তর্ভুক্ত। সীমাহীন ';
+  String get freeMinutesMonth => 'প্রতি মাসে 300 বিনামূল্যে মিনিট অন্তর্ভুক্ত। সীমাহীন ';
 
   @override
   String get omiUnlimited => 'Omi আনলিমিটেড';
@@ -8997,7 +8997,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get billingYearly => 'বার্ষিক';
 
   @override
-  String get savePercent => '~17% সাশ্রয়';
+  String savePercent(int percent) {
+    return '~$percent% সাশ্রয়';
+  }
 
   @override
   String get popular => 'জনপ্রিয়';
@@ -9604,4 +9606,8 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'সংযোগ নেই — স্থানীয়ভাবে রেকর্ড করা হচ্ছে। আপনি আবার অনলাইনে এলে এটি ট্রান্সক্রাইব করা হবে।';
+
+  @override
+  String get dataEncryptedBanner =>
+      'আপনার ডেটা ডিফল্টরূপে শক্তিশালী এনক্রিপশন দিয়ে সুরক্ষিত, এবং এটি কীভাবে সংরক্ষণ ও ব্যবহার করা হয় তা আপনি নিয়ন্ত্রণ করেন।';
 }

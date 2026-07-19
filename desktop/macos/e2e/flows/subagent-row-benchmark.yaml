@@ -4,7 +4,7 @@ tier: 3
 description: Cursor-free timing for selecting subagent rows and returning to main Ask Omi.
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/FloatingControlBar/AgentDelegationExecutor.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
 preconditions:
   - automation_bridge_ready
 

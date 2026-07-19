@@ -50,9 +50,6 @@ async def _retry_or_dead_letter(
     lease_epoch: int,
     task_retry_count: int,
     reason: str,
-    *,
-    uid: str | None = None,
-    conversation_id: str | None = None,
 ) -> bool:
     """Record a task failure; return whether this was the terminal delivery."""
     max_attempts = get_listen_finalization_tasks_max_attempts_for_worker()
@@ -67,13 +64,6 @@ async def _retry_or_dead_letter(
         )
         if not marked_dead_letter:
             return False
-        if uid is not None and conversation_id is not None:
-            await run_blocking(
-                db_executor,
-                lifecycle_service.fail_and_discard_processing,
-                uid,
-                conversation_id,
-            )
         return True
 
     await run_blocking(
@@ -146,16 +136,11 @@ async def run_listen_finalization_job(
                 finalization_job_id=job_id,
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
+                force_process=bool(job.get('force_process')),
             )
         except ConversationFinalizationError:
             terminal = await _retry_or_dead_letter(
-                job_id,
-                dispatch_generation,
-                claimed_lease_epoch,
-                task_retry_count,
-                'processing_failed',
-                uid=job['uid'],
-                conversation_id=job['conversation_id'],
+                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'processing_failed'
             )
             if terminal:
                 logger.error('listen finalization final attempt failed job=%s failure=processing_failed', job_id)
@@ -199,8 +184,6 @@ async def run_listen_finalization_job(
                     claimed_lease_epoch,
                     task_retry_count,
                     'worker_failed',
-                    uid=job.get('uid') if job else None,
-                    conversation_id=job.get('conversation_id') if job else None,
                 )
             except Exception:
                 logger.error('listen finalization recovery update failed job=%s failure=worker_failed', job_id)

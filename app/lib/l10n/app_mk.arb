@@ -1483,7 +1483,7 @@
     "exportConfiguration": "Извезување конфигурација",
     "bringYourOwn": "Донесете ваше",
     "payYourSttProvider": "Слободно користете omi. Плаќате директно на вашиот STT добавувач.",
-    "freeMinutesMonth": "600 слободни минути/месец вклучени. Неограничено со ",
+    "freeMinutesMonth": "300 слободни минути/месец вклучени. Неограничено со ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Домаќин е задолжителен",
     "validPortRequired": "Валиден порт е задолжителен",
@@ -10521,7 +10521,7 @@
     "upgradePlan": "Надгради план",
     "billingMonthly": "Месечно",
     "billingYearly": "Годишно",
-    "savePercent": "Заштедете ~17%",
+    "savePercent": "Заштедете ~{percent}%",
     "popular": "Популарно",
     "currentPlan": "Тековен",
     "neoSubtitle": "{count} прашања месечно",
@@ -10727,5 +10727,6 @@
     "deviceStorageUsedOfTotal": "{used} од {total} искористени",
     "deviceStorageFree": "{free} слободни",
     "deviceStorageNearlyFull": "Уредот е речиси полн — синхронизирајте за да ослободите простор.",
-    "phoneMicOfflineFallbackMessage": "Нема врска — се снима локално. Ќе биде транскрибирано кога повторно ќе бидете онлајн."
+    "phoneMicOfflineFallbackMessage": "Нема врска — се снима локално. Ќе биде транскрибирано кога повторно ќе бидете онлајн.",
+    "dataEncryptedBanner": "Вашите податоци се стандардно заштитени со силна енкрипција, а вие контролирате како се складираат и користат."
 }

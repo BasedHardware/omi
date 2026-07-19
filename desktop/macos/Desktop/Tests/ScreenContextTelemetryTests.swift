@@ -233,13 +233,7 @@ final class ScreenContextTelemetryTests: XCTestCase {
   }
 
   func testPTTDoesNotCreateAnAmbientScreenContextSideChannel() throws {
-    let hubSource = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift"),
-      encoding: .utf8
-    )
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let pttSource = try String(
       contentsOf: URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
@@ -267,7 +261,8 @@ final class ScreenContextTelemetryTests: XCTestCase {
 
     XCTAssertTrue(source.contains("failureCode = .imageUnavailable"))
     XCTAssertTrue(source.contains(#""available": false"#))
-    XCTAssertTrue(source.contains("Latest finalized work-context frame was older than \\(staleThresholdSeconds) seconds"))
+    XCTAssertTrue(
+      source.contains("Latest finalized work-context frame was older than \\(staleThresholdSeconds) seconds"))
     XCTAssertTrue(source.contains(#""stale_inspection_ignored""#))
     XCTAssertFalse(source.contains(#""image_base64": data.base64EncodedString()"#))
     XCTAssertTrue(source.contains(#""raw_image_tool": "capture_screen""#))
@@ -299,7 +294,9 @@ final class ScreenContextTelemetryTests: XCTestCase {
 
   func testScopedDesktopPromptDoesNotMentionExcludedScreenTools() {
     let prompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(
-      excluding: ["get_work_context", "capture_screen", "get_screenshot", "request_permission", "check_permission_status"]
+      excluding: [
+        "get_work_context", "capture_screen", "get_screenshot", "request_permission", "check_permission_status",
+      ]
     )
     XCTAssertFalse(prompt.contains("get_work_context"))
     XCTAssertFalse(prompt.contains("capture_screen"))

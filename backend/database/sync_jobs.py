@@ -603,12 +603,13 @@ def finalize_sync_job(job_id: str, result: Dict[str, Any]) -> Optional[Dict[str,
     return finalized
 
 
-def fenced_finalize_sync_job(
+def _fenced_finalize_sync_job(
     job_id: str,
     run_lock_token: str,
     result: Dict[str, Any],
     *,
     now: Optional[float] = None,
+    allowed_current_statuses: Set[str],
 ) -> FencedSyncJobMutation:
     """Publish a terminal result only while the caller retains the run lock.
 
@@ -623,7 +624,7 @@ def fenced_finalize_sync_job(
         run_lock_token,
         updates,
         now=completed_at,
-        allowed_current_statuses={'processing'},
+        allowed_current_statuses=allowed_current_statuses,
     )
     if mutation.applied and mutation.job is not None:
         _log_sync_job_finalized(
@@ -634,6 +635,45 @@ def fenced_finalize_sync_job(
             failed=failed,
         )
     return mutation
+
+
+def fenced_finalize_sync_job(
+    job_id: str,
+    run_lock_token: str,
+    result: Dict[str, Any],
+    *,
+    now: Optional[float] = None,
+) -> FencedSyncJobMutation:
+    """Publish ordinary worker terminal work only from the processing state."""
+    return _fenced_finalize_sync_job(
+        job_id,
+        run_lock_token,
+        result,
+        now=now,
+        allowed_current_statuses={'processing'},
+    )
+
+
+def fenced_finalize_sync_job_from_durable_ledger(
+    job_id: str,
+    run_lock_token: str,
+    result: Dict[str, Any],
+    *,
+    now: Optional[float] = None,
+) -> FencedSyncJobMutation:
+    """Converge a validated content-ledger completion after a task retry.
+
+    The caller must already have a current run-lock and a valid completed
+    ledger result. Unlike normal worker finalization, its Redis job may have
+    been deliberately reset to ``queued`` before Cloud Tasks redelivered it.
+    """
+    return _fenced_finalize_sync_job(
+        job_id,
+        run_lock_token,
+        result,
+        now=now,
+        allowed_current_statuses={'queued', 'processing'},
+    )
 
 
 def mark_job_completed(job_id: str, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:

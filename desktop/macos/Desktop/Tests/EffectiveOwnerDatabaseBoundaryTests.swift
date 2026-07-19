@@ -52,7 +52,6 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
   private var createdOwnerIDs: [String] = []
 
   override func setUp() async throws {
-    try await super.setUp()
     originalAuthOwner = UserDefaults.standard.string(forKey: .authUserId)
     originalOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
     originalBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
@@ -88,7 +87,6 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
       try? FileManager.default.removeItem(at: userDirectory(ownerID))
     }
     createdOwnerIDs = []
-    try await super.tearDown()
   }
 
   func testOwnerTransitionWaitsForACommitThenAdmitsBWithBPool() async throws {

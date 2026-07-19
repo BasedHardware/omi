@@ -406,9 +406,10 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
     await probe.waitUntilDrainStarted()
     XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-a")
     XCTAssertNil(defaults.string(forKey: .automationOwnerOverride))
-    XCTAssertNil(RuntimeOwnerIdentity.currentOwnerId(
-      defaults: defaults,
-      allowAutomationOverride: true))
+    XCTAssertNil(
+      RuntimeOwnerIdentity.currentOwnerId(
+        defaults: defaults,
+        allowAutomationOverride: true))
     XCTAssertEqual(
       recorder.snapshot(),
       ["effect_started", "voice_quiesced", "drain_started"])
@@ -424,9 +425,10 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
     await probe.releaseEffect()
     await transition.value
 
-    XCTAssertEqual(RuntimeOwnerIdentity.currentOwnerId(
-      defaults: defaults,
-      allowAutomationOverride: true), "owner-b")
+    XCTAssertEqual(
+      RuntimeOwnerIdentity.currentOwnerId(
+        defaults: defaults,
+        allowAutomationOverride: true), "owner-b")
     XCTAssertEqual(
       recorder.snapshot(),
       [

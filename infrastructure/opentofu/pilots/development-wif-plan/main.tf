@@ -25,7 +25,7 @@ resource "google_service_account" "plan" {
 
 resource "google_iam_workload_identity_pool" "github" {
   workload_identity_pool_id = var.workload_identity_pool_id
-  display_name              = "Omi OpenTofu development GitHub pool"
+  display_name              = "Omi OpenTofu dev GitHub pool"
   description               = "GitHub OIDC pool for Omi OpenTofu development pilot #9842."
   disabled                  = false
 }
@@ -33,7 +33,7 @@ resource "google_iam_workload_identity_pool" "github" {
 resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "github"
-  display_name                       = "Omi GitHub Actions development plan provider"
+  display_name                       = "Omi GitHub dev plan OIDC"
   description                        = "Restricts the development plan identity to Omi's immutable GitHub identity, workflow, environment, and main."
 
   attribute_mapping = {
