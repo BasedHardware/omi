@@ -1045,8 +1045,12 @@ describe('floating_agent_pills — dismissed subjects are filtered (attention ov
     return {
       adapterId: 'acp',
       capabilities: adapterCapabilitiesFor('acp'),
-      async start() {},
-      async stop() {},
+      async start() {
+        /* no-op fake */
+      },
+      async stop() {
+        /* no-op fake */
+      },
       async openBinding(input) {
         return {
           sessionId: input.sessionId,
