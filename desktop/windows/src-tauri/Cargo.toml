@@ -1,0 +1,17 @@
+[package]
+name = "omi-tauri"
+version = "1.0.0"
+description = "Omi desktop Tauri transition host"
+authors = ["Based Hardware"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+omi-desktop-core = { path = "../../shared-rust" }
+tauri = { version = "2", features = [] }
+
+[lints.clippy]
+all = "warn"

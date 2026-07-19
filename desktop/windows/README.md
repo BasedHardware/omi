@@ -1,5 +1,9 @@
 # omi-windows
 
+Electron remains current host. `src-tauri/` is a Windows/Linux transition host;
+it shares this React renderer build but exposes no Electron compatibility shim.
+Port a native path to Rust before wiring it into the renderer.
+
 Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app.
 
 ## Recommended IDE Setup
@@ -10,13 +14,13 @@ Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app
 
 ```bash
 # 1. Install dependencies
-npm install
+bun install
 
 # 2. Create your local env file (required — the app won't start without it)
 cp .env.example .env
 
 # 3. Start the app
-npm run dev
+bun run dev
 ```
 
 `.env` is gitignored. `.env.example` ships with Omi's **public** Firebase + PostHog
@@ -47,13 +51,21 @@ Everything below is blank in `.env.example` and safe to leave unset:
 
 ```bash
 # Windows
-npm run build:win
+bun run build:win
 
 # macOS
-npm run build:mac
+bun run build:mac
 
 # Linux
-npm run build:linux
+bun run build:linux
+```
+
+## Tauri transition builds
+
+```bash
+bun run tauri:dev
+bun run tauri:build:windows
+bun run tauri:build:linux
 ```
 
 Vite inlines the `.env` values at build time, so a packaged installer needs no `.env` —
