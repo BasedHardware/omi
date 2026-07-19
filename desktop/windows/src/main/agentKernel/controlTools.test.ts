@@ -1033,3 +1033,106 @@ describe('spawn_agent host-picked fallback from a managed-cloud (pi-mono) caller
     expect(store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n).toBe(before)
   })
 })
+
+// === Dismissing a floating pill: the durable attention-override filter =========
+// The bar's dismiss() writes set_desktop_attention_override for the pill's run
+// (and session); serializeAgentSessionsList must then exclude that subject from
+// floating_agent_pills so the 2s list poll never re-projects the pill. This is
+// the load-bearing contract behind the "dismissed pill comes back" fix — before
+// it was wired, dismiss only mutated the renderer's in-memory array.
+describe('floating_agent_pills — dismissed subjects are filtered (attention override)', () => {
+  function acpAdapter(): RuntimeAdapter {
+    return {
+      adapterId: 'acp',
+      capabilities: adapterCapabilitiesFor('acp'),
+      async start() {
+        /* no-op fake */
+      },
+      async stop() {
+        /* no-op fake */
+      },
+      async openBinding(input) {
+        return {
+          sessionId: input.sessionId,
+          adapterId: 'acp',
+          adapterNativeSessionId: `native-${input.sessionId}`,
+          resumeFidelity: 'none',
+          cwd: input.cwd
+        }
+      },
+      async resumeBinding(input) {
+        return {
+          sessionId: input.sessionId,
+          adapterId: 'acp',
+          adapterNativeSessionId: input.adapterNativeSessionId,
+          resumeFidelity: 'none',
+          cwd: input.cwd
+        }
+      },
+      async executeAttempt(context) {
+        return {
+          text: 'ok',
+          adapterSessionId: context.binding.adapterNativeSessionId,
+          terminalStatus: 'succeeded'
+        }
+      },
+      async cancelAttempt() {
+        return { accepted: true, dispatchAttempted: true, adapterAcknowledged: false }
+      }
+    }
+  }
+
+  function newAcpKernel(databasePath: string): {
+    kernel: AgentRuntimeKernel
+    store: SqliteAgentStore
+  } {
+    const store = new SqliteAgentStore({ databaseFactory: nodeSqliteFactory, databasePath })
+    openStores.push(store)
+    const registry = new AdapterRegistry()
+    registry.register('acp', () => acpAdapter())
+    const kernel = new AgentRuntimeKernel({ store, registry })
+    return { kernel, store }
+  }
+
+  function pillRunId(pill: Record<string, unknown>): string {
+    const runId = pill.runId
+    if (typeof runId !== 'string' || !runId) throw new Error('pill has no runId')
+    return runId
+  }
+
+  it('excludes a run after set_desktop_attention_override, and it stays excluded across a store re-open', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'omi-pill-dismiss-'))
+    createdDirs.push(dir)
+    const databasePath = join(dir, 'omi-agentd.sqlite3')
+
+    const { kernel } = newAcpKernel(databasePath)
+    const context = coordinatorContext(kernel)
+
+    // A visible background agent → a floating_bar session with a run → one pill.
+    const spawn = await call(context, 'spawn_agent', { objective: 'build a snake game' })
+    expect(spawn.ok).toBe(true)
+
+    const before = await call(context, 'list_agent_sessions', { surfaceKind: 'floating_bar' })
+    const pillsBefore = before.floating_agent_pills as Record<string, unknown>[]
+    expect(pillsBefore).toHaveLength(1)
+    const runId = pillRunId(pillsBefore[0])
+
+    // Dismiss the run — exactly what the bar's dismiss() now does.
+    const dismiss = await call(context, 'set_desktop_attention_override', {
+      subjectKind: 'run',
+      subjectId: runId
+    })
+    expect(dismiss.ok).toBe(true)
+
+    const after = await call(context, 'list_agent_sessions', { surfaceKind: 'floating_bar' })
+    expect(after.floating_agent_pills as unknown[]).toEqual([])
+
+    // Restart simulation: a fresh kernel/store on the SAME sqlite file must still
+    // filter the pill — the override is durable, not in-memory.
+    const reopened = newAcpKernel(databasePath)
+    const afterRestart = await call(coordinatorContext(reopened.kernel), 'list_agent_sessions', {
+      surfaceKind: 'floating_bar'
+    })
+    expect(afterRestart.floating_agent_pills as unknown[]).toEqual([])
+  })
+})
