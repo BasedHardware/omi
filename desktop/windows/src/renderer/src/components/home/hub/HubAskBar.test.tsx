@@ -152,3 +152,41 @@ describe('HubAskBar — attachments', () => {
     await waitFor(() => expect(screen.getByText(/25 MB/)).not.toBeNull())
   })
 })
+
+describe('HubAskBar — whole-pill hit target (Mac contentShape parity)', () => {
+  // Regression for the reported bug: only the input's own thin text line was
+  // clickable, so a click on the pill's top/bottom strip or side padding did
+  // nothing. The pill's mousedown now seats focus in the input wherever it lands,
+  // while the paperclip and Connect/Send button keep their own actions.
+  it('focuses the input when the pill body (not the text line) is pressed', async () => {
+    renderBar()
+    const input = screen.getByLabelText('Ask omi anything')
+    const pill = input.parentElement as HTMLElement
+    expect(document.activeElement).not.toBe(input)
+    fireEvent.mouseDown(pill)
+    // The handler defers the focus one frame (see HubAskBar: a sync focus inside a
+    // preventDefault'd mousedown is swallowed by the browser), so wait for it to land.
+    await waitFor(() => expect(document.activeElement).toBe(input))
+  })
+
+  // Focus is rAF-deferred, so a synchronous negative assert would pass even with
+  // the button exclusion deleted — flush two frames before asserting.
+  const flushFocusFrame = (): Promise<void> =>
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+
+  it('does NOT hijack focus when the paperclip button is pressed (button keeps its action)', async () => {
+    renderBar()
+    const input = screen.getByLabelText('Ask omi anything')
+    fireEvent.mouseDown(screen.getByLabelText('Attach files'))
+    await flushFocusFrame()
+    expect(document.activeElement).not.toBe(input)
+  })
+
+  it('does NOT hijack focus when the Connect button is pressed', async () => {
+    renderBar()
+    const input = screen.getByLabelText('Ask omi anything')
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Connect' }))
+    await flushFocusFrame()
+    expect(document.activeElement).not.toBe(input)
+  })
+})
