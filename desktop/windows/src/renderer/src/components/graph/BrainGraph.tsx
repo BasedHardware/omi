@@ -622,7 +622,11 @@ function GraphScene({
           fade in GraphNodeLabel. */}
       {interactive && <AdaptiveFog />}
       {interactive && <DrawCallProbe />}
-      {interactive && frameLoop === 'demand' && <GraphPulseThrottle active={hoveredId !== null} />}
+      {/* No throttle under reduced motion: there is no pulse to keep alive, so the
+          scene settles to a static frame and should stop repainting entirely. */}
+      {interactive && frameLoop === 'demand' && !reduced && (
+        <GraphPulseThrottle active={hoveredId !== null} />
+      )}
       <GraphEdges sim={sim} edges={graph.edges} posMap={posMap} />
       <GraphNodes
         sim={sim}
