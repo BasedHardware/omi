@@ -34,6 +34,7 @@ import { getCacheUid, readPersistedValue, writePersistedValue } from '../lib/per
 import { toast } from '../lib/toast'
 import { worksExternally, setupUrl, isSetupCompleted, startSetupPolling } from '../lib/appInstall'
 import { AppDetailSheet } from '../components/apps/AppDetailSheet'
+import { auth } from '../lib/firebase'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -262,7 +263,7 @@ export function Apps(): React.JSX.Element {
   const [selectedApp, setSelectedApp] = useState<AppCatalogItem | null>(null)
   const filterRef = useRef<HTMLDivElement>(null)
 
-  const load = async (): Promise<void> => {
+  const load = useCallback(async (): Promise<void> => {
     setError(null)
     const originUid = getCacheUid()
     try {
@@ -312,12 +313,28 @@ export function Apps(): React.JSX.Element {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount; not a self-retriggering loop
     void load()
-  }, [])
+  }, [load])
+
+  // Revalidate when the window regains focus, so an app enabled out-of-band (the web
+  // app or another device) appears without an app relaunch — the enabled set (and the
+  // v1+v2 installed pool that backs the Installed view) is otherwise only fetched on
+  // mount. load() swaps sections/pool/enabled in place with no spinner (it never sets
+  // `loading` true), so this is silent, and the cache-first guard keeps the grid on a
+  // failed revalidation — never a blank list. Mirrors the Memories page's focus
+  // refresh. Skipped while an initial load or manual refresh is already in flight, and
+  // during a sign-out transition (auth.currentUser null).
+  useEffect(() => {
+    const onFocus = (): void => {
+      if (auth.currentUser && !loading && !refreshing) void load()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [loading, refreshing, load])
 
   // Debounce search so the network/filter doesn't run on every keystroke.
   useEffect(() => {
