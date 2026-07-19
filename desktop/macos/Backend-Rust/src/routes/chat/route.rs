@@ -284,7 +284,7 @@ pub(crate) fn chat_completions_routes() -> Router<AppState> {
         // Outermost for this route: the budget must exist before extractors and
         // body extraction so auth/paywall waits are inside it (#9835).
         .layer(axum::middleware::from_fn(
-            crate::request_deadline::attach_chat_request_deadline,
+            crate::request_deadline::attach_request_deadline,
         ))
 }
 
