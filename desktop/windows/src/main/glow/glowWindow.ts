@@ -125,12 +125,16 @@ export function createGlowWindow(): BrowserWindow {
     glowReady = false
   })
 
+  // Slim per-window entry (glow.html) instead of the full-app index.html — see
+  // perf/win-slim-aux-windows. The `#/glow` hash is preserved so window-role
+  // detection (windowRole.ts) and IPC sender labeling (voicePlaneIpc.ts) are
+  // unchanged.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/glow`)
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/glow.html#/glow`)
   } else if (rendererBaseUrl()) {
-    win.loadURL(`${rendererBaseUrl()}/index.html#/glow`)
+    win.loadURL(`${rendererBaseUrl()}/glow.html#/glow`)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'glow' })
+    win.loadFile(join(__dirname, '../renderer/glow.html'), { hash: 'glow' })
   }
 
   glowWindow = win

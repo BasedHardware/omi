@@ -33,6 +33,23 @@ export default defineConfig({
   },
   preload: {},
   renderer: {
+    build: {
+      // Multi-page renderer: the main window loads index.html (the full SPA), while
+      // each auxiliary window loads its own slim HTML entry that imports ONLY the
+      // component tree it renders — not the whole app graph (three.js orb,
+      // onnxruntime, every page). Each aux window used to load index.html and pay a
+      // full ~200 MB SPA renderer; per-entry inputs let rollup tree-shake each
+      // window down to what it uses. The main-process window loaders point at these
+      // htmls (glow/glowWindow.ts, insight/toastWindow.ts, captureWindow.ts),
+      // keeping the same `#/<route>` hash so window-role + IPC sender detection are
+      // unchanged. See perf/win-slim-aux-windows.
+      rollupOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          glow: resolve('src/renderer/glow.html')
+        }
+      }
+    },
     // Pin the dev server to this instance's port so the renderer's origin — and
     // therefore its localStorage (onboarding flag, preferences, Firebase session)
     // — stays stable across launches. The PRIMARY checkout keeps 5179; a linked
