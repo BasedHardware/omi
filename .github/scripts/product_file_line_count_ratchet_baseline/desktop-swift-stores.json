@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 2992
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3026
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Unsynced local_ task mutations skip backend calls that can only 404, and the auto-refresh reload limit is clamped to the backend's 500 cap so sessions with >500 tasks no longer 422 on every refresh."
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Unsynced local_ task mutations skip backend calls that can only 404; the auto-refresh reload limit is clamped to the backend's 500 cap; and undo-restore re-creates a task with its full field set (source, category, tags, recurrence, goal/workstream, completion) instead of only description/dueAt/priority."
   },
   "threshold": 1500
 }
