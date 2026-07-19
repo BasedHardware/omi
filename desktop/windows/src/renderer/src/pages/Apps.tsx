@@ -35,6 +35,7 @@ import { toast } from '../lib/toast'
 import { worksExternally, setupUrl, isSetupCompleted, startSetupPolling } from '../lib/appInstall'
 import { AppDetailSheet } from '../components/apps/AppDetailSheet'
 import { auth } from '../lib/firebase'
+import { getE2EUser } from '../lib/dev/e2eAuth'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -330,7 +331,13 @@ export function Apps(): React.JSX.Element {
   // during a sign-out transition (auth.currentUser null).
   useEffect(() => {
     const onFocus = (): void => {
-      if (auth.currentUser && !loading && !refreshing) void load()
+      // Resolve the signed-in user the same way the app's auth does (useAuth):
+      // getE2EUser() is null in normal use (flag-gated), so this is exactly
+      // auth.currentUser in production — but it also honors the fake-auth E2E user,
+      // so the focus-revalidation path is exercisable end to end. Skips during a
+      // sign-out transition (no user) and while a load/refresh is already in flight.
+      const signedIn = getE2EUser() ?? auth.currentUser
+      if (signedIn && !loading && !refreshing) void load()
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
