@@ -246,6 +246,12 @@ final class KernelTurnProjection {
     }
   }
 
+  /// Attach the owner-bound client for a non-production journal control action
+  /// without starting a model session or scheduling projection refresh work.
+  func attachControlClient(_ client: AgentClient.Session) {
+    self.client = client
+  }
+
   /// Synchronous owner teardown. Suspended work retains its old epoch and can
   /// neither mutate checkpoints nor project owner A rows after owner B starts.
   func invalidateOwnerState() {
@@ -697,10 +703,16 @@ final class KernelTurnProjection {
     return nil
   }
 
-  func clear(surface: AgentSurfaceReference, ownerID: String? = nil) async -> Bool {
+  func clear(
+    surface: AgentSurfaceReference,
+    ownerID: String? = nil,
+    requiresModelReadiness: Bool = true
+  ) async -> Bool {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return false }
     let kernelReady =
-      if let kernelReadyOperation {
+      if !requiresModelReadiness {
+        client != nil
+      } else if let kernelReadyOperation {
         await kernelReadyOperation()
       } else {
         await host.ensureBridgeStartedForKernel()
@@ -713,13 +725,24 @@ final class KernelTurnProjection {
       }
       var expectedGeneration = checkpointKey.flatMap { generationByConversation[$0] }
       if expectedGeneration.map({ $0 <= 0 }) ?? true {
-        let page = try await listJournalTurns(
-          client: client,
-          surface: surface,
-          ownerID: lease.ownerID,
-          afterTurnSeq: 0,
-          limit: 1
-        )
+        let page: AgentRuntimeProcess.JournalOperationResult
+        if let journalListOperation {
+          page = try await journalListOperation(client, surface, lease.ownerID, 0, 1)
+        } else if requiresModelReadiness {
+          page = try await client.listJournalTurns(
+            surface: surface,
+            ownerID: lease.ownerID,
+            afterTurnSeq: 0,
+            limit: 1
+          )
+        } else {
+          page = try await client.listJournalTurnsForControl(
+            surface: surface,
+            ownerID: lease.ownerID,
+            afterTurnSeq: 0,
+            limit: 1
+          )
+        }
         guard isCurrent(lease),
           !page.conversationId.isEmpty,
           page.conversationGeneration > 0
@@ -740,8 +763,14 @@ final class KernelTurnProjection {
           lease.ownerID,
           expectedGeneration
         )
-      } else {
+      } else if requiresModelReadiness {
         _ = try await client.clearJournalTurns(
+          surface: surface,
+          ownerID: lease.ownerID,
+          expectedGeneration: expectedGeneration
+        )
+      } else {
+        _ = try await client.clearJournalTurnsForControl(
           surface: surface,
           ownerID: lease.ownerID,
           expectedGeneration: expectedGeneration
@@ -762,7 +791,10 @@ final class KernelTurnProjection {
   }
 
   func clearOwnerSurfaceState(chatId: String = "default") async -> Bool {
-    await clear(surface: .mainChat(chatId: chatId))
+    await clear(
+      surface: .mainChat(chatId: chatId),
+      requiresModelReadiness: false
+    )
   }
 
   @discardableResult
