@@ -225,9 +225,15 @@ const DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS = 150_000
 // invisible to list_agent_sessions and the bar. Give it a generous window
 // instead. Real work streams text/thinking/tool updates continuously (and ANY
 // inbound session/update now resets the clock, see executeAttempt), so multi-
-// minute total silence is a genuine stall, not a long tool run. Still
-// overridable to 0 via options.noProgressTimeoutMs or the env var below.
-const DEFAULT_FIRST_PARTY_NO_PROGRESS_TIMEOUT_MS = 300_000
+// minute total silence is a genuine stall, not a long tool run.
+//
+// 600s (not less): this adapter also serves the interactive in-chat lane, and a
+// single silent tool — npm install, a build, a long test run — can legitimately
+// emit no recognized session/update for several minutes. 600s bounds the actual
+// bug (an INFINITE hang) while making a false-cancel of real work rare. Tune per
+// environment via OMI_ACP_NO_PROGRESS_TIMEOUT_MS (or options.noProgressTimeoutMs,
+// which also accepts 0 to disable) — overridable in both directions.
+const DEFAULT_FIRST_PARTY_NO_PROGRESS_TIMEOUT_MS = 600_000
 
 function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined
@@ -609,10 +615,12 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const pendingTools: PendingToolActivity[] = []
     let syntheticToolIdCounter = 0
     const previousHandler = this.notificationHandler
+    const previousMarkTurnProgress = this.markTurnProgress
     let lastProgressAt = Date.now()
     // Exposed so out-of-band liveness (a permission request from the child,
     // handled in handleRequest) also resets the watchdog — a permission
-    // round-trip is not a stall.
+    // round-trip is not a stall. Saved/restored like notificationHandler so a
+    // nested turn on the same process can't clobber an outer turn's hook.
     this.markTurnProgress = () => {
       lastProgressAt = Date.now()
     }
@@ -704,10 +712,16 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       throw error
     } finally {
       this.notificationHandler = previousHandler
-      this.markTurnProgress = null
+      this.markTurnProgress = previousMarkTurnProgress
     }
   }
 
+  // The watchdog's guarantee is "not silent," NOT "always making progress": it
+  // fires only on TOTAL silence (no inbound session/update and no permission
+  // request for the whole window). A wedged-but-chatty adapter that keeps
+  // emitting updates while doing nothing useful will not trip it — that livelock
+  // is out of scope here; this guard exists solely to bound the INFINITE hang the
+  // 0-default allowed. Any inbound update resets the clock (see executeAttempt).
   private withNoProgressTimeout<T>(
     promise: Promise<T>,
     adapterSessionId: string,

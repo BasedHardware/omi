@@ -319,6 +319,38 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
     expect(logs.some((l) => l.includes('prompt turn failed'))).toBe(true)
   })
 
+  it('the bare first-party "acp" adapter has a live watchdog by DEFAULT (pins the non-zero default)', async () => {
+    // Guards the exact original bug: this constructs the adapter with NO
+    // noProgressTimeoutMs override, so it exercises
+    // DEFAULT_FIRST_PARTY_NO_PROGRESS_TIMEOUT_MS itself. If that default is ever
+    // flipped back to 0 (watchdog disabled), the stalled turn below hangs forever
+    // and this test times out — the regression the other watchdog tests miss
+    // because they all pass an explicit timeout.
+    const adapter = makeAdapter() // bare first-party 'acp', no timeout override
+    const cancels: unknown[] = []
+    scriptJsonRpc(proc, (message) => {
+      if (answerCommonHandshake(proc, message)) return
+      if (message.method === 'session/cancel') cancels.push(message.params)
+      // session/prompt never answered, no progress — the default watchdog must fire.
+    })
+
+    await adapter.openBinding({ sessionId: 'omi-session', cwd: 'C:/work' })
+    vi.useFakeTimers()
+    try {
+      const outcome = adapter
+        .executeAttempt(makeAttemptContext(), () => {}, new AbortController().signal)
+        .catch((error: Error) => error)
+      // Past the default window (600s); advance generously so the poll tick trips.
+      await vi.advanceTimersByTimeAsync(610_000)
+      const error = await outcome
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toContain('no progress')
+      expect(cancels).toEqual([{ sessionId: 'native-session-1' }])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('treats a permission request as liveness, not a stall (resets the watchdog)', async () => {
     // A permission round-trip produces no session/update; without resetting the
     // clock it would count as no-progress and the watchdog would kill a turn
