@@ -49,6 +49,12 @@ const ACTIVE_FPS = 60
 /** Morph tween length, seconds (disc ↔ rounded rect). */
 const MORPH_SECONDS = 0.28
 
+/** Which adaptive amplitude mapper calibrates the raw level: the user's mic
+ *  capture, or Omi's own audible reply (the player tap). Separate instances
+ *  with identical constants keep the two signal families' floor/ceiling
+ *  trackers isolated (see the field docs on OrbAnimator). */
+export type AmplitudeLane = 'mic' | 'playback'
+
 export class OrbAnimator {
   private canvas: HTMLCanvasElement
   private renderer: OrbRenderer
@@ -79,12 +85,18 @@ export class OrbAnimator {
   private failedAt: number | null = null
   private morphTarget = 0
   private morph = 0
-  /** Raw live level target (from the mic pipeline — canonical linear amplitude
-   *  0..1 of full scale), the adaptive mapper that calibrates it to a display
-   *  level, and the smoothed display envelope. The mapper lives on the animator
-   *  (not per-frame) so its floor/ceiling trackers persist across utterances. */
+  /** Raw live level target (canonical linear amplitude 0..1 of full scale), the
+   *  adaptive mappers that calibrate it to a display level, and the smoothed
+   *  display envelope. The mappers live on the animator (not per-frame) so their
+   *  floor/ceiling trackers persist across utterances. TWO mapper instances,
+   *  selected by the producer's lane: 'mic' (the user's capture) and 'playback'
+   *  (Omi's own audible reply). Same constants, isolated trackers — a loud TTS
+   *  reply must not teach the MIC lane's AGC ceiling a hotter range and dampen
+   *  the user's next hold (ceiling decay is ~12s), and vice versa. */
   private rawAmplitude = 0
+  private ampLane: AmplitudeLane = 'mic'
   private amp = new AmplitudeMapper()
+  private playbackAmp = new AmplitudeMapper()
   private ampEnvelope = 0
   /** Opt-in numeric trace of the amplitude chain (localStorage omi.orbAmpDiag =
    *  '1'): logs raw → mapped → envelope at the waveform-sample cadence, for
@@ -162,6 +174,13 @@ export class OrbAnimator {
     return performance.now() / 1000 - this.epoch
   }
 
+  /** The adaptive mapper for the CURRENT producer lane. The inactive lane's
+   *  trackers simply hold (equivalent to its no-signal hold) until that lane
+   *  produces again. */
+  private activeAmp(): AmplitudeMapper {
+    return this.ampLane === 'playback' ? this.playbackAmp : this.amp
+  }
+
   setState(state: OrbState): void {
     if (state === this.state) return
     // Capture the merge currently on screen (computed from the OUTGOING state,
@@ -195,10 +214,14 @@ export class OrbAnimator {
   }
 
   /** RAW live level: canonical linear amplitude 0..1 of full scale (the hub's
-   *  pcmPeakLevel / the capture window's time-domain peak). Hot input above 1 is
-   *  tolerated — the adaptive mapper bounds it downstream. */
-  setAmplitude(a: number): void {
+   *  pcmPeakLevel / the capture window's time-domain peak / the player tap's
+   *  played-audio peak). Hot input above 1 is tolerated — the adaptive mapper
+   *  bounds it downstream. `lane` picks which adaptive mapper calibrates it
+   *  ('mic' default; 'playback' for Omi's own audible reply) so the two signal
+   *  families never cross-contaminate each other's floor/ceiling trackers. */
+  setAmplitude(a: number, lane: AmplitudeLane = 'mic'): void {
     this.rawAmplitude = Math.max(0, a)
+    this.ampLane = lane
   }
 
   /** Play the genesis spring (materialize from scale 0). */
@@ -293,7 +316,7 @@ export class OrbAnimator {
     // waveform bars push it directly and the blob wobble shapes it in
     // computeOrbFrame. All dt-based — identical response at 30 or 60fps.
     this.speechMerge = stepMergeEnvelope(this.speechMerge, this.speechActive ? 1 : 0, dt)
-    const mapped = this.amp.step(this.rawAmplitude, dt)
+    const mapped = this.activeAmp().step(this.rawAmplitude, dt)
     this.ampEnvelope = stepAmplitudeEnvelope(this.ampEnvelope, mapped, dt)
     // Waveform history: scroll a fresh loudness sample in at a fixed cadence
     // (steady scroll regardless of fps), then ease the displayed bar levels toward
@@ -378,10 +401,10 @@ export class OrbAnimator {
       pushes++
     }
     if (this.ampDiag && pushes > 0) {
-      const t = this.amp.trackers
+      const t = this.activeAmp().trackers
       console.log(
         `[orb-amp] raw=${this.rawAmplitude.toFixed(4)} env=${this.ampEnvelope.toFixed(3)} ` +
-          `gate=${t.gateDb.toFixed(1)}dB ceil=${t.ceilDb.toFixed(1)}dB`
+          `gate=${t.gateDb.toFixed(1)}dB ceil=${t.ceilDb.toFixed(1)}dB lane=${this.ampLane}`
       )
     }
     const target = historySlots(this.waveHistory, this.waveWrite, this.slotCount)

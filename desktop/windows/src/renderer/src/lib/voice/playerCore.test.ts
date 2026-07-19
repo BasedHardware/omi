@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { PlayerCore, pcm16BytesToFloat32 } from './playerCore'
+import {
+  PlayerCore,
+  PlaybackLevelMeter,
+  LEVEL_POST_QUANTA,
+  pcm16BytesToFloat32
+} from './playerCore'
 
 const CUSHION = 100
 
@@ -131,5 +136,53 @@ describe('pcm16BytesToFloat32', () => {
     const f = pcm16BytesToFloat32(windowed)
     expect(f.length).toBe(2)
     expect(f[0]).toBeCloseTo(0.5)
+  })
+})
+
+describe('PlaybackLevelMeter (the orb speaking-pose amplitude tap)', () => {
+  const frame = (peak: number, n = 128): Float32Array => {
+    const f = new Float32Array(n).fill(peak * 0.4)
+    f[7] = -peak // the peak is a magnitude — sign must not matter
+    return f
+  }
+
+  // Peak values chosen to be exact in float32 (0.5 / 0.75 / 0.25) so equality
+  // assertions survive the Float32Array round-trip.
+  it('posts the window PEAK once per cadence window, nothing between', () => {
+    const m = new PlaybackLevelMeter()
+    const posts: number[] = []
+    for (let i = 0; i < LEVEL_POST_QUANTA * 2; i++) {
+      const level = m.observe(frame(i < LEVEL_POST_QUANTA ? 0.5 : 0.75), true)
+      if (level !== null) posts.push(level)
+    }
+    expect(posts).toEqual([0.5, 0.75])
+  })
+
+  it('emits ONE trailing 0 when the burst ends, then stays silent', () => {
+    const m = new PlaybackLevelMeter()
+    for (let i = 0; i < LEVEL_POST_QUANTA; i++) m.observe(frame(0.6), true)
+    expect(m.observe(frame(0), false)).toBe(0) // burst ended (drain / clear)
+    expect(m.observe(frame(0), false)).toBeNull() // idle frames stay silent
+    expect(m.observe(frame(0), false)).toBeNull()
+  })
+
+  it('a burst end mid-window drops the partial window (the trailing 0 wins)', () => {
+    const m = new PlaybackLevelMeter()
+    m.observe(frame(0.75), true) // one quantum, cadence window not complete
+    expect(m.observe(frame(0), false)).toBe(0)
+    // The next burst starts a FRESH window — the stale 0.75 peak is gone.
+    const posts: number[] = []
+    for (let i = 0; i < LEVEL_POST_QUANTA; i++) {
+      const level = m.observe(frame(0.25), true)
+      if (level !== null) posts.push(level)
+    }
+    expect(posts).toEqual([0.25])
+  })
+
+  it('never posts for a player that has not played (no idle chatter)', () => {
+    const m = new PlaybackLevelMeter()
+    for (let i = 0; i < LEVEL_POST_QUANTA * 3; i++) {
+      expect(m.observe(frame(0), false)).toBeNull()
+    }
   })
 })

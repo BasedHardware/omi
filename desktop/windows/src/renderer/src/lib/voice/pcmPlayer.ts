@@ -12,6 +12,7 @@
 import workletUrl from './playerWorklet.ts?worker&url'
 import { floatTo16BitPCM } from '../capture/pcmCore'
 import { pcm16BytesToFloat32 } from './playerCore'
+import { playbackLevel } from './playbackLevelBus'
 
 export const GEMINI_OUTPUT_RATE = 24000
 export const JITTER_CUSHION_MS = 150
@@ -58,10 +59,15 @@ export async function createVoicePlayer(opts: {
     processorOptions: { cushionSamples: Math.round((cushionMs / 1000) * rate) }
   })
   let closed = false
-  node.port.onmessage = (e: MessageEvent<{ type: string }>): void => {
+  node.port.onmessage = (e: MessageEvent<{ type: string; value?: number }>): void => {
     if (closed) return
     if (e.data.type === 'started') opts.onStarted()
     else if (e.data.type === 'drained') opts.onDrained()
+    // The worklet's played-audio peak (PlaybackLevelMeter) → the shared signal,
+    // so the orb's speaking pose animates with the reply's real dynamics.
+    else if (e.data.type === 'level' && typeof e.data.value === 'number') {
+      playbackLevel.set(e.data.value)
+    }
   }
   node.connect(ctx.destination)
 

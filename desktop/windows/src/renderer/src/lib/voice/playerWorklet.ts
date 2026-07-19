@@ -10,7 +10,11 @@
 // (worklet → main thread):
 //   { type: 'started' }                    a burst began audibly playing
 //   { type: 'drained' }                    the burst's buffer fully drained
-import { PlayerCore } from './playerCore'
+//   { type: 'level', value }               throttled linear 0..1 peak of the
+//                                          audio actually played (~31Hz while
+//                                          playing, one trailing 0 at burst end)
+//                                          — the orb's speaking-pose amplitude
+import { PlayerCore, PlaybackLevelMeter } from './playerCore'
 
 declare abstract class AudioWorkletProcessor {
   readonly port: MessagePort
@@ -22,6 +26,7 @@ declare function registerProcessor(
 
 class OmiVoicePlayerProcessor extends AudioWorkletProcessor {
   private readonly core: PlayerCore
+  private readonly meter = new PlaybackLevelMeter()
   private wasPlaying = false
 
   constructor(options?: { processorOptions?: { cushionSamples?: number } }) {
@@ -51,6 +56,8 @@ class OmiVoicePlayerProcessor extends AudioWorkletProcessor {
       this.port.postMessage({ type: 'started' })
     }
     const r = this.core.pull(channel)
+    const level = this.meter.observe(channel, r.wroteAudio)
+    if (level !== null) this.port.postMessage({ type: 'level', value: level })
     if (r.drained && this.wasPlaying) {
       this.wasPlaying = false
       this.port.postMessage({ type: 'drained' })

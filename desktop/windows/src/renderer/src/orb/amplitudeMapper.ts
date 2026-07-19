@@ -43,9 +43,10 @@
 // Typical mapping on a normal mic (floor ≈ -50 dBFS → floor+margin -40, clamped
 // to the gate band's top: gate -44; ceiling ≈ -13):
 //   room silence / breath  (< -44 dB) → 0        resting dots
-//   quiet speech           (≈ -32 dB) → ~0.4     clearly visible, well below max
-//   normal speech syllables(-25..-13) → ~0.55–0.92  mid-to-high, live dynamics
-//   loud speech            (≥ ceiling) → 0.92    near max, never pinned at 1
+//   quiet speech           (≈ -32 dB) → ~0.36    clearly visible, well below max
+//   normal speech syllables(-25..-13) → ~0.52–0.78  mid-to-high, live dynamics
+//   loud speech            (ceiling..+7dB over) → ~0.78–0.92; only a >7dB
+//                          outlier touches the 0.92 cap — never pinned there
 
 /** Raw linear levels at/below this (≈ −80 dBFS) are "no signal": output 0 and
  *  hold the trackers (Orb feeds literal 0 while speech is inactive — that must
@@ -98,15 +99,23 @@ export const CEIL_MIN_SPAN_DB = 18
 export const CEIL_ABS_MIN_DB = -22
 export const CEIL_ABS_MAX_DB = -4
 /** Headroom (dB) above the tracked ceiling that maps to full range: the
- *  SESSION-TYPICAL peak reads high-but-not-top (~0.83), so ordinary speech
+ *  SESSION-TYPICAL peak reads high-but-not-top (~0.78), so ordinary speech
  *  lives mid-range and only louder-than-recent moments approach OUT_CEIL —
- *  "approaches, never slams" as a property of the curve, not luck. */
-export const CEIL_HEADROOM_DB = 4
+ *  "approaches, never slams" as a property of the curve, not luck.
+ *  2026-07-18 trim (live feedback: "maxes out a bit"): 4 → 7. With 4dB every
+ *  emphasized syllable (typically 4–6dB over the tracked ceiling) clamped u to
+ *  1 and slammed the cap; 7dB keeps those riding 0.8–0.9 and reserves the cap
+ *  for genuine outliers. AMP_GAMMA dropped in the same change so the quiet end
+ *  stays where it was (the headroom scales u down across the whole range). */
+export const CEIL_HEADROOM_DB = 7
 
 // --- Output shaping ---------------------------------------------------------
 /** Perceptual exponent on the normalized level (dB normalization already does
- *  most of the work; this adds a gentle low-end lift). */
-export const AMP_GAMMA = 0.85
+ *  most of the work; this adds a gentle low-end lift). 0.85 → 0.82 alongside
+ *  the CEIL_HEADROOM_DB 4 → 7 trim: the extra headroom shrinks u for EVERY
+ *  level, so a slightly stronger low-end lift keeps quiet speech at its
+ *  previous visibility while the top end still gains its new margin. */
+export const AMP_GAMMA = 0.82
 /** Display ceiling (< 1): the loudest input approaches, never slams, the bar
  *  maximum (waveform max height needs level 1). */
 export const AMP_OUT_CEIL = 0.92

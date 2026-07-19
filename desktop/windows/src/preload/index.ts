@@ -607,6 +607,8 @@ const omi: OmiBridgeApi = {
   },
   publishVoiceHubState: (state: VoiceHubBarState) =>
     ipcRenderer.send('voiceHub:publishState', state),
+  publishVoicePlaybackLevel: (level: number) =>
+    ipcRenderer.send('voiceHub:publishPlaybackLevel', level),
   // --- Tray + lifecycle (Phase 1) ---
   trayReportState: (state) => ipcRenderer.send('tray:state', state),
   onTrayToggleListening: (cb: () => void) => {
@@ -752,6 +754,11 @@ const omiBar: OmiBarApi = {
     const listener = (_e: Electron.IpcRendererEvent, state: VoiceHubBarState): void => cb(state)
     ipcRenderer.on('voiceHub:state', listener)
     return () => ipcRenderer.removeListener('voiceHub:state', listener)
+  },
+  onVoicePlaybackLevel: (cb: (level: number) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, level: number): void => cb(level)
+    ipcRenderer.on('voiceHub:playbackLevel', listener)
+    return () => ipcRenderer.removeListener('voiceHub:playbackLevel', listener)
   },
   getContentProtection: () => ipcRenderer.invoke('bar:getContentProtection'),
   setContentProtection: (enabled: boolean) =>
