@@ -8986,7 +8986,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get billingYearly => 'Aastane';
 
   @override
-  String get savePercent => 'Säästa ~17%';
+  String savePercent(int percent) {
+    return 'Säästa ~$percent%';
+  }
 
   @override
   String get popular => 'Populaarne';

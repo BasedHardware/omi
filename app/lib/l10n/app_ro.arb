@@ -2935,7 +2935,7 @@
     "upgradePlan": "Actualizare plan",
     "billingMonthly": "Lunar",
     "billingYearly": "Anual",
-    "savePercent": "Economisiți ~17%",
+    "savePercent": "Economisiți ~{percent}%",
     "popular": "Popular",
     "currentPlan": "Curent",
     "neoSubtitle": "{count} întrebări pe lună",
