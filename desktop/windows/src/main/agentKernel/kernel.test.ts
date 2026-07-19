@@ -638,6 +638,46 @@ describe('AgentRuntimeKernel — leaf-role guards (INV-AGENT)', () => {
     expect(spawned.run.status).toBe('queued')
   })
 
+  it('surfaces a hung background spawn as a failed run in listSessions (silent-death regression)', async () => {
+    // The original silent death: a stalled ACP turn left the run pinned 'running'
+    // forever, invisible to list_agent_sessions — the ONE read the LLM status tool
+    // and the bar pill both project from — so a status query reported "no active
+    // agents". With the ACP no-progress watchdog now bounding the turn, the adapter
+    // rejects; the run must land 'failed' AND surface in the floating_bar
+    // projection listSessions returns, so the pill/status shows Failed, never a
+    // phantom stall. Here the fake adapter rejects with a no-progress-shaped error,
+    // standing in for the real watchdog firing.
+    const adapter = fakeAdapter({
+      executeError: new Error('test-adapter produced no progress for 300 seconds')
+    })
+    const { kernel, store } = newKernel(adapter)
+
+    const spawned = await kernel.spawnBackgroundAgent({
+      ownerId: OWNER,
+      clientId: 'client-1',
+      requestId: 'request-hung',
+      prompt: 'build a snake game',
+      adapterId: 'test-adapter',
+      defaultAdapterId: 'test-adapter',
+      trustedUserSpawn: true
+    })
+    // spawnBackgroundAgent is fire-and-forget; the failure is recorded async.
+    await waitFor(
+      () =>
+        String(
+          store.getRow('SELECT status FROM runs WHERE run_id = ?', [spawned.run.runId]).status
+        ) === 'failed'
+    )
+
+    // The exact read list_agent_sessions performs (surfaceKind 'floating_bar').
+    const sessions = kernel.listSessions({ ownerId: OWNER, surfaceKind: 'floating_bar' })
+    const summary = sessions.find((s) => s.session.sessionId === spawned.session.sessionId)
+    expect(summary).toBeDefined()
+    const run = summary?.activeRun ?? summary?.latestRun
+    expect(run?.status).toBe('failed')
+    expect(run?.errorCode).toBe('adapter_execution_failed')
+  })
+
   it('refuses an agent-originated spawn with no caller session', async () => {
     const { kernel } = newKernel(fakeAdapter())
 

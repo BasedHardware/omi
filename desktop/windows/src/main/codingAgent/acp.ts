@@ -767,6 +767,21 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
           this.log(
             `${this.adapterId} ACP session ${adapterSessionId} produced no recognized progress for ${idleMs}ms; cancelling`
           )
+          // Structured degrade breadcrumb so a watchdog kill is never a silent op.
+          // There is no shared Windows recordFallback emitter (see
+          // toolRelayBridge.ts — AGENTS.md emitters are Python/Swift/Rust only), so
+          // match its established pattern: one structured line, standard fields, no
+          // one-off counter. The terminal run failure is recorded separately by the
+          // kernel as a hard-failure event.
+          this.log(
+            `[fallback] ${JSON.stringify({
+              component: 'agent_kernel',
+              from: 'acp_turn',
+              to: 'none',
+              reason: 'no_progress_timeout',
+              outcome: 'degraded'
+            })}`
+          )
           this.notify('session/cancel', { sessionId: adapterSessionId })
           finish(() =>
             reject(
