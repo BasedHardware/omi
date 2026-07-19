@@ -50,15 +50,33 @@ const flush = async (): Promise<void> => {
 describe('pollRebuiltGraph', () => {
   const instant = (): Promise<void> => Promise.resolve()
 
-  it('returns the first non-empty graph the poll sees', async () => {
+  it('adopts a non-empty graph once its node count is stable across two polls', async () => {
     const { pollRebuiltGraph } = await freshHook()
     const fetch = vi
       .fn<() => Promise<KnowledgeGraph>>()
       .mockResolvedValueOnce(EMPTY)
       .mockResolvedValueOnce(G2)
-    const g = await pollRebuiltGraph(fetch, true, [1, 1, 1], instant)
+      .mockResolvedValueOnce(G2)
+    const g = await pollRebuiltGraph(fetch, true, [1, 1, 1, 1], instant)
     expect(g).toEqual(G2)
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('never adopts a still-growing partial snapshot (incremental server upserts)', async () => {
+    const { pollRebuiltGraph } = await freshHook()
+    const grow = (n: number): KnowledgeGraph => ({
+      nodes: Array.from({ length: n }, (_, i) => node(`n${i}`)),
+      edges: []
+    })
+    const fetch = vi
+      .fn<() => Promise<KnowledgeGraph>>()
+      .mockResolvedValueOnce(grow(2))
+      .mockResolvedValueOnce(grow(5))
+      .mockResolvedValueOnce(grow(9))
+    // Count grew on every poll — the job is clearly still writing, so the caller
+    // must keep its old graph rather than adopt a partial one.
+    const g = await pollRebuiltGraph(fetch, true, [1, 1, 1], instant)
+    expect(g).toBeNull()
   })
 
   it('returns null (keep the old graph) when every poll still sees the cleared snapshot', async () => {
@@ -124,9 +142,10 @@ describe('useKnowledgeGraph rebuild state', () => {
     expect(result.current.graph).toEqual(G1)
 
     rebuildMock.mockResolvedValue({ status: 'rebuilding' })
-    // First poll sees the cleared (empty) snapshot; second sees the rebuilt graph.
+    // First poll sees the cleared (empty) snapshot; the rebuilt graph then lands
+    // and holds stable across the next two polls.
     fetchMock.mockReset()
-    fetchMock.mockResolvedValueOnce(EMPTY).mockResolvedValueOnce(G2)
+    fetchMock.mockResolvedValueOnce(EMPTY).mockResolvedValueOnce(G2).mockResolvedValue(G2)
 
     let done: Promise<void>
     act(() => {
@@ -142,9 +161,9 @@ describe('useKnowledgeGraph rebuild state', () => {
     expect(result.current.graph).toEqual(G1)
     expect(result.current.rebuilding).toBe(true)
 
-    // Second poll (3s): rebuilt graph lands and is adopted.
+    // Second + third polls (3s, 5s): rebuilt graph lands, holds stable, adopted.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000)
+      await vi.advanceTimersByTimeAsync(8000)
       await done!
     })
     expect(result.current.graph).toEqual(G2)
@@ -167,7 +186,7 @@ describe('useKnowledgeGraph rebuild state', () => {
       done = result.current.rebuild()
     })
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(70_000)
+      await vi.advanceTimersByTimeAsync(90_000)
       await done!
     })
 

@@ -10,18 +10,24 @@ const cache = {
 }
 
 // Poll cadence after kicking a rebuild: the server-side job is an LLM pass over
-// up to 500 memories, so give it a generous ~60s before giving up (the old
+// up to 500 memories, so give it a generous ~80s before giving up (the old
 // graph stays on screen either way).
-const REBUILD_POLL_DELAYS_MS = [2000, 3000, 5000, 8000, 12000, 15000, 15000]
+const REBUILD_POLL_DELAYS_MS = [2000, 3000, 5000, 8000, 10000, 10000, 10000, 10000, 10000, 10000]
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-// Polls `fetch` until it returns a non-empty graph — i.e. the background rebuild
-// has landed and overwritten the snapshot the rebuild endpoint cleared. When the
-// graph was ALREADY empty before the rebuild, the first response is authoritative
-// (there is no old graph to protect, and "still empty" may be the correct final
-// answer). Returns null when every attempt still saw the cleared snapshot; the
-// caller keeps the graph it already has. Fetch errors propagate to the caller.
+// Polls `fetch` until the background rebuild has LANDED. Two subtleties, both
+// live-observed against the real backend:
+//  - The rebuild endpoint clears the stored graph synchronously, so early polls
+//    see an empty snapshot.
+//  - The job then upserts nodes INCREMENTALLY (utils/llm/knowledge_graph.py
+//    loops per memory batch), so a non-empty snapshot may still be partial —
+//    adopting the first one collapsed the map to a handful of nodes. We only
+//    adopt once the node count is STABLE across two consecutive polls.
+// When the graph was ALREADY empty before the rebuild there is no old graph to
+// protect and the first response is authoritative ("still empty" may be the
+// correct final answer). Returns null when no stable non-empty snapshot arrived
+// in time; the caller keeps the graph it already has. Fetch errors propagate.
 // Exported for tests.
 export async function pollRebuiltGraph(
   fetch: () => Promise<KnowledgeGraph>,
@@ -29,10 +35,15 @@ export async function pollRebuiltGraph(
   delays: readonly number[] = REBUILD_POLL_DELAYS_MS,
   sleep: (ms: number) => Promise<void> = wait
 ): Promise<KnowledgeGraph | null> {
+  let last: KnowledgeGraph | null = null
   for (const delay of delays) {
     await sleep(delay)
     const g = await fetch()
-    if (g.nodes.length > 0 || !hadGraph) return g
+    if (!hadGraph) return g
+    if (g.nodes.length > 0) {
+      if (last && g.nodes.length === last.nodes.length) return g
+      last = g
+    }
   }
   return null
 }
