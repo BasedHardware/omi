@@ -229,4 +229,13 @@ describe('searchCatalog', () => {
     expect(result.usedFallback).toBe(true)
     expect(result.apps.map((a) => a.id)).toEqual(['notes'])
   })
+
+  it('stays flagged as a fallback when the endpoint throws and no local app matches', async () => {
+    // "Both fail" (remote errored AND the local corpus has no match) must remain
+    // usedFallback:true so the page shows the "search temporarily unavailable" hint
+    // rather than a plain "no results" — an error is not the same as an empty match.
+    const fetchRemote = vi.fn().mockRejectedValue(new Error('500'))
+    const result = await searchCatalog('nonexistent-zzz', fetchRemote, local)
+    expect(result).toEqual({ apps: [], usedFallback: true })
+  })
 })
