@@ -296,7 +296,8 @@
         "tests/unit/test_sync_cloud_tasks.py",
         "tests/unit/test_backend_runtime_env_validator.py",
         "tests/unit/test_claim_deletion_wipe_txn.py",
-        "tests/unit/test_delete_account_purge_storage.py"
+        "tests/unit/test_delete_account_purge_storage.py",
+        "testing/e2e/test_account_deletion_cloud_tasks.py"
       ],
       "checks": [],
       "invariants": [
