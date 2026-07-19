@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Search, Maximize2 } from 'lucide-react'
+import type { KnowledgeGraph } from '../../../shared/types'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -28,10 +29,18 @@ import { auth } from '../lib/firebase'
 // rendered.
 const RENDER_CAP = 400
 
+// Stable empty graph fed to the preview until its data has settled, so BrainGraph
+// runs exactly ONE layout pass — of the final merged graph — instead of laying out
+// each intermediate (floor-only, then floor+server-KG) as they load. A module-level
+// constant keeps the reference stable across renders (a fresh {} each render would
+// re-trigger the sim's setGraph every time).
+const EMPTY_GRAPH: KnowledgeGraph = { nodes: [], edges: [] }
+
 const emptyCategorySet = (): Set<MemoryCategory> => new Set<MemoryCategory>()
 
 export function Memories(): React.JSX.Element {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const {
     memories,
     loading,
@@ -46,7 +55,7 @@ export function Memories(): React.JSX.Element {
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
-  const { graph: brainGraph, centerNodeId } = useMemoryGraph(memories)
+  const { graph: brainGraph, centerNodeId, loading: graphLoading } = useMemoryGraph(memories)
   // The inline preview card decluttered to match the full-screen viewer's resting
   // look: the same DEFAULT_NODE_CAP most-connected nodes (edges pruned to that set)
   // and declutter labels. Without this the card rendered the whole graph with every
@@ -57,18 +66,82 @@ export function Memories(): React.JSX.Element {
     () => capGraph(brainGraph, DEFAULT_NODE_CAP, centerNodeId),
     [brainGraph, centerNodeId]
   )
-  // The brain map lazy-loads a ~1MB three.js chunk and then spins up WebGL, so
-  // the container can otherwise sit blank for seconds with no hint anything is
-  // coming. Track readiness via BrainGraph's onCreated signal, with a bounded
-  // fallback so a stalled/failed load (chunk error, WebGL crash) doesn't leave
-  // the placeholder showing forever.
-  const [graphReady, setGraphReady] = useState(false)
+  // Reveal the map only once it is READY TO SHOW ITS FINAL FORM, not the moment
+  // the WebGL canvas is created. Two independent signals gate the crossfade:
+  //
+  //  - settled: every source the graph merges has resolved — the memory list
+  //    (useMemories), the onboarding floor, and the server KG (both via
+  //    useMemoryGraph.loading). Revealing on canvas-creation instead let the user
+  //    watch the graph churn through intermediate states as those loaded in turn
+  //    (floor-only, then floor+server-KG, then re-scoped) — the reported "glitches
+  //    into different views". Holding the loader until they settle means the first
+  //    thing shown is the final graph, flying in once. Stays settled once resolved
+  //    (dataLoading is monotonic), so a later background revalidation swaps in place
+  //    rather than dropping back to the loader.
+  //  - canvasLive: BrainGraph reported a live WebGL context (onReady) — the canvas
+  //    can actually paint. Reset to false when we tear the preview canvas down (see
+  //    the teardown effect) so a revisit falls back to the loader until the fresh
+  //    canvas is ready, rather than crossfading straight to a blank pane.
+  //
+  // revealForced is the bounded fallback that keeps the loader from latching
+  // forever, and it forces the FULL reveal (both axes), not just `settled`: if the
+  // lazy 3D chunk fails to load, LazyBrainGraph renders its static fallback and
+  // onReady never fires, so canvasLive would stay false and the placeholder would
+  // sit on top of that fallback indefinitely. Once the data has settled only the
+  // canvas is outstanding, so force the reveal soon after; before then wait longer
+  // (a slow fetch is legitimate — revealing early would flash a partial graph).
   const hasGraph = brainGraph.nodes.length > 0
+  const [canvasLive, setCanvasLive] = useState(false)
+  const [revealForced, setRevealForced] = useState(false)
+  // dataLoading is monotonic (each source flips true→false once and never back —
+  // revalidation/refetch don't re-raise it), so `settled` needs no latch.
+  const dataLoading = loading || graphLoading
+  const settled = !dataLoading
+  const normalReady = canvasLive && settled
   useEffect(() => {
-    if (graphReady || !hasGraph) return
-    const t = setTimeout(() => setGraphReady(true), 4000)
+    if (normalReady || revealForced || !hasGraph) return
+    const t = setTimeout(() => setRevealForced(true), settled ? 4000 : 15000)
     return () => clearTimeout(t)
-  }, [graphReady, hasGraph])
+  }, [normalReady, revealForced, hasGraph, settled])
+  const graphReady = normalReady || revealForced
+  // Feed the settled graph once we're ready to show it (data settled, or the
+  // fallback forced the reveal); until then EMPTY so the sim lays the final set
+  // out exactly once.
+  const showFinalGraph = settled || revealForced
+
+  // Mount the preview's WebGL canvas for as long as the Memories route is active,
+  // and tear it down only after the user has been away for a sustained window (to
+  // free the GL context — the intent of BrainGraph's own pauseWhenHidden). We gate
+  // this on the RELIABLE route signal rather than pauseWhenHidden's size heuristic:
+  // the graph's ~1s synchronous initial layout momentarily collapses the host to
+  // 0×0 with NO tab switch, and the size heuristic mistook that for a hide, tearing
+  // the canvas down mid-load — the loader flashed back and the whole graph
+  // re-animated. useLocation never reports that spurious transition (the route
+  // stays /memories throughout), so the canvas stays put while you are on the tab.
+  const previewRouteActive = pathname === '/memories'
+  const [mountPreview, setMountPreview] = useState(previewRouteActive)
+  useEffect(() => {
+    if (previewRouteActive) {
+      // Sync the canvas mount to the active route: it must be present whenever the
+      // tab is shown (incl. re-entry after a prior tear-down). Deliberate
+      // state-from-props sync, not a cascading-render smell.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMountPreview(true)
+      return
+    }
+    const t = setTimeout(() => setMountPreview(false), 5000)
+    return () => clearTimeout(t)
+  }, [previewRouteActive])
+
+  // Reset canvasLive whenever the canvas is actually torn down — the route teardown
+  // above, or the card's hasGraph gate dropping it — so a later remount re-earns
+  // onReady instead of us crossfading over a fresh, not-yet-painted canvas (stale
+  // canvasLive=true → a blank flash on remount). The cleanup runs on the unmount
+  // transition; the effect body sets no state.
+  useEffect(() => {
+    if (!(mountPreview && hasGraph)) return
+    return () => setCanvasLive(false)
+  }, [mountPreview, hasGraph])
 
   // Revalidate when the window regains focus, so memories the backend distilled
   // from new conversations during the session show up on return without an app
@@ -476,24 +549,30 @@ export function Memories(): React.JSX.Element {
               <div
                 className={`h-full w-full transition-opacity duration-500 ${graphReady ? 'opacity-100' : 'opacity-0'}`}
               >
-                <BrainGraph
-                  graph={previewGraph}
-                  centerNodeId={centerNodeId}
-                  interactive={false}
-                  labelMode="declutter"
-                  pauseWhenHidden
-                  frameLoop="demand"
-                  onReady={() => setGraphReady(true)}
-                  // pauseWhenHidden tears down and recreates the canvas when this
-                  // tab goes hidden then shown again (e.g. it was pre-warmed in
-                  // the background before you navigated here) — fall back to the
-                  // loading state for that brief recreation gap instead of a
-                  // blank pane; onReady above flips it back once the new canvas
-                  // is ready (typically instant, since the layout is cached).
-                  onVisibleChange={(v) => {
-                    if (!v) setGraphReady(false)
-                  }}
-                />
+                {mountPreview && (
+                  <BrainGraph
+                    // Feed the final graph only once we're ready to show it; until
+                    // then an empty graph, so the sim lays out the final node set
+                    // exactly once (and flies it in once) at reveal, rather than
+                    // laying out each intermediate as floor/server-KG load in.
+                    graph={showFinalGraph ? previewGraph : EMPTY_GRAPH}
+                    centerNodeId={centerNodeId}
+                    interactive={false}
+                    labelMode="declutter"
+                    // Route-gated mount (mountPreview) owns tear-down for GPU, so
+                    // pauseWhenHidden's size heuristic stays off — it was what tore
+                    // the canvas down mid-load on the transient 0×0 during layout.
+                    pauseWhenHidden={false}
+                    frameLoop="demand"
+                    onReady={() => setCanvasLive(true)}
+                    // Still fires on a WebGL context loss (independent of
+                    // pauseWhenHidden): drop back to the loader while
+                    // useWebglRecovery remounts the canvas, then onReady re-reveals.
+                    onVisibleChange={(v) => {
+                      if (!v) setCanvasLive(false)
+                    }}
+                  />
+                )}
               </div>
               {/* Expand to the full-screen, interactive (orbit/pan/zoom) brain
                   map. Sits above the non-interactive card canvas. */}

@@ -16,12 +16,21 @@ describe('Memories brain-map loading state', () => {
   })
 
   it('fades the canvas in once BrainGraph reports it is ready', () => {
-    expect(source).toContain('onReady={() => setGraphReady(true)}')
+    expect(source).toContain('onReady={() => setCanvasLive(true)}')
     expect(source).toMatch(/graphReady\s*\?\s*'opacity-100'\s*:\s*'opacity-0'/)
   })
 
-  it('bounds the placeholder so a stalled or failed graph load cannot hang it forever', () => {
-    expect(source).toMatch(/setTimeout\(\(\) => setGraphReady\(true\), \d+\)/)
+  it('gates the reveal on BOTH a live canvas AND settled data (not canvas creation alone)', () => {
+    expect(source).toMatch(/const normalReady = canvasLive && settled/)
+    expect(source).toMatch(/const graphReady = normalReady \|\| revealForced/)
+  })
+
+  it('bounds the placeholder with a FULL reveal so a chunk/canvas failure cannot hang it forever', () => {
+    // Must force the whole reveal (revealForced feeds graphReady), not just the
+    // data-`settled` axis: if the lazy 3D chunk fails, onReady never fires and
+    // canvasLive would stay false, leaving the placeholder on top of the fallback.
+    expect(source).toMatch(/setTimeout\(\(\) => setRevealForced\(true\)/)
+    expect(source).toMatch(/const graphReady = normalReady \|\| revealForced/)
   })
 
   it('keeps the placeholder off-brand-color free', () => {
