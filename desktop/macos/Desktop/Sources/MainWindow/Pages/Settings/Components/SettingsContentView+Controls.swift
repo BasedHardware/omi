@@ -635,6 +635,10 @@ extension SettingsContentView {
             Text("Release builds always auto-check and auto-install updates in the background.")
               .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
+          } else if AppBuild.isNamedDevelopmentBundle {
+            Text("Named developer bundles do not use shared Sparkle updates. Run omi-dev update instead.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary)
           } else if AnalyticsManager.isDevBuild {
             Text(
               "Development builds keep automatic installation disabled to avoid replacing the local app."

@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# Developer-only updater for isolated named Omi bundles. It never uses Sparkle.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEFAULT_REPOSITORY="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+REPOSITORY="${OMI_DEV_REPOSITORY:-$DEFAULT_REPOSITORY}"
+WORKTREE_ROOT="${OMI_DEV_WORKTREE_ROOT:-$HOME/.omi/worktrees}"
+STATE_ROOT="${OMI_DEV_STATE_ROOT:-$HOME/.omi/named-bundles}"
+APP_NAME=""
+REQUESTED_REF=""
+COMMAND=""
+
+usage() {
+  cat <<'USAGE'
+Developer-only updater for isolated named Omi bundles.
+
+Usage:
+  omi-dev <install|update|run|status> --name omi-<name> [--ref <git-ref>]
+
+Examples:
+  omi-dev update --name omi-alice --ref origin/main
+  omi-dev update --name omi-beta-local --ref v0.12.84+12084-macos
+  omi-dev status --name omi-alice
+
+Each name owns one detached worktree and one state directory. Builds install only
+to /Applications/<name>.app. Named developer bundles do not use the shared
+production/beta Sparkle archive; update them with this command instead.
+USAGE
+}
+
+fail() {
+  echo "ERROR: $*" >&2
+  exit 2
+}
+
+parse_arguments() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      install|update|run|status)
+        [[ -z "$COMMAND" ]] || fail "only one command may be supplied"
+        COMMAND="$1"
+        ;;
+      --name)
+        [[ $# -ge 2 ]] || fail "--name requires a value"
+        APP_NAME="$2"
+        shift
+        ;;
+      --ref)
+        [[ $# -ge 2 ]] || fail "--ref requires a value"
+        REQUESTED_REF="$2"
+        shift
+        ;;
+      help|--help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        fail "unknown argument: $1"
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n "$COMMAND" ]] || fail "a command is required"
+  [[ -n "$APP_NAME" ]] || fail "--name omi-<name> is required"
+  [[ "$APP_NAME" =~ ^omi-[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+    || fail "developer bundle names must match omi-<letters-numbers-dots-dashes> (got '$APP_NAME')"
+}
+
+require_git_repository() {
+  git -C "$REPOSITORY" rev-parse --git-dir >/dev/null 2>&1 || {
+    echo "Not a git repository: $REPOSITORY" >&2
+    exit 1
+  }
+}
+
+configure_paths() {
+  WORKTREE="${OMI_DEV_WORKTREE:-$WORKTREE_ROOT/$APP_NAME}"
+  STATE_DIR="${OMI_DEV_STATE_DIR:-$STATE_ROOT/$APP_NAME}"
+  APP_PATH="/Applications/$APP_NAME.app"
+}
+
+stored_ref() {
+  if [[ -f "$STATE_DIR/ref" ]]; then
+    cat "$STATE_DIR/ref"
+  else
+    printf '%s\n' "origin/main"
+  fi
+}
+
+effective_ref() {
+  if [[ -n "$REQUESTED_REF" ]]; then
+    printf '%s\n' "$REQUESTED_REF"
+  else
+    stored_ref
+  fi
+}
+
+resolve_ref() {
+  local ref="$1"
+  git -C "$REPOSITORY" rev-parse --verify --end-of-options "${ref}^{commit}"
+}
+
+refresh_worktree() {
+  local ref="$1"
+  require_git_repository
+  git -C "$REPOSITORY" fetch --quiet origin --tags
+  local target
+  target="$(resolve_ref "$ref")" || {
+    echo "Unable to resolve requested ref '$ref' in $REPOSITORY" >&2
+    exit 1
+  }
+
+  if [[ ! -e "$WORKTREE/.git" ]]; then
+    mkdir -p "$(dirname "$WORKTREE")"
+    git -C "$REPOSITORY" worktree add --detach "$WORKTREE" "$target"
+  else
+    if [[ -n "$(git -C "$WORKTREE" status --porcelain)" ]]; then
+      echo "Developer worktree has local changes; refusing to replace it: $WORKTREE" >&2
+      exit 1
+    fi
+    git -C "$WORKTREE" checkout --detach "$target"
+  fi
+}
+
+build_and_launch() {
+  local ref="$1"
+  mkdir -p "$STATE_DIR"
+  (
+    cd "$WORKTREE/desktop/macos"
+    OMI_APP_NAME="$APP_NAME" ./run.sh --yolo
+  )
+  git -C "$WORKTREE" rev-parse HEAD > "$STATE_DIR/installed-sha"
+  printf '%s\n' "$ref" > "$STATE_DIR/ref"
+}
+
+show_status() {
+  require_git_repository
+  git -C "$REPOSITORY" fetch --quiet origin --tags
+  local ref
+  ref="$(effective_ref)"
+  local installed="not installed"
+  local source="not checked out"
+  local available
+  available="$(resolve_ref "$ref")" || available="unavailable ($ref)"
+  if [[ -f "$STATE_DIR/installed-sha" ]]; then
+    installed="$(<"$STATE_DIR/installed-sha")"
+  fi
+  if [[ -e "$WORKTREE/.git" ]]; then
+    source="$(git -C "$WORKTREE" rev-parse HEAD)"
+  fi
+  printf 'bundle:    %s\n' "$APP_PATH"
+  printf 'worktree:  %s\n' "$WORKTREE"
+  printf 'state:     %s\n' "$STATE_DIR"
+  printf 'ref:       %s\n' "$ref"
+  printf 'installed: %s\n' "$installed"
+  printf 'source:    %s\n' "$source"
+  printf 'available: %s\n' "$available"
+  if [[ "$installed" != "$available" ]]; then
+    printf 'update:    available\n'
+  else
+    printf 'update:    current\n'
+  fi
+}
+
+parse_arguments "$@"
+configure_paths
+
+case "$COMMAND" in
+  install|update)
+    ref="$(effective_ref)"
+    refresh_worktree "$ref"
+    build_and_launch "$ref"
+    ;;
+  run)
+    if [[ ! -d "$APP_PATH" ]]; then
+      echo "$APP_NAME is not installed; run: omi-dev install --name $APP_NAME" >&2
+      exit 1
+    fi
+    open -a "$APP_PATH"
+    ;;
+  status)
+    show_status
+    ;;
+esac

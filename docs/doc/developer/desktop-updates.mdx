@@ -97,17 +97,24 @@ The following sources of truth remain transitional until their named deletion ga
 
 Python `backend*` deployment identity is independent. V1 neither reads nor mutates Python backend release state; only the existing desktop manifest/pointer API is involved in the later control-plane migration.
 
-## Developer head-of-main
+## Named developer bundles
 
-Developers can use a local named bundle without creating a release:
+Use `omi-dev` to build and update a local named bundle without creating a release:
 
 ```bash
-desktop/macos/scripts/omi-main install
-desktop/macos/scripts/omi-main update
-desktop/macos/scripts/omi-main status
+desktop/macos/scripts/omi-dev update --name omi-alice --ref origin/main
+desktop/macos/scripts/omi-dev update --name omi-beta-local --ref v0.12.84+12084-macos
+desktop/macos/scripts/omi-dev status --name omi-alice
 ```
 
-This uses a dedicated detached worktree and `/Applications/omi-main.app`. It never replaces or launches the production Omi or Omi Beta bundles.
+Every `omi-<name>` gets its own detached worktree, state directory, bundle ID, ports, and
+`/Applications/omi-<name>.app` target. The command rejects standard application names, so it
+never replaces or launches Omi, Omi Beta, Stable, or their user data. Updates are explicit:
+named developer bundles do not use the shared production/beta Sparkle archive.
+
+`desktop/macos/scripts/omi-main` remains available as a compatibility wrapper for the
+`omi-main` bundle; it forwards to `omi-dev --name omi-main` and honors the legacy
+`OMI_MAIN_REPOSITORY`, `OMI_MAIN_WORKTREE`, and `OMI_MAIN_STATE_DIR` overrides.
 
 ## Update transaction truth
 
