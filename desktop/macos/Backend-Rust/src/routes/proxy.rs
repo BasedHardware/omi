@@ -935,13 +935,28 @@ async fn gemini_stream_server_key(
                         tracing::warn!("gemini_stream_proxy: Vertex AI token failed, falling back to API key: {}", e);
                         let upstream_url =
                             build_gemini_stream_url(effective_path, gemini_key, query);
-                        state
+                        let healed = state
                             .gemini_stream_client
                             .post(&upstream_url)
                             .header("content-type", "application/json")
                             .body(sanitized_body)
                             .send()
-                            .await
+                            .await;
+                        // Mirror the non-streaming heal: a Vertex token failure
+                        // that reroutes to AI Studio is a real provider switch
+                        // and must emit fallback telemetry, not switch silently.
+                        record_fallback(
+                            "gemini_stream_proxy",
+                            "vertex_ai",
+                            "ai_studio",
+                            "auth",
+                            if healed.is_ok() {
+                                FallbackOutcome::Recovered
+                            } else {
+                                FallbackOutcome::Exhausted
+                            },
+                        );
+                        healed
                     } else {
                         tracing::error!(
                             "gemini_stream_proxy: Vertex AI token error and no fallback: {}",
