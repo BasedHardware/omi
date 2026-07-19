@@ -54,7 +54,11 @@ protocol HomeSuggestionGenerating: Sendable {
   /// Returns personalized questions, or an empty array when the user's
   /// context is too thin to reference anything real. Throws on transport
   /// failure so the caller can retry later without burning the daily slot.
-  func generatePersonalizedQuestions() async throws -> [String]
+  /// Every context read must be bound to `snapshot` so a mid-generation
+  /// account switch can never return another owner's data.
+  func generatePersonalizedQuestions(
+    snapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> [String]
 }
 
 // MARK: - Store
@@ -95,7 +99,7 @@ final class HomeSuggestionsStore: ObservableObject {
     self.defaults = defaults
     self.generator = generator ?? GeminiHomeSuggestionGenerator()
     self.now = now
-    publishCache(for: currentOwnerID())
+    publishCache(for: RuntimeOwnerIdentity.currentOwnerId() ?? "signed-out")
     ownerObserver = NotificationCenter.default.addObserver(
       forName: .runtimeOwnerDidChange, object: nil, queue: .main
     ) { [weak self] _ in
@@ -110,13 +114,20 @@ final class HomeSuggestionsStore: ObservableObject {
   }
 
   /// Publish the current owner's cached questions and generate fresh ones at
-  /// most once per day per owner. Transport failures leave the cache
-  /// untouched so a later call retries; a successful-but-empty generation is
-  /// cached to hold one attempt per day.
+  /// most once per day per owner. The owner-authorization snapshot captured
+  /// up front bounds every context fetch, the cache write, and the publish,
+  /// so a mid-generation account switch drops the result entirely. Transport
+  /// failures leave the cache untouched so a later call retries; a
+  /// successful-but-empty generation is cached to hold one attempt per day.
   func refreshIfNeeded() async {
-    let ownerID = currentOwnerID()
+    guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      // Signed out or mid account transition — never render a previous
+      // owner's questions.
+      personalizedQuestions = []
+      return
+    }
+    let ownerID = snapshot.ownerID
     publishCache(for: ownerID)
-    guard ownerID != "signed-out" else { return }
 
     let today = Self.dayStampFormatter.string(from: now())
     if let cache = loadCache(for: ownerID), cache.dayStamp == today { return }
@@ -126,13 +137,15 @@ final class HomeSuggestionsStore: ObservableObject {
     defer { generatingOwnerID = nil }
 
     do {
-      let generated = try await generator.generatePersonalizedQuestions()
+      let generated = try await generator.generatePersonalizedQuestions(snapshot: snapshot)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot) else {
+        log("HomeSuggestions: dropped generation result after account switch")
+        return
+      }
       let questions = Array(HomeSuggestionComposer.sanitize(generated).prefix(2))
       let entry = CacheEntry(questions: questions, dayStamp: today)
-      defaults.set(try? JSONEncoder().encode(entry), forKey: cacheKey(ownerID: ownerID))
-      if currentOwnerID() == ownerID {
-        personalizedQuestions = questions
-      }
+      defaults.set(try? JSONEncoder().encode(entry), forKey: Self.cacheKey(ownerID: ownerID))
+      personalizedQuestions = questions
       log("HomeSuggestions: generated \(questions.count) personalized questions for \(today)")
     } catch {
       log(
@@ -141,16 +154,12 @@ final class HomeSuggestionsStore: ObservableObject {
     }
   }
 
-  private func currentOwnerID() -> String {
-    defaults.string(forKey: .authUserId) ?? "signed-out"
-  }
-
-  private func cacheKey(ownerID: String) -> String {
+  static func cacheKey(ownerID: String) -> String {
     "homePersonalizedSuggestions.v1.\(ownerID)"
   }
 
   private func loadCache(for ownerID: String) -> CacheEntry? {
-    guard let data = defaults.data(forKey: cacheKey(ownerID: ownerID)) else { return nil }
+    guard let data = defaults.data(forKey: Self.cacheKey(ownerID: ownerID)) else { return nil }
     return try? JSONDecoder().decode(CacheEntry.self, from: data)
   }
 
@@ -180,18 +189,22 @@ struct GeminiHomeSuggestionGenerator: HomeSuggestionGenerating {
     )
   }
 
-  func generatePersonalizedQuestions() async throws -> [String] {
+  func generatePersonalizedQuestions(
+    snapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> [String] {
     async let memoriesFetch = { () async -> [ServerMemory] in
-      (try? await APIClient.shared.getMemories(limit: 200)) ?? []
+      (try? await APIClient.shared.getMemories(limit: 200, authorizationSnapshot: snapshot)) ?? []
     }()
     async let conversationsFetch = { () async -> [ServerConversation] in
-      (try? await APIClient.shared.getConversations(limit: 30, statuses: [.completed])) ?? []
+      (try? await APIClient.shared.getConversations(
+        limit: 30, statuses: [.completed], authorizationSnapshot: snapshot)) ?? []
     }()
     async let actionItemsFetch = { () async -> ActionItemsListResponse? in
-      try? await APIClient.shared.getActionItems(limit: 50, completed: false)
+      try? await APIClient.shared.getActionItems(
+        limit: 50, completed: false, authorizationSnapshot: snapshot)
     }()
     async let goalsFetch = { () async -> [Goal] in
-      (try? await APIClient.shared.getGoals()) ?? []
+      (try? await APIClient.shared.getGoals(authorizationSnapshot: snapshot)) ?? []
     }()
 
     let (memories, conversations, actionItems, goals) = await (
