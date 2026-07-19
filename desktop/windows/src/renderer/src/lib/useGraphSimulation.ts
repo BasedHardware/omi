@@ -174,6 +174,20 @@ export class GraphSimulation {
       if (e.targetId in degree && e.targetId !== e.sourceId) degree[e.targetId]++
     }
 
+    // Prune nodes no longer in the incoming graph. Historically every caller only
+    // GREW the node set (onboarding reveals more each step), so this was a no-op.
+    // The knowledge-graph viewer's node cap is the first caller that can SHRINK it
+    // (toggling "Show all 188" back to "Show key 120"); without pruning, getPositions()
+    // would keep reporting the high-water-mark set and the scene would never shed the
+    // dropped spheres. Safe for the grow-only callers (nothing to remove there).
+    const incoming = new Set(graph.nodes.map((n) => n.id))
+    if (this.nodes.some((n) => !incoming.has(n.id))) {
+      this.nodes = this.nodes.filter((n) => incoming.has(n.id))
+      for (const id of [...this.nodeMap.keys()]) {
+        if (!incoming.has(id)) this.nodeMap.delete(id)
+      }
+    }
+
     this.newlyAdded = []
     for (const n of graph.nodes) {
       const existing = this.nodeMap.get(n.id)
