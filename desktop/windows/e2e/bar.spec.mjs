@@ -354,20 +354,20 @@ test('paint-ack: reveal defers the HWND show until the renderer paints slide-in'
 })
 
 // Bug A regression: a normal mouse move onto the pill + click must expand into
-// the chat/agents surface. The reported bug was the pill "not expanding": main
+// the chat surface. The reported bug was the pill "not expanding": main
 // left the window click-through until an async renderer mouseenter → IPC round
 // trip flipped hit-testing on, so a fast click landed first and passed through.
 // The fix drives interactivity from the OS cursor in main (peekTick). This test
 // drives the REAL built app: reveal the pill, locate its rect, move+click it,
-// and assert the bar expanded (focusable) with the Omi Chat + agent rows shown.
-// Signed-in (OMI_E2E_FAKE_AUTH) so the expanded surface renders its real rows,
+// and assert the bar expanded (focusable) with the hub composer shown.
+// Signed-in (OMI_E2E_FAKE_AUTH) so the expanded surface renders the real hub,
 // not the signed-out prompt. Repeated to prove it is reliable, not flaky.
 //
 // (Note: Playwright's page.mouse dispatches via CDP, below the OS window-message
 // layer that setIgnoreMouseEvents gates, so this asserts the click→expand WIRING
 // + rendered surface end-to-end; the OS-cursor→interactivity race itself is
 // covered deterministically by the main/bar/watchdog.test.ts unit tests.)
-test('pill click expands into the chat/agents surface (Bug A)', async (t) => {
+test('pill click expands into the chat surface (Bug A)', async (t) => {
   const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
   t.after(cleanup)
   await app.firstWindow()
@@ -387,16 +387,13 @@ test('pill click expands into the chat/agents surface (Bug A)', async (t) => {
     // Expand is async: the mode IPC flips focus in main immediately, but the
     // renderer's pill→panel morph + content render lands a beat later. Wait for
     // the expanded surface's content rather than reading once (that read raced the
-    // morph). Presence of the hub's "Ask Omi" inline input AND the always-connected
-    // "Claude Code" agent row proves the click reached the real chat surface.
+    // morph). Presence of the hub's "Ask Omi" inline input proves the click
+    // reached the real chat surface. (Mac parity: the hub has no idle connected-
+    // agent rows — see the pills-only regression below.)
     await barPage.waitForFunction(() => {
       const active = document.querySelector('.bar-content-active')
       if (!active) return false
-      const hasInput = !!active.querySelector('textarea[placeholder*="Ask Omi"]')
-      const texts = [...active.querySelectorAll('.text-sm')].map((e) =>
-        (e.textContent ?? '').trim()
-      )
-      return hasInput && texts.includes('Claude Code')
+      return !!active.querySelector('textarea[placeholder*="Ask Omi"]')
     })
 
     const s = await app.evaluate(() => globalThis.__omiE2E.barState())
@@ -423,15 +420,12 @@ test('pill click expands from a ptt-summoned pill too (Bug A live gap)', async (
   const barPage = await findBarPage(app)
   await barShow(app, 'ptt')
   // The ptt pill is collapsed (!expanded), so its content is clickable; a click
-  // must expand into the shared chat surface (the hub's Ask-Omi input + the
-  // always-on agent row).
+  // must expand into the shared chat surface (the hub's Ask-Omi input).
   await barPage.locator('.bar-content[role="button"]').click()
   await barPage.waitForFunction(() => {
     const active = document.querySelector('.bar-content-active')
     if (!active) return false
-    const hasInput = !!active.querySelector('textarea[placeholder*="Ask Omi"]')
-    const texts = [...active.querySelectorAll('.text-sm')].map((e) => (e.textContent ?? '').trim())
-    return hasInput && texts.includes('Claude Code')
+    return !!active.querySelector('textarea[placeholder*="Ask Omi"]')
   })
   const s = await app.evaluate(() => globalThis.__omiE2E.barState())
   assert.equal(s.focusable, true, 'a ptt-summoned pill must expand on click (focusable)')
@@ -487,9 +481,14 @@ test('hub Ask-Omi input: focus stays on the hub; only send opens the conversatio
   await barPage.screenshot({ path: path.join(shotsDir, 'bar-hub-input-conversation.png') })
 })
 
-// Skeptical-review screenshot of the expanded surface WITH the agent rows
-// (signed-in so the real rows render, not the sign-in prompt).
-test('bar expanded agents-surface screenshot (signed-in)', async (t) => {
+// Mac-parity regression (fix/win-bar-pills-only): the expanded hub must NOT
+// render idle connected-agent summon rows. Upstream Mac's bar list is strictly
+// pills-for-actual-runs; connecting agents lives in Settings → Agents. Even
+// though the built-in "Claude Code" adapter is CONNECTED under fake auth (so the
+// OLD hub would have shown its row), the hub must now show only the Ask-Omi
+// composer (no run pills are spawned in this hermetic launch). Drives the REAL
+// built app, signed-in, and captures the surface for the skeptical review.
+test('bar expanded hub renders no idle connected-agent rows (Mac parity)', async (t) => {
   mkdirSync(shotsDir, { recursive: true })
   const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
   t.after(cleanup)
@@ -497,8 +496,30 @@ test('bar expanded agents-surface screenshot (signed-in)', async (t) => {
   await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
   const barPage = await findBarPage(app)
   await barShow(app, 'expanded')
-  await new Promise((r) => setTimeout(r, 900)) // morph + content dissolve + agent list
-  await barPage.screenshot({ path: path.join(shotsDir, 'bar-expanded-agents.png') })
+
+  // Wait for the expanded hub to render its composer.
+  await barPage.waitForFunction(() => {
+    const active = document.querySelector('.bar-content-active')
+    return !!active?.querySelector('textarea[placeholder*="Ask Omi"]')
+  })
+  await new Promise((r) => setTimeout(r, 900)) // morph + content dissolve settle
+
+  // No idle connected-agent row: the removed row rendered the adapter's
+  // displayName ("Claude Code") plus a "Ready"/"Working…" status line. Assert
+  // neither appears in the expanded hub, even though Claude Code IS connected.
+  const rowText = await barPage.evaluate(() => {
+    const active = document.querySelector('.bar-content-active')
+    if (!active) return { claudeCode: -1, ready: -1 }
+    const texts = [...active.querySelectorAll('*')].map((e) => (e.textContent ?? '').trim())
+    return {
+      claudeCode: texts.filter((t) => t === 'Claude Code').length,
+      ready: texts.filter((t) => t === 'Ready' || t === 'Working…').length
+    }
+  })
+  assert.equal(rowText.claudeCode, 0, 'expanded hub must not render a "Claude Code" summon row')
+  assert.equal(rowText.ready, 0, 'expanded hub must not render an agent Ready/Working status line')
+
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-expanded-hub.png') })
 })
 
 // Bug C: the collapsed pill shows "Listening" while the orb is in its listening
