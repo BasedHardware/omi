@@ -1015,4 +1015,21 @@ describe('spawn_agent host-picked fallback from a managed-cloud (pi-mono) caller
     expect(result.ok).toBe(false)
     expect(result.error?.message).toMatch(/managed-cloud adapter and cannot be spawned or run/)
   })
+
+  it('a host hook that RETURNS a managed-cloud adapter is still refused (defense in depth)', async () => {
+    // The production picker only iterates PRODUCTION_ADAPTER_IDS (never pi-mono),
+    // but the unconditional assertControlSpawnAdapterNotManagedCloud inside the
+    // boundary check must hold even for a buggy/compromised hook — this pins the
+    // property against a future reorder of that assertion.
+    const { kernel, store } = newKernelWithAdapters()
+    const context = piMonoChatContext(kernel, async () => 'pi-mono')
+    const before = store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n
+
+    const result = await call(context, 'spawn_agent', { objective: 'x' })
+
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/managed-cloud adapter and cannot be spawned or run/)
+    // No kernel work on the way out.
+    expect(store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n).toBe(before)
+  })
 })
