@@ -1,7 +1,9 @@
 {
   "files": {
-    "desktop/macos/Backend-Rust/src/routes/proxy.rs": 2741
+    "desktop/macos/Backend-Rust/src/routes/proxy.rs": 2760
   },
-  "raise_justifications": {},
+  "raise_justifications": {
+    "desktop/macos/Backend-Rust/src/routes/proxy.rs": "Streaming Gemini Vertex->AI Studio token-failure heal now emits record_fallback with a Recovered/Exhausted outcome, matching the non-streaming provider-switch telemetry."
+  },
   "threshold": 1500
 }
