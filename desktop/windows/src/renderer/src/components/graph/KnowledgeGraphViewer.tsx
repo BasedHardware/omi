@@ -3,7 +3,7 @@ import { ArrowLeft, Brain, Loader2, RefreshCw } from 'lucide-react'
 import type { KnowledgeGraph } from '../../../../shared/types'
 import { BrainGraph } from './LazyBrainGraph'
 import { EmptyState } from '../ui/EmptyState'
-import { capGraph, isCapped, DEFAULT_NODE_CAP } from '../../lib/graphDisplay'
+import { capGraph, isCapped, DEFAULT_NODE_CAP, DEFAULT_LABEL_TOPK } from '../../lib/graphDisplay'
 
 // Full-screen, INTERACTIVE (orbit/pan/zoom) home for the shared BrainGraph. This
 // is a promotion of the small non-interactive "Brain Map" card on the Memories
@@ -33,6 +33,11 @@ export function KnowledgeGraphViewer(props: {
   const { graph, centerNodeId, onClose, rebuild, rebuilding } = props
   const hasGraph = graph.nodes.length > 0
   const [showAll, setShowAll] = useState(false)
+  // Independent of the node cap: declutter (default) names only the top hubs plus
+  // whatever is hovered/selected; 'all' names every visible node. Composes with
+  // showAll (4 states) — all labels of the key nodes, or all labels of the full
+  // graph. Component state (not durable), matching showAll above.
+  const [showAllLabels, setShowAllLabels] = useState(false)
 
   // The full graph stays reachable: showAll lifts the cap entirely (capGraph
   // returns the same graph ref, so the sim re-lays out the complete set). When
@@ -40,6 +45,11 @@ export function KnowledgeGraphViewer(props: {
   const cap = showAll ? Infinity : DEFAULT_NODE_CAP
   const visibleGraph = useMemo(() => capGraph(graph, cap, centerNodeId), [graph, cap, centerNodeId])
   const capsBite = isCapped(graph, DEFAULT_NODE_CAP)
+  // The labels toggle only does something once declutter would actually hide
+  // labels, i.e. more visible nodes than the top-K that stay named — otherwise
+  // both modes name everything and the control would be a no-op. Re-evaluates
+  // when showAll changes the visible set.
+  const labelsBite = visibleGraph.nodes.length > DEFAULT_LABEL_TOPK
 
   return (
     // BrainGraph's root is `absolute inset-0`, so the host must be positioned.
@@ -57,7 +67,7 @@ export function KnowledgeGraphViewer(props: {
           // 240Hz monitor 'always' rendered a gentle pulse 240x/sec for no benefit;
           // the pulse choreography is unchanged, just capped. See GraphPulseThrottle.
           frameLoop="demand"
-          labelMode="declutter"
+          labelMode={showAllLabels ? 'all' : 'declutter'}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center">
@@ -115,6 +125,20 @@ export function KnowledgeGraphViewer(props: {
               aria-pressed={showAll}
             >
               {showAll ? `Show key ${DEFAULT_NODE_CAP}` : `Show all ${graph.nodes.length}`}
+            </button>
+          )}
+          {hasGraph && labelsBite && (
+            <button
+              onClick={() => setShowAllLabels((v) => !v)}
+              className="btn-ghost px-3 py-2"
+              title={
+                showAllLabels
+                  ? 'Label only the most connected nodes'
+                  : 'Show a label on every visible node'
+              }
+              aria-pressed={showAllLabels}
+            >
+              {showAllLabels ? 'Show key labels' : 'Show all labels'}
             </button>
           )}
           {rebuild && hasGraph && (
