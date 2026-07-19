@@ -61,3 +61,19 @@ class Person(BaseModel):
                 if on_error is not None:
                     on_error(record, exc)
         return parsed
+
+
+class PersonLeaderboardEntry(BaseModel):
+    person_id: str
+    name: str
+    conversation_count: int
+    speaking_seconds: float
+    last_talked_at: Optional[datetime] = None
+
+
+class PeopleLeaderboardResponse(BaseModel):
+    # Size of the window scanned and how many conversations it actually considered,
+    # so a client can tell an empty board (no people) from a short history.
+    days: int
+    conversations_considered: int
+    people: List[PersonLeaderboardEntry] = []

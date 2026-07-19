@@ -15109,6 +15109,32 @@
         "title": "PendingSyncResponse",
         "type": "object"
       },
+      "PeopleLeaderboardResponse": {
+        "properties": {
+          "conversations_considered": {
+            "title": "Conversations Considered",
+            "type": "integer"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "people": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PersonLeaderboardEntry"
+            },
+            "title": "People",
+            "type": "array"
+          }
+        },
+        "required": [
+          "days",
+          "conversations_considered"
+        ],
+        "title": "PeopleLeaderboardResponse",
+        "type": "object"
+      },
       "Person": {
         "properties": {
           "created_at": {
@@ -15176,6 +15202,46 @@
           "name"
         ],
         "title": "Person",
+        "type": "object"
+      },
+      "PersonLeaderboardEntry": {
+        "properties": {
+          "conversation_count": {
+            "title": "Conversation Count",
+            "type": "integer"
+          },
+          "last_talked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Talked At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "person_id": {
+            "title": "Person Id",
+            "type": "string"
+          },
+          "speaking_seconds": {
+            "title": "Speaking Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "person_id",
+          "name",
+          "conversation_count",
+          "speaking_seconds"
+        ],
+        "title": "PersonLeaderboardEntry",
         "type": "object"
       },
       "PhoneCallQuota": {
@@ -49387,6 +49453,104 @@
           }
         ],
         "summary": "Get Or Create Person",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/people/leaderboard": {
+      "get": {
+        "description": "People you talk to the most (issue #3808).\n\nRanks the identified speakers across your recent conversations by how many\nconversations you shared and total speaking time, resolving names from your\npeople list. Structured, non-LLM complement to the yearly Wrapped 'top people'.",
+        "operationId": "get_people_leaderboard_v1_users_people_leaderboard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleLeaderboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get People Leaderboard",
         "tags": [
           "v1"
         ]
