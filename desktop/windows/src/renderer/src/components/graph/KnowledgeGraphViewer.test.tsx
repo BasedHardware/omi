@@ -17,8 +17,28 @@ vi.mock('./LazyBrainGraph', () => ({
 }))
 
 import { KnowledgeGraphViewer } from './KnowledgeGraphViewer'
+import { DEFAULT_NODE_CAP } from '../../lib/graphDisplay'
 
 afterEach(cleanup)
+
+// A graph larger than the default cap, so the density control engages. One hub
+// (n0) connected to every other node guarantees a stable importance ranking.
+const big: KnowledgeGraph = {
+  nodes: Array.from({ length: DEFAULT_NODE_CAP + 40 }, (_, i) => ({
+    id: `n${i}`,
+    label: `n${i}`,
+    nodeType: 'concept',
+    aliases: [],
+    memoryIds: []
+  })),
+  edges: Array.from({ length: DEFAULT_NODE_CAP + 39 }, (_, i) => ({
+    id: `e${i}`,
+    sourceId: 'n0',
+    targetId: `n${i + 1}`,
+    label: '',
+    memoryIds: []
+  }))
+}
 
 const POPULATED: KnowledgeGraph = {
   nodes: [
@@ -62,6 +82,28 @@ describe('KnowledgeGraphViewer', () => {
     render(<KnowledgeGraphViewer graph={POPULATED} onClose={() => {}} rebuild={rebuild} />)
     fireEvent.click(screen.getByRole('button', { name: /rebuild/i }))
     expect(rebuild).toHaveBeenCalledTimes(1)
+  })
+
+  it('caps a large graph by default and reveals the full set via "Show all"', () => {
+    render(<KnowledgeGraphViewer graph={big} centerNodeId="n0" onClose={() => {}} />)
+    // Default view is capped to the connected core, not the whole graph.
+    expect(screen.getByTestId('brain-graph').getAttribute('data-node-count')).toBe(
+      String(DEFAULT_NODE_CAP)
+    )
+    // The escape hatch is present and names the full count so nothing is hidden
+    // without a way to reach it.
+    const showAll = screen.getByRole('button', { name: `Show all ${big.nodes.length}` })
+    fireEvent.click(showAll)
+    // Now the full graph is rendered, and the control flips to collapse again.
+    expect(screen.getByTestId('brain-graph').getAttribute('data-node-count')).toBe(
+      String(big.nodes.length)
+    )
+    expect(screen.getByRole('button', { name: `Show key ${DEFAULT_NODE_CAP}` })).toBeTruthy()
+  })
+
+  it('does not show the density control when the graph is under the cap', () => {
+    render(<KnowledgeGraphViewer graph={POPULATED} onClose={() => {}} />)
+    expect(screen.queryByRole('button', { name: /show all/i })).toBeNull()
   })
 
   it('never introduces off-brand purple chrome', () => {

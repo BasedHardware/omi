@@ -38,6 +38,7 @@ import type {
   TaskRerank
 } from '../../shared/types'
 import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
+import { cachedStmt } from './stmtCache'
 
 // Minimal DB surface these functions need — satisfied structurally by both
 // better-sqlite3 (production) and node:sqlite's DatabaseSync (tests). Bind params
@@ -462,7 +463,7 @@ function actionInsertParams(input: ActionItemInput, backendSynced: boolean): unk
 }
 
 function getActionByIdOn(d: TaskStoreDb, id: number): ActionItemRecord | null {
-  const row = d.prepare(`SELECT ${ACTION_COLUMNS} FROM action_items WHERE id = ?`).get(id) as
+  const row = cachedStmt(d, `SELECT ${ACTION_COLUMNS} FROM action_items WHERE id = ?`).get(id) as
     | ActionItemRow
     | undefined
   return row ? mapAction(row) : null
@@ -515,12 +516,11 @@ export function getLocalActionItemsOn(
  *  task-extraction context "recent-N by recency" it wants (Mac's
  *  getRecentActiveTasks, TA:1409). Active = completed = 0 AND deleted = 0. */
 export function getRecentActiveActionItemsOn(d: TaskStoreDb, limit = 30): ActionItemRecord[] {
-  const rows = d
-    .prepare(
-      `SELECT ${ACTION_COLUMNS} FROM action_items
+  const rows = cachedStmt(
+    d,
+    `SELECT ${ACTION_COLUMNS} FROM action_items
          WHERE deleted = 0 AND completed = 0 ORDER BY created_at DESC LIMIT ?`
-    )
-    .all(limit) as ActionItemRow[]
+  ).all(limit) as ActionItemRow[]
   return rows.map(mapAction)
 }
 
@@ -567,7 +567,7 @@ export function updateCompletionStatusOn(
   completed: boolean,
   now: number
 ): void {
-  d.prepare('UPDATE action_items SET completed = ?, updated_at = ? WHERE backend_id = ?').run(
+  cachedStmt(d, 'UPDATE action_items SET completed = ?, updated_at = ? WHERE backend_id = ?').run(
     completed ? 1 : 0,
     now,
     backendId
@@ -666,7 +666,8 @@ function applyActionUpdateFrom(
   const indentLevel = item.indentLevel != null ? item.indentLevel : existing.indentLevel
   const fromStaged = item.fromStaged != null ? (item.fromStaged ? 1 : 0) : existing.fromStaged
   const tagsJson = item.tags && item.tags.length > 0 ? serializeTags(item.tags) : existing.tagsJson
-  d.prepare(
+  cachedStmt(
+    d,
     `UPDATE action_items SET
        backend_id = ?, backend_synced = 1, description = ?, completed = ?, deleted = ?,
        deleted_by = ?, source = ?, conversation_id = ?, priority = ?, category = ?,
@@ -719,9 +720,10 @@ export function syncTaskActionItemsOn(
     let inserted = 0
     let updated = 0
     for (const item of items) {
-      const existing = d
-        .prepare(`SELECT ${ACTION_COLUMNS} FROM action_items WHERE backend_id = ?`)
-        .get(item.backendId) as ActionItemRow | undefined
+      const existing = cachedStmt(
+        d,
+        `SELECT ${ACTION_COLUMNS} FROM action_items WHERE backend_id = ?`
+      ).get(item.backendId) as ActionItemRow | undefined
       if (existing) {
         const incoming = item.updatedAt ?? item.createdAt
         const isLocalStagedGuess = overrideStagedDeletions && existing.deletedBy === 'staged'
@@ -734,13 +736,12 @@ export function syncTaskActionItemsOn(
         updated++
         continue
       }
-      const orphan = d
-        .prepare(
-          `SELECT ${ACTION_COLUMNS} FROM action_items
+      const orphan = cachedStmt(
+        d,
+        `SELECT ${ACTION_COLUMNS} FROM action_items
              WHERE backend_synced = 0 AND (backend_id IS NULL OR backend_id = '')
                AND description = ? LIMIT 1`
-        )
-        .get(item.description) as ActionItemRow | undefined
+      ).get(item.description) as ActionItemRow | undefined
       if (orphan) {
         applyActionUpdateFrom(d, orphan, item)
         adopted++
@@ -752,17 +753,17 @@ export function syncTaskActionItemsOn(
       if (relevanceScore == null) {
         const max =
           (
-            d
-              .prepare(
-                `SELECT COALESCE(MAX(relevance_score), 0) AS m FROM action_items
+            cachedStmt(
+              d,
+              `SELECT COALESCE(MAX(relevance_score), 0) AS m FROM action_items
                    WHERE completed = 0 AND deleted = 0 AND relevance_score IS NOT NULL`
-              )
-              .get() as { m: number }
+            ).get() as { m: number }
           ).m ?? 0
         relevanceScore = max + 1
         scoredAt = now
       }
-      d.prepare(
+      cachedStmt(
+        d,
         `INSERT INTO action_items ${ACTION_INSERT_COLUMNS} VALUES ${ACTION_INSERT_PLACEHOLDERS}`
       ).run(
         ...actionInsertParams(
@@ -805,17 +806,16 @@ export function syncTaskActionItemsOn(
 export function hardDeleteAbsentTasksOn(d: TaskStoreDb, apiIds: string[]): number[] {
   if (apiIds.length === 0) return []
   return tx(d, () => {
-    const candidates = d
-      .prepare(
-        `SELECT id, backend_id AS backendId FROM action_items
+    const candidates = cachedStmt(
+      d,
+      `SELECT id, backend_id AS backendId FROM action_items
            WHERE completed = 0 AND deleted = 0 AND backend_id IS NOT NULL AND backend_synced = 1`
-      )
-      .all() as { id: number; backendId: string | null }[]
+    ).all() as { id: number; backendId: string | null }[]
     const keep = new Set(apiIds)
     const toDelete = candidates
       .filter((c) => c.backendId && !keep.has(c.backendId))
       .map((c) => c.id)
-    for (const id of toDelete) d.prepare('DELETE FROM action_items WHERE id = ?').run(id)
+    for (const id of toDelete) cachedStmt(d, 'DELETE FROM action_items WHERE id = ?').run(id)
     return toDelete
   })
 }
@@ -841,9 +841,10 @@ export function getUnsyncedActionItemsOn(
 
 /** All action-item embeddings for loading the in-memory index. */
 export function getAllActionItemEmbeddingsOn(d: TaskStoreDb): TaskEmbeddingRow[] {
-  const rows = d
-    .prepare('SELECT id, embedding FROM action_items WHERE embedding IS NOT NULL')
-    .all() as { id: number; embedding: Buffer | Uint8Array }[]
+  const rows = cachedStmt(
+    d,
+    'SELECT id, embedding FROM action_items WHERE embedding IS NOT NULL'
+  ).all() as { id: number; embedding: Buffer | Uint8Array }[]
   return rows.map((r) => ({ id: r.id, embedding: bufferToVector(r.embedding) }))
 }
 
@@ -853,7 +854,10 @@ export function updateActionItemEmbeddingOn(
   id: number,
   vector: Float32Array
 ): void {
-  d.prepare('UPDATE action_items SET embedding = ? WHERE id = ?').run(vectorToBuffer(vector), id)
+  cachedStmt(d, 'UPDATE action_items SET embedding = ? WHERE id = ?').run(
+    vectorToBuffer(vector),
+    id
+  )
 }
 
 /** Active action items still missing an embedding (backfill), newest-first. */
@@ -861,12 +865,11 @@ export function getActionItemsMissingEmbeddingsOn(
   d: TaskStoreDb,
   limit = 100
 ): { id: number; description: string }[] {
-  return d
-    .prepare(
-      `SELECT id, description FROM action_items
+  return cachedStmt(
+    d,
+    `SELECT id, description FROM action_items
          WHERE embedding IS NULL AND deleted = 0 ORDER BY created_at DESC LIMIT ?`
-    )
-    .all(limit) as { id: number; description: string }[]
+  ).all(limit) as { id: number; description: string }[]
 }
 
 /** Insert an action item at a specific relevance_score, shifting existing active
@@ -878,18 +881,18 @@ export function insertActionItemWithScoreShiftOn(
 ): ActionItemRecord {
   return tx(d, () => {
     if (input.relevanceScore != null) {
-      d.prepare(
+      cachedStmt(
+        d,
         `UPDATE action_items SET relevance_score = relevance_score + 1
            WHERE relevance_score IS NOT NULL AND relevance_score >= ?
              AND completed = 0 AND deleted = 0`
       ).run(input.relevanceScore)
     }
     const id = Number(
-      d
-        .prepare(
-          `INSERT INTO action_items ${ACTION_INSERT_COLUMNS} VALUES ${ACTION_INSERT_PLACEHOLDERS}`
-        )
-        .run(...actionInsertParams(input, false)).lastInsertRowid
+      cachedStmt(
+        d,
+        `INSERT INTO action_items ${ACTION_INSERT_COLUMNS} VALUES ${ACTION_INSERT_PLACEHOLDERS}`
+      ).run(...actionInsertParams(input, false)).lastInsertRowid
     )
     const rec = getActionByIdOn(d, id)
     if (!rec) throw new Error('insertActionItemWithScoreShift: row vanished after insert')
@@ -913,13 +916,12 @@ export function getTopRelevanceActionItemsOn(
   d: TaskStoreDb,
   limit = 30
 ): { id: number; description: string; priority: string | null; relevanceScore: number | null }[] {
-  return d
-    .prepare(
-      `SELECT id, description, priority, relevance_score AS relevanceScore FROM action_items
+  return cachedStmt(
+    d,
+    `SELECT id, description, priority, relevance_score AS relevanceScore FROM action_items
          WHERE completed = 0 AND deleted = 0 AND relevance_score IS NOT NULL
          ORDER BY relevance_score ASC LIMIT ?`
-    )
-    .all(limit) as {
+  ).all(limit) as {
     id: number
     description: string
     priority: string | null
@@ -1030,7 +1032,7 @@ function stagedInsertParams(input: StagedTaskInput, backendSynced: boolean): unk
 }
 
 function getStagedByIdRow(d: TaskStoreDb, id: number): StagedTaskRow | undefined {
-  return d.prepare(`SELECT ${STAGED_COLUMNS} FROM staged_tasks WHERE id = ?`).get(id) as
+  return cachedStmt(d, `SELECT ${STAGED_COLUMNS} FROM staged_tasks WHERE id = ?`).get(id) as
     | StagedTaskRow
     | undefined
 }
@@ -1038,11 +1040,10 @@ function getStagedByIdRow(d: TaskStoreDb, id: number): StagedTaskRow | undefined
 /** Insert a locally-extracted staged task (forces backend_synced = 0). */
 export function insertLocalStagedTaskOn(d: TaskStoreDb, input: StagedTaskInput): StagedTaskRecord {
   const id = Number(
-    d
-      .prepare(
-        `INSERT INTO staged_tasks ${STAGED_INSERT_COLUMNS} VALUES ${STAGED_INSERT_PLACEHOLDERS}`
-      )
-      .run(...stagedInsertParams(input, false)).lastInsertRowid
+    cachedStmt(
+      d,
+      `INSERT INTO staged_tasks ${STAGED_INSERT_COLUMNS} VALUES ${STAGED_INSERT_PLACEHOLDERS}`
+    ).run(...stagedInsertParams(input, false)).lastInsertRowid
   )
   const row = getStagedByIdRow(d, id)
   if (!row) throw new Error('insertLocalStagedTask: row vanished after insert')
@@ -1057,18 +1058,18 @@ export function insertStagedTaskWithScoreShiftOn(
 ): StagedTaskRecord {
   return tx(d, () => {
     if (input.relevanceScore != null) {
-      d.prepare(
+      cachedStmt(
+        d,
         `UPDATE staged_tasks SET relevance_score = relevance_score + 1
            WHERE relevance_score IS NOT NULL AND relevance_score >= ?
              AND completed = 0 AND deleted = 0`
       ).run(input.relevanceScore)
     }
     const id = Number(
-      d
-        .prepare(
-          `INSERT INTO staged_tasks ${STAGED_INSERT_COLUMNS} VALUES ${STAGED_INSERT_PLACEHOLDERS}`
-        )
-        .run(...stagedInsertParams(input, false)).lastInsertRowid
+      cachedStmt(
+        d,
+        `INSERT INTO staged_tasks ${STAGED_INSERT_COLUMNS} VALUES ${STAGED_INSERT_PLACEHOLDERS}`
+      ).run(...stagedInsertParams(input, false)).lastInsertRowid
     )
     const row = getStagedByIdRow(d, id)
     if (!row) throw new Error('insertStagedTaskWithScoreShift: row vanished after insert')
@@ -1093,7 +1094,7 @@ export function markSyncedStagedTaskOn(
 /** HARD-delete a staged task by local id. FIX (i): exposed + wired (Mac has it but
  *  never calls it). FIX (ii): returns the deleted ids for embedding-index eviction. */
 export function deleteStagedTaskByIdOn(d: TaskStoreDb, id: number): number[] {
-  const changes = Number(d.prepare('DELETE FROM staged_tasks WHERE id = ?').run(id).changes)
+  const changes = Number(cachedStmt(d, 'DELETE FROM staged_tasks WHERE id = ?').run(id).changes)
   return changes > 0 ? [id] : []
 }
 
@@ -1104,23 +1105,21 @@ export function deleteStagedTaskByBackendIdOn(d: TaskStoreDb, backendId: string)
 
 /** Unsynced staged tasks for retry (backend_synced = 0, active), newest-first. */
 export function getUnsyncedStagedTasksOn(d: TaskStoreDb, limit = 50): StagedTaskRecord[] {
-  const rows = d
-    .prepare(
-      `SELECT ${STAGED_COLUMNS} FROM staged_tasks
+  const rows = cachedStmt(
+    d,
+    `SELECT ${STAGED_COLUMNS} FROM staged_tasks
          WHERE backend_synced = 0 AND deleted = 0 ORDER BY created_at DESC LIMIT ?`
-    )
-    .all(limit) as StagedTaskRow[]
+  ).all(limit) as StagedTaskRow[]
   return rows.map(mapStaged)
 }
 
 /** Active staged tasks, newest-first. */
 export function getAllStagedTasksOn(d: TaskStoreDb, limit = 10000): StagedTaskRecord[] {
-  const rows = d
-    .prepare(
-      `SELECT ${STAGED_COLUMNS} FROM staged_tasks
+  const rows = cachedStmt(
+    d,
+    `SELECT ${STAGED_COLUMNS} FROM staged_tasks
          WHERE deleted = 0 AND completed = 0 ORDER BY created_at DESC LIMIT ?`
-    )
-    .all(limit) as StagedTaskRow[]
+  ).all(limit) as StagedTaskRow[]
   return rows.map(mapStaged)
 }
 
@@ -1128,13 +1127,12 @@ export function getAllStagedTasksOn(d: TaskStoreDb, limit = 10000): StagedTaskRe
 export function getAllScoredStagedTasksOn(
   d: TaskStoreDb
 ): { backendId: string; relevanceScore: number }[] {
-  return d
-    .prepare(
-      `SELECT backend_id AS backendId, relevance_score AS relevanceScore FROM staged_tasks
+  return cachedStmt(
+    d,
+    `SELECT backend_id AS backendId, relevance_score AS relevanceScore FROM staged_tasks
          WHERE backend_id IS NOT NULL AND relevance_score IS NOT NULL
            AND deleted = 0 AND completed = 0`
-    )
-    .all() as { backendId: string; relevanceScore: number }[]
+  ).all() as { backendId: string; relevanceScore: number }[]
 }
 
 /** One staged task by local id, or null if it is completed/deleted (spec: active-only). */
@@ -1146,11 +1144,10 @@ export function getStagedTaskOn(d: TaskStoreDb, id: number): StagedTaskRecord | 
 
 /** All staged-task embeddings for the in-memory index (active only, per spec). */
 export function getAllStagedTaskEmbeddingsOn(d: TaskStoreDb): TaskEmbeddingRow[] {
-  const rows = d
-    .prepare(
-      'SELECT id, embedding FROM staged_tasks WHERE embedding IS NOT NULL AND completed = 0 AND deleted = 0'
-    )
-    .all() as { id: number; embedding: Buffer | Uint8Array }[]
+  const rows = cachedStmt(
+    d,
+    'SELECT id, embedding FROM staged_tasks WHERE embedding IS NOT NULL AND completed = 0 AND deleted = 0'
+  ).all() as { id: number; embedding: Buffer | Uint8Array }[]
   return rows.map((r) => ({ id: r.id, embedding: bufferToVector(r.embedding) }))
 }
 
@@ -1160,7 +1157,10 @@ export function updateStagedTaskEmbeddingOn(
   id: number,
   vector: Float32Array
 ): void {
-  d.prepare('UPDATE staged_tasks SET embedding = ? WHERE id = ?').run(vectorToBuffer(vector), id)
+  cachedStmt(d, 'UPDATE staged_tasks SET embedding = ? WHERE id = ?').run(
+    vectorToBuffer(vector),
+    id
+  )
 }
 
 /** Active staged tasks still missing an embedding (backfill), newest-first. */
@@ -1168,12 +1168,11 @@ export function getStagedTasksMissingEmbeddingsOn(
   d: TaskStoreDb,
   limit = 100
 ): { id: number; description: string }[] {
-  return d
-    .prepare(
-      `SELECT id, description FROM staged_tasks
+  return cachedStmt(
+    d,
+    `SELECT id, description FROM staged_tasks
          WHERE embedding IS NULL AND deleted = 0 ORDER BY created_at DESC LIMIT ?`
-    )
-    .all(limit) as { id: number; description: string }[]
+  ).all(limit) as { id: number; description: string }[]
 }
 
 /** Selective re-rank of staged tasks (same algorithm as applyActionItemReranking). */
@@ -1188,9 +1187,10 @@ export function applyStagedTaskRerankingOn(
 /** Count active (non-completed, non-deleted) staged tasks. */
 export function countActiveStagedTasksOn(d: TaskStoreDb): number {
   return (
-    d
-      .prepare('SELECT COUNT(*) AS n FROM staged_tasks WHERE completed = 0 AND deleted = 0')
-      .get() as { n: number }
+    cachedStmt(
+      d,
+      'SELECT COUNT(*) AS n FROM staged_tasks WHERE completed = 0 AND deleted = 0'
+    ).get() as { n: number }
   ).n
 }
 
@@ -1202,12 +1202,11 @@ export function searchStagedTasksFTSOn(
 ): { id: number; description: string; relevanceScore: number | null }[] {
   const q = sanitizeFtsQuery(query)
   if (!q) return []
-  return d
-    .prepare(
-      `SELECT s.id, s.description, s.relevance_score AS relevanceScore
+  return cachedStmt(
+    d,
+    `SELECT s.id, s.description, s.relevance_score AS relevanceScore
          FROM staged_tasks s JOIN staged_tasks_fts fts ON fts.rowid = s.id
          WHERE staged_tasks_fts MATCH ? AND s.completed = 0 AND s.deleted = 0
          ORDER BY bm25(staged_tasks_fts) ASC LIMIT ?`
-    )
-    .all(q, limit) as { id: number; description: string; relevanceScore: number | null }[]
+  ).all(q, limit) as { id: number; description: string; relevanceScore: number | null }[]
 }

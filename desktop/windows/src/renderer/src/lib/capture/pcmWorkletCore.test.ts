@@ -51,6 +51,78 @@ describe('StreamingResampler', () => {
     const out = r.process(sine(QUANTUM, 200, 16000))
     expect(out.length).toBe(QUANTUM)
   })
+
+  // Faithful copy of the ORIGINAL allocating implementation (closure + growing
+  // number[] + Float32Array.from). The zero-allocation rewrite must be bit-for-bit
+  // identical to this, quantum for quantum, or the capture stream has drifted.
+  function referenceResample(
+    fromRate: number,
+    toRate: number,
+    quanta: Float32Array[]
+  ): Float32Array[] {
+    const step = fromRate / toRate
+    let hist = 0
+    let frac = 0
+    return quanta.map((input) => {
+      const n = input.length
+      if (n === 0) return input
+      const at = (i: number): number => (i <= 0 ? hist : input[i - 1])
+      const out: number[] = []
+      let p = frac
+      while (p < n) {
+        const i = Math.floor(p)
+        const f = p - i
+        out.push(at(i) * (1 - f) + at(i + 1) * f)
+        p += step
+      }
+      hist = input[n - 1]
+      frac = p - n
+      return Float32Array.from(out)
+    })
+  }
+
+  it('REGRESSION: zero-alloc process() is bit-identical to the original algorithm', () => {
+    // A deterministic pseudo-random signal chunked into varied quanta, across the
+    // rate pairs the capture path actually hits (down), plus an upsample edge case.
+    let seed = 0x9e3779b9
+    const rnd = (): number => {
+      seed = (seed * 1664525 + 1013904223) >>> 0
+      return (seed / 0xffffffff) * 2 - 1
+    }
+    for (const [from, to] of [
+      [48000, 16000],
+      [44100, 16000],
+      [16000, 16000],
+      [8000, 16000] // upsample: output longer than input (exercises scratch growth)
+    ] as const) {
+      const quanta: Float32Array[] = []
+      // Mix full 128-sample quanta with the odd short/empty tail the framer can pass.
+      for (const len of [128, 128, 128, 37, 0, 128, 91, 128, 128, 5]) {
+        quanta.push(Float32Array.from({ length: len }, rnd))
+      }
+      const expected = referenceResample(from, to, quanta)
+      const r = new StreamingResampler(from, to)
+      quanta.forEach((q, k) => {
+        const got = r.process(q)
+        expect(got.length).toBe(expected[k].length)
+        for (let j = 0; j < got.length; j++) {
+          // Exact equality: same operations in the same order ⇒ same float bits.
+          expect(Object.is(got[j], expected[k][j])).toBe(true)
+        }
+      })
+    }
+  })
+
+  it('returns independently-owned buffers (scratch never aliases a prior return)', () => {
+    const r = new StreamingResampler(48000, 16000)
+    const first = r.process(sine(QUANTUM, 440, 48000, 0))
+    const firstCopy = Float32Array.from(first)
+    // Several more quanta reuse the internal scratch; the first return must be intact.
+    for (let off = QUANTUM; off < QUANTUM * 20; off += QUANTUM) {
+      r.process(sine(QUANTUM, 440, 48000, off))
+    }
+    expect(Array.from(first)).toEqual(Array.from(firstCopy))
+  })
 })
 
 describe('PcmFramer', () => {

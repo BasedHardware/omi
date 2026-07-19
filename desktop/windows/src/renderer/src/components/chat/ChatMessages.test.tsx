@@ -53,6 +53,28 @@ describe('ChatMessages copy button', () => {
     render(<ChatMessages messages={[assistant('   ')]} sending={false} variant="main" />)
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull()
   })
+
+  // Regression: the button used to sit across a `mr-1`/`ml-1` margin gap from the
+  // bubble. Because it reveals via `group-hover/msg` and rests at
+  // `pointer-events-none`, the pointer crossing that empty gap dropped the group's
+  // hover — the button flipped back to non-interactive and vanished before it could
+  // be clicked. The hit region must stay contiguous: the button lives INSIDE the
+  // `group/msg` bubble and abuts it flush (`right-full`/`left-full`, no margin).
+  it.each(['user', 'assistant'] as const)(
+    'keeps the %s copy button inside the hover group with no dead margin gap',
+    (role) => {
+      const msg: ChatMsg = { id: `${role}-1`, role, content: 'copy me' }
+      const { container } = render(<ChatMessages messages={[msg]} sending={false} variant="main" />)
+      const bubble = container.querySelector('[class*="group/msg"]') as HTMLElement
+      const button = screen.getByRole('button', { name: 'Copy message' })
+      // Contiguous hover: the button is a descendant of the hover-owning bubble.
+      expect(bubble.contains(button)).toBe(true)
+      // Flush against the bubble on the thread-facing side, no gap-opening margin.
+      const flush = role === 'user' ? 'right-full' : 'left-full'
+      expect(button.className).toContain(flush)
+      expect(button.className).not.toMatch(/\b[mp][rl]-1\b/)
+    }
+  )
 })
 
 describe('ChatMessages [overlay] — pending spinner', () => {

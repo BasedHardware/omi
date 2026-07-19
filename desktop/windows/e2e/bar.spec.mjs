@@ -290,14 +290,17 @@ test('pill click expands into the chat/agents surface (Bug A)', async (t) => {
 
     // Expand is async: the mode IPC flips focus in main immediately, but the
     // renderer's pill→panel morph + content render lands a beat later. Wait for
-    // the expanded surface's rows rather than reading once (that read raced the
-    // morph). Presence of the shared "Omi Chat" row AND the always-connected
+    // the expanded surface's content rather than reading once (that read raced the
+    // morph). Presence of the hub's "Ask Omi" inline input AND the always-connected
     // "Claude Code" agent row proves the click reached the real chat surface.
     await barPage.waitForFunction(() => {
-      const texts = [...document.querySelectorAll('.bar-content-active .text-sm')].map((e) =>
+      const active = document.querySelector('.bar-content-active')
+      if (!active) return false
+      const hasInput = !!active.querySelector('textarea[placeholder*="Ask Omi"]')
+      const texts = [...active.querySelectorAll('.text-sm')].map((e) =>
         (e.textContent ?? '').trim()
       )
-      return texts.includes('Omi Chat') && texts.includes('Claude Code')
+      return hasInput && texts.includes('Claude Code')
     })
 
     const s = await app.evaluate(() => globalThis.__omiE2E.barState())
@@ -324,16 +327,68 @@ test('pill click expands from a ptt-summoned pill too (Bug A live gap)', async (
   const barPage = await findBarPage(app)
   await barShow(app, 'ptt')
   // The ptt pill is collapsed (!expanded), so its content is clickable; a click
-  // must expand into the shared chat surface (Omi Chat + the always-on agent row).
+  // must expand into the shared chat surface (the hub's Ask-Omi input + the
+  // always-on agent row).
   await barPage.locator('.bar-content[role="button"]').click()
   await barPage.waitForFunction(() => {
-    const texts = [...document.querySelectorAll('.bar-content-active .text-sm')].map((e) =>
-      (e.textContent ?? '').trim()
-    )
-    return texts.includes('Omi Chat') && texts.includes('Claude Code')
+    const active = document.querySelector('.bar-content-active')
+    if (!active) return false
+    const hasInput = !!active.querySelector('textarea[placeholder*="Ask Omi"]')
+    const texts = [...active.querySelectorAll('.text-sm')].map((e) => (e.textContent ?? '').trim())
+    return hasInput && texts.includes('Claude Code')
   })
   const s = await app.evaluate(() => globalThis.__omiE2E.barState())
   assert.equal(s.focusable, true, 'a ptt-summoned pill must expand on click (focusable)')
+})
+
+// Hub inline-input regression (fix/win-hub-inline-input): clicking/focusing the
+// hub's "Ask Omi anything" input must NOT navigate — the surface only flips to the
+// conversation on SEND (macOS AskAIInputView: .mainInput → .mainResponse on send).
+// Drives the REAL built app (signed-in fake auth) end-to-end: expand the bar,
+// confirm the hub hosts the inline input, focus+click it and assert we stay on the
+// hub (no back chevron), then type + Enter and assert the conversation opens (the
+// back chevron appears). The view flip is a renderer transition, independent of the
+// backend, so it is deterministic under fake auth with no network.
+test('hub Ask-Omi input: focus stays on the hub; only send opens the conversation', async (t) => {
+  mkdirSync(shotsDir, { recursive: true })
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
+  const barPage = await findBarPage(app)
+  await barShow(app, 'expanded')
+
+  // The hub hosts the inline input, not a navigate-on-click row.
+  const input = barPage.locator('.bar-content-active textarea[placeholder*="Ask Omi"]')
+  await input.waitFor({ state: 'visible' })
+
+  // Auto-focus on expand (Mac AskAIInputView focusOnAppear): the hub input holds
+  // the cursor on the real expand path — no click needed. This is the end-to-end
+  // proof of the focus fix (BarChatSurface stays mounted while collapsed, so the
+  // focus effect must key on becoming-expanded, not just the view).
+  await barPage.waitForFunction(() => {
+    const el = document.querySelector('.bar-content-active textarea[placeholder*="Ask Omi"]')
+    return !!el && document.activeElement === el
+  })
+
+  // Focusing + clicking the input must not navigate: no back chevron appears.
+  await input.click()
+  await barPage.evaluate(() => document.querySelector('.bar-content-active textarea')?.focus())
+  await new Promise((r) => setTimeout(r, 250))
+  assert.equal(
+    await barPage.locator('[aria-label="Back to list"]').count(),
+    0,
+    'clicking/focusing the hub input must NOT open the conversation'
+  )
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-hub-input-idle.png') })
+
+  // Typing + Enter sends and opens the conversation (the back chevron appears).
+  await input.fill('hub input smoke test')
+  await input.press('Enter')
+  await barPage.locator('[aria-label="Back to list"]').waitFor({ state: 'visible' })
+  const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+  assert.equal(s.focusable, true, 'the conversation surface stays focusable for typing')
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-hub-input-conversation.png') })
 })
 
 // Skeptical-review screenshot of the expanded surface WITH the agent rows
