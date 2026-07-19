@@ -34,8 +34,10 @@ import {
   CHAT_RATE_LIMIT_RETRIES,
   CHAT_BUSY_RETRY_INTERIM,
   chatRateLimitBackoffMs,
+  chatRateLimitFallbackProps,
   isRetryableChatRateLimit
 } from '../lib/chat/chatRetry'
+import { trackEvent } from '../lib/analytics'
 import { mergeAgentCards } from '../lib/chat/agentThreadCards'
 import type { ChatContentBlock } from '../../../shared/chatContent'
 
@@ -866,6 +868,7 @@ export function useChat(): UseChat {
       // retries are exhausted the friendly "busy" copy stands (terminal handling
       // below). isCurrent()-gated so a reset() mid-backoff skips the next attempt —
       // the lingering setTimeout is harmless because we bail before re-sending.
+      let rateLimitRetries = 0
       for (
         let rl = 1;
         rl <= CHAT_RATE_LIMIT_RETRIES &&
@@ -878,6 +881,21 @@ export function useChat(): UseChat {
         await new Promise<void>((resolve) => setTimeout(resolve, chatRateLimitBackoffMs(rl)))
         if (!isCurrent()) return
         result = await attempt(requestId, textToSend)
+        rateLimitRetries = rl
+      }
+      // Silent UX healing is fine; silent OPS is not (AGENTS.md). A 429 retry is a
+      // degrade path — surface ONE fixed-field fallback event (never per-retry, so a
+      // storm can't spam): `recovered` if the retry landed, else `exhausted`. Only
+      // when a retry actually happened, and only for a still-current turn.
+      if (rateLimitRetries > 0 && isCurrent()) {
+        trackEvent(
+          'fallback_triggered',
+          chatRateLimitFallbackProps(
+            result.ok ? 'recovered' : 'exhausted',
+            'pi_mono',
+            rateLimitRetries
+          )
+        )
       }
 
       if (result.ok) {
@@ -1173,17 +1191,33 @@ export function useChat(): UseChat {
           signal: ac.signal
         })
       let res = await doFetch()
-      // Transient rate-limit recovery (parity with the pi_mono door + apiClient's
-      // 429 policy): a 429 here is a transient backend rate limit — not the user
-      // sending too fast — so back off and re-issue the POST a bounded number of
-      // times before surfacing an error. Nothing has been read from the stream yet,
-      // so re-fetching is safe. isCurrent()-gated so a reset()/dismiss mid-backoff
-      // bails before re-sending (its abort would otherwise reject the retry).
+      // Transient rate-limit recovery (same policy as the pi_mono door): a 429 here
+      // is a transient backend rate limit — not the user sending too fast — so back
+      // off and re-issue the POST a bounded number of times before surfacing an
+      // error. (Only 429 is retried, unlike apiClient which also retries 503 — a
+      // deliberately narrow scope for this path.) Nothing has been read from the
+      // stream yet, so re-fetching is safe. isCurrent()-gated so a reset()/dismiss
+      // mid-backoff bails before re-sending (its abort would otherwise reject it).
+      let rateLimitRetries = 0
       for (let rl = 1; rl <= CHAT_RATE_LIMIT_RETRIES && res.status === 429 && isCurrent(); rl++) {
         renderAssistant(assistantMsg(CHAT_BUSY_RETRY_INTERIM))
         await new Promise<void>((resolve) => setTimeout(resolve, chatRateLimitBackoffMs(rl)))
         if (!isCurrent()) return
         res = await doFetch()
+        rateLimitRetries = rl
+      }
+      // Silent UX healing is fine; silent OPS is not (AGENTS.md). Surface ONE
+      // fixed-field fallback event when a 429 retry happened: `recovered` if the
+      // retry cleared the limit (2xx), else `exhausted` (the "busy" copy will show).
+      if (rateLimitRetries > 0 && isCurrent()) {
+        trackEvent(
+          'fallback_triggered',
+          chatRateLimitFallbackProps(
+            res.ok ? 'recovered' : 'exhausted',
+            'legacy_sse',
+            rateLimitRetries
+          )
+        )
       }
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 

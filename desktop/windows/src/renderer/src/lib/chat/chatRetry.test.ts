@@ -4,6 +4,7 @@ import {
   CHAT_RATE_LIMIT_RETRIES,
   CHAT_BUSY_RETRY_INTERIM,
   chatRateLimitBackoffMs,
+  chatRateLimitFallbackProps,
   isRetryableChatRateLimit
 } from './chatRetry'
 
@@ -59,5 +60,20 @@ describe('chatRetry — rate-limit policy', () => {
   it('the interim line is non-blaming and consistent with the degraded notice', () => {
     expect(CHAT_BUSY_RETRY_INTERIM).toMatch(/busy/i)
     expect(CHAT_BUSY_RETRY_INTERIM).not.toMatch(/too quickly/i)
+  })
+
+  it('fallback props carry the fixed shared fields (component/from/to/reason/outcome)', () => {
+    const recovered = chatRateLimitFallbackProps('recovered', 'pi_mono', 1)
+    expect(recovered).toMatchObject({
+      component: 'chat_send',
+      from: 'none',
+      to: 'none',
+      reason: 'rate_limited',
+      outcome: 'recovered',
+      engine: 'pi_mono',
+      attempts: 1
+    })
+    const exhausted = chatRateLimitFallbackProps('exhausted', 'legacy_sse', 2)
+    expect(exhausted).toMatchObject({ outcome: 'exhausted', engine: 'legacy_sse', attempts: 2 })
   })
 })

@@ -57,6 +57,12 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock('../lib/chatSessionsClient', () => ({ getMessages: sessionMocks.getMessages }))
 const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
+// Fallback/degrade telemetry — spied so the 429-retry tests assert the ops signal
+// without a real PostHog fetch (which would otherwise pollute the global.fetch mock).
+const trackEventSpy = vi.fn((_e: string, _p?: Record<string, unknown>) => {})
+vi.mock('../lib/analytics', () => ({
+  trackEvent: (e: string, p?: Record<string, unknown>) => trackEventSpy(e, p)
+}))
 // Shared-thread continuity is best-effort HTTP; stub it so recordVoiceTurn's
 // backend echo is hermetic (and assertable).
 const saveDesktopMessageSpy = vi.fn(async (_r: unknown) => null)
@@ -70,6 +76,7 @@ import {
   CHAT_NOT_READY_INTERIM,
   CHAT_NOT_READY_FINAL
 } from './useChat'
+import { CHAT_BUSY_RETRY_INTERIM } from '../lib/chat/chatRetry'
 import {
   addAttachments,
   awaitUploadsSettled,
@@ -399,6 +406,125 @@ describe('useChat — legacy_sse error taxonomy (friendly copy, never raw)', () 
     const content = lastAssistant(result.current.history)?.content
     expect(content).toBe('Please sign in to continue.')
     expect(content).not.toMatch(/^Error:/)
+  })
+})
+
+// Legacy_sse rate-limit (429) auto-retry — the sibling of the pi_mono retry, on the
+// raw-fetch path that attachment sends + engine=legacy_sse hit in production. A
+// transient 429 must back off + re-issue the POST (not surface the throttle copy),
+// and both retry+exhaustion must emit the fixed-field fallback event (silent ops is
+// not allowed). Fake timers drive the backoff.
+describe('useChat — legacy_sse rate-limit (429) auto-retry', () => {
+  const pumpUntilStream = async (i: number): Promise<void> => {
+    for (let k = 0; k < 200 && !streams[i]; k++) await vi.advanceTimersByTimeAsync(1)
+    if (!streams[i]) throw new Error(`stream ${i} never opened`)
+  }
+  const pumpUntilBusy = async (
+    result: ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+  ): Promise<void> => {
+    for (
+      let k = 0;
+      k < 200 && lastAssistant(result.current.history)?.content !== CHAT_BUSY_RETRY_INTERIM;
+      k++
+    ) {
+      await vi.advanceTimersByTimeAsync(1)
+    }
+  }
+
+  it('auto-retries a 429 then streams the reply — throttle copy never shows; one user turn; recovered fallback', async () => {
+    vi.useFakeTimers()
+    try {
+      let call = 0
+      global.fetch = vi.fn(
+        async (_url: unknown, init?: { signal?: AbortSignal; body?: unknown }) => {
+          call++
+          if (call === 1) return { ok: false, status: 429 } as unknown as Response
+          const s = makeManualStream(init?.signal)
+          streams.push(s)
+          signals.push(init?.signal)
+          bodies.push(typeof init?.body === 'string' ? init.body : String(init?.body ?? ''))
+          return { ok: true, body: { getReader: () => s.reader } } as unknown as Response
+        }
+      ) as unknown as typeof fetch
+
+      const { result } = renderHook(() => useChat())
+      let p!: Promise<void>
+      await act(async () => {
+        p = result.current.send('hi')
+        await pumpUntilBusy(result)
+      })
+      // Attempt 1 got a 429 → busy interim shown, one fetch so far.
+      expect(call).toBe(1)
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_BUSY_RETRY_INTERIM)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000) // fire the backoff → retry fetch
+        await pumpUntilStream(0)
+        streams[0].push('data: Recovered reply\n')
+        streams[0].close()
+        await p
+      })
+      expect(call).toBe(2) // retried once
+      expect(lastAssistant(result.current.history)?.content).toBe('Recovered reply')
+      // The old throttle copy NEVER appeared.
+      const seen = result.current.history.map((m) => m.content).join(' | ')
+      expect(seen).not.toMatch(/too quickly/i)
+      // Exactly one user turn — the retry re-POSTs the same text, it does not
+      // duplicate the user bubble or persist a second human turn.
+      expect(
+        result.current.history.filter((m) => m.role === 'user' && m.content === 'hi')
+      ).toHaveLength(1)
+      expect(persisted.every((thread) => thread.filter((m) => m.role === 'user').length <= 1)).toBe(
+        true
+      )
+      // Silent-ops guard: one recovered fallback event with the fixed fields.
+      const fb = trackEventSpy.mock.calls.filter((c) => c[0] === 'fallback_triggered')
+      expect(fb).toHaveLength(1)
+      expect(fb[0][1]).toMatchObject({
+        component: 'chat_send',
+        reason: 'rate_limited',
+        outcome: 'recovered',
+        engine: 'legacy_sse'
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('exhausts retries when every attempt 429s — busy copy (never "too quickly"), exhausted fallback', async () => {
+    vi.useFakeTimers()
+    try {
+      let call = 0
+      global.fetch = vi.fn(async () => {
+        call++
+        return { ok: false, status: 429 } as unknown as Response
+      }) as unknown as typeof fetch
+
+      const { result } = renderHook(() => useChat())
+      let p!: Promise<void>
+      await act(async () => {
+        p = result.current.send('hi')
+        await pumpUntilBusy(result)
+      })
+      expect(call).toBe(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20000) // exhaust every bounded retry
+        await p
+      })
+      // Initial attempt + the bounded retries.
+      expect(call).toBeGreaterThanOrEqual(2)
+      expect(lastAssistant(result.current.history)?.content).toBe(
+        'Omi’s servers are busy. Try again in a moment.'
+      )
+      expect(lastAssistant(result.current.history)?.content).not.toMatch(/too quickly/i)
+      // Silent-ops guard: one exhausted fallback event.
+      const fb = trackEventSpy.mock.calls.filter((c) => c[0] === 'fallback_triggered')
+      expect(fb).toHaveLength(1)
+      expect(fb[0][1]).toMatchObject({ outcome: 'exhausted', engine: 'legacy_sse' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

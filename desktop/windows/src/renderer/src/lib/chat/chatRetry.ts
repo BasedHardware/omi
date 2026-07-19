@@ -38,9 +38,37 @@ export function isRetryableChatRateLimit(raw: string | null | undefined): boolea
 
 /**
  * Backoff (ms) before the Nth (1-based) rate-limit retry: exponential with a small
- * cap plus jitter (1s, 2s, … capped at 4s), mirroring apiClient's 429 backoff.
- * The jitter avoids a thundering-herd re-send when several surfaces retry at once.
+ * cap plus jitter (1s, 2s, … capped at 4s), matching apiClient's 429 backoff shape.
+ * (We deliberately retry only 429 here, not 503 — narrower than apiClient's set, a
+ * conservative scope for this chat-send path.) The jitter avoids a thundering-herd
+ * re-send when several surfaces retry at once.
  */
 export function chatRateLimitBackoffMs(attempt: number): number {
   return Math.min(1000 * 2 ** (attempt - 1), 4000) + Math.floor(Math.random() * 300)
+}
+
+/**
+ * Fixed-field fallback/telemetry properties for a chat-send rate-limit degrade
+ * path, matching the shared `fallback_triggered` shape (AGENTS.md "Fallback /
+ * resilience telemetry", same event the realtime hub emits). Pure — the caller
+ * passes it to `trackEvent` — so silent UX healing stays visible to ops without a
+ * one-off counter. Emitted at most once per send, ONLY when a 429 retry actually
+ * happened: `recovered` when the send ultimately succeeded, `exhausted` when the
+ * bounded retries ran out (the "servers are busy" copy shown). No provider/mode
+ * change here, so from/to are `none`; the rate limit is the `reason`.
+ */
+export function chatRateLimitFallbackProps(
+  outcome: 'recovered' | 'exhausted',
+  engine: 'pi_mono' | 'legacy_sse',
+  attempts: number
+): Record<string, unknown> {
+  return {
+    component: 'chat_send',
+    from: 'none',
+    to: 'none',
+    reason: 'rate_limited',
+    outcome,
+    engine,
+    attempts
+  }
 }

@@ -49,6 +49,12 @@ vi.mock('../lib/preferences', () => ({
 }))
 const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
+// Fallback/degrade telemetry — spied so the 429-retry tests can assert the ops
+// signal fires (recovered/exhausted) without a real PostHog fetch (hermetic).
+const trackEventSpy = vi.fn((_e: string, _p?: Record<string, unknown>) => {})
+vi.mock('../lib/analytics', () => ({
+  trackEvent: (e: string, p?: Record<string, unknown>) => trackEventSpy(e, p)
+}))
 // The INV-CHAT-1 shared-thread persistence — spied so we can assert the two turns.
 const saveSpy = vi.fn(async (_req: Record<string, unknown>) => ({
   id: 'srv',
@@ -719,6 +725,16 @@ describe('useChat — pi_mono rate-limit (429) auto-retry', () => {
         expect(saveSpy).toHaveBeenCalledTimes(2)
         expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human', text: 'hi' })
         expect(saveSpy.mock.calls[1][0]).toMatchObject({ sender: 'ai', text: 'Hi there' })
+        // Silent-ops guard: the heal is NOT invisible — one fixed-field fallback
+        // event fired with outcome 'recovered' (never per-retry spam).
+        const fb = trackEventSpy.mock.calls.filter((c) => c[0] === 'fallback_triggered')
+        expect(fb).toHaveLength(1)
+        expect(fb[0][1]).toMatchObject({
+          component: 'chat_send',
+          reason: 'rate_limited',
+          outcome: 'recovered',
+          engine: 'pi_mono'
+        })
       } finally {
         vi.useRealTimers()
       }
@@ -766,6 +782,14 @@ describe('useChat — pi_mono rate-limit (429) auto-retry', () => {
       expect(saveSpy).toHaveBeenCalledTimes(1)
       expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
       expect(speakSpy).not.toHaveBeenCalled()
+      // Silent-ops guard: exhaustion surfaces ONE fallback event, outcome 'exhausted'.
+      const fb = trackEventSpy.mock.calls.filter((c) => c[0] === 'fallback_triggered')
+      expect(fb).toHaveLength(1)
+      expect(fb[0][1]).toMatchObject({
+        reason: 'rate_limited',
+        outcome: 'exhausted',
+        engine: 'pi_mono'
+      })
     } finally {
       vi.useRealTimers()
     }
@@ -797,6 +821,9 @@ describe('useChat — pi_mono rate-limit (429) auto-retry', () => {
       expect(lastAssistant(result.current.history)?.content).toBe(
         'Omi couldn’t answer right now. Try again.'
       )
+      // No 429 retry happened → no fallback event (a hard failure is an error metric,
+      // not a fallback — AGENTS.md).
+      expect(trackEventSpy.mock.calls.filter((c) => c[0] === 'fallback_triggered')).toHaveLength(0)
     } finally {
       vi.useRealTimers()
     }
