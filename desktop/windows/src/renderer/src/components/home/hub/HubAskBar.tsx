@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowUp, Link as LinkIcon, Loader2, Paperclip } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import {
@@ -53,6 +53,7 @@ export function HubAskBar(props: {
   const [focused, setFocused] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [rejectNote, setRejectNote] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const attachments = usePendingAttachments()
   const atCap = attachments.length >= MAX_CHAT_ATTACHMENTS
   // Send is allowed with text OR at least one attachment that hasn't failed —
@@ -86,6 +87,28 @@ export function HubAskBar(props: {
     stage(await filesToPickedChatFiles(files))
   }
 
+  // The WHOLE pill is a hit target — clicking anywhere in it seats the caret in the
+  // input, matching Mac's `.contentShape(.rect(cornerRadius: 29)).onTapGesture` on the
+  // whole HomeAskBar pill (DashboardPage.swift:2211-2214). Without this only the input's
+  // own thin text line was clickable: the 58px pill's top/bottom strips and the padding
+  // to either side were dead zones, so a click near the pill's edge did nothing — the
+  // reported bug. The paperclip and the trailing Connect/Send button keep their own
+  // actions (a click that lands on a button returns early), and a click already on the
+  // input keeps native caret placement.
+  const focusFromPill = (e: React.MouseEvent): void => {
+    const target = e.target as HTMLElement
+    if (target === inputRef.current || target.closest('button')) return
+    // preventDefault so the mousedown doesn't move focus to the container (or start a
+    // text selection on it). Then hand focus to the input on the NEXT frame — a
+    // focus() called synchronously inside a preventDefault'd mousedown is swallowed by
+    // Chromium/Electron (the browser's own post-dispatch focus handling reverts it, so
+    // the input never actually focuses — verified: the handler ran but activeElement
+    // stayed <body>). Deferring past the event makes the focus stick, and focusing the
+    // input fires onFocus, opening the chat stage exactly as a direct input click does.
+    e.preventDefault()
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
   return (
     <div
       className="w-full"
@@ -110,8 +133,9 @@ export function HubAskBar(props: {
       )}
 
       <div
+        onMouseDown={focusFromPill}
         className={cn(
-          'flex h-[58px] w-full items-center rounded-[29px] border pl-2 pr-2',
+          'flex h-[58px] w-full cursor-text items-center rounded-[29px] border pl-2 pr-2',
           'transition-[background-color,border-color,box-shadow] duration-150 ease-out',
           dragging
             ? 'border-[rgb(var(--home-stage-glow-rgb)/0.4)] bg-home-tile'
@@ -140,13 +164,14 @@ export function HubAskBar(props: {
             'transition-colors duration-150',
             atCap
               ? 'cursor-not-allowed text-home-muted opacity-40'
-              : 'text-home-muted hover:bg-white/10 hover:text-home-ink'
+              : 'cursor-pointer text-home-muted hover:bg-white/10 hover:text-home-ink'
           )}
         >
           <Paperclip className="h-[15px] w-[15px]" strokeWidth={2.25} />
         </button>
 
         <input
+          ref={inputRef}
           // Not a page-load autofocus: this fires only when the bar re-mounts inside the
           // chat panel, restoring the focus the user already had. In the resting hub it is
           // false. No jsx-a11y plugin is configured here, so autoFocus needs no disable.
@@ -194,7 +219,7 @@ export function HubAskBar(props: {
             type="button"
             onClick={onSubmit}
             aria-label="Send"
-            className="focus-ring flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-white text-home-paper transition-opacity duration-150 hover:opacity-90"
+            className="focus-ring flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white text-home-paper transition-opacity duration-150 hover:opacity-90"
           >
             <ArrowUp className="h-[13px] w-[13px]" strokeWidth={2.75} />
           </button>
@@ -204,7 +229,7 @@ export function HubAskBar(props: {
             onClick={onToggleConnect}
             aria-pressed={connectActive}
             className={cn(
-              'focus-ring flex h-[34px] shrink-0 items-center gap-1.5 rounded-full px-[13px]',
+              'focus-ring flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-[13px]',
               'text-[12px] font-medium transition-colors duration-150',
               connectActive
                 ? 'bg-white text-home-paper'
