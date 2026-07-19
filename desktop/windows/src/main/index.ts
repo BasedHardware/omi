@@ -128,6 +128,8 @@ import { startRewindRetention } from './rewind/retentionRunner'
 import { startOrphanSweep } from './rewind/orphanSweep'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
+import { startStartupProfiler } from './dev/startupProfiler'
+import { scheduleStartupSteps } from './startupScheduler'
 // Dev-only benchmarking / sandbox machinery. Every call below is behind
 // `import.meta.env.DEV`, so this module is tree-shaken out of packaged main.
 import * as devBench from './dev/bench'
@@ -604,6 +606,8 @@ app.whenReady().then(async () => {
   // window/service setup, just let it exit and hand off to the first instance.
   if (!gotSingleInstanceLock) return
   perfMark('main:ready')
+  // Startup-burst profiler (inert unless OMI_STARTUP_PROFILE=<path> is set).
+  startStartupProfiler()
 
   // Open (and, if it is corrupt, recover) omi.db before anything else can touch
   // it. This has to happen here, first: recovery REPLACES the database file, and
@@ -1098,34 +1102,105 @@ app.whenReady().then(async () => {
     // Capture starts ~0.5-1s later as a result, which the 2s PTT pre-roll and the
     // 30s silence finalizer tolerate. Skipped under the dev perf bench, whose
     // startup measurement must not include a second renderer.
-    if (!(import.meta.env.DEV && devBench.isBenchMode())) createCaptureWindow()
-    // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.
-    startForegroundMonitor()
-    // Track the last non-Omi foreground window so the automation planner snapshots
-    // the app the user was actually using (Omi is foreground once they click chat).
-    if (AUTOMATION_ENABLED) startAutomationTargetTracker()
-    // Load the user's persisted Rewind settings — capture is ON by default for a
-    // fresh install, and any change the user makes in Settings survives restarts.
-    // OCR/retention loops are cheap no-ops until frames exist.
-    startRewindCapture()
-    startRewindOcr()
-    // Semantic-search indexer (Track 4). Starts its flush timer here; the queue
-    // and the launch backfill only move once the renderer relays a Firebase
-    // session (see rewind/embeddingService.ts).
-    startRewindEmbedding()
-    // Embeddings are derived from screen content, so any that outlived their frame
-    // are data the user asked us to forget. Retention deletes them inline now; this
-    // sweeps up anything an earlier build left behind. No-op on a healthy database.
-    try {
-      const dropped = pruneOrphanedRewindEmbeddings()
-      if (dropped > 0) console.log(`[rewind-embed] dropped ${dropped} orphaned embedding(s)`)
-    } catch (e) {
-      console.warn(`[rewind-embed] orphan sweep failed: ${(e as Error).message}`)
-    }
-    startRewindRetention()
-    // Delete JPEGs orphaned by a crash between the file write and the DB insert
-    // (Windows-specific — frames are per-file). Startup pass + every 6h.
-    startOrphanSweep()
+    // Stagger the background-service starts + auxiliary-window creations across the
+    // first ~second instead of running them all in this one tick. They used to
+    // block the main thread ~1s and spawn 3 renderers + churn the DWM compositor
+    // simultaneously at first paint, stuttering the whole desktop. Order is
+    // preserved (capture first for continuous recording; glow before the Focus
+    // assistant that uses it); nothing is dropped. See startupScheduler.ts.
+    scheduleStartupSteps([
+      // The hidden always-alive capture window: owns all audio + Rewind capture,
+      // independent of any UI window. Runs first so continuous recording comes up
+      // promptly (the 2s PTT pre-roll and 30s silence finalizer tolerate the small
+      // delay). Skipped under the dev perf bench (its measurement must not include a
+      // second renderer).
+      {
+        name: 'captureWindow',
+        run: () => {
+          if (!(import.meta.env.DEV && devBench.isBenchMode())) createCaptureWindow()
+        }
+      },
+      // Foreground app-usage tracking. No-ops when disabled in Settings or off-Windows.
+      { name: 'foregroundMonitor', run: () => startForegroundMonitor() },
+      // Track the last non-Omi foreground window so the automation planner snapshots
+      // the app the user was actually using (Omi is foreground once they click chat).
+      {
+        name: 'automationTargetTracker',
+        run: () => {
+          if (AUTOMATION_ENABLED) startAutomationTargetTracker()
+        }
+      },
+      // Load the user's persisted Rewind settings — capture is ON by default for a
+      // fresh install, and any change the user makes in Settings survives restarts.
+      // OCR/retention loops are cheap no-ops until frames exist.
+      { name: 'rewindCapture', run: () => startRewindCapture() },
+      { name: 'rewindOcr', run: () => startRewindOcr() },
+      // Semantic-search indexer (Track 4). Starts its flush timer here; the queue
+      // and the launch backfill only move once the renderer relays a Firebase
+      // session (see rewind/embeddingService.ts).
+      { name: 'rewindEmbedding', run: () => startRewindEmbedding() },
+      // Embeddings are derived from screen content, so any that outlived their frame
+      // are data the user asked us to forget. Retention deletes them inline now; this
+      // sweeps up anything an earlier build left behind. No-op on a healthy database.
+      {
+        name: 'pruneOrphanedEmbeddings',
+        run: () => {
+          const dropped = pruneOrphanedRewindEmbeddings()
+          if (dropped > 0) console.log(`[rewind-embed] dropped ${dropped} orphaned embedding(s)`)
+        }
+      },
+      { name: 'rewindRetention', run: () => startRewindRetention() },
+      // Delete JPEGs orphaned by a crash between the file write and the DB insert
+      // (Windows-specific — frames are per-file). Startup pass + every 6h.
+      { name: 'orphanSweep', run: () => startOrphanSweep() },
+      // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
+      { name: 'insightToastWindow', run: () => createInsightToastWindow() },
+      // Pre-create the focus-halo window. It is created ONCE and never hidden after
+      // its off-screen prime — a transparent frameless window fades in via the OS
+      // show-animation on every hide→show (the bug that read as the bar "plummeting"),
+      // so the halo parks off-screen instead. See main/glow/glowWindow.ts.
+      { name: 'glowWindow', run: () => createGlowWindow() },
+      // Meeting detection (Phase 5): event-driven Tier1/Tier2 monitor → toast +
+      // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
+      // the machine latched silent.
+      { name: 'meetingMonitor', run: () => startMeetingMonitor({ getCaptureWc }) },
+      // Track 3 (AI user profile): run the >24h startup check + start the daily
+      // timer. No-ops until the renderer has pushed a session (Firebase token lives
+      // renderer-side) and is gated on the aiProfileEnabled setting.
+      { name: 'aiUserProfile', run: () => maybeGenerateAiProfileOnStartup() },
+      // Track 3 (Focus assistant): register it with the coordinator, which brings
+      // up the shared screen-analysis loop (gated on screenAnalysisEnabled). The
+      // loop only polls frames once an assistant is registered, so this is the call
+      // that turns the proactive stack on. The glow window above is pre-created; the
+      // renderer relays a session that Focus (and the AI profile) read.
+      { name: 'focusAssistant', run: () => registerFocusAssistant() },
+      // Track 3 (Insight assistant): Mac's two-phase tool-calling "Advice" pipeline.
+      // A coordinator peer to Focus (same shared loop); the sole Insight engine now
+      // that the renderer bootstrap no longer runs one.
+      { name: 'insightAssistant', run: () => registerInsightAssistant() },
+      // Track 3 (Memory assistant): Mac's interval-based single-shot memory
+      // extractor. A coordinator peer to Focus/Insight (same shared loop); no glow,
+      // no notification — it records durable facts silently.
+      { name: 'memoryAssistant', run: () => registerMemoryAssistant() },
+      // Track 3 (Task assistant): Mac's screen→task extractor. A coordinator peer to
+      // Focus/Insight/Memory (same shared loop) that stages tasks silently, gated on
+      // the `taskEnabled` setting (default ON, under the screenAnalysisEnabled master).
+      // Bring the task-title embedding index up too (loadIndex + a one-shot backfill
+      // once the renderer relays a session).
+      { name: 'taskAssistant', run: () => registerTaskAssistant() },
+      { name: 'taskEmbeddingIndex', run: () => bringUpTaskEmbeddingIndex() },
+      // Start the promotion safety net (startup promote + 60s bypass-debounce timer),
+      // the Windows port of Mac's TaskPromotionService.start(). This drains staged
+      // tasks the inline post-extraction promote leaves behind (a frame stages N tasks
+      // but the 30s debounce only promotes task 1) and promotes app-closed backlog on
+      // sign-in. Unconditional (not taskEnabled-gated), matching Mac.
+      { name: 'taskPromotion', run: () => startTaskPromotionService() },
+      // Track 3 (Goals, Wave C): client-side goal auto-generation. NOT a coordinator
+      // peer — it's a time-triggered job (no screen frames). Registers the manual
+      // Suggest IPC and starts the periodic scheduler; both no-op until a session is
+      // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
+      { name: 'goalGeneration', run: () => registerGoalGeneration() }
+    ])
     // Warm the (slow) screen-source-id cache a few seconds later, off the critical
     // path, so enabling capture later is an instant cache hit.
     setTimeout(() => prewarmPrimarySourceId(), 4000)
@@ -1133,13 +1208,6 @@ app.whenReady().then(async () => {
     // cold-spawn cost. Deferred off first paint; a silent no-op when the helper
     // binary was never built (no .NET SDK) — PTT then simply doesn't mute.
     setTimeout(() => systemAudioMuteBridge.warm(), 4000)
-    // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
-    createInsightToastWindow()
-    // Pre-create the focus-halo window. It is created ONCE and never hidden after
-    // its off-screen prime — a transparent frameless window fades in via the OS
-    // show-animation on every hide→show (the bug that read as the bar "plummeting"),
-    // so the halo parks off-screen instead. See main/glow/glowWindow.ts.
-    createGlowWindow()
     // Post-update "what's new" (Phase 8): a few seconds after startup (once the
     // toast window has loaded), surface the changelog for the version we just
     // updated into. No-op on a fresh install or an unchanged version.
@@ -1147,47 +1215,6 @@ app.whenReady().then(async () => {
       const whatsNew = maybeGetWhatsNew()
       if (whatsNew) showWhatsNewToast(whatsNew)
     }, 6000)
-    // Meeting detection (Phase 5): event-driven Tier1/Tier2 monitor → toast +
-    // auto-capture via the capture window. No-op off-Windows; 'off' mode keeps
-    // the machine latched silent.
-    startMeetingMonitor({ getCaptureWc })
-    // Track 3 (AI user profile): run the >24h startup check + start the daily
-    // timer. No-ops until the renderer has pushed a session (Firebase token lives
-    // renderer-side) and is gated on the aiProfileEnabled setting.
-    maybeGenerateAiProfileOnStartup()
-    // Track 3 (Focus assistant): register it with the coordinator, which brings
-    // up the shared screen-analysis loop (gated on screenAnalysisEnabled). The
-    // loop only polls frames once an assistant is registered, so this is the call
-    // that turns the proactive stack on. The glow window above is pre-created; the
-    // renderer relays a session that Focus (and the AI profile) read.
-    registerFocusAssistant()
-    // Track 3 (Insight assistant): Mac's two-phase tool-calling "Advice" pipeline.
-    // A coordinator peer to Focus (same shared loop); the sole Insight engine now
-    // that the renderer bootstrap no longer runs one.
-    registerInsightAssistant()
-    // Track 3 (Memory assistant): Mac's interval-based single-shot memory
-    // extractor. A coordinator peer to Focus/Insight (same shared loop); no glow,
-    // no notification — it records durable facts silently.
-    registerMemoryAssistant()
-    // Track 3 (Task assistant): Mac's screen→task extractor. A coordinator peer to
-    // Focus/Insight/Memory (same shared loop) that stages tasks silently, gated on
-    // the `taskEnabled` setting (default ON, under the screenAnalysisEnabled master).
-    // Bring the task-title embedding index up too
-    // (loadIndex + a one-shot backfill once the renderer relays a session) — those
-    // PR-A primitives were shipped but never wired until now.
-    registerTaskAssistant()
-    bringUpTaskEmbeddingIndex()
-    // Start the promotion safety net (startup promote + 60s bypass-debounce timer),
-    // the Windows port of Mac's TaskPromotionService.start(). This drains staged
-    // tasks the inline post-extraction promote leaves behind (a frame stages N tasks
-    // but the 30s debounce only promotes task 1) and promotes app-closed backlog on
-    // sign-in. Unconditional (not taskEnabled-gated), matching Mac.
-    startTaskPromotionService()
-    // Track 3 (Goals, Wave C): client-side goal auto-generation. NOT a coordinator
-    // peer — it's a time-triggered job (no screen frames). Registers the manual
-    // Suggest IPC and starts the periodic scheduler; both no-op until a session is
-    // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
-    registerGoalGeneration()
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon
