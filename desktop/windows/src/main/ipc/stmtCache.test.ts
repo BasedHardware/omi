@@ -9,7 +9,7 @@
 // connection to another. These tests pin exactly that.
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { cachedStmt } from './stmtCache'
+import { cachedStmt, statementCacheSize, STATEMENT_CACHE_CAP } from './stmtCache'
 
 const SQL = 'SELECT value FROM kv WHERE key = ?'
 
@@ -73,6 +73,35 @@ describe('cachedStmt', () => {
     expect((onSecond.get('a') as { value: string }).value).toBe('ALPHA2')
     expect((onFirst.get('a') as { value: string }).value).toBe('alpha')
     db2.close()
+  })
+
+  it('bounds the per-connection cache with LRU eviction, staying correct on re-miss', () => {
+    // A statement that we keep exercising must survive eviction (its recency is
+    // refreshed on every hit). A never-touched-again one must be evicted once the
+    // flood of distinct dynamic SQL shapes exceeds the cap.
+    const HOT = 'SELECT value FROM kv WHERE key = ? /* hot */'
+    const COLD = 'SELECT value FROM kv WHERE key = ? /* cold */'
+    const hot0 = cachedStmt(db, HOT)
+    const cold0 = cachedStmt(db, COLD)
+
+    // Flood with > cap distinct shapes (mimics variable IN (?,…) clauses). Keep the
+    // HOT statement warm across the flood so LRU protects it.
+    for (let i = 0; i < STATEMENT_CACHE_CAP + 300; i++) {
+      cachedStmt(db, `SELECT value FROM kv WHERE key = ? /* shape ${i} */`)
+      if (i % 5 === 0) cachedStmt(db, HOT) // refresh recency
+    }
+
+    expect(statementCacheSize(db)).toBeLessThanOrEqual(STATEMENT_CACHE_CAP)
+
+    // HOT was kept warm -> same object, still works.
+    const hot1 = cachedStmt(db, HOT)
+    expect(hot1).toBe(hot0)
+    expect((hot1.get('a') as { value: string }).value).toBe('alpha')
+
+    // COLD was never touched again -> evicted -> a fresh, working statement on re-miss.
+    const cold1 = cachedStmt(db, COLD)
+    expect(cold1).not.toBe(cold0)
+    expect((cold1.get('b') as { value: string }).value).toBe('beta')
   })
 
   it('does not leak a closed connection’s statements onto a new one', () => {

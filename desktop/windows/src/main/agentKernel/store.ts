@@ -1554,9 +1554,10 @@ export class SqliteAgentStore implements AgentStore {
 
   // execute/getRow/getOptionalRow/allRows are the choke points nearly every store
   // query flows through, so caching the prepared statement here (keyed by the SQL
-  // text, per connection) hoists all of them at once. Every `sql` reaching these is
-  // a developer-authored literal or a constant-length placeholder expansion — never
-  // a runtime-variable-length string — so the per-connection cache stays bounded.
+  // text, per connection) hoists all of them at once. Most `sql` here is a fixed
+  // literal, but some callers build dynamic SQL (variable-length IN (?,…) clauses,
+  // dynamic column sets), so cachedStmt's LRU bound is what keeps this store's
+  // long-lived connection from accumulating statements without limit.
   execute(sql: string, values: unknown[] = []): number {
     return Number(cachedStmt(this.db, sql).run(...values).changes)
   }

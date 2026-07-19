@@ -15,23 +15,35 @@
 //   - When a connection is closed/GC'd, its statement cache is collected with it —
 //     no manual invalidation, no dangling statements over a swapped handle.
 //
-// Do NOT route these through the cache (callers keep inline `db.prepare`):
-//   - SQL built with a variable number of placeholders (IN (?,?,…)) or a dynamic
-//     column set — each shape is a distinct string, so caching would grow without
-//     bound.
-//   - Statements put into a sticky mode (`.raw()`, `.pluck()`, `.safeIntegers()`),
-//     since the mode would leak to every other caller of the same SQL.
+// The per-connection map is **LRU-bounded** (STATEMENT_CACHE_CAP). Most call sites
+// pass a small fixed set of literal SQL, but some route dynamic SQL through here —
+// variable-length `IN (?,?,…)` clauses and dynamic column sets each mint a distinct
+// string, so an unbounded map would grow for the life of a long-lived connection
+// (the agent-kernel store especially). Evicting the least-recently-used entry is
+// correctness-safe: a re-miss just re-prepares, which is exactly the pre-cache
+// behavior, and no caller retains a statement across calls (outside a synchronous
+// transaction that finishes before returning). Hot literal statements stay resident
+// because every hit refreshes their recency.
+//
+// Still keep inline `db.prepare` for statements put into a sticky mode
+// (`.raw()`, `.pluck()`, `.safeIntegers()`) — the mode would leak to every other
+// caller of the same SQL through the shared cached statement.
 //
 // Type-only import (fully erased at compile time — no runtime `require`), so
 // taskStore.ts (driver-agnostic, loaded under plain-node vitest) can still import
 // this module without pulling in better-sqlite3's native binary.
 import type BetterSqlite3 from 'better-sqlite3'
 
+/** Max prepared statements retained per connection before LRU eviction kicks in.
+ *  Comfortably above the count of distinct literal SQL any one connection uses, so
+ *  only genuinely-dynamic SQL ever causes eviction. */
+export const STATEMENT_CACHE_CAP = 512
+
 const caches = new WeakMap<object, Map<string, unknown>>()
 
 /**
- * Return a prepared statement for `sql`, cached per `db` connection. The first
- * call on a given (connection, sql) pair prepares it; later calls reuse it.
+ * Return a prepared statement for `sql`, cached (LRU, per connection) on `db`. The
+ * first call on a given (connection, sql) pair prepares it; later calls reuse it.
  *
  * The overloads preserve each caller's exact statement type:
  *   - better-sqlite3's `Database` gets a real `Statement` (its generic `prepare`
@@ -54,10 +66,24 @@ export function cachedStmt(db: { prepare(sql: string): unknown }, sql: string): 
     cache = new Map<string, unknown>()
     caches.set(db, cache)
   }
-  let stmt = cache.get(sql)
-  if (stmt === undefined) {
-    stmt = db.prepare(sql)
-    cache.set(sql, stmt)
+  const existing = cache.get(sql)
+  if (existing !== undefined) {
+    // LRU touch: re-insert so this key becomes most-recently-used (Map preserves
+    // insertion order, so the first key is always the least-recently-used).
+    cache.delete(sql)
+    cache.set(sql, existing)
+    return existing
+  }
+  const stmt = db.prepare(sql)
+  cache.set(sql, stmt)
+  if (cache.size > STATEMENT_CACHE_CAP) {
+    const lru = cache.keys().next().value
+    if (lru !== undefined) cache.delete(lru)
   }
   return stmt
+}
+
+/** Test/introspection only: current cached-statement count for a connection. */
+export function statementCacheSize(db: object): number {
+  return caches.get(db)?.size ?? 0
 }
