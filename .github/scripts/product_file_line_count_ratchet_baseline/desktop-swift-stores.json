@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 2961
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 2982
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "To Do and Done now retain independent load and error state so an aggregate cache cannot mask the selected view's fetch result."
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Mutations on unsynced local_ tasks now skip backend calls that can only 404, so a guaranteed rollback no longer reverts the user's local toggle/edit/delete."
   },
   "threshold": 1500
 }
