@@ -14,6 +14,7 @@ import { signalRewindOcrPending } from './ocrService'
 import { getPersistedRewindSettings, persistRewindSettings } from './rewindSettings'
 import { startCaptureDirective, setBaseCaptureInterval } from './captureDirective'
 import { BUILT_IN_EXCLUDED_APPS } from '../../shared/rewindExclusions'
+import { isRewindFrameSizeAllowed } from './frameFile'
 import type { RewindSettings } from '../../shared/types'
 
 const HASH_W = 16
@@ -106,6 +107,7 @@ async function refreshCurrentScreen(
  */
 export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
   if (!settings.captureEnabled) return { captured: false, reason: 'disabled' }
+  if (!isRewindFrameSizeAllowed(jpeg.length)) return { captured: false, reason: 'frame-too-large' }
 
   // NOTE: we don't skip capture while an Omi window is focused. The main window is
   // no longer content-protected, so Omi appears in the Rewind timeline like any
