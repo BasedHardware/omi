@@ -279,8 +279,11 @@ class LiveConversationController:
         return None
 
     async def process_pending(self, timed_out_id: Optional[str]) -> None:
-        if await self.host.wait(7):
-            return
+        # Interruptible delay, not a polling loop. An early wake means the session is shutting
+        # down, which is precisely when the timed-out conversation and anything still stuck in
+        # `processing` must be finalized, so the wake shortens the wait instead of skipping the
+        # work. Returning here dropped both (pre-split this was an unconditional sleep).
+        await self.host.wait(7)
         if timed_out_id:
             await self.process_conversation(timed_out_id)
         processing = await self.host.persistence.call(

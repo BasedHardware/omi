@@ -469,8 +469,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                     ? 6
                                     : (textFieldFocusNode.hasFocus &&
                                             (textController.text.length > 40 || textController.text.contains('\n'))
-                                        ? 0
-                                        : 2),
+                                        ? 4
+                                        : 10),
                               ),
                               child: Stack(
                                 clipBehavior: Clip.none,

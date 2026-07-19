@@ -2940,7 +2940,7 @@
     "upgradePlan": "Aktualizovať plán",
     "billingMonthly": "Mesačne",
     "billingYearly": "Ročne",
-    "savePercent": "Ušetrite ~17%",
+    "savePercent": "Ušetrite ~{percent}%",
     "popular": "Obľúbené",
     "currentPlan": "Aktuálny",
     "neoSubtitle": "{count} otázok mesačne",

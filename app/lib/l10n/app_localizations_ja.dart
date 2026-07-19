@@ -8845,7 +8845,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get billingYearly => '年額';
 
   @override
-  String get savePercent => '約17%お得';
+  String savePercent(int percent) {
+    return '約$percent%お得';
+  }
 
   @override
   String get popular => '人気';

@@ -9019,7 +9019,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get billingYearly => 'ವಾರ್ಷಿಕ';
 
   @override
-  String get savePercent => '~17% ಉಳಿಸಿ';
+  String savePercent(int percent) {
+    return '~$percent% ಉಳಿಸಿ';
+  }
 
   @override
   String get popular => 'ಜನಪ್ರಿಯ';

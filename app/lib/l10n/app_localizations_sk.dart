@@ -8977,7 +8977,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get billingYearly => 'Ročne';
 
   @override
-  String get savePercent => 'Ušetrite ~17%';
+  String savePercent(int percent) {
+    return 'Ušetrite ~$percent%';
+  }
 
   @override
   String get popular => 'Obľúbené';
