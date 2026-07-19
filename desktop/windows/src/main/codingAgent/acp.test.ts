@@ -280,6 +280,99 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
     }
   })
 
+  it('cancels a stalled first-party "acp" turn via the default watchdog (no longer hangs forever)', async () => {
+    // Regression: the first-party bridge used to default noProgressTimeoutMs to
+    // 0, so a Claude Code turn that went silent after a permission-resolve hung
+    // forever, pinning the kernel run 'running' with no terminal event. The
+    // default is now a generous non-zero window; a stalled turn must reject.
+    const logs: string[] = []
+    const adapter = new AcpRuntimeAdapter({
+      acpEntry: 'stub-entry.mjs',
+      noProgressTimeoutMs: 10_000,
+      log: (message) => logs.push(message)
+    })
+    const cancels: unknown[] = []
+    scriptJsonRpc(proc, (message) => {
+      if (answerCommonHandshake(proc, message)) return
+      if (message.method === 'session/cancel') cancels.push(message.params)
+      // session/prompt intentionally never answered, no session/update sent —
+      // exactly the observed silent-death shape. The watchdog must fire.
+    })
+
+    await adapter.openBinding({ sessionId: 'omi-session', cwd: 'C:/work' })
+    vi.useFakeTimers()
+    try {
+      const outcome = adapter
+        .executeAttempt(makeAttemptContext(), () => {}, new AbortController().signal)
+        .catch((error: Error) => error)
+      await vi.advanceTimersByTimeAsync(13_000)
+      const error = await outcome
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toContain('no progress')
+      expect(cancels).toEqual([{ sessionId: 'native-session-1' }])
+    } finally {
+      vi.useRealTimers()
+    }
+    // Death is observable: the turn's start and its failure are both logged, so
+    // a stall is distinguishable from success/silence in a real log.
+    expect(logs.some((l) => l.includes('prompt turn started'))).toBe(true)
+    expect(logs.some((l) => l.includes('prompt turn failed'))).toBe(true)
+  })
+
+  it('treats a permission request as liveness, not a stall (resets the watchdog)', async () => {
+    // A permission round-trip produces no session/update; without resetting the
+    // clock it would count as no-progress and the watchdog would kill a turn
+    // that is actually alive and waiting on our (immediate) decision.
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: 'hermes',
+      command: 'hermes acp',
+      noProgressTimeoutMs: 10_000
+    })
+    const cancels: unknown[] = []
+    let promptId: number | undefined
+    scriptJsonRpc(proc, (message) => {
+      if (answerCommonHandshake(proc, message)) return
+      if (message.method === 'session/cancel') cancels.push(message.params)
+      if (message.method === 'session/prompt' && message.id !== undefined) promptId = message.id
+    })
+
+    await adapter.openBinding({ sessionId: 'omi-session', cwd: 'C:/work' })
+    vi.useFakeTimers()
+    try {
+      const outcome = adapter
+        .executeAttempt(
+          makeAttemptContext('native-session-1', 'hermes'),
+          () => {},
+          new AbortController().signal
+        )
+        .catch((error: Error) => error)
+      // Idle to just under the 10s deadline, deliver a permission request (the
+      // reset), then idle again almost a full window. With the reset, no single
+      // idle stretch reaches 10s, so the watchdog must NOT fire.
+      await vi.advanceTimersByTimeAsync(8_000)
+      proc.stdout.write(
+        `${JSON.stringify({
+          jsonrpc: '2.0',
+          id: 999,
+          method: 'session/request_permission',
+          params: {
+            sessionId: 'native-session-1',
+            options: [{ kind: 'allow_always', optionId: 'allow' }]
+          }
+        })}\n`
+      )
+      await vi.advanceTimersByTimeAsync(8_000)
+      // Still alive — end the turn cleanly to confirm it was never cancelled.
+      if (promptId !== undefined) respond(proc, promptId, { stopReason: 'end_turn' })
+      await vi.advanceTimersByTimeAsync(0)
+      const result = await outcome
+      expect(result).not.toBeInstanceOf(Error)
+      expect(cancels).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('reports per-attempt cost as the delta of cumulative usage_update notifications', async () => {
     const adapter = makeAdapter()
     let promptCount = 0
@@ -356,7 +449,10 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
   })
 
   it('settles a cancelled attempt even when the adapter never answers (no-watchdog path)', async () => {
-    const adapter = makeAdapter() // adapterId "acp" → noProgressTimeoutMs 0
+    // noProgressTimeoutMs: 0 explicitly disables the watchdog (the first-party
+    // "acp" default is now a generous non-zero window), exercising the
+    // cancel-settles-with-no-watchdog branch of withNoProgressTimeout.
+    const adapter = new AcpRuntimeAdapter({ acpEntry: 'stub-entry.mjs', noProgressTimeoutMs: 0 })
     scriptJsonRpc(proc, (message) => {
       if (answerCommonHandshake(proc, message)) return
       // session/prompt intentionally never answered.
