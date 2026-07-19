@@ -23,12 +23,18 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://apis.google.com https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: https://*.googleusercontent.com; font-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://firebase.googleapis.com https://api.omi.me wss://api.omi.me https://desktop-backend-hhibjajaja-uc.a.run.app https://api.deepgram.com wss://api.deepgram.com https://accounts.google.com https://cdn.jsdelivr.net https://us.i.posthog.com; frame-src 'self' https://based-hardware.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:"
     }
   },
   "bundle": {
     "active": true,
-    "icon": ["../resources/icon.png"],
-    "targets": ["appimage", "deb", "nsis", "rpm", "msi"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "targets": ["app", "appimage", "deb", "dmg", "nsis", "rpm", "msi"]
   }
 }
