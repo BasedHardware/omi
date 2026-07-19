@@ -489,6 +489,7 @@ function GraphScene({
           the far-label declutter is handled separately by the per-node distance
           fade in GraphNodeMesh. */}
       {interactive && <AdaptiveFog />}
+      {interactive && <DrawCallProbe />}
       <GraphEdges sim={sim} edges={graph.edges} posMap={posMap} />
       {/* eslint-disable-next-line react-hooks/refs -- posMap is a lazy-init ref read here to glue edges/nodes to eased positions; intentional */}
       {nodes.map((n) => (
@@ -517,6 +518,19 @@ function GraphScene({
       )}
     </>
   )
+}
+
+// Diagnostic (interactive scene only): publish the live three.js draw-call count
+// on window so the perf harness can assert draw calls stay independent of graph
+// size after batching/instancing. Reading renderer.info is free; writing one
+// number per frame is negligible and never affects rendering.
+function DrawCallProbe(): null {
+  const gl = useThree((s) => s.gl)
+  useFrame(() => {
+    ;(window as unknown as { __omiGraphDrawCalls?: number }).__omiGraphDrawCalls =
+      gl.info.render.calls
+  })
+  return null
 }
 
 // Interactive 3D only: depth fog whose near/far track the CAMERA'S CURRENT

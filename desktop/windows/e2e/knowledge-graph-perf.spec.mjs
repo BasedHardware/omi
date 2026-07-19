@@ -119,10 +119,13 @@ describe('Brain-map performance at real-account scale', () => {
     )
     await page.waitForTimeout(3000) // let the layout settle before sampling
 
+    const drawCalls = (p) => p.evaluate(() => window.__omiGraphDrawCalls ?? -1)
+
     const fpsDefault = await measureFps(page, 4000)
+    const callsDefault = await drawCalls(page)
     await page.screenshot({ path: path.join(shotsDir, 'default-view.png') })
     console.log(
-      `[kg-perf] DEFAULT nodes=${GRAPH.nodes.length} edges=${GRAPH.edges.length} fps=${fpsDefault}`
+      `[kg-perf] DEFAULT nodes=${GRAPH.nodes.length} edges=${GRAPH.edges.length} fps=${fpsDefault} drawCalls=${callsDefault}`
     )
 
     // Escape hatch: if a "Show all" control exists (post-change), exercise it.
@@ -131,8 +134,9 @@ describe('Brain-map performance at real-account scale', () => {
       await showAll.first().click()
       await page.waitForTimeout(3000)
       const fpsAll = await measureFps(page, 4000)
+      const callsAll = await drawCalls(page)
       await page.screenshot({ path: path.join(shotsDir, 'show-all-view.png') })
-      console.log(`[kg-perf] SHOW_ALL fps=${fpsAll}`)
+      console.log(`[kg-perf] SHOW_ALL fps=${fpsAll} drawCalls=${callsAll}`)
     } else {
       console.log('[kg-perf] SHOW_ALL control absent (baseline / capless build)')
     }
