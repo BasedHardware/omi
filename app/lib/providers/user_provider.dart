@@ -25,8 +25,8 @@ class UserProvider with ChangeNotifier {
   UserProvider({
     Future<bool?> Function()? privateCloudSyncFetcher,
     Future<bool> Function(bool value)? privateCloudSyncSetter,
-  }) : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled,
-       _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled;
+  })  : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled,
+        _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled;
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
@@ -476,8 +476,7 @@ class UserProvider with ChangeNotifier {
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
       title: ctx?.l10n.omiSays ?? 'omi says',
-      body:
-          ctx?.l10n.dataProtectedWithSettings(targetLevel) ??
+      body: ctx?.l10n.dataProtectedWithSettings(targetLevel) ??
           'Your data is now protected with the new $targetLevel settings.',
       layout: NotificationLayout.Default,
       payload: {'navigate_to': '/settings/data-privacy'},
