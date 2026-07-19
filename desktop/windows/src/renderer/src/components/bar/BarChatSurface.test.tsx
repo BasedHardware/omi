@@ -91,14 +91,60 @@ function renderLiveSurface(
 afterEach(() => cleanup())
 
 describe('BarChatSurface', () => {
-  it('list: shows the Omi Chat row and opens the Omi thread (null target) on click', () => {
+  it('list: the hub hosts the Ask-Omi input, and clicking/focusing it does NOT navigate', () => {
+    // Regression for the reported bug: the hub used to be an "Omi Chat" row whose
+    // single click opened the conversation. Mac (AskAIInputView / .mainInput) puts
+    // an inline focused input here instead — clicking/focusing just seats the
+    // cursor; nothing navigates until the user sends.
     const props = renderSurface({ view: 'list' })
-    expect(screen.getByText('Omi Chat')).toBeTruthy()
-    // The row previews the last turn.
-    expect(screen.getByText('Here is the answer')).toBeTruthy()
-    fireEvent.click(screen.getByText('Omi Chat'))
-    // null target = the Omi Chat thread (no agent framing/prefill).
+    const input = screen.getByPlaceholderText(/Ask Omi/i)
+    expect(input).toBeTruthy()
+    fireEvent.click(input)
+    fireEvent.focus(input)
+    expect(props.onOpenConversation).not.toHaveBeenCalled()
+  })
+
+  it('list: Enter in the hub input sends ONCE and opens the conversation with the typed text', () => {
+    // The send is the only transition to the response state (.mainInput → .mainResponse):
+    // onSubmit fires exactly once, the surface flips to the Omi thread (null target),
+    // and the shared draft is cleared (INV-CHAT-1 — one thread carries the text).
+    const props = renderSurface({ view: 'list', draft: 'what is on my calendar' })
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })
+    expect(props.onSubmit).toHaveBeenCalledTimes(1)
+    expect(props.onSubmit).toHaveBeenCalledWith('what is on my calendar')
     expect(props.onOpenConversation).toHaveBeenCalledWith(null)
+    expect(props.setDraft).toHaveBeenCalledWith('')
+  })
+
+  it('list: the Send button sends and opens the conversation', () => {
+    const props = renderSurface({ view: 'list', draft: 'hello there' })
+    fireEvent.click(screen.getByText('Send'))
+    expect(props.onSubmit).toHaveBeenCalledWith('hello there')
+    expect(props.onOpenConversation).toHaveBeenCalledWith(null)
+  })
+
+  it('list: an empty draft cannot send (Enter is a no-op, Send is disabled)', () => {
+    const props = renderSurface({ view: 'list', draft: '' })
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })
+    expect(props.onSubmit).not.toHaveBeenCalled()
+    expect(props.onOpenConversation).not.toHaveBeenCalled()
+    expect((screen.getByText('Send') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('list: Esc with text clears the draft in place and does NOT navigate (Mac: clears inline)', () => {
+    const props = renderSurface({ view: 'list', draft: 'draft text' })
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Escape' })
+    expect(props.setDraft).toHaveBeenCalledWith('')
+    expect(props.onOpenConversation).not.toHaveBeenCalled()
+    expect(props.onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('list: Esc with an empty draft is left to the window handler (no local clear)', () => {
+    // An already-idle hub lets Esc bubble to BarApp's window handler (which hides
+    // the bar) — the local handler only intercepts when there is text to clear.
+    const props = renderSurface({ view: 'list', draft: '' })
+    fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Escape' })
+    expect(props.setDraft).not.toHaveBeenCalled()
   })
 
   it('list: renders a row per connected agent and opens the conversation FOR THAT agent on click', () => {
@@ -128,16 +174,20 @@ describe('BarChatSurface', () => {
     expect(screen.getByText('Omi Chat')).toBeTruthy()
   })
 
-  it('list: every row leads with a status-dot column so all titles share one left margin', () => {
-    // Regression for the ragged-left defect: the Omi Chat row used to have no
-    // leading column while agent rows led with a dot, so the titles didn't line
-    // up. Assert every row's FIRST child is the status dot (same column slot).
+  it('list: every agent row leads with a status-dot column so all titles share one left margin', () => {
+    // Regression for the ragged-left defect: assert every agent row's FIRST child
+    // is the status dot (same column slot). Scoped to the agent rows (the rounded
+    // list buttons) so the Send button — also a <button>, but with no dot — is
+    // excluded.
     renderSurface({
       view: 'list',
-      agents: [{ id: 'acp', displayName: 'Claude Code', working: true }]
+      agents: [
+        { id: 'acp', displayName: 'Claude Code', working: true },
+        { id: 'codex', displayName: 'Codex', working: false }
+      ]
     })
-    const rows = screen.getAllByRole('button')
-    expect(rows.length).toBe(2) // Omi Chat + one agent
+    const rows = screen.getAllByRole('button').filter((b) => b.querySelector('span.rounded-full'))
+    expect(rows.length).toBe(2) // one per agent
     for (const row of rows) {
       const dot = row.querySelector('span.rounded-full')
       expect(dot).toBeTruthy()

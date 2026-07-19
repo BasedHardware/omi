@@ -6,7 +6,7 @@
 // window.omiBar.sendChat). This component owns NO chat engine.
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { ChatMessages } from '../chat/ChatMessages'
-import { agentRowStatus, omiChatListStatus, type BarAgentRow } from './barDisplay'
+import { agentRowStatus, type BarAgentRow } from './barDisplay'
 import type { BarChatState } from '../../../../shared/types'
 
 function ChevronRight(): React.JSX.Element {
@@ -102,18 +102,23 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   // the last thing the user asked (see submit()).
   const submitSeq = useRef(0)
 
-  // Focus the input whenever the conversation view opens.
+  // Focus the active view's input whenever the view opens — the hub input on the
+  // list (Mac AskAIInputView focusOnAppear: expanding lands with the cursor in the
+  // "Ask Omi anything" field, ready to type in place) and the composer in the
+  // conversation. inputRef attaches to whichever textarea is mounted (the two
+  // views never render together), so one ref drives focus + auto-grow for both.
   useEffect(() => {
-    if (view === 'conversation') inputRef.current?.focus()
+    inputRef.current?.focus()
   }, [view])
 
-  // Auto-grow the textarea to its content.
+  // Auto-grow the mounted textarea to its content (re-run on a view switch so the
+  // freshly mounted input sizes to the shared draft immediately).
   useLayoutEffect(() => {
     const el = inputRef.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
-  }, [props.draft])
+  }, [props.draft, view])
 
   // Keep the list pinned to the live edge while streaming, but disengage when the
   // reader scrolls up (re-engage on returning to the bottom).
@@ -144,11 +149,23 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
     }
   }, [hasHistory, view])
 
-  const submit = (): void => {
+  // `navigate` opens the conversation as the send fires — the hub composer's
+  // send is the ONLY moment the surface transitions from the ask state (Mac's
+  // .mainInput) to the response state (.mainResponse). The conversation composer
+  // leaves it undefined (already there). Send-once either way: onSubmit runs a
+  // single time; the navigate is a pure view flip in the parent, not a second send.
+  const submit = (navigate = false): void => {
     const text = props.draft.trim()
     if (!text) return
     props.setDraft('')
     followRef.current = true
+    // Flip to the conversation BEFORE awaiting the send so the reply streams into
+    // the response state. onOpenConversation(null) = the Omi thread; the shared
+    // draft was just cleared, so it re-seeds nothing (nextConversationDraft keeps
+    // the empty draft). A send refused by the usage limit still lands here and
+    // surfaces its notice + restored text inline, exactly as an in-conversation
+    // refusal does.
+    if (navigate) props.onOpenConversation(null)
     const seq = ++submitSeq.current
     void props.onSubmit(text).then((notice) => {
       // A REFUSED send never reaches the transcript, so clearing the input would
@@ -172,23 +189,58 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
       // key={view} remounts on every list⇄conversation switch so bar-view-enter
       // replays — the swap morphs in place instead of popping a new sheet.
       <div key="list" className="bar-view-enter flex flex-col gap-1 px-3 pb-3 pt-1">
-        {/* Omi Chat — always present (INV-CHAT-1: the one shared thread). Its
-            dot pulses while Omi is thinking/speaking, matching the agent rows so
-            every title shares one left margin. */}
-        <button
-          type="button"
-          onClick={() => props.onOpenConversation(null)}
-          className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
-        >
-          <RowStatusDot active={chat.status !== 'idle'} />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-neutral-100">Omi Chat</div>
-            <div className="truncate text-xs text-neutral-500">{omiChatListStatus(chat)}</div>
+        {/* The hub's Ask-Omi input (Mac AskAIInputView / .mainInput). Clicking or
+            focusing it just puts the cursor here — it does NOT navigate (the old
+            "Omi Chat" row opened the conversation on a single click, the reported
+            bug). Typing stays in place; only SEND (Enter or the button) flips to
+            the conversation (.mainResponse) via submit(true). The shared draft
+            (INV-CHAT-1) carries the text into the one thread. */}
+        <div className="flex items-end gap-2 px-1 pb-1 pt-1">
+          <textarea
+            ref={inputRef}
+            rows={1}
+            value={props.draft}
+            onChange={(e) => props.setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              // Push-to-talk claims Space first (hold-to-talk while focused).
+              if (props.pttKeyDown(e)) return
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                submit(true)
+                return
+              }
+              if (e.key === 'Escape' && props.draft) {
+                // Clear in place → return the hub to idle (Mac: Esc clears the
+                // inline input). Stop it reaching BarApp's window Esc, which would
+                // hide the bar; an empty field lets Esc bubble there so a second
+                // press still closes the bar.
+                e.preventDefault()
+                e.stopPropagation()
+                props.setDraft('')
+              }
+            }}
+            onKeyUp={(e) => props.pttKeyUp(e)}
+            placeholder="Ask Omi anything…  ·  hold Space to talk"
+            className="max-h-32 flex-1 resize-none rounded-xl bg-neutral-800/70 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:ring-1 focus:ring-neutral-500"
+          />
+          <button
+            type="button"
+            onClick={() => submit(true)}
+            disabled={chat.sending || props.recording || props.transcribing || !props.draft.trim()}
+            className="rounded-xl bg-neutral-200 px-3 py-2 text-sm font-medium text-neutral-900 disabled:opacity-40"
+          >
+            Send
+          </button>
+        </div>
+
+        {/* A failed push-to-talk hold while the hub is focused surfaces its hint
+            inline (same copy the conversation composer shows). */}
+        {props.pttNotice ? (
+          <div role="status" className="px-2 pb-1 pt-1 text-xs leading-relaxed text-amber-300/90">
+            {props.pttNotice}
           </div>
-          <span className="shrink-0 text-neutral-600 transition-colors group-hover:text-neutral-400">
-            <ChevronRight />
-          </span>
-        </button>
+        ) : null}
+
         {/* Connected coding agents. A row opens the SAME inline conversation —
             agent progress streams into the shared thread (no separate store). */}
         {props.agents.map((agent) => (
@@ -287,7 +339,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
         />
         <button
           type="button"
-          onClick={submit}
+          onClick={() => submit()}
           disabled={chat.sending || props.recording || props.transcribing || !props.draft.trim()}
           className="rounded-xl bg-neutral-200 px-3 py-2 text-sm font-medium text-neutral-900 disabled:opacity-40"
         >
