@@ -200,6 +200,11 @@ describe('boundsSizeDrifted (fullscreen cross-DPI reveal-size guard)', () => {
     expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 559, height: 641 })).toBe(false)
   })
 
+  it('does not flag exactly at the ±2px tolerance boundary (> 2, not >= 2)', () => {
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 562, height: 640 })).toBe(false)
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 558, height: 642 })).toBe(false)
+  })
+
   it('flags a drift beyond the rounding tolerance', () => {
     expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 563, height: 640 })).toBe(true)
     expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 560, height: 644 })).toBe(true)

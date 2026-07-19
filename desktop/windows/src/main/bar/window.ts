@@ -364,12 +364,24 @@ function unparkWindow(win: BrowserWindow, bounds: Rect): void {
   // under the wrong monitor's scale (oversized/blurry/off-center — happens when
   // the target monitor isn't a normally-composited on-monitor position, e.g. it
   // sits behind a fullscreen-exclusive app), the window is now geometrically ON
-  // the target, so a second setBounds sizes it correctly. getBounds reflects the
-  // drift synchronously. No-op on a normal reveal (the first setBounds matches),
-  // so the #193 staging path and every other reveal are unchanged.
-  if (boundsSizeDrifted(bounds, win.getBounds())) {
+  // the target, so a second setBounds should size it correctly. getBounds reflects
+  // the drift synchronously. No-op on a normal reveal (the first setBounds
+  // matches), so the #193 staging path and every other reveal are unchanged.
+  //
+  // This corrective branch is UNVERIFIED in the real exclusive-fullscreen trigger
+  // (it could not be reproduced on the dev hardware — a borderless-fullscreen app
+  // does not de-composite the monitor). The pre/post getBounds in the diag below
+  // settles it the next time the bug is hit live: if `now` matches the request the
+  // re-apply worked (Theory A); if `now` is still drifted the destination monitor
+  // stayed de-composited and the re-apply is a harmless no-op (Theory B).
+  const revealed = win.getBounds()
+  if (boundsSizeDrifted(bounds, revealed)) {
     win.setBounds(bounds)
-    diag(`unpark size drift corrected -> ${bounds.width}x${bounds.height}`)
+    const corrected = win.getBounds()
+    diag(
+      `unpark size drift ${revealed.width}x${revealed.height}: re-applied ` +
+        `${bounds.width}x${bounds.height} -> now ${corrected.width}x${corrected.height}`
+    )
   }
   if (PARK_MODE === 'opacity') win.setOpacity(1)
   barOnScreen = true
