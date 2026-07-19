@@ -481,6 +481,47 @@ test('hub Ask-Omi input: focus stays on the hub; only send opens the conversatio
   await barPage.screenshot({ path: path.join(shotsDir, 'bar-hub-input-conversation.png') })
 })
 
+// Omi Chat row regression (fix/win-bar-omi-chat-row): after the hub input was made
+// focus-only (#209) and the idle agent launcher rows were removed (#220), there was
+// no way to open the shared Omi conversation from the bar WITHOUT sending a message.
+// Mac's FloatingControlBarView renders a static notchOmiChatRow (the assistant's own
+// chat entry) above the pills for exactly this. Drives the REAL built app (signed-in
+// fake auth): expand the hub, confirm the "Omi Chat" row is present alongside the
+// (still focus-only) input, click it, and assert the conversation opens (back chevron
+// appears) — a pure view flip, NOT a send (the input was never touched, so an empty
+// draft could not have produced a turn; the empty-thread invite renders instead).
+test('hub Omi Chat row opens the conversation without sending (fix/win-bar-omi-chat-row)', async (t) => {
+  mkdirSync(shotsDir, { recursive: true })
+  const { app, cleanup } = await launch([], { OMI_E2E_FAKE_AUTH: '1' })
+  t.after(cleanup)
+  await app.firstWindow()
+  await app.evaluate(() => globalThis.__omiE2E.barHoldPeekOpen(true))
+  const barPage = await findBarPage(app)
+  await barShow(app, 'expanded')
+
+  // The hub renders both the focus-only Ask-Omi input AND the static Omi Chat row.
+  await barPage
+    .locator('.bar-content-active textarea[placeholder*="Ask Omi"]')
+    .waitFor({ state: 'visible' })
+  const omiChatRow = barPage.locator('.bar-content-active button', { hasText: 'Omi Chat' })
+  await omiChatRow.waitFor({ state: 'visible' })
+  // It is a ROW below the input, not the input itself.
+  assert.equal(await omiChatRow.count(), 1, 'the hub must render exactly one Omi Chat row')
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-hub-omi-chat-row.png') })
+
+  // A single click opens the shared conversation (the back chevron appears). The
+  // input was never touched, so this cannot be a send.
+  await omiChatRow.click()
+  await barPage.locator('[aria-label="Back to list"]').waitFor({ state: 'visible' })
+  const s = await app.evaluate(() => globalThis.__omiE2E.barState())
+  assert.equal(s.focusable, true, 'the opened conversation surface stays focusable for typing')
+  await barPage.screenshot({ path: path.join(shotsDir, 'bar-omi-chat-conversation.png') })
+
+  // Back returns to the hub, where the Omi Chat row is present again.
+  await barPage.locator('[aria-label="Back to list"]').click()
+  await omiChatRow.waitFor({ state: 'visible' })
+})
+
 // Mac-parity regression (fix/win-bar-pills-only): the expanded hub must NOT
 // render idle connected-agent summon rows. Upstream Mac's bar list is strictly
 // pills-for-actual-runs; connecting agents lives in Settings → Agents. Even
