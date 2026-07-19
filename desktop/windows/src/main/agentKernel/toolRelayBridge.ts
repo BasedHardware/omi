@@ -484,7 +484,12 @@ function buildControlToolContext(
     defaultAdapterId: policy.defaultAdapterId,
     // Load-bearing — see controlMcpBridge.ts note 4.
     callerSessionId: authority.sessionId,
-    getOwnerId: () => policy.ownerId
+    getOwnerId: () => policy.ownerId,
+    // spawn_agent's connected-coding-agent fallback for managed-cloud callers.
+    // CALL-TIME dynamic import: controlPlane statically imports this module, so
+    // a static import back would be a cycle (same idiom as productToolExecutors).
+    resolveSpawnableAdapterId: async () =>
+      (await import('./controlPlane')).resolveSpawnableCodingAgentAdapterId()
   }
 }
 

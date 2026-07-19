@@ -47,7 +47,14 @@ import {
   piMonoManagedApiBaseUrl,
   registerPiMonoAdapter
 } from '../codingAgent/piMonoSession'
-import type { RuntimeAdapter } from '../codingAgent/interface'
+import type { CodingAgentAdapterId, RuntimeAdapter } from '../codingAgent/interface'
+import {
+  ADAPTER_PROFILES,
+  adapterConfiguredCommand,
+  adapterIsActivated
+} from '../codingAgent/adapterRegistry'
+import { claudeAuthStatus } from '../codingAgent/claudeOAuth'
+import { PRODUCTION_ADAPTER_IDS } from '../codingAgent/interface'
 import {
   DEFAULT_LOCAL_OWNER_ID,
   handleAgentControlToolCall,
@@ -201,6 +208,68 @@ export function ensurePiMonoAdapterRegistered(): boolean {
 }
 
 /**
+ * Register a user-selectable coding agent (acp/openclaw/hermes/codex) into the
+ * live kernel registry, once, so `spawn_agent`'s host-picked fallback can
+ * actually execute a run. Same lazy-factory posture as pi-mono: registration is
+ * cheap (the adapter subprocess only spawns when a binding opens), and the
+ * factory re-reads the configured command at build time. Idempotent; returns
+ * false (never throws) when registration fails so the caller can fall through
+ * to the next connected agent.
+ */
+export function ensureCodingAgentAdapterRegistered(adapterId: CodingAgentAdapterId): boolean {
+  try {
+    const registry = getAgentAdapterRegistry()
+    if (registry.has(adapterId)) return true
+    const profile = ADAPTER_PROFILES[adapterId]
+    registry.register(adapterId, () =>
+      profile.createAdapter({
+        log: (message) => console.log(`[${adapterId}] ${message}`),
+        command: adapterConfiguredCommand(adapterId)
+      })
+    )
+    return true
+  } catch (error) {
+    console.error(`[agent-kernel] failed to register coding agent ${adapterId}:`, error)
+    return false
+  }
+}
+
+/** Injectable edges for `resolveSpawnableCodingAgentAdapterId` (unit tests). */
+export interface SpawnableAdapterDeps {
+  env?: NodeJS.ProcessEnv
+  claudeConnected?: () => boolean
+  ensureRegistered?: (adapterId: CodingAgentAdapterId) => boolean
+}
+
+/**
+ * The HOST's default spawnable coding agent for `spawn_agent`'s fallback when
+ * the calling surface's own adapter is the managed-cloud chat engine: the first
+ * CONNECTED agent in the canonical order (acp → openclaw → hermes → codex —
+ * PRODUCTION_ADAPTER_IDS, the same order the coding-agent task fallback uses).
+ * Claude Code ('acp') is bundled and always "activated", so it is additionally
+ * gated on real OAuth sign-in (`claudeAuthStatus`) — the same gate Settings →
+ * Agents' Test uses. The winner is registered into the kernel registry before
+ * being returned; null when nothing is connected.
+ *
+ * External agents' launch commands are read from env vars here (the renderer's
+ * per-user command overrides are not relayed to main); Claude Code needs none.
+ */
+export function resolveSpawnableCodingAgentAdapterId(
+  deps: SpawnableAdapterDeps = {}
+): string | null {
+  const env = deps.env ?? process.env
+  const claudeConnected = deps.claudeConnected ?? ((): boolean => claudeAuthStatus().connected)
+  const ensureRegistered = deps.ensureRegistered ?? ensureCodingAgentAdapterRegistered
+  for (const adapterId of PRODUCTION_ADAPTER_IDS) {
+    if (!adapterIsActivated(adapterId, {}, env)) continue
+    if (adapterId === 'acp' && !claudeConnected()) continue
+    if (!ensureRegistered(adapterId)) continue
+    return adapterId
+  }
+  return null
+}
+
+/**
  * Set the authoritative owner for control-tool calls. MAIN-SIDE ONLY — must never
  * be wired to a plain IPC handler (see the owner-authority note above). Called by
  * the `pimono:setSession` handler with the uid decoded from the relayed Firebase
@@ -238,7 +307,8 @@ export function trustedDirectControlContext(): AgentControlToolContext {
     kernel: getAgentRuntimeKernel(),
     trustedUserControl: true,
     executionRole: 'coordinator',
-    getOwnerId: () => activeOwnerId
+    getOwnerId: () => activeOwnerId,
+    resolveSpawnableAdapterId: async () => resolveSpawnableCodingAgentAdapterId()
   }
 }
 

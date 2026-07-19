@@ -437,6 +437,16 @@ export interface AgentControlToolContext {
   recoverRunInput?: (
     adapterId: string
   ) => Pick<ExecuteAgentRunInput, 'maxAttempts' | 'recoverAfterError'>
+  /**
+   * Host hook for `spawn_agent`'s adapter fallback: resolve (and register into
+   * the kernel registry) the default spawnable CODING-AGENT adapter when the
+   * caller's own default adapter is a managed-cloud chat engine (pi-mono) that
+   * can never be spawned. Returns the registered adapter id, or null when no
+   * coding agent is connected. HOST-derived — the model supplies nothing; the
+   * pick comes from the host's connected-agent detection (INV-AGENT posture is
+   * unchanged: this widens nothing a `provider` selector could not already do).
+   */
+  resolveSpawnableAdapterId?: () => Promise<string | null>
 }
 
 function controlRunRecovery(
@@ -463,15 +473,48 @@ function defaultControlAdapterId(context: AgentControlToolContext): string {
  * DARK. Called at the entry of both admission guards so every spawn variant
  * (spawn_agent, spawn_background_agent, run_agent_and_wait) is covered.
  */
+function isManagedCloudAdapterId(adapterId: string): boolean {
+  return (
+    isProductionAdapterId(adapterId) && adapterCredentialScopeFor(adapterId) === 'managed_cloud'
+  )
+}
+
 function assertControlSpawnAdapterNotManagedCloud(adapterId: string): void {
-  if (
-    isProductionAdapterId(adapterId) &&
-    adapterCredentialScopeFor(adapterId) === 'managed_cloud'
-  ) {
+  if (isManagedCloudAdapterId(adapterId)) {
     throw new Error(
       `${adapterId} is a managed-cloud adapter and cannot be spawned or run through the agent-control tools.`
     )
   }
+}
+
+/**
+ * The adapter a fallback (no explicit adapterId/provider) `spawn_agent` runs on.
+ *
+ * The inherited default — the caller session's adapter, or the parent run's —
+ * is fine when it is itself spawnable. But the DEFAULT chat/voice surface runs
+ * on pi-mono (managed cloud), which `assertControlSpawnAdapterNotManagedCloud`
+ * refuses to spawn — so before this helper existed, every "build me X" spawn
+ * from default chat or voice dead-ended in `pi-mono is a managed-cloud adapter…`
+ * even with Claude Code connected (the 2026-07-18 live failure; macOS defaults
+ * the top-level spawn to 'acp' instead of the caller's adapter). In that case,
+ * ask the host which CONNECTED coding agent to use (`resolveSpawnableAdapterId`,
+ * which also registers it in the kernel registry). No hook or no connected agent
+ * is a clear actionable error, not the misleading managed-cloud refusal.
+ */
+async function resolveSpawnAgentFallbackAdapter(
+  context: AgentControlToolContext,
+  inherited: string
+): Promise<{ adapterId: string; hostPicked: boolean }> {
+  if (!isManagedCloudAdapterId(inherited)) {
+    return { adapterId: inherited, hostPicked: false }
+  }
+  const picked = (await context.resolveSpawnableAdapterId?.()) ?? null
+  if (!picked) {
+    throw new Error(
+      'No coding agent is connected to run this as a background agent. Ask the user to connect Claude Code (or another coding agent) in Settings, then try again.'
+    )
+  }
+  return { adapterId: picked, hostPicked: true }
 }
 
 function assertAdapterAllowedForControlRun(
@@ -491,22 +534,27 @@ function assertAdapterAllowedForControlRun(
 }
 
 /**
- * A signed desktop action, or the explicit `provider` selector on the canonical
- * top-level spawn_agent tool, may start a new local-provider session. The active
- * bridge can still be a managed-cloud adapter because it is only carrying the
- * control RPC; it is not the owner of the new session's credentials.
+ * A signed desktop action, the explicit `provider` selector on the canonical
+ * top-level spawn_agent tool, or the HOST-picked connected-coding-agent fallback
+ * (`resolveSpawnAgentFallbackAdapter`) may start a new local-provider session.
+ * The active bridge can still be a managed-cloud adapter because it is only
+ * carrying the control RPC; it is not the owner of the new session's
+ * credentials. The host-picked fallback carries the same authority as the
+ * `provider` selector: the adapter id comes from the host's connected-agent
+ * detection, never from the model.
  *
- * An adapterId alone does not get this exception, and neither does any
- * parent-linked delegation. Those must stay inside the caller's persisted
- * provider boundary.
+ * A model-supplied adapterId alone does not get this exception, and neither
+ * does any parent-linked delegation. Those must stay inside the caller's
+ * persisted provider boundary.
  */
 function assertAdapterAllowedForTopLevelLocalProviderSpawn(
   context: AgentControlToolContext,
   adapterId: string,
-  directedProvider?: 'hermes' | 'openclaw'
+  directedProvider?: 'hermes' | 'openclaw',
+  hostPicked = false
 ): void {
   assertControlSpawnAdapterNotManagedCloud(adapterId)
-  const hasDirectedLocalProvider = directedProvider === adapterId
+  const hasDirectedLocalProvider = directedProvider === adapterId || hostPicked
   if (!context.trustedUserControl && !hasDirectedLocalProvider) {
     assertAdapterAllowedForControlRun(context, adapterId)
     return
@@ -804,27 +852,43 @@ export async function handleAgentControlToolCall(
         if (parsed.provider && parsed.adapterId && parsed.provider !== parsed.adapterId) {
           throw new Error('provider and adapterId must match when both are supplied')
         }
-        const adapterId =
+        const directedAdapterId =
           parsed.adapterId ??
           (parsed.provider === 'openclaw'
             ? 'openclaw'
             : parsed.provider === 'hermes'
               ? 'hermes'
-              : undefined) ??
-          (parsed.parentRunId
-            ? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
-            : defaultControlAdapterId(context))
-        if (parsed.parentRunId) {
+              : undefined)
+        const fallback = directedAdapterId
+          ? { adapterId: directedAdapterId, hostPicked: false }
+          : await resolveSpawnAgentFallbackAdapter(
+              context,
+              parsed.parentRunId
+                ? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
+                : defaultControlAdapterId(context)
+            )
+        const adapterId = fallback.adapterId
+        // A managed-cloud parent run (the pi-mono chat turn itself) cannot own a
+        // delegation — its provider boundary can never contain a spawnable local
+        // adapter — so a host-picked fallback reroutes to a TOP-LEVEL background
+        // spawn (parent recorded in metadata) instead of failing the request.
+        const delegateUnderParent = Boolean(parsed.parentRunId) && !fallback.hostPicked
+        if (delegateUnderParent) {
           assertAdapterAllowedForControlRun(context, adapterId)
         } else {
-          assertAdapterAllowedForTopLevelLocalProviderSpawn(context, adapterId, parsed.provider)
+          assertAdapterAllowedForTopLevelLocalProviderSpawn(
+            context,
+            adapterId,
+            parsed.provider,
+            fallback.hostPicked
+          )
         }
         const visiblePillExternalRefId = parsed.visible
           ? (parsed.externalRefId ?? randomUUID())
           : parsed.externalRefId
         const childSurfaceKind = parsed.visible ? 'floating_bar' : 'delegated_agent'
         const childExternalRefKind = parsed.visible ? 'pill' : undefined
-        if (parsed.parentRunId) {
+        if (delegateUnderParent && parsed.parentRunId) {
           const result = await context.kernel.delegateAgent({
             ...controlRunRecovery(context, adapterId),
             mode: 'spawn',
@@ -870,7 +934,10 @@ export async function handleAgentControlToolCall(
           metadata: {
             ...(parsed.metadata ?? {}),
             visible: parsed.visible,
-            provider: parsed.provider ?? null
+            provider: parsed.provider ?? null,
+            // Kept for traceability when a managed-cloud parent rerouted the
+            // delegation into a top-level background spawn (see above).
+            requestedParentRunId: parsed.parentRunId ?? null
           }
         })
         return stringifyToolResult({

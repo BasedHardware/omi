@@ -858,3 +858,161 @@ describe('DARK invariant: managed-cloud pi-mono is un-spawnable via control tool
     }
   )
 })
+
+// === Regression (2026-07-18): spawn_agent from the managed-cloud chat surface ===
+// The default chat/voice surface runs on pi-mono. A fallback spawn_agent (no
+// adapterId/provider — exactly what the model emits for "build me a snake game")
+// inherited that pi-mono default and died on the managed-cloud guard with
+// "pi-mono is a managed-cloud adapter…", even with Claude Code connected. The
+// fix routes the fallback through the HOST's resolveSpawnableAdapterId hook
+// (the connected coding agent, macOS defaults 'acp' here) and turns the
+// no-agent-connected case into an actionable error.
+describe('spawn_agent host-picked fallback from a managed-cloud (pi-mono) caller', () => {
+  function fakeAdapter(adapterId: 'acp' | 'pi-mono'): RuntimeAdapter {
+    return {
+      adapterId,
+      capabilities: adapterCapabilitiesFor(adapterId),
+      async start() {
+        /* no-op fake */
+      },
+      async stop() {
+        /* no-op fake */
+      },
+      async openBinding(input) {
+        return {
+          sessionId: input.sessionId,
+          adapterId,
+          adapterNativeSessionId: `native-${input.sessionId}`,
+          resumeFidelity: 'none',
+          cwd: input.cwd
+        }
+      },
+      async resumeBinding(input) {
+        return {
+          sessionId: input.sessionId,
+          adapterId,
+          adapterNativeSessionId: input.adapterNativeSessionId,
+          resumeFidelity: 'none',
+          cwd: input.cwd
+        }
+      },
+      async executeAttempt(context) {
+        return {
+          text: 'ok',
+          adapterSessionId: context.binding.adapterNativeSessionId,
+          terminalStatus: 'succeeded'
+        }
+      },
+      async cancelAttempt() {
+        return { accepted: true, dispatchAttempted: true, adapterAcknowledged: false }
+      }
+    }
+  }
+
+  function newKernelWithAdapters(): { kernel: AgentRuntimeKernel; store: SqliteAgentStore } {
+    const dir = mkdtempSync(join(tmpdir(), 'omi-spawn-fallback-'))
+    createdDirs.push(dir)
+    const store = new SqliteAgentStore({
+      databaseFactory: nodeSqliteFactory,
+      databasePath: join(dir, 'omi-agentd.sqlite3')
+    })
+    openStores.push(store)
+    const registry = new AdapterRegistry()
+    registry.register('acp', () => fakeAdapter('acp'))
+    registry.register('pi-mono', () => fakeAdapter('pi-mono'))
+    const kernel = new AgentRuntimeKernel({ store, registry })
+    return { kernel, store }
+  }
+
+  /** The exact context shape the voice/typed main-chat dispatch builds: an
+   *  untrusted model-authority coordinator whose surface session is pinned to
+   *  pi-mono / managed_cloud (toolRelayBridge.buildControlToolContext). */
+  function piMonoChatContext(
+    kernel: AgentRuntimeKernel,
+    resolveSpawnableAdapterId?: () => Promise<string | null>
+  ): AgentControlToolContext {
+    return {
+      kernel,
+      trustedUserControl: false,
+      executionRole: 'coordinator',
+      defaultAdapterId: 'pi-mono',
+      providerBoundary: 'managed_cloud',
+      getOwnerId: () => OWNER,
+      resolveSpawnableAdapterId
+    }
+  }
+
+  it('spawns on the host-picked connected coding agent instead of failing on pi-mono', async () => {
+    const { kernel } = newKernelWithAdapters()
+    const picks: number[] = []
+    const context = piMonoChatContext(kernel, async () => {
+      picks.push(1)
+      return 'acp'
+    })
+
+    const result = await call(context, 'spawn_agent', { objective: 'build a snake game' })
+
+    expect(result.ok).toBe(true)
+    expect(picks).toHaveLength(1)
+    const session = result.session as { defaultAdapterId?: string; surfaceKind?: string }
+    expect(session.defaultAdapterId).toBe('acp')
+    expect(session.surfaceKind).toBe('floating_bar')
+    expect(result.run).toBeTruthy()
+  })
+
+  it('returns an actionable connect-an-agent error when no coding agent is connected', async () => {
+    const { kernel } = newKernelWithAdapters()
+    const context = piMonoChatContext(kernel, async () => null)
+
+    const result = await call(context, 'spawn_agent', { objective: 'build a snake game' })
+
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/No coding agent is connected/)
+    expect(result.error?.message).toMatch(/Claude Code/)
+    // NOT the misleading pre-fix managed-cloud refusal.
+    expect(result.error?.message).not.toMatch(/managed-cloud/)
+  })
+
+  it('also gives the actionable error when the host hook is absent entirely', async () => {
+    const { kernel } = newKernelWithAdapters()
+    const result = await call(piMonoChatContext(kernel), 'spawn_agent', { objective: 'x' })
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/No coding agent is connected/)
+  })
+
+  it('reroutes a pi-mono parentRunId delegation into a top-level background spawn', async () => {
+    const { kernel } = newKernelWithAdapters()
+    // A real pi-mono chat run — the parent the model would name.
+    const parent = await kernel.executeRun({
+      ownerId: OWNER,
+      surfaceKind: 'main_chat',
+      defaultAdapterId: 'pi-mono',
+      adapterId: 'pi-mono',
+      requestId: 'req-parent',
+      clientId: 'test',
+      prompt: 'hello',
+      mode: 'act'
+    })
+    const context = piMonoChatContext(kernel, async () => 'acp')
+
+    const result = await call(context, 'spawn_agent', {
+      objective: 'build a snake game',
+      parentRunId: parent.run.runId
+    })
+
+    expect(result.ok).toBe(true)
+    // Top-level background spawn (session + run), NOT a delegation under the
+    // managed-cloud parent — its boundary can never hold a local adapter.
+    expect(result.delegation).toBeUndefined()
+    const session = result.session as { defaultAdapterId?: string }
+    expect(session.defaultAdapterId).toBe('acp')
+  })
+
+  it('an EXPLICIT pi-mono adapterId still hits the managed-cloud guard (fallback only)', async () => {
+    const { kernel } = newKernelWithAdapters()
+    const context = piMonoChatContext(kernel, async () => 'acp')
+    const result = await call(context, 'spawn_agent', { objective: 'x', adapterId: 'pi-mono' })
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/managed-cloud adapter and cannot be spawned or run/)
+  })
+})
