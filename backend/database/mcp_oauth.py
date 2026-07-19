@@ -699,9 +699,15 @@ def rotate_refresh_token(
             return None
         if not set(requested_scopes).issubset(set(data.get("scopes") or [])):
             return None
-        access_token, new_refresh_token, access_ref, access_data, refresh_ref, refresh_data, _ = (
-            _build_token_pair_writes(grant, requested_scopes, data.get("token_family_id"))
-        )
+        (
+            access_token,
+            new_refresh_token,
+            access_ref,
+            access_data,
+            refresh_ref,
+            refresh_data,
+            _,
+        ) = _build_token_pair_writes(grant, requested_scopes, data.get("token_family_id"))
         transaction.set(access_ref, access_data)
         transaction.set(refresh_ref, refresh_data)
         transaction.update(ref, {"used_at": now, "replaced_by": hash_secret(new_refresh_token)})

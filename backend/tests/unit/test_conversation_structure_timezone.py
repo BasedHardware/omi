@@ -91,6 +91,15 @@ llm_clients_stub = _stub_module("utils.llm.clients")
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
 llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
 llm_clients_stub.parser = MagicMock()
+usage_tracker_stub = _stub_module("utils.llm.usage_tracker")
+
+
+class _Features:
+    CONVERSATION_STRUCTURE = "conversation_structure"
+
+
+usage_tracker_stub.Features = _Features
+usage_tracker_stub.track_usage = MagicMock()
 conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
 conversation_folder_stub.FolderAssignment = MagicMock
 conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=None)
@@ -160,7 +169,6 @@ conv_proc.ZoneInfo = _test_zone_info
 
 
 class TestLocalStartedAtIso:
-
     def test_converts_utc_to_user_local(self):
         # 23:48 UTC -> 13:48 in Honolulu (UTC-10), the meal/time-of-day case from the issue.
         out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), "Pacific/Honolulu")
@@ -228,7 +236,6 @@ def _capture_structure(fn, **kwargs):
 
 
 class TestStructureFunctionsTimezone:
-
     def test_get_transcript_structure_passes_local_time(self):
         result = _capture_structure(
             conv_proc.get_transcript_structure,

@@ -24,6 +24,7 @@ class AppReview {
   });
 
   factory AppReview.fromJson(Map<String, dynamic> json) {
+    if (json['responded_at'] == '') json['responded_at'] = null;
     return AppReview.fromGenerated(
       wire.GeneratedAppReview.fromJson(json),
       updatedAt: (json['updated_at'] == "" || json['updated_at'] == null)
@@ -53,8 +54,8 @@ class AppReview {
       'review': review,
       'username': username,
       'response': response,
-      'updated_at': updatedAt?.toUtc().toIso8601String() ?? '',
-      'responded_at': respondedAt?.toUtc().toIso8601String() ?? '',
+      'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'responded_at': respondedAt?.toUtc().toIso8601String(),
     };
   }
 
@@ -371,7 +372,25 @@ class App {
     return false;
   }
 
+  /// Legacy cached JSON (AppReview.toJson before the null-date fix) wrote null
+  /// review dates as '', which the strict generated parser rejects. Convert
+  /// them back to null so cached apps lists keep parsing.
+  static void _sanitizeLegacyReviewDates(Map<String, dynamic> json) {
+    void fixReview(dynamic review) {
+      if (review is Map) {
+        for (final key in const ['responded_at', 'updated_at']) {
+          if (review[key] == '') review[key] = null;
+        }
+      }
+    }
+
+    final reviews = json['reviews'];
+    if (reviews is List) reviews.forEach(fixReview);
+    fixReview(json['user_review']);
+  }
+
   factory App.fromJson(Map<String, dynamic> json) {
+    _sanitizeLegacyReviewDates(json);
     return App.fromGeneratedDetail(
       wire.GeneratedApp.fromJson(json),
       approvedFallback: json.containsKey('approved') ? null : true,

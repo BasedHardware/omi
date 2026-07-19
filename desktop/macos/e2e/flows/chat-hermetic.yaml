@@ -4,13 +4,28 @@ tier: 2
 description: Hermetic main chat navigation and typed turn using Rust OMI_LLM_STUB=1 (no live LLM)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/APIClient+AuthPolicy.swift
+  - desktop/macos/Desktop/Sources/Auth/AuthSessionAttemptFence.swift
+  - desktop/macos/Desktop/Sources/Chat/APIClient+KernelJournal.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentArtifactProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentFailureTranscriptFormatter.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentLifecycleDisplayProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentLifecycleTranscriptProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
   - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift
   - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+HarnessReset.swift
+  - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
   - desktop/macos/Desktop/Sources/AnalyticsManager.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift
@@ -19,7 +34,9 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
   - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatTurnLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/StallDetector.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
   - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
@@ -37,8 +54,17 @@ covers:
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
   - desktop/macos/Desktop/Sources/PostHogManager.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  - desktop/macos/Desktop/Sources/Services/QueryTracer.swift
   - desktop/macos/Desktop/Sources/Diagnostics/DesktopStressDiagnostics.swift
-  - desktop/macos/Backend-Rust/src/routes/chat_completions.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/mod.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/request_translation.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/route.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/sse.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/streaming.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/transport.rs
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSessionsSidebar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentConnectPickerSheet.swift
 preconditions:
   - automation_bridge_ready
 
@@ -77,13 +103,13 @@ steps:
       result.detail.idle: "true"
 
   - id: S4
-    name: Assert stub marker echoed in assistant reply
+    name: Assert deterministic exact stub reply
     bridge.action:
       name: main_chat_snapshot
       params:
         limit: "12"
     expect:
-      result.detail.last_assistant_text: "Stub saw marker: chat-hermetic"
+      result.detail.last_assistant_text: "MARKER:chat-hermetic"
 
   - id: S5
     name: Logs clean

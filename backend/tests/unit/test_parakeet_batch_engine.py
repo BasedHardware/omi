@@ -94,7 +94,6 @@ def _make_mock_gpu_worker(results_fn=None):
 
 
 class TestBatchEngineSubmit:
-
     @pytest.fixture
     def loop(self):
         loop = asyncio.new_event_loop()
@@ -148,7 +147,6 @@ class TestBatchEngineSubmit:
 
 
 class TestBatchEngineQueueFull:
-
     def test_queue_full_error(self):
         gpu = _make_mock_gpu_worker()
         engine = BatchEngine(gpu, max_batch_size=100, max_wait_seconds=10.0, max_queue_depth=2)
@@ -173,7 +171,6 @@ class TestBatchEngineQueueFull:
 
 
 class TestBatchEngineFileCleanup:
-
     def test_owns_file_cleaned_after_success(self):
         gpu = _make_mock_gpu_worker()
         engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01)
@@ -247,7 +244,6 @@ class TestBatchEngineFileCleanup:
 
 
 class TestBatchEngineErrorPropagation:
-
     def test_gpu_error_propagates_to_all_futures(self):
         gpu = MagicMock(spec=GPUWorker)
         gpu.is_ready = True
@@ -310,7 +306,6 @@ class TestBatchEngineErrorPropagation:
 
 
 class TestBatchEngineResultMismatch:
-
     def test_fewer_results_than_requests(self):
         def short_results(payload):
             return [{"text": "only-one", "timestamp": {}}]
@@ -338,7 +333,6 @@ class TestBatchEngineResultMismatch:
 
 
 class TestBatchEngineMetrics:
-
     def test_metrics_track_requests_and_batches(self):
         gpu = _make_mock_gpu_worker()
         engine = BatchEngine(gpu, max_batch_size=2, max_wait_seconds=0.01)
@@ -364,7 +358,6 @@ class TestBatchEngineMetrics:
 
 
 class TestBatchEngineShutdown:
-
     def test_stop_flushes_pending(self):
         gpu = _make_mock_gpu_worker()
         engine = BatchEngine(gpu, max_batch_size=100, max_wait_seconds=100.0)
@@ -422,7 +415,6 @@ class TestBatchEngineShutdown:
 
 
 class TestBatchEngineCallbacks:
-
     def test_on_batch_complete_called_with_timing(self):
         gpu = _make_mock_gpu_worker()
         callback_data = {}
@@ -490,7 +482,6 @@ class TestBatchEngineCallbacks:
 
 
 class TestConcurrentFlush:
-
     def test_inflight_semaphore_bounds_concurrent_gpu_calls(self):
         concurrent_count = {"current": 0, "peak": 0}
 
@@ -597,7 +588,6 @@ class TestConcurrentFlush:
 
 
 class TestMaxInflight2:
-
     def test_sequential_batching_accumulates_requests(self):
         """With flush_pending gate held during GPU work, requests accumulate
         into larger batches instead of being flushed one-at-a-time."""
@@ -652,7 +642,6 @@ class TestMaxInflight2:
 
 
 class TestFlushGuard:
-
     def test_no_duplicate_flush_tasks(self):
         gate = asyncio.Event()
         flush_entries = {"count": 0}
@@ -700,7 +689,6 @@ class TestFlushGuard:
 
 
 class TestDurationPassthrough:
-
     def test_payload_includes_durations(self):
         submitted_payloads = []
 
@@ -740,7 +728,6 @@ class TestDurationPassthrough:
 
 
 class TestLazyVramInit:
-
     def test_vram_init_deferred_until_worker_ready(self):
         """VRAM info is zero at start() time, populated later — lazy init picks it up."""
         submitted_payloads = []
@@ -788,7 +775,6 @@ class TestLazyVramInit:
 
 
 class TestBatchesInflight:
-
     def test_full_batch_uses_second_inflight_slot(self):
         """When a full batch is processing (inflight=1), a second full batch
         should dispatch immediately using the second inflight slot."""
@@ -1004,7 +990,6 @@ class TestBatchesInflight:
 
 
 class TestUnlinkSafe:
-
     def test_unlink_existing(self):
         with tempfile.NamedTemporaryFile(delete=False) as f:
             path = f.name

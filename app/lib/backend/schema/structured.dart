@@ -135,14 +135,14 @@ class ActionItem {
   ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false});
 
   factory ActionItem.fromGenerated(wire.GeneratedActionItem generated) {
-    return ActionItem(generated.description, completed: generated.completed ?? false);
+    return ActionItem(generated.description, completed: generated.completed);
   }
 
   static fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedActionItem.fromJson(json);
     return ActionItem(
       generated.description,
-      completed: generated.completed ?? false,
+      completed: generated.completed,
       deleted: json['deleted'] ?? false,
     );
   }
@@ -193,9 +193,9 @@ class Event {
     return Event(
       generated.title,
       generated.start,
-      generated.duration ?? 30,
-      description: generated.description ?? '',
-      created: generated.created ?? false,
+      generated.duration,
+      description: generated.description,
+      created: generated.created,
     );
   }
 

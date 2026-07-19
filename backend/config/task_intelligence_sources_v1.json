@@ -87,7 +87,7 @@
       "id": "backend_conversation_extraction",
       "policy_class": "shared_capture_policy",
       "owner_paths": ["backend/utils/conversations/process_conversation.py", "backend/utils/conversations/merge_conversations.py", "backend/routers/conversations.py"],
-      "test_adapter": "transcript_capture_v1",
+      "test_adapter": "transcript_capture_v2",
       "writer_anchors": [
         {"path": "backend/utils/conversations/process_conversation.py", "symbol": "action_items_db.create_action_items_batch", "discover": true},
         {"path": "backend/utils/conversations/process_conversation.py", "symbol": "action_items_db.delete_action_items_for_conversation", "discover": true},
@@ -102,7 +102,7 @@
       "id": "desktop_screen_extraction",
       "policy_class": "shared_capture_policy",
       "owner_paths": ["desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift"],
-      "test_adapter": "screen_capture_v1",
+      "test_adapter": "screen_capture_v2",
       "writer_anchors": []
     },
     {
@@ -156,7 +156,7 @@
         "backend/utils/llm/goals.py",
         "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Goals/GoalsAIService.swift"
       ],
-      "test_adapter": "transcript_capture_v1",
+      "test_adapter": "transcript_capture_v2",
       "writer_anchors": [{"path": "backend/utils/llm/goals.py", "symbol": "goals_db.update_goal_progress", "discover": true}]
     },
     {

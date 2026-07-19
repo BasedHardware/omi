@@ -26,20 +26,35 @@ import 'package:omi/utils/wal_file_manager.dart';
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _freshSyncCutoffSeconds = 6 * 60 * 60;
 
-SyncUploadLane syncUploadLaneForTimestamp(
-  int captureSeconds,
-  int nowSeconds, {
-  required bool hasServerCaptureProof,
-}) =>
+enum SyncJobTerminalPolicy { wait, acknowledge, retry }
+
+/// The shared WAL acknowledgement boundary for async sync jobs.
+///
+/// Only the backend's truthful `completed` state permits local audio to become
+/// terminally synced. Partial and full failures deliberately take the retry
+/// path so the retained WAL remains recoverable.
+@visibleForTesting
+SyncJobTerminalPolicy syncJobTerminalPolicy({required String status, required bool isTerminal}) {
+  if (!isTerminal) return SyncJobTerminalPolicy.wait;
+  return status == 'completed' ? SyncJobTerminalPolicy.acknowledge : SyncJobTerminalPolicy.retry;
+}
+
+@visibleForTesting
+bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
+  if ((status.error ?? '').contains(_kBackendBusyErrorHint)) return true;
+  // Legacy stale-worker failures predate reason_code. New typed failures with
+  // totalSegments=0 carry a reason and must consume retry budget normally.
+  final reasonCode = status.reasonCode;
+  return status.status == 'failed' && status.totalSegments == 0 && (reasonCode == null || reasonCode.isEmpty);
+}
+
+SyncUploadLane syncUploadLaneForTimestamp(int captureSeconds, int nowSeconds, {required bool hasServerCaptureProof}) =>
     hasServerCaptureProof && nowSeconds - captureSeconds <= _freshSyncCutoffSeconds
         ? SyncUploadLane.fresh
         : SyncUploadLane.backfill;
 
-SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) => syncUploadLaneForTimestamp(
-      wal.timerStart,
-      nowSeconds,
-      hasServerCaptureProof: wal.conversationId != null,
-    );
+SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) =>
+    syncUploadLaneForTimestamp(wal.timerStart, nowSeconds, hasServerCaptureProof: wal.conversationId != null);
 
 @visibleForTesting
 Set<String> oversizedFreshConversationIds(List<Wal> pending, int nowSeconds) {
@@ -80,7 +95,7 @@ List<Wal> nextSyncUploadBatch(
 }
 
 class LocalWalSyncImpl implements LocalWalSync {
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
 
   List<WalFrame> _frames = [];
   List<bool> _frameSynced = [];
@@ -584,10 +599,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<SyncLocalFilesResponse?> syncFreshOnly({IWalSyncProgressListener? progress}) =>
       _syncAll(progress: progress, includeBackfill: false);
 
-  Future<SyncLocalFilesResponse?> _syncAll({
-    IWalSyncProgressListener? progress,
-    required bool includeBackfill,
-  }) async {
+  Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool includeBackfill}) async {
     await _flush();
     _isCancelled = false;
     _accumulatedResponse = null;
@@ -824,6 +836,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       'updatedConversations': resp.updatedConversationIds.length,
     });
 
+    resp.localUploadFailures = batchesFailed;
     progress?.onWalSyncedProgress(1.0);
     return resp;
   }
@@ -1031,7 +1044,8 @@ class LocalWalSyncImpl implements LocalWalSync {
             break;
           case SyncJobFetchOutcome.ok:
             final s = fetch.status!;
-            if (!s.isTerminal) {
+            final terminalPolicy = syncJobTerminalPolicy(status: s.status, isTerminal: s.isTerminal);
+            if (terminalPolicy == SyncJobTerminalPolicy.wait) {
               DebugLogManager.logEvent('reconcile_poll', {
                 'jobId': jobId,
                 'memberWalIds': memberWalIds,
@@ -1052,7 +1066,7 @@ class LocalWalSyncImpl implements LocalWalSync {
                 ),
               );
             }
-            if (s.status == 'completed') {
+            if (terminalPolicy == SyncJobTerminalPolicy.acknowledge) {
               DebugLogManager.logEvent('reconcile_poll', {
                 'jobId': jobId,
                 'memberWalIds': memberWalIds,
@@ -1071,8 +1085,7 @@ class LocalWalSyncImpl implements LocalWalSync {
               // backend stale guard (mark_job_completed only sets 'failed'
               // when total>0). String hint is a fallback if the structural
               // signal ever becomes ambiguous.
-              final backendBusy =
-                  (s.status == 'failed' && s.totalSegments == 0) || (s.error ?? '').contains(_kBackendBusyErrorHint);
+              final backendBusy = syncJobIsBackendBusy(s);
               final backfillPaced = s.reasonCode == 'backfill_paced' || s.reasonCode == 'backfill_capacity';
               if (backfillPaced) {
                 SyncRateLimiter.instance.markLimited(

@@ -8984,7 +8984,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get billingYearly => 'Roční';
 
   @override
-  String get savePercent => 'Ušetřete ~17%';
+  String savePercent(int percent) {
+    return 'Ušetřete ~$percent%';
+  }
 
   @override
   String get popular => 'Oblíbené';
@@ -9343,7 +9345,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Zatím funguje se zařízeními Omi a Limitless. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.';
+      'Funguje s mikrofonem telefonu a se zařízeními Omi a Limitless. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9574,4 +9576,33 @@ class AppLocalizationsCs extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Chyba při připojování k Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Úložiště zařízení';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% zaplněno';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used z $total využito';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free volných';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Zařízení je téměř plné — synchronizujte pro uvolnění místa.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Bez připojení – nahrává se lokálně. Přepíše se, až budete znovu online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Vaše data jsou ve výchozím nastavení zabezpečena silným šifrováním a vy máte kontrolu nad tím, jak jsou ukládána a používána.';
 }

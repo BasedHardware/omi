@@ -1,447 +1,453 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Folder Colors
 
 struct FolderColors {
-    static let palette: [(name: String, hex: String)] = [
-        ("Gray", "#6B7280"),
-        ("Red", "#EF4444"),
-        ("Orange", "#F97316"),
-        ("Amber", "#F59E0B"),
-        ("Green", "#22C55E"),
-        ("Teal", "#14B8A6"),
-        ("Blue", "#3B82F6"),
-        ("Indigo", "#6366F1"),
-        ("Purple", "#A855F7"),
-        ("Pink", "#EC4899"),
-    ]
+  static let palette: [(name: String, hex: String)] = [
+    ("Gray", "#6B7280"),
+    ("Red", "#EF4444"),
+    ("Orange", "#F97316"),
+    ("Amber", "#F59E0B"),
+    ("Green", "#22C55E"),
+    ("Teal", "#14B8A6"),
+    ("Blue", "#3B82F6"),
+    ("Indigo", "#6366F1"),
+    ("Purple", "#A855F7"),
+    ("Pink", "#EC4899"),
+  ]
 }
 
 // MARK: - Folder Tabs Strip
 
 struct FolderTabsStrip: View {
-    @ObservedObject var appState: AppState
-    var onCreateFolder: () -> Void
-    var onEditFolder: (Folder) -> Void
-    var onDeleteFolder: (Folder) -> Void
+  @ObservedObject var appState: AppState
+  var onCreateFolder: () -> Void
+  var onEditFolder: (Folder) -> Void
+  var onDeleteFolder: (Folder) -> Void
 
-    @State private var isFilteringFolder: Bool = false
+  @State private var isFilteringFolder: Bool = false
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                // "All" tab
-                folderTab(
-                    label: "All",
-                    icon: "tray.2",
-                    isSelected: appState.selectedFolderId == nil && !appState.showStarredOnly
-                ) {
-                    Task {
-                        isFilteringFolder = true
-                        await appState.setFolderFilter(nil)
-                        if appState.showStarredOnly {
-                            await appState.toggleStarredFilter()
-                        }
-                        isFilteringFolder = false
-                    }
-                }
-
-                // "Starred" tab
-                folderTab(
-                    label: "Starred",
-                    icon: appState.showStarredOnly ? "star.fill" : "star",
-                    isSelected: appState.showStarredOnly
-                ) {
-                    Task {
-                        isFilteringFolder = true
-                        await appState.toggleStarredFilter()
-                        isFilteringFolder = false
-                    }
-                }
-
-                // Folder tabs
-                ForEach(appState.folders) { folder in
-                    let isSelected = appState.selectedFolderId == folder.id
-                    folderTab(
-                        label: folder.name,
-                        icon: nil,
-                        isSelected: isSelected
-                    ) {
-                        Task {
-                            isFilteringFolder = true
-                            if isSelected {
-                                await appState.setFolderFilter(nil)
-                            } else {
-                                await appState.setFolderFilter(folder.id)
-                            }
-                            isFilteringFolder = false
-                        }
-                    }
-                    .contextMenu {
-                        Button {
-                            onEditFolder(folder)
-                        } label: {
-                            Label("Edit", systemImage: "pencil")
-                        }
-                        Button(role: .destructive) {
-                            onDeleteFolder(folder)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
-
-                // "+" create button
-                Button(action: onCreateFolder) {
-                    Image(systemName: "plus")
-                        .scaledFont(size: 11, weight: .semibold)
-                        .foregroundColor(OmiColors.textSecondary)
-                        .frame(width: 26, height: 26)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(OmiColors.backgroundTertiary.opacity(0.6))
-                        )
-                }
-                .buttonStyle(.plain)
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: OmiSpacing.xs) {
+        // "All" tab
+        folderTab(
+          label: "All",
+          icon: "tray.2",
+          isSelected: appState.selectedFolderId == nil && !appState.showStarredOnly
+        ) {
+          Task {
+            isFilteringFolder = true
+            await appState.setFolderFilter(nil)
+            if appState.showStarredOnly {
+              await appState.toggleStarredFilter()
             }
-            .padding(.vertical, 2)
+            isFilteringFolder = false
+          }
         }
-        .disabled(isFilteringFolder)
-    }
 
-    @ViewBuilder
-    private func folderTab(
-        label: String,
-        icon: String?,
-        isSelected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                if let icon = icon {
-                    Image(systemName: icon)
-                        .scaledFont(size: 11)
-                }
-                Text(label)
-                    .scaledFont(size: 12, weight: .medium)
-                    .lineLimit(1)
+        // "Starred" tab
+        folderTab(
+          label: "Starred",
+          icon: appState.showStarredOnly ? "star.fill" : "star",
+          isSelected: appState.showStarredOnly
+        ) {
+          Task {
+            isFilteringFolder = true
+            await appState.toggleStarredFilter()
+            isFilteringFolder = false
+          }
+        }
+
+        // Folder tabs
+        ForEach(appState.folders) { folder in
+          let isSelected = appState.selectedFolderId == folder.id
+          folderTab(
+            label: folder.name,
+            icon: nil,
+            isSelected: isSelected
+          ) {
+            Task {
+              isFilteringFolder = true
+              if isSelected {
+                await appState.setFolderFilter(nil)
+              } else {
+                await appState.setFolderFilter(folder.id)
+              }
+              isFilteringFolder = false
             }
-            .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+          }
+          .contextMenu {
+            Button {
+              onEditFolder(folder)
+            } label: {
+              Label("Edit", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+              onDeleteFolder(folder)
+            } label: {
+              Label("Delete", systemImage: "trash")
+            }
+          }
+        }
+
+        // "+" create button
+        Button(action: onCreateFolder) {
+          Image(systemName: "plus")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 26, height: 26)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundTertiary.opacity(0.6))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? OmiColors.textPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+              RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
+                .fill(OmiColors.backgroundTertiary.opacity(0.6))
             )
         }
         .buttonStyle(.plain)
+      }
+      .padding(.vertical, OmiSpacing.hairline)
     }
+    .disabled(isFilteringFolder)
+  }
+
+  @ViewBuilder
+  private func folderTab(
+    label: String,
+    icon: String?,
+    isSelected: Bool,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      HStack(spacing: OmiSpacing.xxs) {
+        if let icon = icon {
+          Image(systemName: icon)
+            .scaledFont(size: OmiType.caption)
+        }
+        Text(label)
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .lineLimit(1)
+      }
+      .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+          .fill(isSelected ? OmiColors.textPrimary.opacity(0.12) : OmiColors.backgroundTertiary.opacity(0.6))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+          .stroke(isSelected ? OmiColors.textPrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+      )
+    }
+    .buttonStyle(.plain)
+  }
 }
 
 // MARK: - Folder Form Sheet (Create / Edit)
 
 struct FolderFormSheet: View {
-    let folder: Folder?
-    let onDismiss: () -> Void
+  let folder: Folder?
+  let onDismiss: () -> Void
 
-    @EnvironmentObject var appState: AppState
+  @EnvironmentObject var appState: AppState
 
-    @State private var name: String = ""
-    @State private var descriptionText: String = ""
-    @State private var selectedColor: String = "#6B7280"
-    @State private var isSaving: Bool = false
+  @State private var name: String = ""
+  @State private var descriptionText: String = ""
+  @State private var selectedColor: String = "#6B7280"
+  @State private var isSaving: Bool = false
 
-    private var isEditing: Bool { folder != nil }
+  private var isEditing: Bool { folder != nil }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Text(isEditing ? "Edit Folder" : "New Folder")
-                    .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
-                Spacer()
-                DismissButton(action: onDismiss)
-            }
-            .padding(20)
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      // Header
+      HStack {
+        Text(isEditing ? "Edit Folder" : "New Folder")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Spacer()
+        DismissButton(action: onDismiss)
+      }
+      .padding(OmiSpacing.xl)
 
-            Divider().background(OmiColors.backgroundTertiary)
+      Divider().background(OmiColors.backgroundTertiary)
 
-            VStack(alignment: .leading, spacing: 16) {
-                // Name field
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Name")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
-                    TextField("Folder name", text: $name)
-                        .textFieldStyle(.plain)
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.backgroundTertiary.opacity(0.5))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.border, lineWidth: 1)
-                        )
-                }
-
-                // Description field
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Description")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
-                    TextField("Optional description", text: $descriptionText)
-                        .textFieldStyle(.plain)
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(OmiColors.backgroundTertiary.opacity(0.5))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.border, lineWidth: 1)
-                        )
-                }
-
-                // Color picker
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Color")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 8), count: 5), spacing: 8) {
-                        ForEach(FolderColors.palette, id: \.hex) { item in
-                            let isSelected = selectedColor == item.hex
-                            Button(action: {
-                                selectedColor = item.hex
-                            }) {
-                                Circle()
-                                    .fill(Color(hex: item.hex) ?? Color.gray)
-                                    .frame(width: 28, height: 28)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: isSelected ? 2 : 0)
-                                            .padding(2)
-                                    )
-                                    .overlay(
-                                        Circle()
-                                            .stroke(isSelected ? (Color(hex: item.hex) ?? Color.gray) : Color.clear, lineWidth: 2)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-            .padding(20)
-
-            Divider().background(OmiColors.backgroundTertiary)
-
-            // Action buttons
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    onDismiss()
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-
-                Button(action: save) {
-                    if isSaving {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                            .frame(width: 14, height: 14)
-                    } else {
-                        Text(isEditing ? "Save" : "Create")
-                    }
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(name.trimmingCharacters(in: .whitespaces).isEmpty ? OmiColors.textTertiary : .white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(name.trimmingCharacters(in: .whitespaces).isEmpty ? OmiColors.backgroundTertiary : Color(hex: selectedColor) ?? OmiColors.textPrimary)
-                )
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
-            }
-            .padding(20)
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+        // Name field
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          Text("Name")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(OmiColors.textSecondary)
+          TextField("Folder name", text: $name)
+            .textFieldStyle(.plain)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textPrimary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.sm)
+            .background(
+              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                .stroke(OmiColors.border, lineWidth: 1)
+            )
         }
-        .onAppear {
-            if let folder = folder {
-                name = folder.name
-                descriptionText = folder.description ?? ""
-                selectedColor = folder.color
-            }
+
+        // Description field
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          Text("Description")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(OmiColors.textSecondary)
+          TextField("Optional description", text: $descriptionText)
+            .textFieldStyle(.plain)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textPrimary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.sm)
+            .background(
+              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                .stroke(OmiColors.border, lineWidth: 1)
+            )
         }
+
+        // Color picker
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          Text("Color")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(OmiColors.textSecondary)
+
+          LazyVGrid(
+            columns: Array(repeating: GridItem(.fixed(32), spacing: OmiSpacing.sm), count: 5), spacing: OmiSpacing.sm
+          ) {
+            ForEach(FolderColors.palette, id: \.hex) { item in
+              let isSelected = selectedColor == item.hex
+              Button(action: {
+                selectedColor = item.hex
+              }) {
+                Circle()
+                  .fill(Color(hex: item.hex) ?? Color.gray)
+                  .frame(width: 28, height: 28)
+                  .overlay(
+                    Circle()
+                      .stroke(Color.white, lineWidth: isSelected ? 2 : 0)
+                      .padding(OmiSpacing.hairline)
+                  )
+                  .overlay(
+                    Circle()
+                      .stroke(isSelected ? (Color(hex: item.hex) ?? Color.gray) : Color.clear, lineWidth: 2)
+                  )
+              }
+              .buttonStyle(.plain)
+            }
+          }
+        }
+      }
+      .padding(OmiSpacing.xl)
+
+      Divider().background(OmiColors.backgroundTertiary)
+
+      // Action buttons
+      HStack {
+        Spacer()
+        Button("Cancel") {
+          onDismiss()
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(OmiColors.textSecondary)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
+
+        Button(action: save) {
+          if isSaving {
+            ProgressView()
+              .scaleEffect(0.6)
+              .frame(width: 14, height: 14)
+          } else {
+            Text(isEditing ? "Save" : "Create")
+          }
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(name.trimmingCharacters(in: .whitespaces).isEmpty ? OmiColors.textTertiary : .white)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+            .fill(
+              name.trimmingCharacters(in: .whitespaces).isEmpty
+                ? OmiColors.backgroundTertiary : Color(hex: selectedColor) ?? OmiColors.textPrimary)
+        )
+        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+      }
+      .padding(OmiSpacing.xl)
     }
-
-    private func save() {
-        let trimmedName = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmedName.isEmpty else { return }
-
-        isSaving = true
-        Task {
-            if let folder = folder {
-                await appState.updateFolder(
-                    folder.id,
-                    name: trimmedName,
-                    description: descriptionText.isEmpty ? nil : descriptionText,
-                    color: selectedColor
-                )
-            } else {
-                _ = await appState.createFolder(
-                    name: trimmedName,
-                    description: descriptionText.isEmpty ? nil : descriptionText,
-                    color: selectedColor
-                )
-            }
-            isSaving = false
-            onDismiss()
-        }
+    .onAppear {
+      if let folder = folder {
+        name = folder.name
+        descriptionText = folder.description ?? ""
+        selectedColor = folder.color
+      }
     }
+  }
+
+  private func save() {
+    let trimmedName = name.trimmingCharacters(in: .whitespaces)
+    guard !trimmedName.isEmpty else { return }
+
+    isSaving = true
+    Task {
+      if let folder = folder {
+        await appState.updateFolder(
+          folder.id,
+          name: trimmedName,
+          description: descriptionText.isEmpty ? nil : descriptionText,
+          color: selectedColor
+        )
+      } else {
+        _ = await appState.createFolder(
+          name: trimmedName,
+          description: descriptionText.isEmpty ? nil : descriptionText,
+          color: selectedColor
+        )
+      }
+      isSaving = false
+      onDismiss()
+    }
+  }
 }
 
 // MARK: - Delete Folder Sheet
 
 struct DeleteFolderSheet: View {
-    let folder: Folder
-    let onDismiss: () -> Void
+  let folder: Folder
+  let onDismiss: () -> Void
 
-    @EnvironmentObject var appState: AppState
+  @EnvironmentObject var appState: AppState
 
-    @State private var moveToFolderId: String? = nil
-    @State private var isDeleting: Bool = false
+  @State private var moveToFolderId: String? = nil
+  @State private var isDeleting: Bool = false
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Text("Delete Folder")
-                    .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
-                Spacer()
-                DismissButton(action: onDismiss)
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      // Header
+      HStack {
+        Text("Delete Folder")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Spacer()
+        DismissButton(action: onDismiss)
+      }
+      .padding(OmiSpacing.xl)
+
+      Divider().background(OmiColors.backgroundTertiary)
+
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+        Text("Are you sure you want to delete \"\(folder.name)\"?")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textPrimary)
+
+        if folder.conversationCount > 0 {
+          Text(
+            "This folder has \(folder.conversationCount) conversation\(folder.conversationCount == 1 ? "" : "s"). Choose where to move them:"
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textSecondary)
+
+          // Move destination picker
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            moveOption(label: "No folder (unfiled)", folderId: nil)
+
+            ForEach(appState.folders.filter { $0.id != folder.id }) { otherFolder in
+              moveOption(label: otherFolder.name, folderId: otherFolder.id, color: otherFolder.color)
             }
-            .padding(20)
-
-            Divider().background(OmiColors.backgroundTertiary)
-
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Are you sure you want to delete \"\(folder.name)\"?")
-                    .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                if folder.conversationCount > 0 {
-                    Text("This folder has \(folder.conversationCount) conversation\(folder.conversationCount == 1 ? "" : "s"). Choose where to move them:")
-                        .scaledFont(size: 13)
-                        .foregroundColor(OmiColors.textSecondary)
-
-                    // Move destination picker
-                    VStack(alignment: .leading, spacing: 4) {
-                        moveOption(label: "No folder (unfiled)", folderId: nil)
-
-                        ForEach(appState.folders.filter { $0.id != folder.id }) { otherFolder in
-                            moveOption(label: otherFolder.name, folderId: otherFolder.id, color: otherFolder.color)
-                        }
-                    }
-                }
-            }
-            .padding(20)
-
-            Divider().background(OmiColors.backgroundTertiary)
-
-            // Action buttons
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    onDismiss()
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-
-                Button(action: performDelete) {
-                    if isDeleting {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                            .frame(width: 14, height: 14)
-                    } else {
-                        Text("Delete")
-                    }
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.red)
-                )
-                .disabled(isDeleting)
-            }
-            .padding(20)
+          }
         }
-    }
+      }
+      .padding(OmiSpacing.xl)
 
-    @ViewBuilder
-    private func moveOption(label: String, folderId: String?, color: String? = nil) -> some View {
-        let isSelected = moveToFolderId == folderId
-        Button(action: {
-            moveToFolderId = folderId
-        }) {
-            HStack(spacing: 8) {
-                if let color = color, let c = Color(hex: color) {
-                    Circle()
-                        .fill(c)
-                        .frame(width: 8, height: 8)
-                } else {
-                    Image(systemName: "tray")
-                        .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
-                        .frame(width: 8)
-                }
-                Text(label)
-                    .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textPrimary)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .scaledFont(size: 11, weight: .semibold)
-                        .foregroundColor(OmiColors.textPrimary)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? OmiColors.backgroundTertiary : Color.clear)
-            )
+      Divider().background(OmiColors.backgroundTertiary)
+
+      // Action buttons
+      HStack {
+        Spacer()
+        Button("Cancel") {
+          onDismiss()
         }
         .buttonStyle(.plain)
-    }
+        .foregroundColor(OmiColors.textSecondary)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
 
-    private func performDelete() {
-        isDeleting = true
-        Task {
-            await appState.deleteFolder(folder.id, moveToFolderId: moveToFolderId)
-            isDeleting = false
-            onDismiss()
+        Button(action: performDelete) {
+          if isDeleting {
+            ProgressView()
+              .scaleEffect(0.6)
+              .frame(width: 14, height: 14)
+          } else {
+            Text("Delete")
+          }
         }
+        .buttonStyle(.plain)
+        .foregroundColor(.white)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+            .fill(Color.red)
+        )
+        .disabled(isDeleting)
+      }
+      .padding(OmiSpacing.xl)
     }
+  }
+
+  @ViewBuilder
+  private func moveOption(label: String, folderId: String?, color: String? = nil) -> some View {
+    let isSelected = moveToFolderId == folderId
+    Button(action: {
+      moveToFolderId = folderId
+    }) {
+      HStack(spacing: OmiSpacing.sm) {
+        if let color = color, let c = Color(hex: color) {
+          Circle()
+            .fill(c)
+            .frame(width: 8, height: 8)
+        } else {
+          Image(systemName: "tray")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.textTertiary)
+            .frame(width: 8)
+        }
+        Text(label)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textPrimary)
+        Spacer()
+        if isSelected {
+          Image(systemName: "checkmark")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+        }
+      }
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
+          .fill(isSelected ? OmiColors.backgroundTertiary : Color.clear)
+      )
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func performDelete() {
+    isDeleting = true
+    Task {
+      await appState.deleteFolder(folder.id, moveToFolderId: moveToFolderId)
+      isDeleting = false
+      onDismiss()
+    }
+  }
 }

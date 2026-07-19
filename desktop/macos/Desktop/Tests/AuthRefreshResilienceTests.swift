@@ -6,15 +6,14 @@ import XCTest
 final class AuthRefreshResilienceTests: XCTestCase {
   private var priorFirebaseApiKey: String?
 
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     clearAuthDefaults()
     DesktopDiagnosticsManager.shared.resetForTests()
-    priorFirebaseApiKey = getenv("FIREBASE_API_KEY").flatMap { String(validatingUTF8: $0) }
+    priorFirebaseApiKey = getenv("FIREBASE_API_KEY").flatMap { String(validatingCString: $0) }
     setenv("FIREBASE_API_KEY", "test-firebase-api-key", 1)
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     if let priorFirebaseApiKey {
       setenv("FIREBASE_API_KEY", priorFirebaseApiKey, 1)
     } else {
@@ -22,7 +21,6 @@ final class AuthRefreshResilienceTests: XCTestCase {
     }
     clearAuthDefaults()
     DesktopDiagnosticsManager.shared.resetForTests()
-    super.tearDown()
   }
 
   func testRefresh400WithNonAuthBodyPreservesTokens() async {
@@ -63,6 +61,54 @@ final class AuthRefreshResilienceTests: XCTestCase {
 
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-token-stable")
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "refresh-token-stable")
+  }
+
+  /// AUTH-04: a refresh that fails at the NETWORK layer (offline, dead port, DNS —
+  /// the "point securetoken at a dead proxy port" class) must never sign the user
+  /// out. The URLError is thrown by the transport before any HTTP status exists, so
+  /// it can never be classified as a definitive auth failure; the session must
+  /// survive for the 30s refresh timer to retry. Exercises the real
+  /// `refreshIdToken()` path via `tokenRefreshHooks` — the same seam a live
+  /// dead-port run would hit, without the local-profile storage-identity switch
+  /// that blocked the runtime rig (Wave 9).
+  func testRefreshNetworkErrorPreservesTokens() async {
+    let auth = makeAuthWithUserDefaultsStorage()
+    XCTAssertNoThrow(
+      try auth.saveTokens(
+        idToken: "id-token-net",
+        refreshToken: "refresh-token-net",
+        expiresIn: 3600,
+        userId: "user-net"
+      )
+    )
+    UserDefaults.standard.set("user-net", forKey: .authUserId)
+
+    auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
+      dataForRequest: { _ in
+        throw URLError(.cannotConnectToHost)
+      }
+    )
+
+    do {
+      _ = try await auth.getIdToken(forceRefresh: true)
+      XCTFail("expected the network error to propagate")
+    } catch let error as URLError {
+      XCTAssertEqual(error.code, .cannotConnectToHost)
+    } catch let error as AuthError {
+      // Whatever the wrapper, it must NOT be the signed-out terminal state.
+      if case .notSignedIn = error {
+        XCTFail("a transient network failure must not sign the user out")
+      }
+    } catch {
+      // Other wrappers are acceptable as long as the session survives (below).
+    }
+
+    XCTAssertEqual(
+      UserDefaults.standard.string(forKey: .authIdToken), "id-token-net",
+      "id token must survive a network-layer refresh failure")
+    XCTAssertEqual(
+      UserDefaults.standard.string(forKey: .authRefreshToken), "refresh-token-net",
+      "refresh token must survive a network-layer refresh failure")
   }
 
   func testRefresh400WithInvalidRefreshTokenClearsSessionAndRecordsHealth() async throws {

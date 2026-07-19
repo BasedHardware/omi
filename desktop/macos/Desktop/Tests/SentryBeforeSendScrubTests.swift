@@ -28,19 +28,23 @@ final class SentryBeforeSendScrubTests: XCTestCase {
   }
 
   func testKeepsGenuineProductionEvent() {
-    XCTAssertFalse(drop(message: "TasksStore: failed to persist reorder"),
+    XCTAssertFalse(
+      drop(message: "TasksStore: failed to persist reorder"),
       "a genuine prod error must reach Sentry")
-    XCTAssertFalse(drop(exceptions: [("Omi_Computer.SomeError", "boom")]),
+    XCTAssertFalse(
+      drop(exceptions: [("Omi_Computer.SomeError", "boom")]),
       "an unrecognized exception must reach Sentry")
   }
 
   func testUserReportIsKeptFromEveryBuildIncludingDev() {
-    XCTAssertFalse(drop(isUserReport: true, isDev: true),
+    XCTAssertFalse(
+      drop(isUserReport: true, isDev: true),
       "user feedback must reach Sentry even from dev builds")
   }
 
   func testDropsNonReportDevBuildEvents() {
-    XCTAssertTrue(drop(isDev: true, message: "dev crash noise"),
+    XCTAssertTrue(
+      drop(isDev: true, message: "dev crash noise"),
       "non-report dev events pollute production Sentry data and must be dropped")
   }
 
@@ -51,18 +55,22 @@ final class SentryBeforeSendScrubTests: XCTestCase {
     ] {
       XCTAssertTrue(drop(url: u), "\(u) is a local/tunnel URL → drop")
     }
-    XCTAssertFalse(drop(url: "https://api.omi.me/v1/tasks"),
+    XCTAssertFalse(
+      drop(url: "https://api.omi.me/v1/tasks"),
       "a real backend URL must not be dropped")
   }
 
   func testDropsTransientNetworkExceptionsByDomainAndCode() {
     XCTAssertTrue(drop(exceptions: [("NSURLErrorDomain", "The request timed out. Code=-1001")]))
-    XCTAssertTrue(drop(exceptions: [("NSURLErrorDomain", "offline (Code: -1009)")]),
+    XCTAssertTrue(
+      drop(exceptions: [("NSURLErrorDomain", "offline (Code: -1009)")]),
       "both `Code=` and `Code: ` spellings must match")
     XCTAssertTrue(drop(exceptions: [("NSPOSIXErrorDomain", "Connection reset Code=54")]))
-    XCTAssertFalse(drop(exceptions: [("NSURLErrorDomain", "SSL error Code=-1200")]),
+    XCTAssertFalse(
+      drop(exceptions: [("NSURLErrorDomain", "SSL error Code=-1200")]),
       "an unlisted URL error code must not be dropped")
-    XCTAssertFalse(drop(exceptions: [("NSPOSIXErrorDomain", "Code=-1001")]),
+    XCTAssertFalse(
+      drop(exceptions: [("NSPOSIXErrorDomain", "Code=-1001")]),
       "a code only counts within its own error domain")
   }
 
@@ -76,9 +84,11 @@ final class SentryBeforeSendScrubTests: XCTestCase {
   }
 
   func testDropsTransientNotSignedInAuthErrorOnly() {
-    XCTAssertTrue(drop(exceptions: [("Omi_Computer.AuthError", "notSignedIn")]),
+    XCTAssertTrue(
+      drop(exceptions: [("Omi_Computer.AuthError", "notSignedIn")]),
       "notSignedIn is a transient refresh failure the 30s timer recovers")
-    XCTAssertFalse(drop(exceptions: [("Omi_Computer.AuthError", "keychainWriteFailed")]),
+    XCTAssertFalse(
+      drop(exceptions: [("Omi_Computer.AuthError", "keychainWriteFailed")]),
       "other AuthError cases are actionable and must reach Sentry")
   }
 

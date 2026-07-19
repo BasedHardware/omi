@@ -2,7 +2,7 @@
 Tools for accessing and managing user action items.
 """
 
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 import contextvars
 
@@ -17,7 +17,7 @@ from utils.notifications import (
     send_action_item_data_message,
     sync_action_item_reminder,
 )
-from utils.conversations.render import resolve_display_tz
+from utils.conversations.render import format_local_time, resolve_display_tz
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,18 +28,6 @@ try:
 except ImportError:
     # Fallback if import fails
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
-
-
-def _format_local(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
-    """Render a stored timestamp in the user's local timezone with a tz label.
-
-    Action-item timestamps are stored tz-aware (UTC); a naive value is treated as
-    UTC defensively so the chat model never sees an unlabeled wall-clock time and
-    mislabels the time of day (issue #4643).
-    """
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
 
 
 # Bound the chat tool result so a broad request ("show me all my tasks") cannot flood the chat
@@ -341,13 +329,13 @@ def get_action_items_tool(
 
         # Add dates if available (rendered in the user's local timezone)
         if item.get('created_at'):
-            result += f"   Created: {_format_local(item['created_at'], display_tz, tz_label)}\n"
+            result += f"   Created: {format_local_time(item['created_at'], display_tz, tz_label)}\n"
 
         if item.get('due_at'):
-            result += f"   Due: {_format_local(item['due_at'], display_tz, tz_label)}\n"
+            result += f"   Due: {format_local_time(item['due_at'], display_tz, tz_label)}\n"
 
         if item.get('completed_at'):
-            result += f"   Completed: {_format_local(item['completed_at'], display_tz, tz_label)}\n"
+            result += f"   Completed: {format_local_time(item['completed_at'], display_tz, tz_label)}\n"
 
         if item.get('conversation_id'):
             result += f"   From conversation: {item['conversation_id']}\n"

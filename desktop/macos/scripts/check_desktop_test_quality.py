@@ -5,7 +5,9 @@ The checker enforces three lessons from recurring macOS bug fixes:
 
 1. `Dictionary(uniqueKeysWithValues:)` is a process-terminating assertion when
    external or persisted data contains a duplicate key. Production code must use
-   an explicit collision policy such as `Dictionary(lastWriteWins:)`.
+   an explicit collision policy such as `Dictionary(lastWriteWins:)`. This
+   static tripwire preserves the production fix from #6506 and #9288; it
+   supplements, rather than proves, the behavioral regression coverage.
 2. Tests that read production source and assert on strings do not exercise
    behavior. Existing debt is ratcheted, while new static-contract tripwires need
    a narrow, reasoned annotation.
@@ -42,11 +44,17 @@ TEST_ROOT = "desktop/macos/Desktop/Tests"
 
 # Pinned debt ceilings. These may only decrease. Escaped sites are not counted.
 # Run with --print after improving tests, then lower both relevant values.
-SOURCE_INSPECTION_FILE_BASELINE = 63
-SOURCE_INSPECTION_SITE_BASELINE = 172
+SOURCE_INSPECTION_FILE_BASELINE = 56
+SOURCE_INSPECTION_SITE_BASELINE = 155
 WALL_CLOCK_WAIT_BASELINE = 19
 
 MIN_REASON_LENGTH = 12
+
+COLLECTION_SAFETY_GUIDANCE = (
+    "Use Dictionary(lastWriteWins:) for data-driven collections. #6506 and #9288 "
+    "were real duplicate-key crashes; this static tripwire supplements their behavioral coverage. "
+    "The static-unique-keys escape is reserved for uniqueness enforced by a type contract."
+)
 
 COLLECTION_ANNOTATION_RE = re.compile(r"//\s*omi-collection-safety:\s*static-unique-keys(?:\s*--\s*(.*?))?\s*$")
 SOURCE_ANNOTATION_RE = re.compile(r"//\s*omi-test-quality:\s*source-inspection(?:\s*--\s*(.*?))?\s*$")
@@ -477,8 +485,7 @@ def main() -> int:
         print("FAIL: production Swift contains trapping dictionary initializers:", file=sys.stderr)
         _print_findings(report.collection_findings)
         print(
-            "Use Dictionary(lastWriteWins:) for data-driven collections. The static-unique-keys "
-            "escape is reserved for uniqueness enforced by a type contract.",
+            COLLECTION_SAFETY_GUIDANCE,
             file=sys.stderr,
         )
     if report.annotation_findings:

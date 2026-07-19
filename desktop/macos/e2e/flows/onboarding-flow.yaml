@@ -6,10 +6,24 @@ description: >
   and confirm there is no Bring Your Own Keys step and the 2nd-brain label has no background.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingExportsStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingDataSourcesStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFileScanStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarShortcutStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingGoalStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingHowDidYouHearStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingLanguageStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingPermissionStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingTasksStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingTrustStepView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingWelcomeStepView.swift
+  - desktop/macos/Desktop/Sources/PostOnboardingPromptViews.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexingView.swift
 preconditions:
   - automation_bridge_ready
 

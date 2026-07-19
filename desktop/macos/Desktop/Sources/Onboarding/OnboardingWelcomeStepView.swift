@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingWelcomeStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator
@@ -20,16 +20,16 @@ struct OnboardingWelcomeStepView: View {
       layoutMode: .centered,
       onForceComplete: onForceComplete
     ) {
-      VStack(spacing: 18) {
+      VStack(spacing: OmiSpacing.lg) {
         TextField("Your name", text: $coordinator.draftName)
           .textFieldStyle(.plain)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 14)
+          .padding(.horizontal, OmiSpacing.lg)
+          .padding(.vertical, OmiSpacing.md)
           .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
               .fill(OmiColors.backgroundSecondary)
               .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                   .stroke(Color.white.opacity(0.08), lineWidth: 1)
               )
           )
@@ -47,7 +47,7 @@ struct OnboardingWelcomeStepView: View {
         Button("Continue") {
           confirmName()
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .buttonStyle(OmiButtonStyle(.primary))
         .keyboardShortcut(.defaultAction)
 
         // Dev-only shortcut to skip the whole onboarding flow — same as the

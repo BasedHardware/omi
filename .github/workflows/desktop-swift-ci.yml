@@ -11,58 +11,98 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  desktop-swift:
-    name: Desktop Swift Build & Tests
-    runs-on: macos-15
+  changes:
+    name: Detect Desktop Swift Changes
+    runs-on: ubuntu-latest
+    outputs:
+      diff_base: ${{ steps.changed.outputs.diff_base }}
+      should_run: ${{ steps.changed.outputs.should_run }}
+      should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Check changed files
+      - name: Detect changed paths
         id: changed
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            DIFF_BASE="origin/${{ github.base_ref }}"
+            DIFF_BASE="${{ github.event.pull_request.base.sha }}"
           else
-            DIFF_BASE="HEAD~1"
+            DIFF_BASE="${{ github.event.before }}"
           fi
-          FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)
-          echo "$FILES"
-          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$'; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          if [ -z "$DIFF_BASE" ] || [[ "$DIFF_BASE" =~ ^0+$ ]]; then
+            DIFF_BASE="$(git rev-parse HEAD^)"
           fi
 
-      - name: Cache SwiftPM build products
-        if: steps.changed.outputs.should_run == 'true'
-        uses: actions/cache@v4
+          FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)
+          echo "$FILES"
+          echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
+
+          SHOULD_RUN=false
+          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$|^\.github/checks-manifest\.yaml$|^\.github/scripts/run_checks\.py$|^\.github/scripts/test_desktop_manifest_routes\.py$|^\.github/scripts/test_desktop_swift_ci_contract\.py$'; then
+            SHOULD_RUN=true
+          fi
+          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+
+          DESKTOP_SWIFT=false
+          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$'; then
+            DESKTOP_SWIFT=true
+          fi
+          PACKAGE_SWIFT=false
+          if echo "$FILES" | grep -qx 'desktop/macos/Desktop/Package.swift'; then
+            PACKAGE_SWIFT=true
+          fi
+          PACKAGE_RESOLVED=false
+          if echo "$FILES" | grep -qx 'desktop/macos/Desktop/Package.resolved'; then
+            PACKAGE_RESOLVED=true
+          fi
+
+          # Clean release compile: every main push that touches desktop Swift,
+          # plus PRs that change the package manifest or lockfile (highest
+          # release-risk: a dependency graph change can break release builds
+          # even when the manifest source is unchanged).
+          SHOULD_RELEASE_COMPILE=false
+          if [ "$DESKTOP_SWIFT" = "true" ]; then
+            if [ "${{ github.event_name }}" = "push" ] || [ "$PACKAGE_SWIFT" = "true" ] || [ "$PACKAGE_RESOLVED" = "true" ]; then
+              SHOULD_RELEASE_COMPILE=true
+            fi
+          fi
+          echo "should_release_compile=$SHOULD_RELEASE_COMPILE" >> "$GITHUB_OUTPUT"
+          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT package_resolved=$PACKAGE_RESOLVED should_run=$SHOULD_RUN should_release_compile=$SHOULD_RELEASE_COMPILE"
+
+  desktop-swift:
+    name: Desktop Swift Build & Tests
+    needs: changes
+    if: needs.changes.outputs.should_run == 'true'
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Select and assert pinned Xcode 16.4
+        run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
+
+      - name: Restore SwiftPM build products
+        id: swiftpm-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             desktop/macos/Desktop/.build
-          key: ${{ runner.os }}-desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}
+            ~/.cache/omi-swift-format
+            ~/.cache/omi-swiftlint
+          key: ${{ runner.os }}-desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved', 'desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-swift-
+            ${{ runner.os }}-desktop-swift-xcode164-
 
       - name: Install Swift system dependencies
-        if: steps.changed.outputs.should_run == 'true'
         run: brew install pkg-config webp
 
-      - name: Check desktop e2e flow coverage
-        if: steps.changed.outputs.should_run == 'true'
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            DIFF_BASE="origin/${{ github.base_ref }}"
-          else
-            DIFF_BASE="HEAD~1"
-          fi
-          python3 desktop/macos/scripts/check-e2e-flow-coverage.py --strict --base "$DIFF_BASE"
-
       - name: Desktop launcher script tests
-        if: steps.changed.outputs.should_run == 'true'
         working-directory: desktop/macos
         run: |
           # Discovery, not a hardcoded list — a new tests/test-*.sh runs here
@@ -72,61 +112,53 @@ jobs:
             bash "$t"
           done
 
+      - name: Install uv for manifest checks
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+
+      - name: Run macOS-scoped manifest checks
+        run: |
+          python3 .github/scripts/run_checks.py --lane ci --platform macos --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
+
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, or PRs that touch Package.swift) so we do not
       # pay for a second configuration that tests never consume.
       - name: Test desktop Swift app
-        if: steps.changed.outputs.should_run == 'true'
         working-directory: desktop/macos
         env:
           OMI_SWIFT_TEST_SUITE_WORKERS: "4"
-        run: ./scripts/swift-test-suites.sh
+        run: ./scripts/run-swift-ci.sh --test
+
+      # SwiftPM validates cached incremental state before using it. Saving after
+      # a failed test command makes the next diagnostic run reuse completed
+      # dependency and module work instead of recompiling the same test bundle.
+      - name: Save SwiftPM build products after test attempt
+        if: ${{ always() && steps.swiftpm-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            desktop/macos/Desktop/.build
+            ~/.cache/omi-swift-format
+            ~/.cache/omi-swiftlint
+          key: ${{ runner.os }}-desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved', 'desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
   desktop-swift-release-compile:
     name: Desktop Swift Release Compile
+    needs: changes
+    if: needs.changes.outputs.should_release_compile == 'true'
     runs-on: macos-15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Check changed files
-        id: changed
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            DIFF_BASE="origin/${{ github.base_ref }}"
-          else
-            DIFF_BASE="HEAD~1"
-          fi
-          FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)
-          echo "$FILES"
-          DESKTOP_SWIFT=false
-          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$'; then
-            DESKTOP_SWIFT=true
-          fi
-          PACKAGE_SWIFT=false
-          if echo "$FILES" | grep -qx 'desktop/macos/Desktop/Package.swift'; then
-            PACKAGE_SWIFT=true
-          fi
-          # Clean release compile: every main push that touches desktop Swift,
-          # plus PRs that change the package manifest (highest release-risk).
-          SHOULD_RUN=false
-          if [ "$DESKTOP_SWIFT" = "true" ]; then
-            if [ "${{ github.event_name }}" = "push" ] || [ "$PACKAGE_SWIFT" = "true" ]; then
-              SHOULD_RUN=true
-            fi
-          fi
-          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
-          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT should_run=$SHOULD_RUN"
+      - name: Select and assert pinned Xcode 16.4
+        run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
       - name: Install Swift system dependencies
-        if: steps.changed.outputs.should_run == 'true'
         run: brew install pkg-config webp
 
       - name: Clean release compile
-        if: steps.changed.outputs.should_run == 'true'
         working-directory: desktop/macos
-        run: |
-          rm -rf Desktop/.build
-          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+        run: ./scripts/run-swift-ci.sh --release-compile

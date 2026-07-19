@@ -488,6 +488,34 @@ class GeneratedActionItemsSearchResponse {
   }
 }
 
+class GeneratedConversationActionItemsCountResponse {
+  final int completed;
+  final int incomplete;
+  final int total;
+
+  const GeneratedConversationActionItemsCountResponse({
+    required this.completed,
+    required this.incomplete,
+    required this.total,
+  });
+
+  factory GeneratedConversationActionItemsCountResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationActionItemsCountResponse(
+      completed: _required(_readFieldValue<int>(_readField(json, const ["completed"]), "completed", _readInt, requiredField: true, nullable: false), "completed"),
+      incomplete: _required(_readFieldValue<int>(_readField(json, const ["incomplete"]), "incomplete", _readInt, requiredField: true, nullable: false), "incomplete"),
+      total: _required(_readFieldValue<int>(_readField(json, const ["total"]), "total", _readInt, requiredField: true, nullable: false), "total"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'completed': completed,
+      'incomplete': incomplete,
+      'total': total,
+    };
+  }
+}
+
 class GeneratedPendingSyncResponse {
   final List<GeneratedActionItemResponse> pendingExport;
   final List<GeneratedActionItemResponse> syncedItems;

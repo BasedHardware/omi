@@ -569,7 +569,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final file = await File('${tempDir.path}/memory_graph.png').create();
       await file.writeAsBytes(finalByteData.buffer.asUint8List());
 
-      await Share.shareXFiles([XFile(file.path)], text: context.l10n.checkOutMyMemoryGraph);
+      if (mounted) {
+        await Share.shareXFiles([XFile(file.path)], text: context.l10n.checkOutMyMemoryGraph);
+      }
     } catch (e) {
       Logger.debug('Error sharing graph: $e');
     }

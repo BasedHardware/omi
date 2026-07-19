@@ -4471,7 +4471,7 @@ public enum OmiAPI {
 
   public static func createActionItemV1ActionItemsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ActionItemCreateRequest) async throws -> ActionItemResponse {
     let _path = "/v1/action-items"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4497,7 +4497,7 @@ public enum OmiAPI {
 
   public static func acceptSharedActionItemsV1ActionItemsAcceptPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/accept"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4523,7 +4523,7 @@ public enum OmiAPI {
 
   public static func createActionItemsBatchV1ActionItemsBatchPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: [ActionItemCreateRequest]) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/batch"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4549,7 +4549,7 @@ public enum OmiAPI {
 
   public static func batchUpdateActionItemsV1ActionItemsBatchPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/batch"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4575,7 +4575,7 @@ public enum OmiAPI {
 
   public static func batchDeleteActionItemsV1ActionItemsBatchDeletePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/batch-delete"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4601,7 +4601,7 @@ public enum OmiAPI {
 
   public static func getActionItemsCountV1ActionItemsCountGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/count"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4625,7 +4625,7 @@ public enum OmiAPI {
 
   public static func listActionItemIdsV1ActionItemsIdsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/ids"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4708,7 +4708,7 @@ public enum OmiAPI {
 
   public static func shareActionItemsV1ActionItemsSharePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/share"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4734,7 +4734,7 @@ public enum OmiAPI {
 
   public static func getSharedActionItemsV1ActionItemsSharedTokenGet(client: OmiApiClient, token: String) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/shared/\(token)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4754,7 +4754,7 @@ public enum OmiAPI {
 
   public static func syncBatchUpdateV1ActionItemsSyncBatchPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/action-items/sync-batch"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4780,7 +4780,7 @@ public enum OmiAPI {
 
   public static func getActionItemV1ActionItemsActionItemIdGet(client: OmiApiClient, actionItemId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> ActionItemResponse {
     let _path = "/v1/action-items/\(actionItemId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4804,7 +4804,7 @@ public enum OmiAPI {
 
   public static func updateActionItemV1ActionItemsActionItemIdPatch(client: OmiApiClient, actionItemId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ActionItemUpdateRequest) async throws -> ActionItemResponse {
     let _path = "/v1/action-items/\(actionItemId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4830,7 +4830,7 @@ public enum OmiAPI {
 
   public static func deleteActionItemV1ActionItemsActionItemIdDelete(client: OmiApiClient, actionItemId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Void {
     let _path = "/v1/action-items/\(actionItemId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4881,7 +4881,7 @@ public enum OmiAPI {
 
   public static func executeToolV1AgentExecuteToolPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/agent/execute-tool"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4907,7 +4907,7 @@ public enum OmiAPI {
 
   public static func keepaliveV1AgentKeepalivePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/agent/keepalive"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4931,7 +4931,7 @@ public enum OmiAPI {
 
   public static func listToolsV1AgentToolsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/agent/tools"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4955,7 +4955,7 @@ public enum OmiAPI {
 
   public static func ensureVmV1AgentVmEnsurePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/agent/vm-ensure"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -4979,7 +4979,7 @@ public enum OmiAPI {
 
   public static func getVmStatusV1AgentVmStatusGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/agent/vm-status"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5003,7 +5003,7 @@ public enum OmiAPI {
 
   public static func createAnnouncementEndpointV1AnnouncementsPost(client: OmiApiClient, secretKey: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/announcements"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5176,7 +5176,7 @@ public enum OmiAPI {
 
   public static func getAnnouncementV1AnnouncementsAnnouncementIdGet(client: OmiApiClient, announcementId: String, secretKey: String) async throws -> OmiAnyCodable {
     let _path = "/v1/announcements/\(announcementId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5197,7 +5197,7 @@ public enum OmiAPI {
 
   public static func updateAnnouncementEndpointV1AnnouncementsAnnouncementIdPut(client: OmiApiClient, announcementId: String, secretKey: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/announcements/\(announcementId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5246,7 +5246,7 @@ public enum OmiAPI {
 
   public static func dismissAnnouncementEndpointV1AnnouncementsAnnouncementIdDismissPost(client: OmiApiClient, announcementId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/announcements/\(announcementId)/dismiss"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5272,7 +5272,7 @@ public enum OmiAPI {
 
   public static func getAppCapabilitiesV1AppCapabilitiesGet(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/app-capabilities"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5292,7 +5292,7 @@ public enum OmiAPI {
 
   public static func getAppCategoriesV1AppCategoriesGet(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/app-categories"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5312,7 +5312,7 @@ public enum OmiAPI {
 
   public static func generateAppEndpointV1AppGeneratePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/app/generate"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5338,7 +5338,7 @@ public enum OmiAPI {
 
   public static func generateDescriptionEndpointV1AppGenerateDescriptionPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/app/generate-description"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5364,7 +5364,7 @@ public enum OmiAPI {
 
   public static func generateDescriptionAndEmojiEndpointV1AppGenerateDescriptionEmojiPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/app/generate-description-emoji"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5390,7 +5390,7 @@ public enum OmiAPI {
 
   public static func generateAppIconEndpointV1AppGenerateIconPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/app/generate-icon"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5416,7 +5416,7 @@ public enum OmiAPI {
 
   public static func generateSamplePromptsEndpointV1AppGeneratePromptsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/app/generate-prompts"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5440,7 +5440,7 @@ public enum OmiAPI {
 
   public static func getPaymentPlansV1V1AppPaymentPlansGet(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/app/payment-plans"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5460,7 +5460,7 @@ public enum OmiAPI {
 
   public static func getPaymentPlansV1AppPlansGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/app/plans"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5484,7 +5484,7 @@ public enum OmiAPI {
 
   public static func getNotificationScopesV1AppProactiveNotificationScopesGet(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/app/proactive-notification-scopes"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5504,7 +5504,7 @@ public enum OmiAPI {
 
   public static func uploadAppThumbnailEndpointV1AppThumbnailsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/app/thumbnails"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5557,7 +5557,7 @@ public enum OmiAPI {
 
   public static func createAppV1AppsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5635,7 +5635,7 @@ public enum OmiAPI {
 
   public static func getUserEnabledAppsV1AppsEnabledGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [String] {
     let _path = "/v1/apps/enabled"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5659,7 +5659,7 @@ public enum OmiAPI {
 
   public static func addMcpServerV1AppsMcpPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/mcp"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5712,7 +5712,7 @@ public enum OmiAPI {
 
   public static func getPopularAppsEndpointV1AppsPopularGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/apps/popular"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5736,7 +5736,7 @@ public enum OmiAPI {
 
   public static func getUnapprovedPublicAppsV1AppsPublicUnapprovedGet(client: OmiApiClient, secretKey: String) async throws -> [OmiAnyCodable] {
     let _path = "/v1/apps/public/unapproved"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5786,7 +5786,7 @@ public enum OmiAPI {
 
   public static func addNewTesterV1AppsTesterPost(client: OmiApiClient, secretKey: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/tester"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5809,7 +5809,7 @@ public enum OmiAPI {
 
   public static func addAppAccessTesterV1AppsTesterAccessPost(client: OmiApiClient, secretKey: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/tester/access"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5832,7 +5832,7 @@ public enum OmiAPI {
 
   public static func removeAppAccessTesterV1AppsTesterAccessDelete(client: OmiApiClient, secretKey: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/tester/access"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5855,7 +5855,7 @@ public enum OmiAPI {
 
   public static func checkIsTesterV1AppsTesterCheckGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/tester/check"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5879,7 +5879,7 @@ public enum OmiAPI {
 
   public static func getAppDetailsV1AppsAppIdGet(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5903,7 +5903,7 @@ public enum OmiAPI {
 
   public static func updateAppV1AppsAppIdPatch(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -5927,7 +5927,7 @@ public enum OmiAPI {
 
   public static func deleteAppV1AppsAppIdDelete(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6002,7 +6002,7 @@ public enum OmiAPI {
 
   public static func listApiKeysV1AppsAppIdKeysGet(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/apps/\(appId)/keys"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6026,7 +6026,7 @@ public enum OmiAPI {
 
   public static func createApiKeyForAppV1AppsAppIdKeysPost(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/keys"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6050,7 +6050,7 @@ public enum OmiAPI {
 
   public static func deleteApiKeyV1AppsAppIdKeysKeyIdDelete(client: OmiApiClient, appId: String, keyId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/keys/\(keyId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6074,7 +6074,7 @@ public enum OmiAPI {
 
   public static func refreshMcpToolsV1AppsAppIdMcpRefreshPost(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/mcp/refresh"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6122,7 +6122,7 @@ public enum OmiAPI {
 
   public static func refreshAppManifestV1AppsAppIdRefreshManifestPost(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/refresh-manifest"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6170,7 +6170,7 @@ public enum OmiAPI {
 
   public static func updateAppReviewV1AppsAppIdReviewPatch(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/review"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6196,7 +6196,7 @@ public enum OmiAPI {
 
   public static func replyToReviewV1AppsAppIdReviewReplyPatch(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/review/reply"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6222,7 +6222,7 @@ public enum OmiAPI {
 
   public static func appReviewsV1AppsAppIdReviewsGet(client: OmiApiClient, appId: String) async throws -> [OmiAnyCodable] {
     let _path = "/v1/apps/\(appId)/reviews"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6242,7 +6242,7 @@ public enum OmiAPI {
 
   public static func getAppSubscriptionV1AppsAppIdSubscriptionGet(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/subscription"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6266,7 +6266,7 @@ public enum OmiAPI {
 
   public static func cancelAppSubscriptionV1AppsAppIdSubscriptionDelete(client: OmiApiClient, appId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/subscription"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6364,7 +6364,7 @@ public enum OmiAPI {
 
   public static func storeCalendarMeetingV1CalendarMeetingsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/calendar/meetings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6390,7 +6390,7 @@ public enum OmiAPI {
 
   public static func getCalendarMeetingV1CalendarMeetingsMeetingIdGet(client: OmiApiClient, meetingId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/calendar/meetings/\(meetingId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6414,7 +6414,7 @@ public enum OmiAPI {
 
   public static func resetCalendarOnboardingV1CalendarOnboardingResetPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/calendar/onboarding/reset"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6438,7 +6438,7 @@ public enum OmiAPI {
 
   public static func skipCalendarOnboardingV1CalendarOnboardingSkipPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/calendar/onboarding/skip"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6462,7 +6462,7 @@ public enum OmiAPI {
 
   public static func getCalendarOnboardingStatusV1CalendarOnboardingStatusGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/calendar/onboarding/status"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6484,7 +6484,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func listCandidatesV1CandidatesGet(client: OmiApiClient, status: String? = nil, limit: Int? = nil, offset: Int? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CandidateListResponse {
+  public static func listCandidatesV1CandidatesGet(client: OmiApiClient, status: String? = nil, limit: Int? = nil, offset: Int? = nil, surface: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CandidateListResponse {
     let _path = "/v1/candidates"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -6498,6 +6498,9 @@ public enum OmiAPI {
     }
     if let offset {
       queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let surface {
+      queryItems.append(URLQueryItem(name: "surface", value: String(surface)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6521,7 +6524,7 @@ public enum OmiAPI {
 
   public static func createCandidateV1CandidatesPost(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: CandidateCreate) async throws -> CandidateRecord {
     let _path = "/v1/candidates"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6549,7 +6552,7 @@ public enum OmiAPI {
 
   public static func getCandidateWorkflowControlV1CandidatesControlGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> TaskWorkflowControl {
     let _path = "/v1/candidates/control"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6603,7 +6606,7 @@ public enum OmiAPI {
 
   public static func migrateStagedCandidatesV1CandidatesMigrateStagedPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/candidates/migrate-staged"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6629,7 +6632,7 @@ public enum OmiAPI {
 
   public static func getCandidateV1CandidatesCandidateIdGet(client: OmiApiClient, candidateId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CandidateRecord {
     let _path = "/v1/candidates/\(candidateId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6653,7 +6656,7 @@ public enum OmiAPI {
 
   public static func acceptCandidateV1CandidatesCandidateIdAcceptPost(client: OmiApiClient, candidateId: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CandidateResolutionReceipt {
     let _path = "/v1/candidates/\(candidateId)/accept"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6678,7 +6681,7 @@ public enum OmiAPI {
 
   public static func expireCandidateV1CandidatesCandidateIdExpirePost(client: OmiApiClient, candidateId: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: CandidateResolutionRequest) async throws -> CandidateResolutionReceipt {
     let _path = "/v1/candidates/\(candidateId)/expire"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6705,7 +6708,7 @@ public enum OmiAPI {
 
   public static func rejectCandidateV1CandidatesCandidateIdRejectPost(client: OmiApiClient, candidateId: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: CandidateResolutionRequest) async throws -> CandidateResolutionReceipt {
     let _path = "/v1/candidates/\(candidateId)/reject"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6782,7 +6785,7 @@ public enum OmiAPI {
 
   public static func processInProgressConversationV1ConversationsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6855,7 +6858,7 @@ public enum OmiAPI {
 
   public static func createConversationFromSegmentsUserV1ConversationsFromSegmentsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/from-segments"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6881,7 +6884,7 @@ public enum OmiAPI {
 
   public static func mergeConversationsV1ConversationsMergePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/merge"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6907,7 +6910,7 @@ public enum OmiAPI {
 
   public static func searchConversationsEndpointV1ConversationsSearchPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/search"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6933,7 +6936,7 @@ public enum OmiAPI {
 
   public static func getConversationByIdV1ConversationsConversationIdGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
     let _path = "/v1/conversations/\(conversationId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6986,7 +6989,7 @@ public enum OmiAPI {
 
   public static func getConversationActionItemsV1ConversationsConversationIdActionItemsGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/action-items"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7010,7 +7013,7 @@ public enum OmiAPI {
 
   public static func setActionItemStatusV1ConversationsConversationIdActionItemsPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/action-items"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7036,7 +7039,7 @@ public enum OmiAPI {
 
   public static func deleteConversationActionItemsV1ConversationsConversationIdActionItemsDelete(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/action-items"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7058,9 +7061,33 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func getConversationActionItemsCountV1ConversationsConversationIdActionItemsCountGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/\(conversationId)/action-items/count"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func updateActionItemDescriptionV1ConversationsConversationIdActionItemsActionItemIdxPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/action-items/{action_item_idx}"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7119,7 +7146,7 @@ public enum OmiAPI {
 
   public static func linkCalendarEventV1ConversationsConversationIdCalendarEventPost(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> CalendarEventLink {
     let _path = "/v1/conversations/\(conversationId)/calendar-event"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7145,7 +7172,7 @@ public enum OmiAPI {
 
   public static func unlinkCalendarEventV1ConversationsConversationIdCalendarEventDelete(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/calendar-event"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7169,7 +7196,7 @@ public enum OmiAPI {
 
   public static func autoLinkCalendarEventV1ConversationsConversationIdCalendarEventAutoLinkPost(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CalendarEventLink {
     let _path = "/v1/conversations/\(conversationId)/calendar-event/auto-link"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7193,7 +7220,7 @@ public enum OmiAPI {
 
   public static func setConversationEventsStateV1ConversationsConversationIdEventsPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/events"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7217,9 +7244,33 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func getConversationFinalizationStatusV1ConversationsConversationIdFinalizationGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/conversations/\(conversationId)/finalization"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func finalizeConversationV1ConversationsConversationIdFinalizePost(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/finalize"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7245,7 +7296,7 @@ public enum OmiAPI {
 
   public static func moveConversationToFolderV1ConversationsConversationIdFolderPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/folder"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7271,7 +7322,7 @@ public enum OmiAPI {
 
   public static func getConversationPhotosV1ConversationsConversationIdPhotosGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [ConversationPhoto] {
     let _path = "/v1/conversations/\(conversationId)/photos"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7295,7 +7346,7 @@ public enum OmiAPI {
 
   public static func conversationHasAudioRecordingV1ConversationsConversationIdRecordingGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/recording"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7351,7 +7402,7 @@ public enum OmiAPI {
 
   public static func assignSegmentsBulkV1ConversationsConversationIdSegmentsAssignBulkPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> Conversation {
     let _path = "/v1/conversations/\(conversationId)/segments/assign-bulk"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7377,7 +7428,7 @@ public enum OmiAPI {
 
   public static func patchConversationSegmentTextV1ConversationsConversationIdSegmentsTextPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/segments/text"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7436,7 +7487,7 @@ public enum OmiAPI {
 
   public static func getSharedConversationByIdV1ConversationsConversationIdSharedGet(client: OmiApiClient, conversationId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/shared"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7483,7 +7534,7 @@ public enum OmiAPI {
 
   public static func getConversationSuggestedAppsV1ConversationsConversationIdSuggestedAppsGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/suggested-apps"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7507,7 +7558,7 @@ public enum OmiAPI {
 
   public static func patchConversationSummaryV1ConversationsConversationIdSummaryPatch(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/summary"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7533,7 +7584,7 @@ public enum OmiAPI {
 
   public static func testPromptV1ConversationsConversationIdTestPromptPost(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/test-prompt"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7586,7 +7637,7 @@ public enum OmiAPI {
 
   public static func getConversationTranscriptsByModelsV1ConversationsConversationIdTranscriptsGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [String: [TranscriptSegment]] {
     let _path = "/v1/conversations/\(conversationId)/transcripts"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7637,7 +7688,7 @@ public enum OmiAPI {
 
   public static func listApiKeys(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/dev/keys"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7657,7 +7708,7 @@ public enum OmiAPI {
 
   public static func createApiKey(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/keys"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7679,7 +7730,7 @@ public enum OmiAPI {
 
   public static func revokeApiKey(client: OmiApiClient, keyId: String) async throws -> Void {
     let _path = "/v1/dev/keys/\(keyId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7739,7 +7790,7 @@ public enum OmiAPI {
 
   public static func createActionItem(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/action-items"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7761,7 +7812,7 @@ public enum OmiAPI {
 
   public static func createActionItemsBatch(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/action-items/batch"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7783,7 +7834,7 @@ public enum OmiAPI {
 
   public static func updateActionItem(client: OmiApiClient, actionItemId: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/action-items/\(actionItemId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7805,7 +7856,7 @@ public enum OmiAPI {
 
   public static func deleteActionItem(client: OmiApiClient, actionItemId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/action-items/\(actionItemId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7871,7 +7922,7 @@ public enum OmiAPI {
 
   public static func createConversation(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/conversations"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7893,7 +7944,7 @@ public enum OmiAPI {
 
   public static func createConversationFromSegments(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/conversations/from-segments"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7940,7 +7991,7 @@ public enum OmiAPI {
 
   public static func updateConversation(client: OmiApiClient, conversationId: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/conversations/\(conversationId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7962,7 +8013,7 @@ public enum OmiAPI {
 
   public static func deleteConversation(client: OmiApiClient, conversationId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/conversations/\(conversationId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -7982,7 +8033,7 @@ public enum OmiAPI {
 
   public static func listFolders(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/dev/user/folders"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8030,7 +8081,7 @@ public enum OmiAPI {
 
   public static func createGoal(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/goals"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8052,7 +8103,7 @@ public enum OmiAPI {
 
   public static func getGoal(client: OmiApiClient, goalId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/goals/\(goalId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8072,7 +8123,7 @@ public enum OmiAPI {
 
   public static func updateGoal(client: OmiApiClient, goalId: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/goals/\(goalId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8094,7 +8145,7 @@ public enum OmiAPI {
 
   public static func deleteGoal(client: OmiApiClient, goalId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/goals/\(goalId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8193,7 +8244,7 @@ public enum OmiAPI {
 
   public static func createMemory(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/memories"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8215,7 +8266,7 @@ public enum OmiAPI {
 
   public static func createMemoriesBatch(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/memories/batch"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8263,7 +8314,7 @@ public enum OmiAPI {
 
   public static func updateMemory(client: OmiApiClient, memoryId: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/memories/\(memoryId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8285,7 +8336,7 @@ public enum OmiAPI {
 
   public static func deleteMemory(client: OmiApiClient, memoryId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/dev/user/memories/\(memoryId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8305,7 +8356,7 @@ public enum OmiAPI {
 
   public static func getPublicCaseStatusV1FairUseCaseCaseRefStatusGet(client: OmiApiClient, caseRef: String) async throws -> OmiAnyCodable {
     let _path = "/v1/fair-use/case/\(caseRef)/status"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8325,7 +8376,7 @@ public enum OmiAPI {
 
   public static func getMyFairUseStatusV1FairUseStatusGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/fair-use/status"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8349,7 +8400,7 @@ public enum OmiAPI {
 
   public static func getFoldersV1FoldersGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v1/folders"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8373,7 +8424,7 @@ public enum OmiAPI {
 
   public static func createFolderV1FoldersPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/folders"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8399,7 +8450,7 @@ public enum OmiAPI {
 
   public static func reorderFoldersV1FoldersReorderPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/folders/reorder"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8425,7 +8476,7 @@ public enum OmiAPI {
 
   public static func getFolderV1FoldersFolderIdGet(client: OmiApiClient, folderId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/folders/\(folderId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8449,7 +8500,7 @@ public enum OmiAPI {
 
   public static func updateFolderV1FoldersFolderIdPatch(client: OmiApiClient, folderId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/folders/\(folderId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8539,7 +8590,7 @@ public enum OmiAPI {
 
   public static func bulkMoveConversationsV1FoldersFolderIdConversationsBulkMovePost(client: OmiApiClient, folderId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/folders/\(folderId)/conversations/bulk-move"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8565,7 +8616,7 @@ public enum OmiAPI {
 
   public static func getCurrentGoalV1GoalsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> GoalResponse {
     let _path = "/v1/goals"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8589,7 +8640,7 @@ public enum OmiAPI {
 
   public static func createGoalV1GoalsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> GoalResponse {
     let _path = "/v1/goals"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8615,7 +8666,7 @@ public enum OmiAPI {
 
   public static func getCurrentGoalAdviceV1GoalsAdviceGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/goals/advice"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8668,7 +8719,7 @@ public enum OmiAPI {
 
   public static func createCanonicalGoalV1GoalsCanonicalPost(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> GoalResponse {
     let _path = "/v1/goals/canonical"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8696,7 +8747,7 @@ public enum OmiAPI {
 
   public static func extractAndUpdateProgressV1GoalsExtractProgressPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/goals/extract-progress"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8722,7 +8773,7 @@ public enum OmiAPI {
 
   public static func suggestGoalV1GoalsSuggestGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/goals/suggest"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8746,7 +8797,7 @@ public enum OmiAPI {
 
   public static func updateGoalV1GoalsGoalIdPatch(client: OmiApiClient, goalId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: GoalUpdate) async throws -> GoalResponse {
     let _path = "/v1/goals/\(goalId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8772,7 +8823,7 @@ public enum OmiAPI {
 
   public static func deleteGoalV1GoalsGoalIdDelete(client: OmiApiClient, goalId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/goals/\(goalId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8796,7 +8847,7 @@ public enum OmiAPI {
 
   public static func getGoalAdviceV1GoalsGoalIdAdviceGet(client: OmiApiClient, goalId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/goals/\(goalId)/advice"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8820,7 +8871,7 @@ public enum OmiAPI {
 
   public static func getGoalDetailV1GoalsGoalIdDetailGet(client: OmiApiClient, goalId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> GoalDetailProjection {
     let _path = "/v1/goals/\(goalId)/detail"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8844,7 +8895,7 @@ public enum OmiAPI {
 
   public static func focusGoalV1GoalsGoalIdFocusPost(client: OmiApiClient, goalId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> GoalResponse {
     let _path = "/v1/goals/\(goalId)/focus"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8872,7 +8923,7 @@ public enum OmiAPI {
 
   public static func unfocusGoalV1GoalsGoalIdFocusDelete(client: OmiApiClient, goalId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> GoalResponse {
     let _path = "/v1/goals/\(goalId)/focus"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -8927,7 +8978,7 @@ public enum OmiAPI {
 
   public static func transitionGoalLifecycleV1GoalsGoalIdLifecyclePost(client: OmiApiClient, goalId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> GoalResponse {
     let _path = "/v1/goals/\(goalId)/lifecycle"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9011,7 +9062,7 @@ public enum OmiAPI {
 
   public static func appendGoalProgressEventV1GoalsGoalIdProgressEventsPost(client: OmiApiClient, goalId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> GoalProgressEvent {
     let _path = "/v1/goals/\(goalId)/progress-events"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9068,7 +9119,7 @@ public enum OmiAPI {
 
   public static func getImportJobStatusV1ImportJobsJobIdGet(client: OmiApiClient, jobId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/import/jobs/\(jobId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9092,7 +9143,7 @@ public enum OmiAPI {
 
   public static func deleteImportJobV1ImportJobsJobIdDelete(client: OmiApiClient, jobId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/import/jobs/\(jobId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9116,7 +9167,7 @@ public enum OmiAPI {
 
   public static func cancelImportJobV1ImportJobsJobIdCancelPost(client: OmiApiClient, jobId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/import/jobs/\(jobId)/cancel"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9169,7 +9220,7 @@ public enum OmiAPI {
 
   public static func deleteLimitlessConversationsV1ImportLimitlessConversationsDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/import/limitless/conversations"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9193,7 +9244,7 @@ public enum OmiAPI {
 
   public static func syncAppleHealthDataV1IntegrationsAppleHealthSyncPut(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/integrations/apple-health/sync"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9219,7 +9270,7 @@ public enum OmiAPI {
 
   public static func sendAppNotificationToUserV1IntegrationsNotificationPost(client: OmiApiClient, authorization: String? = nil, body: [String: OmiAnyCodable]) async throws -> OmiAnyCodable {
     let _path = "/v1/integrations/notification"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9242,7 +9293,7 @@ public enum OmiAPI {
 
   public static func getIntegrationV1IntegrationsAppKeyGet(client: OmiApiClient, appKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/integrations/\(appKey)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9266,7 +9317,7 @@ public enum OmiAPI {
 
   public static func saveIntegrationV1IntegrationsAppKeyPut(client: OmiApiClient, appKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/integrations/\(appKey)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9292,7 +9343,7 @@ public enum OmiAPI {
 
   public static func deleteIntegrationV1IntegrationsAppKeyDelete(client: OmiApiClient, appKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Void {
     let _path = "/v1/integrations/\(appKey)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9316,7 +9367,7 @@ public enum OmiAPI {
 
   public static func getOauthUrlV1IntegrationsAppKeyOauthUrlGet(client: OmiApiClient, appKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/integrations/\(appKey)/oauth-url"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9340,7 +9391,7 @@ public enum OmiAPI {
 
   public static func getKnowledgeGraphV1KnowledgeGraphGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/knowledge-graph"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9364,7 +9415,7 @@ public enum OmiAPI {
 
   public static func deleteKnowledgeGraphV1KnowledgeGraphDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/knowledge-graph"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9388,7 +9439,7 @@ public enum OmiAPI {
 
   public static func rebuildGraphV1KnowledgeGraphRebuildPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/knowledge-graph/rebuild"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9449,7 +9500,7 @@ public enum OmiAPI {
 
   public static func createActionItemV1McpActionItemsPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/action-items"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9497,7 +9548,7 @@ public enum OmiAPI {
 
   public static func updateActionItemV1McpActionItemsActionItemIdPatch(client: OmiApiClient, actionItemId: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/action-items/\(actionItemId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9519,7 +9570,7 @@ public enum OmiAPI {
 
   public static func deleteActionItemV1McpActionItemsActionItemIdDelete(client: OmiApiClient, actionItemId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/action-items/\(actionItemId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9661,7 +9712,7 @@ public enum OmiAPI {
 
   public static func getConversationByIdV1McpConversationsConversationIdGet(client: OmiApiClient, conversationId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/conversations/\(conversationId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9740,7 +9791,7 @@ public enum OmiAPI {
 
   public static func getKeysV1McpKeysGet(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/keys"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9760,7 +9811,7 @@ public enum OmiAPI {
 
   public static func createKeyV1McpKeysPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/keys"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9782,7 +9833,7 @@ public enum OmiAPI {
 
   public static func deleteKeyV1McpKeysKeyIdDelete(client: OmiApiClient, keyId: String) async throws -> Void {
     let _path = "/v1/mcp/keys/\(keyId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9851,7 +9902,7 @@ public enum OmiAPI {
 
   public static func createMemoryV1McpMemoriesPost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/memories"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9922,7 +9973,7 @@ public enum OmiAPI {
 
   public static func deleteMemoryV1McpMemoriesMemoryIdDelete(client: OmiApiClient, memoryId: String) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/memories/\(memoryId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9942,7 +9993,7 @@ public enum OmiAPI {
 
   public static func getOauthGrantsV1McpOauthGrantsGet(client: OmiApiClient) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/oauth/grants"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9962,7 +10013,7 @@ public enum OmiAPI {
 
   public static func revokeOauthGrantV1McpOauthGrantsGrantIdDelete(client: OmiApiClient, grantId: String) async throws -> Void {
     let _path = "/v1/mcp/oauth/grants/\(grantId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -9982,7 +10033,7 @@ public enum OmiAPI {
 
   public static func getPeopleV1McpPeopleGet(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/mcp/people"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10002,7 +10053,7 @@ public enum OmiAPI {
 
   public static func getUserProfileV1McpProfileGet(client: OmiApiClient) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/profile"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10059,7 +10110,7 @@ public enum OmiAPI {
 
   public static func mcpSseGetV1McpSseGet(client: OmiApiClient, authorization: String? = nil, mcpSessionId: String? = nil) async throws -> Void {
     let _path = "/v1/mcp/sse"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10081,7 +10132,7 @@ public enum OmiAPI {
 
   public static func mcpStreamableHttpV1McpSsePost(client: OmiApiClient, authorization: String? = nil, mcpSessionId: String? = nil, accept: String? = nil) async throws -> Void {
     let _path = "/v1/mcp/sse"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10104,7 +10155,7 @@ public enum OmiAPI {
 
   public static func mcpDeleteSessionV1McpSseDelete(client: OmiApiClient, mcpSessionId: String? = nil, authorization: String? = nil) async throws -> Void {
     let _path = "/v1/mcp/sse"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10126,7 +10177,7 @@ public enum OmiAPI {
 
   public static func mcpSseInfoV1McpSseInfoGet(client: OmiApiClient) async throws -> OmiAnyCodable {
     let _path = "/v1/mcp/sse/info"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10146,7 +10197,7 @@ public enum OmiAPI {
 
   public static func setDefaultPaymentMethodEndpointV1PaymentMethodsDefaultPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/payment-methods/default"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10172,7 +10223,7 @@ public enum OmiAPI {
 
   public static func getPaymentMethodStatusV1PaymentMethodsStatusGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/payment-methods/status"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10196,7 +10247,7 @@ public enum OmiAPI {
 
   public static func getAvailablePlansEndpointV1PaymentsAvailablePlansGet(client: OmiApiClient, xAppPlatform: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/payments/available-plans"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10220,7 +10271,7 @@ public enum OmiAPI {
 
   public static func createCheckoutSessionEndpointV1PaymentsCheckoutSessionPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/payments/checkout-session"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10246,7 +10297,7 @@ public enum OmiAPI {
 
   public static func createCustomerPortalEndpointV1PaymentsCustomerPortalPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/payments/customer-portal"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10270,7 +10321,7 @@ public enum OmiAPI {
 
   public static func getOverageInfoEndpointV1PaymentsOverageInfoGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/payments/overage-info"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10294,7 +10345,7 @@ public enum OmiAPI {
 
   public static func cancelSubscriptionEndpointV1PaymentsSubscriptionDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/payments/subscription"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10320,7 +10371,7 @@ public enum OmiAPI {
 
   public static func upgradeSubscriptionEndpointV1PaymentsUpgradeSubscriptionPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/payments/upgrade-subscription"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10346,7 +10397,7 @@ public enum OmiAPI {
 
   public static func getPaypalPaymentDetailsEndpointV1PaypalPaymentDetailsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/paypal/payment-details"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10370,7 +10421,7 @@ public enum OmiAPI {
 
   public static func savePaypalPaymentDetailsV1PaypalPaymentDetailsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/paypal/payment-details"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10396,7 +10447,7 @@ public enum OmiAPI {
 
   public static func listPhoneNumbersV1PhoneNumbersGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/phone/numbers"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10420,7 +10471,7 @@ public enum OmiAPI {
 
   public static func verifyPhoneNumberV1PhoneNumbersVerifyPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/phone/numbers/verify"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10446,7 +10497,7 @@ public enum OmiAPI {
 
   public static func checkPhoneVerificationV1PhoneNumbersVerifyCheckPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/phone/numbers/verify/check"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10472,7 +10523,7 @@ public enum OmiAPI {
 
   public static func removePhoneNumberV1PhoneNumbersPhoneNumberIdDelete(client: OmiApiClient, phoneNumberId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/phone/numbers/\(phoneNumberId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10496,7 +10547,7 @@ public enum OmiAPI {
 
   public static func getPhoneTokenV1PhoneTokenPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/phone/token"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10520,7 +10571,7 @@ public enum OmiAPI {
 
   public static func twimlVoiceWebhookV1PhoneTwimlPost(client: OmiApiClient) async throws -> Void {
     let _path = "/v1/phone/twiml"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10569,7 +10620,7 @@ public enum OmiAPI {
 
   public static func stripeConnectWebhookV1StripeConnectWebhookPost(client: OmiApiClient, stripeSignature: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/stripe/connect/webhook"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10590,7 +10641,7 @@ public enum OmiAPI {
 
   public static func checkOnboardingStatusV1StripeOnboardedGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/stripe/onboarded"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10614,7 +10665,7 @@ public enum OmiAPI {
 
   public static func refreshAccountLinkEndpointV1StripeRefreshAccountIdPost(client: OmiApiClient, accountId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/stripe/refresh/\(accountId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10638,7 +10689,7 @@ public enum OmiAPI {
 
   public static func getSupportedCountriesV1StripeSupportedCountriesGet(client: OmiApiClient) async throws -> [OmiAnyCodable] {
     let _path = "/v1/stripe/supported-countries"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10658,7 +10709,7 @@ public enum OmiAPI {
 
   public static func stripeWebhookV1StripeWebhookPost(client: OmiApiClient, stripeSignature: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/stripe/webhook"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10679,7 +10730,7 @@ public enum OmiAPI {
 
   public static func precacheConversationAudioEndpointV1SyncAudioConversationIdPrecachePost(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/sync/audio/\(conversationId)/precache"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10703,7 +10754,7 @@ public enum OmiAPI {
 
   public static func getAudioSignedUrlsEndpointV1SyncAudioConversationIdUrlsGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/sync/audio/\(conversationId)/urls"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10727,7 +10778,7 @@ public enum OmiAPI {
 
   public static func getTaskIntegrationsV1TaskIntegrationsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10751,7 +10802,7 @@ public enum OmiAPI {
 
   public static func getAsanaProjectsV1TaskIntegrationsAsanaProjectsWorkspaceGidGet(client: OmiApiClient, workspaceGid: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/asana/projects/\(workspaceGid)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10775,7 +10826,7 @@ public enum OmiAPI {
 
   public static func getAsanaWorkspacesV1TaskIntegrationsAsanaWorkspacesGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/asana/workspaces"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10799,7 +10850,7 @@ public enum OmiAPI {
 
   public static func getClickupListsV1TaskIntegrationsClickupListsSpaceIdGet(client: OmiApiClient, spaceId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/clickup/lists/\(spaceId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10823,7 +10874,7 @@ public enum OmiAPI {
 
   public static func getClickupSpacesV1TaskIntegrationsClickupSpacesTeamIdGet(client: OmiApiClient, teamId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/clickup/spaces/\(teamId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10847,7 +10898,7 @@ public enum OmiAPI {
 
   public static func getClickupTeamsV1TaskIntegrationsClickupTeamsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/clickup/teams"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10871,7 +10922,7 @@ public enum OmiAPI {
 
   public static func getDefaultTaskIntegrationV1TaskIntegrationsDefaultGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/default"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10895,7 +10946,7 @@ public enum OmiAPI {
 
   public static func setDefaultTaskIntegrationV1TaskIntegrationsDefaultPut(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/default"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10921,7 +10972,7 @@ public enum OmiAPI {
 
   public static func saveTaskIntegrationV1TaskIntegrationsAppKeyPut(client: OmiApiClient, appKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/\(appKey)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10947,7 +10998,7 @@ public enum OmiAPI {
 
   public static func deleteTaskIntegrationV1TaskIntegrationsAppKeyDelete(client: OmiApiClient, appKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Void {
     let _path = "/v1/task-integrations/\(appKey)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10971,7 +11022,7 @@ public enum OmiAPI {
 
   public static func getOauthUrlV1TaskIntegrationsAppKeyOauthUrlGet(client: OmiApiClient, appKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/\(appKey)/oauth-url"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -10995,7 +11046,7 @@ public enum OmiAPI {
 
   public static func createTaskViaIntegrationV1TaskIntegrationsAppKeyTasksPost(client: OmiApiClient, appKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/task-integrations/\(appKey)/tasks"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11021,7 +11072,7 @@ public enum OmiAPI {
 
   public static func replaceContextSnapshotV1TaskIntelligenceContextSnapshotPut(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: NormalizedContextSnapshot) async throws -> SnapshotReceipt {
     let _path = "/v1/task-intelligence/context-snapshot"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11079,7 +11130,7 @@ public enum OmiAPI {
 
   public static func createFeedbackV1TaskIntelligenceFeedbackPost(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: FeedbackCreate) async throws -> FeedbackRecord {
     let _path = "/v1/task-intelligence/feedback"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11107,7 +11158,7 @@ public enum OmiAPI {
 
   public static func registerInterventionV1TaskIntelligenceInterventionsPost(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: InterventionCreate) async throws -> InterventionRecord {
     let _path = "/v1/task-intelligence/interventions"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11135,7 +11186,7 @@ public enum OmiAPI {
 
   public static func replaceOpenLoopSnapshotV1TaskIntelligenceOpenLoopSnapshotPut(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OpenLoopSnapshot) async throws -> SnapshotReceipt {
     let _path = "/v1/task-intelligence/open-loop-snapshot"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11163,7 +11214,7 @@ public enum OmiAPI {
 
   public static func createOutcomeV1TaskIntelligenceOutcomesPost(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OutcomeCreate) async throws -> OutcomeRecord {
     let _path = "/v1/task-intelligence/outcomes"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11191,7 +11242,7 @@ public enum OmiAPI {
 
   public static func getAiProfileV1UsersAiProfileGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/ai-profile"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11215,7 +11266,7 @@ public enum OmiAPI {
 
   public static func updateAiProfileV1UsersAiProfilePatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/ai-profile"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11327,7 +11378,7 @@ public enum OmiAPI {
 
   public static func getAssistantSettingsV1UsersAssistantSettingsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/assistant-settings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11351,7 +11402,7 @@ public enum OmiAPI {
 
   public static func updateAssistantSettingsV1UsersAssistantSettingsPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/assistant-settings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11409,7 +11460,7 @@ public enum OmiAPI {
 
   public static func getDailySummaryV1UsersDailySummariesSummaryIdGet(client: OmiApiClient, summaryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/daily-summaries/\(summaryId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11433,7 +11484,7 @@ public enum OmiAPI {
 
   public static func deleteDailySummaryV1UsersDailySummariesSummaryIdDelete(client: OmiApiClient, summaryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/daily-summaries/\(summaryId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11457,7 +11508,7 @@ public enum OmiAPI {
 
   public static func regenerateDailySummaryV1UsersDailySummariesSummaryIdRegeneratePost(client: OmiApiClient, summaryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/daily-summaries/\(summaryId)/regenerate"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11508,7 +11559,7 @@ public enum OmiAPI {
 
   public static func getDailySummarySettingsV1UsersDailySummarySettingsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/daily-summary-settings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11532,7 +11583,7 @@ public enum OmiAPI {
 
   public static func updateDailySummarySettingsV1UsersDailySummarySettingsPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/daily-summary-settings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11558,7 +11609,7 @@ public enum OmiAPI {
 
   public static func testDailySummaryV1UsersDailySummarySettingsTestPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/daily-summary-settings/test"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11584,7 +11635,7 @@ public enum OmiAPI {
 
   public static func deleteAccountV1UsersDeleteAccountDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/delete-account"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11610,7 +11661,7 @@ public enum OmiAPI {
 
   public static func getUserWebhookEndpointV1UsersDeveloperWebhookWtypeGet(client: OmiApiClient, wtype: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/developer/webhook/\(wtype)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11634,7 +11685,7 @@ public enum OmiAPI {
 
   public static func setUserWebhookEndpointV1UsersDeveloperWebhookWtypePost(client: OmiApiClient, wtype: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/developer/webhook/\(wtype)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11660,7 +11711,7 @@ public enum OmiAPI {
 
   public static func disableUserWebhookEndpointV1UsersDeveloperWebhookWtypeDisablePost(client: OmiApiClient, wtype: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/developer/webhook/\(wtype)/disable"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11684,7 +11735,7 @@ public enum OmiAPI {
 
   public static func enableUserWebhookEndpointV1UsersDeveloperWebhookWtypeEnablePost(client: OmiApiClient, wtype: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/developer/webhook/\(wtype)/enable"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11708,7 +11759,7 @@ public enum OmiAPI {
 
   public static func getUserWebhooksStatusV1UsersDeveloperWebhooksStatusGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/developer/webhooks/status"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11732,7 +11783,7 @@ public enum OmiAPI {
 
   public static func exportAllUserDataV1UsersExportGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/export"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11756,7 +11807,7 @@ public enum OmiAPI {
 
   public static func saveTokenV1UsersFcmTokenPost(client: OmiApiClient, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, authorization: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/fcm-token"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11782,7 +11833,7 @@ public enum OmiAPI {
 
   public static func setUserGeolocationV1UsersGeolocationPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: Geolocation) async throws -> OmiAnyCodable {
     let _path = "/v1/users/geolocation"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11808,7 +11859,7 @@ public enum OmiAPI {
 
   public static func getUserLanguageV1UsersLanguageGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/language"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11832,7 +11883,7 @@ public enum OmiAPI {
 
   public static func setUserLanguageV1UsersLanguagePatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/language"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11858,7 +11909,7 @@ public enum OmiAPI {
 
   public static func activateByokEndpointV1UsersMeByokActivePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/me/byok-active"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11884,7 +11935,7 @@ public enum OmiAPI {
 
   public static func deactivateByokEndpointV1UsersMeByokActiveDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/me/byok-active"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11937,7 +11988,7 @@ public enum OmiAPI {
 
   public static func recordLlmUsageBucketV1UsersMeLlmUsagePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/me/llm-usage"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -11995,7 +12046,7 @@ public enum OmiAPI {
 
   public static func getTotalLlmCostV1UsersMeLlmUsageTotalGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/me/llm-usage/total"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12048,7 +12099,7 @@ public enum OmiAPI {
 
   public static func getUserSubscriptionEndpointV1UsersMeSubscriptionGet(client: OmiApiClient, xAppPlatform: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/me/subscription"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12072,7 +12123,7 @@ public enum OmiAPI {
 
   public static func getUserTrialStatusV1UsersMeTrialGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/me/trial"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12125,7 +12176,7 @@ public enum OmiAPI {
 
   public static func getUserChatUsageQuotaV1UsersMeUsageQuotaGet(client: OmiApiClient, xAppPlatform: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/me/usage-quota"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12149,7 +12200,7 @@ public enum OmiAPI {
 
   public static func getMentorNotificationSettingsV1UsersMentorNotificationSettingsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/mentor-notification-settings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12173,7 +12224,7 @@ public enum OmiAPI {
 
   public static func updateMentorNotificationSettingsV1UsersMentorNotificationSettingsPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/mentor-notification-settings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12199,7 +12250,7 @@ public enum OmiAPI {
 
   public static func handleBatchMigrationRequestsV1UsersMigrationBatchRequestsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/migration/batch-requests"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12252,7 +12303,7 @@ public enum OmiAPI {
 
   public static func handleMigrationRequestsV1UsersMigrationRequestsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/migration/requests"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12278,7 +12329,7 @@ public enum OmiAPI {
 
   public static func finalizeMigrationRequestV1UsersMigrationRequestsDataProtectionLevelFinalizePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/migration/requests/data-protection-level/finalize"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12304,7 +12355,7 @@ public enum OmiAPI {
 
   public static func getNotificationSettingsV1UsersNotificationSettingsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/notification-settings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12328,7 +12379,7 @@ public enum OmiAPI {
 
   public static func updateNotificationSettingsV1UsersNotificationSettingsPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/notification-settings"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12354,7 +12405,7 @@ public enum OmiAPI {
 
   public static func getOnboardingStateV1UsersOnboardingGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/onboarding"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12378,7 +12429,7 @@ public enum OmiAPI {
 
   public static func updateOnboardingStateV1UsersOnboardingPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/onboarding"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12433,7 +12484,7 @@ public enum OmiAPI {
 
   public static func getOrCreatePersonV1UsersPeoplePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/people"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12488,7 +12539,7 @@ public enum OmiAPI {
 
   public static func deletePersonEndpointV1UsersPeoplePersonIdDelete(client: OmiApiClient, personId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Void {
     let _path = "/v1/users/people/\(personId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12539,7 +12590,7 @@ public enum OmiAPI {
 
   public static func deletePersonSpeechSampleEndpointV1UsersPeoplePersonIdSpeechSamplesSampleIndexDelete(client: OmiApiClient, personId: String, sampleIndex: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/people/\(personId)/speech-samples/\(sampleIndex)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12590,7 +12641,7 @@ public enum OmiAPI {
 
   public static func getPrivateCloudSyncV1UsersPrivateCloudSyncGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/private-cloud-sync"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12641,7 +12692,7 @@ public enum OmiAPI {
 
   public static func getUserProfileEndpointV1UsersProfileGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/profile"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12665,7 +12716,7 @@ public enum OmiAPI {
 
   public static func getChatMessageCountV1UsersStatsChatMessagesGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/stats/chat-messages"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12689,7 +12740,7 @@ public enum OmiAPI {
 
   public static func getStoreRecordingPermissionV1UsersStoreRecordingPermissionGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/store-recording-permission"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12740,7 +12791,7 @@ public enum OmiAPI {
 
   public static func deletePermissionAndRecordingsV1UsersStoreRecordingPermissionDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/store-recording-permission"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12764,7 +12815,7 @@ public enum OmiAPI {
 
   public static func getTrainingDataOptInStatusV1UsersTrainingDataOptInGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/training-data-opt-in"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12788,7 +12839,7 @@ public enum OmiAPI {
 
   public static func setTrainingDataOptInStatusV1UsersTrainingDataOptInPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/training-data-opt-in"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12812,7 +12863,7 @@ public enum OmiAPI {
 
   public static func getTranscriptionPreferencesEndpointV1UsersTranscriptionPreferencesGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/transcription-preferences"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12836,7 +12887,7 @@ public enum OmiAPI {
 
   public static func updateTranscriptionPreferencesEndpointV1UsersTranscriptionPreferencesPatch(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/users/transcription-preferences"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12891,7 +12942,7 @@ public enum OmiAPI {
 
   public static func evaluateWhatMattersNowV1WhatMattersNowEvaluatePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: EvaluationRequest) async throws -> WhatMattersNowProjection {
     let _path = "/v1/what-matters-now/evaluate"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12917,7 +12968,7 @@ public enum OmiAPI {
 
   public static func resolveWorkIntentV1WorkIntentsPost(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> WorkIntentReceipt {
     let _path = "/v1/work-intents"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12945,7 +12996,7 @@ public enum OmiAPI {
 
   public static func importTaskGoalLinksV1WorkflowMigrationsTaskGoalLinksPost(client: OmiApiClient, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/workflow-migrations/task-goal-links"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12973,7 +13024,7 @@ public enum OmiAPI {
 
   public static func getWorkstreamDetailV1WorkstreamsWorkstreamIdGet(client: OmiApiClient, workstreamId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> WorkstreamDetailProjection {
     let _path = "/v1/workstreams/\(workstreamId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -12997,7 +13048,7 @@ public enum OmiAPI {
 
   public static func updateWorkstreamV1WorkstreamsWorkstreamIdPatch(client: OmiApiClient, workstreamId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: WorkstreamUpdate) async throws -> Workstream {
     let _path = "/v1/workstreams/\(workstreamId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13054,7 +13105,7 @@ public enum OmiAPI {
 
   public static func createArtifactDescriptorV1WorkstreamsWorkstreamIdArtifactsPost(client: OmiApiClient, workstreamId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ArtifactDescriptorCreate) async throws -> ArtifactDescriptor {
     let _path = "/v1/workstreams/\(workstreamId)/artifacts"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13082,7 +13133,7 @@ public enum OmiAPI {
 
   public static func transitionArtifactStatusV1WorkstreamsWorkstreamIdArtifactsArtifactIdStatusPatch(client: OmiApiClient, workstreamId: String, artifactId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ArtifactStatusTransitionRequest) async throws -> ArtifactDescriptor {
     let _path = "/v1/workstreams/\(workstreamId)/artifacts/\(artifactId)/status"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13110,7 +13161,7 @@ public enum OmiAPI {
 
   public static func listContinuationCheckpointsV1WorkstreamsWorkstreamIdCheckpointsGet(client: OmiApiClient, workstreamId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [ContinuationCheckpoint] {
     let _path = "/v1/workstreams/\(workstreamId)/checkpoints"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13134,7 +13185,7 @@ public enum OmiAPI {
 
   public static func upsertContinuationCheckpointV1WorkstreamsWorkstreamIdCheckpointsRuntimeIdPut(client: OmiApiClient, workstreamId: String, runtimeId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: ContinuationCheckpointUpsert) async throws -> ContinuationCheckpoint {
     let _path = "/v1/workstreams/\(workstreamId)/checkpoints/\(runtimeId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13194,7 +13245,7 @@ public enum OmiAPI {
 
   public static func appendWorkstreamEventV1WorkstreamsWorkstreamIdEventsPost(client: OmiApiClient, workstreamId: String, idempotencyKey: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: WorkstreamEventCreate) async throws -> WorkstreamEvent {
     let _path = "/v1/workstreams/\(workstreamId)/events"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13222,7 +13273,7 @@ public enum OmiAPI {
 
   public static func getWrappedStatusV1WrappedYearGet(client: OmiApiClient, year: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/wrapped/\(year)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13246,7 +13297,7 @@ public enum OmiAPI {
 
   public static func generateWrappedV1WrappedYearGeneratePost(client: OmiApiClient, year: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/wrapped/\(year)/generate"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13385,7 +13436,7 @@ public enum OmiAPI {
 
   public static func uploadFileChatV2FilesPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v2/files"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13612,7 +13663,7 @@ public enum OmiAPI {
 
   public static func shareChatMessagesV2MessagesSharePost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v2/messages/share"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13638,7 +13689,7 @@ public enum OmiAPI {
 
   public static func getSharedChatMessagesV2MessagesSharedTokenGet(client: OmiApiClient, token: String) async throws -> OmiAnyCodable {
     let _path = "/v2/messages/shared/\(token)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13658,7 +13709,7 @@ public enum OmiAPI {
 
   public static func rateMessageV2MessagesMessageIdRatingPatch(client: OmiApiClient, messageId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v2/messages/\(messageId)/rating"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13684,7 +13735,7 @@ public enum OmiAPI {
 
   public static func reportMessageV2MessagesMessageIdReportPost(client: OmiApiClient, messageId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/messages/\(messageId)/report"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13708,7 +13759,7 @@ public enum OmiAPI {
 
   public static func createSyncCaptureManifestV2SyncCaptureManifestPost(client: OmiApiClient, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v2/sync-capture-manifest"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13766,7 +13817,7 @@ public enum OmiAPI {
 
   public static func getSyncJobStatusV2SyncLocalFilesJobIdGet(client: OmiApiClient, jobId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/sync-local-files/\(jobId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13790,7 +13841,7 @@ public enum OmiAPI {
 
   public static func transcribeVoiceMessageV2VoiceMessageTranscribePost(client: OmiApiClient, xAppPlatform: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/voice-message/transcribe"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13855,7 +13906,7 @@ public enum OmiAPI {
 
   public static func createMemoryV3MemoriesPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> MemoryDB {
     let _path = "/v3/memories"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13881,7 +13932,7 @@ public enum OmiAPI {
 
   public static func deleteMemoriesV3MemoriesDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/memories"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13905,7 +13956,7 @@ public enum OmiAPI {
 
   public static func createMemoriesBatchV3MemoriesBatchPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v3/memories/batch"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13963,7 +14014,7 @@ public enum OmiAPI {
 
   public static func getMemoryReviewItemV3MemoriesReviewQueueReviewIdGet(client: OmiApiClient, reviewId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/memories/review-queue/\(reviewId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -13987,7 +14038,7 @@ public enum OmiAPI {
 
   public static func resolveMemoryReviewItemV3MemoriesReviewQueueReviewIdResolvePost(client: OmiApiClient, reviewId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v3/memories/review-queue/\(reviewId)/resolve"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14044,7 +14095,7 @@ public enum OmiAPI {
 
   public static func deleteMemoryV3MemoriesMemoryIdDelete(client: OmiApiClient, memoryId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/memories/\(memoryId)"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14126,7 +14177,7 @@ public enum OmiAPI {
 
   public static func hasSpeechProfileV3SpeechProfileGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/speech-profile"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14210,7 +14261,7 @@ public enum OmiAPI {
 
   public static func uploadProfileV3UploadAudioPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/upload-audio"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14234,7 +14285,7 @@ public enum OmiAPI {
 
   public static func getSpeechProfileV4SpeechProfileGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v4/speech-profile"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14256,5 +14307,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 380 Swift client methods generated.
+  // Total: 382 Swift client methods generated.
 }

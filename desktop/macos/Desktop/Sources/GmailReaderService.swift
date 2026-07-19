@@ -28,7 +28,8 @@ enum GmailReaderError: LocalizedError {
     case .noGmailCookies:
       return "No Gmail session cookies found. Make sure you're logged into Gmail."
     case .notSignedIn:
-      return "Not signed into Gmail in any browser. Open mail.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
+      return
+        "Not signed into Gmail in any browser. Open mail.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
     case .sessionExpired:
       return "Your Gmail session expired. Reload mail.google.com in your browser to refresh it, then try again."
     case .cookieDecryptionFailed(let msg):
@@ -60,9 +61,9 @@ enum GmailFetchOutcome: Equatable {
 
   static func == (lhs: GmailFetchOutcome, rhs: GmailFetchOutcome) -> Bool {
     switch (lhs, rhs) {
-    case let (.success(_, lb, ls), .success(_, rb, rs)):
+    case (.success(_, let lb, let ls), .success(_, let rb, let rs)):
       return lb == rb && ls == rs
-    case let (.failure(lc, ls, la), .failure(rc, rs, ra)):
+    case (.failure(let lc, let ls, let la), .failure(let rc, let rs, let ra)):
       return lc == rc && ls == rs && la == ra
     default:
       return false
@@ -246,103 +247,105 @@ actor GmailReaderService {
     // Retry the synthesis on transient failure instead of silently dropping the import.
     let maxAttempts = 2
     for attempt in 1...maxAttempts {
-    do {
-      if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-        || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
-        throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
-      }
-      let result = try await AgentClient.run(
-        surface: .service("gmail_reader"),
-        prompt: synthesisPrompt,
-        model: ModelQoS.Claude.synthesis,
-        systemPrompt:
-          "You are a profile extraction assistant. Output ONLY valid JSON. No markdown, no code fences, no explanation.",
-        onTextDelta: { @Sendable _ in },
-        onToolCall: { @Sendable _, _, _ in return "" },
-        onToolActivity: { @Sendable _, _, _, _ in }
-      )
-
-      var responseText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-      log("GmailReaderService: Synthesis response length: \(responseText.count) chars")
-
-      // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
-      if responseText.hasPrefix("```") {
-        // Remove opening fence (```json or ```)
-        if let firstNewline = responseText.firstIndex(of: "\n") {
-          responseText = String(responseText[responseText.index(after: firstNewline)...])
+      do {
+        if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
+          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+        {
+          throw NSError(
+            domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
         }
-        // Remove closing fence
-        if responseText.hasSuffix("```") {
-          responseText = String(responseText.dropLast(3)).trimmingCharacters(
-            in: .whitespacesAndNewlines)
+        let result = try await AgentClient.run(
+          surface: .service("gmail_reader"),
+          prompt: synthesisPrompt,
+          model: ModelQoS.Claude.synthesis,
+          systemPrompt:
+            "You are a profile extraction assistant. Output ONLY valid JSON. No markdown, no code fences, no explanation.",
+          onTextDelta: { @Sendable _ in },
+          onToolCall: { @Sendable _, _, _ in return "" },
+          onToolActivity: { @Sendable _, _, _, _ in }
+        )
+
+        var responseText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        log("GmailReaderService: Synthesis response length: \(responseText.count) chars")
+
+        // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
+        if responseText.hasPrefix("```") {
+          // Remove opening fence (```json or ```)
+          if let firstNewline = responseText.firstIndex(of: "\n") {
+            responseText = String(responseText[responseText.index(after: firstNewline)...])
+          }
+          // Remove closing fence
+          if responseText.hasSuffix("```") {
+            responseText = String(responseText.dropLast(3)).trimmingCharacters(
+              in: .whitespacesAndNewlines)
+          }
         }
-      }
 
-      // Parse the JSON response
-      guard let jsonData = responseText.data(using: .utf8),
-        let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-      else {
-        log("GmailReaderService: Failed to parse synthesis response: \(responseText.prefix(500))")
-        return (0, 0, "")
-      }
+        // Parse the JSON response
+        guard let jsonData = responseText.data(using: .utf8),
+          let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+        else {
+          log("GmailReaderService: Failed to parse synthesis response: \(responseText.prefix(500))")
+          return (0, 0, "")
+        }
 
-      let memoryStrings = parsed["memories"] as? [String] ?? []
-      let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
-      let profileSummary = parsed["profile"] as? String ?? ""
+        let memoryStrings = parsed["memories"] as? [String] ?? []
+        let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
+        let profileSummary = parsed["profile"] as? String ?? ""
 
-      log("GmailReaderService: Parsed \(memoryStrings.count) memories, \(taskDicts.count) tasks")
+        log("GmailReaderService: Parsed \(memoryStrings.count) memories, \(taskDicts.count) tasks")
 
-      let artifacts = memoryStrings.map { memory in
-        ImportEvidenceBatchItem(
+        let artifacts = memoryStrings.map { memory in
+          ImportEvidenceBatchItem(
             title: "Email Profile Insight",
             snippet: memory,
             content: memory,
             metadata: ["import_kind": "profile"]
+          )
+        }
+        let legacyMemories = memoryStrings.map { memory in
+          MemoryBatchItem(
+            content: memory,
+            tags: ["gmail", "onboarding"],
+            headline: "Email Profile Insight",
+            source: "gmail"
+          )
+        }
+        let saveResult = await OnboardingImportEvidenceService.save(
+          artifacts,
+          sourceType: "gmail",
+          logPrefix: "GmailReaderService",
+          legacyMemories: legacyMemories
         )
-      }
-      let legacyMemories = memoryStrings.map { memory in
-        MemoryBatchItem(
-          content: memory,
-          tags: ["gmail", "onboarding"],
-          headline: "Email Profile Insight",
-          source: "gmail"
+
+        // Save tasks
+        var tasksSaved = 0
+        for taskDict in taskDicts {
+          guard let description = taskDict["description"] as? String else { continue }
+          let priority = taskDict["priority"] as? String ?? "medium"
+          let task = await TasksStore.shared.createTask(
+            description: description,
+            dueAt: nil,
+            priority: priority,
+            tags: ["gmail", "onboarding"]
+          )
+          if task != nil { tasksSaved += 1 }
+        }
+
+        log(
+          "GmailReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks"
         )
-      }
-      let saveResult = await OnboardingImportEvidenceService.save(
-        artifacts,
-        sourceType: "gmail",
-        logPrefix: "GmailReaderService",
-        legacyMemories: legacyMemories
-      )
+        return (saveResult.saved, tasksSaved, profileSummary)
 
-      // Save tasks
-      var tasksSaved = 0
-      for taskDict in taskDicts {
-        guard let description = taskDict["description"] as? String else { continue }
-        let priority = taskDict["priority"] as? String ?? "medium"
-        let task = await TasksStore.shared.createTask(
-          description: description,
-          dueAt: nil,
-          priority: priority,
-          tags: ["gmail", "onboarding"]
-        )
-        if task != nil { tasksSaved += 1 }
+      } catch {
+        if attempt < maxAttempts {
+          log("GmailReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
+          try? await Task.sleep(nanoseconds: 800_000_000)
+          continue
+        }
+        log("GmailReaderService: Synthesis failed after \(attempt) attempts: \(error)")
+        return (0, 0, "")
       }
-
-      log(
-        "GmailReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks"
-      )
-      return (saveResult.saved, tasksSaved, profileSummary)
-
-    } catch {
-      if attempt < maxAttempts {
-        log("GmailReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
-        try? await Task.sleep(nanoseconds: 800_000_000)
-        continue
-      }
-      log("GmailReaderService: Synthesis failed after \(attempt) attempts: \(error)")
-      return (0, 0, "")
-    }
     }
     return (0, 0, "")
   }
@@ -725,12 +728,12 @@ actor GmailReaderService {
     let outcome = GmailOutcomeParser.parse(json)
     let emailDicts: [[String: Any]]
     switch outcome {
-    case let .failure(cls, summary, attempts):
+    case .failure(let cls, let summary, let attempts):
       log(
         "GmailReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
           + "attempts: \(GmailOutcomeParser.diagnosticsLine(attempts))")
       throw cls.asError(summary: summary)
-    case let .success(emails, browserName, sourceName):
+    case .success(let emails, let browserName, let sourceName):
       log("GmailReaderService: Got \(emails.count) emails from \(browserName) via \(sourceName)")
       emailDicts = emails
     }

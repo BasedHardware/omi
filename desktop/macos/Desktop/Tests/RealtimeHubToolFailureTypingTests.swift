@@ -26,7 +26,8 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
     XCTAssertEqual(
       failure.userFacingOutput(base: "Could not read your memories right now."),
       "Could not read your memories right now. The provider credential needs attention.")
-    XCTAssertFalse(failure.userFacingOutput(base: "Could not read your memories right now.").contains("raw provider body"))
+    XCTAssertFalse(
+      failure.userFacingOutput(base: "Could not read your memories right now.").contains("raw provider body"))
   }
 
   func testClassifiesTransportAndDecodeFailures() {
@@ -38,35 +39,45 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
     XCTAssertEqual(RealtimeHubToolFailureKind.classify(transport), .backendTransport)
   }
 
-  func testRealtimeToolCatchPathUsesTypedFailureOutput() throws {
+  func testRealtimeToolDispatchHasNoPhysicalSideEffectBeforeKernelAuthorization() throws {
     let source = try realtimeHubControllerSource()
+    let requestStart = try XCTUnwrap(source.range(of: "func hubDidRequestTool("))
+    let requestEnd = try XCTUnwrap(
+      source.range(
+        of: "func hubDidFinishTurn(",
+        range: requestStart.upperBound..<source.endIndex))
+    let requestSource = String(source[requestStart.lowerBound..<requestEnd.lowerBound])
 
-    XCTAssertTrue(source.contains("RealtimeHubToolFailure.classify(error)"))
-    XCTAssertTrue(source.contains("failure_type=\\(failure.kind.rawValue)"))
-    XCTAssertTrue(source.contains("out = failure.userFacingOutput(base: errorText)"))
-    XCTAssertFalse(source.contains("out = errorText }"))
+    XCTAssertTrue(requestSource.contains(".toolStartedScoped("))
+    XCTAssertTrue(requestSource.contains("invokeExternallyAuthorizedTool("))
+    XCTAssertFalse(requestSource.contains("ChatToolExecutor.execute"))
+    XCTAssertFalse(requestSource.contains("APIClient.shared.tool"))
+    XCTAssertFalse(requestSource.contains("ScreenCaptureManager.captureScreen"))
+    XCTAssertFalse(requestSource.contains("Self.click(at:"))
+    XCTAssertTrue(source.contains("func executeAuthorizedRealtimeTool("))
   }
 
-  func testBeginTurnDoesNotUploadSpeculativeScreenshotPixels() throws {
+  func testRealtimeScreenshotUsesOnlyPreCapturedTurnEvidence() throws {
     let source = try realtimeHubControllerSource()
     let beginRange = try XCTUnwrap(source.range(of: "func beginTurn(turnID requestedTurnID:"))
     let nextRange = try XCTUnwrap(
       source.range(
-        of: "private func captureInterruptedTurnPayloadIfNeeded()",
+        of: "func captureInterruptedTurnPayloadIfNeeded()",
         range: beginRange.upperBound..<source.endIndex))
     let beginTurnSource = String(source[beginRange.lowerBound..<nextRange.lowerBound])
 
-    XCTAssertTrue(beginTurnSource.contains("speculativeScreenshot = jpeg"))
+    XCTAssertFalse(beginTurnSource.contains("ScreenCaptureManager.captureScreen"))
     XCTAssertFalse(beginTurnSource.contains("sendVideoFrame"))
+    XCTAssertFalse(source.contains("voiceTurnScreenContextEnvelopeJSON"))
+    XCTAssertFalse(source.contains("sendVoiceTurnScreenContextIfNeeded"))
+    XCTAssertFalse(source.contains("ScreenCaptureManager.captureScreenJPEG"))
+    XCTAssertTrue(source.contains("effect: { [currentEvidence] in [currentEvidence] }"))
+    XCTAssertTrue(source.contains("RealtimeScreenEvidenceAttachment"))
   }
 
   private struct DummyDecodeError: Error {}
 
   private func realtimeHubControllerSource() throws -> String {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
-    return try String(contentsOf: sourceURL, encoding: .utf8)
+    try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
   }
 }

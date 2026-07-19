@@ -1,5 +1,4 @@
 import os
-import random
 import asyncio
 import time
 import websockets
@@ -8,6 +7,7 @@ from enum import Enum
 from typing import Any, Callable, List, Optional, cast
 
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_STATE
+from utils.other.backoff import calculate_backoff_with_jitter
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ async def connect_to_trigger_pusher(
                 logger.warning(f"Pusher circuit breaker tripped during retries, failing fast {uid}")
                 raise PusherCircuitBreakerOpen(f"Circuit breaker open during retries {uid}")
 
-        backoff_delay = calculate_backoff_with_jitter(attempt)
+        backoff_delay = calculate_backoff_with_jitter(attempt, max_delay=15000)
         logger.warning(f"Waiting {backoff_delay:.0f}ms before next retry... {uid}")
         await asyncio.sleep(backoff_delay / 1000)
 
@@ -186,10 +186,3 @@ async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000):
     except Exception as e:
         logger.error(f"Exception in connect_to_transcript_pusher: {e} {uid}")
         raise
-
-
-# Calculate backoff with jitter
-def calculate_backoff_with_jitter(attempt: int, base_delay: int = 1000, max_delay: int = 15000) -> float:
-    jitter = random.random() * base_delay
-    backoff = min(((2**attempt) * base_delay) + jitter, max_delay)
-    return backoff
