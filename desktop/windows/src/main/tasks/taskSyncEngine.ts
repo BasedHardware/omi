@@ -115,6 +115,11 @@ let hydrateCompletedInFlight: Promise<void> | null = null
 // TTL-bounded so a lost confirmation can't wedge a row as permanently invisible.
 const TOMBSTONE_TTL_MS = 10 * 60_000
 const pendingDeletes = new Map<string, number>() // backendId -> expiresAt (epoch ms)
+// An ambiguous delete (DELETE failed AND the verify GET was also inconclusive) is
+// re-verified a few times across the TTL window, so a storm that outlasts the first
+// GET still resolves before the tombstone expires. Initial verify + 3 re-verifies.
+const MAX_DELETE_VERIFY_ATTEMPTS = 4
+const VERIFY_BACKOFF_BASE_MS = 15_000 // 15s, 30s, 60s (+ up to 5s jitter) — inside the TTL
 
 function tombstoneDelete(backendId: string): void {
   pendingDeletes.set(backendId, Date.now() + TOMBSTONE_TTL_MS)
@@ -133,9 +138,14 @@ function isTombstoned(backendId: string): boolean {
   return true
 }
 
-/** Test-only: reset tombstone state between cases. */
-export function __resetTombstonesForTest(): void {
+/** Drop all pending-delete tombstones. Called on sign-out so one account's in-flight
+ *  deletes never gate another account's hydrate (cross-account hygiene). */
+export function resetPendingDeletes(): void {
   pendingDeletes.clear()
+}
+/** Test-only alias. */
+export function __resetTombstonesForTest(): void {
+  resetPendingDeletes()
 }
 /** Test-only: inspect whether a backend_id is currently tombstoned. */
 export function __isTombstonedForTest(backendId: string): boolean {
@@ -658,10 +668,11 @@ async function pushUpdate(
  *  in the background. On FAILURE keep the local deletion (Mac behavior) — the row is
  *  already gone locally. */
 export function deleteTask(backendId: string): void {
-  // Tombstone BEFORE the local delete so a hydrate that races the DELETE can't
-  // resurrect the row (see pendingDeletes).
-  tombstoneDelete(backendId)
+  // Tombstone AFTER the local delete SUCCEEDS (so a delete that throws leaves no
+  // stuck tombstone) but BEFORE any broadcast/hydrate — this is all synchronous, so
+  // nothing can interleave and resurrect the row in the gap (see pendingDeletes).
   const deletedIds = deleteActionItemByBackendId(backendId, 'user')
+  tombstoneDelete(backendId)
   emitDeletions(deletedIds)
   broadcastTasksChanged()
   void pushDelete(backendId, getSessionEpoch())
@@ -698,20 +709,36 @@ async function pushDelete(backendId: string, epoch: number): Promise<void> {
   }
 }
 
+/** Honestly restore a task whose delete failed but which is still on the server:
+ *  re-insert it through the normal sync path and tell the user, so a failed delete
+ *  is never a silent zombie. Clears the tombstone FIRST so the guard doesn't block
+ *  our own insert. */
+function restoreDeletedRow(backendId: string, item: BackendActionItem): void {
+  clearTombstone(backendId)
+  const now = Date.now()
+  syncTaskActionItems([mapBackendItem(item, now)], { now, isTombstoned })
+  broadcastTasksChanged()
+  emitTaskOpFailed({ op: 'delete', message: 'Could not delete task — it has been restored.' })
+}
+
 /**
  * Resolve an ambiguous delete: GET the item by id.
  *   - 404 → the delete actually stuck → keep it deleted, retire the tombstone.
- *   - 200 → it's still on the server → the delete failed → honestly RESTORE the row
- *     (reusing the normal insert path) and tell the user, so it's never a silent
- *     zombie. This overrides the engine's usual keep-local-deleted asymmetry, which
- *     only holds when the delete definitively succeeded.
- *   - anything else (e.g. still 429) → inconclusive → keep the tombstone (no
- *     resurrection); the TTL / next reconcile resolves it later.
+ *   - 200 → it's still on the server → the delete failed → RESTORE the row and tell
+ *     the user. Overrides the engine's usual keep-local-deleted asymmetry, which only
+ *     holds when the delete definitively succeeded.
+ *   - inconclusive (still 429/5xx) or the GET itself threw → schedule a bounded,
+ *     epoch-guarded, jittered RE-VERIFY (a storm that outlasts the first GET still
+ *     resolves before the tombstone TTL-expires). On exhaustion the tombstone is left
+ *     to TTL-expire — we never confirmed the row still exists, so a spurious restore
+ *     would show a phantom for a genuinely-deleted task; the re-verify window covers
+ *     transient storms, and a total outage spanning the whole TTL is the residual.
  */
 async function verifyDeleteOutcome(
   backendId: string,
   epoch: number,
-  external?: AbortSignal
+  external?: AbortSignal,
+  attempt = 0
 ): Promise<void> {
   try {
     const res = await apiFetch(
@@ -728,18 +755,37 @@ async function verifyDeleteOutcome(
     if (res.ok) {
       const item = (await res.json()) as BackendActionItem
       if (getSessionEpoch() !== epoch) return
-      // Clear FIRST so the guard doesn't block our own restore insert.
-      clearTombstone(backendId)
-      const now = Date.now()
-      syncTaskActionItems([mapBackendItem(item, now)], { now, isTombstoned })
-      broadcastTasksChanged()
-      emitTaskOpFailed({ op: 'delete', message: 'Could not delete task — it has been restored.' })
+      restoreDeletedRow(backendId, item)
       return
     }
-    console.warn('[tasks] delete verify inconclusive (kept tombstone):', res.status)
+    scheduleDeleteReVerify(backendId, epoch, attempt, res.status)
   } catch (e) {
-    console.warn('[tasks] delete verify failed (kept tombstone):', errName(e))
+    if (getSessionEpoch() !== epoch) return
+    scheduleDeleteReVerify(backendId, epoch, attempt, errName(e))
   }
+}
+
+/** Schedule the next re-verify of an inconclusive delete, or give up (keeping the
+ *  tombstone to TTL-expire) once the attempt budget is spent. The timer re-checks the
+ *  epoch and that the tombstone is still live before firing, so a sign-out / account
+ *  switch or an already-resolved delete self-cancels it. */
+function scheduleDeleteReVerify(
+  backendId: string,
+  epoch: number,
+  attempt: number,
+  reason: number | string
+): void {
+  const next = attempt + 1
+  if (next >= MAX_DELETE_VERIFY_ATTEMPTS) {
+    console.warn('[tasks] delete verify exhausted (tombstone will TTL-expire):', backendId, reason)
+    return
+  }
+  const delayMs = VERIFY_BACKOFF_BASE_MS * 2 ** attempt + Math.random() * 5_000
+  setTimeout(() => {
+    if (getSessionEpoch() !== epoch) return // account switch — drop
+    if (!isTombstoned(backendId)) return // already resolved or reset
+    void verifyDeleteOutcome(backendId, getSessionEpoch(), getAbortSignal(), next)
+  }, delayMs)
 }
 
 // --- Retry unsynced creates --------------------------------------------------

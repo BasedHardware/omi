@@ -406,6 +406,10 @@ export async function promoteIfNeeded(opts?: { bypassDebounce?: boolean }): Prom
       if (body.promoted === true && body.promoted_task) {
         const at = Date.now()
         lastPromotedAt = at
+        // No isTombstoned guard needed here: a promotion mints a BRAND-NEW backend_id
+        // for a task the user never deleted, so it can't collide with a pending-delete
+        // tombstone (those key on the deleted task's own id). The guard only matters on
+        // the hydrate/list path, which can re-observe a just-deleted id.
         syncTaskActionItems([mapPromotedTask(body.promoted_task, at)], { now: at })
         broadcastTasksChanged()
       }
