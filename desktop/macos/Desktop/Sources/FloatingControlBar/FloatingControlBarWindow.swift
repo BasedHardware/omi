@@ -202,7 +202,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// closeAIConversation() and cleared when the animation settles.
   /// Used by savePreChatCenterIfNeeded() to snap to the correct pill position
   /// if a new PTT query fires while the restore animation is still running.
-  private var pendingRestoreOrigin: NSPoint?
+  // Stores the FULL pending restore frame (origin AND size), not just the origin.
+  // The restore origin is computed for the glow-inflated window size; snapping to
+  // it with the bare collapsed size instead drifted the recorded center by one
+  // glow outset (~22pt left / 18pt down) on every rapid re-open cycle.
+  private var pendingRestoreFrame: NSRect?
   /// The idle pill frame captured just before morphing into the active island
   /// on a non-notch display, so the pill returns to the exact same spot.
   private var savedPillFrame: NSRect?
@@ -1301,9 +1305,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
       restoreOrigin = defaultTopCenteredFrame(for: size).origin
     } else if let center = preChatCenter {
-      restoreOrigin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
+      restoreOrigin = FloatingControlBarGeometry.restoreOrigin(center: center, size: size)
     } else {
-      restoreOrigin = NSPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2)
+      restoreOrigin = FloatingControlBarGeometry.restoreOrigin(
+        center: NSPoint(x: frame.midX, y: frame.midY), size: size)
     }
 
     resizeWorkItem?.cancel()
@@ -1312,15 +1317,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     isResizingProgrammatically = true
     // Record the animation target so savePreChatCenterIfNeeded() can snap to it
     // if a new PTT query fires while this restore animation is still running.
-    pendingRestoreOrigin = restoreOrigin
-    animateFrame(to: NSRect(origin: restoreOrigin, size: size), duration: Self.askOmiAnimationDuration)
     let targetFrame = NSRect(origin: restoreOrigin, size: size)
+    pendingRestoreFrame = targetFrame
+    animateFrame(to: targetFrame, duration: Self.askOmiAnimationDuration)
     preChatCenter = nil
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
       guard let self = self else { return }
       guard self.resignKeyAnimationToken == closeAnimationToken else { return }
       self.isResizingProgrammatically = false
-      self.pendingRestoreOrigin = nil
+      self.pendingRestoreFrame = nil
       // Safety net: only snap if no new AI session was opened while the close settled.
       // Without this guard, a rapid PTT query that fires while close settles gets collapsed
       // back to the pill position by this stale completion block.
@@ -2160,7 +2165,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     )
     return !state.showingAIConversation
       && !suppressHoverResize
-      && pendingRestoreOrigin == nil
+      && pendingRestoreFrame == nil
       && NSEqualSizes(frame.size, settledSize)
   }
 
@@ -4738,7 +4743,7 @@ extension FloatingControlBarWindow {
 
   /// Save the current center point so closeAIConversation can restore position.
   /// Only saves if preChatCenter is not already set (avoids overwriting during follow-ups).
-  /// If a close/restore animation is in flight (pendingRestoreOrigin is set), snaps the
+  /// If a close/restore animation is in flight (pendingRestoreFrame is set), snaps the
   /// window to that target first so the saved center reflects the true pill position,
   /// not an intermediate animation frame.
   /// In non-draggable mode, always snaps to the fixed default position so the saved
@@ -4763,14 +4768,18 @@ extension FloatingControlBarWindow {
       isResizingProgrammatically = true
       setFrame(snapFrame, display: true, animate: false)
       isResizingProgrammatically = false
-      pendingRestoreOrigin = nil
-    } else if let restoreOrigin = pendingRestoreOrigin {
-      // Draggable: if a restore animation is running, snap to its target immediately
-      // so we record the correct pill position rather than a mid-animation frame.
+      pendingRestoreFrame = nil
+    } else if let restoreFrame = pendingRestoreFrame {
+      // Draggable: if a restore animation is running, snap to its target frame
+      // immediately so we record the correct pill center rather than a
+      // mid-animation frame. Snap to the STORED frame (origin + the glow-inflated
+      // size the origin was computed for) — reconstructing it with the bare
+      // collapsedBarSize is exactly what drifted preChatCenter one glow outset
+      // per cycle.
       isResizingProgrammatically = true
-      setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: false)
+      setFrame(restoreFrame, display: true, animate: false)
       isResizingProgrammatically = false
-      pendingRestoreOrigin = nil
+      pendingRestoreFrame = nil
     }
     if !notchModeEnabled, state.isNotchHoverMenuVisible {
       // Chat is opening from the taller pill agent list. The pill's true
@@ -4789,7 +4798,7 @@ extension FloatingControlBarWindow {
     resignKeyAnimationToken += 1
     frameAnimationToken += 1
     if !ShortcutSettings.shared.draggableBarEnabled {
-      pendingRestoreOrigin = nil
+      pendingRestoreFrame = nil
     }
     suppressHoverResize = false
     isResizingProgrammatically = false
