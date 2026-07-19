@@ -791,6 +791,15 @@ class SafeModulateSocket(STTSocket):
             self._mark_dead(f'ws recv closed: {e}')
         except Exception as e:
             self._mark_dead(f'ws recv error: {e}')
+        else:
+            # The `async for` exhausted without a `done`/`error` message and
+            # without an exception: the provider closed the transport cleanly
+            # mid-stream. All explicit-termination paths above `break`, and local
+            # finish() sets `_closed`, so reaching here means an unexpected close.
+            if not self._closed and not self._done_event.is_set():
+                logger.warning('Modulate stream closed cleanly by upstream before done')
+                self._done_event.set()
+                self._mark_dead('modulate stream closed cleanly by upstream')
 
     def _handle_partial_utterance(self, msg: Dict[str, Any]) -> None:
         # Modulate sends cumulative partial_utterance messages during streaming
@@ -1299,6 +1308,14 @@ class ParakeetWebSocketSocket(STTSocket):
             if not self._closed:
                 logger.error(f"Parakeet WS recv error: {e}")
                 self._mark_dead(f"parakeet ws recv: {e}")
+        else:
+            # A clean upstream close (loop exhausts without an exception) is only
+            # reached when the provider transport actually ended; a healthy stream
+            # blocks in `async for`. If we did not close/finalize locally, latch it
+            # as dead so the listen loop stops treating the session as ready.
+            if not self._closed and not getattr(self, '_finalized', False):
+                logger.warning('Parakeet WS closed cleanly by upstream before finalize')
+                self._mark_dead('parakeet ws closed cleanly by upstream')
 
 
 async def process_audio_parakeet(

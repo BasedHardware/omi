@@ -531,8 +531,19 @@ class TestRecvLoop(unittest.TestCase):
 
     def test_invalid_json_skipped(self):
         sock = self._run_recv(['not json', '{{bad'])
-        self.assertFalse(sock.is_connection_dead)
+        # Invalid frames produce no segments; the subsequent clean upstream close
+        # (message stream exhausted with no `done`) latches the socket dead.
         self.assertEqual(self.segments, [])
+        self.assertTrue(sock.is_connection_dead)
+
+    def test_clean_close_without_done_marks_dead(self):
+        # A provider that ends its WebSocket cleanly without a `done`/`error`
+        # message must latch the socket dead so the listen loop stops treating
+        # the session as ready (regression for the "Listening" zombie state).
+        sock = self._run_recv([])
+        self.assertTrue(sock.is_connection_dead)
+        self.assertIn('closed cleanly by upstream', sock.death_reason)
+        self.assertTrue(sock._done_event.is_set())
 
     def test_error_message_marks_dead(self):
         msg = json.dumps({'type': 'error', 'error': 'rate limit'})
@@ -793,6 +804,51 @@ class TestProcessAudioParakeet(unittest.TestCase):
                 assert socket.send(b'overflow') is False
                 assert socket.is_connection_dead is True
                 assert socket.death_reason == 'parakeet ws send queue full'
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_receive_loop_clean_upstream_close_marks_dead(self):
+        # The Parakeet /v3/stream socket closing cleanly mid-session (recv loop
+        # exhausts without an exception) must latch dead, not leave the session
+        # in a ready "Listening" zombie state until the next audio frame fails.
+        from utils.stt.streaming import ParakeetWebSocketSocket
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def empty_ws():
+                return
+                yield  # pragma: no cover - makes this an async generator
+
+            async def run():
+                socket = ParakeetWebSocketSocket(lambda _segments: None, 'ws://parakeet.local/v3/stream', 16000)
+                await socket._receive_loop(empty_ws())
+                assert socket.is_connection_dead is True
+                assert socket.death_reason == 'parakeet ws closed cleanly by upstream'
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_receive_loop_close_after_finalize_stays_alive(self):
+        # A clean close after we locally finalized is the normal end of stream
+        # and must NOT be reported as a connection death.
+        from utils.stt.streaming import ParakeetWebSocketSocket
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def empty_ws():
+                return
+                yield  # pragma: no cover - makes this an async generator
+
+            async def run():
+                socket = ParakeetWebSocketSocket(lambda _segments: None, 'ws://parakeet.local/v3/stream', 16000)
+                socket.finalize()
+                await socket._receive_loop(empty_ws())
+                assert socket.is_connection_dead is False
 
             loop.run_until_complete(run())
         finally:
