@@ -53,6 +53,38 @@ def normalized_digest(asset: dict) -> str:
     return digest.removeprefix("sha256:")
 
 
+def _validate_smoke_contract(
+    smoke: dict,
+    *,
+    bundle_id: str,
+    release_tag: str,
+    expected_version: str,
+    expected_build: str,
+    label: str,
+) -> set[str]:
+    """Enforce the shared success/tag/version/build/team/channel contract on a
+    smoke result. The beta artifact must satisfy the same bar as stable, only
+    with its own bundle id."""
+    expected = {
+        "ok": True,
+        "release_tag": release_tag,
+        "expected_channel": "beta",
+        "bundle_id": bundle_id,
+        "version": expected_version,
+        "build": expected_build,
+        "team_id": EXPECTED_TEAM_ID,
+    }
+    for field, value in expected.items():
+        if smoke.get(field) != value:
+            fail(f"{label} smoke result {field} mismatch: expected {value!r}, got {smoke.get(field)!r}")
+
+    checks = set(smoke.get("checks") or [])
+    missing_checks = sorted(REQUIRED_SMOKE_CHECKS - checks)
+    if missing_checks:
+        fail(f"{label} smoke result is missing required checks: {', '.join(missing_checks)}")
+    return checks
+
+
 def validate(args: argparse.Namespace) -> dict:
     match = TAG_RE.match(args.release_tag)
     if not match:
@@ -79,23 +111,14 @@ def validate(args: argparse.Namespace) -> dict:
 
     expected_version = match.group("version")
     expected_build = match.group("build")
-    expected = {
-        "ok": True,
-        "release_tag": args.release_tag,
-        "expected_channel": "beta",
-        "bundle_id": EXPECTED_BUNDLE_ID,
-        "version": expected_version,
-        "build": expected_build,
-        "team_id": EXPECTED_TEAM_ID,
-    }
-    for field, value in expected.items():
-        if smoke.get(field) != value:
-            fail(f"signed smoke result {field} mismatch: expected {value!r}, got {smoke.get(field)!r}")
-
-    checks = set(smoke.get("checks") or [])
-    missing_checks = sorted(REQUIRED_SMOKE_CHECKS - checks)
-    if missing_checks:
-        fail(f"signed smoke result is missing required checks: {', '.join(missing_checks)}")
+    checks = _validate_smoke_contract(
+        smoke,
+        bundle_id=EXPECTED_BUNDLE_ID,
+        release_tag=args.release_tag,
+        expected_version=expected_version,
+        expected_build=expected_build,
+        label="signed",
+    )
 
     callback_canary = smoke.get("notification_callback_canary")
     if not isinstance(callback_canary, dict):
@@ -130,18 +153,21 @@ def validate(args: argparse.Namespace) -> dict:
         fail("published DMG digest does not match the signed artifact smoke")
 
     # Releases that ship the side-by-side Omi Beta identity carry a second smoke
-    # result; when those assets exist they must match it (older releases without
-    # beta assets stay valid).
+    # result; when those assets exist the beta artifact must satisfy the same
+    # contract as stable (older releases without beta assets stay valid).
     beta_assets = {a.get("name") for a in release.get("assets", [])}
     if "Omi.Beta.zip" in beta_assets:
-        if not args.beta_smoke_result or not Path(args.beta_smoke_result).exists():
+        if not getattr(args, "beta_smoke_result", "") or not Path(args.beta_smoke_result).exists():
             fail("release ships Omi Beta assets but no beta smoke result was provided")
         beta_smoke = load_json(args.beta_smoke_result)
-        if beta_smoke.get("bundle_id") != EXPECTED_BETA_BUNDLE_ID:
-            fail(
-                "beta smoke result bundle_id mismatch: expected "
-                f"{EXPECTED_BETA_BUNDLE_ID!r}, got {beta_smoke.get('bundle_id')!r}"
-            )
+        _validate_smoke_contract(
+            beta_smoke,
+            bundle_id=EXPECTED_BETA_BUNDLE_ID,
+            release_tag=args.release_tag,
+            expected_version=expected_version,
+            expected_build=expected_build,
+            label="beta",
+        )
         beta_zip_release = asset_by_name(release, {"Omi.Beta.zip"})
         beta_dmg_release = asset_by_name(release, {"omi-beta.dmg"})
         beta_zip_smoke = smoke_artifact(beta_smoke, "sparkle_zip")
