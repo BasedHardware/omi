@@ -126,7 +126,7 @@ def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[
     coll = _posts_ref(uid)
     if kind:
         docs: List[Dict[str, Any]] = []
-        for d in coll.where(filter=FieldFilter('kind', '==', kind)).limit(limit * 3).stream():
+        for d in coll.where(filter=FieldFilter('kind', '==', kind)).stream():
             raw: object = d.to_dict()
             if isinstance(raw, dict):
                 docs.append(cast(Dict[str, Any], raw))
