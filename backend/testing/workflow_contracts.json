@@ -212,18 +212,29 @@
     {
       "id": "sync_cloud_tasks",
       "risk": "high",
-      "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
+      "sources": [
+        "backend/routers/sync.py",
+        "backend/utils/sync/pipeline.py",
+        "backend/database/sync_jobs.py",
+        "backend/utils/sync/*.py",
+        "backend/testing/sync_cloud_tasks_stack/**",
+        ".github/workflows/backend-hermetic-e2e.yml",
+        "package.json",
+        "package-lock.json"
+      ],
       "tests": [
         "tests/unit/test_sync_v2.py",
         "tests/unit/test_sync_cloud_tasks.py",
         "tests/unit/test_audio_merge_tasks.py",
-        "tests/unit/test_sync_fair_use_gate.py"
+        "tests/unit/test_sync_fair_use_gate.py",
+        "tests/unit/test_sync_cloud_tasks_stack_ci_wiring.py"
       ],
       "checks": [],
       "invariants": [
         "task retries do not double-count usage or completed segments",
         "segment failures cannot be reported as completed work",
-        "enqueued jobs retain staged blobs until handler completion"
+        "enqueued jobs retain staged blobs until handler completion",
+        "fresh v2 Sync admission runs a credential-free local Firestore, Redis, storage, and separate Cloud Tasks-worker stack gauntlet in blocking PR CI"
       ]
     },
     {
