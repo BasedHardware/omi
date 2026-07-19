@@ -55,7 +55,7 @@ describe('buildFtsQuery', () => {
 
 // --- executeVectorSearchWith (fully-injected fakes) ---
 function resolved(over: Partial<ResolvedTask> & { description: string }): ResolvedTask {
-  return { completed: false, deleted: false, relevanceScore: null, ...over }
+  return { completed: false, deleted: false, relevanceScore: null, backendId: null, ...over }
 }
 function sim(source: TaskSimilarity['source'], id: number, similarity: number): TaskSimilarity {
   return { source, id, similarity }
@@ -67,7 +67,7 @@ describe('executeVectorSearchWith', () => {
       id === 10 ? resolved({ description: 'staged: launch email', relevanceScore: 7 }) : null
     )
     const getActionItem = vi.fn((id: number) =>
-      id === 20 ? resolved({ description: 'action: quarterly budget' }) : null
+      id === 20 ? resolved({ description: 'action: quarterly budget', backendId: 'be-20' }) : null
     )
     const deps: VectorSearchDeps = {
       embedQuery: vi.fn(async () => new Float32Array([1])),
@@ -91,7 +91,9 @@ describe('executeVectorSearchWith', () => {
         status: 'active',
         similarity: 0.9,
         match_type: 'vector',
-        relevance_score: 7
+        relevance_score: 7,
+        source: 'staged_task',
+        backendId: null // a staged draft is never mutation-addressable
       },
       {
         id: 20,
@@ -99,7 +101,9 @@ describe('executeVectorSearchWith', () => {
         status: 'active',
         similarity: 0.5,
         match_type: 'vector',
-        relevance_score: null
+        relevance_score: null,
+        source: 'action_item',
+        backendId: 'be-20' // the synced action item's mutation handle
       }
     ])
     // Source-aware resolution: staged ids never hit the action resolver and vice versa.
@@ -297,5 +301,30 @@ describe('encodeSearchResults', () => {
 
   it('encodes an empty result set as "[]"', () => {
     expect(encodeSearchResults([])).toBe('[]')
+  })
+
+  it('strips the Windows-only source/backendId enrichment (extraction-loop JSON stays Mac-shaped)', () => {
+    const encoded = encodeSearchResults([
+      {
+        id: 7,
+        description: 'x',
+        status: 'active',
+        similarity: 0.5,
+        match_type: 'vector',
+        relevance_score: null,
+        source: 'action_item',
+        backendId: 'be-7'
+      }
+    ])
+    expect(encoded).not.toContain('backendId')
+    expect(encoded).not.toContain('source')
+    expect(Object.keys(JSON.parse(encoded)[0]).sort()).toEqual([
+      'description',
+      'id',
+      'match_type',
+      'relevance_score',
+      'similarity',
+      'status'
+    ])
   })
 })

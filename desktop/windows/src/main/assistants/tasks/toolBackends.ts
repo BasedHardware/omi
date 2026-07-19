@@ -36,7 +36,17 @@ import type { TaskSimilarity } from '../../tasks/taskEmbeddingService'
 
 /** Mac's `TaskSearchResult` (TaskModels.swift:530), ported field-for-field with its
  *  exact Codable JSON keys (`match_type` / `relevance_score` are snake_case). This
- *  is the object the loop JSON-encodes as each search tool's functionResponse. */
+ *  is the object the loop JSON-encodes (via `encodeSearchResults`, which emits ONLY
+ *  these Mac fields) as each search tool's functionResponse.
+ *
+ *  `backendId` + `source` are Windows-only enrichment for the `search_tasks` product
+ *  tool: `id` is the LOCAL rowid of the source table (staged/action rowid spaces
+ *  overlap, so it is NOT a stable cross-tool handle), whereas the product tool must
+ *  hand the model an id the mutation tools (update/complete/delete) can resolve. Only
+ *  an `action_item` carries a mutatable id (its `backendId`, or `local:<rowid>` before
+ *  it syncs); a `staged_task` is an extraction draft with no action-item identity.
+ *  These fields are stripped by `encodeSearchResults` so the extraction-loop JSON
+ *  stays byte-for-byte Mac-faithful. */
 export type TaskSearchResult = {
   id: number
   description: string
@@ -48,6 +58,13 @@ export type TaskSearchResult = {
   match_type: string
   /** Relevance ranking score (higher = more important); null when unscored. */
   relevance_score: number | null
+  /** Source table this row came from. Populated by the vector backend (the only one
+   *  the `search_tasks` product tool reads); absent on results the extraction loop
+   *  produces that never surface to a mutation tool. */
+  source?: TaskEmbeddingSource
+  /** The action-item backendId, when the row is a synced `action_item`; null for an
+   *  unsynced action item or any staged task. */
+  backendId?: string | null
 }
 
 /** The projection of a task row the backends read to build a `TaskSearchResult`.
@@ -57,6 +74,9 @@ export type ResolvedTask = {
   completed: boolean
   deleted: boolean
   relevanceScore: number | null
+  /** The action-item backendId (null for a staged task or an unsynced action item).
+   *  Threaded through so `search_tasks` can emit a mutation-resolvable id. */
+  backendId: string | null
 }
 
 /** One `action_items` FTS row (subset of `searchActionItemsFTS`'s return this
@@ -135,7 +155,9 @@ export async function executeVectorSearchWith(
         status: statusOf(rec),
         similarity: hit.similarity,
         match_type: 'vector',
-        relevance_score: rec.relevanceScore
+        relevance_score: rec.relevanceScore,
+        source: hit.source,
+        backendId: rec.backendId
       })
     }
   } catch {
@@ -210,19 +232,39 @@ export async function executeKeywordSearchWith(
  */
 export function encodeSearchResults(results: TaskSearchResult[]): string {
   try {
-    return JSON.stringify(results)
+    // Emit ONLY Mac's Codable fields — the Windows-only `source`/`backendId`
+    // enrichment (for the `search_tasks` product tool) must not leak into the
+    // extraction-loop functionResponse the model de-dupes against.
+    return JSON.stringify(
+      results.map((r) => ({
+        id: r.id,
+        description: r.description,
+        status: r.status,
+        similarity: r.similarity,
+        match_type: r.match_type,
+        relevance_score: r.relevance_score
+      }))
+    )
   } catch {
     return '[]'
   }
 }
 
-/** Narrow a full record to the `ResolvedTask` projection the backend needs. */
-function projectRecord(r: ActionItemRecord | StagedTaskRecord): ResolvedTask {
+/** Narrow a full record to the `ResolvedTask` projection the backend needs. The
+ *  caller passes the mutation-addressable `backendId`: an action item's own
+ *  `backendId`, or `null` for a staged task — a `StagedTaskRecord.backendId` is a
+ *  staged-table id the action-item mutation tools cannot resolve, so it must never be
+ *  surfaced as a task handle. */
+function projectRecord(
+  r: ActionItemRecord | StagedTaskRecord,
+  backendId: string | null
+): ResolvedTask {
   return {
     description: r.description,
     completed: r.completed,
     deleted: r.deleted,
-    relevanceScore: r.relevanceScore
+    relevanceScore: r.relevanceScore,
+    backendId
   }
 }
 
@@ -248,7 +290,7 @@ export async function executeVectorSearch(query: string): Promise<TaskSearchResu
       byId = new Map(getLocalActionItems({ limit: MAX_INDEX_SIZE }).map((r) => [r.id, r] as const))
     }
     const r = byId.get(id)
-    return r ? projectRecord(r) : null
+    return r ? projectRecord(r, r.backendId) : null
   }
 
   return executeVectorSearchWith(
@@ -257,7 +299,8 @@ export async function executeVectorSearch(query: string): Promise<TaskSearchResu
       searchSimilar,
       getStagedTask: (id) => {
         const s = getStagedTask(id)
-        return s ? projectRecord(s) : null
+        // A staged task carries no action-item identity → no mutatable backendId.
+        return s ? projectRecord(s, null) : null
       },
       getActionItem
     },

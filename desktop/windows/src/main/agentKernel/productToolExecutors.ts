@@ -179,11 +179,32 @@ export interface SearchTasksDeps {
 const SEARCH_TASKS_CAP = 10
 
 /**
+ * The mutation-resolvable handle for a search result, in the SAME id namespace the
+ * update/complete/delete tools resolve (and that `get_action_items` emits):
+ *  - a synced action item → its `backendId`
+ *  - an unsynced action item → `local:<rowid>` (resolved by rowid until it syncs)
+ *  - a staged task → `null`: it is an extraction draft with no action-item identity,
+ *    and its rowid shares a space with action_items, so emitting `local:<rowid>` would
+ *    address an UNRELATED action item. Callers render it as non-actionable instead.
+ *
+ * Historically this emitted the raw `id` (the local rowid), which the mutation tools —
+ * keyed on `backendId` — could never resolve, so every search-sourced update/complete/
+ * delete silently no-op'd.
+ */
+function searchResultTaskId(r: TaskSearchResult): string | null {
+  if (r.source === 'staged_task') return null
+  return r.backendId != null && r.backendId.length > 0 ? r.backendId : `local:${r.id}`
+}
+
+/**
  * `search_tasks`. Vector similarity search over tasks; drops completed unless
  * `include_completed`, caps at 10, and renders Mac's prose rows
- * (ChatToolExecutor:1131-1162): `N. [x]/[ ] description (similarity, id)`.
- * (Windows' TaskSearchResult carries `status`/`similarity` but not priority or the
- * source table, so Mac's optional ` [priority]` / `source:` segments are omitted.)
+ * (ChatToolExecutor:1131-1162): `N. [x]/[ ] description (similarity, id)`. The `id`
+ * is the mutation-resolvable handle (`searchResultTaskId`), NOT the raw rowid, so the
+ * model can hand it straight to complete_task / delete_task / update_action_item.
+ * Staged-task drafts have no such handle and are flagged as not-yet-saved.
+ * (Windows' TaskSearchResult carries `status`/`similarity` but not priority, so Mac's
+ * optional ` [priority]` segment is omitted.)
  */
 export function createSearchTasksExecutor(deps?: Partial<SearchTasksDeps>): ProductToolExecutor {
   const vectorSearch =
@@ -206,7 +227,9 @@ export function createSearchTasksExecutor(deps?: Partial<SearchTasksDeps>): Prod
     kept.forEach((r, i) => {
       const check = r.status === 'completed' ? '[x]' : '[ ]'
       const sim = r.similarity != null ? r.similarity.toFixed(2) : 'n/a'
-      lines.push(`${i + 1}. ${check} ${r.description} (similarity: ${sim}, id: ${r.id})`)
+      const toolId = searchResultTaskId(r)
+      const idPart = toolId != null ? `id: ${toolId}` : 'draft — not yet saved, cannot be modified'
+      lines.push(`${i + 1}. ${check} ${r.description} (similarity: ${sim}, ${idPart})`)
     })
     return lines.join('\n')
   }
@@ -322,8 +345,9 @@ export function createCreateActionItemExecutor(
 // --- update / complete / delete (need a by-backendId lookup) -----------------
 
 export interface TaskMutateDeps {
-  /** Resolve a task by its backendId (the id the model was given). */
-  findByBackendId: (backendId: string) => Promise<ActionItemRecord | null>
+  /** Resolve a task from the tool-facing id the model was given — either an action
+   *  item's `backendId` or a `local:<rowid>` handle for one that hasn't synced yet. */
+  resolveTask: (id: string) => Promise<ActionItemRecord | null>
   toggleTask: (backendId: string, completed: boolean) => Promise<void>
   updateTask: (
     backendId: string,
@@ -332,16 +356,46 @@ export interface TaskMutateDeps {
   deleteTask: (backendId: string) => Promise<void>
 }
 
-/** Real by-backendId lookup: Windows exposes no direct action-item-by-backendId
- *  getter, so scan a wide local page (same pragma as toolBackends.ts's resolver). */
-async function realFindByBackendId(backendId: string): Promise<ActionItemRecord | null> {
+const LOCAL_ID_PREFIX = 'local:'
+
+/** How a tool-facing task id resolves: by action_items rowid (a `local:<rowid>`
+ *  handle) or by backendId (a synced task's id). */
+export type TaskIdLookup = { by: 'rowid'; rowid: number } | { by: 'backendId'; backendId: string }
+
+/**
+ * Parse a tool-facing task id (from `search_tasks` / `get_action_items`) into how it
+ * should be resolved. A `local:<n>` handle resolves by the action_items rowid ONLY when
+ * the suffix is a valid POSITIVE integer (rowids start at 1); an empty, negative, or
+ * non-integer suffix — or any other id — is treated as a backendId, so a malformed
+ * handle misses honestly rather than mis-resolving to rowid 0 / a wrong row. Exported
+ * and unit-tested directly so `realResolveTask` and its tests share ONE parser (no
+ * hand-copied logic — the SQL/DDL-drift trap this repo has been burned by).
+ */
+export function parseTaskToolId(id: string): TaskIdLookup {
+  if (id.startsWith(LOCAL_ID_PREFIX)) {
+    const rowid = Number(id.slice(LOCAL_ID_PREFIX.length))
+    if (Number.isInteger(rowid) && rowid > 0) return { by: 'rowid', rowid }
+  }
+  return { by: 'backendId', backendId: id }
+}
+
+/** Resolve a tool-facing task id to its local action item, via the shared
+ *  `parseTaskToolId`. `local:<rowid>` resolves strictly against the action_items rowid
+ *  space; anything else (a backendId, or a malformed `local:` handle) resolves by
+ *  backendId and misses honestly if unknown — never the wrong row. Windows exposes no
+ *  by-id getter, so scan a wide local page. */
+async function realResolveTask(id: string): Promise<ActionItemRecord | null> {
   const { getLocalActionItems } = await import('../ipc/db')
-  return getLocalActionItems({ limit: 5000 }).find((r) => r.backendId === backendId) ?? null
+  const items = getLocalActionItems({ limit: 5000 })
+  const lookup = parseTaskToolId(id)
+  return lookup.by === 'rowid'
+    ? (items.find((r) => r.id === lookup.rowid) ?? null)
+    : (items.find((r) => r.backendId === lookup.backendId) ?? null)
 }
 
 function bindTaskMutateDeps(deps?: Partial<TaskMutateDeps>): TaskMutateDeps {
   return {
-    findByBackendId: deps?.findByBackendId ?? realFindByBackendId,
+    resolveTask: deps?.resolveTask ?? realResolveTask,
     toggleTask:
       deps?.toggleTask ??
       (async (id, c) => (await import('../tasks/taskSyncEngine')).toggleTask(id, c)),
@@ -353,10 +407,19 @@ function bindTaskMutateDeps(deps?: Partial<TaskMutateDeps>): TaskMutateDeps {
   }
 }
 
+/** The sync engine's toggle/update/delete are all keyed on `backendId`. A task that
+ *  exists locally but hasn't synced yet has none, so a write would be a silent no-op —
+ *  surface an honest error instead. (Transient: the task syncs within moments.) */
+function unsyncedError(task: ActionItemRecord): string {
+  return `Error: task '${task.description}' hasn't finished syncing yet — try again in a moment`
+}
+
 /**
- * `update_action_item`. Finds the task by `action_item_id` (backendId), applies
- * description/due changes via updateTask and a completion change via toggleTask (the
- * local completion path — updateTask's field set has no completed column).
+ * `update_action_item`. Resolves the task from `action_item_id` (a backendId or a
+ * `local:<rowid>` handle), applies description/due changes via updateTask and a
+ * completion change via toggleTask (the local completion path — updateTask's field set
+ * has no completed column). Writes address the resolved task's backendId, so a handle
+ * that resolved by rowid still targets the right row.
  */
 export function createUpdateActionItemExecutor(
   deps?: Partial<TaskMutateDeps>
@@ -368,7 +431,7 @@ export function createUpdateActionItemExecutor(
     const due = parseIsoDate(input.due_at, 'due_at')
     if (due.error) return due.error
 
-    const task = await d.findByBackendId(id)
+    const task = await d.resolveTask(id)
     if (!task) return `Error: task not found with id '${id}'`
 
     // A provided description is trimmed and must be non-empty — never let an update
@@ -383,8 +446,10 @@ export function createUpdateActionItemExecutor(
     const fields: { description?: string; dueAt?: number | null; clearDueAt?: boolean } = {}
     if (description !== undefined) fields.description = description
     if (due.ms !== undefined) fields.dueAt = due.ms
-    if (Object.keys(fields).length > 0) await d.updateTask(id, fields)
-    if (typeof input.completed === 'boolean') await d.toggleTask(id, input.completed)
+    const willWrite = Object.keys(fields).length > 0 || typeof input.completed === 'boolean'
+    if (willWrite && !task.backendId) return unsyncedError(task)
+    if (Object.keys(fields).length > 0) await d.updateTask(task.backendId!, fields)
+    if (typeof input.completed === 'boolean') await d.toggleTask(task.backendId!, input.completed)
 
     return `OK: task '${task.description}' updated`
   }
@@ -399,10 +464,11 @@ export function createCompleteTaskExecutor(deps?: Partial<TaskMutateDeps>): Prod
   return async (input) => {
     const taskId = stringArg(input, 'task_id')
     if (!taskId) return 'Error: task_id is required'
-    const task = await d.findByBackendId(taskId)
+    const task = await d.resolveTask(taskId)
     if (!task) return `Error: task not found with id '${taskId}'`
     if (task.completed) return `OK: task '${task.description}' is already completed`
-    await d.toggleTask(taskId, true)
+    if (!task.backendId) return unsyncedError(task)
+    await d.toggleTask(task.backendId, true)
     return `OK: task '${task.description}' marked as completed`
   }
 }
@@ -417,9 +483,10 @@ export function createDeleteTaskExecutor(deps?: Partial<TaskMutateDeps>): Produc
   return async (input) => {
     const taskId = stringArg(input, 'task_id')
     if (!taskId) return 'Error: task_id is required'
-    const task = await d.findByBackendId(taskId)
+    const task = await d.resolveTask(taskId)
     if (!task) return `Error: task not found with id '${taskId}'`
-    await d.deleteTask(taskId)
+    if (!task.backendId) return unsyncedError(task)
+    await d.deleteTask(task.backendId)
     return `OK: task '${task.description}' deleted`
   }
 }
