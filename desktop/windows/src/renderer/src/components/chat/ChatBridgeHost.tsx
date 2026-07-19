@@ -3,6 +3,7 @@ import { useAppState } from '../../state/appState'
 import { interruptCurrentResponse, speakText } from '../../lib/voice/voiceController'
 import { showUsageLimit } from '../../lib/usageLimit'
 import type { BarChatState, BarChatStatus } from '../../../../shared/types'
+import { planChatPublish } from './chatPublishSchedule'
 
 // The main-window half of the bar↔main chat bridge. The bar is a VIEWPORT over
 // the ONE chat engine (INV-CHAT-1 / Mac INV-6): the app's single useChat lives in
@@ -12,10 +13,6 @@ import type { BarChatState, BarChatStatus } from '../../../../shared/types'
 // the bar renders the same thread Home shows, with no second useChat instance
 // (the old duplicate that dropped PTT messages from Home — bug C3).
 //
-// Streaming updates history on every SSE chunk; publishes are throttled (~50ms
-// trailing) so the IPC/serialization cost stays bounded during a fast reply.
-const PUBLISH_THROTTLE_MS = 50
-
 // Backstop for the "wait until the engine is idle before delivering a queued bar
 // send" loop. It bounds only ORDINARY streams (chat replies are seconds); a
 // delegated coding-agent task legitimately holds the engine for MINUTES and is
@@ -127,19 +124,36 @@ export function ChatBridgeHost(): null {
     })
   }, [])
 
-  // Throttled broadcast on every state change (leading + trailing at 50ms).
+  // Throttled broadcast on every state change. Flag transitions publish promptly;
+  // mid-stream history churn coalesces to the streaming cadence (planChatPublish).
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastAtRef = useRef(0)
+  const lastFlagsRef = useRef('')
   useEffect(() => {
-    const since = Date.now() - lastAtRef.current
-    const fire = (): void => {
-      lastAtRef.current = Date.now()
+    const flagsSig = `${sending}|${status}|${agentActive}`
+    const flagsChanged = flagsSig !== lastFlagsRef.current
+    lastFlagsRef.current = flagsSig
+    const plan = planChatPublish({
+      now: Date.now(),
+      lastPublishAt: lastAtRef.current,
+      sending,
+      flagsChanged,
+      hasPendingTimer: timerRef.current !== null
+    })
+    if (plan.clearPending && timerRef.current) {
+      clearTimeout(timerRef.current)
       timerRef.current = null
-      publish()
     }
-    if (since >= PUBLISH_THROTTLE_MS) fire()
-    else if (timerRef.current === null)
-      timerRef.current = setTimeout(fire, PUBLISH_THROTTLE_MS - since)
+    if (plan.publishNow) {
+      lastAtRef.current = Date.now()
+      publish()
+    } else if (plan.scheduleInMs !== null && timerRef.current === null) {
+      timerRef.current = setTimeout(() => {
+        lastAtRef.current = Date.now()
+        timerRef.current = null
+        publish()
+      }, plan.scheduleInMs)
+    }
   }, [history, sending, status, agentActive, publish])
 
   useEffect(() => {

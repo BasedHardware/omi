@@ -27,6 +27,7 @@ vi.mock('../../lib/voice/voiceController', () => ({
 }))
 
 import { ChatBridgeHost } from './ChatBridgeHost'
+import { planChatPublish } from './chatPublishSchedule'
 import { onUsageLimit, dismissUsageLimit, type UsageLimitReason } from '../../lib/usageLimit'
 
 let barSendCb: ((p: { text: string; fromVoice: boolean }) => void) | null
@@ -197,6 +198,75 @@ describe('ChatBridgeHost', () => {
     unsub()
   })
 
+  it('coalesces mid-stream history churn to the streaming cadence, then flushes the final frame byte-identical', async () => {
+    // A reply streams: the assistant message text grows on every SSE chunk while
+    // the flags stay put (sending=true). Those pure-churn updates must coalesce to
+    // the slower streaming cadence (far fewer publishes than chunks) — the IPC win
+    // — while the frame the bar settles on when the stream ENDS stays byte-identical
+    // to Home's (the hard bar).
+    vi.useFakeTimers()
+    try {
+      chat = {
+        ...chat,
+        sending: true,
+        history: [{ id: 'a', role: 'assistant', content: 'H' }]
+      }
+      const { rerender } = render(<ChatBridgeHost />)
+      published.length = 0 // drop the immediate mount publish
+      // 5 chunks, 20ms apart → ~100ms of churn, same flags, text just growing.
+      for (const text of ['He', 'Hel', 'Hell', 'Hello', 'Hello!']) {
+        chat = { ...chat, history: [{ id: 'a', role: 'assistant', content: text }] }
+        rerender(<ChatBridgeHost />)
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(20)
+        })
+      }
+      // Coalesced: the 5 rapid updates produced at most a couple of publishes.
+      expect(published.length).toBeLessThan(5)
+
+      // Stream ends: sending true→false is a flag transition → prompt terminal
+      // publish carrying the completed message.
+      published.length = 0
+      chat = {
+        ...chat,
+        sending: false,
+        history: [{ id: 'a', role: 'assistant', content: 'Hello!' }]
+      }
+      rerender(<ChatBridgeHost />)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60)
+      })
+      expect(published.at(-1)).toEqual({
+        messages: [{ id: 'a', role: 'assistant', content: 'Hello!' }],
+        sending: false,
+        status: 'idle',
+        agentsActive: false
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('answers a mid-stream reconnect pull with the full current snapshot (byte-identical resync)', () => {
+    // The bar reconnecting/reopening mid-stream pulls via bar:requestChatState —
+    // it must get the full current thread immediately, not wait on a throttle, so
+    // it resyncs to exactly what Home shows even between coalesced streaming frames.
+    chat = {
+      ...chat,
+      sending: true,
+      history: [{ id: 'a', role: 'assistant', content: 'partial reply so far' }]
+    }
+    render(<ChatBridgeHost />)
+    published.length = 0
+    reqStateCb?.()
+    expect(published.at(-1)).toEqual({
+      messages: [{ id: 'a', role: 'assistant', content: 'partial reply so far' }],
+      sending: true,
+      status: 'sending',
+      agentsActive: false
+    })
+  })
+
   it('speaks the limit line back for a blocked VOICE turn, but does NOT re-pop the popup (popup:false)', () => {
     // A blocked voice send arrives with popup:false: the pre-capture PTT veto
     // already owns the modal for voice (macOS parity). TTS lives here
@@ -214,5 +284,70 @@ describe('ChatBridgeHost', () => {
     expect(speakSpy).toHaveBeenCalledWith("You've reached your monthly free message limit.")
     expect(reasons).not.toContain('chat')
     unsub()
+  })
+})
+
+describe('planChatPublish', () => {
+  const base = {
+    now: 1000,
+    lastPublishAt: 0,
+    sending: false,
+    flagsChanged: false,
+    hasPendingTimer: false
+  }
+
+  it('publishes a flag transition promptly at the idle cadence', () => {
+    // A stream START/END or speaking flip, spaced past the idle window → publish now.
+    expect(planChatPublish({ ...base, flagsChanged: true, lastPublishAt: 1000 - 50 })).toEqual({
+      publishNow: true,
+      scheduleInMs: null,
+      clearPending: true
+    })
+  })
+
+  it('schedules a flag transition at the idle cadence when inside the window, pre-empting a pending timer', () => {
+    // Stream just ended 10ms after the last publish, and a slow streaming trailing
+    // timer is pending: schedule at the IDLE window (50-10) AND clear the pending
+    // one so the terminal frame isn't held behind the 100ms coalesce timer.
+    expect(
+      planChatPublish({
+        ...base,
+        flagsChanged: true,
+        lastPublishAt: 1000 - 10,
+        hasPendingTimer: true
+      })
+    ).toEqual({ publishNow: false, scheduleInMs: 40, clearPending: true })
+  })
+
+  it('coalesces mid-stream churn to the 100ms streaming cadence', () => {
+    // Same flags, streaming, 30ms since last publish, nothing pending → schedule the
+    // remainder of the 100ms streaming window (not the 50ms idle one).
+    expect(planChatPublish({ ...base, sending: true, lastPublishAt: 1000 - 30 })).toEqual({
+      publishNow: false,
+      scheduleInMs: 70,
+      clearPending: false
+    })
+  })
+
+  it('does not re-arm a streaming timer that is already pending', () => {
+    expect(
+      planChatPublish({ ...base, sending: true, lastPublishAt: 1000 - 30, hasPendingTimer: true })
+    ).toEqual({ publishNow: false, scheduleInMs: null, clearPending: false })
+  })
+
+  it('publishes immediately once the streaming window has elapsed', () => {
+    expect(planChatPublish({ ...base, sending: true, lastPublishAt: 1000 - 120 })).toEqual({
+      publishNow: true,
+      scheduleInMs: null,
+      clearPending: false
+    })
+  })
+
+  it('keeps idle (non-streaming) churn responsive at the 50ms cadence', () => {
+    expect(planChatPublish({ ...base, sending: false, lastPublishAt: 1000 - 20 })).toEqual({
+      publishNow: false,
+      scheduleInMs: 30,
+      clearPending: false
+    })
   })
 })
