@@ -34,11 +34,24 @@ podLabels: {}
 
 service:
   type: ClusterIP
-  backendConfig: ""
+  backendConfig: prod-llm-gateway-backend-config
   port: 8080
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "prod-llm-gateway-backend-config"}'
 
 ingress:
-  enabled: false
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: "gce-internal"
+    kubernetes.io/ingress.regional-static-ip-name: "prod-omi-self-hosted-llm-ip-address"
+    kubernetes.io/ingress.allow-http: "true"
+  hosts:
+    - paths:
+        - path: /
+          pathType: Prefix
+  tls: []
 
 env:
   - name: OMI_LLM_GATEWAY_PROD
@@ -55,17 +68,37 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
+  - name: ANTHROPIC_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ANTHROPIC_API_KEY
+  - name: OPENROUTER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: OPENROUTER_API_KEY
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: METRICS_SECRET
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware"
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: DD_SERVICE
     value: "llm-gateway"
   - name: DD_ENV
     value: "prod"
   - name: DD_TRACE_ENABLED
     value: "true"
+  - name: LLM_GATEWAY_ACCOUNTING_ENABLED
+    value: "true"
+  - name: LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS
+    value: "1"
+  - name: LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES
+    value: "1000"
 
 resources:
   requests:
@@ -84,9 +117,15 @@ livenessProbe:
   timeoutSeconds: 5
 
 readinessProbe:
-  httpGet:
-    path: /health
-    port: 8080
+  exec:
+    command:
+      - sh
+      - -ec
+      - >-
+        curl --fail --silent --show-error --max-time 4
+        --header "Authorization: Bearer ${OMI_LLM_GATEWAY_SERVICE_TOKEN}"
+        --header "X-Omi-Service-Caller: backend"
+        http://127.0.0.1:8080/ready >/dev/null
   failureThreshold: 3
   periodSeconds: 10
   timeoutSeconds: 5

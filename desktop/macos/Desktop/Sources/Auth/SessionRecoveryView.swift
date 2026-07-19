@@ -24,7 +24,9 @@ struct SessionRecoveryView: View {
 
       HStack(spacing: 12) {
         Button("Sign In Again") {
-          AuthService.shared.invalidateSession(reason: .manual)
+          Task {
+            await AuthService.shared.invalidateSession(reason: .manual)
+          }
         }
         .buttonStyle(.bordered)
         .accessibilityIdentifier("auth_recovery_sign_in")

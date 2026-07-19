@@ -7,6 +7,8 @@ import { transcribeVoiceMessage } from '@/lib/api';
 
 type RecordingState = 'idle' | 'recording' | 'transcribing';
 
+const recordingMimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+
 interface InlineVoiceRecorderProps {
   onTranscript: (text: string) => void;
   disabled?: boolean;
@@ -17,7 +19,10 @@ interface InlineVoiceRecorderProps {
  * Click to start recording, click again to stop and transcribe.
  * The mic button stays visible after transcription for continuous use.
  */
-export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecorderProps) {
+export function InlineVoiceRecorder({
+  onTranscript,
+  disabled,
+}: InlineVoiceRecorderProps) {
   const [state, setState] = useState<RecordingState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
@@ -28,9 +33,11 @@ export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecor
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check if browser supports recording
-  const isSupported = typeof navigator !== 'undefined' &&
+  const isSupported =
+    typeof navigator !== 'undefined' &&
     navigator.mediaDevices &&
-    typeof navigator.mediaDevices.getUserMedia === 'function';
+    typeof navigator.mediaDevices.getUserMedia === 'function' &&
+    typeof MediaRecorder !== 'undefined';
 
   // Cleanup on unmount
   useEffect(() => {
@@ -42,7 +49,7 @@ export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecor
         mediaRecorderRef.current.stop();
       }
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
@@ -55,9 +62,12 @@ export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecor
       streamRef.current = stream;
 
       // Start recording
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4',
-      });
+      const mimeType = recordingMimeTypes.find((candidate) =>
+        MediaRecorder.isTypeSupported(candidate),
+      );
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -69,11 +79,13 @@ export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecor
 
       mediaRecorder.onstop = async () => {
         // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
 
         // Process audio
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: mediaRecorder.mimeType || mimeType || 'audio/webm',
+        });
         await processAudio(audioBlob);
       };
 
@@ -83,7 +95,7 @@ export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecor
 
       // Start duration counter
       durationIntervalRef.current = setInterval(() => {
-        setDuration(d => d + 1);
+        setDuration((d) => d + 1);
       }, 1000);
     } catch (err) {
       console.error('Failed to start recording:', err);
@@ -152,9 +164,7 @@ export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecor
   return (
     <div className="flex items-center gap-2">
       {/* Error message */}
-      {error && (
-        <span className="text-xs text-error whitespace-nowrap">{error}</span>
-      )}
+      {error && <span className="text-xs text-error whitespace-nowrap">{error}</span>}
 
       {/* Duration display when recording */}
       {state === 'recording' && (
@@ -185,15 +195,18 @@ export function InlineVoiceRecorder({ onTranscript, disabled }: InlineVoiceRecor
         className={cn(
           'p-2 rounded-lg flex-shrink-0',
           'transition-all duration-200',
-          state === 'idle' && 'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
+          state === 'idle' &&
+            'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
           state === 'recording' && 'text-white bg-error hover:bg-error/80 animate-pulse',
           state === 'transcribing' && 'text-text-quaternary cursor-not-allowed',
-          'disabled:opacity-50 disabled:cursor-not-allowed'
+          'disabled:opacity-50 disabled:cursor-not-allowed',
         )}
         title={
-          state === 'idle' ? 'Click to start recording' :
-          state === 'recording' ? 'Click to stop and transcribe' :
-          'Transcribing...'
+          state === 'idle'
+            ? 'Click to start recording'
+            : state === 'recording'
+              ? 'Click to stop and transcribe'
+              : 'Transcribing...'
         }
       >
         {state === 'transcribing' ? (

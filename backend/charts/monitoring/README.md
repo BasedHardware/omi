@@ -77,11 +77,11 @@ The service chart includes a `ServiceMonitor` CRD that Prometheus auto-discovers
 
 **2. Pod annotations + additionalScrapeConfigs**
 
-Used by: backend-listen, pusher, deepgram engine, GPU metrics, Stackdriver.
+Used by: backend-listen, pusher, llm-gateway, deepgram engine, GPU metrics, Stackdriver.
 
 Pods set annotations (`prometheus.io/scrape: "true"`, `prometheus.io/port`, `prometheus.io/path`) and a matching `additionalScrapeConfigs` entry in `kube-prometheus-stack` values defines the scrape job.
 
-Backend-listen and pusher require bearer token auth via the `metrics-scrape-token` secret.
+Backend-listen, pusher, and llm-gateway require bearer token auth via the `metrics-scrape-token` secret.
 
 ### Custom Scrape Jobs (prod)
 
@@ -91,10 +91,18 @@ These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kub
 |-----|--------|----------|------|
 | `backend-listen-metrics` | backend-listen pods `/metrics:8080` | 15s | Bearer token |
 | `pusher-metrics` | pusher pods `/metrics:8080` | 15s | Bearer token |
+| `llm-gateway-metrics` | llm-gateway pods `/metrics:8080` | 15s | Bearer token |
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
 | `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
 | `prometheus-stackdriver-metrics` | Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
+
+For llm-gateway streams, `llm_gateway_requests_total{outcome="success"}` is emitted only after the provider's
+terminal SSE marker (`data: [DONE]` or Anthropic `event: message_stop`) is observed. EOF without that marker,
+transport failure after first output, and client cancellation have separate bounded `outcome`, `phase`, and
+`error_class` values. This proves provider completion, not guaranteed delivery of the terminal chunk to the client.
+`credential_source` separates Omi-managed traffic from service-forwarded BYOK without putting key material or user
+identity in labels. `llm_gateway_stream_ttfb_seconds` records time to the first non-empty provider chunk.
 
 ### Log Pipeline
 

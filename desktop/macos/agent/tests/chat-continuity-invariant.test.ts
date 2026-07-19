@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
-import { mergeFloatingChatIntoMainChat, resolveSurfaceSession } from "../src/runtime/surface-session.js";
+import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
 
 const RUNTIME_DIR = fileURLToPath(new URL("../src/runtime", import.meta.url));
 
@@ -57,59 +57,6 @@ describe("INV-CHAT-1 chat continuity", () => {
   afterEach(() => {
     store.close();
     rmSync(stateDir, { recursive: true, force: true });
-  });
-
-  it("main_chat and floating_chat for the same chatId merge into one main transcript", () => {
-    const floating = resolveSurfaceSession(
-      store,
-      {
-        ownerId: "owner-a",
-        surfaceRef: {
-          surfaceKind: "floating_chat",
-          externalRefKind: "chat",
-          externalRefId: "default",
-        },
-      },
-      () => 1,
-    );
-    store.insertConversationTurn({
-      conversationId: floating.conversationId,
-      role: "user",
-      surfaceKind: "floating_chat",
-      content: "from notch",
-      createdAtMs: 10,
-      metadataJson: "{}",
-    });
-
-    const merge = mergeFloatingChatIntoMainChat(store, { ownerId: "owner-a", chatId: "default" }, () => 20);
-    expect(merge.mergedTurns).toBe(1);
-
-    const main = resolveSurfaceSession(
-      store,
-      {
-        ownerId: "owner-a",
-        surfaceRef: {
-          surfaceKind: "main_chat",
-          externalRefKind: "chat",
-          externalRefId: "default",
-        },
-      },
-      () => 21,
-    );
-    const turns = store.allRows(
-      "SELECT content FROM conversation_turns WHERE conversation_id = ? ORDER BY created_at_ms ASC",
-      [main.conversationId],
-    );
-    expect(turns).toEqual([{ content: "from notch" }]);
-
-    // After merge, floating mapping is gone — one shared mind, not two histories.
-    expect(
-      store.getOptionalRow(
-        `SELECT conversation_id FROM surface_conversations
-         WHERE owner_id = ? AND surface_kind = ?`,
-        ["owner-a", "floating_chat"],
-      ),
-    ).toBeUndefined();
   });
 
   it("reuses one agent session for repeated main_chat resolves (no second store)", () => {

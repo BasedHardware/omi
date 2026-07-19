@@ -15,8 +15,9 @@ import database.import_jobs as import_jobs_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
+from utils.multipart import IMPORT_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class DeleteLimitlessConversationsResponse(BaseModel):
     response_model=ImportJobResponse,
     tags=['import'],
 )
+@max_part_size(IMPORT_MAX_PART_SIZE)
 async def import_limitless_data(
     file: UploadFile = File(...),
     language: str = 'en',
@@ -104,6 +106,9 @@ def get_import_jobs(
     Returns:
         List of import jobs ordered by creation date (newest first)
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection.
+    limit = max(1, min(limit, 1000))
     jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
 
     # Build each response individually so one malformed/legacy job (missing id, or a status value not in

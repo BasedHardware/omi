@@ -40,6 +40,30 @@ def test_forwards_prompt_cache_key():
     assert validated.forwarded_params['prompt_cache_key'] == 'omi-extract-actions'
 
 
+def test_accepts_matching_output_limit_aliases():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    validated = validate_chat_completion_request(valid_request(max_tokens=128, max_completion_tokens=128), lane)
+
+    assert validated.forwarded_params['max_tokens'] == 128
+    assert validated.forwarded_params['max_completion_tokens'] == 128
+
+
+def test_rejects_conflicting_output_limit_aliases():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    with pytest.raises(GatewayInvalidRequestError, match='must match'):
+        validate_chat_completion_request(valid_request(max_tokens=64, max_completion_tokens=128), lane)
+
+
+@pytest.mark.parametrize('key', ['max_tokens', 'max_completion_tokens'])
+def test_rejects_invalid_output_limits(key):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    with pytest.raises(GatewayInvalidRequestError, match='positive integer'):
+        validate_chat_completion_request(valid_request(**{key: 0}), lane)
+
+
 def test_rejects_streaming():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(stream=True)

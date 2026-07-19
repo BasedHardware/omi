@@ -1,3 +1,5 @@
+from html import escape as html_escape
+import hmac
 import logging
 import os
 import random
@@ -9,8 +11,9 @@ from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
 from pydantic import BaseModel, Field
 
+from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import promote_channel, register_release_manifest
-from database.desktop_update_policy import get_desktop_update_policy
+from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
 from utils.desktop_update_resolver import live_cache_key, resolve_pointer_release
 from utils.executors import db_executor, run_blocking
@@ -73,6 +76,30 @@ class DesktopChannelPromotionRequest(BaseModel):
     channel: str = Field(pattern="^(beta|stable)$")
     release_id: str
     expected_generation: Optional[int] = Field(default=None, ge=0)
+
+
+class DesktopPreviewPublishRequest(BaseModel):
+    """Immutable metadata for a signed desktop preview artifact."""
+
+    slug: str
+    source_sha: str
+    dmg_url: str
+    dmg_sha256: str
+    app_name: str
+    bundle_id: str
+    url_scheme: str
+    built_at: str
+    signer: str
+    notarization: str
+    notes: Optional[str] = None
+    backend_url: Optional[str] = None
+    expected_generation: Optional[int] = Field(default=None, ge=0)
+
+
+class DesktopPreviewDelistRequest(BaseModel):
+    """Compare-and-delete request for a mutable preview landing-page pointer."""
+
+    expected_generation: int = Field(ge=0)
 
 
 VALID_CHANNELS = {"beta", "stable"}
@@ -510,6 +537,60 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
 </html>"""
 
 
+def _preview_download_landing_html(manifest: Dict[str, Any]) -> str:
+    """Render a public preview landing page from already-validated metadata.
+
+    The registry still treats notes and app identity as untrusted text because
+    they originate with a CI payload. Escape every dynamic HTML value rather
+    than relying on the publisher's credentials as an XSS boundary.
+    """
+    app_name = html_escape(str(manifest["app_name"]), quote=True)
+    slug = html_escape(str(manifest["slug"]), quote=True)
+    source_sha = html_escape(str(manifest["source_sha"]), quote=True)
+    built_at = html_escape(str(manifest["built_at"]), quote=True)
+    notes = html_escape(str(manifest.get("notes") or ""), quote=True)
+    dmg_url = html_escape(str(manifest["dmg_url"]), quote=True)
+    notes_html = f'<p class="notes">{notes}</p>' if notes else ""
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="2;url={dmg_url}">
+    <title>Download {app_name} for macOS</title>
+    <style>
+        * {{ box-sizing: border-box; }}
+        body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0a0a0a;
+               color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+        main {{ width: min(620px, calc(100% - 48px)); padding: 40px; border: 1px solid #2a2a2a; border-radius: 16px;
+               background: #121212; text-align: center; }}
+        h1 {{ margin: 0 0 12px; font-size: 28px; }}
+        p {{ color: #b6b6b6; line-height: 1.5; }}
+        code {{ display: block; overflow-wrap: anywhere; padding: 12px; border-radius: 8px; background: #1c1c1c;
+               color: #e8e8e8; font-size: 13px; }}
+        a {{ color: #ffffff; }}
+        .notes {{ white-space: pre-wrap; }}
+        .meta {{ margin-top: 24px; text-align: left; font-size: 13px; color: #909090; }}
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Downloading {app_name}</h1>
+        <p>Your macOS preview download should start automatically.</p>
+        <p><a href="{dmg_url}">Download the preview DMG</a></p>
+        {notes_html}
+        <div class="meta">
+            <p>Preview branch: <strong>{slug}</strong></p>
+            <p>Approved source commit:</p>
+            <code>{source_sha}</code>
+            <p>Build time: {built_at}</p>
+        </div>
+    </main>
+</body>
+</html>"""
+
+
 def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
     """Format changelog as HTML for Sparkle appcast"""
     if not changes:
@@ -718,6 +799,81 @@ async def download_beta_desktop_release(
     return await download_latest_desktop_release(platform=platform, channel="beta")
 
 
+def _preview_landing_response(result: Dict[str, Any]) -> HTMLResponse:
+    return HTMLResponse(
+        content=_preview_download_landing_html(result["manifest"]),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get("/v2/desktop/previews/{slug}")
+async def download_current_desktop_preview(slug: str):
+    """Serve a public landing page for the current approved preview of one slug."""
+    try:
+        preview = await run_blocking(db_executor, get_current_preview, slug)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Preview not found") from None
+    if preview is None:
+        raise HTTPException(status_code=404, detail="Preview not found")
+    return _preview_landing_response(preview)
+
+
+@router.get("/v2/desktop/previews/{slug}/{source_sha}")
+async def download_immutable_desktop_preview(slug: str, source_sha: str):
+    """Serve a public landing page for one immutable approved preview artifact."""
+    try:
+        manifest = await run_blocking(db_executor, get_preview_manifest, slug, source_sha)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Preview not found") from None
+    if manifest is None:
+        raise HTTPException(status_code=404, detail="Preview not found")
+    return _preview_landing_response({"manifest": manifest})
+
+
+def _has_preview_publish_authorization(secret_key: str) -> bool:
+    """Require a preview-only secret and fail closed when it is not configured."""
+    preview_key = os.getenv("DESKTOP_PREVIEW_PUBLISH_KEY")
+    return bool(preview_key) and hmac.compare_digest(secret_key, preview_key)
+
+
+@router.post("/v2/desktop/previews/publish", status_code=201)
+async def publish_desktop_preview(request: DesktopPreviewPublishRequest, secret_key: str = Header(...)):
+    """Register a preview artifact without touching normal desktop release state."""
+    if not _has_preview_publish_authorization(secret_key):
+        raise HTTPException(status_code=403, detail="You are not authorized to publish desktop previews")
+    try:
+        result = await run_blocking(
+            db_executor,
+            publish_preview,
+            request.model_dump(exclude={"expected_generation"}),
+            expected_generation=request.expected_generation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, **result}
+
+
+@router.delete("/v2/desktop/previews/{slug}")
+async def delist_desktop_preview(
+    slug: str,
+    request: DesktopPreviewDelistRequest,
+    secret_key: str = Header(...),
+):
+    """Remove only a slug's mutable landing-page pointer, retaining immutable artifacts."""
+    if not _has_preview_publish_authorization(secret_key):
+        raise HTTPException(status_code=403, detail="You are not authorized to delist desktop previews")
+    try:
+        result = await run_blocking(
+            db_executor,
+            delist_preview,
+            slug,
+            expected_generation=request.expected_generation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, **result}
+
+
 @router.get("/v2/desktop/update-policy", response_model=DesktopUpdatePolicyResponse)
 def get_desktop_update_policy_endpoint(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
@@ -730,7 +886,21 @@ def get_desktop_update_policy_endpoint(
     ``desktop_update_policy/current`` to show a dismissible banner or a required
     manual-update prompt to future desktop clients.
     """
-    return get_desktop_update_policy(current_build=current_build, platform=platform)
+    try:
+        return get_desktop_update_policy(current_build=current_build, platform=platform)
+    except Exception as exc:
+        # The policy only accelerates manual recovery; clients still have the
+        # Sparkle appcast and stable manual download path when Firestore is unavailable.
+        logger.warning("desktop_update_policy_unavailable error_type=%s", type(exc).__name__)
+        record_fallback(
+            component="other",
+            from_mode="desktop_update_policy",
+            to_mode="desktop_update_appcast",
+            reason="other",
+            outcome="recovered",
+            log=logger,
+        )
+        return default_desktop_update_policy()
 
 
 @router.post("/v2/desktop/clear-cache", response_model=ClearCacheResponse)

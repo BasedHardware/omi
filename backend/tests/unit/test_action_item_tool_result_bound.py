@@ -89,7 +89,7 @@ for _name, _attrs in {
         "send_action_item_data_message",
         "sync_action_item_reminder",
     ],
-    "utils.conversations.render": ["resolve_display_tz"],
+    "utils.conversations.render": ["resolve_display_tz", "format_local_time"],
     "utils.retrieval.agentic": ["agent_config_context"],
 }.items():
     _m = _mod(_name)

@@ -1,0 +1,208 @@
+name: Publish Desktop Preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Canonical preview branch, exactly preview/<slug>'
+        required: true
+        type: string
+      tester_notes:
+        description: 'Optional tester-facing notes for this preview'
+        required: false
+        default: ''
+        type: string
+      backend_mode:
+        description: 'API compatibility declaration for this preview'
+        required: true
+        default: production_compatible
+        type: choice
+        options:
+          - production_compatible
+          - preview_backend
+      python_api_url:
+        description: 'Required only for preview_backend; HTTPS Python API URL'
+        required: false
+        default: ''
+        type: string
+      desktop_api_url:
+        description: 'Required only for preview_backend; HTTPS Desktop API URL'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve canonical preview ref
+    runs-on: ubuntu-latest
+    outputs:
+      slug: ${{ steps.preview.outputs.slug }}
+      preview_id: ${{ steps.preview.outputs.preview_id }}
+      source_sha: ${{ steps.preview.outputs.source_sha }}
+      source_ref: ${{ steps.preview.outputs.source_ref }}
+      python_api_url: ${{ steps.backend.outputs.python_api_url }}
+      desktop_api_url: ${{ steps.backend.outputs.desktop_api_url }}
+    steps:
+      - name: Checkout publishing controls from main
+        uses: actions/checkout@v7
+        with:
+          # workflow_dispatch can be invoked against another ref. Controls must
+          # remain default-branch owned before an Environment exposes secrets.
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve a canonical preview branch to an immutable SHA
+        id: preview
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          test "$REPOSITORY" = "BasedHardware/omi" || {
+            echo "Desktop previews may only publish from BasedHardware/omi." >&2
+            exit 1
+          }
+          if ! [[ "$SOURCE_REF" =~ ^preview/([a-z][a-z0-9-]{0,47})$ ]]; then
+            echo "source_ref must be exactly preview/<lowercase-slug>." >&2
+            exit 1
+          fi
+          slug="${BASH_REMATCH[1]}"
+          resolved="$(git ls-remote --exit-code origin "refs/heads/$SOURCE_REF" | awk 'NR == 1 { print $1 }')"
+          if ! [[ "$resolved" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "source_ref did not resolve to a canonical commit SHA." >&2
+            exit 1
+          fi
+          preview_id="p$(printf '%s' "$slug" | sha256sum | cut -c1-10)"
+          {
+            echo "slug=$slug"
+            echo "preview_id=$preview_id"
+            echo "source_sha=$resolved"
+            echo "source_ref=$SOURCE_REF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate the declared backend contract
+        id: backend
+        env:
+          BACKEND_MODE: ${{ inputs.backend_mode }}
+          PYTHON_API_URL: ${{ inputs.python_api_url }}
+          DESKTOP_API_URL: ${{ inputs.desktop_api_url }}
+        run: |
+          set -euo pipefail
+          case "$BACKEND_MODE" in
+            production_compatible)
+              test -z "$PYTHON_API_URL" && test -z "$DESKTOP_API_URL" || {
+                echo "production_compatible previews must use the canonical production URLs." >&2
+                exit 1
+              }
+              python_api_url="https://api.omi.me"
+              desktop_api_url="https://desktop-backend-hhibjajaja-uc.a.run.app/"
+              ;;
+            preview_backend)
+              [[ "$PYTHON_API_URL" =~ ^https:// ]] && [[ "$DESKTOP_API_URL" =~ ^https:// ]] || {
+                echo "preview_backend requires HTTPS Python and Desktop API URLs." >&2
+                exit 1
+              }
+              python_api_url="$PYTHON_API_URL"
+              desktop_api_url="$DESKTOP_API_URL"
+              ;;
+            *)
+              echo "Unsupported backend mode: $BACKEND_MODE" >&2
+              exit 1
+              ;;
+          esac
+          {
+            echo "python_api_url=$python_api_url"
+            echo "desktop_api_url=$desktop_api_url"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Summarize exact preview awaiting approval
+        env:
+          PREVIEW_SLUG: ${{ steps.preview.outputs.slug }}
+          PREVIEW_ID: ${{ steps.preview.outputs.preview_id }}
+          PREVIEW_SOURCE_REF: ${{ steps.preview.outputs.source_ref }}
+          PREVIEW_SOURCE_SHA: ${{ steps.preview.outputs.source_sha }}
+          PREVIEW_BACKEND_MODE: ${{ inputs.backend_mode }}
+          OMI_PYTHON_API_URL: ${{ steps.backend.outputs.python_api_url }}
+          OMI_DESKTOP_API_URL: ${{ steps.backend.outputs.desktop_api_url }}
+          PREVIEW_NOTES: ${{ inputs.tester_notes }}
+        run: |
+          set -euo pipefail
+          notes_json="$(jq -Rn --arg value "$PREVIEW_NOTES" '$value')"
+          {
+            echo "### Preview approval context"
+            echo
+            echo "- Source branch: \`${PREVIEW_SOURCE_REF}\`"
+            echo "- Source commit: [\`${PREVIEW_SOURCE_SHA}\`](https://github.com/${GITHUB_REPOSITORY}/commit/${PREVIEW_SOURCE_SHA})"
+            echo "- Preview identity: \`${PREVIEW_SLUG}\` (\`${PREVIEW_ID}\`)"
+            echo "- Backend mode: \`${PREVIEW_BACKEND_MODE}\`"
+            echo "- Python API: \`${OMI_PYTHON_API_URL}\`"
+            echo "- Desktop API: \`${OMI_DESKTOP_API_URL}\`"
+            echo "- Tester notes (JSON-escaped): ${notes_json}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Build and publish approved preview
+    needs: resolve
+    runs-on: ubuntu-latest
+    # Configure desktop-preview-publish with release-maintainers as required
+    # reviewers, no self-review, and no administrator bypass.
+    environment: desktop-preview-publish
+    concurrency:
+      group: desktop-preview-publish-${{ needs.resolve.outputs.preview_id }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout publishing controls from main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Start the trusted Codemagic preview workflow
+        env:
+          CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          PREVIEW_SLUG: ${{ needs.resolve.outputs.slug }}
+          PREVIEW_ID: ${{ needs.resolve.outputs.preview_id }}
+          PREVIEW_SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
+          PREVIEW_SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
+          PREVIEW_NOTES: ${{ inputs.tester_notes }}
+          PREVIEW_BACKEND_MODE: ${{ inputs.backend_mode }}
+          OMI_PYTHON_API_URL: ${{ needs.resolve.outputs.python_api_url }}
+          OMI_DESKTOP_API_URL: ${{ needs.resolve.outputs.desktop_api_url }}
+        run: |
+          set -euo pipefail
+          test -n "$CODEMAGIC_API_TOKEN" || {
+            echo "CODEMAGIC_API_TOKEN must be an environment secret." >&2
+            exit 1
+          }
+          notes_base64="$(printf '%s' "$PREVIEW_NOTES" | base64 | tr -d '\n')"
+          payload="$(jq -n \
+            --arg app_id "$CODEMAGIC_APP_ID" \
+            --arg slug "$PREVIEW_SLUG" \
+            --arg preview_id "$PREVIEW_ID" \
+            --arg source_ref "$PREVIEW_SOURCE_REF" \
+            --arg source_sha "$PREVIEW_SOURCE_SHA" \
+            --arg notes "$notes_base64" \
+            --arg backend_mode "$PREVIEW_BACKEND_MODE" \
+            --arg python_api_url "$OMI_PYTHON_API_URL" \
+            --arg desktop_api_url "$OMI_DESKTOP_API_URL" \
+            '{appId: $app_id, workflowId: "omi-desktop-swift-preview", branch: "main", environment: {variables: {PREVIEW_MODE: "true", PREVIEW_SLUG: $slug, PREVIEW_ID: $preview_id, PREVIEW_SOURCE_REF: $source_ref, PREVIEW_SOURCE_SHA: $source_sha, PREVIEW_NOTES_BASE64: $notes, PREVIEW_BACKEND_MODE: $backend_mode, OMI_PYTHON_API_URL: $python_api_url, OMI_DESKTOP_API_URL: $desktop_api_url}}}')"
+          response="$(curl --fail --show-error --silent \
+            -H 'Content-Type: application/json' \
+            -H "x-auth-token: $CODEMAGIC_API_TOKEN" \
+            --data "$payload" \
+            https://api.codemagic.io/builds)"
+          build_id="$(jq -r '.buildId // empty' <<<"$response")"
+          test -n "$build_id" || { echo "Codemagic did not return a build ID." >&2; exit 1; }
+          {
+            echo "### Desktop preview requested"
+            echo
+            echo "- Ref: \`${PREVIEW_SOURCE_REF}\`"
+            echo "- SHA: \`${PREVIEW_SOURCE_SHA}\`"
+            echo "- Preview: \`${PREVIEW_SLUG}\` (\`${PREVIEW_ID}\`)"
+            echo "- Landing page: \`https://macos.omi.me/preview/${PREVIEW_SLUG}\`"
+            echo "- Codemagic build: \`${build_id}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

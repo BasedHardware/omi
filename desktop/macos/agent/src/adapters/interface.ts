@@ -3,7 +3,7 @@
 // Issue #6592: Support multiple AI harnesses via common interface.
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
-import type { OutboundMessageDraft, WarmupSessionConfig } from "../protocol.js";
+import type { OutboundMessageDraft } from "../protocol.js";
 import type { RuntimeFailure } from "../runtime/failures.js";
 import type { ArtifactRole, ResumeFidelity, RunMode } from "../runtime/types.js";
 
@@ -26,6 +26,13 @@ export interface SessionOpts {
   systemPrompt?: string;
   mcpServers?: Record<string, unknown>[];
   executionRole?: "coordinator" | "leaf";
+}
+
+/** Adapter-internal preload shape. It is never accepted from the Swift wire. */
+export interface WarmupSessionConfig {
+  key: string;
+  model?: string;
+  systemPrompt?: string;
 }
 
 /**
@@ -354,6 +361,8 @@ export interface AdapterAttemptContext {
   clientId: string;
   runId: string;
   attemptId: string;
+  /** Opaque, attempt-bounded authority for Omi/Swift-backed tools. */
+  toolCapabilityRef: string;
   binding: AdapterBindingHandle;
   prompt: PromptBlock[];
   mode: RunMode;

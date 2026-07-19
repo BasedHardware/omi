@@ -1,0 +1,10 @@
+{
+  "backend/database/candidates.py": 3,
+  "backend/database/dev_api_key.py": 1,
+  "backend/database/goals.py": 2,
+  "backend/database/mcp_api_key.py": 1,
+  "backend/database/memory_vector_repair_pinecone_adapter.py": 1,
+  "backend/database/task_recommendations.py": 7,
+  "backend/database/user_usage.py": 4,
+  "backend/database/workstreams.py": 10
+}

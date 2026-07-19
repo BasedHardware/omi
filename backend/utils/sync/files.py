@@ -8,6 +8,7 @@ from typing import Any, List, Optional
 
 from fastapi import HTTPException, UploadFile
 
+from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
 from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import playback as sync_playback
@@ -47,6 +48,7 @@ def decode_opus_file_to_wav(
 
     decoder = _get_opus_decoder_class()(sample_rate, channels)
     frame_count = 0
+    corrupt_stream = False
 
     try:
         with open(opus_file_path, 'rb') as f, wave.open(wav_file_path, 'wb') as wav_file:
@@ -57,29 +59,32 @@ def decode_opus_file_to_wav(
             while True:
                 length_bytes = f.read(4)
                 if not length_bytes:
-                    logger.info("End of file reached.")
                     break
                 if len(length_bytes) < 4:
-                    logger.info("Incomplete length prefix at the end of the file.")
+                    logger.warning('Opus decode: truncated length prefix')
+                    corrupt_stream = True
                     break
 
                 frame_length = struct.unpack('<I', length_bytes)[0]
                 if frame_length == 0 or frame_length > MAX_SYNC_FRAME_BYTES:
-                    logger.warning(f"Opus decode: suspicious frame length {frame_length}, skipping rest")
+                    logger.warning('Opus decode: invalid frame length')
+                    corrupt_stream = True
                     break
                 opus_data = f.read(frame_length)
                 if len(opus_data) < frame_length:
-                    logger.error(f"Unexpected end of file at frame {frame_count}.")
+                    logger.warning('Opus decode: truncated frame')
+                    corrupt_stream = True
                     break
                 try:
                     pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
                     wav_file.writeframes(pcm_frame)
                     frame_count += 1
                 except Exception as e:
-                    logger.error(f"Error decoding frame {frame_count}: {e}")
-                    continue
+                    logger.warning('Opus decode: frame failed exception_type=%s', type(e).__name__)
+                    corrupt_stream = True
+                    break
 
-        if frame_count > 0:
+        if frame_count > 0 and not corrupt_stream:
             logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
             return True
 
@@ -154,22 +159,35 @@ def decode_pcm_file_to_wav(
     """
     try:
         pcm_data = bytearray()
+        corrupt_stream = False
         with open(pcm_file_path, 'rb') as f:
             while True:
                 length_bytes = f.read(4)
-                if not length_bytes or len(length_bytes) < 4:
+                if not length_bytes:
+                    break
+                if len(length_bytes) < 4:
+                    corrupt_stream = True
                     break
                 frame_length = struct.unpack('<I', length_bytes)[0]
                 if frame_length == 0 or frame_length > MAX_SYNC_FRAME_BYTES:
-                    logger.warning(f"PCM decode: suspicious frame length {frame_length}, skipping rest")
+                    logger.warning('PCM decode: invalid frame length')
+                    corrupt_stream = True
                     break
                 frame_data = f.read(frame_length)
                 if len(frame_data) < frame_length:
+                    corrupt_stream = True
+                    break
+                if frame_length % (sample_width * channels) != 0:
+                    logger.warning('PCM decode: misaligned frame length')
+                    corrupt_stream = True
                     break
                 pcm_data.extend(frame_data)
 
-        if not pcm_data:
-            logger.info(f"PCM decode: no data in {pcm_file_path}")
+        if not pcm_data or corrupt_stream:
+            logger.info('PCM decode: stream is empty or malformed')
+            pcm_data.clear()
+            if os.path.exists(wav_file_path):
+                os.remove(wav_file_path)
             return False
 
         wav_data = sync_playback.pcm_to_wav(
@@ -177,15 +195,37 @@ def decode_pcm_file_to_wav(
         )
         with open(wav_file_path, 'wb') as f:
             f.write(wav_data)
+        pcm_data.clear()
         return True
     except Exception as e:
-        logger.error(f"PCM decode failed for {pcm_file_path}: {e}")
+        logger.error('PCM decode failed exception_type=%s', type(e).__name__)
+        if os.path.exists(wav_file_path):
+            os.remove(wav_file_path)
         return False
 
 
 def _is_pcm_codec(filename: str) -> bool:
     """Check if the filename indicates a PCM codec (pcm8 or pcm16)."""
     return '_pcm16_' in filename or '_pcm8_' in filename
+
+
+def detect_source_from_filenames(filenames: List[Optional[str]]) -> ConversationSource:
+    """Detect the conversation source for a /v2/sync-local-files batch from uploaded filenames.
+
+    Keeps the original first-match-wins loop semantics: the first filename that carries a known
+    marker sets the source and stops the scan. limitless is checked before phone so a limitless
+    file never loses to phone. 'omibatchphone' also covers the 'omibatchphoneauto' offline
+    auto-switch variant; 'phonemic' covers the phone-mic WAL fallback uploads. Defaults to omi.
+    """
+    for filename in filenames:
+        if not filename:
+            continue
+        name = filename.lower()
+        if 'limitless' in name:
+            return ConversationSource.limitless
+        if 'omibatchphone' in name or 'phonemic' in name:
+            return ConversationSource.phone
+    return ConversationSource.omi
 
 
 def decode_files_to_wav(files_path: List[str]) -> List[str]:
@@ -213,9 +253,12 @@ def decode_files_to_wav(files_path: List[str]) -> List[str]:
             success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
 
         if not success:
+            for decoded_wav in wav_files:
+                if os.path.exists(decoded_wav):
+                    os.remove(decoded_wav)
             if os.path.exists(path):
                 os.remove(path)
-            continue
+            raise HTTPException(status_code=400, detail='Audio decode failed')
 
         if os.path.exists(path):
             os.remove(path)
@@ -224,10 +267,12 @@ def decode_files_to_wav(files_path: List[str]) -> List[str]:
         if duration == 0:
             if os.path.exists(wav_path):
                 os.remove(wav_path)
-            raise HTTPException(status_code=400, detail=f"Invalid file format {path}")
+            for decoded_wav in wav_files:
+                if os.path.exists(decoded_wav):
+                    os.remove(decoded_wav)
+            raise HTTPException(status_code=400, detail='Invalid audio input')
 
-        if duration < 1:
-            os.remove(wav_path)
-            continue
+        # Short, successfully decoded audio is not proof of silence. Preserve it
+        # for the authoritative VAD stage instead of silently acknowledging it.
         wav_files.append(wav_path)
     return wav_files

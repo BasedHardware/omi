@@ -498,7 +498,6 @@ class MessageProvider extends ChangeNotifier {
       currentAppId = null;
     }
     String chatTargetId = currentAppId ?? 'omi';
-    App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = false;
 
     PlatformManager.instance.analytics.chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
@@ -618,7 +617,6 @@ class MessageProvider extends ChangeNotifier {
     }
 
     String chatTargetId = currentAppId ?? 'omi';
-    App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = false;
 
     PlatformManager.instance.analytics.chatMessageSent(
@@ -751,7 +749,6 @@ class MessageProvider extends ChangeNotifier {
   Future _sendMessageViaAgent(String text, String? appId) async {
     var message = ServerMessage.empty(appId: appId);
     messages.add(message);
-    final aiIndex = messages.length - 1;
     notifyListeners();
     clearSelectedFiles();
     clearUploadedFiles();

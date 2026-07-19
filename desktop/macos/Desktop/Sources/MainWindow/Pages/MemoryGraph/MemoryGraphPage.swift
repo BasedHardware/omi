@@ -1,7 +1,7 @@
-import SceneKit
-import SwiftUI
 import OmiSupport
 import OmiTheme
+import SceneKit
+import SwiftUI
 
 // MARK: - Memory Graph Page
 
@@ -26,7 +26,7 @@ struct MemoryGraphPage: View {
             dismiss()
           } label: {
             Image(systemName: "xmark")
-              .scaledFont(size: 13, weight: .semibold)
+              .scaledFont(size: OmiType.body, weight: .semibold)
               .foregroundColor(.white.opacity(0.5))
               .frame(width: 28, height: 28)
           }
@@ -43,7 +43,7 @@ struct MemoryGraphPage: View {
               Task { await viewModel.rebuildGraph() }
             } label: {
               Image(systemName: "arrow.clockwise")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(.white.opacity(0.5))
                 .frame(width: 28, height: 28)
             }
@@ -51,8 +51,8 @@ struct MemoryGraphPage: View {
             .help("Rebuild graph")
           }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.top, OmiSpacing.md)
 
         Spacer()
       }
@@ -74,10 +74,10 @@ struct MemoryGraphInlineCard: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .center, spacing: 12) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      HStack(alignment: .center, spacing: OmiSpacing.md) {
         Text("Brain Map")
-          .scaledFont(size: 15, weight: .semibold)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
@@ -91,7 +91,7 @@ struct MemoryGraphInlineCard: View {
             Task { await viewModel.rebuildGraph() }
           } label: {
             Image(systemName: "arrow.clockwise")
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(OmiColors.textSecondary)
               .frame(width: 32, height: 32)
               .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 12)
@@ -113,22 +113,22 @@ struct MemoryGraphInlineCard: View {
             .scaleEffect(1.1)
             .tint(.white.opacity(0.45))
         } else if viewModel.isEmpty {
-          VStack(spacing: 8) {
+          VStack(spacing: OmiSpacing.sm) {
             Image(systemName: "brain")
-              .scaledFont(size: 18)
+              .scaledFont(size: OmiType.heading)
               .foregroundColor(OmiColors.textTertiary)
             Text("Brain map will appear once enough linked memories are available.")
               .scaledFont(size: 12.5)
               .foregroundColor(OmiColors.textSecondary)
               .multilineTextAlignment(.center)
           }
-          .padding(18)
+          .padding(OmiSpacing.lg)
         }
       }
       .frame(height: 350)
-      .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
     }
-    .padding(16)
+    .padding(OmiSpacing.lg)
     .omiPanel(
       fill: OmiColors.backgroundSecondary, radius: 24, stroke: OmiColors.border.opacity(0.14),
       shadowOpacity: 0.14, shadowRadius: 12, shadowY: 8
@@ -181,8 +181,9 @@ struct MemoryGraphSceneView: NSViewRepresentable {
       // Throttle to ~30fps for physics updates
       guard time - lastUpdateTime > 0.033 else { return }
       lastUpdateTime = time
+      let vm = viewModel
       Task { @MainActor in
-        viewModel.updateSimulation()
+        vm.updateSimulation()
       }
     }
   }
@@ -338,6 +339,14 @@ class MemoryGraphViewModel: ObservableObject {
       let restoredLayout =
         loadCachedLayout(signature: signature).map { simulation.applyLayout($0) } ?? false
       if !restoredLayout {
+        // Suppress the render-driven simulation.tick() while the off-main physics
+        // run mutates the same node positions/velocities. The SceneKit delegate
+        // enqueues updateSimulation() on the main actor every frame; without this
+        // it would tick() concurrently with runSync() off-main — an unsynchronized
+        // read/write of non-atomic SIMD3 node state (torn positions, corrupt
+        // layout/camera). The post-layout block below re-enables animation once the
+        // detached run has completed.
+        isAnimating = false
         // Run initial layout off main thread for responsiveness
         await Task.detached(priority: .userInitiated) { [simulation] in
           simulation.runSync(ticks: 800)
@@ -532,6 +541,11 @@ class MemoryGraphViewModel: ObservableObject {
 
     let userName = AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName
     simulation.addNodesAndEdges(graphResponse: response, userNodeLabel: userName)
+
+    // Suppress the render-driven tick() while this off-main physics burst mutates
+    // the (already-live) scene's node state — same main-vs-detached data race as
+    // loadGraph. Re-enabled for the settle animation below, after the detached run.
+    isAnimating = false
 
     // Run a burst of physics to integrate new nodes
     await Task.detached(priority: .userInitiated) { [simulation] in
@@ -977,7 +991,7 @@ extension KnowledgeGraphNodeType: CaseIterable {
     case .person: return .cyan
     case .place: return Color(red: 0, green: 1, blue: 0.62)  // Mint
     case .organization: return .orange
-    case .thing: return .purple
+    case .thing: return .yellow
     case .concept: return .blue
     }
   }
@@ -987,7 +1001,7 @@ extension KnowledgeGraphNodeType: CaseIterable {
     case .person: return .cyan
     case .place: return NSColor(red: 0, green: 1, blue: 0.62, alpha: 1)
     case .organization: return .orange
-    case .thing: return .purple
+    case .thing: return .systemYellow
     case .concept: return .systemBlue
     }
   }
@@ -1002,8 +1016,8 @@ extension SCNVector3 {
 // MARK: - Preview
 
 #if canImport(PreviewsMacros)
-#Preview {
-  MemoryGraphPage(viewModel: MemoryGraphViewModel())
-    .frame(width: 800, height: 600)
-}
+  #Preview {
+    MemoryGraphPage(viewModel: MemoryGraphViewModel())
+      .frame(width: 800, height: 600)
+  }
 #endif

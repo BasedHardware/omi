@@ -71,7 +71,6 @@ def _gpu_worker_module():
 
 
 class TestSubmitLockRace(unittest.TestCase):
-
     def _make_started_worker(self):
         worker = GPUWorker()
         worker._running = True

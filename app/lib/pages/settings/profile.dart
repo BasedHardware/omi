@@ -4,21 +4,18 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/pages/payments/payments_page.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/people.dart';
-import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-
-import 'package:omi/pages/settings/conversation_display_settings.dart';
 
 import 'delete_account.dart';
 
@@ -361,7 +358,7 @@ class _ProfilePageState extends State<ProfilePage> {
             final enabled = SharedPreferencesUtil().batchModeEnabled;
             Future<void> setEnabled(bool value) async {
               final accepted = await captureProvider.setBatchMode(value);
-              if (!accepted) {
+              if (!accepted && context.mounted) {
                 AppSnackbar.showSnackbarError(context.l10n.transcribeLaterNote);
               }
               if (sheetContext.mounted) {
@@ -529,6 +526,14 @@ class _ProfilePageState extends State<ProfilePage> {
                     routeToPage(context, const CustomVocabularyPage());
                   },
                 ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: context.l10n.memories,
+                  icon: FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const MemoriesPage());
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -576,36 +581,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   showBetaTag: true,
                   chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
                   onTap: _showOfflineModeSheet,
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // PAYMENT & PRIVACY SECTION
-            _buildSectionContainer(
-              children: [
-                _buildProfileItem(
-                  title: context.l10n.paymentMethods,
-                  icon: FaIcon(FontAwesomeIcons.solidCreditCard, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const PaymentsPage());
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.conversationDisplay,
-                  icon: FaIcon(FontAwesomeIcons.list, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const ConversationDisplaySettings());
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.dataPrivacy,
-                  icon: FaIcon(FontAwesomeIcons.shield, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
-                  },
                 ),
               ],
             ),

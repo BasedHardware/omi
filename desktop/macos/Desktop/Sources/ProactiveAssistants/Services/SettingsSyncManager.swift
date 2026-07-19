@@ -4,173 +4,174 @@ import Foundation
 /// Server is source of truth — server values override local when present.
 @MainActor
 class SettingsSyncManager {
-    static let shared = SettingsSyncManager()
-    private init() {}
+  static let shared = SettingsSyncManager()
+  private init() {}
 
-    /// Pull settings from server and apply non-nil values to local singletons.
-    func syncFromServer() async {
-        guard AuthService.shared.isSignedIn else { return }
-        do {
-            let remote = try await APIClient.shared.getAssistantSettings()
-            applyRemoteSettings(remote)
-            log("SettingsSyncManager: synced from server")
-        } catch {
-            logError("SettingsSyncManager: failed to sync from server", error: error)
-        }
+  /// Pull settings from server and apply non-nil values to local singletons.
+  func syncFromServer() async {
+    guard AuthService.shared.isSignedIn else { return }
+    do {
+      let remote = try await APIClient.shared.getAssistantSettings()
+      applyRemoteSettings(remote)
+      log("SettingsSyncManager: synced from server")
+    } catch {
+      logError("SettingsSyncManager: failed to sync from server", error: error)
+    }
+  }
+
+  /// Push all current local settings to the server.
+  func syncToServer() async {
+    let settings = buildFromLocal()
+    do {
+      let _ = try await APIClient.shared.updateAssistantSettings(settings)
+      log("SettingsSyncManager: synced to server")
+    } catch {
+      logError("SettingsSyncManager: failed to sync to server", error: error)
+    }
+  }
+
+  /// Fire-and-forget partial update to server.
+  func pushPartialUpdate(_ settings: AssistantSettingsResponse) {
+    Task {
+      do {
+        let _ = try await APIClient.shared.updateAssistantSettings(settings)
+      } catch {
+        logError("SettingsSyncManager: failed to push partial update", error: error)
+      }
+    }
+  }
+
+  // MARK: - Apply Remote → Local
+
+  private func applyRemoteSettings(_ remote: AssistantSettingsResponse) {
+    // Shared settings
+    if let shared = remote.shared {
+      if let v = shared.cooldownInterval { AssistantSettings.shared.cooldownInterval = v }
+      if let v = shared.glowOverlayEnabled { AssistantSettings.shared.glowOverlayEnabled = v }
+      if let v = shared.analysisDelay { AssistantSettings.shared.analysisDelay = v }
+      // Lazy-dev bundles keep their per-bundle capture preference instead of
+      // importing another bundle's remote value. Capture defaults to enabled;
+      // the runtime checks TCC without prompting when permission is absent.
+      if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
+        AssistantSettings.shared.screenAnalysisEnabled = v
+      }
     }
 
-    /// Push all current local settings to the server.
-    func syncToServer() async {
-        let settings = buildFromLocal()
-        do {
-            let _ = try await APIClient.shared.updateAssistantSettings(settings)
-            log("SettingsSyncManager: synced to server")
-        } catch {
-            logError("SettingsSyncManager: failed to sync to server", error: error)
-        }
+    // Focus settings
+    if let focus = remote.focus {
+      if let v = focus.enabled { FocusAssistantSettings.shared.isEnabled = v }
+      if let v = focus.analysisPrompt { FocusAssistantSettings.shared.analysisPrompt = v }
+      if let v = focus.cooldownInterval { FocusAssistantSettings.shared.cooldownInterval = v }
+      if let v = focus.notificationsEnabled { FocusAssistantSettings.shared.notificationsEnabled = v }
+      if let v = focus.excludedApps { FocusAssistantSettings.shared.excludedApps = Set(v) }
     }
 
-    /// Fire-and-forget partial update to server.
-    func pushPartialUpdate(_ settings: AssistantSettingsResponse) {
-        Task {
-            do {
-                let _ = try await APIClient.shared.updateAssistantSettings(settings)
-            } catch {
-                logError("SettingsSyncManager: failed to push partial update", error: error)
-            }
-        }
+    // Task settings
+    if let task = remote.task {
+      if let v = task.enabled { TaskAssistantSettings.shared.isEnabled = v }
+      if let v = task.analysisPrompt { TaskAssistantSettings.shared.analysisPrompt = v }
+      if let v = task.extractionInterval { TaskAssistantSettings.shared.extractionInterval = v }
+      if let v = task.minConfidence { TaskAssistantSettings.shared.minConfidence = v }
+      if let v = task.notificationsEnabled { TaskAssistantSettings.shared.notificationsEnabled = v }
+      if let v = task.allowedApps { TaskAssistantSettings.shared.allowedApps = Set(v) }
+      if let v = task.browserKeywords { TaskAssistantSettings.shared.browserKeywords = v }
     }
 
-    // MARK: - Apply Remote → Local
-
-    private func applyRemoteSettings(_ remote: AssistantSettingsResponse) {
-        // Shared settings
-        if let shared = remote.shared {
-            if let v = shared.cooldownInterval { AssistantSettings.shared.cooldownInterval = v }
-            if let v = shared.glowOverlayEnabled { AssistantSettings.shared.glowOverlayEnabled = v }
-            if let v = shared.analysisDelay { AssistantSettings.shared.analysisDelay = v }
-            // Lazy-dev bundles keep the local seed (false) and ignore the remote value
-            // so the named bundle cannot start screen analysis until the user opts in.
-            if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
-                AssistantSettings.shared.screenAnalysisEnabled = v
-            }
-        }
-
-        // Focus settings
-        if let focus = remote.focus {
-            if let v = focus.enabled { FocusAssistantSettings.shared.isEnabled = v }
-            if let v = focus.analysisPrompt { FocusAssistantSettings.shared.analysisPrompt = v }
-            if let v = focus.cooldownInterval { FocusAssistantSettings.shared.cooldownInterval = v }
-            if let v = focus.notificationsEnabled { FocusAssistantSettings.shared.notificationsEnabled = v }
-            if let v = focus.excludedApps { FocusAssistantSettings.shared.excludedApps = Set(v) }
-        }
-
-        // Task settings
-        if let task = remote.task {
-            if let v = task.enabled { TaskAssistantSettings.shared.isEnabled = v }
-            if let v = task.analysisPrompt { TaskAssistantSettings.shared.analysisPrompt = v }
-            if let v = task.extractionInterval { TaskAssistantSettings.shared.extractionInterval = v }
-            if let v = task.minConfidence { TaskAssistantSettings.shared.minConfidence = v }
-            if let v = task.notificationsEnabled { TaskAssistantSettings.shared.notificationsEnabled = v }
-            if let v = task.allowedApps { TaskAssistantSettings.shared.allowedApps = Set(v) }
-            if let v = task.browserKeywords { TaskAssistantSettings.shared.browserKeywords = v }
-        }
-
-        // Insight settings
-        if let insight = remote.insight {
-            if let v = insight.enabled { InsightAssistantSettings.shared.isEnabled = v }
-            if let v = insight.analysisPrompt { InsightAssistantSettings.shared.analysisPrompt = v }
-            if let v = insight.extractionInterval { InsightAssistantSettings.shared.extractionInterval = v }
-            if let v = insight.minConfidence { InsightAssistantSettings.shared.minConfidence = v }
-            if let v = insight.notificationsEnabled { InsightAssistantSettings.shared.notificationsEnabled = v }
-            if let v = insight.excludedApps { InsightAssistantSettings.shared.excludedApps = Set(v) }
-        }
-
-        // Memory settings
-        if let memory = remote.memory {
-            if let v = memory.enabled { MemoryAssistantSettings.shared.isEnabled = v }
-            if let v = memory.analysisPrompt { MemoryAssistantSettings.shared.analysisPrompt = v }
-            if let v = memory.extractionInterval { MemoryAssistantSettings.shared.extractionInterval = v }
-            if let v = memory.minConfidence { MemoryAssistantSettings.shared.minConfidence = v }
-            if let v = memory.notificationsEnabled { MemoryAssistantSettings.shared.notificationsEnabled = v }
-            if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
-        }
-
-        // Push-to-talk voice replies are no longer configurable. Ignore the legacy
-        // server field so old synced `false` values cannot suppress spoken answers.
-
-        // Update channel (server-authoritative override)
-        // Note: updateChannel.didSet already calls checkForUpdatesInBackground()
-        if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
-            if UpdaterViewModel.shared.updateChannel != parsed {
-                log("SettingsSyncManager: Server assigned update channel: \(channel)")
-                UpdaterViewModel.shared.updateChannel = parsed
-            }
-        }
+    // Insight settings
+    if let insight = remote.insight {
+      if let v = insight.enabled { InsightAssistantSettings.shared.isEnabled = v }
+      if let v = insight.analysisPrompt { InsightAssistantSettings.shared.analysisPrompt = v }
+      if let v = insight.extractionInterval { InsightAssistantSettings.shared.extractionInterval = v }
+      if let v = insight.minConfidence { InsightAssistantSettings.shared.minConfidence = v }
+      if let v = insight.notificationsEnabled { InsightAssistantSettings.shared.notificationsEnabled = v }
+      if let v = insight.excludedApps { InsightAssistantSettings.shared.excludedApps = Set(v) }
     }
 
-    // MARK: - Build Local → Response
-
-    private var shouldKeepLocalScreenAnalysisDefault: Bool {
-        AppBuild.usesLazyDevPermissions
+    // Memory settings
+    if let memory = remote.memory {
+      if let v = memory.enabled { MemoryAssistantSettings.shared.isEnabled = v }
+      if let v = memory.analysisPrompt { MemoryAssistantSettings.shared.analysisPrompt = v }
+      if let v = memory.extractionInterval { MemoryAssistantSettings.shared.extractionInterval = v }
+      if let v = memory.minConfidence { MemoryAssistantSettings.shared.minConfidence = v }
+      if let v = memory.notificationsEnabled { MemoryAssistantSettings.shared.notificationsEnabled = v }
+      if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
     }
 
-    private func buildFromLocal() -> AssistantSettingsResponse {
-        let shared = SharedAssistantSettingsResponse(
-            cooldownInterval: AssistantSettings.shared.cooldownInterval,
-            glowOverlayEnabled: AssistantSettings.shared.glowOverlayEnabled,
-            analysisDelay: AssistantSettings.shared.analysisDelay,
-            screenAnalysisEnabled: shouldKeepLocalScreenAnalysisDefault ? nil : AssistantSettings.shared.screenAnalysisEnabled
-        )
+    // Push-to-talk voice replies are no longer configurable. Ignore the legacy
+    // server field so old synced `false` values cannot suppress spoken answers.
 
-        let focus = FocusSettingsResponse(
-            enabled: FocusAssistantSettings.shared.isEnabled,
-            analysisPrompt: FocusAssistantSettings.shared.analysisPrompt,
-            cooldownInterval: FocusAssistantSettings.shared.cooldownInterval,
-            notificationsEnabled: FocusAssistantSettings.shared.notificationsEnabled,
-            excludedApps: Array(FocusAssistantSettings.shared.excludedApps)
-        )
-
-        let task = TaskSettingsResponse(
-            enabled: TaskAssistantSettings.shared.isEnabled,
-            analysisPrompt: TaskAssistantSettings.shared.analysisPrompt,
-            extractionInterval: TaskAssistantSettings.shared.extractionInterval,
-            minConfidence: TaskAssistantSettings.shared.minConfidence,
-            notificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
-            allowedApps: Array(TaskAssistantSettings.shared.allowedApps),
-            browserKeywords: TaskAssistantSettings.shared.browserKeywords
-        )
-
-        let insight = InsightSettingsResponse(
-            enabled: InsightAssistantSettings.shared.isEnabled,
-            analysisPrompt: InsightAssistantSettings.shared.analysisPrompt,
-            extractionInterval: InsightAssistantSettings.shared.extractionInterval,
-            minConfidence: InsightAssistantSettings.shared.minConfidence,
-            notificationsEnabled: InsightAssistantSettings.shared.notificationsEnabled,
-            excludedApps: Array(InsightAssistantSettings.shared.excludedApps)
-        )
-
-        let memory = MemorySettingsResponse(
-            enabled: MemoryAssistantSettings.shared.isEnabled,
-            analysisPrompt: MemoryAssistantSettings.shared.analysisPrompt,
-            extractionInterval: MemoryAssistantSettings.shared.extractionInterval,
-            minConfidence: MemoryAssistantSettings.shared.minConfidence,
-            notificationsEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
-            excludedApps: Array(MemoryAssistantSettings.shared.excludedApps)
-        )
-
-        let floatingBar = FloatingBarSettingsResponse(
-            voiceAnswersEnabled: ShortcutSettings.shared.floatingBarVoiceAnswersEnabled
-        )
-
-        return AssistantSettingsResponse(
-            shared: shared,
-            focus: focus,
-            task: task,
-            insight: insight,
-            memory: memory,
-            floatingBar: floatingBar,
-            updateChannel: UpdaterViewModel.shared.updateChannel.rawValue
-        )
+    // Update channel (server-authoritative override)
+    // Note: updateChannel.didSet already calls checkForUpdatesInBackground()
+    if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
+      if UpdaterViewModel.shared.updateChannel != parsed {
+        log("SettingsSyncManager: Server assigned update channel: \(channel)")
+        UpdaterViewModel.shared.updateChannel = parsed
+      }
     }
+  }
+
+  // MARK: - Build Local → Response
+
+  private var shouldKeepLocalScreenAnalysisDefault: Bool {
+    AppBuild.usesLazyDevPermissions
+  }
+
+  private func buildFromLocal() -> AssistantSettingsResponse {
+    let shared = SharedAssistantSettingsResponse(
+      cooldownInterval: AssistantSettings.shared.cooldownInterval,
+      glowOverlayEnabled: AssistantSettings.shared.glowOverlayEnabled,
+      analysisDelay: AssistantSettings.shared.analysisDelay,
+      screenAnalysisEnabled: shouldKeepLocalScreenAnalysisDefault ? nil : AssistantSettings.shared.screenAnalysisEnabled
+    )
+
+    let focus = FocusSettingsResponse(
+      enabled: FocusAssistantSettings.shared.isEnabled,
+      analysisPrompt: FocusAssistantSettings.shared.analysisPrompt,
+      cooldownInterval: FocusAssistantSettings.shared.cooldownInterval,
+      notificationsEnabled: FocusAssistantSettings.shared.notificationsEnabled,
+      excludedApps: Array(FocusAssistantSettings.shared.excludedApps)
+    )
+
+    let task = TaskSettingsResponse(
+      enabled: TaskAssistantSettings.shared.isEnabled,
+      analysisPrompt: TaskAssistantSettings.shared.analysisPrompt,
+      extractionInterval: TaskAssistantSettings.shared.extractionInterval,
+      minConfidence: TaskAssistantSettings.shared.minConfidence,
+      notificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+      allowedApps: Array(TaskAssistantSettings.shared.allowedApps),
+      browserKeywords: TaskAssistantSettings.shared.browserKeywords
+    )
+
+    let insight = InsightSettingsResponse(
+      enabled: InsightAssistantSettings.shared.isEnabled,
+      analysisPrompt: InsightAssistantSettings.shared.analysisPrompt,
+      extractionInterval: InsightAssistantSettings.shared.extractionInterval,
+      minConfidence: InsightAssistantSettings.shared.minConfidence,
+      notificationsEnabled: InsightAssistantSettings.shared.notificationsEnabled,
+      excludedApps: Array(InsightAssistantSettings.shared.excludedApps)
+    )
+
+    let memory = MemorySettingsResponse(
+      enabled: MemoryAssistantSettings.shared.isEnabled,
+      analysisPrompt: MemoryAssistantSettings.shared.analysisPrompt,
+      extractionInterval: MemoryAssistantSettings.shared.extractionInterval,
+      minConfidence: MemoryAssistantSettings.shared.minConfidence,
+      notificationsEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+      excludedApps: Array(MemoryAssistantSettings.shared.excludedApps)
+    )
+
+    let floatingBar = FloatingBarSettingsResponse(
+      voiceAnswersEnabled: ShortcutSettings.shared.floatingBarVoiceAnswersEnabled
+    )
+
+    return AssistantSettingsResponse(
+      shared: shared,
+      focus: focus,
+      task: task,
+      insight: insight,
+      memory: memory,
+      floatingBar: floatingBar,
+      updateChannel: UpdaterViewModel.shared.updateChannel.rawValue
+    )
+  }
 }

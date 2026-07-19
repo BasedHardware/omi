@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Protocol
@@ -11,8 +12,14 @@ from pydantic import BaseModel, ConfigDict, Field
 import database.candidates as candidates_db
 import database.task_recommendations as recommendation_db
 import database.workstreams as workstreams_db
-from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskChangePayload, TaskStatus
-from models.candidate import CandidateCreate, CandidateStatus, TaskCompleteCandidate
+from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskChangePayload, TaskOwner, TaskStatus
+from models.candidate import (
+    CandidateAction,
+    CandidateCreate,
+    CandidateStatus,
+    CandidateSubjectKind,
+    TaskCompleteCandidate,
+)
 from models.goal import GoalStatus
 from models.task_intelligence import TaskIntelligenceFeedbackAction, TaskIntelligenceFeedbackReason
 from models.task_recommendation import (
@@ -42,13 +49,14 @@ from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 
 MAX_SHORTLIST_SIZE = 20
 MAX_RECOMMENDATIONS = 3
+ATTENTION_TIER_RESERVED_CAPACITY = {0: 10, 1: 8, 2: 2}
 PROJECTION_TTL = timedelta(minutes=30)
 MAX_LOCAL_SNAPSHOT_TTL = timedelta(hours=1)
 DEFAULT_LATER_TTL = timedelta(days=1)
 DISMISS_TTL = timedelta(days=30)
-PROMPT_VERSION = 'what-matters-now.v1'
-POLICY_VERSION = 'ranking.v1'
-FACT_DEFINITION_VERSION = 'facts.v1'
+PROMPT_VERSION = 'what-matters-now.v2'
+POLICY_VERSION = 'ranking.v2'
+FACT_DEFINITION_VERSION = 'facts.v2'
 
 
 class SnapshotValidationError(ValueError):
@@ -80,6 +88,7 @@ class EvaluationSubject:
     facts: DeterministicFacts
     eligibility: ShortlistEligibility
     material_token: str
+    explicit_user_intent: bool = False
 
 
 class RecommendationJudgment(Protocol):
@@ -98,8 +107,14 @@ def _recommendation_dedupe_key(subject: EvaluationSubject) -> str:
     # pending Candidate. Keep one bounded key so feedback on either surface
     # suppresses the equivalent intervention everywhere.
     if subject.kind == RecommendationSubjectKind.candidate:
-        return _stable_id('candidate', subject.subject_id)
+        return candidate_recommendation_dedupe_key(subject.subject_id)
     return _stable_id('recommendation', subject.kind.value, subject.subject_id, subject.material_token)
+
+
+def candidate_recommendation_dedupe_key(candidate_id: str) -> str:
+    """Return the cross-surface Candidate attention identity."""
+
+    return _stable_id('candidate', candidate_id)
 
 
 def _as_aware(value: Any) -> Optional[datetime]:
@@ -163,6 +178,7 @@ def _eligibility(
     facts: DeterministicFacts,
     recent_material_activity: bool,
     has_evidence: bool = True,
+    quality_eligible: bool = True,
 ) -> ShortlistEligibility:
     passes = (
         is_open
@@ -170,6 +186,7 @@ def _eligibility(
         and facts.capture_confidence >= MINIMUM_CAPTURE_CONFIDENCE
         and facts.has_concrete_next_action
         and has_evidence
+        and quality_eligible
     )
     return ShortlistEligibility(
         open=is_open,
@@ -212,6 +229,9 @@ def _subject(
     unexpired: bool,
     recent_material_activity: bool,
     material_token: str,
+    quality_eligible: bool = True,
+    evidence_preview: Optional[str] = None,
+    explicit_user_intent: bool = False,
 ) -> EvaluationSubject:
     eligibility = _eligibility(
         is_open=is_open,
@@ -219,6 +239,7 @@ def _subject(
         facts=facts,
         recent_material_activity=recent_material_activity,
         has_evidence=bool(evidence),
+        quality_eligible=quality_eligible,
     )
     resolved_feedback_kind = feedback_subject_kind or FeedbackSubjectKind(kind.value)
     return EvaluationSubject(
@@ -230,11 +251,12 @@ def _subject(
         destination_workstream_id=destination_workstream_id,
         headline=headline[:256] or 'Untitled work',
         label=label[:256] if label else None,
-        evidence_preview=_canonical_evidence_preview(facts, evidence),
+        evidence_preview=evidence_preview or _canonical_evidence_preview(facts, evidence),
         evidence_refs=evidence,
         facts=facts,
         eligibility=eligibility,
         material_token=material_token,
+        explicit_user_intent=explicit_user_intent,
     )
 
 
@@ -260,6 +282,9 @@ def build_evaluation_subject(
     unexpired: bool,
     recent_material_activity: bool,
     material_token: str,
+    quality_eligible: bool = True,
+    evidence_preview: Optional[str] = None,
+    explicit_user_intent: bool = False,
 ) -> EvaluationSubject:
     """Public EvaluationSubject builder for fixture and live-eval harnesses."""
 
@@ -278,6 +303,9 @@ def build_evaluation_subject(
         unexpired=unexpired,
         recent_material_activity=recent_material_activity,
         material_token=material_token,
+        quality_eligible=quality_eligible,
+        evidence_preview=evidence_preview,
+        explicit_user_intent=explicit_user_intent,
     )
 
 
@@ -310,15 +338,25 @@ def _build_subjects(
             task.get('status') or (TaskStatus.completed.value if task.get('completed') else TaskStatus.active.value)
         )
         signals = _context_signals(kind, subject_id, context)
+        raw_owner = task.get('owner')
+        owner = raw_owner.value if isinstance(raw_owner, TaskOwner) else str(raw_owner or '')
+        trusted_manual_task = str(task.get('source') or '') == 'manual' and owner == TaskOwner.user.value
+        capture_confidence = 1.0 if trusted_manual_task else float(task.get('capture_confidence', 0.0))
         facts = DeterministicFacts(
             days_to_due=_days_to_due(task.get('due_at'), now),
             someone_blocked=False,
             has_concrete_next_action=bool(str(task.get('description') or '').strip()),
             focused_goal_linked=goal_id in focused_goal_ids,
             context_match_signals=signals,
-            capture_confidence=float(task.get('capture_confidence', 0.0)),
+            capture_confidence=capture_confidence,
         )
         evidence = _valid_evidence(task.get('provenance'), device_id=context.device_id if context else None)
+        if trusted_manual_task and not evidence:
+            evidence = (EvidenceRef(kind=EvidenceKind.external, id=subject_id, scope=EvidenceScope.canonical),)
+        recent_material_activity = _recent(
+            task.get('created_at') if trusted_manual_task else task.get('updated_at') or task.get('created_at'),
+            now,
+        )
         subjects.append(
             _subject(
                 kind=kind,
@@ -331,14 +369,21 @@ def _build_subjects(
                 facts=facts,
                 is_open=status == TaskStatus.active.value and not task.get('deleted', False),
                 unexpired=True,
-                recent_material_activity=_recent(task.get('updated_at') or task.get('created_at'), now),
+                recent_material_activity=recent_material_activity,
                 material_token=':'.join((status, _iso_token(task.get('updated_at')), _iso_token(task.get('due_at')))),
+                evidence_preview='Created directly by you.' if trusted_manual_task else None,
+                explicit_user_intent=trusted_manual_task,
             )
         )
 
     for candidate in state['candidates']:
         subject_id = str(candidate.get('candidate_id') or candidate.get('id') or '')
         if not subject_id:
+            continue
+        subject_kind = str(candidate.get('subject_kind') or CandidateSubjectKind.task.value)
+        proposed_action = str(candidate.get('proposed_action') or CandidateAction.create.value)
+        if subject_kind == CandidateSubjectKind.task.value and proposed_action != CandidateAction.create.value:
+            # Task mutations have no Suggested renderer yet; emitting one here creates a dead-end WMN card.
             continue
         kind = RecommendationSubjectKind.candidate
         raw_task_change = candidate.get('task_change')
@@ -348,7 +393,9 @@ def _build_subjects(
         headline = str(task_change.get('description') or proposal.get('title') or 'Review suggested work')
         goal_id = str(candidate.get('goal_id') or '')
         confidence = float(candidate.get('capture_confidence', 0))
+        ownership_confidence = float(candidate.get('ownership_confidence', 0))
         facts = DeterministicFacts(
+            days_to_due=_days_to_due(task_change.get('due_at'), now),
             has_concrete_next_action=bool(headline.strip()),
             focused_goal_linked=goal_id in focused_goal_ids,
             context_match_signals=_context_signals(kind, subject_id, context),
@@ -370,6 +417,7 @@ def _build_subjects(
                 unexpired=True,
                 recent_material_activity=_recent(candidate.get('created_at'), now),
                 material_token=':'.join((candidate_status, _iso_token(candidate.get('created_at')))),
+                quality_eligible=ownership_confidence >= MINIMUM_CAPTURE_CONFIDENCE,
             )
         )
 
@@ -531,22 +579,89 @@ def _build_subjects(
     return subjects
 
 
-def filter_shortlist(subjects: list[EvaluationSubject], suppressed_dedupe_keys: set[str]) -> list[EvaluationSubject]:
-    """Filter only. It must never calculate or sort by relevance."""
+def _attention_tier(subject: EvaluationSubject) -> Optional[int]:
+    """Return a deterministic trigger tier, never a relevance score.
 
-    shortlist: list[EvaluationSubject] = []
+    Recency only establishes freshness. It cannot, by itself, earn attention.
+    The holistic judgment remains the sole relevance ordering step.
+    """
+
+    days_to_due = subject.facts.days_to_due
+    if subject.facts.someone_blocked or (days_to_due is not None and days_to_due < 0):
+        return 0
+    if (days_to_due is not None and 0 <= days_to_due <= 7) or bool(subject.facts.context_match_signals):
+        return 1
+    if subject.eligibility.recent_material_activity and (
+        subject.kind
+        in {
+            RecommendationSubjectKind.artifact,
+            RecommendationSubjectKind.decision,
+            RecommendationSubjectKind.agent_open_loop,
+        }
+        or (
+            subject.kind == RecommendationSubjectKind.task
+            and (subject.facts.focused_goal_linked or subject.explicit_user_intent)
+        )
+    ):
+        return 2
+    return None
+
+
+def _round_robin(groups: dict[str, list[EvaluationSubject]]) -> list[EvaluationSubject]:
+    queues = {key: deque(values) for key, values in sorted(groups.items()) if values}
+    result: list[EvaluationSubject] = []
+    while queues:
+        for key in list(queues):
+            queue = queues[key]
+            result.append(queue.popleft())
+            if not queue:
+                del queues[key]
+    return result
+
+
+def _balanced_tier(subjects: list[EvaluationSubject]) -> list[EvaluationSubject]:
+    by_kind_and_workstream: dict[str, dict[str, list[EvaluationSubject]]] = defaultdict(lambda: defaultdict(list))
+    for subject in sorted(subjects, key=lambda item: (item.kind.value, item.subject_id)):
+        workstream_bucket = subject.destination_workstream_id or 'unlinked'
+        by_kind_and_workstream[subject.kind.value][workstream_bucket].append(subject)
+    by_kind = {
+        kind: _round_robin(dict(workstream_groups)) for kind, workstream_groups in by_kind_and_workstream.items()
+    }
+    return _round_robin(by_kind)
+
+
+def filter_shortlist(subjects: list[EvaluationSubject], suppressed_dedupe_keys: set[str]) -> list[EvaluationSubject]:
+    """Apply typed attention gates, then build a stable kind/workstream-balanced recall set."""
+
+    by_tier: dict[int, list[EvaluationSubject]] = defaultdict(list)
     for subject in subjects:
         dedupe_key = _recommendation_dedupe_key(subject)
-        fact_window = (
-            subject.eligibility.recent_material_activity
-            or subject.eligibility.inside_due_window
-            or bool(subject.facts.context_match_signals)
-            or subject.facts.someone_blocked
-        )
-        if subject.eligibility.passes_recommendation_gates and fact_window and dedupe_key not in suppressed_dedupe_keys:
-            shortlist.append(subject)
+        tier = _attention_tier(subject)
+        if (
+            subject.eligibility.passes_recommendation_gates
+            and tier is not None
+            and dedupe_key not in suppressed_dedupe_keys
+        ):
+            by_tier[tier].append(subject)
+
+    ordered_by_tier = {tier: _balanced_tier(by_tier[tier]) for tier in sorted(by_tier)}
+    shortlist: list[EvaluationSubject] = []
+    consumed: dict[int, int] = {}
+
+    # Reserve typed recall across trigger classes so an overdue flood cannot erase
+    # due-today, active-context, or fresh review loops. Unused capacity is then
+    # redistributed in urgency order; this is a bounded policy, not a score.
+    for tier, ordered in ordered_by_tier.items():
+        reserved = min(len(ordered), ATTENTION_TIER_RESERVED_CAPACITY.get(tier, 0))
+        shortlist.extend(ordered[:reserved])
+        consumed[tier] = reserved
+
+    for tier, ordered in ordered_by_tier.items():
         if len(shortlist) == MAX_SHORTLIST_SIZE:
             break
+        start = consumed[tier]
+        available = MAX_SHORTLIST_SIZE - len(shortlist)
+        shortlist.extend(ordered[start : start + available])
     return shortlist
 
 
@@ -556,7 +671,7 @@ def _material_version(
     suppressed_dedupe_keys: set[str],
     context: Optional[NormalizedContextSnapshot],
     open_loops: list[OpenLoopSnapshot],
-    material_hint: Optional[str],
+    model_version: str,
 ) -> str:
     payload = {
         'subjects': [
@@ -566,6 +681,13 @@ def _material_version(
                 'material': subject.material_token,
                 'facts': subject.facts.model_dump(mode='json'),
                 'eligibility': subject.eligibility.model_dump(mode='json'),
+                'explicit_user_intent': subject.explicit_user_intent,
+                'headline': subject.headline,
+                'label': subject.label,
+                'evidence_preview': subject.evidence_preview,
+                'evidence_refs': [
+                    evidence.model_dump(mode='json', exclude_none=True) for evidence in subject.evidence_refs
+                ],
             }
             for subject in subjects
         ],
@@ -605,8 +727,12 @@ def _material_version(
             )
             for snapshot in open_loops
         ),
-        'hint': material_hint,
-        'policy': POLICY_VERSION,
+        'judgment_contract': {
+            'prompt': PROMPT_VERSION,
+            'policy': POLICY_VERSION,
+            'facts': FACT_DEFINITION_VERSION,
+            'model': model_version,
+        },
     }
     return _stable_id('material', json.dumps(payload, sort_keys=True, separators=(',', ':')))
 
@@ -656,7 +782,7 @@ def evaluate(
         suppressed_dedupe_keys=suppressed,
         context=context,
         open_loops=open_loops,
-        material_hint=request.material_hint,
+        model_version=judgment.model_version,
     )
     cached = recommendation_db.get_projection(
         uid,
@@ -751,7 +877,44 @@ def evaluate(
         recommendations=recommendations,
     )
     shortlist_ids = [_stable_id('subject', subject.kind.value, subject.subject_id) for subject in shortlist]
-    traced_subjects = shortlist + [subject for subject in subjects if subject not in shortlist]
+    shortlist_keys = {(subject.kind, subject.subject_id) for subject in shortlist}
+
+    def disposition(subject: EvaluationSubject) -> tuple[str, str]:
+        key = (subject.kind, subject.subject_id)
+        if key in selected_keys:
+            return 'Selected by holistic judgment.', 'selected'
+        if key in shortlist_keys:
+            return 'Not selected by holistic judgment.', 'not_selected'
+        if not subject.eligibility.passes_recommendation_gates:
+            return 'Removed by deterministic recommendation gates.', 'ineligible'
+        if _attention_tier(subject) is None:
+            return 'No current attention trigger.', 'no_attention_trigger'
+        if _recommendation_dedupe_key(subject) in suppressed:
+            return 'Suppressed by an active attention override.', 'suppressed'
+        return 'Excluded from the bounded balanced shortlist.', 'shortlist_capacity'
+
+    traced_subjects: list[EvaluationSubject] = []
+    traced_keys: set[tuple[RecommendationSubjectKind, str]] = set()
+
+    def append_trace(subject: EvaluationSubject) -> None:
+        key = (subject.kind, subject.subject_id)
+        if key in traced_keys or len(traced_subjects) == MAX_SHORTLIST_SIZE:
+            return
+        traced_keys.add(key)
+        traced_subjects.append(subject)
+
+    for subject in shortlist:
+        if (subject.kind, subject.subject_id) in selected_keys:
+            append_trace(subject)
+    for reason_code in ('suppressed', 'ineligible', 'no_attention_trigger', 'shortlist_capacity'):
+        representative = next((subject for subject in subjects if disposition(subject)[1] == reason_code), None)
+        if representative is not None:
+            append_trace(representative)
+    for subject in shortlist:
+        append_trace(subject)
+    for subject in subjects:
+        append_trace(subject)
+
     decisions = [
         DecisionRecord(
             evaluation_id=evaluation_id,
@@ -764,28 +927,14 @@ def evaluate(
             policy_version=POLICY_VERSION,
             fact_definition_version=FACT_DEFINITION_VERSION,
             model_version=judgment.model_version,
-            decision_summary=(
-                'Selected by holistic judgment.'
-                if (subject.kind, subject.subject_id) in selected_keys
-                else (
-                    'Not selected by holistic judgment.'
-                    if subject in shortlist
-                    else 'Removed by deterministic recommendation gates.'
-                )
-            ),
-            reason_codes=[
-                (
-                    'selected'
-                    if (subject.kind, subject.subject_id) in selected_keys
-                    else 'not_selected' if subject in shortlist else 'ineligible'
-                )
-            ],
+            decision_summary=disposition(subject)[0],
+            reason_codes=[disposition(subject)[1]],
             evidence_refs=list(subject.evidence_refs),
             final_output_ref=output_version,
             evaluated_at=evaluated_at,
             expires_at=expires_at,
         )
-        for subject in traced_subjects[:MAX_SHORTLIST_SIZE]
+        for subject in traced_subjects
     ]
     published = recommendation_db.save_projection(
         uid,
@@ -1034,6 +1183,7 @@ __all__ = [
     'FACT_DEFINITION_VERSION',
     'POLICY_VERSION',
     'PROMPT_VERSION',
+    'candidate_recommendation_dedupe_key',
     'RecommendationJudgment',
     'SnapshotValidationError',
     'build_evaluation_subject',

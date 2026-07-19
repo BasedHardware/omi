@@ -2935,7 +2935,7 @@
     "upgradePlan": "Aggiorna piano",
     "billingMonthly": "Mensile",
     "billingYearly": "Annuale",
-    "savePercent": "Risparmia ~17%",
+    "savePercent": "Risparmia ~{percent}%",
     "popular": "Popolare",
     "currentPlan": "Attuale",
     "neoSubtitle": "{count} domande al mese",
@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Usi un tuo fornitore di trascrizione. Sincronizzare queste registrazioni le trascrive sui server di Omi e contano per il limite di trascrizione del tuo piano.",
     "transcribeLaterTitle": "Trascrivi più tardi",
     "transcribeLaterDescription": "Registra l'audio ora e trascrivilo quando vuoi, invece che in tempo reale. Le registrazioni vengono salvate sul telefono; poi le carichi per creare le conversazioni.",
-    "transcribeLaterNote": "Per ora funziona con i dispositivi Omi e Limitless. L'audio resta sul telefono finché non scegli di caricarlo.",
+    "transcribeLaterNote": "Funziona con il microfono del telefono e con i dispositivi Omi e Limitless. L'audio resta sul telefono finché non scegli di caricarlo.",
     "transcribeLaterStorageFull": "Lo spazio sul telefono sta per esaurirsi, quindi la registrazione è in pausa. Libera spazio o carica le registrazioni e riprenderà automaticamente.",
     "unmute": "Riattiva audio",
     "newRecording": "Nuova registrazione",
@@ -3143,5 +3143,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Archiviazione del dispositivo",
+    "deviceStoragePercentFull": "{percent}% pieno",
+    "deviceStorageUsedOfTotal": "{used} di {total} utilizzati",
+    "deviceStorageFree": "{free} liberi",
+    "deviceStorageNearlyFull": "Dispositivo quasi pieno — sincronizza per liberare spazio.",
+    "phoneMicOfflineFallbackMessage": "Nessuna connessione: registrazione in locale. Verrà trascritto quando tornerai online.",
+    "dataEncryptedBanner": "I tuoi dati sono protetti per impostazione predefinita con una crittografia avanzata, e sei tu a controllare come vengono archiviati e utilizzati."
 }
