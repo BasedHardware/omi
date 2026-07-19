@@ -203,6 +203,11 @@ export class VoiceHubTurnDriver {
   private lastProjection: VoiceTurnUIProjection = IDLE_PROJECTION
   private orbLevel = 0
   private lastOrbPublishAt = 0
+  /** Monotonic reducer-transition counter carried on every published state (the
+   *  supervisor's observed-progress signal). Bumped ONLY in onProjection —
+   *  throttled loudness emits re-send the same value, so the bar can tell real
+   *  phase progress from mere audio-level chatter. */
+  private projectionSeq = 0
 
   constructor(deps: VoiceHubTurnDriverDeps) {
     this.deps = deps
@@ -908,6 +913,7 @@ export class VoiceHubTurnDriver {
 
   private onProjection(projection: VoiceTurnUIProjection): void {
     this.lastProjection = projection
+    this.projectionSeq += 1
     this.emit(true)
   }
 
@@ -923,6 +929,7 @@ export class VoiceHubTurnDriver {
       isListening: p.isListening,
       isThinking: p.isThinking,
       isResponseActive: p.isResponseActive,
+      seq: this.projectionSeq,
       orbLevel: this.turnID !== null ? this.orbLevel : 0,
       // Forwarded UNCONDITIONALLY (not gated on an active turn): a terminal hint (e.g.
       // a post-commit provider death) is emitted on the same terminal transition that

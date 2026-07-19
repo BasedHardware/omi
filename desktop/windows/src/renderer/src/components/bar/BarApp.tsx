@@ -63,6 +63,7 @@ const HUB_ORB_IDLE: VoiceHubBarState = {
   isListening: false,
   isThinking: false,
   isResponseActive: false,
+  seq: 0,
   orbLevel: 0,
   hint: ''
 }
@@ -409,7 +410,9 @@ export function BarApp(): React.JSX.Element {
     hubActive: hubOrb.active,
     hubResponseActive: hubOrb.isResponseActive,
     hubHint: hubOrb.hint,
+    hubSeq: hubOrb.seq,
     pttRecording: ptt.recording,
+    pttTranscribing: ptt.transcribing,
     pttHint: ptt.hint,
     pttError: ptt.error,
     chatStatus: chat.status,

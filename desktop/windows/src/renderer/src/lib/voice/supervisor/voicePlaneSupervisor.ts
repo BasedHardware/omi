@@ -12,18 +12,32 @@
 // each was insufficient, because variant N+1 always lands somewhere new. This
 // class is pure (timers injected) so the contract itself is unit-tested.
 //
-// INERT ON HEALTHY TURNS — the design constraint that picked the timeout:
-// every layer below self-terminates faster (reducer deadlines incl. the 30 s
-// pendingTools budget, the cascade's 20 s batch-transcription budget, the
-// driver's 45 s release watchdog) and each of those produces an observable
-// terminal (a hint at worst) that disarms this watch. The supervisor may only
-// fire when ALL of that machinery failed to produce anything a user can see —
-// so its window must comfortably outlast the slowest legitimate interior bound
-// (45 s), never race it. It adds one armed timer per release and nothing else:
-// no added latency, no double-terminals.
+// INERT ON HEALTHY TURNS — two mechanisms, both required (2026-07-18 audit
+// M1/M2):
+//   * "Machine reconciled" counts as a terminal. A silent hold is DISCARDED
+//     quietly by design (hub `silentRejected` has no hint; the local lane's
+//     silent gate likewise) — the machine returning to idle IS the observable
+//     outcome at this seam, and a genuinely wedged turn never reconciles
+//     (active/recording stays latched). Machine-level liveness is what this
+//     seam can honestly judge; audibility beyond it belongs to INV-VOICE-1
+//     and the mute/restore flight events.
+//   * The window bounds time-since-last-OBSERVED-PROGRESS, not total turn
+//     time. `noteProgress` (fed by the projection `seq`, which bumps only on
+//     real reducer transitions) re-arms the watch, so a legitimate multi-round
+//     tool turn — which can exceed any fixed total budget (each round re-arms
+//     its own 20 s/30 s reducer deadlines) — keeps proving liveness, while a
+//     wedged turn emits no transitions and its watch runs to the deadline.
+//     Health = observed dataflow, not elapsed time (the Pipecat heartbeat
+//     doctrine).
+// The window must still comfortably exceed the LONGEST gap between observable
+// events inside a healthy turn (worst known: the cascade's 20 s batch budget,
+// and the driver's 45 s release watchdog which itself ends in an observable
+// hint) — hence 60 s. The supervisor adds one armed timer per release and
+// nothing else: no added latency, no double-terminals.
 
-/** Must exceed the driver's 45 s release watchdog (the slowest interior layer)
- *  with margin — see the header. Overridable for tests / tuning. */
+/** Must exceed the longest observable-event GAP in a healthy turn (the 45 s
+ *  release watchdog is the slowest interior layer that still ends in a visible
+ *  hint) — see the header. Overridable for tests / tuning. */
 export const VOICE_SUPERVISOR_TIMEOUT_MS = 60_000
 
 export type VoiceSupervisorLane = 'hub' | 'local'
@@ -81,14 +95,9 @@ export class VoicePlaneSupervisor {
       this.cancelledSincePress = false
       return
     }
-    this.disarm()
     this.pendingLane = lane
     this.record('supervisor_arm', { lane, timeoutMs: this.timeoutMs })
-    this.pending = this.schedule(() => {
-      this.pending = null
-      this.record('supervisor_fired', { lane: this.pendingLane })
-      this.deps.onFire({ lane: this.pendingLane })
-    }, this.timeoutMs)
+    this.arm()
   }
 
   /** The turn was aborted (Esc, focus loss, an external voice-plane reset):
@@ -100,16 +109,41 @@ export class VoicePlaneSupervisor {
   }
 
   /** ANY observable terminal — reply playback started, text entered the chat
-   *  pipeline, a visible hint/error — satisfies the contract. */
-  noteTerminal(kind: string): void {
+   *  pipeline, a visible hint/error, or the machine reconciling to idle —
+   *  satisfies the contract. A `lane`-scoped terminal (e.g. the hub turn
+   *  reconciling) only clears a watch armed for that lane, so one lane's
+   *  reconcile can never absolve the other's stuck turn. */
+  noteTerminal(kind: string, lane?: VoiceSupervisorLane): void {
     if (this.pending === null) return
+    if (lane !== undefined && lane !== this.pendingLane) return
     this.record('supervisor_terminal', { kind, lane: this.pendingLane })
     this.disarm()
+  }
+
+  /** Observed phase progress (a reducer transition reached the bar): the turn
+   *  is demonstrably alive, so the watch's clock restarts — the window bounds
+   *  time-BETWEEN-observations, not total turn time (audit M2: a healthy
+   *  multi-round tool turn legitimately outlives any fixed total budget). A
+   *  wedged turn emits no transitions, so its watch still runs out. */
+  noteProgress(lane?: VoiceSupervisorLane): void {
+    if (this.disposed || this.pending === null) return
+    if (lane !== undefined && lane !== this.pendingLane) return
+    this.arm()
   }
 
   dispose(): void {
     this.disposed = true
     this.disarm()
+  }
+
+  /** (Re)start the watch's clock for the current pendingLane. */
+  private arm(): void {
+    this.disarm()
+    this.pending = this.schedule(() => {
+      this.pending = null
+      this.record('supervisor_fired', { lane: this.pendingLane })
+      this.deps.onFire({ lane: this.pendingLane })
+    }, this.timeoutMs)
   }
 
   private disarm(): void {

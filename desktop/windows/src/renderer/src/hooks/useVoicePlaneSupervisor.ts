@@ -33,14 +33,26 @@ export const PLANE_RESET_CHIP = 'Voice was reset'
 const CHIP_MS = 5000
 
 export type VoicePlaneSupervisorSignals = {
-  /** A main-owned hub turn is live (VoiceHubBarState.active). */
+  /** A main-owned hub turn is live (VoiceHubBarState.active). Its true→false
+   *  edge is the "machine reconciled" terminal: a silent hold is DISCARDED
+   *  quietly by design (silentRejected has no hint), so idle IS the outcome —
+   *  while a genuinely wedged turn never drops active (audit M1). */
   hubActive: boolean
   /** The hub reply is audibly playing — a contract terminal. */
   hubResponseActive: boolean
   /** The hub projection's visible hint ('' when none) — non-empty is a terminal. */
   hubHint: string
+  /** Reducer-transition counter from VoiceHubBarState — every change is
+   *  observed phase progress and restarts the watch's clock (audit M2: a
+   *  healthy multi-round tool turn outlives any fixed total budget; a wedged
+   *  turn's seq freezes). */
+  hubSeq: number
   /** The local PTT machine is recording a hold. */
   pttRecording: boolean
+  /** The local machine is transcribing the released hold. Recording AND
+   *  transcribing both idle (debounced) = the local machine reconciled —
+   *  its silent gate discards quietly too (audit M1, local flavor). */
+  pttTranscribing: boolean
   /** Local lane visible hint/error — non-empty is a terminal. */
   pttHint: string | null
   pttError: string | null
@@ -51,6 +63,12 @@ export type VoicePlaneSupervisorSignals = {
    *  local hold; the hub side is reset by the main window). */
   cancelLocal?: () => void
 }
+
+/** How long the local machine must sit fully idle (not recording, not
+ *  transcribing) before that counts as "reconciled". Bridges the React commit
+ *  split between recording→false and transcribing→true at release, so a real
+ *  turn's momentary both-false frame can't falsely satisfy the contract. */
+export const LOCAL_IDLE_TERMINAL_MS = 400
 
 export function useVoicePlaneSupervisor(signals: VoicePlaneSupervisorSignals): {
   /** Transient failure/reset chip for the bar hint strip (null = none). */
@@ -85,10 +103,12 @@ export function useVoicePlaneSupervisor(signals: VoicePlaneSupervisorSignals): {
           // Shared fallback shape (AGENTS.md): the plane fail-opened into a full
           // reset — no new counter, closed-enum fields, outcome 'degraded' (the
           // turn was lost; the plane continues after the rebuild).
+          // `to: 'rebuilt'` — the blessed value the silent-mic heal already
+          // uses for a rebuilt-in-place resource (audit m1: no new enum value).
           trackEvent('fallback_triggered', {
             component: lane === 'hub' ? 'realtime_hub' : 'ptt_cascade',
             from: lane === 'hub' ? 'hub' : 'cascade',
-            to: 'reset',
+            to: 'rebuilt',
             reason: 'other',
             outcome: 'degraded'
           })
@@ -120,10 +140,34 @@ export function useVoicePlaneSupervisor(signals: VoicePlaneSupervisorSignals): {
 
   // Terminal edges — each disarms a pending watch. Rising-edge semantics come
   // free from the deps: the effect only runs when the value changes.
-  const { hubResponseActive, hubHint, pttHint, pttError, chatStatus } = signals
+  const { hubActive, hubResponseActive, hubHint, hubSeq, pttRecording, pttTranscribing } = signals
+  const { pttHint, pttError, chatStatus } = signals
   useEffect(() => {
     if (hubResponseActive) supervisor.noteTerminal('hub_playback')
   }, [supervisor, hubResponseActive])
+  // M1 (hub): the hub turn reconciled to idle — active true→false. The quiet
+  // silentRejected discard ends exactly this way; a wedged turn stays latched.
+  const prevHubActiveRef = useRef(hubActive)
+  useEffect(() => {
+    const was = prevHubActiveRef.current
+    prevHubActiveRef.current = hubActive
+    if (was && !hubActive) supervisor.noteTerminal('turn_reconciled', 'hub')
+  }, [supervisor, hubActive])
+  // M1 (local): the local machine fully idle (debounced past the release
+  // commit-split) — its silent gate also discards with no hint.
+  useEffect(() => {
+    if (pttRecording || pttTranscribing) return
+    const t = setTimeout(
+      () => supervisor.noteTerminal('local_idle', 'local'),
+      LOCAL_IDLE_TERMINAL_MS
+    )
+    return () => clearTimeout(t)
+  }, [supervisor, pttRecording, pttTranscribing])
+  // M2: every reducer transition observed at the bar restarts the watch's
+  // clock — the window bounds silence-between-events, not total turn time.
+  useEffect(() => {
+    supervisor.noteProgress('hub')
+  }, [supervisor, hubSeq])
   useEffect(() => {
     if (hubHint !== '') supervisor.noteTerminal('hub_hint')
   }, [supervisor, hubHint])

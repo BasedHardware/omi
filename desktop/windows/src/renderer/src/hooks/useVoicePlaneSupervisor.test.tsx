@@ -5,6 +5,7 @@ import {
   useVoicePlaneSupervisor,
   SUPERVISOR_FIRE_CHIP,
   PLANE_RESET_CHIP,
+  LOCAL_IDLE_TERMINAL_MS,
   type VoicePlaneSupervisorSignals
 } from './useVoicePlaneSupervisor'
 import { VOICE_SUPERVISOR_TIMEOUT_MS } from '../lib/voice/supervisor/voicePlaneSupervisor'
@@ -26,7 +27,9 @@ const baseSignals = (
   hubActive: false,
   hubResponseActive: false,
   hubHint: '',
+  hubSeq: 0,
   pttRecording: false,
+  pttTranscribing: false,
   pttHint: null,
   pttError: null,
   chatStatus: 'idle',
@@ -81,7 +84,7 @@ describe('useVoicePlaneSupervisor — fires on a never-terminal turn', () => {
     expect(trackEvent).toHaveBeenCalledWith('fallback_triggered', {
       component: 'realtime_hub',
       from: 'hub',
-      to: 'reset',
+      to: 'rebuilt',
       reason: 'other',
       outcome: 'degraded'
     })
@@ -157,6 +160,83 @@ describe('useVoicePlaneSupervisor — inert on healthy / non-turn activity', () 
     release() // hubActive may still read true here (state lag) — must not arm
     elapse()
     expect(resetVoicePlane).not.toHaveBeenCalled()
+  })
+})
+
+describe('useVoicePlaneSupervisor — audit M1: silent holds are legit, not wedges', () => {
+  it('a silent HUB hold (quiet silentRejected discard: active drops, no hint) never fires', () => {
+    const { rerender } = renderHook(
+      (s: VoicePlaneSupervisorSignals) => useVoicePlaneSupervisor(s),
+      { initialProps: baseSignals({ hubActive: true }) }
+    )
+    press()
+    release()
+    // The reducer discards the silent turn: terminal silentRejected — NO hint,
+    // NO playback, chat untouched. The only observable is active → false.
+    rerender(baseSignals({ hubActive: false }))
+    elapse()
+    expect(resetVoicePlane).not.toHaveBeenCalled()
+  })
+
+  it('a genuinely WEDGED hub turn (active stays latched, no transitions) still fires', () => {
+    renderHook((s: VoicePlaneSupervisorSignals) => useVoicePlaneSupervisor(s), {
+      initialProps: baseSignals({ hubActive: true })
+    })
+    press()
+    release()
+    elapse()
+    expect(resetVoicePlane).toHaveBeenCalledTimes(1)
+  })
+
+  it('a silent LOCAL hold (machine reconciles to full idle, no hint) never fires', () => {
+    const { rerender } = renderHook(
+      (s: VoicePlaneSupervisorSignals) => useVoicePlaneSupervisor(s),
+      { initialProps: baseSignals({ pttRecording: true }) }
+    )
+    press()
+    release()
+    // Silent gate: recording drops and transcription never starts.
+    rerender(baseSignals({ pttRecording: false, pttTranscribing: false }))
+    elapse() // covers the idle debounce AND the full window
+    expect(resetVoicePlane).not.toHaveBeenCalled()
+  })
+
+  it('the release commit-split (recording↓ then transcribing↑ a beat later) does NOT satisfy the contract', () => {
+    const { rerender } = renderHook(
+      (s: VoicePlaneSupervisorSignals) => useVoicePlaneSupervisor(s),
+      { initialProps: baseSignals({ pttRecording: true }) }
+    )
+    press()
+    release()
+    // Momentary both-false frame between React commits…
+    rerender(baseSignals({ pttRecording: false, pttTranscribing: false }))
+    act(() => vi.advanceTimersByTime(LOCAL_IDLE_TERMINAL_MS - 100))
+    // …then the real transcription starts (inside the debounce): the watch must
+    // still be armed, and a machine that then WEDGES in transcribing fires.
+    rerender(baseSignals({ pttTranscribing: true }))
+    elapse()
+    expect(resetVoicePlane).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useVoicePlaneSupervisor — audit M2: progress restarts the clock', () => {
+  it('a healthy multi-round tool turn (transitions keep arriving) outlives several windows without firing', () => {
+    const { rerender } = renderHook(
+      (s: VoicePlaneSupervisorSignals) => useVoicePlaneSupervisor(s),
+      { initialProps: baseSignals({ hubActive: true, hubSeq: 1 }) }
+    )
+    press()
+    release()
+    // Three windows' worth of wall time, each punctuated by an observed
+    // reducer transition (tool round start/finish) before the deadline.
+    for (let seq = 2; seq <= 4; seq++) {
+      act(() => vi.advanceTimersByTime(VOICE_SUPERVISOR_TIMEOUT_MS - 1000))
+      rerender(baseSignals({ hubActive: true, hubSeq: seq }))
+    }
+    expect(resetVoicePlane).not.toHaveBeenCalled()
+    // Then the turn truly stalls: no more transitions ⇒ the watch runs out.
+    elapse()
+    expect(resetVoicePlane).toHaveBeenCalledTimes(1)
   })
 })
 

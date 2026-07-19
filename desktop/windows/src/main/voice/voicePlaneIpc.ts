@@ -31,6 +31,7 @@ const IDLE_HUB_BAR_STATE: VoiceHubBarState = {
   isListening: false,
   isThinking: false,
   isResponseActive: false,
+  seq: 0,
   orbLevel: 0,
   hint: ''
 }

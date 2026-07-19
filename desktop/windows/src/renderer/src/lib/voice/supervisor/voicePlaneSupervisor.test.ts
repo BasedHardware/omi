@@ -44,8 +44,54 @@ describe('VoicePlaneSupervisor — fires on a never-terminal turn', () => {
     expect(h.onFire).toHaveBeenCalledTimes(1)
   })
 
-  it('the default window outlasts the driver release watchdog (45 s interior bound)', () => {
+  it('the default window outlasts the longest observable-event GAP in a healthy turn (45 s release watchdog → hint)', () => {
+    // NOT a total-turn bound — multi-round tool turns legitimately run longer;
+    // noteProgress restarts the clock on every observed transition. The window
+    // only needs to exceed the longest silent gap a healthy turn can produce.
     expect(VOICE_SUPERVISOR_TIMEOUT_MS).toBeGreaterThan(45_000)
+  })
+})
+
+describe('VoicePlaneSupervisor — observed progress restarts the clock (audit M2)', () => {
+  it('a slow multi-round tool turn that keeps making transitions never fires', () => {
+    const h = makeSupervisor()
+    h.sup.notePress()
+    h.sup.noteRelease('hub')
+    // Round 1 tool call, round 2 tool call, response — each observed transition
+    // re-arms; the PRIOR window's timer must be cancelled, not left to fire.
+    h.sup.noteProgress('hub')
+    h.sup.noteProgress('hub')
+    h.sup.noteProgress('hub')
+    h.elapse() // only the LATEST armed window can elapse
+    expect(h.onFire).toHaveBeenCalledTimes(1) // the final window did run out…
+    h.elapse()
+    expect(h.onFire).toHaveBeenCalledTimes(1) // …but no stale timer double-fires
+  })
+
+  it('progress for the WRONG lane does not touch the watch', () => {
+    const h = makeSupervisor()
+    h.sup.notePress()
+    h.sup.noteRelease('local')
+    h.sup.noteProgress('hub') // hub transitions while a LOCAL watch is armed
+    expect(h.sup.armed).toBe(true)
+  })
+
+  it('progress with nothing armed is a no-op', () => {
+    const h = makeSupervisor()
+    h.sup.noteProgress('hub')
+    expect(h.sup.armed).toBe(false)
+  })
+})
+
+describe('VoicePlaneSupervisor — lane-scoped terminals (audit M1)', () => {
+  it("a lane-scoped terminal only clears its own lane's watch", () => {
+    const h = makeSupervisor()
+    h.sup.notePress()
+    h.sup.noteRelease('local')
+    h.sup.noteTerminal('turn_reconciled', 'hub') // hub reconciled ≠ local outcome
+    expect(h.sup.armed).toBe(true)
+    h.sup.noteTerminal('local_idle', 'local')
+    expect(h.sup.armed).toBe(false)
   })
 })
 

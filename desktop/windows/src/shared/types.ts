@@ -470,6 +470,13 @@ export type VoiceHubBarState = {
   isThinking: boolean
   /** The hub is speaking its reply (the orb's response-active pose). */
   isResponseActive: boolean
+  /** Monotonic count of reducer-published projections for the CURRENT driver.
+   *  Bumped ONLY on real turn-machine transitions (never on throttled loudness
+   *  emits), so a change = observed phase progress. The bar-side supervisor
+   *  refreshes its press→terminal watch on it: a healthy multi-round tool turn
+   *  keeps progressing and never trips the watch, while a wedged turn's seq
+   *  freezes (health = observed dataflow, not flags). */
+  seq: number
   /** Latest orb loudness in [0,1] sampled from the main-owned capture. */
   orbLevel: number
   /** Transient status/error hint for the bar (e.g. "Voice response failed — try
