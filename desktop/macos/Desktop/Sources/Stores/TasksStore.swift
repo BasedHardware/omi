@@ -2711,23 +2711,57 @@ class TasksStore: ObservableObject {
       incompleteTasks.insert(task, at: 0)
     }
 
-    // 3. Re-create on backend (hard-delete already removed it)
+    // 3. Re-create on backend (hard-delete already removed it). Pass the full
+    // field set — restore used to send only description/dueAt/priority, so undo
+    // silently dropped source, category, tags, recurrence, goal/workstream, and
+    // completion state.
     do {
+      var restoreMetadata: [String: Any] = [:]
+      if let existing = task.metadata,
+        let data = existing.data(using: .utf8),
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      {
+        restoreMetadata = json
+      }
+      if !task.tags.isEmpty {
+        restoreMetadata["tags"] = task.tags
+      }
       let created = try await APIClient.shared.createActionItem(
         description: task.description,
         dueAt: task.dueAt,
+        source: task.source,
         priority: task.priority,
+        category: task.category,
+        metadataBox: restoreMetadata.isEmpty ? nil : ActionItemMetadataBox(restoreMetadata),
+        relevanceScore: task.relevanceScore,
+        recurrenceRule: task.recurrenceRule,
+        recurrenceParentId: task.recurrenceParentId,
+        goalId: task.goalId,
+        workstreamId: task.workstreamId,
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
       guard isCurrent(lease) else { return }
+      // createActionItem cannot set completion; restore the completed state of
+      // a task that was done when it was deleted via a follow-up update.
+      var resolved = created
+      if task.completed, !created.completed {
+        resolved =
+          (try? await APIClient.shared.updateActionItem(
+            id: created.id,
+            completed: true,
+            expectedOwnerId: lease.ownerID,
+            authorizationSnapshot: lease.authorizationSnapshot
+          )) ?? created
+        guard isCurrent(lease) else { return }
+      }
       // Update local record with new backend ID
       try await ActionItemStorage.shared.syncTaskActionItems(
-        [created],
+        [resolved],
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
       guard isCurrent(lease) else { return }
-      log("TasksStore: Restored task via undo (new backend ID: \(created.id))")
+      log("TasksStore: Restored task via undo (new backend ID: \(resolved.id))")
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-create task on backend (local restore preserved)", error: error)
