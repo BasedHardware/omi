@@ -211,7 +211,9 @@ export function useAgentPills(activePillId: string | null): AgentPillsApi {
           const detail = await callRun(pill.runId)
           if (cancelled || detail === null) return
           const row = runDetailToProjectionRow(pill, detail)
-          if (row) {
+          // Same guard as the list poll: if this pill was dismissed while its
+          // get_agent_run was in flight, don't let the refreshed row re-create it.
+          if (row && !isRowDismissed(dismissedRef.current, row)) {
             setPills((prev) => {
               const next = mergeProjectedPills(prev, [row], Date.now()).pills
               return samePills(prev, next) ? prev : next
