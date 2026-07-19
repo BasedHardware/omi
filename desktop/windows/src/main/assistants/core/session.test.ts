@@ -43,6 +43,20 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 
+describe('onSessionReset', () => {
+  it('fires listeners on sign-out (null) but not on a non-null session change', async () => {
+    const s = await freshSession()
+    const reset = vi.fn()
+    s.onSessionReset(reset)
+    s.setBackendSession(sess(freshU1(0))) // sign-in
+    expect(reset).not.toHaveBeenCalled()
+    s.setBackendSession(sess(freshU1(0))) // same-user refresh
+    expect(reset).not.toHaveBeenCalled()
+    s.setBackendSession(null) // sign-out
+    expect(reset).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('isSessionExpired', () => {
   it('is false with no session', async () => {
     const s = await freshSession()

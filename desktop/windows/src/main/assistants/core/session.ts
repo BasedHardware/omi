@@ -39,6 +39,19 @@ let cached: BackendSession | null = null
 let epoch = 0
 let abortController: AbortController | null = null
 
+// Fired on sign-out (session cleared to null) so per-user main-process state that
+// isn't epoch-guarded — e.g. the tasks pending-delete tombstones and the degraded
+// tracker — is dropped before the next account signs in. Not fired on a same-user
+// token refresh (main can't distinguish that from a user switch, and sign-out is
+// always wipe-then-signout, so null is the safe, sufficient reset trigger).
+type SessionResetListener = () => void
+const sessionResetListeners = new Set<SessionResetListener>()
+
+/** Register a reset run when the session is cleared (sign-out). */
+export function onSessionReset(fn: SessionResetListener): void {
+  sessionResetListeners.add(fn)
+}
+
 /** Set/refresh (or clear, on null) the shared session. Every in-flight job for
  *  the previous session is invalidated: its epoch check now fails, and its
  *  network work is aborted. */
@@ -50,6 +63,16 @@ export function setBackendSession(session: BackendSession | null): void {
 
   abortController?.abort()
   abortController = session ? new AbortController() : null
+
+  if (!session) {
+    for (const fn of sessionResetListeners) {
+      try {
+        fn()
+      } catch (e) {
+        console.warn('[session] reset listener threw:', (e as Error)?.message)
+      }
+    }
+  }
 }
 
 /** The current session, or null when signed out / not yet relayed. */

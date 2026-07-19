@@ -84,6 +84,12 @@ export function isBackendDegraded(): boolean {
   return tracker?.isDegraded() ?? false
 }
 
+/** Drop all 429-storm state. Called on sign-out so one account's storm never carries
+ *  into the next account's session. */
+export function resetBackendDegraded(): void {
+  tracker = null
+}
+
 /** Register the pull channel so a late-mounting window can read current state. */
 export function registerBackendDegradedIpc(): void {
   ipcMain.handle('backend:degradedState', () => isBackendDegraded())
