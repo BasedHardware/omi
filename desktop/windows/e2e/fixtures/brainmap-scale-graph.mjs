@@ -20,11 +20,34 @@ const TYPE_MIX = [
   ['place', 6]
 ]
 const WORDS = [
-  'household chores', 'breakdancing', 'code review', 'E2E tests', 'testing', 'Notion',
-  'Porter', 'file', 'Trader Joe', 'Portugal', 'Gusto', 'OpenAI', 'GitHub', 'Warp',
-  'refactor', 'sprint planning', 'design system', 'onboarding', 'latency budget',
-  'knowledge graph', 'speaker embedding', 'transcription pipeline', 'vector search',
-  'release pipeline', 'incident review', 'weekly sync', 'roadmap', 'user research'
+  'household chores',
+  'breakdancing',
+  'code review',
+  'E2E tests',
+  'testing',
+  'Notion',
+  'Porter',
+  'file',
+  'Trader Joe',
+  'Portugal',
+  'Gusto',
+  'OpenAI',
+  'GitHub',
+  'Warp',
+  'refactor',
+  'sprint planning',
+  'design system',
+  'onboarding',
+  'latency budget',
+  'knowledge graph',
+  'speaker embedding',
+  'transcription pipeline',
+  'vector search',
+  'release pipeline',
+  'incident review',
+  'weekly sync',
+  'roadmap',
+  'user research'
 ]
 
 function lcg(seed) {
@@ -43,7 +66,8 @@ export function buildScaleGraph() {
   for (let i = 0; i < NODES; i++) {
     const w = WORDS[Math.floor(rand() * WORDS.length)]
     // Vary label length 1..35 chars around a ~13 median.
-    const label = i === 0 ? 'You' : `${w}${i % 5 === 0 ? ' ' + Math.floor(rand() * 900) : ''}`.slice(0, 35)
+    const label =
+      i === 0 ? 'You' : `${w}${i % 5 === 0 ? ' ' + Math.floor(rand() * 900) : ''}`.slice(0, 35)
     nodes.push({
       id: `n${i}`,
       label: label || `n${i}`,

@@ -24,7 +24,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const mainEntry = path.join(root, 'out', 'main', 'index.js')
 const shotsDir = path.join(root, '.playwright-mcp', 'brainmap-perf')
 
-const baseEnv = { ...process.env, OMI_E2E: '1', OMI_E2E_FAKE_AUTH: '1', OMI_AUTOMATION: '0', OMI_SKIP_TUNNEL: '1' }
+const baseEnv = {
+  ...process.env,
+  OMI_E2E: '1',
+  OMI_E2E_FAKE_AUTH: '1',
+  OMI_AUTOMATION: '0',
+  OMI_SKIP_TUNNEL: '1'
+}
 const SECONDARY_HASHES = ['#/bar', '#/insight', '#/notch', '#/capture', '#/glow']
 const isSecondary = (url) => SECONDARY_HASHES.some((h) => url.includes(h))
 
@@ -38,7 +44,12 @@ const MEMORIES = Array.from({ length: 125 }, (_, i) => ({
 }))
 
 const json = (route, body) =>
-  route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) })
+  route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify(body)
+  })
 
 async function stubBackend(page) {
   await page.route('**/v1/**', (route) => route.abort())
@@ -51,7 +62,9 @@ async function mainPage(app) {
   for (let i = 0; i < 120; i++) {
     const page = (await app.windows()).find((w) => !isSecondary(w.url()))
     if (page) {
-      const ready = await page.evaluate(() => (document.querySelector('#root')?.childElementCount ?? 0) > 0).catch(() => false)
+      const ready = await page
+        .evaluate(() => (document.querySelector('#root')?.childElementCount ?? 0) > 0)
+        .catch(() => false)
       if (ready) return page
     }
     await new Promise((r) => setTimeout(r, 100))
@@ -68,7 +81,8 @@ const measureFps = (page, ms) =>
         const t0 = performance.now()
         const tick = () => {
           frames++
-          if (performance.now() - t0 >= ms) resolve(Math.round((frames * 1000) / (performance.now() - t0)))
+          if (performance.now() - t0 >= ms)
+            resolve(Math.round((frames * 1000) / (performance.now() - t0)))
           else requestAnimationFrame(tick)
         }
         requestAnimationFrame(tick)
@@ -83,7 +97,11 @@ describe('Brain-map performance at real-account scale', () => {
     const app = await electron.launch({ args: [mainEntry, `--user-data-dir=${dir}`], env: baseEnv })
     t.after(async () => {
       await app.close().catch(() => {})
-      try { rmSync(dir, { recursive: true, force: true }) } catch { /* best-effort */ }
+      try {
+        rmSync(dir, { recursive: true, force: true })
+      } catch {
+        /* best-effort */
+      }
     })
 
     const page = await mainPage(app)
@@ -93,14 +111,19 @@ describe('Brain-map performance at real-account scale', () => {
 
     await page.getByText('Brain Map', { exact: true }).waitFor({ state: 'visible', timeout: 20000 })
     await page.waitForFunction(
-      () => [...document.querySelectorAll('canvas')].some((c) => c.clientWidth > 600 && c.clientHeight > 400),
+      () =>
+        [...document.querySelectorAll('canvas')].some(
+          (c) => c.clientWidth > 600 && c.clientHeight > 400
+        ),
       { timeout: 20000 }
     )
     await page.waitForTimeout(3000) // let the layout settle before sampling
 
     const fpsDefault = await measureFps(page, 4000)
     await page.screenshot({ path: path.join(shotsDir, 'default-view.png') })
-    console.log(`[kg-perf] DEFAULT nodes=${GRAPH.nodes.length} edges=${GRAPH.edges.length} fps=${fpsDefault}`)
+    console.log(
+      `[kg-perf] DEFAULT nodes=${GRAPH.nodes.length} edges=${GRAPH.edges.length} fps=${fpsDefault}`
+    )
 
     // Escape hatch: if a "Show all" control exists (post-change), exercise it.
     const showAll = page.getByRole('button', { name: /show all/i })

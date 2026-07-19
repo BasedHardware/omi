@@ -292,10 +292,9 @@ function GraphEdges({
   posMap: Map<string, THREE.Vector3>
 }): React.JSX.Element | null {
   const size = useThree((s) => s.size)
-  // One geometry + material + object, rebuilt only when the edge SET changes
-  // (cap toggle / graph change). Buffers are sized to the edge count; positions
-  // update every frame, colors once (per-edge, by target node type).
-  const batch = useMemo(() => {
+  // One geometry + material + object, stable for the component's life (three.js
+  // objects mutated imperatively — setPositions/setColors/resolution below).
+  const gpu = useMemo(() => {
     const geom = new LineSegmentsGeometry()
     const mat = new LineMaterial({
       linewidth: 0.8,
@@ -308,27 +307,38 @@ function GraphEdges({
     const seg = new LineSegments2(geom, mat)
     seg.renderOrder = -1
     seg.frustumCulled = false
-    return {
-      geom,
-      mat,
-      seg,
-      positions: new Float32Array(Math.max(1, edges.length) * 6),
-      colors: new Float32Array(Math.max(1, edges.length) * 6),
-      colorsSet: false
-    }
-  }, [edges])
-  // Dispose GPU resources when the batch is replaced or the component unmounts.
+    return { geom, mat, seg }
+  }, [])
+  // Dispose GPU resources on unmount.
   useEffect(
     () => () => {
-      batch.geom.dispose()
-      batch.mat.dispose()
+      gpu.geom.dispose()
+      gpu.mat.dispose()
     },
-    [batch]
+    [gpu]
   )
 
+  // Mutable per-frame staging buffers in a ref (reallocated only when the edge
+  // COUNT changes), so writing them each frame is an intentional imperative
+  // update rather than React state — and never trips the no-mutate-hook-values rule.
+  const staging = useRef({
+    positions: new Float32Array(0),
+    colors: new Float32Array(0),
+    colorsSet: false,
+    n: -1
+  })
+  const scratch = useRef(new THREE.Color())
+
   useFrame(() => {
-    const { positions, colors, geom, mat } = batch
-    const scratch = new THREE.Color()
+    const s = staging.current
+    if (s.n !== edges.length) {
+      s.positions = new Float32Array(Math.max(1, edges.length) * 6)
+      s.colors = new Float32Array(Math.max(1, edges.length) * 6)
+      s.colorsSet = false
+      s.n = edges.length
+    }
+    const { positions, colors } = s
+    const { geom, mat } = gpu
     let allPlaced = true
     for (let i = 0; i < edges.length; i++) {
       const e = edges[i]
@@ -353,24 +363,25 @@ function GraphEdges({
     // Color each edge by its target node once its type is known (same scheme as
     // before). Done once, when every endpoint has resolved, so a first-frame race
     // can't bake in a default color for a node still being added.
-    if (!batch.colorsSet && allPlaced && edges.length > 0) {
+    if (!s.colorsSet && allPlaced && edges.length > 0) {
+      const c = scratch.current
       for (let i = 0; i < edges.length; i++) {
         const t = sim.liveNode(edges[i].targetId)?.nodeType ?? 'concept'
-        scratch.set(nodeColor(t, false))
+        c.set(nodeColor(t, false))
         const o = i * 6
-        colors[o] = colors[o + 3] = scratch.r
-        colors[o + 1] = colors[o + 4] = scratch.g
-        colors[o + 2] = colors[o + 5] = scratch.b
+        colors[o] = colors[o + 3] = c.r
+        colors[o + 1] = colors[o + 4] = c.g
+        colors[o + 2] = colors[o + 5] = c.b
       }
       geom.setColors(colors)
-      batch.colorsSet = true
+      s.colorsSet = true
     }
     // Fat-line width is in screen pixels, so the material needs the viewport size.
     mat.resolution.set(size.width, size.height)
   })
 
   if (edges.length === 0) return null
-  return <primitive object={batch.seg} />
+  return <primitive object={gpu.seg} />
 }
 
 // Empty-space margin around the graph. >1 pulls the camera back so there is a
