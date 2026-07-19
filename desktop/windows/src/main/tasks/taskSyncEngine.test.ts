@@ -276,6 +276,32 @@ describe('completed-phantom reconcile (hardDeleteAbsentCompletedTasks)', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
+  // THE mass-flip regression: the sweep must NEVER run against a partial completed
+  // list. A multi-page fetch whose 2nd page rejects (500/429) makes fetchAll throw,
+  // so doHydrateCompleted's catch skips the reconcile entirely — no delete-by-absence
+  // off a truncated snapshot. This guards the invariant (fetchPage throws on !ok →
+  // fetchAll propagates) a refactor could silently break with an otherwise-green suite.
+  it('mass-flip guard: a page-2 failure in the completed fetch skips the reconcile (no delete)', async () => {
+    h.hardDeleteAbsentCompletedTasks.mockReturnValue([99]) // would delete a real row if ever called
+    h.netFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+      if ((init?.method ?? 'GET') !== 'GET') return h.jsonResponse({})
+      // Page 1 (offset=0): a page that signals more. Page 2 (offset=500): reject.
+      if (String(url).includes('offset=0'))
+        return h.jsonResponse({ action_items: [backendItem({ id: 'b1' })], has_more: true })
+      return h.jsonResponse({}, false, 500)
+    })
+    const { engine } = await freshEngine()
+    const listener = vi.fn()
+    engine.setTaskDeletionListener(listener)
+
+    await engine.hydrateCompleted() // swallows the fetch error
+
+    // fetchAll threw on page 2 → neither the sync nor the reconcile is reached.
+    expect(h.hardDeleteAbsentCompletedTasks).not.toHaveBeenCalled()
+    expect(h.syncTaskActionItems).not.toHaveBeenCalled()
+    expect(listener).not.toHaveBeenCalled()
+  })
+
   it('throttles the completed reconcile to once per 5 minutes', async () => {
     const t0 = 1_700_000_000_000
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(t0)
