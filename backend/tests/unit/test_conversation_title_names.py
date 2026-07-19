@@ -110,7 +110,7 @@ conversation_folder_stub.FolderAssignment = MagicMock()
 conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=(None, 0.0, "test stub"))
 conversation_folder_stub.build_folders_context = MagicMock(return_value="")
 
-# conversation_processing imports these two after the origin/main merge; stub them so the
+# conversation_processing imports these after the origin/main merge; stub them so the
 # module under test imports in isolation (they are not exercised by these title tests).
 byok_stub = sys.modules.get("utils.byok") or _stub_module("utils.byok")
 byok_stub.has_byok_keys = MagicMock(return_value=False)
@@ -122,6 +122,13 @@ gateway_client_stub.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 
 gateway_obs_stub = sys.modules.get("utils.llm.gateway_observability") or _stub_module("utils.llm.gateway_observability")
 gateway_obs_stub.record_gateway_shadow_comparison = MagicMock()
+
+# get_transcript_structure imports usage_tracker at its invocation boundary, so this one is
+# needed at call time rather than import time. track_usage is used as `with track_usage(uid,
+# Features.CONVERSATION_STRUCTURE):`, so the stub must be a context manager.
+usage_tracker_stub = sys.modules.get("utils.llm.usage_tracker") or _stub_module("utils.llm.usage_tracker")
+usage_tracker_stub.Features = MagicMock()
+usage_tracker_stub.track_usage = MagicMock(side_effect=lambda *args, **kwargs: contextlib.nullcontext())
 
 # Real models (pure pydantic) resolve from the models package directory.
 if not hasattr(sys.modules.get("models", None), "__path__"):
