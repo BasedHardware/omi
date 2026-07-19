@@ -228,15 +228,19 @@ final class WALServiceUploadTests: XCTestCase {
     service = makeService(timestampProvider: { now })
     let cutoff = now - 7 * 24 * 60 * 60
 
-    func makeWal(timerStart: Int, status: WALStatus, file: String) throws -> WALEntry {
+    // Distinct (device, timerStart) per entry so WAL ids (device_timerStart) don't
+    // collide — cleanupOldWals removes by id, and a shared id would collaterally
+    // remove the wrong entry. Production reserves unique timerStarts.
+    func makeWal(device: String, timerStart: Int, status: WALStatus, file: String) throws -> WALEntry {
       try Data([0x01]).write(to: walDir.appendingPathComponent(file))
       return WALEntry(
         timerStart: timerStart, codec: "opus", status: status, storage: .disk,
-        filePath: file, seconds: 60, device: "dev1", deviceModel: "Omi")
+        filePath: file, seconds: 60, device: device, deviceModel: "Omi")
     }
-    let oldSynced = try makeWal(timerStart: cutoff - 10, status: .synced, file: "audio_old.bin")
-    let youngSynced = try makeWal(timerStart: cutoff + 10, status: .synced, file: "audio_young.bin")
-    let oldMiss = try makeWal(timerStart: cutoff - 10, status: .miss, file: "audio_miss.bin")
+    let oldSynced = try makeWal(device: "dev1", timerStart: cutoff - 10, status: .synced, file: "audio_old.bin")
+    let youngSynced = try makeWal(
+      device: "dev1", timerStart: cutoff + 10, status: .synced, file: "audio_young.bin")
+    let oldMiss = try makeWal(device: "dev2", timerStart: cutoff - 10, status: .miss, file: "audio_miss.bin")
     service.setWalsForTesting([oldSynced, youngSynced, oldMiss])
     service.saveWals()
 
