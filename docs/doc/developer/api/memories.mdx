@@ -24,6 +24,31 @@ description: "Create and retrieve memories via the Developer API"
   </Card>
 </CardGroup>
 
+## Access and availability
+
+Memory endpoints require a Developer API key with the corresponding scope: `memories:read` for reads and
+`memories:write` for writes. Creating a key is self-service in **Developer → API Keys**, and creation
+records the matching key grant when the key includes a memory scope.
+
+Default memory reads also have a separate, server-owned account readiness gate. A valid, correctly scoped
+key can therefore receive `403` while that account is not yet provisioned for Developer Memory API access.
+Do not recreate the key in that case; retry after the account is enabled or contact Omi support if it remains
+unavailable.
+
+```json
+{
+  "detail": {
+    "enabled": false,
+    "code": "developer_memory_access_not_ready",
+    "message": "Developer Memory API access is not enabled for this account.",
+    "reason": "missing_rollout_state"
+  }
+}
+```
+
+`code` is the stable programmatic signal. `reason` provides a diagnostic for the current server-side gate and
+must not be treated as a key or scope error.
+
 ---
 
 ## Get Memories

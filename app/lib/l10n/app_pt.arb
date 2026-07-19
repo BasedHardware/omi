@@ -2971,7 +2971,7 @@
     "upgradePlan": "Fazer upgrade",
     "billingMonthly": "Mensal",
     "billingYearly": "Anual",
-    "savePercent": "Economize ~17%",
+    "savePercent": "Economize ~{percent}%",
     "popular": "Popular",
     "currentPlan": "Atual",
     "neoSubtitle": "{count} perguntas por mês",

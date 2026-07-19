@@ -2,6 +2,37 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.82",
+      "date": "2026-07-19",
+      "changes": [
+        "Fixed beta chat recovery after a failed request."
+      ]
+    },
+    {
+      "version": "0.12.81",
+      "date": "2026-07-19",
+      "changes": [
+        "Improved beta chat recovery after a failed request."
+      ]
+    },
+    {
+      "version": "0.12.80",
+      "date": "2026-07-18",
+      "changes": [
+        "Improved macOS beta qualification reliability during fault-path testing."
+      ]
+    },
+    {
+      "version": "0.12.79",
+      "date": "2026-07-18",
+      "changes": [
+        "Fixed several stability and accuracy issues: a chat-gateway crash on some upstream errors, a crash parsing malformed Limitless audio packets, loss of Rewind footage when power was connected mid-recording, and daily-recap/file-scan numbers wrongly showing zero",
+        "Improved macOS beta qualification reliability.",
+        "Reduced memory use in Rewind search by loading downsampled thumbnails instead of full-resolution screenshots",
+        "Fixed proactive task capture occasionally trying to update a non-existent task when a new capture matched an already-staged one"
+      ]
+    },
+    {
       "version": "0.12.78",
       "date": "2026-07-18",
       "changes": [

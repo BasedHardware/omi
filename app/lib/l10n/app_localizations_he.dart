@@ -8918,7 +8918,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get billingYearly => 'שנתי';
 
   @override
-  String get savePercent => 'חסוך ~17%';
+  String savePercent(int percent) {
+    return 'חסוך ~$percent%';
+  }
 
   @override
   String get popular => 'פופולרי';

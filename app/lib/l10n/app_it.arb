@@ -2935,7 +2935,7 @@
     "upgradePlan": "Aggiorna piano",
     "billingMonthly": "Mensile",
     "billingYearly": "Annuale",
-    "savePercent": "Risparmia ~17%",
+    "savePercent": "Risparmia ~{percent}%",
     "popular": "Popolare",
     "currentPlan": "Attuale",
     "neoSubtitle": "{count} domande al mese",

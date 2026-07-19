@@ -6,8 +6,10 @@ from models.memory_search_gateway import SearchMode
 from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
     FirestoreFake as _FirestoreFake,
+    MEMORY_ADAPTER_FIXTURE_NOW as _FIXTURE_NOW,
     VectorCandidateResult as _VectorCandidateResult,
     enabled_rollout_doc,
+    freeze_default_vector_eligibility_clock,
     memory_item,
     stored_item as _stored_item,
     vector_hit as _hit,
@@ -510,8 +512,11 @@ def test_developer_default_memory_adapter_classifies_explicit_legacy_safe_withou
     assert db_client.collection_paths == []
 
 
-def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default(
+    monkeypatch,
+):
+    now = _FIXTURE_NOW
+    freeze_default_vector_eligibility_clock(monkeypatch, now=now)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -544,7 +549,12 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
         )
 
     result = search_memory_default_developer_memories_vector(
-        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_decision=decision, vector_query=vector_query
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        rollout_decision=decision,
+        vector_query=vector_query,
     )
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
     assert result.fallback_reason is None

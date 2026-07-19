@@ -2970,7 +2970,7 @@
     "upgradePlan": "Planı yükselt",
     "billingMonthly": "Aylık",
     "billingYearly": "Yıllık",
-    "savePercent": "~%17 tasarruf",
+    "savePercent": "~%{percent} tasarruf",
     "popular": "Popüler",
     "currentPlan": "Mevcut",
     "neoSubtitle": "Ayda {count} soru",

@@ -9009,7 +9009,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get billingYearly => 'Anual';
 
   @override
-  String get savePercent => 'Ahorra ~17%';
+  String savePercent(int percent) {
+    return 'Ahorra ~$percent%';
+  }
 
   @override
   String get popular => 'Popular';

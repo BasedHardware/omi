@@ -2940,7 +2940,7 @@
     "upgradePlan": "Nâng cấp gói",
     "billingMonthly": "Hàng tháng",
     "billingYearly": "Hàng năm",
-    "savePercent": "Tiết kiệm ~17%",
+    "savePercent": "Tiết kiệm ~{percent}%",
     "popular": "Phổ biến",
     "currentPlan": "Hiện tại",
     "neoSubtitle": "{count} câu hỏi mỗi tháng",

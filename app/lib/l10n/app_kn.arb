@@ -10521,7 +10521,7 @@
     "upgradePlan": "ಯೋಜನೆ ಅಪ್‌ಗ್ರೇಡ್",
     "billingMonthly": "ಮಾಸಿಕ",
     "billingYearly": "ವಾರ್ಷಿಕ",
-    "savePercent": "~17% ಉಳಿಸಿ",
+    "savePercent": "~{percent}% ಉಳಿಸಿ",
     "popular": "ಜನಪ್ರಿಯ",
     "currentPlan": "ಪ್ರಸ್ತುತ",
     "neoSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
