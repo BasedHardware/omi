@@ -1,7 +1,67 @@
 import XCTest
+
 @testable import Omi_Computer
 
+private final class ConversationCountURLStub: URLProtocol, @unchecked Sendable {
+  private static let lock = NSLock()
+  private nonisolated(unsafe) static var _requests: [(method: String, path: String)] = []
+
+  static var requests: [(method: String, path: String)] {
+    lock.lock()
+    defer { lock.unlock() }
+    return _requests
+  }
+
+  static func reset() {
+    lock.lock()
+    _requests = []
+    lock.unlock()
+  }
+
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+  override func startLoading() {
+    let method = request.httpMethod ?? "GET"
+    let path = request.url?.path ?? ""
+    Self.lock.lock()
+    Self._requests.append((method: method, path: path))
+    Self.lock.unlock()
+
+    let (status, body): (Int, Data) =
+      switch (method, path) {
+      case ("GET", "/v1/conversations/count"):
+        (200, Data(#"{"count":4}"#.utf8))
+      case ("POST", "/v1/conversations/merge"):
+        (200, Data(#"{"status":"ok","message":"merged","conversation_ids":[]}"#.utf8))
+      default:
+        (204, Data())
+      }
+    guard
+      let url = request.url,
+      let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
+    else { return }
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: body)
+    client?.urlProtocolDidFinishLoading(self)
+  }
+
+  override func stopLoading() {}
+}
+
 final class APIClientConversationCountTests: XCTestCase {
+  override func setUp() {
+    super.setUp()
+    ConversationCountURLStub.reset()
+    setenv("OMI_PYTHON_API_URL", "http://conversation-count-test:9001", 1)
+  }
+
+  override func tearDown() {
+    unsetenv("OMI_PYTHON_API_URL")
+    ConversationCountURLStub.reset()
+    super.tearDown()
+  }
+
   func testCreateConversationFromSegmentsResponseDefaultsOptionalFields() throws {
     let response = try JSONDecoder().decode(
       APIClient.CreateConversationFromSegmentsResponse.self,
@@ -64,44 +124,43 @@ final class APIClientConversationCountTests: XCTestCase {
       starred: false
     )
 
-    XCTAssertEqual(queryItems, [
-      "include_discarded=true",
-      "statuses=completed",
-      "start_date=2026-06-01T00:00:00Z",
-      "folder_id=folder-a",
-      "starred=false",
-    ])
+    XCTAssertEqual(
+      queryItems,
+      [
+        "include_discarded=true",
+        "statuses=completed",
+        "start_date=2026-06-01T00:00:00Z",
+        "folder_id=folder-a",
+        "starred=false",
+      ])
   }
 
-  func testConversationMutationsInvalidateCountCache() throws {
-    let testFile = URL(fileURLWithPath: #filePath)
-    let sourceURL = testFile
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/APIClient.swift")
-    let source = try String(contentsOf: sourceURL)
+  func testConversationMutationsInvalidateCountCache() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ConversationCountURLStub.self]
+    let client = APIClient(session: URLSession(configuration: configuration))
+    await client.setTestAuthHeader("Bearer test-token")
 
-    for method in [
-      "deleteConversation(id:",
-      "setConversationStarred(id:",
-      "mergeConversations(ids:",
-      "deleteFolder(id:",
-      "moveConversationToFolder(conversationId:",
-      "createConversationFromSegments(_ request:",
-    ] {
-      guard let methodRange = source.range(of: method) else {
-        XCTFail("Missing method \(method)")
-        continue
-      }
-      let suffix = source[methodRange.upperBound...]
-      guard let nextMethodRange = suffix.range(of: "\n  ///") ?? suffix.range(of: "\n}") else {
-        XCTFail("Could not find end of method \(method)")
-        continue
-      }
-      let methodBody = suffix[..<nextMethodRange.lowerBound]
-      XCTAssertTrue(
-        methodBody.contains("invalidateConversationsCountCache()"),
-        "\(method) should clear the filtered count cache after mutating conversations or folder membership")
-    }
+    let initialCount = try await client.getConversationsCount()
+    XCTAssertEqual(initialCount, 4)
+    let cachedCount = try await client.getConversationsCount()
+    XCTAssertEqual(cachedCount, 4)
+    try await client.deleteConversation(id: "conversation-1")
+    let countAfterDelete = try await client.getConversationsCount()
+    XCTAssertEqual(countAfterDelete, 4)
+    _ = try await client.mergeConversations(ids: ["conversation-1"])
+    let countAfterMerge = try await client.getConversationsCount()
+    XCTAssertEqual(countAfterMerge, 4)
+
+    XCTAssertEqual(
+      ConversationCountURLStub.requests.map { "\($0.method) \($0.path)" },
+      [
+        "GET /v1/conversations/count",
+        "DELETE /v1/conversations/conversation-1",
+        "GET /v1/conversations/count",
+        "POST /v1/conversations/merge",
+        "GET /v1/conversations/count",
+      ]
+    )
   }
 }

@@ -1,5 +1,3 @@
-import 'package:flutter/cupertino.dart';
-
 import 'package:just_audio/just_audio.dart';
 
 import 'package:omi/backend/http/api/users.dart';

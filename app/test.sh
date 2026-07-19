@@ -51,4 +51,4 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   flutter pub run build_runner build --delete-conflicting-outputs
 fi
 
-flutter test
+flutter test "$@"

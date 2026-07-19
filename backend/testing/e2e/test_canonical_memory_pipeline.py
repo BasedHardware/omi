@@ -60,7 +60,7 @@ def _trusted_generation_patch(monkeypatch) -> None:
     )
     for target in (
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
-        "utils.memory.v3_account_generation_source.read_memory_v3_trusted_account_generation",
+        "utils.memory.v3.account_generation_source.read_memory_v3_trusted_account_generation",
     ):
         monkeypatch.setattr(target, lambda **_: trusted, raising=False)
 
@@ -204,7 +204,7 @@ def _write_short_term_via_conversation_ingress(client, auth_headers, monkeypatch
         conversations_db.update_conversation(
             uid,
             conversation.id,
-            {"structured": structured, "status": "completed"},
+            {"structured": structured},
         )
         refreshed = conversations_db.get_conversation(uid, conversation.id)
         from utils.conversations.factory import deserialize_conversation
@@ -377,7 +377,7 @@ class TestCanonicalMemoryPipelineE2E:
         )
 
         def failing_memory_service(_params, _adapters):
-            from utils.memory.v3_composed_get_service import V3ComposedResponse
+            from utils.memory.v3.composed_get_service import V3ComposedResponse
 
             return V3ComposedResponse.error(503, "infrastructure_failure")
 

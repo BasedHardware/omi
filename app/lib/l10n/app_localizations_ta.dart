@@ -1476,7 +1476,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.';
 
   @override
-  String get freeMinutesMonth => 'மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
+  String get freeMinutesMonth => 'மாதத்திற்கு 300 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4741,7 +4741,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'குறிப்பிட்ட தரவு அணுக கட்டமைக்கப்படவில்லை.';
 
   @override
-  String get basicPlanDescription => '600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
+  String get basicPlanDescription => '300 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
 
   @override
   String get minutes => 'நிமிషங்கள்';
@@ -6041,7 +6041,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get viewUsage => 'பயன்பாட்டைக் கவனிக்கவும்';
@@ -6123,7 +6123,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get audioProcessedLocally =>
@@ -9054,7 +9054,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get billingYearly => 'ஆண்டு';
 
   @override
-  String get savePercent => '~17% சேமிக்கவும்';
+  String savePercent(int percent) {
+    return '~$percent% சேமிக்கவும்';
+  }
 
   @override
   String get popular => 'பிரபலம்';
@@ -9409,7 +9411,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'தற்போது Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
+      'தொலைபேசி மைக்ரோஃபோன், Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9643,4 +9645,33 @@ class AppLocalizationsTa extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta உடன் இணைப்பதில் பிழை: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'சாதன சேமிப்பு';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% நிரம்பியது';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total இல் $used பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free காலி';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'சாதனம் கிட்டத்தட்ட நிரம்பிவிட்டது — இடத்தைக் காலி செய்ய ஒத்திசைக்கவும்.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'இணைப்பு இல்லை — உள்ளூரில் பதிவு செய்யப்படுகிறது. நீங்கள் மீண்டும் ஆன்லைனுக்கு வரும்போது படியெடுக்கப்படும்.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'உங்கள் தரவு இயல்பாகவே வலுவான குறியாக்கத்துடன் பாதுகாக்கப்படுகிறது, மேலும் அது எவ்வாறு சேமிக்கப்படுகிறது மற்றும் பயன்படுத்தப்படுகிறது என்பதை நீங்கள் கட்டுப்படுத்துகிறீர்கள்.';
 }

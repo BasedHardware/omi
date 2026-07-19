@@ -676,6 +676,9 @@ def extract_action_items(
     • Skip only work demonstrably completed in the current moment; an immediate but still-open commitment is capturable.
     • For every item set capture_kind to exactly one of explicit_command, clear_commitment, direct_request, inferred_next_step.
     • Set capture_owner to user, other, or unknown and emit capture_confidence and ownership_confidence from 0 to 1.
+    • A concrete request addressed directly to the primary user has capture_kind=direct_request,
+      capture_owner=user, and high ownership_confidence. Use unknown only when the addressee is genuinely unclear.
+    • A request addressed to someone else or broadcast without a direct mention is not owned by the primary user.
     • Set concrete_deliverable true only when the commitment names a specific deliverable or outcome; vague "I'll handle it" is false.'''
         if task_intelligence_capture
         else '''LEGACY COMMITMENT FILTER:
@@ -992,6 +995,10 @@ def get_transcript_structure(
     calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
     output_language_code: Optional[str] = None,
 ) -> Structured:
+    # Keep this import at the invocation boundary: selected unit tests load
+    # this pure processing module in isolation without the full LLM package.
+    from utils.llm.usage_tracker import Features, track_usage
+
     conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
     if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
@@ -1047,7 +1054,6 @@ def get_transcript_structure(
     # Second system message: conversation context (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
     prompt = cast(Any, ChatPromptTemplate).from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
     legacy_prompt_values = {
         'conversation_context': conversation_context,
         'format_instructions': parser.get_format_instructions(),
@@ -1057,7 +1063,9 @@ def get_transcript_structure(
         'tz': tz or 'UTC',
     }
 
-    response = _coerce_structured(chain.invoke(legacy_prompt_values))
+    with track_usage(uid, Features.CONVERSATION_STRUCTURE):
+        chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+        response = _coerce_structured(chain.invoke(legacy_prompt_values))
     if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
         _submit_conversation_structure_shadow(
             prompt,

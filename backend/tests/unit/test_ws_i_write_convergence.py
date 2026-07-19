@@ -488,12 +488,13 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
     ]
     write_mock = MagicMock()
     retract_mock = MagicMock()
+    readiness_mock = MagicMock()
     service = MagicMock()
     service.write = write_mock
     service.retract_conversation_memories = retract_mock
+    service.ensure_canonical_mutation_ready = readiness_mock
 
     _patch_cohort_resolver(monkeypatch, MemorySystem.CANONICAL)
-    monkeypatch.setattr(pc, "canonical_write_enabled", lambda *args, **kwargs: True)
     monkeypatch.setattr(pc, "new_memories_extractor", lambda *args, **kwargs: memories)
     monkeypatch.setattr(pc, "record_usage", lambda *args, **kwargs: None)
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
@@ -511,6 +512,7 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
     pc._extract_memories_inner("uid-canonical", conversation)
 
     retract_mock.assert_called_once_with("uid-canonical", "conv-canonical")
+    readiness_mock.assert_called_once_with("uid-canonical")
     legacy_delete.assert_not_called()
     legacy_save.assert_not_called()
     assert write_mock.call_count == 2
@@ -523,6 +525,7 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
     conversation.is_locked = True
     pc._extract_memories_inner("uid-canonical", conversation)
     assert write_mock.call_count == 4
+    assert readiness_mock.call_count == 2
     association_mock.assert_not_called()
 
 
@@ -864,7 +867,6 @@ def test_review_memory_routes_canonical_cohort_through_memory_service():
 def test_preference_tools_routes_canonical_cohort_through_memory_service():
     source = (BACKEND_DIR / "utils" / "retrieval" / "tools" / "preference_tools.py").read_text(encoding="utf-8")
     assert "resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL" in source
-    assert "canonical_write_enabled(" in source
     assert "MemoryService(db_client=db).create_external_memory(" in source
     assert "require_canonical_promotion=True" in source
     canonical_pos = source.find("MemorySystem.CANONICAL")

@@ -1483,7 +1483,7 @@
     "exportConfiguration": "ייצא תצורה",
     "bringYourOwn": "הביא שלך",
     "payYourSttProvider": "השתמש בomi בחופשיות. אתה משלם ישירות לספק STT שלך.",
-    "freeMinutesMonth": "600 דקות חינם לחודש כלולות. בלתי מוגבל עם ",
+    "freeMinutesMonth": "300 דקות חינם לחודש כלולות. בלתי מוגבל עם ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "דרוש Host",
     "validPortRequired": "דרוש Port תקף",
@@ -5506,7 +5506,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 דקות פרימיום + בלתי מוגבל במכשיר",
+    "basicPlanDescription": "300 דקות פרימיום + בלתי מוגבל במכשיר",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7281,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.",
+    "premiumMinutesInfo": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7392,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ",
+    "premiumMinutesMonth": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10521,7 +10521,7 @@
     "upgradePlan": "שדרג תוכנית",
     "billingMonthly": "חודשי",
     "billingYearly": "שנתי",
-    "savePercent": "חסוך ~17%",
+    "savePercent": "חסוך ~{percent}%",
     "popular": "פופולרי",
     "currentPlan": "נוכחי",
     "neoSubtitle": "{count} שאלות בחודש",
@@ -10633,7 +10633,7 @@
     "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.",
     "transcribeLaterTitle": "תמלול מאוחר יותר",
     "transcribeLaterDescription": "הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.",
-    "transcribeLaterNote": "פועל עם מכשירי Omi ו-Limitless בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
+    "transcribeLaterNote": "פועל עם מיקרופון הטלפון ועם מכשירי Omi ו-Limitless. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
     "transcribeLaterStorageFull": "האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.",
     "unmute": "בטל השתקה",
     "newRecording": "הקלטה חדשה",
@@ -10721,5 +10721,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "אחסון המכשיר",
+    "deviceStoragePercentFull": "{percent}% מלא",
+    "deviceStorageUsedOfTotal": "{used} מתוך {total} בשימוש",
+    "deviceStorageFree": "{free} פנוי",
+    "deviceStorageNearlyFull": "המכשיר כמעט מלא — סנכרן כדי לפנות מקום.",
+    "phoneMicOfflineFallbackMessage": "אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.",
+    "dataEncryptedBanner": "הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים."
 }

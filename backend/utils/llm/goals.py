@@ -78,7 +78,10 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
             chat_lines: List[str] = []
             for msg in reversed(recent_messages):  # Chronological order
                 sender = "User" if msg.get('sender') == 'human' else "Omi"
-                text = msg.get('text', '')[:200]
+                # get('text', '') only defaults an ABSENT key; a stored message with text=None would
+                # make None[:200] raise, and the broad except below then drops the entire chat block
+                # from the goal-advice prompt. The memory block below already guards with if m.get(...).
+                text = (msg.get('text') or '')[:200]
                 if text:
                     chat_lines.append(f"{sender}: {text}")
             chat_context = '\n'.join(chat_lines[-10:])  # Last 10 messages

@@ -1,6 +1,6 @@
+import OmiTheme
 import SwiftUI
 import WebKit
-import OmiTheme
 
 struct BillingWebFlow: Identifiable {
   let id = UUID()
@@ -21,9 +21,9 @@ struct BillingWebFlowSheet: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 12) {
+      HStack(spacing: OmiSpacing.md) {
         Text(flow.title)
-          .scaledFont(size: 18, weight: .semibold)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
@@ -31,11 +31,10 @@ struct BillingWebFlowSheet: View {
         Button("Close") {
           onComplete(.dismissed)
         }
-        .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
+      .padding(.horizontal, OmiSpacing.xl)
+      .padding(.vertical, OmiSpacing.lg)
       .background(OmiColors.backgroundTertiary)
 
       Divider()
@@ -79,10 +78,11 @@ struct BillingWebView: NSViewRepresentable {
       self.onComplete = onComplete
     }
 
+    @MainActor
     func webView(
       _ webView: WKWebView,
       decidePolicyFor navigationAction: WKNavigationAction,
-      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+      decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
       guard let url = navigationAction.request.url else {
         decisionHandler(.allow)

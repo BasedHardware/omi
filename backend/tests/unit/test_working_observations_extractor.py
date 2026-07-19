@@ -8,15 +8,18 @@ from langchain_core.messages import AIMessage
 from models.memory_contracts import L1MemoryArchiveItem
 from utils.llm import working_observations
 from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
+from utils.llm.usage_tracker import get_current_context
 
 
 class FakeLLM:
     def __init__(self, content):
         self.content = content
         self.calls = []
+        self.usage_contexts = []
 
     def invoke(self, messages):
         self.calls.append(messages)
+        self.usage_contexts.append(get_current_context())
         return AIMessage(content=self.content)
 
 
@@ -54,6 +57,8 @@ def test_l1_archive_extractor_emits_general_archive_items_without_lifecycle_rout
     assert items[0].is_stable_profile_fact is False
     assert not hasattr(items[0], "status")
     assert not hasattr(items[0], "route_hint")
+    assert fake_llm.usage_contexts[0].uid == "user_1"
+    assert fake_llm.usage_contexts[0].feature == "memories"
 
 
 def test_l1_archive_extractor_converts_secret_risk_to_sensitive_archive():

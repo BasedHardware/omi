@@ -60,9 +60,7 @@ from utils.mcp_memories import (
     parse_optional_mcp_bool,
     search_default_mcp_memories_vector,
 )
-import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
-from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 import logging
 
 logger = logging.getLogger(__name__)
@@ -96,26 +94,6 @@ class McpScreenActivityAppSummary(BaseModel):
 class McpScreenActivitySummaryResponse(BaseModel):
     apps: Dict[str, McpScreenActivityAppSummary] = {}
     total_screenshots: int = 0
-
-
-@router.get("/v1/mcp/keys", response_model=List[McpApiKey], tags=["mcp"])
-def get_keys(uid: str = Depends(get_current_user_id)):
-    return mcp_api_key_db.get_mcp_keys_for_user(uid)
-
-
-@router.post("/v1/mcp/keys", response_model=McpApiKeyCreated, tags=["mcp"])
-def create_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id)):
-    if not key_data.name or len(key_data.name.strip()) == 0:
-        raise HTTPException(status_code=422, detail="Key name cannot be empty")
-
-    raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
-    return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
-
-
-@router.delete("/v1/mcp/keys/{key_id}", status_code=204, tags=["mcp"])
-def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
-    mcp_api_key_db.delete_mcp_key(uid, key_id)
-    return
 
 
 @router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
@@ -328,7 +306,6 @@ def search_memories(
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Depends(get_uid_from_mcp_api_key),
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
@@ -340,6 +317,7 @@ def get_memories(
     include_activity: bool = False,
     include_sensitive: bool = True,
 ):
+    uid = auth_context.uid
     try:
         limit = parse_mcp_int(limit, "limit", default=25, minimum=1, maximum=500)
         offset = parse_mcp_int(offset, "offset", default=0, minimum=0, maximum=100000)

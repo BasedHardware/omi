@@ -1457,7 +1457,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get payYourSttProvider => 'השתמש בomi בחופשיות. אתה משלם ישירות לספק STT שלך.';
 
   @override
-  String get freeMinutesMonth => '600 דקות חינם לחודש כלולות. בלתי מוגבל עם ';
+  String get freeMinutesMonth => '300 דקות חינם לחודש כלולות. בלתי מוגבל עם ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4672,7 +4672,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'אין גישת נתונים ספציפית מוגדרת.';
 
   @override
-  String get basicPlanDescription => '600 דקות פרימיום + בלתי מוגבל במכשיר';
+  String get basicPlanDescription => '300 דקות פרימיום + בלתי מוגבל במכשיר';
 
   @override
   String get minutes => 'דקות';
@@ -5951,7 +5951,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get cloudProvider => 'ספק ענן';
 
   @override
-  String get premiumMinutesInfo => '600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.';
+  String get premiumMinutesInfo => '300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.';
 
   @override
   String get viewUsage => 'הצג שימוש';
@@ -6030,7 +6030,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get batteryDrainSignificantly => 'זליגת הסוללה תגדל משמעותית.';
 
   @override
-  String get premiumMinutesMonth => '600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ';
+  String get premiumMinutesMonth => '300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ';
 
   @override
   String get audioProcessedLocally => 'אודיו מעובד מקומית. עובד במצב לא מקוון, פרטי יותר, אך משתמש בסוללה יותר.';
@@ -8918,7 +8918,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get billingYearly => 'שנתי';
 
   @override
-  String get savePercent => 'חסוך ~17%';
+  String savePercent(int percent) {
+    return 'חסוך ~$percent%';
+  }
 
   @override
   String get popular => 'פופולרי';
@@ -9273,7 +9275,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'פועל עם מכשירי Omi ו-Limitless בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
+      'פועל עם מיקרופון הטלפון ועם מכשירי Omi ו-Limitless. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9501,4 +9503,32 @@ class AppLocalizationsHe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'שגיאה בהתחברות ל-Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'אחסון המכשיר';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% מלא';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used מתוך $total בשימוש';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free פנוי';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'המכשיר כמעט מלא — סנכרן כדי לפנות מקום.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => 'אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים.';
 }

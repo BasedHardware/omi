@@ -1,6 +1,7 @@
-import XCTest
-@testable import Omi_Computer
 import OmiWAL
+import XCTest
+
+@testable import Omi_Computer
 
 final class WALCloudSyncLogicTests: XCTestCase {
 
@@ -84,6 +85,44 @@ final class WALCloudSyncLogicTests: XCTestCase {
     XCTAssertEqual(wals[0].status, .synced)
   }
 
+  func testReconcilePartialFailureRetainsWalForRetry() {
+    assertFailureRemainsRetryable(status: "partial_failure", failedSegments: 1, totalSegments: 2)
+  }
+
+  func testReconcileAllFailureRetainsWalForRetry() {
+    assertFailureRemainsRetryable(status: "failed", failedSegments: 2, totalSegments: 2)
+  }
+
+  private func assertFailureRemainsRetryable(
+    status: String, failedSegments: Int, totalSegments: Int
+  ) {
+    var wals = [makeWal(status: .uploaded)]
+    wals[0].jobId = "job-failure"
+    let fetch = SyncJobFetch(
+      outcome: .ok,
+      status: SyncJobStatusResponse(
+        jobId: "job-failure",
+        status: status,
+        totalSegments: totalSegments,
+        processedSegments: totalSegments,
+        successfulSegments: totalSegments - failedSegments,
+        failedSegments: failedSegments,
+        result: nil,
+        error: "synthetic transcription failure"
+      ))
+
+    let changed = WALCloudSyncLogic.applyReconcileFetch(
+      wals: &wals,
+      memberWalIds: [wals[0].id],
+      fetch: fetch,
+      fileExists: { _ in true }
+    )
+
+    XCTAssertTrue(changed)
+    XCTAssertEqual(wals[0].status, .miss)
+    XCTAssertNil(wals[0].jobId)
+  }
+
   func testReconcileNonTerminalLeavesUploaded() {
     var wals = [makeWal(status: .uploaded)]
     wals[0].jobId = "job-1"
@@ -125,5 +164,90 @@ final class WALCloudSyncLogicTests: XCTestCase {
     XCTAssertEqual(wals[0].status, .miss)
     XCTAssertNil(wals[0].jobId)
     XCTAssertEqual(wals[0].uploadedAt, 0)
+  }
+
+  // MARK: - mergeReconciledUploads
+
+  private func makeWal(timerStart: Int, status: WALStatus, jobId: String? = nil) -> WALEntry {
+    var wal = WALEntry(
+      timerStart: timerStart,
+      codec: "opus",
+      status: status,
+      storage: .disk,
+      filePath: "audio_\(timerStart).bin",
+      seconds: 60,
+      device: "dev1",
+      deviceModel: "Omi"
+    )
+    wal.jobId = jobId
+    return wal
+  }
+
+  func testMergePreservesWalAppendedDuringReconcile() {
+    // Snapshot taken before reconcile's network await: one uploaded WAL.
+    let uploaded = makeWal(timerStart: 1_700_000_000, status: .uploaded, jobId: "job-1")
+    let snapshot = [uploaded]
+
+    // Reconcile marks it synced (operating on the snapshot copy).
+    var reconciled = snapshot
+    reconciled[0].status = .synced
+    reconciled[0].jobId = nil
+    reconciled[0].uploadedAt = 0
+
+    // Meanwhile the live array gained a brand-new WAL (chunk timer fired during await).
+    let appended = makeWal(timerStart: 1_700_000_500, status: .inProgress)
+    let live = [uploaded, appended]
+
+    let merged = WALCloudSyncLogic.mergeReconciledUploads(
+      live: live, snapshot: snapshot, reconciled: reconciled)
+
+    // The reconciled transition is applied...
+    XCTAssertEqual(merged.count, 2)
+    let mergedUploaded = merged.first { $0.id == uploaded.id }
+    XCTAssertEqual(mergedUploaded?.status, .synced)
+    XCTAssertNil(mergedUploaded?.jobId ?? nil)
+    // ...and the WAL appended during the await is NOT dropped (the regression).
+    let mergedAppended = merged.first { $0.id == appended.id }
+    XCTAssertNotNil(mergedAppended, "WAL appended during reconcile must survive the merge")
+    XCTAssertEqual(mergedAppended?.status, .inProgress)
+  }
+
+  func testMergeDoesNotClobberConcurrentFieldUpdateOnUntouchedEntry() {
+    // Snapshot: two WALs, only one is being reconciled.
+    let reconciledWal = makeWal(timerStart: 1_700_000_000, status: .uploaded, jobId: "job-1")
+    let otherWal = makeWal(timerStart: 1_700_000_500, status: .uploaded, jobId: "job-2")
+    let snapshot = [reconciledWal, otherWal]
+
+    // Reconcile only changed the first WAL.
+    var reconciled = snapshot
+    reconciled[0].status = .synced
+    reconciled[0].jobId = nil
+
+    // Live array: the second WAL was concurrently transitioned by another path
+    // (e.g. its own job completed) — merge must not roll that back to the snapshot.
+    var liveOther = otherWal
+    liveOther.status = .synced
+    liveOther.jobId = nil
+    let live = [reconciledWal, liveOther]
+
+    let merged = WALCloudSyncLogic.mergeReconciledUploads(
+      live: live, snapshot: snapshot, reconciled: reconciled)
+
+    XCTAssertEqual(merged.first { $0.id == reconciledWal.id }?.status, .synced)
+    // The untouched entry keeps its concurrent update, not the stale snapshot value.
+    XCTAssertEqual(merged.first { $0.id == otherWal.id }?.status, .synced)
+    XCTAssertNil(merged.first { $0.id == otherWal.id }?.jobId ?? nil)
+  }
+
+  func testMergeIsNoOpWhenNothingReconciled() {
+    let a = makeWal(timerStart: 1_700_000_000, status: .uploaded, jobId: "job-1")
+    let snapshot = [a]
+    let reconciled = snapshot  // unchanged
+    let live = [a]
+    let merged = WALCloudSyncLogic.mergeReconciledUploads(
+      live: live, snapshot: snapshot, reconciled: reconciled)
+    XCTAssertEqual(merged.count, 1)
+    XCTAssertEqual(merged[0].status, .uploaded)
+    XCTAssertEqual(merged[0].jobId, "job-1")
   }
 }

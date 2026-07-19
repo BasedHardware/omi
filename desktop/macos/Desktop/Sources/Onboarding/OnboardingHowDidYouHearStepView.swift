@@ -1,3 +1,4 @@
+import OmiTheme
 import SwiftUI
 
 struct OnboardingHowDidYouHearStepView: View {
@@ -35,8 +36,8 @@ struct OnboardingHowDidYouHearStepView: View {
       description: "",
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 12) {
-        FlowLayout(spacing: 10) {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        FlowLayout(spacing: OmiSpacing.sm) {
           ForEach(shuffledSources, id: \.self) { source in
             OnboardingSelectableChip(
               title: source,

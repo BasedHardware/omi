@@ -61,7 +61,7 @@ function SetupFirebase {
 
 function SetupFirebaseWithServiceAccount {
     dart pub global activate flutterfire_cli
-    
+
     # Dev configuration
     flutterfire config `
         --platforms="android,ios,web" `

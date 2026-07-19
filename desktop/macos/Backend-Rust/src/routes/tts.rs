@@ -16,6 +16,8 @@ use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
 use crate::AppState;
 
+use super::rate_limit::requires_server_metering;
+
 fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
     crate::routes::response_or_500("tts_synthesize", builder, body)
 }
@@ -128,7 +130,7 @@ async fn tts_synthesize(
         .filter(|value| !value.is_empty());
 
     let (api_key, uses_server_key) = openai_key_for_request(&state, &headers, byok_stripped)?;
-    if uses_server_key {
+    if requires_server_metering(!uses_server_key) {
         check_server_tts_rate_limit(&state, &user.uid, char_count).await?;
     }
 
@@ -242,24 +244,38 @@ async fn check_server_tts_rate_limit(
     uid: &str,
     char_count: usize,
 ) -> Result<(), TtsProxyError> {
-    let redis = state.redis.as_ref().ok_or_else(|| {
-        tracing::error!(
-            "tts_synthesize: Redis is not configured; refusing unmetered server-key TTS"
-        );
-        TtsProxyError::RateLimitUnavailable
-    })?;
+    let result = match state.redis.as_ref() {
+        Some(redis) => Some(
+            redis
+                .check_tts_rate_limit(uid, char_count, TTS_BURST_WINDOW_SECS)
+                .await,
+        ),
+        None => None,
+    };
+    enforce_server_tts_metering(uid, result)
+}
 
-    let (daily_chars, burst_count) = redis
-        .check_tts_rate_limit(uid, char_count, TTS_BURST_WINDOW_SECS)
-        .await
-        .map_err(|error| {
+fn enforce_server_tts_metering(
+    uid: &str,
+    result: Option<Result<(i64, i64), redis::RedisError>>,
+) -> Result<(), TtsProxyError> {
+    let (daily_chars, burst_count) = match result {
+        None => {
+            tracing::error!(
+                "tts_synthesize: Redis is not configured; refusing unmetered server-key TTS"
+            );
+            return Err(TtsProxyError::RateLimitUnavailable);
+        }
+        Some(Err(error)) => {
             tracing::error!(
                 "tts_synthesize: Redis rate-limit error for uid={}: {}",
                 uid,
                 error
             );
-            TtsProxyError::RateLimitUnavailable
-        })?;
+            return Err(TtsProxyError::RateLimitUnavailable);
+        }
+        Some(Ok(counts)) => counts,
+    };
 
     if burst_count > SERVER_TTS_BURST_PER_MINUTE {
         tracing::warn!("tts_synthesize: burst rate limit exceeded uid={}", uid);
@@ -319,5 +335,19 @@ mod tests {
     #[test]
     fn request_character_limit_matches_openai_limit() {
         assert_eq!(MAX_TTS_CHARS, 4096);
+    }
+
+    #[test]
+    fn server_key_tts_fails_closed_when_redis_is_missing_or_broken() {
+        assert!(matches!(
+            enforce_server_tts_metering("uid", None),
+            Err(TtsProxyError::RateLimitUnavailable)
+        ));
+
+        let broken_pipe = (redis::ErrorKind::IoError, "broken pipe").into();
+        assert!(matches!(
+            enforce_server_tts_metering("uid", Some(Err(broken_pipe))),
+            Err(TtsProxyError::RateLimitUnavailable)
+        ));
     }
 }

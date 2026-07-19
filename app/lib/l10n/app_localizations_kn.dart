@@ -1469,7 +1469,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get payYourSttProvider => 'Omi ಅನ್ನು ಅವಿರತವಾಗಿ ಬಳಸಿ. ನೀವು ಕೇವಲ ನಿಮ್ಮ STT ಪ್ರದಾನಕಾರಕನಿಗೆ ನೇರವಾಗಿ ಪಾವತಿ ಮಾಡಿ.';
 
   @override
-  String get freeMinutesMonth => '600 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ';
+  String get freeMinutesMonth => '300 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4727,7 +4727,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'ನಿರ್ದಿಷ್ಟ ಡೇಟಾ ಪ್ರವೇಶ ಸಂರೂಪಿತವಾಗಿಲ್ಲ.';
 
   @override
-  String get basicPlanDescription => '600 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್';
+  String get basicPlanDescription => '300 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್';
 
   @override
   String get minutes => 'ನಿಮಿಷಗಳು';
@@ -6022,7 +6022,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
+      'ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
 
   @override
   String get viewUsage => 'ಬಳಕೆ ವಿವರಿಸಿ';
@@ -6104,7 +6104,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
+      'ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
 
   @override
   String get audioProcessedLocally =>
@@ -9019,7 +9019,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get billingYearly => 'ವಾರ್ಷಿಕ';
 
   @override
-  String get savePercent => '~17% ಉಳಿಸಿ';
+  String savePercent(int percent) {
+    return '~$percent% ಉಳಿಸಿ';
+  }
 
   @override
   String get popular => 'ಜನಪ್ರಿಯ';
@@ -9374,7 +9376,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ಸದ್ಯಕ್ಕೆ Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
+      'ಫೋನ್ ಮೈಕ್ರೊಫೋನ್, Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9604,4 +9606,33 @@ class AppLocalizationsKn extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta ಗೆ ಸಂಪರ್ಕಿಸುವಲ್ಲಿ ದೋಷ: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'ಸಾಧನ ಸಂಗ್ರಹಣೆ';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% ತುಂಬಿದೆ';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total ರಲ್ಲಿ $used ಬಳಸಲಾಗಿದೆ';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ಖಾಲಿ';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'ನಿಮ್ಮ ಡೇಟಾ ಪೂರ್ವನಿಯೋಜಿತವಾಗಿ ಬಲವಾದ ಎನ್‌ಕ್ರಿಪ್ಶನ್‌ನಿಂದ ಸುರಕ್ಷಿತವಾಗಿದೆ, ಮತ್ತು ಅದನ್ನು ಹೇಗೆ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಬಳಸಲಾಗುತ್ತದೆ ಎಂಬುದನ್ನು ನೀವು ನಿಯಂತ್ರಿಸುತ್ತೀರಿ.';
 }

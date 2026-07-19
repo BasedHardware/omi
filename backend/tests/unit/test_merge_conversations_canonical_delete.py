@@ -71,9 +71,8 @@ def test_delete_conversation_related_data_routes_canonical_to_retract():
         "utils.conversations.merge_conversations.pin_memory_system",
         return_value=MemorySystem.CANONICAL,
     ):
-        with patch("utils.conversations.merge_conversations.canonical_write_enabled", return_value=True):
-            with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
-                _delete_conversation_and_related_data("uid-canonical", "conv-1")
+        with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+            _delete_conversation_and_related_data("uid-canonical", "conv-1")
 
     service.retract_conversation_memories.assert_called_once_with("uid-canonical", "conv-1")
     legacy_delete.assert_not_called()
@@ -93,3 +92,23 @@ def test_delete_conversation_related_data_routes_legacy_to_memories_db():
 
     legacy_delete.assert_called_once_with("uid-legacy", "conv-1")
     service.retract_conversation_memories.assert_not_called()
+
+
+def test_canonical_retraction_failure_stops_source_cleanup():
+    service = MagicMock()
+    service.retract_conversation_memories.side_effect = RuntimeError("canonical unavailable")
+    delete_conversation = sys.modules["database.conversations"].delete_conversation
+    delete_conversation.reset_mock()
+    legacy_delete = sys.modules["database.memories"].delete_memories_for_conversation
+    legacy_delete.reset_mock()
+
+    with patch(
+        "utils.conversations.merge_conversations.pin_memory_system",
+        return_value=MemorySystem.CANONICAL,
+    ):
+        with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+            with pytest.raises(RuntimeError, match="canonical unavailable"):
+                _delete_conversation_and_related_data("uid-canonical", "conv-1")
+
+    legacy_delete.assert_not_called()
+    delete_conversation.assert_not_called()

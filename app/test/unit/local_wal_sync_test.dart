@@ -275,14 +275,8 @@ void main() {
     test('recent timestamps without server capture proof remain backfill', () {
       const now = 2000000000;
 
-      expect(
-        syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: false),
-        SyncUploadLane.backfill,
-      );
-      expect(
-        syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: true),
-        SyncUploadLane.fresh,
-      );
+      expect(syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: false), SyncUploadLane.backfill);
+      expect(syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: true), SyncUploadLane.fresh);
     });
 
     test('historical batches are bounded to three newest WALs', () {
@@ -315,11 +309,7 @@ void main() {
       final forcedBackfill = oversizedFreshConversationIds(oversized, now);
       expect(forcedBackfill, {'oversized-conversation'});
 
-      final batch = nextSyncUploadBatch(
-        oversized,
-        now,
-        forcedBackfillConversationIds: forcedBackfill,
-      );
+      final batch = nextSyncUploadBatch(oversized, now, forcedBackfillConversationIds: forcedBackfill);
       expect(batch.length, 3);
       expect(batch.every((wal) => wal.conversationId == 'oversized-conversation'), isTrue);
     });
@@ -450,6 +440,52 @@ void main() {
       // No firmware header in stored data
       expect(chunk[0].length, 3);
       expect(chunk[0][0], 0xAA); // First byte is audio, not header
+    });
+  });
+
+  group('WAL lists are growable (regression: Cannot add to an unmodifiable list)', () {
+    // Crash: LocalWalSyncImpl._chunk called wal.data.addAll(chunk) on a WAL
+    // loaded from disk. Wal.fromJson never passed `data`, so the constructor
+    // default `const []` left an unmodifiable list that threw on addAll.
+    test('Wal.fromJson produces a growable data list that _chunk can append to', () {
+      final wal = Wal.fromJson({
+        'timer_start': 1700000000,
+        'codec': 'opus',
+        'seconds': 60,
+        'status': 'miss',
+        'storage': 'disk',
+      });
+
+      // The exact operation from _chunk that crashed in production:
+      wal.data.addAll([
+        [0xAA, 0xBB],
+        [0xCC, 0xDD],
+      ]);
+
+      expect(wal.data.length, 2);
+    });
+
+    test('Wal constructed without data has a growable data list', () {
+      final wal = Wal(timerStart: 1700000000, codec: BleAudioCodec.opus, seconds: 60);
+
+      wal.data.add([0x01]);
+
+      expect(wal.data, [
+        [0x01],
+      ]);
+    });
+
+    test('addExternalWal before _initializeWals completes does not throw on _wals', () async {
+      // Same failure class: `_wals = const []` was unmodifiable until
+      // _initializeWals replaced it, so an early addExternalWal crashed.
+      final freshListener = _MockListener();
+      final freshSync = LocalWalSyncImpl(freshListener);
+      // Old timerStart → backfill lane, so no fresh-upload network call runs.
+      final wal = Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 60);
+
+      await freshSync.addExternalWal(wal);
+
+      expect(freshSync.testWals.map((w) => w.id), contains(wal.id));
     });
   });
 

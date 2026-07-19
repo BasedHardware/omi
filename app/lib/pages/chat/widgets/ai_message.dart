@@ -825,10 +825,12 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     (idx, date) = memProvider.addConversationWithDateGrouped(m);
                     PlatformManager.instance.analytics.chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
-                    context.read<ConversationDetailProvider>().updateConversation(m.id, date);
-                    await Navigator.of(
-                      context,
-                    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
+                    if (context.mounted) {
+                      context.read<ConversationDetailProvider>().updateConversation(m.id, date);
+                      await Navigator.of(
+                        context,
+                      ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
+                    }
                     if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
                       ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
                       widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
@@ -1269,6 +1271,7 @@ class CopyButton extends StatelessWidget {
         highlightColor: Colors.transparent,
         onTap: () async {
           await Clipboard.setData(ClipboardData(text: messageText));
+          if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(

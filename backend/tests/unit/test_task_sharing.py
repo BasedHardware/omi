@@ -53,9 +53,16 @@ for sub in [
     "mem_db",
     "notifications",
     "workstreams",
+    "firestore_transaction_retry",
 ]:
     mod = _stub_module(f"database.{sub}")
     setattr(database_mod, sub, mod)
+
+sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted = type(
+    "FirestoreContentionExhausted",
+    (RuntimeError,),
+    {},
+)
 
 # Stub vector_db functions used by routers.action_items
 vector_db_mod = sys.modules["database.vector_db"]

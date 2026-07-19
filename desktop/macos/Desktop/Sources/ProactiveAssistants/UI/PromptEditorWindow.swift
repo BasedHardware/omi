@@ -1,153 +1,153 @@
 import Cocoa
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// SwiftUI view for editing the analysis prompt
 struct PromptEditorView: View {
-    @State private var prompt: String
-    @Environment(\.dismiss) private var dismiss
+  @State private var prompt: String
+  @Environment(\.dismiss) private var dismiss
 
-    var onClose: (() -> Void)?
+  var onClose: (() -> Void)?
 
-    init(onClose: (() -> Void)? = nil) {
-        self.onClose = onClose
-        _prompt = State(initialValue: FocusAssistantSettings.shared.analysisPrompt)
-    }
+  init(onClose: (() -> Void)? = nil) {
+    self.onClose = onClose
+    _prompt = State(initialValue: FocusAssistantSettings.shared.analysisPrompt)
+  }
 
-    var body: some View {
-        VStack(spacing: 16) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Focus Analysis Prompt")
-                        .scaledFont(size: 16, weight: .semibold)
-                        .foregroundColor(.primary)
+  var body: some View {
+    VStack(spacing: OmiSpacing.lg) {
+      // Header
+      HStack {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Focus Analysis Prompt")
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(.primary)
 
-                    Text("Customize the AI instructions for focus analysis")
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                // Reset button
-                Button(action: resetToDefault) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .scaledFont(size: 11)
-                        Text("Reset to Default")
-                            .scaledFont(size: 12)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
-            // Text editor
-            TextEditor(text: $prompt)
-                .scaledFont(size: 13, design: .monospaced)
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(nsColor: .textBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
-                )
-                .onChange(of: prompt) { _, newValue in
-                    FocusAssistantSettings.shared.analysisPrompt = newValue
-                }
-
-            // Footer with character count
-            HStack {
-                Text("\(prompt.count) characters")
-                    .scaledFont(size: 11)
-                    .foregroundColor(.secondary)
-
-                Spacer()
-
-                Button("Done") {
-                    onClose?()
-                }
-                .keyboardShortcut(.return, modifiers: .command)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-            }
+          Text("Customize the AI instructions for focus analysis")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(.secondary)
         }
-        .padding(20)
-        .frame(width: 600, height: 500)
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
 
-    private func resetToDefault() {
-        FocusAssistantSettings.shared.resetPromptToDefault()
-        prompt = FocusAssistantSettings.shared.analysisPrompt
+        Spacer()
+
+        // Reset button
+        Button(action: resetToDefault) {
+          HStack(spacing: OmiSpacing.xxs) {
+            Image(systemName: "arrow.counterclockwise")
+              .scaledFont(size: OmiType.caption)
+            Text("Reset to Default")
+              .scaledFont(size: OmiType.caption)
+          }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+      }
+
+      // Text editor
+      TextEditor(text: $prompt)
+        .scaledFont(size: OmiType.body, design: .monospaced)
+        .padding(OmiSpacing.md)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+            .fill(Color(nsColor: .textBackgroundColor))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+            .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
+        )
+        .onChange(of: prompt) { _, newValue in
+          FocusAssistantSettings.shared.analysisPrompt = newValue
+        }
+
+      // Footer with character count
+      HStack {
+        Text("\(prompt.count) characters")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(.secondary)
+
+        Spacer()
+
+        Button("Done") {
+          onClose?()
+        }
+        .keyboardShortcut(.return, modifiers: .command)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.regular)
+      }
     }
+    .padding(OmiSpacing.xl)
+    .frame(width: 600, height: 500)
+    .background(Color(nsColor: .windowBackgroundColor))
+  }
+
+  private func resetToDefault() {
+    FocusAssistantSettings.shared.resetPromptToDefault()
+    prompt = FocusAssistantSettings.shared.analysisPrompt
+  }
 }
 
 /// NSWindow subclass that hosts the Prompt Editor SwiftUI view
 class PromptEditorWindow: NSWindow {
-    private static var sharedWindow: PromptEditorWindow?
+  private static var sharedWindow: PromptEditorWindow?
 
-    /// Shows the prompt editor window, creating it if necessary
-    static func show() {
-        if let existingWindow = sharedWindow {
-            existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate()
-            return
-        }
-
-        let window = PromptEditorWindow()
-        sharedWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+  /// Shows the prompt editor window, creating it if necessary
+  static func show() {
+    if let existingWindow = sharedWindow {
+      existingWindow.makeKeyAndOrderFront(nil)
+      NSApp.activate()
+      return
     }
 
-    /// Closes the prompt editor window
-    static func close() {
-        sharedWindow?.close()
-        sharedWindow = nil
-    }
+    let window = PromptEditorWindow()
+    sharedWindow = window
+    window.makeKeyAndOrderFront(nil)
+    NSApp.activate()
+  }
 
-    private init() {
-        let contentRect = NSRect(x: 0, y: 0, width: 600, height: 500)
+  /// Closes the prompt editor window
+  static func close() {
+    sharedWindow?.close()
+    sharedWindow = nil
+  }
 
-        super.init(
-            contentRect: contentRect,
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+  private init() {
+    let contentRect = NSRect(x: 0, y: 0, width: 600, height: 500)
 
-        self.title = "Edit Analysis Prompt"
-        self.isReleasedWhenClosed = false
-        self.delegate = self
-        self.minSize = NSSize(width: 500, height: 400)
+    super.init(
+      contentRect: contentRect,
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false
+    )
 
-        // Center on screen
-        self.center()
+    self.title = "Edit Analysis Prompt"
+    self.isReleasedWhenClosed = false
+    self.delegate = self
+    self.minSize = NSSize(width: 500, height: 400)
 
-        // Create SwiftUI view
-        let editorView = PromptEditorView(onClose: { [weak self] in
-            self?.close()
-        })
+    // Center on screen
+    self.center()
 
-        let hostingView = NSHostingView(rootView: editorView.withFontScaling())
-        self.contentView = hostingView
-    }
+    // Create SwiftUI view
+    let editorView = PromptEditorView(onClose: { [weak self] in
+      self?.close()
+    })
+
+    let hostingView = NSHostingView(rootView: editorView.withFontScaling())
+    self.contentView = hostingView
+  }
 }
 
 // MARK: - NSWindowDelegate
 
 extension PromptEditorWindow: NSWindowDelegate {
-    func windowWillClose(_ notification: Notification) {
-        PromptEditorWindow.sharedWindow = nil
-    }
+  func windowWillClose(_ notification: Notification) {
+    PromptEditorWindow.sharedWindow = nil
+  }
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
+  #Preview {
     PromptEditorView()
-}
+  }
 #endif

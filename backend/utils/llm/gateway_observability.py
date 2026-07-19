@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 
 from utils.metrics import (
     LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS,
@@ -21,6 +23,9 @@ _GATEWAY_MODE_SHADOW = 'shadow'
 
 _LABEL_MAX_LENGTH = 128
 _SAFE_LABEL_CHARS = frozenset('._:-')
+_OBSERVATION_WARNING_INTERVAL_SECONDS = 60.0
+_observation_warning_lock = threading.Lock()
+_last_observation_warning_at = 0.0
 
 
 def record_gateway_request_result(
@@ -30,6 +35,8 @@ def record_gateway_request_result(
     reason: str,
     route: str = 'chat_structured',
     mode: str | None = None,
+    request_id: str = 'unknown',
+    credential_source: str = 'unknown',
 ) -> None:
     feature_label = _safe_label(feature)
     outcome_label = _safe_label(outcome)
@@ -45,7 +52,7 @@ def record_gateway_request_result(
             reason=reason_label,
         ).inc()
     except Exception:
-        pass
+        _report_observation_failure('request_metric')
 
     _log_gateway_event(
         kind='request_result',
@@ -55,6 +62,8 @@ def record_gateway_request_result(
         reason=reason_label,
         field='none',
         route=route_label,
+        request_id=_safe_label(request_id),
+        credential_source=_safe_label(credential_source),
     )
 
 
@@ -65,7 +74,7 @@ def record_direct_exception_surface(*, surface: str, reason: str = 'acknowledged
     try:
         LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS.labels(surface=surface_label, reason=reason_label).inc()
     except Exception:
-        pass
+        _report_observation_failure('direct_exception_metric')
 
     try:
         LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS.labels(
@@ -75,7 +84,7 @@ def record_direct_exception_surface(*, surface: str, reason: str = 'acknowledged
             reason=reason_label,
         ).inc()
     except Exception:
-        pass
+        _report_observation_failure('request_metric')
 
     _log_gateway_event(
         kind='direct_exception',
@@ -85,6 +94,8 @@ def record_direct_exception_surface(*, surface: str, reason: str = 'acknowledged
         reason=reason_label,
         field='none',
         route='direct',
+        request_id='unknown',
+        credential_source='unknown',
     )
 
 
@@ -101,7 +112,7 @@ def record_gateway_shadow_comparison(*, feature: str, field: str, outcome: str, 
             outcome=outcome_label,
         ).inc()
     except Exception:
-        pass
+        _report_observation_failure('shadow_comparison_metric')
 
     _log_gateway_event(
         kind='shadow_comparison',
@@ -111,6 +122,8 @@ def record_gateway_shadow_comparison(*, feature: str, field: str, outcome: str, 
         reason='none',
         field=field_label,
         route=route_label,
+        request_id='unknown',
+        credential_source='unknown',
     )
 
 
@@ -136,22 +149,43 @@ def _log_gateway_event(
     reason: str,
     field: str,
     route: str,
+    request_id: str,
+    credential_source: str,
 ) -> None:
     if not _observability_logs_enabled():
         return
 
-    logger.info(
-        '%s kind=%s feature=%s mode=%s outcome=%s reason=%s field=%s route=%s service=%s',
-        LLM_GATEWAY_BACKEND_EVENT,
-        _safe_label(kind),
-        feature,
-        _safe_label(mode),
-        outcome,
-        reason,
-        field,
-        route,
-        _service_label(),
-    )
+    try:
+        logger.info(
+            '%s kind=%s request_id=%s feature=%s mode=%s outcome=%s reason=%s field=%s route=%s '
+            'credential_source=%s service=%s',
+            LLM_GATEWAY_BACKEND_EVENT,
+            _safe_label(kind),
+            request_id,
+            feature,
+            _safe_label(mode),
+            outcome,
+            reason,
+            field,
+            route,
+            credential_source,
+            _service_label(),
+        )
+    except Exception:
+        _report_observation_failure('structured_log')
+
+
+def _report_observation_failure(stage: str) -> None:
+    global _last_observation_warning_at
+    now = time.monotonic()
+    with _observation_warning_lock:
+        if now - _last_observation_warning_at < _OBSERVATION_WARNING_INTERVAL_SECONDS:
+            return
+        _last_observation_warning_at = now
+    try:
+        logger.warning('llm_gateway_backend_observation_failed stage=%s', _safe_label(stage))
+    except Exception:
+        return
 
 
 def _observability_logs_enabled() -> bool:

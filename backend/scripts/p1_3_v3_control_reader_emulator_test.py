@@ -19,13 +19,13 @@ from google.cloud import firestore
 
 from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig
 from database.memory_collections import MemoryCollections
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReaderRequest,
     V3ControlRouteFamily,
     decide_v3_control_route,
 )
-from utils.memory.v3_control_state_adapter import read_v3_control
+from utils.memory.v3.control_state_adapter import read_v3_control
 
 PROJECT_ID = os.environ.get("GCLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT") or "demo-memory"
 UID = "memory-v3-control-reader-emulator-user"

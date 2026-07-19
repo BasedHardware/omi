@@ -1,11 +1,12 @@
+# LIFECYCLE: permanent
 from __future__ import annotations
 
 import copy
 import hashlib
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
+from utils.memory_ingestion.ids import canonical_json
 
 WriteMode = Literal["legacy_only", "dual_write", "graph_only"]
 ReadMode = Literal["legacy", "graph_head"]
@@ -358,5 +359,4 @@ def _parse_datetime(value: Any) -> datetime | None:
     return None
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+_canonical_json = canonical_json

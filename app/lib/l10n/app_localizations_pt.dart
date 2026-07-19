@@ -8992,7 +8992,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get billingYearly => 'Anual';
 
   @override
-  String get savePercent => 'Economize ~17%';
+  String savePercent(int percent) {
+    return 'Economize ~$percent%';
+  }
 
   @override
   String get popular => 'Popular';
@@ -9348,7 +9350,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Por enquanto, funciona com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.';
+      'Funciona com o microfone do telefone e com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9580,4 +9582,33 @@ class AppLocalizationsPt extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Erro ao conectar ao Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Armazenamento do dispositivo';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% cheio';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used de $total usado';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free livre';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Dispositivo quase cheio — sincronize para liberar espaço.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Sem conexão — gravando localmente. Será transcrito quando você voltar a ficar online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Seus dados são protegidos por padrão com criptografia forte, e você controla como são armazenados e usados.';
 }

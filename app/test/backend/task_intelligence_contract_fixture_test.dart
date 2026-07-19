@@ -37,7 +37,7 @@ void main() {
   });
 
   test('capture fixture modalities carry identical recorded adapter outputs', () {
-    final fixture = _readJson('backend/tests/unit/fixtures/task_intelligence/capture_v1.json');
+    final fixture = _readJson('backend/tests/unit/fixtures/task_intelligence/capture_v2.json');
     final cases = fixture['cases'] as List<dynamic>;
 
     expect(cases, isNotEmpty);

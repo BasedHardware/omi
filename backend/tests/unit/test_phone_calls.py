@@ -18,6 +18,10 @@ def _stub_phone_call_plan_guards(monkeypatch):
         'routers.phone_calls.get_quota_snapshot',
         MagicMock(return_value=SimpleNamespace(has_access=True, is_paid=True, max_duration_seconds=None)),
     )
+    monkeypatch.setattr(
+        'routers.phone_calls.reserve_phone_call_quota',
+        MagicMock(return_value=SimpleNamespace(has_access=True, is_paid=False, max_duration_seconds=None)),
+    )
     monkeypatch.setattr('routers.phone_calls.check_destination_allowed', MagicMock())
 
 
@@ -201,6 +205,19 @@ def test_check_verification_no_pending_record(mock_check, mock_db, client):
 # ---------------------------------------------------------------------------
 
 
+def test_twiml_rejects_oversized_urlencoded_body(client):
+    body = b'payload=' + (b'x' * (5 * 1024 * 1024))
+
+    resp = client.post(
+        '/v1/phone/twiml',
+        content=body,
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()['detail'] == 'Form body exceeded maximum size of 5242880 bytes.'
+
+
 @patch('routers.phone_calls.validate_twilio_signature', return_value=True)
 @patch('routers.phone_calls.phone_calls_db')
 def test_twiml_no_destination(mock_db, mock_sig, client):
@@ -255,15 +272,37 @@ def test_twiml_success(mock_db, mock_check, mock_sig, client):
 
 @patch('routers.phone_calls.validate_twilio_signature', return_value=True)
 @patch('routers.phone_calls.check_caller_id_verified', return_value=True)
-@patch('routers.phone_calls.phone_call_usage_db')
 @patch('routers.phone_calls.phone_calls_db')
-def test_twiml_free_tier_counts_successful_call(mock_db, mock_usage_db, mock_check, mock_sig, client, monkeypatch):
+def test_twiml_free_tier_reserves_successful_call(mock_db, mock_check, mock_sig, client, monkeypatch):
     mock_db.get_primary_phone_number.return_value = {'phone_number': '+15551234567'}
-    snapshot = SimpleNamespace(has_access=True, is_paid=False, max_duration_seconds=None)
+    snapshot = SimpleNamespace(has_access=True, is_paid=False, monthly_limit=5, max_duration_seconds=None)
+    reserve = MagicMock(return_value=snapshot)
     monkeypatch.setattr('routers.phone_calls.get_quota_snapshot', MagicMock(return_value=snapshot))
+    monkeypatch.setattr('routers.phone_calls.reserve_phone_call_quota', reserve)
 
     resp = client.post('/v1/phone/twiml', data={'To': '+15559876543', 'From': f'client:{TEST_UID}', 'CallId': 'C1'})
 
     assert resp.status_code == 200
-    mock_usage_db.increment_current_month.assert_called_once_with(TEST_UID)
+    reserve.assert_called_once_with(TEST_UID)
     assert '<Dial callerId="+15551234567">' in resp.text
+
+
+@patch('routers.phone_calls.validate_twilio_signature', return_value=True)
+@patch('routers.phone_calls.check_caller_id_verified', return_value=True)
+@patch('routers.phone_calls.phone_calls_db')
+def test_twiml_free_tier_rejects_when_atomic_quota_reservation_fails(
+    mock_db, mock_check, mock_sig, client, monkeypatch
+):
+    mock_db.get_primary_phone_number.return_value = {'phone_number': '+15551234567'}
+    snapshot = SimpleNamespace(has_access=True, is_paid=False, monthly_limit=5, max_duration_seconds=None)
+    exhausted = SimpleNamespace(has_access=False, is_paid=False, monthly_limit=5, max_duration_seconds=None)
+    reserve = MagicMock(return_value=exhausted)
+    monkeypatch.setattr('routers.phone_calls.get_quota_snapshot', MagicMock(return_value=snapshot))
+    monkeypatch.setattr('routers.phone_calls.reserve_phone_call_quota', reserve)
+
+    resp = client.post('/v1/phone/twiml', data={'To': '+15559876543', 'From': f'client:{TEST_UID}', 'CallId': 'C1'})
+
+    assert resp.status_code == 200
+    reserve.assert_called_once_with(TEST_UID)
+    assert 'Monthly phone call limit reached' in resp.text
+    assert '<Dial' not in resp.text

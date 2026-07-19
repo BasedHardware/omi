@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -28,8 +28,10 @@ jobs:
           echo "USERNAME=$username" >> $GITHUB_ENV
       - name: Sanitize Issue Body
         id: sanitize-body
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          sanitized_body=$(echo "${{ github.event.issue.body }}" | tr -d '\r' | tr '\n' ' ')
+          sanitized_body=$(printf '%s' "$ISSUE_BODY" | tr -d '\r' | tr '\n' ' ')
           echo "SANITIZED_BODY=${sanitized_body}" >> $GITHUB_ENV
       - name: Debug Sanitized Body
         run: |
@@ -54,7 +56,7 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
           set -e
       - name: Post Comment on Issue
-        uses: actions/github-script@v6
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

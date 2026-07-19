@@ -12,14 +12,50 @@ from openai.types.chat import (
     ChatCompletionMessageParam,
 )
 from PIL import Image
+from pydantic import ValidationError
 
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
+    """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
+
+    A legacy or partial file document (missing openai_file_id, mime_type, created_at, ...) must not
+    500 the whole chat-file flow. Skip such a record, logging the file id and offending field names,
+    mirroring utils.apps._safe_build_app.
+    """
+    files: List[FileChat] = []
+    for f in files_data:
+        try:
+            files.append(FileChat(**f))
+        except ValidationError as e:
+            logger.warning(
+                "Skipping malformed chat file %s: %s",
+                f.get('id'),
+                [err['loc'][0] for err in e.errors()],
+            )
+    return files
+
+
+def _openai_file_ids(files_data: List[Dict[str, Any]]) -> List[str]:
+    """Collect openai_file_id values from raw file docs without Pydantic validation.
+
+    Cleanup must delete provider objects even when a legacy doc fails FileChat validation
+    (e.g. missing mime_type/created_at) — otherwise Firestore wipe orphans the OpenAI file.
+    """
+    ids: List[str] = []
+    for f in files_data:
+        openai_file_id = f.get('openai_file_id')
+        if isinstance(openai_file_id, str) and openai_file_id:
+            ids.append(openai_file_id)
+    return ids
+
 
 _async_openai: AsyncOpenAI | None = None
 
@@ -151,7 +187,7 @@ class FileChatTool:
             files_data = await run_blocking(
                 db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
             )
-            files = [FileChat(**f) for f in files_data]
+            files = _safe_file_chats(files_data)
             all_images = all(f.is_image() for f in files) if files else False
         except Exception:
             callback.end_nowait()
@@ -162,16 +198,21 @@ class FileChatTool:
             answer = await self._ask_vision_stream(question, files, callback)
             return answer
 
-        # _ensure_thread_and_assistant can fail before ask_stream runs.
-        # ask_stream has its own try/finally on callback, so only guard
-        # the setup phase here.
+        # The Assistants setup and stream iterator both use the synchronous
+        # OpenAI client. Keep the complete non-vision sequence off the event
+        # loop so graph.py can enforce its first-event and total-stream bounds.
+        return await run_blocking(llm_executor, self._ensure_and_ask_stream, question, file_ids, callback)
+
+    def _ensure_and_ask_stream(self, question: str, file_ids: List[str], callback: _StreamingCallbackProtocol) -> str:
+        """Run the synchronous Assistants setup and stream in the LLM executor."""
         try:
             self._ensure_thread_and_assistant()
         except Exception:
+            # ask_stream owns its callback finalizer; setup fails before that
+            # function is entered, so terminate the callback here instead.
             callback.end_nowait()
             raise
-        answer = self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
-        return answer
+        return self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
 
     async def _ask_vision_stream(
         self,
@@ -228,8 +269,8 @@ class FileChatTool:
             try:
                 thread = openai.beta.threads.retrieve(self.thread_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
                 logger.info(f"Retrieved existing thread: {thread.id}")
-            except Exception as e:
-                logger.error(f"Failed to retrieve thread {self.thread_id}, creating new one. Error: {e}")
+            except Exception as error:
+                logger.error('file chat thread retrieval failed error_type=%s', type(error).__name__)
                 self.thread_id = None
 
         if not self.thread_id:
@@ -238,8 +279,8 @@ class FileChatTool:
                 self.thread_id = thread.id
                 created_new = True
                 logger.info(f"Created new thread: {self.thread_id}")
-            except Exception as e:
-                raise Exception(f"Failed to create OpenAI thread: {e}")
+            except Exception as error:
+                raise RuntimeError('failed to create OpenAI thread') from error
 
         # Handle assistant
         if self.assistant_id:
@@ -247,8 +288,8 @@ class FileChatTool:
             try:
                 assistant = openai.beta.assistants.retrieve(self.assistant_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
                 logger.info(f"Retrieved existing assistant: {assistant.id}")
-            except Exception as e:
-                logger.error(f"Failed to retrieve assistant {self.assistant_id}, creating new one. Error: {e}")
+            except Exception as error:
+                logger.error('file chat assistant retrieval failed error_type=%s', type(error).__name__)
                 self.assistant_id = None
 
         if not self.assistant_id:
@@ -263,8 +304,8 @@ class FileChatTool:
                 self.assistant_id = assistant.id
                 created_new = True
                 logger.info(f"Created new assistant: {self.assistant_id}")
-            except Exception as e:
-                raise Exception(f"Failed to create OpenAI assistant: {e}")
+            except Exception as error:
+                raise RuntimeError('failed to create OpenAI assistant') from error
 
         # Save to database if we created new ones
         if created_new:
@@ -272,15 +313,15 @@ class FileChatTool:
                 chat_db.update_chat_session_openai_ids(
                     self.uid, self.chat_session_id, self.thread_id, self.assistant_id
                 )
-            except Exception as e:
-                logger.error(f"Failed to save thread/assistant IDs to database: {e}")
+            except Exception as error:
+                logger.error('file chat identifier save failed error_type=%s', type(error).__name__)
                 # Continue anyway - IDs will be recreated next time
 
     def _fill_question(self, uid: str, question: str, file_ids: List[str], thread_id: str) -> None:
         # OpenAI has a limit of 10 items in content array (1 text + max 9 images)
         files = chat_db.get_chat_files_desc(uid, files_id=file_ids, limit=9)
 
-        files_typed = [FileChat(**file) for file in files]
+        files_typed = _safe_file_chats(files)
 
         contents: List[Dict[str, Any]] = []
         attachments: List[Dict[str, Any]] = []
@@ -379,25 +420,23 @@ class FileChatTool:
         """Cleanup chat session files, thread, and assistant"""
         logger.info("start cleanup thread chat with file")
         files = chat_db.get_chat_files(self.uid)
-        # delete file in db
         if files:
-            chat_db.delete_multi_files(self.uid, files)
-
-            file_objs = [FileChat(**file) for file in files]
-            # clear file in openai
-            for file in file_objs:
+            # Delete OpenAI objects from raw docs first — do not gate on FileChat validation,
+            # or a malformed doc with openai_file_id leaks after Firestore delete (#9608 follow-up).
+            for openai_file_id in _openai_file_ids(files):
                 try:
-                    openai.files.delete(file.openai_file_id, timeout=30.0)
-                except Exception as e:
-                    logger.error(f"Failed to delete file {file.openai_file_id}: {e}")
+                    openai.files.delete(openai_file_id, timeout=30.0)
+                except Exception as error:
+                    logger.error('file chat file deletion failed error_type=%s', type(error).__name__)
+            chat_db.delete_multi_files(self.uid, files)
 
         if self.thread_id:
             try:
                 openai.beta.threads.delete(self.thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
-            except Exception as e:
-                logger.error(f"Failed to delete thread {self.thread_id}: {e}")
+            except Exception as error:
+                logger.error('file chat thread deletion failed error_type=%s', type(error).__name__)
         if self.assistant_id:
             try:
                 openai.beta.assistants.delete(self.assistant_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
-            except Exception as e:
-                logger.error(f"Failed to delete assistant {self.assistant_id}: {e}")
+            except Exception as error:
+                logger.error('file chat assistant deletion failed error_type=%s', type(error).__name__)
