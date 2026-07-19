@@ -6,60 +6,9 @@
 //! pipelines can aggregate. Call sites must still use this helper — do not
 //! invent ad-hoc warn strings for new fallbacks.
 
-/// Closed outcome set matching the cross-platform contract.
-#[allow(dead_code)] // Recovered/Exhausted used by call sites in later phases
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FallbackOutcome {
-    Recovered,
-    Degraded,
-    Exhausted,
-}
-
-impl FallbackOutcome {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Recovered => "recovered",
-            Self::Degraded => "degraded",
-            Self::Exhausted => "exhausted",
-        }
-    }
-}
-
-const ALLOWED_COMPONENTS: &[&str] = &[
-    "sync_dispatch",
-    "pusher",
-    "stt_selection",
-    "vad",
-    "audio_merge",
-    "webhook",
-    "realtime_hub",
-    "ptt_cascade",
-    "chat_retrieval",
-    "gemini_model",
-    "gemini_proxy",
-    "gemini_stream_proxy",
-    "redis_ratelimit",
-    "silent_mic",
-    "other",
-];
-
-const ALLOWED_REASONS: &[&str] = &[
-    "timeout",
-    "provider_5xx",
-    "provider_429",
-    "enqueue_failed",
-    "config_incomplete",
-    "circuit_open",
-    "capability_mismatch",
-    "auth",
-    "quota",
-    "local_heal",
-    "policy",
-    "dispatch_disabled",
-    "byok",
-    "other",
-    "none",
-];
+pub use omi_desktop_core::fallback::{
+    bucket_component, bucket_reason, safe_label, FallbackOutcome,
+};
 
 /// Record a fallback / resilience transition.
 ///
@@ -84,49 +33,6 @@ pub fn record_fallback(
         outcome = outcome.as_str(),
         "omi_fallback_event"
     );
-}
-
-pub fn bucket_reason(reason: &str) -> String {
-    let label = safe_label(reason, "other");
-    if ALLOWED_REASONS.contains(&label.as_str()) {
-        label
-    } else {
-        "other".to_string()
-    }
-}
-
-pub fn bucket_component(component: &str) -> String {
-    let label = safe_label(component, "other");
-    if ALLOWED_COMPONENTS.contains(&label.as_str()) {
-        label
-    } else {
-        "other".to_string()
-    }
-}
-
-pub fn safe_label(value: &str, default: &str) -> String {
-    let trimmed = value.trim().to_ascii_lowercase();
-    let source = if trimmed.is_empty() {
-        default
-    } else {
-        trimmed.as_str()
-    };
-    let normalized: String = source
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | ':' | '-') {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let clipped: String = normalized.chars().take(64).collect();
-    if clipped.is_empty() {
-        default.to_string()
-    } else {
-        clipped
-    }
 }
 
 #[cfg(test)]
