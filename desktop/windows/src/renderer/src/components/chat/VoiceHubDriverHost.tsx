@@ -9,7 +9,7 @@ import { batchTranscribe } from '../../lib/ptt/transport'
 import { muteSystemAudioForHubCapture } from '../../lib/ptt/systemAudioMute'
 import { HubController } from '../../lib/voice/hub/hubController'
 import { VoiceHubTurnDriver } from '../../lib/voice/turn/voiceHubTurnDriver'
-import { subscribePlaybackLevel } from '../../lib/voice/playbackLevelBus'
+import { playbackLevel } from '../../lib/voice/playbackLevelBus'
 
 // The main-window mount for the warm-hub PTT driver (A5 PR-6b, Option A / D1).
 //
@@ -93,12 +93,12 @@ export function VoiceHubDriverHost(): null {
   )
 
   // Forward the reply's PLAYBACK loudness to the bar. The PCM player (main-window
-  // resident, D3) posts the played audio's linear peak on the renderer-local bus;
+  // resident, D3) posts the played audio's linear peak on the shared signal;
   // relaying it main → bar lets the orb's speaking pose move with the reply's
   // real speech dynamics instead of sitting frozen. Tiny numeric frames at ~31Hz
   // only while audio actually plays — never per-frame audio over IPC.
   useEffect(
-    () => subscribePlaybackLevel((level) => window.omi?.publishVoicePlaybackLevel?.(level)),
+    () => playbackLevel.subscribe((level) => window.omi?.publishVoicePlaybackLevel?.(level)),
     []
   )
 

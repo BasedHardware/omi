@@ -25,6 +25,7 @@ import { BarChatSurface } from './BarChatSurface'
 import { BarHintStrip } from './BarHintStrip'
 import { createBarSender } from './barSend'
 import {
+  constantLevelWaveformSource,
   deriveOrbState,
   deriveBarVoiceState,
   isBarBusy,
@@ -34,7 +35,6 @@ import {
   nextConversationDraft,
   type BarAgentRow
 } from './barDisplay'
-import { subscribePlaybackLevel } from '../../lib/voice/playbackLevelBus'
 import type {
   BarMode,
   BarShowPayload,
@@ -251,35 +251,31 @@ export function BarApp(): React.JSX.Element {
   }, [hubOrb.hint])
   // A WaveformSource fed by the projected orb level (no per-frame audio crosses
   // windows — just the coarse loudness). Stable ref so the Orb reads the latest.
-  const hubWaveRef = useRef<WaveformSource>({
-    getByteFrequencyData: (dest) => {
-      const v = Math.round(Math.min(1, Math.max(0, hubOrbRef.current.orbLevel)) * 255)
-      for (let i = 0; i < dest.length; i++) dest[i] = v
-    },
-    getOrbLevel: () => hubOrbRef.current.orbLevel
-  })
+  const hubWaveRef = useRef<WaveformSource>(
+    // eslint-disable-next-line react-hooks/refs -- the getter runs at orb-sample time, never during render
+    constantLevelWaveformSource(() => hubOrbRef.current.orbLevel)
+  )
   // Playback-amplitude lane: the latest loudness of Omi's OWN audible reply —
-  // the played-out PCM's linear peak, posted by the player worklet's tap. It
-  // arrives over IPC when the player is main-window-resident (the warm-hub
-  // reply, D3) and over the renderer-local bus for any bar-local player.
-  // Ref-only: a ~31Hz numeric stream must not re-render the bar — the orb
-  // samples it through the WaveformSource getter below. The timestamp gates
-  // freshness (isPlaybackLevelFresh): an unfed lane (e.g. the `<audio>`-element
-  // cascade TTS, which has no tap) falls back to the pose-only speaking
-  // choreography instead of pinning dead-zero dots.
+  // the played-out PCM's linear peak, posted by the player worklet's tap and
+  // relayed over IPC (every PCM player is main-window-resident, D3 — the bar
+  // renderer never constructs one, so IPC is the sole feed). Ref-only: a ~31Hz
+  // numeric stream must not re-render the bar — the orb samples it through the
+  // WaveformSource getter below. The timestamp gates freshness
+  // (isPlaybackLevelFresh): an unfed lane (e.g. the `<audio>`-element cascade
+  // TTS, which has no tap) falls back to the pose-only speaking choreography
+  // instead of pinning dead-zero dots.
   const playbackLevelRef = useRef({ level: 0, at: 0 })
-  const onPlaybackLevel = useCallback((level: number): void => {
-    playbackLevelRef.current = { level, at: performance.now() }
-  }, [])
-  useEffect(() => window.omiBar.onVoicePlaybackLevel(onPlaybackLevel), [onPlaybackLevel])
-  useEffect(() => subscribePlaybackLevel(onPlaybackLevel), [onPlaybackLevel])
-  const playbackWaveRef = useRef<WaveformSource>({
-    getByteFrequencyData: (dest) => {
-      const v = Math.round(Math.min(1, Math.max(0, playbackLevelRef.current.level)) * 255)
-      for (let i = 0; i < dest.length; i++) dest[i] = v
-    },
-    getOrbLevel: () => playbackLevelRef.current.level
-  })
+  useEffect(
+    () =>
+      window.omiBar.onVoicePlaybackLevel((level) => {
+        playbackLevelRef.current = { level, at: performance.now() }
+      }),
+    []
+  )
+  const playbackWaveRef = useRef<WaveformSource>(
+    // eslint-disable-next-line react-hooks/refs -- the getter runs at orb-sample time, never during render
+    constantLevelWaveformSource(() => playbackLevelRef.current.level)
+  )
   const hubActive = hubOrb.active
   // Effective bar voice signals — a main-owned warm-hub turn (when active) folds over
   // the local PTT/chat state. Crucially a hub SPOKEN reply lands as status 'speaking'

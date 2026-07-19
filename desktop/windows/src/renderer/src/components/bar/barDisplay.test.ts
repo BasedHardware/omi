@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
+  constantLevelWaveformSource,
   deriveOrbState,
   deriveBarVoiceState,
+  deriveTurnPhase,
   isBarBusy,
   isPlaybackLevelFresh,
   PLAYBACK_LEVEL_FRESH_MS,
@@ -22,6 +24,72 @@ const chat = (partial: Partial<BarChatState> = {}): BarChatState => ({
   sending: false,
   status: 'idle',
   ...partial
+})
+
+describe('deriveTurnPhase (the ONE precedence ladder orb + pill derive from)', () => {
+  const base = {
+    recording: false,
+    transcribing: false,
+    status: 'idle',
+    continuousListening: false,
+    agentsActive: false
+  } as const
+
+  it('orders the ladder: capturing › replying › agents › thinking › ambient › idle', () => {
+    // Each row flips everything below it ON to prove the higher rung wins.
+    expect(
+      deriveTurnPhase({
+        ...base,
+        recording: true,
+        status: 'speaking',
+        agentsActive: true,
+        transcribing: true,
+        continuousListening: true
+      })
+    ).toBe('capturing')
+    expect(
+      deriveTurnPhase({
+        ...base,
+        status: 'speaking',
+        agentsActive: true,
+        transcribing: true,
+        continuousListening: true
+      })
+    ).toBe('replying')
+    expect(
+      deriveTurnPhase({
+        ...base,
+        agentsActive: true,
+        transcribing: true,
+        continuousListening: true
+      })
+    ).toBe('agents')
+    expect(deriveTurnPhase({ ...base, transcribing: true, continuousListening: true })).toBe(
+      'thinking'
+    )
+    expect(deriveTurnPhase({ ...base, status: 'sending', continuousListening: true })).toBe(
+      'thinking'
+    )
+    expect(deriveTurnPhase({ ...base, continuousListening: true })).toBe('ambient')
+    expect(deriveTurnPhase(base)).toBe('idle')
+  })
+})
+
+describe('constantLevelWaveformSource', () => {
+  it('reads the live level through the getter and paints every bin clamped', () => {
+    let level = 0.5
+    const src = constantLevelWaveformSource(() => level)
+    expect(src.getOrbLevel?.()).toBe(0.5)
+    const bins = new Uint8Array(4)
+    src.getByteFrequencyData(bins)
+    expect(Array.from(bins)).toEqual([128, 128, 128, 128])
+    // Hot input: fast lane passes it through (the mapper bounds it downstream),
+    // the bin painter clamps.
+    level = 1.7
+    expect(src.getOrbLevel?.()).toBe(1.7)
+    src.getByteFrequencyData(bins)
+    expect(Array.from(bins)).toEqual([255, 255, 255, 255])
+  })
 })
 
 describe('deriveOrbState', () => {
