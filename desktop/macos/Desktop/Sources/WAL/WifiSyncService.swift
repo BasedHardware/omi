@@ -130,7 +130,7 @@ final class WifiSyncService: ObservableObject {
       try await self.performWifiSync(device: device, codec: codec, ssid: ssid, password: password)
     }
     syncTask = task
-    defer { if syncTask === task { syncTask = nil } }
+    defer { syncTask = nil }
     try await task.value
   }
 
@@ -291,11 +291,6 @@ final class WifiSyncService: ObservableObject {
     throw WifiSyncServiceError.timeout
   }
 
-  /// Hard timeout for establishing the TCP connection to the device AP. Without
-  /// it, an unreachable server leaves NWConnection in `.waiting` forever and the
-  /// sync hangs in the "syncing" state with no way out but Stop.
-  static let tcpConnectTimeout: TimeInterval = 20
-
   private func connectTCP(host: String, port: UInt16) async throws {
     let endpoint = NWEndpoint.hostPort(
       host: NWEndpoint.Host(host),
@@ -306,36 +301,33 @@ final class WifiSyncService: ObservableObject {
     self.tcpConnection = connection
 
     return try await withCheckedThrowingContinuation { continuation in
-      // Both the state handler and the timeout run on .main, so a plain flag
-      // guarantees the continuation resumes exactly once.
-      var isResumed = false
-      func resumeOnce(_ result: Result<Void, Error>) {
-        guard !isResumed else { return }
-        isResumed = true
-        connection.stateUpdateHandler = nil
-        switch result {
-        case .success: continuation.resume()
-        case .failure(let error): continuation.resume(throwing: error)
-        }
-      }
-
+      // Resume the continuation directly in each terminal case and clear the
+      // handler on first resume so it fires exactly once (no shared mutable
+      // state, which strict concurrency rejects across the @Sendable handler).
       connection.stateUpdateHandler = { [weak self] state in
         switch state {
         case .ready:
           self?.logger.info("TCP connection ready")
-          resumeOnce(.success(()))
+          connection.stateUpdateHandler = nil
+          continuation.resume()
 
         case .failed(let error):
           self?.logger.error("TCP connection failed: \(error.localizedDescription)")
-          resumeOnce(.failure(WifiSyncServiceError.connectionFailed))
+          connection.stateUpdateHandler = nil
+          continuation.resume(throwing: WifiSyncServiceError.connectionFailed)
 
         case .waiting(let error):
-          // Unreachable server (e.g. the Mac never joined the device AP). Log
-          // and let the timeout backstop fire rather than waiting forever.
-          self?.logger.warning("TCP connection waiting: \(error.localizedDescription)")
+          // The device AP is unreachable (e.g. the Mac never joined it).
+          // NWConnection would sit in `.waiting` and retry forever, hanging
+          // the sync in "syncing" with no exit but Stop. Fail fast so the
+          // user can retry instead.
+          self?.logger.error("TCP connection unreachable: \(error.localizedDescription)")
+          connection.stateUpdateHandler = nil
+          continuation.resume(throwing: WifiSyncServiceError.connectionFailed)
 
         case .cancelled:
-          resumeOnce(.failure(CancellationError()))
+          connection.stateUpdateHandler = nil
+          continuation.resume(throwing: CancellationError())
 
         default:
           break
@@ -343,13 +335,6 @@ final class WifiSyncService: ObservableObject {
       }
 
       connection.start(queue: .main)
-
-      DispatchQueue.main.asyncAfter(deadline: .now() + Self.tcpConnectTimeout) { [weak self] in
-        guard !isResumed else { return }
-        self?.logger.error("TCP connection timed out after \(Self.tcpConnectTimeout)s")
-        connection.cancel()
-        resumeOnce(.failure(WifiSyncServiceError.timeout))
-      }
     }
   }
 
