@@ -202,6 +202,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]
     lanes: ["local", "ci"]
     reason: "workflow boundary sources changed"
+  - id: pusher-rollout-readiness-budget
+    command: ["python3", "backend/scripts/verify_pusher_rollout_budget.py"]
+    triggers: ["backend/charts/pusher/**", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", "backend/scripts/verify_pusher_rollout_budget.py", "backend/tests/unit/test_verify_pusher_rollout_budget.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9988: Pusher's Kubernetes deadline and workflow wait must cover chart-derived availability at the HPA ceiling"
   - id: conversation-lifecycle-write-guard
     command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]

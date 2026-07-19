@@ -1,7 +1,7 @@
 import importlib.util
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -58,6 +58,8 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         "scripts/voice-provider-probe.sh": "tests/unit/test_voice_provider_probe.py",
         ".github/workflows/desktop_backend_auto_dev.yml": "tests/unit/test_voice_provider_probe.py",
         "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
+        ".github/workflows/gcp_backend_pusher.yml": "tests/unit/test_verify_pusher_rollout_budget.py",
+        "backend/scripts/verify_pusher_rollout_budget.py": "tests/unit/test_verify_pusher_rollout_budget.py",
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_verify_backend_release_vector.py",
         ".github/workflows/gcp_llm_gateway.yml": "tests/unit/test_preflight_cloud_run_deploy.py",
@@ -172,10 +174,13 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
         for source in workflow.get("sources", [])
         if not source.startswith("backend/")
     }
+    triggers = re.findall(r"^\s*-\s+['\"]([^'\"]+)['\"]\s*$", workflow_text, flags=re.MULTILINE)
     missing = {
         source
         for source in external_sources
-        if f"- '{source}'" not in workflow_text and f'- "{source}"' not in workflow_text
+        if not any(
+            source == trigger or ("*" not in source and PurePosixPath(source).match(trigger)) for trigger in triggers
+        )
     }
 
     assert missing == set()
