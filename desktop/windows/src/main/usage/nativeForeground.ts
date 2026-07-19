@@ -16,7 +16,16 @@ const OBJID_WINDOW = 0
 // visually correct frame — the rect a human sees. Anything that draws relative to
 // a window's edges must use this, never GetWindowRect. Size of a RECT = 16 bytes.
 const DWMWA_EXTENDED_FRAME_BOUNDS = 9
+// DWMWA_CLOAKED. A cloaked window is composited-away by DWM while still enumerable
+// with a valid frame: a suspended UWP app's ApplicationFrameWindow, a window on
+// another virtual desktop, or one mid-animation. IsWindowVisible() (the WS_VISIBLE
+// style bit) reports TRUE for such a window even though NOTHING is painted where
+// its bounds say it is — so anything drawing around a window's edges must also
+// reject cloaked windows or it rings empty desktop. Returns a non-zero DWORD when
+// cloaked (the specific bit says by whom; any non-zero value means invisible).
+const DWMWA_CLOAKED = 14
 const SIZEOF_RECT = 16
+const SIZEOF_DWORD = 4
 const S_OK = 0
 
 export type ForegroundWindowInfo = {
@@ -45,6 +54,12 @@ export type ForegroundFrame = {
   maximized: boolean
   minimized: boolean
   visible: boolean
+  // DWM-cloaked (composited away though WS_VISIBLE) — see DWMWA_CLOAKED. A drawing
+  // consumer must treat this as "do not frame": the window paints nothing on screen.
+  cloaked: boolean
+  // Owning process id, so a caller can recognise its OWN windows (an Electron app's
+  // BrowserWindows are all owned by the main/browser process) and never frame them.
+  pid: number | null
 }
 
 const NO_FRAME: ForegroundFrame = {
@@ -54,7 +69,9 @@ const NO_FRAME: ForegroundFrame = {
   exePath: null,
   maximized: false,
   minimized: false,
-  visible: false
+  visible: false,
+  cloaked: false,
+  pid: null
 }
 
 type Win32 = {
@@ -122,11 +139,24 @@ function load(): Win32 | null {
     // unavailable the frame reader falls back to GetWindowRect (and the halo's
     // maximized gate then rejects, which is the safe direction).
     let DwmGetWindowAttribute: ((...args: unknown[]) => number) | null = null
+    // Same export, DWORD-out overload — koffi types a func by its C signature, so
+    // the RECT and DWORD attribute reads need distinct declarations.
+    let DwmGetWindowAttributeDword: ((...args: unknown[]) => number) | null = null
     try {
       const dwmapi = koffi.load('dwmapi.dll')
       DwmGetWindowAttribute = dwmapi.func(
         'int32 DwmGetWindowAttribute(void* hwnd, uint32 dwAttribute, _Out_ OMI_RECT* pvAttribute, uint32 cbAttribute)'
       ) as (...args: unknown[]) => number
+      // Same symbol, DWORD-out overload. koffi binds a signature, not just a
+      // symbol, so the RECT-out and DWORD-out reads are two distinct declarations;
+      // the variadic (symbol, result, params) form gives the second one without
+      // re-parsing a C prototype.
+      DwmGetWindowAttributeDword = dwmapi.func('DwmGetWindowAttribute', 'int32', [
+        'void*',
+        'uint32',
+        koffi.out(koffi.pointer('uint32')),
+        'uint32'
+      ]) as (...args: unknown[]) => number
     } catch (e) {
       console.warn('[usage] dwmapi unavailable; falling back to GetWindowRect:', e)
     }
@@ -170,6 +200,34 @@ function load(): Win32 | null {
         return null
       }
       return null
+    }
+
+    // Is the window composited-away by DWM (DWMWA_CLOAKED != 0)? A cloaked window
+    // has WS_VISIBLE set yet paints nothing on screen (suspended UWP host, another
+    // virtual desktop, mid-animation). Unreadable (no dwmapi) ⇒ false: absent the
+    // signal, fall back to the other visibility gates rather than over-suppress.
+    const cloakedFromHwnd = (hwnd: unknown): boolean => {
+      if (!DwmGetWindowAttributeDword) return false
+      try {
+        const box: [number] = [0]
+        const hr = DwmGetWindowAttributeDword(hwnd, DWMWA_CLOAKED, box, SIZEOF_DWORD)
+        return hr === S_OK && box[0] !== 0
+      } catch {
+        return false
+      }
+    }
+
+    // The window's owning process id, or null on any permission edge. A throw
+    // degrades to pid=null (halo still allowed) rather than suppressing the halo —
+    // symmetric with cloakedFromHwnd's fail-open.
+    const pidFromHwnd = (hwnd: unknown): number | null => {
+      try {
+        const pidBox: [number] = [0]
+        GetWindowThreadProcessId(hwnd, pidBox)
+        return pidBox[0] || null
+      } catch {
+        return null
+      }
     }
 
     // Read an HWND's title text. Returns null on any edge. Titles can be long
@@ -326,7 +384,9 @@ function load(): Win32 | null {
           exePath: exePathFromHwnd(hwnd),
           maximized: !!IsZoomed(hwnd),
           minimized: !!IsIconic(hwnd),
-          visible: !!IsWindowVisible(hwnd)
+          visible: !!IsWindowVisible(hwnd),
+          cloaked: cloakedFromHwnd(hwnd),
+          pid: pidFromHwnd(hwnd)
         }
       }
     }
