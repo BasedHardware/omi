@@ -2193,7 +2193,6 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppThumbnailUploadResponse)
 @router.post('/v1/app/thumbnails', tags=['v1'], response_model=AppThumbnailUploadResponse)
 @max_part_size(APP_IMAGE_MAX_PART_SIZE)
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
@@ -2227,6 +2226,7 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
             os.remove(temp_path)
 
 
+@router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppMutationResponse)
 def delete_persona(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
