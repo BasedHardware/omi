@@ -167,6 +167,20 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(source.contains("filteredFromDatabase.first(where:"))
   }
 
+  func testMemorySearchRefreshesTheVisibleMemoriesProjection() throws {
+    let pageURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/MemoriesPage.swift")
+    // omi-test-quality: source-inspection -- static contract: bridge search must refresh its projection before lifecycle-scoped SQLite search
+    let source = try String(contentsOf: pageURL, encoding: .utf8)
+    let body = try actionBody(named: "memories_search", in: source)
+    XCTAssertTrue(
+      body.contains("await self.refreshMemoriesIfNeeded()"),
+      "A bridge search must refresh the active MemoriesViewModel before it reads lifecycle-scoped local cache."
+    )
+  }
+
   func testMemoryCrudActionsUseNonProdGuard() throws {
     let source = try bridgeSource()
     for action in [

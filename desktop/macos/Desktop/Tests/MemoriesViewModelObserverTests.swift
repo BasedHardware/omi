@@ -59,6 +59,25 @@ final class MemoriesViewModelObserverTests: XCTestCase {
     )
   }
 
+  func testRefreshWaitsForActiveInitialLoadBeforeReturning() async {
+    let viewModel = MemoriesViewModel()
+    viewModel.isActive = true
+    viewModel.isLoading = true
+
+    // Force the bridge-search interleave: its refresh reaches the view model
+    // while navigation's initial load still owns the projection. This must
+    // suspend at the lifecycle barrier rather than silently no-op.
+    let refresh = Task { await viewModel.refreshMemoriesIfNeeded() }
+    await Task.yield()
+    XCTAssertEqual(viewModel.memoryLoadLifecycleWaiterCount, 1)
+
+    viewModel.isLoading = false
+    await refresh.value
+
+    XCTAssertEqual(viewModel.memoryLoadLifecycleWaiterCount, 0)
+    XCTAssertEqual(viewModel.refreshInvocations, 1)
+  }
+
   func testConversationDeletedNotificationTriggersCascadeHandler() async throws {
     let conversationId = "conv-cascade-test"
     let linkedMemory = makeMemory(id: "mem-linked", conversationId: conversationId)

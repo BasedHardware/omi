@@ -95,6 +95,12 @@ def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
+    """Add a chat message an app posted for the user, linking it to that app's chat session so it
+    appears in the chat feed. get_messages filters by chat_session_id whenever a session exists, so
+    a message stored without one is never returned on that path."""
+    chat_session = get_chat_session(uid, app_id=app_id)
+    chat_session_id = chat_session['id'] if chat_session else None
+
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
@@ -104,8 +110,11 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         from_external_integration=False,
         type='text',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         memories_id=[conversation_id] if conversation_id else [],
+        chat_session_id=chat_session_id,
     )
     add_message(uid, ai_message.model_dump())
+    if chat_session_id:
+        add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
 
 

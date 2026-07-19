@@ -511,7 +511,13 @@ def search_conversations_via_integration(
     # Get full conversation data using the IDs
     full_conversations = []
     if conversation_ids:
-        full_conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+        # Hydration must honour the same include_discarded the search above ran with, or a
+        # discarded match is dropped here after the search window already moved past it.
+        full_conversations = conversations_db.get_conversations_by_id(
+            uid,
+            conversation_ids,
+            include_discarded=cast(bool, search_request.include_discarded),
+        )
 
     # Convert database conversations to integration model
     conversation_items: List[integration_models.ConversationItem] = []

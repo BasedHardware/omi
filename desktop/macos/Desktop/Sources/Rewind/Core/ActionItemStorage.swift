@@ -1127,7 +1127,7 @@ actor ActionItemStorage {
     includeCompleted: Bool = true,
     includeDeleted: Bool = false
   ) async throws -> [(
-    id: Int64, description: String, completed: Bool, deleted: Bool, deletedBy: String?, relevanceScore: Int?
+    backendId: String?, description: String, completed: Bool, deleted: Bool, deletedBy: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
     // Sanitize FTS5 query: strip special characters that could be misinterpreted
@@ -1138,7 +1138,7 @@ actor ActionItemStorage {
 
     return try await db.read { database in
       var sql = """
-        SELECT a.id, a.description, a.completed, a.deleted, a.deletedBy, a.relevanceScore
+        SELECT a.backendId, a.description, a.completed, a.deleted, a.deletedBy, a.relevanceScore
         FROM action_items a
         JOIN action_items_fts fts ON fts.rowid = a.id
         WHERE action_items_fts MATCH ?
@@ -1157,7 +1157,7 @@ actor ActionItemStorage {
 
       return try Row.fetchAll(database, sql: sql, arguments: StatementArguments(arguments)).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           completed: row["completed"] as Bool,
           deleted: row["deleted"] as Bool,
@@ -1170,7 +1170,7 @@ actor ActionItemStorage {
 
   /// Get active tasks with the highest relevance (lowest score = most important)
   func getTopRelevanceTasks(limit: Int = 30) async throws -> [(
-    id: Int64, description: String, priority: String?, relevanceScore: Int?
+    backendId: String?, description: String, priority: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
 
@@ -1178,13 +1178,13 @@ actor ActionItemStorage {
       try Row.fetchAll(
         database,
         sql: """
-              SELECT id, description, priority, relevanceScore FROM action_items
+              SELECT backendId, description, priority, relevanceScore FROM action_items
               WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
               ORDER BY relevanceScore ASC LIMIT ?
           """, arguments: [limit]
       ).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           priority: row["priority"] as String?,
           relevanceScore: row["relevanceScore"] as Int?
@@ -1195,7 +1195,7 @@ actor ActionItemStorage {
 
   /// Get most recently created active tasks
   func getRecentActiveTasks(limit: Int = 30) async throws -> [(
-    id: Int64, description: String, priority: String?, relevanceScore: Int?
+    backendId: String?, description: String, priority: String?, relevanceScore: Int?
   )] {
     let db = try await ensureInitialized()
 
@@ -1203,13 +1203,13 @@ actor ActionItemStorage {
       try Row.fetchAll(
         database,
         sql: """
-              SELECT id, description, priority, relevanceScore FROM action_items
+              SELECT backendId, description, priority, relevanceScore FROM action_items
               WHERE completed = 0 AND deleted = 0
               ORDER BY createdAt DESC LIMIT ?
           """, arguments: [limit]
       ).map { row in
         (
-          id: row["id"] as Int64,
+          backendId: row["backendId"] as String?,
           description: row["description"] as String,
           priority: row["priority"] as String?,
           relevanceScore: row["relevanceScore"] as Int?
