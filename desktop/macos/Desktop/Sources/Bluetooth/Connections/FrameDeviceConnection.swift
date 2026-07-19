@@ -1,5 +1,4 @@
-import Combine
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 import Foundation
 import os.log
 
@@ -10,235 +9,225 @@ import os.log
 /// Ported from: omi/app/lib/services/devices/frame_connection.dart
 final class FrameDeviceConnection: BaseDeviceConnection {
 
-    // MARK: - Constants
+  // MARK: - Properties
 
-    /// JPEG header used to prepend to raw image data from Frame
-    /// Frame sends raw JPEG data without the standard header
-    private static let photoHeader = Data(base64Encoded:
-        "/9j/4AAQSkZJRgABAgAAZABkAAD/2wBDACAWGBwYFCAcGhwkIiAmMFA0MCwsMGJGSjpQdGZ6" +
-        "eHJmcG6AkLicgIiuim5woNqirr7EztDOfJri8uDI8LjKzsb/2wBDASIkJDAqMF40NF7GhHCE" +
-        "xsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsb/wAAR" +
-        "CAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAHwEA" +
-        "AwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQR" +
-        "BRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RF" +
-        "RkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ip" +
-        "qrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAtREA" +
-        "AgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYk" +
-        "NOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOE" +
-        "hYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk" +
-        "5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwA="
-    )!
+  private let logger = Logger(subsystem: "me.omi.desktop", category: "FrameDeviceConnection")
+  private var cachedBatteryLevel: Int?
 
-    // MARK: - Properties
+  // MARK: - Initialization
 
-    private let logger = Logger(subsystem: "me.omi.desktop", category: "FrameDeviceConnection")
-    private var cachedBatteryLevel: Int?
+  override init(
+    device: BtDevice,
+    transport: DeviceTransport,
+    operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+  ) {
+    super.init(
+      device: device,
+      transport: transport,
+      operationClock: operationClock
+    )
+  }
 
-    // MARK: - Initialization
+  // MARK: - Connection
 
-    override init(device: BtDevice, transport: DeviceTransport) {
-        super.init(device: device, transport: transport)
+  override func prepareDeviceAfterConnect() async throws {
+    // Update device info
+    device.firmwareRevision = "Frame"
+    device.hardwareRevision = "Brilliant Labs Frame"
+    device.manufacturerName = "Brilliant Labs"
+    device.modelNumber = "Frame"
+
+    // Get initial battery level
+    cachedBatteryLevel = await getBatteryLevel()
+    if cachedBatteryLevel == -1 {
+      cachedBatteryLevel = nil
     }
 
-    // MARK: - Connection
+    logger.info("Connected to Frame device")
+  }
 
-    override func connect() async throws {
-        try await super.connect()
+  // MARK: - Battery
 
-        // Update device info
-        device.firmwareRevision = "Frame"
-        device.hardwareRevision = "Brilliant Labs Frame"
-        device.manufacturerName = "Brilliant Labs"
-        device.modelNumber = "Frame"
+  override func getBatteryLevel() async -> Int {
+    guard await isConnected() else { return -1 }
 
-        // Get initial battery level
-        cachedBatteryLevel = await getBatteryLevel()
-        if cachedBatteryLevel == -1 {
-            cachedBatteryLevel = nil
+    do {
+      let data = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.Battery.service,
+        characteristicUUID: DeviceUUIDs.Battery.level
+      )
+      if !data.isEmpty {
+        cachedBatteryLevel = Int(data[0])
+        return cachedBatteryLevel!
+      }
+      return cachedBatteryLevel ?? -1
+    } catch {
+      logger.debug("Error reading battery level: \(error.localizedDescription)")
+      return cachedBatteryLevel ?? -1
+    }
+  }
+
+  override func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error> {
+    let stream = transport.getCharacteristicStream(
+      serviceUUID: DeviceUUIDs.Battery.service,
+      characteristicUUID: DeviceUUIDs.Battery.level
+    )
+
+    return AsyncThrowingStream { [weak self] continuation in
+      let forwardingTask = Task { [weak self] in
+        guard let self = self else {
+          continuation.finish()
+          return
         }
-
-        logger.info("Connected to Frame device")
-    }
-
-    // MARK: - Battery
-
-    override func getBatteryLevel() async -> Int {
-        guard await isConnected() else { return -1 }
 
         do {
-            let data = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.Battery.service,
-                characteristicUUID: DeviceUUIDs.Battery.level
-            )
+          for try await data in stream {
             if !data.isEmpty {
-                cachedBatteryLevel = Int(data[0])
-                return cachedBatteryLevel!
+              let level = Int(data[0])
+              if level != self.cachedBatteryLevel {
+                self.cachedBatteryLevel = level
+                continuation.yield(level)
+              }
             }
-            return cachedBatteryLevel ?? -1
+          }
+          continuation.finish()
         } catch {
-            logger.debug("Error reading battery level: \(error.localizedDescription)")
-            return cachedBatteryLevel ?? -1
+          continuation.finish(throwing: error)
         }
+      }
+      continuation.onTermination = { @Sendable _ in
+        forwardingTask.cancel()
+      }
     }
+  }
 
-    override func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error> {
-        let stream = transport.getCharacteristicStream(
-            serviceUUID: DeviceUUIDs.Battery.service,
-            characteristicUUID: DeviceUUIDs.Battery.level
-        )
+  // MARK: - Audio
 
-        return AsyncThrowingStream { [weak self] continuation in
-            Task { [weak self] in
-                guard let self = self else {
-                    continuation.finish()
-                    return
-                }
+  override func getAudioCodec() async -> BleAudioCodec {
+    // Frame uses PCM 8-bit audio
+    .pcm8
+  }
 
-                do {
-                    for try await data in stream {
-                        if !data.isEmpty {
-                            let level = Int(data[0])
-                            if level != self.cachedBatteryLevel {
-                                self.cachedBatteryLevel = level
-                                continuation.yield(level)
-                            }
-                        }
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-        }
+  override func getAudioStream() -> AsyncThrowingStream<Data, Error> {
+    // Frame audio requires Frame SDK with Lua scripting
+    // This would need to send "MIC START" command and listen for 0xEE prefixed data
+    // For now, return an empty stream
+    logger.warning("Frame audio streaming requires Frame SDK (not available on macOS)")
+    return AsyncThrowingStream { $0.finish() }
+  }
+
+  // MARK: - Camera
+
+  override func hasPhotoStreaming() async -> Bool {
+    // Frame supports photo streaming through Frame SDK
+    // Return true since Frame hardware supports it
+    true
+  }
+
+  override func startPhotoCapture() async {
+    // Frame camera control requires Frame SDK
+    // Would need to send "CAMERA START" command
+    logger.warning("Frame camera control requires Frame SDK (not available on macOS)")
+  }
+
+  override func stopPhotoCapture() async {
+    // Frame camera control requires Frame SDK
+    // Would need to send "CAMERA STOP" command
+    logger.warning("Frame camera control requires Frame SDK (not available on macOS)")
+  }
+
+  override func getImageStream() -> AsyncThrowingStream<OrientedImage, Error> {
+    // Frame images require Frame SDK
+    // Would need to listen for FrameDataTypePrefixes.photoData
+    logger.warning("Frame image streaming requires Frame SDK (not available on macOS)")
+    return AsyncThrowingStream { $0.finish() }
+  }
+
+  // MARK: - Unsupported Features
+
+  override func getFeatures() async -> OmiFeatures {
+    // Frame does not support Omi features
+    []
+  }
+
+  override func getButtonState() async -> [UInt8] {
+    // Frame does not have a button
+    []
+  }
+
+  override func getButtonStream() -> AsyncThrowingStream<[UInt8], Error> {
+    AsyncThrowingStream { $0.finish() }
+  }
+
+  override func getAccelerometerStream() -> AsyncThrowingStream<AccelerometerData, Error> {
+    AsyncThrowingStream { $0.finish() }
+  }
+
+  override func setLedDimRatio(_ ratio: Int) async {
+    // Frame does not support LED dimming
+  }
+
+  override func getLedDimRatio() async -> Int? {
+    nil
+  }
+
+  override func setMicGain(_ gain: Int) async {
+    // Frame does not support mic gain control
+  }
+
+  override func getMicGain() async -> Int? {
+    nil
+  }
+
+  override func playHaptic(level: Int) async -> Bool {
+    // Frame does not support haptic feedback
+    false
+  }
+
+  // MARK: - Storage
+
+  override func getStorageList() async -> [Int32] {
+    // Frame does not support storage
+    []
+  }
+
+  override func writeToStorage(fileNum: Int, command: Int, offset: Int) async -> Bool {
+    // Frame does not support storage
+    false
+  }
+
+  override func getStorageStream() -> AsyncThrowingStream<Data, Error> {
+    AsyncThrowingStream { $0.finish() }
+  }
+
+  // MARK: - WiFi Sync
+
+  override func isWifiSyncSupported() async -> Bool {
+    // Frame does not support WiFi sync
+    false
+  }
+
+  // MARK: - Device Info
+
+  override func updateDeviceInfo() async {
+    device.modelNumber = "Frame"
+    device.firmwareRevision = "Frame"
+    device.hardwareRevision = "Brilliant Labs Frame"
+    device.manufacturerName = "Brilliant Labs"
+
+    // Try to read firmware version from standard BLE characteristic
+    do {
+      let data = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.DeviceInfo.service,
+        characteristicUUID: DeviceUUIDs.DeviceInfo.firmwareRevision
+      )
+      if !data.isEmpty {
+        device.firmwareRevision = String(data: data, encoding: .utf8) ?? "Frame"
+      }
+    } catch {
+      // Use default
     }
-
-    // MARK: - Audio
-
-    override func getAudioCodec() async -> BleAudioCodec {
-        // Frame uses PCM 8-bit audio
-        .pcm8
-    }
-
-    override func getAudioStream() -> AsyncThrowingStream<Data, Error> {
-        // Frame audio requires Frame SDK with Lua scripting
-        // This would need to send "MIC START" command and listen for 0xEE prefixed data
-        // For now, return an empty stream
-        logger.warning("Frame audio streaming requires Frame SDK (not available on macOS)")
-        return AsyncThrowingStream { $0.finish() }
-    }
-
-    // MARK: - Camera
-
-    override func hasPhotoStreaming() async -> Bool {
-        // Frame supports photo streaming through Frame SDK
-        // Return true since Frame hardware supports it
-        true
-    }
-
-    override func startPhotoCapture() async {
-        // Frame camera control requires Frame SDK
-        // Would need to send "CAMERA START" command
-        logger.warning("Frame camera control requires Frame SDK (not available on macOS)")
-    }
-
-    override func stopPhotoCapture() async {
-        // Frame camera control requires Frame SDK
-        // Would need to send "CAMERA STOP" command
-        logger.warning("Frame camera control requires Frame SDK (not available on macOS)")
-    }
-
-    override func getImageStream() -> AsyncThrowingStream<OrientedImage, Error> {
-        // Frame images require Frame SDK
-        // Would need to listen for FrameDataTypePrefixes.photoData
-        logger.warning("Frame image streaming requires Frame SDK (not available on macOS)")
-        return AsyncThrowingStream { $0.finish() }
-    }
-
-    // MARK: - Unsupported Features
-
-    override func getFeatures() async -> OmiFeatures {
-        // Frame does not support Omi features
-        []
-    }
-
-    override func getButtonState() async -> [UInt8] {
-        // Frame does not have a button
-        []
-    }
-
-    override func getButtonStream() -> AsyncThrowingStream<[UInt8], Error> {
-        AsyncThrowingStream { $0.finish() }
-    }
-
-    override func getAccelerometerStream() -> AsyncThrowingStream<AccelerometerData, Error> {
-        AsyncThrowingStream { $0.finish() }
-    }
-
-    override func setLedDimRatio(_ ratio: Int) async {
-        // Frame does not support LED dimming
-    }
-
-    override func getLedDimRatio() async -> Int? {
-        nil
-    }
-
-    override func setMicGain(_ gain: Int) async {
-        // Frame does not support mic gain control
-    }
-
-    override func getMicGain() async -> Int? {
-        nil
-    }
-
-    override func playHaptic(level: Int) async -> Bool {
-        // Frame does not support haptic feedback
-        false
-    }
-
-    // MARK: - Storage
-
-    override func getStorageList() async -> [Int32] {
-        // Frame does not support storage
-        []
-    }
-
-    override func writeToStorage(fileNum: Int, command: Int, offset: Int) async -> Bool {
-        // Frame does not support storage
-        false
-    }
-
-    override func getStorageStream() -> AsyncThrowingStream<Data, Error> {
-        AsyncThrowingStream { $0.finish() }
-    }
-
-    // MARK: - WiFi Sync
-
-    override func isWifiSyncSupported() async -> Bool {
-        // Frame does not support WiFi sync
-        false
-    }
-
-    // MARK: - Device Info
-
-    override func updateDeviceInfo() async {
-        device.modelNumber = "Frame"
-        device.firmwareRevision = "Frame"
-        device.hardwareRevision = "Brilliant Labs Frame"
-        device.manufacturerName = "Brilliant Labs"
-
-        // Try to read firmware version from standard BLE characteristic
-        do {
-            let data = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.DeviceInfo.service,
-                characteristicUUID: DeviceUUIDs.DeviceInfo.firmwareRevision
-            )
-            if !data.isEmpty {
-                device.firmwareRevision = String(data: data, encoding: .utf8) ?? "Frame"
-            }
-        } catch {
-            // Use default
-        }
-    }
+  }
 }
 
 // MARK: - Frame SDK Notes

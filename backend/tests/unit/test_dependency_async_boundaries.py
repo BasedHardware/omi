@@ -50,11 +50,11 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType,
     firebase_auth = _module('firebase_admin.auth', verify_id_token=lambda _token: {'uid': 'user-1'})
     mcp_api_key_db = _module(
         'database.mcp_api_key',
-        get_user_and_scopes_by_api_key=lambda _token: None,
+        get_api_key_auth_result=lambda _token: SimpleNamespace(context=None, repairs=frozenset()),
     )
     dev_api_key_db = _module(
         'database.dev_api_key',
-        get_user_and_scopes_by_api_key=lambda _token: None,
+        get_api_key_auth_result=lambda _token: SimpleNamespace(context=None, repairs=frozenset()),
     )
     endpoints = _module('utils.other.endpoints', check_api_key_rate_limit=lambda **_kwargs: None)
     mcp_memories = _module(
@@ -127,13 +127,19 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
         rate_limit_calls: list[dict[str, Any]] = []
 
-        def lookup_mcp(token: str) -> dict[str, Any]:
+        def lookup_mcp(token: str) -> SimpleNamespace:
             assert token == 'omi_mcp_secret'
-            return {'user_id': 'mcp-user', 'scopes': [], 'app_id': 'mcp-app', 'key_id': 'mcp-key'}
+            return SimpleNamespace(
+                context={'user_id': 'mcp-user', 'scopes': [], 'app_id': 'mcp-app', 'key_id': 'mcp-key'},
+                repairs=frozenset(),
+            )
 
-        def lookup_dev(token: str) -> dict[str, Any]:
+        def lookup_dev(token: str) -> SimpleNamespace:
             assert token == 'omi_dev_secret'
-            return {'user_id': 'dev-user', 'scopes': [], 'app_id': 'dev-app', 'key_id': 'dev-key'}
+            return SimpleNamespace(
+                context={'user_id': 'dev-user', 'scopes': [], 'app_id': 'dev-app', 'key_id': 'dev-key'},
+                repairs=frozenset(),
+            )
 
         def check_rate_limit(**kwargs: Any) -> None:
             rate_limit_calls.append(kwargs)
@@ -142,8 +148,8 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
             calls.append((executor, fn, args, kwargs))
             return fn(*args, **kwargs)
 
-        mcp_api_key_db.get_user_and_scopes_by_api_key = lookup_mcp
-        dev_api_key_db.get_user_and_scopes_by_api_key = lookup_dev
+        mcp_api_key_db.get_api_key_auth_result = lookup_mcp
+        dev_api_key_db.get_api_key_auth_result = lookup_dev
         dependencies.check_api_key_rate_limit = check_rate_limit
         dependencies.run_blocking = tracking_run_blocking
 
@@ -164,6 +170,28 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
                 'app_id': 'mcp-app',
                 'key_id': 'mcp-key',
                 'policy_name': 'mcp:read',
+            }
+        ]
+
+
+def test_auth_repair_metadata_is_emitted_from_the_dependency_layer() -> None:
+    with _loaded_dependencies() as (dependencies, _firebase_auth, mcp_api_key_db, _dev_db):
+        mcp_api_key_db.get_api_key_auth_result = lambda _token: SimpleNamespace(
+            context={'user_id': 'mcp-user', 'scopes': [], 'app_id': 'mcp-app', 'key_id': 'mcp-key'},
+            repairs=frozenset({'cache_write'}),
+        )
+        events: list[dict[str, Any]] = []
+        dependencies.record_api_key_repairs = lambda **kwargs: events.append(kwargs)
+
+        auth = asyncio.run(dependencies.get_mcp_api_key_auth('Bearer omi_mcp_secret'))
+
+        assert auth.uid == 'mcp-user'
+        assert events == [
+            {
+                'key_kind': 'mcp',
+                'operation': 'auth',
+                'repairs': frozenset({'cache_write'}),
+                'log': dependencies.logger,
             }
         ]
 
@@ -291,12 +319,15 @@ def test_persisted_api_key_lookup_keeps_the_event_loop_responsive() -> None:
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_lookup(_token: str) -> dict[str, Any]:
+            def blocking_lookup(_token: str) -> SimpleNamespace:
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
-                return {'user_id': 'user-1', 'scopes': [], 'app_id': 'app-1', 'key_id': 'key-1'}
+                return SimpleNamespace(
+                    context={'user_id': 'user-1', 'scopes': [], 'app_id': 'app-1', 'key_id': 'key-1'},
+                    repairs=frozenset(),
+                )
 
-            mcp_api_key_db.get_user_and_scopes_by_api_key = blocking_lookup
+            mcp_api_key_db.get_api_key_auth_result = blocking_lookup
             dependencies.check_api_key_rate_limit = lambda **_kwargs: None
             safety_release = threading.Timer(1, release.set)
             safety_release.start()

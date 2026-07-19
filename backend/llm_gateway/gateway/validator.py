@@ -30,6 +30,7 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'prompt_cache_key',
         'seed',
         'stop',
+        'stream_options',
         'temperature',
         'top_logprobs',
         'top_p',
@@ -156,7 +157,26 @@ def _validate_forwarded_params(request: Mapping[str, Any]) -> Mapping[str, Any]:
             param=unsupported[0],
         )
     forwarded = {key: request[key] for key in FORWARDED_CHAT_COMPLETION_PARAMS if key in request}
+    _validate_output_limit_aliases(forwarded)
     for key in ('tools', 'tool_choice', 'stream'):
         if key in request:
             forwarded[key] = request[key]
     return forwarded
+
+
+def _validate_output_limit_aliases(forwarded: Mapping[str, Any]) -> None:
+    max_tokens = forwarded.get('max_tokens')
+    max_completion_tokens = forwarded.get('max_completion_tokens')
+    for key, value in (
+        ('max_tokens', max_tokens),
+        ('max_completion_tokens', max_completion_tokens),
+    ):
+        if value is None:
+            continue
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise GatewayInvalidRequestError(f'{key} must be a positive integer', param=key)
+    if max_tokens is not None and max_completion_tokens is not None and max_tokens != max_completion_tokens:
+        raise GatewayInvalidRequestError(
+            'max_tokens and max_completion_tokens must match when both are provided',
+            param='max_completion_tokens',
+        )

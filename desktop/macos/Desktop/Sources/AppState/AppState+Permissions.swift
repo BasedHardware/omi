@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 extension AppState {
@@ -20,7 +20,7 @@ extension AppState {
   func requestNotificationPermission() {
     // First check current authorization status
     UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
-      DispatchQueue.main.async {
+      Task { @MainActor in
         guard let self = self else { return }
 
         if settings.authorizationStatus == .notDetermined {
@@ -29,7 +29,7 @@ extension AppState {
             reason: "launch_disabled_error",
             previousStatus: "notDetermined"
           ) { [weak self] _ in
-            self?.checkNotificationPermission()
+            MainActor.assumeIsolated { self?.checkNotificationPermission() }
           }
         } else if settings.authorizationStatus == .denied {
           // Previously denied - open System Settings so user can enable manually
@@ -50,7 +50,7 @@ extension AppState {
         reason: "launch_disabled_error_retry",
         previousStatus: "post_repair"
       ) { [weak self] _ in
-        self?.checkNotificationPermission()
+        MainActor.assumeIsolated { self?.checkNotificationPermission() }
       }
     }
 
@@ -79,7 +79,7 @@ extension AppState {
         reason: "settings_fix_button_retry",
         previousStatus: "post_repair"
       ) { [weak self] _ in
-        self?.checkNotificationPermission()
+        MainActor.assumeIsolated { self?.checkNotificationPermission() }
       }
     }
 
@@ -97,83 +97,6 @@ extension AppState {
               "Notification repair didn't restore auth (status=\(settings.authorizationStatus.rawValue)) — opening System Settings"
             )
             self?.openNotificationPreferences()
-          }
-        }
-      }
-    }
-  }
-
-  /// Trigger screen recording permission prompt
-  func triggerScreenRecordingPermission() {
-    // Request both traditional TCC and ScreenCaptureKit permissions
-    ScreenCaptureService.requestAllScreenCapturePermissions()
-  }
-
-  /// Trigger automation permission by attempting to use Apple Events
-  nonisolated func triggerAutomationPermission() {
-    // NSAppleScript is main-thread-only; each build+execute below runs on the
-    // main actor. The scripts are tiny (executeAndReturnError blocks only
-    // briefly) and the delays between them stay off-main. Keeping the NSDictionary
-    // error local to each MainActor.run block also avoids crossing a non-Sendable
-    // value back to this detached task.
-    Task.detached {
-      // First, ensure System Events is running — without it, the TCC prompt won't appear
-      // and checkAutomationPermission returns -600 (procNotFound)
-      await MainActor.run {
-        let launchScript = NSAppleScript(
-          source: """
-                launch application "System Events"
-            """)
-        var launchError: NSDictionary?
-        launchScript?.executeAndReturnError(&launchError)
-        if let launchError = launchError {
-          log("AUTOMATION_TRIGGER: Failed to launch System Events: \(launchError)")
-        } else {
-          log("AUTOMATION_TRIGGER: System Events launched successfully")
-        }
-      }
-
-      // Small delay to let System Events initialize
-      try? await Task.sleep(nanoseconds: 500_000_000)
-
-      // Now trigger the actual TCC prompt
-      await MainActor.run {
-        let script = NSAppleScript(
-          source: """
-                tell application "System Events"
-                    return name of first process whose frontmost is true
-                end tell
-            """)
-        var error: NSDictionary?
-        script?.executeAndReturnError(&error)
-
-        if let error = error {
-          let errorNum = error[NSAppleScript.errorNumber] as? Int ?? 0
-          let errorMsg = error[NSAppleScript.errorMessage] as? String ?? "unknown"
-          log("AUTOMATION_TRIGGER: AppleScript failed: \(errorNum) - \(errorMsg)")
-        } else {
-          log("AUTOMATION_TRIGGER: AppleScript succeeded, permission may have been granted")
-        }
-      }
-
-      // Re-check permission status after the TCC dialog
-      await MainActor.run { [weak self] in
-        self?.checkAutomationPermission()
-      }
-
-      // Small delay to let the check complete
-      try? await Task.sleep(nanoseconds: 300_000_000)
-
-      // Only open Settings if the TCC dialog didn't grant permission
-      let granted = await MainActor.run { [weak self] in
-        self?.hasAutomationPermission ?? false
-      }
-      if !granted {
-        await MainActor.run {
-          if let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
-          {
-            NSWorkspace.shared.open(url)
           }
         }
       }
@@ -298,73 +221,73 @@ extension AppState {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       UNUserNotificationCenter.current().getNotificationSettings { settings in
-      DispatchQueue.main.async {
-        let isNowGranted = settings.authorizationStatus == .authorized
-        self.hasNotificationPermission = isNowGranted
-        self.notificationAlertStyle = settings.alertStyle
+        DispatchQueue.main.async {
+          let isNowGranted = settings.authorizationStatus == .authorized
+          self.hasNotificationPermission = isNowGranted
+          self.notificationAlertStyle = settings.alertStyle
 
-        // Log the current notification settings
-        let authStatus =
-          switch settings.authorizationStatus {
-          case .notDetermined: "notDetermined"
-          case .denied: "denied"
-          case .authorized: "authorized"
-          case .provisional: "provisional"
-          case .ephemeral: "ephemeral"
-          @unknown default: "unknown"
-          }
-        let alertStyleName =
-          switch settings.alertStyle {
-          case .none: "NONE (no banners)"
-          case .banner: "BANNER"
-          case .alert: "ALERT"
-          @unknown default: "unknown"
-          }
-        log(
-          "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
-        )
-
-        // Track notification settings in analytics only when they change
-        let soundEnabled = settings.soundSetting == .enabled
-        let badgeEnabled = settings.badgeSetting == .enabled
-        let settingsChanged =
-          authStatus != self.lastNotificationAuthStatus
-          || alertStyleName != self.lastNotificationAlertStyle
-          || soundEnabled != self.lastNotificationSoundEnabled
-          || badgeEnabled != self.lastNotificationBadgeEnabled
-
-        if settingsChanged {
-          AnalyticsManager.shared.notificationSettingsChecked(
-            authStatus: authStatus,
-            alertStyle: alertStyleName,
-            soundEnabled: soundEnabled,
-            badgeEnabled: badgeEnabled,
-            bannersDisabled: settings.alertStyle == .none
+          // Log the current notification settings
+          let authStatus =
+            switch settings.authorizationStatus {
+            case .notDetermined: "notDetermined"
+            case .denied: "denied"
+            case .authorized: "authorized"
+            case .provisional: "provisional"
+            case .ephemeral: "ephemeral"
+            @unknown default: "unknown"
+            }
+          let alertStyleName =
+            switch settings.alertStyle {
+            case .none: "NONE (no banners)"
+            case .banner: "BANNER"
+            case .alert: "ALERT"
+            @unknown default: "unknown"
+            }
+          log(
+            "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
           )
 
-          // Detect regression: was authorized, now reverted to notDetermined
-          // This happens on macOS 26+ where the OS silently revokes notification permission
-          if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
-            log(
-              "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
+          // Track notification settings in analytics only when they change
+          let soundEnabled = settings.soundSetting == .enabled
+          let badgeEnabled = settings.badgeSetting == .enabled
+          let settingsChanged =
+            authStatus != self.lastNotificationAuthStatus
+            || alertStyleName != self.lastNotificationAlertStyle
+            || soundEnabled != self.lastNotificationSoundEnabled
+            || badgeEnabled != self.lastNotificationBadgeEnabled
+
+          if settingsChanged {
+            AnalyticsManager.shared.notificationSettingsChecked(
+              authStatus: authStatus,
+              alertStyle: alertStyleName,
+              soundEnabled: soundEnabled,
+              badgeEnabled: badgeEnabled,
+              bannersDisabled: settings.alertStyle == .none
             )
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: "auth_regression",
-              previousStatus: "authorized",
-              currentStatus: "notDetermined"
-            )
-            self.repairNotificationRegistrationAndRetry()
+
+            // Detect regression: was authorized, now reverted to notDetermined
+            // This happens on macOS 26+ where the OS silently revokes notification permission
+            if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
+              log(
+                "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
+              )
+              AnalyticsManager.shared.notificationRepairTriggered(
+                reason: "auth_regression",
+                previousStatus: "authorized",
+                currentStatus: "notDetermined"
+              )
+              self.repairNotificationRegistrationAndRetry()
+            }
+
+            // Update last known state
+            self.lastNotificationAuthStatus = authStatus
+            self.lastNotificationAlertStyle = alertStyleName
+            self.lastNotificationSoundEnabled = soundEnabled
+            self.lastNotificationBadgeEnabled = badgeEnabled
           }
 
-          // Update last known state
-          self.lastNotificationAuthStatus = authStatus
-          self.lastNotificationAlertStyle = alertStyleName
-          self.lastNotificationSoundEnabled = soundEnabled
-          self.lastNotificationBadgeEnabled = badgeEnabled
         }
-
       }
-    }
     }  // end DispatchQueue.main.async
   }
 

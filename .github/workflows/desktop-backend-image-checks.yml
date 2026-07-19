@@ -19,7 +19,7 @@ jobs:
     outputs:
       dockerfile_changed: ${{ steps.dockerfile.outputs.changed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -45,7 +45,7 @@ jobs:
     if: needs.docker-context-contract.outputs.dockerfile_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Create non-production credentials placeholder
         run: printf '%s\n' '{}' > desktop/macos/Backend-Rust/google-credentials.json

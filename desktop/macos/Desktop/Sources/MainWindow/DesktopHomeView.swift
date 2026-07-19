@@ -1,6 +1,8 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
+
+private struct AnySendableBox: @unchecked Sendable { let value: Any? }
 
 // MARK: - NSHostingView sizingOptions access
 
@@ -71,7 +73,7 @@ struct DesktopHomeView: View {
     Group {
       if authState.isRestoringAuth {
         // State 0: Restoring auth session - show loading
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
           if let nsImage = Self.heroLogoImage {
             Image(nsImage: nsImage)
               .resizable()
@@ -134,7 +136,10 @@ struct DesktopHomeView: View {
                   onUpgrade: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .planUsage
-                    withAnimation(Self.pageNavigationAnimation) {
+                    // Plan and Usage now lives below Account on the merged
+                    // "Account & Plan" page — scroll straight to the plan card.
+                    highlightedSettingId = "planusage.current"
+                    OmiMotion.withGated(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }
                   },
@@ -144,7 +149,7 @@ struct DesktopHomeView: View {
                   onBringYourOwnKeys: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .advanced
-                    withAnimation(Self.pageNavigationAnimation) {
+                    OmiMotion.withGated(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }
                   }
@@ -158,8 +163,8 @@ struct DesktopHomeView: View {
                   onDownload: { updatePolicyManager.openDownload(policy) },
                   onDismiss: { updatePolicyManager.dismiss(policy) }
                 )
-                .padding(.top, 12)
-                .padding(.horizontal, 20)
+                .padding(.top, OmiSpacing.md)
+                .padding(.horizontal, OmiSpacing.xl)
                 .transition(.move(edge: .top).combined(with: .opacity))
               }
             }
@@ -211,6 +216,20 @@ struct DesktopHomeView: View {
                 )
                 // Push true to server so syncFromServer() doesn't revert it
                 Task { await SettingsSyncManager.shared.syncToServer() }
+              }
+
+              // Named development bundles used to seed screen analysis off to
+              // avoid permission prompts. Screen capture no longer requests
+              // TCC during startup, so restore the default once: a granted
+              // named-bundle permission must actually begin storing frames.
+              let quietBundleCaptureMigrationKey = "screenAnalysisAutoStartFixed_v3"
+              if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
+                usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
+                migrationApplied: UserDefaults.standard.bool(forKey: quietBundleCaptureMigrationKey)
+              ) {
+                AssistantSettings.shared.screenAnalysisEnabled = true
+                UserDefaults.standard.set(true, forKey: quietBundleCaptureMigrationKey)
+                log("DesktopHomeView: Restored screen capture default for quiet named bundle")
               }
 
               // Start proactive assistants monitoring if enabled in settings.
@@ -364,7 +383,7 @@ struct DesktopHomeView: View {
             }
 
           if !viewModelContainer.isInitialLoadComplete {
-            VStack(spacing: 24) {
+            VStack(spacing: OmiSpacing.xxl) {
               if let nsImage = Self.heroLogoImage {
                 Image(nsImage: nsImage)
                   .resizable()
@@ -372,7 +391,7 @@ struct DesktopHomeView: View {
                   .frame(width: 72, height: 72)
                   .scaleEffect(logoPulse ? 1.08 : 1.0)
                   .opacity(logoPulse ? 1.0 : 0.7)
-                  .animation(
+                  .omiAnimation(
                     .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
                     value: logoPulse
                   )
@@ -380,16 +399,16 @@ struct DesktopHomeView: View {
               }
 
               Text(viewModelContainer.initStatusMessage)
-                .scaledFont(size: 14, weight: .medium)
+                .scaledFont(size: OmiType.body, weight: .medium)
                 .foregroundColor(OmiColors.textTertiary)
 
               ProgressView()
                 .scaleEffect(0.8)
-                .tint(OmiColors.purplePrimary.opacity(0.6))
+                .tint(OmiColors.accent.opacity(0.6))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(OmiColors.backgroundPrimary)
-            .transition(.opacity.animation(.easeOut(duration: 0.3)))
+            .transition(.opacity.animation(OmiMotion.gated(.easeOut(duration: 0.3))))
           }
 
           if let policy = updatePolicyManager.visiblePolicy, policy.isRequired {
@@ -408,7 +427,7 @@ struct DesktopHomeView: View {
     .background(OmiColors.backgroundPrimary)
     .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
     .preferredColorScheme(.dark)
-    .tint(OmiColors.purplePrimary)
+    .tint(OmiColors.accent)
     .onAppear {
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
@@ -454,13 +473,11 @@ struct DesktopHomeView: View {
     .onChange(of: authState.isSignedIn) { _, _ in reportAutomationState() }
     .onChange(of: authState.isRestoringAuth) { _, _ in reportAutomationState() }
     .onChange(of: appState.hasCompletedOnboarding) { _, _ in reportAutomationState() }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       enforceMainWindowMinimumSize()
       reportAutomationState()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationNavigateRequested)) {
@@ -507,15 +524,18 @@ struct DesktopHomeView: View {
     let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
     NotificationCenter.default.addObserver(
       forName: NSWindow.didResizeNotification, object: nil, queue: .main
-    ) { note in
-      guard let window = note.object as? NSWindow,
-        window.title.lowercased().hasPrefix("omi")
-      else { return }
-      let frameMin = window.frameRect(
-        forContentRect: NSRect(origin: .zero, size: minimumContentSize)
-      ).size
-      if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
-      if window.minSize != frameMin { window.minSize = frameMin }
+    ) { notification in
+      let objectBox = AnySendableBox(value: notification.object)
+      MainActor.assumeIsolated {
+        guard let window = objectBox.value as? NSWindow,
+          window.title.lowercased().hasPrefix("omi")
+        else { return }
+        let frameMin = window.frameRect(
+          forContentRect: NSRect(origin: .zero, size: minimumContentSize)
+        ).size
+        if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
+        if window.minSize != frameMin { window.minSize = frameMin }
+      }
     }
   }
 
@@ -800,9 +820,9 @@ struct DesktopHomeView: View {
       log("DesktopHomeView: Running delayed background file scan for existing user")
       await FileIndexerService.shared.backgroundRescan()
       guard !Task.isCancelled,
-            sessionScope.matches(
-              currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
-              isSignedIn: AuthState.shared.isSignedIn)
+        sessionScope.matches(
+          currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+          isSignedIn: AuthState.shared.isSignedIn)
       else {
         initialFileIndexingBackfill.releaseReservation()
         return
@@ -888,7 +908,7 @@ struct DesktopHomeView: View {
             selectedSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
             onBack: {
-              withAnimation(Self.pageNavigationAnimation) {
+              OmiMotion.withGated(Self.pageNavigationAnimation) {
                 selectedIndex =
                   previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
                   ? SidebarNavItem.dashboard.rawValue
@@ -940,15 +960,19 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue {
+          // Settings has its own Back affordance in SettingsSidebar, so skip the
+          // redundant Home chrome there.
+          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue
+            && !isInSettings
+          {
             PageChromeBar(
               onHome: {
                 selectedIndex = SidebarNavItem.dashboard.rawValue
               }
             )
-            .padding(.horizontal, 18)
-            .padding(.top, 14)
-            .padding(.bottom, 4)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.top, OmiSpacing.md)
+            .padding(.bottom, OmiSpacing.xxs)
           }
 
           PageContentView(
@@ -965,7 +989,7 @@ struct DesktopHomeView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
-      .padding(14)
+      .padding(OmiSpacing.md)
     }
     .overlay {
       // Goal completion celebration overlay
@@ -1055,7 +1079,7 @@ struct DesktopHomeView: View {
       updateStoreActivity(for: newValue)
     }
     .onChange(of: useLegacyHomeDesign) { _, newValue in
-      withAnimation(.easeInOut(duration: 0.2)) {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
         isSidebarCollapsed = !newValue
       }
     }
@@ -1073,7 +1097,7 @@ struct DesktopHomeView: View {
     guard !useLegacyHomeDesign else { return }
     guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
     guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
-    withAnimation(Self.pageNavigationAnimation) {
+    OmiMotion.withGated(Self.pageNavigationAnimation) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }
   }
@@ -1083,7 +1107,7 @@ private struct PageChromeBar: View {
   let onHome: () -> Void
 
   var body: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       PageChromeButton(title: "Home", systemImage: "house.fill", action: onHome)
       Spacer()
     }
@@ -1099,15 +1123,15 @@ private struct PageChromeButton: View {
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 7) {
+      HStack(spacing: OmiSpacing.xs) {
         Image(systemName: systemImage)
-          .scaledFont(size: 12, weight: .semibold)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
         Text(title)
-          .scaledFont(size: 12, weight: .semibold)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
       }
       .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
-      .padding(.horizontal, 11)
-      .padding(.vertical, 7)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.xs)
       .background(
         Capsule(style: .continuous)
           .fill(.ultraThinMaterial)
@@ -1210,12 +1234,17 @@ private struct ConversationsPageHost: View {
 
   var body: some View {
     ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+      // Owner fencing: an open detail view must not keep showing the previous
+      // account's conversation after an in-place account switch.
+      .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        selectedConversation = nil
+      }
   }
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  DesktopHomeView()
-    .environmentObject(AppState())
-}
+  #Preview {
+    DesktopHomeView()
+      .environmentObject(AppState())
+  }
 #endif

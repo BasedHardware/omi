@@ -89,6 +89,11 @@ def test_llm_gateway_is_a_bounded_fallback_component():
     assert fallback_mod.bucket_component('llm_gateway') == 'llm_gateway'
 
 
+def test_firestore_malformed_document_labels_are_bounded():
+    assert fallback_mod.bucket_component('firestore_read') == 'firestore_read'
+    assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'
+
+
 def test_record_fallback_never_raises_on_metric_or_log_failure(monkeypatch):
     class BoomCounter:
         def labels(self, **_labels):
@@ -118,17 +123,15 @@ def test_stt_selection_fallback_records_on_capability_mismatch(monkeypatch):
 
     service, lang, model = streaming_mod.get_stt_service_for_language('xx-unsupported')
 
-    assert service == streaming_mod.STTService.deepgram
-    assert lang == 'en'
-    assert model == 'nova-3'
+    assert (service, lang, model) == (None, None, None)
     assert counter.increments == [
         (
             {
                 'component': 'stt_selection',
                 'from_mode': 'requested_non_en',
-                'to_mode': 'deepgram_en',
+                'to_mode': 'unavailable',
                 'reason': 'capability_mismatch',
-                'outcome': 'degraded',
+                'outcome': 'exhausted',
             },
             1.0,
         )

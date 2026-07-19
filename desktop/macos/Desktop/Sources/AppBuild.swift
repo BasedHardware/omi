@@ -3,25 +3,128 @@ import Foundation
 enum AppBuild {
   static let productionBundleIdentifier = "com.omi.computer-macos"
   static let desktopDevBundleIdentifier = "com.omi.desktop-dev"
+  static let externalPreviewBundleIdentifierPrefix = "com.omi.preview."
+  static let externalPreviewMarkerInfoKey = "OMIExternalPreview"
+  static let externalPreviewBackendInfoKey = "OMIExternalPreviewBackend"
   private static let updateChannelDefaultsKey = "update_channel"
   private static let betaOverwriteMigrationKey = "didMigrateBetaOverwrite_v1"
   private static let desktopAppcastURL = URL(
     string: "https://api.omi.me/v2/desktop/appcast.xml?platform=macos")!
+
+  /// How long the launch-time channel probe may hold the main thread. It runs before the
+  /// first frame, so it has to stay clear of the 3s watchdog that reports "App Hanging".
+  private static let channelProbeMainThreadBudget: TimeInterval = 1.5
+  private static let channelProbeRequestTimeout: TimeInterval = 3
+
+  enum ExternalPreviewBackend: String, Equatable {
+    case production
+    case development
+
+    init?(infoValue: Any?) {
+      guard let rawValue = infoValue as? String else { return nil }
+      self.init(rawValue: rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+  }
+
+  /// Preview bundle identity, the explicit Info.plist marker, and the selected backend are
+  /// all evaluated together. The reserved identity is the safety boundary: an artifact with
+  /// a preview identity is always restricted, even if a packaging error omits its marker.
+  struct Configuration: Equatable {
+    let bundleIdentifier: String
+    let isExternalPreview: Bool
+    let hasExternalPreviewMarker: Bool
+    let externalPreviewBackend: ExternalPreviewBackend?
+
+    var isNonProduction: Bool {
+      bundleIdentifier.hasPrefix("com.omi.")
+        && bundleIdentifier != AppBuild.productionBundleIdentifier
+    }
+
+    var allowsLocalAutomation: Bool {
+      isNonProduction && !isExternalPreview
+    }
+
+    var allowsSparkleUpdates: Bool {
+      !isExternalPreview
+    }
+
+    var hasValidExternalPreviewConfiguration: Bool {
+      !isExternalPreview || (hasExternalPreviewMarker && externalPreviewBackend != nil)
+    }
+  }
+
+  static func configuration(
+    bundleIdentifier: String,
+    infoDictionary: [String: Any]
+  ) -> Configuration {
+    let isExternalPreview = isExternalPreviewBundleIdentifier(bundleIdentifier)
+    let hasExternalPreviewMarker = infoDictionary[externalPreviewMarkerInfoKey] as? Bool == true
+    let externalPreviewBackend = ExternalPreviewBackend(
+      infoValue: infoDictionary[externalPreviewBackendInfoKey])
+
+    return Configuration(
+      bundleIdentifier: bundleIdentifier,
+      isExternalPreview: isExternalPreview,
+      hasExternalPreviewMarker: hasExternalPreviewMarker,
+      externalPreviewBackend: externalPreviewBackend
+    )
+  }
+
+  static func isExternalPreviewBundleIdentifier(_ bundleIdentifier: String) -> Bool {
+    let suffix = bundleIdentifier.dropFirst(externalPreviewBundleIdentifierPrefix.count)
+    return bundleIdentifier.hasPrefix(externalPreviewBundleIdentifierPrefix) && !suffix.isEmpty
+  }
+
+  private static var buildConfiguration: Configuration {
+    configuration(
+      bundleIdentifier: bundleIdentifier,
+      infoDictionary: Bundle.main.infoDictionary ?? [:]
+    )
+  }
 
   static var bundleIdentifier: String {
     Bundle.main.bundleIdentifier ?? productionBundleIdentifier
   }
 
   static var isNonProduction: Bool {
-    bundleIdentifier.hasPrefix("com.omi.") && bundleIdentifier != productionBundleIdentifier
+    buildConfiguration.isNonProduction
   }
 
   static var isProductionBundle: Bool {
     bundleIdentifier == productionBundleIdentifier
   }
 
+  static var isExternalPreview: Bool {
+    buildConfiguration.isExternalPreview
+  }
+
+  /// Only local development bundles expose the loopback automation/debug bridge. Published
+  /// preview apps share the non-production namespace but must never expose that bridge.
+  static var allowsLocalAutomation: Bool {
+    buildConfiguration.allowsLocalAutomation
+  }
+
+  /// Preview artifacts are delivered from their landing page, never from the shared Sparkle
+  /// feed. The updater additionally checks this at every call site.
+  static var allowsSparkleUpdates: Bool {
+    buildConfiguration.allowsSparkleUpdates
+  }
+
+  static var hasValidExternalPreviewConfiguration: Bool {
+    buildConfiguration.hasValidExternalPreviewConfiguration
+  }
+
+  /// Nil is intentional for a malformed preview configuration. Backend routing then fails
+  /// closed to production rather than inheriting the local-development default.
+  static var externalPreviewBackend: ExternalPreviewBackend? {
+    guard buildConfiguration.isExternalPreview, buildConfiguration.hasExternalPreviewMarker else {
+      return nil
+    }
+    return buildConfiguration.externalPreviewBackend
+  }
+
   static var isNamedDevelopmentBundle: Bool {
-    isNonProduction && bundleIdentifier != desktopDevBundleIdentifier
+    allowsLocalAutomation && bundleIdentifier != desktopDevBundleIdentifier
   }
 
   static var usesLazyDevPermissions: Bool {
@@ -101,7 +204,7 @@ enum AppBuild {
   @discardableResult
   static func syncUpdateChannelOnFirstLaunch() -> String? {
     guard UserDefaults.standard.string(forKey: updateChannelDefaultsKey) == nil else { return nil }
-    let resolved = resolveFreshInstallUpdateChannelSynchronously()
+    let resolved = probeFreshInstallUpdateChannel()
     UserDefaults.standard.set(resolved, forKey: updateChannelDefaultsKey)
     return resolved
   }
@@ -110,13 +213,21 @@ enum AppBuild {
   /// by the syncUpdateChannelWithInstalledApp() bug (commit 8c60fafe8, March 27 2026).
   /// Re-checks the appcast: if the current build is ahead of latest stable, restore beta.
   static func migrateBetaChannelOverwrite() {
+    migrateBetaChannelOverwrite(probeAppcast: probeFreshInstallUpdateChannel)
+  }
+
+  static func migrateBetaChannelOverwrite(probeAppcast: () -> String) {
     guard !UserDefaults.standard.bool(forKey: betaOverwriteMigrationKey) else { return }
     UserDefaults.standard.set(true, forKey: betaOverwriteMigrationKey)
 
+    // A fresh install has no stored channel, so there is nothing to restore — and
+    // syncUpdateChannelOnFirstLaunch() probes the same appcast moments later. Probing
+    // here as well made every new install pay for two serial launch-blocking round
+    // trips to answer one question.
+    guard UserDefaults.standard.string(forKey: updateChannelDefaultsKey) != nil else { return }
     guard currentUpdateChannel == "stable" else { return }
 
-    let resolved = resolveFreshInstallUpdateChannelSynchronously()
-    if resolved == "beta" {
+    if probeAppcast() == "beta" {
       UserDefaults.standard.set("beta", forKey: updateChannelDefaultsKey)
     }
   }
@@ -202,43 +313,115 @@ enum AppBuild {
     return Int(raw)
   }
 
-  private static func resolveFreshInstallUpdateChannelSynchronously(timeout: TimeInterval = 3) -> String {
-    let fallback = inferredUpdateChannel
+  private static func probeFreshInstallUpdateChannel() -> String {
+    probeFreshInstallUpdateChannel(
+      fallback: inferredUpdateChannel,
+      currentBuild: currentBuildNumber,
+      mainThreadBudget: channelProbeMainThreadBudget,
+      fetchAppcast: fetchDesktopAppcast,
+      persistLateCorrection: { storeLateChannelCorrection($0) }
+    )
+  }
 
+  /// Resolve the channel for an install with no stored preference.
+  ///
+  /// This runs on the main thread during launch (`AppState.init` needs the channel before
+  /// it loads backend URLs), so it waits at most `mainThreadBudget` for the appcast. Past
+  /// that it returns the bundle-inferred channel and lets the request finish in the
+  /// background: a late answer that disagrees is written through `persistLateCorrection`,
+  /// so the next launch starts on the right channel.
+  ///
+  /// It used to block for up to 3.5s inline, and pinned the timed-out guess permanently.
+  static func probeFreshInstallUpdateChannel(
+    fallback: String,
+    currentBuild: Int?,
+    mainThreadBudget: TimeInterval,
+    fetchAppcast: @escaping (@escaping @Sendable (String?) -> Void) -> Void,
+    persistLateCorrection: @escaping @Sendable (String) -> Void
+  ) -> String {
     if fallback == "beta" {
       return "beta"
     }
 
-    guard let currentBuild = currentBuildNumber else {
+    guard let currentBuild else {
       return fallback
     }
 
+    let appcast = AppcastProbeResult()
+    let semaphore = DispatchSemaphore(value: 0)
+
+    fetchAppcast { xml in
+      appcast.set(xml)
+      semaphore.signal()
+    }
+
+    if semaphore.wait(timeout: .now() + mainThreadBudget) == .success {
+      guard let appcastXML = appcast.value else { return fallback }
+      return resolveFreshInstallUpdateChannel(
+        currentBuild: currentBuild,
+        fallback: fallback,
+        appcastXML: appcastXML
+      )
+    }
+
+    DispatchQueue.global(qos: .utility).async {
+      guard
+        semaphore.wait(timeout: .now() + channelProbeRequestTimeout + 0.5) == .success,
+        let appcastXML = appcast.value
+      else { return }
+
+      let resolved = resolveFreshInstallUpdateChannel(
+        currentBuild: currentBuild,
+        fallback: fallback,
+        appcastXML: appcastXML
+      )
+      guard resolved != fallback else { return }
+      persistLateCorrection(resolved)
+    }
+
+    return fallback
+  }
+
+  private static func fetchDesktopAppcast(completion: @escaping @Sendable (String?) -> Void) {
     let configuration = URLSessionConfiguration.ephemeral
-    configuration.timeoutIntervalForRequest = timeout
-    configuration.timeoutIntervalForResource = timeout
+    configuration.timeoutIntervalForRequest = channelProbeRequestTimeout
+    configuration.timeoutIntervalForResource = channelProbeRequestTimeout
 
     let session = URLSession(configuration: configuration)
-    let semaphore = DispatchSemaphore(value: 0)
-    var appcastXML: String?
+    session.dataTask(with: desktopAppcastURL) { data, _, _ in
+      defer { session.finishTasksAndInvalidate() }
+      guard let data, let xml = String(data: data, encoding: .utf8) else {
+        completion(nil)
+        return
+      }
+      completion(xml)
+    }.resume()
+  }
 
-    let task = session.dataTask(with: desktopAppcastURL) { data, _, _ in
-      defer { semaphore.signal() }
-      guard let data, let xml = String(data: data, encoding: .utf8) else { return }
-      appcastXML = xml
+  private static func storeLateChannelCorrection(_ resolved: String) {
+    DispatchQueue.main.async {
+      // Only upgrade the guess this probe stored — never clobber a channel the user
+      // picked in Settings while the appcast was still in flight.
+      guard currentUpdateChannel == "stable" else { return }
+      UserDefaults.standard.set(resolved, forKey: updateChannelDefaultsKey)
+      log("AppBuild: appcast answered after the launch budget; update channel set to \(resolved)")
     }
-    task.resume()
+  }
+}
 
-    let finishedInTime = semaphore.wait(timeout: .now() + timeout + 0.5) == .success
-    session.finishTasksAndInvalidate()
+private final class AppcastProbeResult: @unchecked Sendable {
+  private let lock = NSLock()
+  private var xml: String?
 
-    guard finishedInTime, let appcastXML else {
-      return fallback
-    }
+  func set(_ value: String?) {
+    lock.lock()
+    defer { lock.unlock() }
+    xml = value
+  }
 
-    return resolveFreshInstallUpdateChannel(
-      currentBuild: currentBuild,
-      fallback: fallback,
-      appcastXML: appcastXML
-    )
+  var value: String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return xml
   }
 }

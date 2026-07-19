@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingTrustStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator
@@ -22,8 +22,8 @@ struct OnboardingTrustStepView: View {
       layoutMode: .centered,
       onForceComplete: onForceComplete
     ) {
-      VStack(spacing: 18) {
-        VStack(alignment: .leading, spacing: 12) {
+      VStack(spacing: OmiSpacing.lg) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           permissionRow(
             icon: "display", title: "Screen + files",
             detail: "Build context from what you’re working on.")
@@ -36,12 +36,12 @@ struct OnboardingTrustStepView: View {
         }
         .frame(maxWidth: 560, alignment: .leading)
 
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
           Button("Continue") {
             coordinator.clearLastActionError()
             onContinue()
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .buttonStyle(OmiButtonStyle(.primary))
           .keyboardShortcut(.defaultAction)
 
           Button("Read the source code") {
@@ -61,17 +61,17 @@ struct OnboardingTrustStepView: View {
   }
 
   private func permissionRow(icon: String, title: String, detail: String) -> some View {
-    HStack(alignment: .top, spacing: 12) {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .semibold))
         .foregroundColor(.white.opacity(0.85))
         .frame(width: 28, height: 28)
         .background(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
             .fill(OmiColors.backgroundSecondary)
         )
 
-      VStack(alignment: .leading, spacing: 2) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
           .font(.system(size: 14, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
@@ -82,9 +82,9 @@ struct OnboardingTrustStepView: View {
 
       Spacer()
     }
-    .padding(14)
+    .padding(OmiSpacing.md)
     .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
         .fill(OmiColors.backgroundTertiary.opacity(0.55))
     )
   }

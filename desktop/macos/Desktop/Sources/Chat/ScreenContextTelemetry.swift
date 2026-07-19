@@ -8,6 +8,7 @@ enum ScreenContextFailureCode: String, CaseIterable {
   case screenshotPending = "screenshot_pending"
   case screenshotFileMissing = "screenshot_file_missing"
   case screenshotChunkCorrupted = "screenshot_chunk_corrupted"
+  case screenshotSharingDisabled = "screenshot_sharing_disabled"
   case imageUnavailable = "image_unavailable"
   case policyApprovalRequired = "policy_approval_required"
   case captureFailed = "capture_failed"
@@ -223,12 +224,13 @@ enum ScreenContextToolTelemetry {
     toolName: String? = nil,
     properties: [String: Any] = [:]
   ) {
+    let propertiesBox = RuntimeJSONPayloadBox(properties)
     Task { @MainActor in
       AnalyticsManager.shared.screenContextInvariant(
         name: name,
         context: context,
         toolName: toolName,
-        properties: properties
+        properties: propertiesBox.value
       )
     }
   }
@@ -270,6 +272,17 @@ enum ScreenContextToolTelemetry {
   }
 
   static func toolResultFacts(toolName: String, output: String) -> ScreenContextToolFacts? {
+    if output.hasPrefix("EXECUTION_PRECONDITION_FAILED:"),
+      output.contains("\"code\":\"execution_precondition_failed\""),
+      output.contains("\"reason\":\"screenshot_sharing_disabled\"")
+    {
+      return ScreenContextToolFacts(
+        requested: true,
+        succeeded: false,
+        approvalRequired: false,
+        failureCode: .screenshotSharingDisabled
+      )
+    }
     if output.hasPrefix("POLICY_DENIED:"), output.contains("\"code\":\"approval_required\"") {
       return ScreenContextToolFacts(
         requested: true,
@@ -290,7 +303,9 @@ enum ScreenContextToolTelemetry {
       )
     }
 
-    let normalizedOutput = output
+    let normalizedOutput =
+      output
+      .replacingOccurrences(of: "EXECUTION_PRECONDITION_FAILED: ", with: "")
       .replacingOccurrences(of: "POLICY_DENIED: ", with: "")
       .replacingOccurrences(of: "PERMISSION_REQUIRED: ", with: "")
     guard
@@ -330,7 +345,8 @@ enum ScreenContextToolTelemetry {
   }
 
   private static func permissionErrorHasNextTool(_ output: String) -> Bool {
-    let normalizedOutput = output
+    let normalizedOutput =
+      output
       .replacingOccurrences(of: "PERMISSION_REQUIRED: ", with: "")
     guard
       let data = normalizedOutput.data(using: .utf8),
@@ -413,6 +429,57 @@ enum ScreenContextWorkContextBuilder {
   static let staleCaptureThresholdSeconds = 60
   static let voiceTurnStaleCaptureThresholdSeconds = 15
 
+  /// Direct “what is on my screen?” requests are a turn-scoped visual action,
+  /// not a request for Rewind history. The caller attaches the same image bytes
+  /// to the model request; this envelope makes that provenance explicit.
+  static func explicitCurrentScreenPayload(
+    screenRecordingGranted: Bool,
+    imageAttached: Bool,
+    capturedAt: Date = Date(),
+    formatter: ISO8601DateFormatter = ISO8601DateFormatter()
+  ) -> [String: Any] {
+    guard screenRecordingGranted else {
+      return permissionDeniedPayload(windowMinutes: 1)
+    }
+    guard imageAttached else {
+      return [
+        "ok": false,
+        "name": "get_work_context",
+        "failure_code": ScreenContextFailureCode.imageUnavailable.rawValue,
+        "screen_now": [
+          "available": false,
+          "failure_code": ScreenContextFailureCode.imageUnavailable.rawValue,
+          "source": "turn_scoped_live_capture",
+        ],
+        "timeline": [],
+        "guidance":
+          "A live capture for this request failed. Do not answer from screen history; explain that current screen evidence was unavailable.",
+      ]
+    }
+    return [
+      "ok": true,
+      "name": "get_work_context",
+      "screen_now": [
+        "available": true,
+        "source": "turn_scoped_live_capture",
+        "captured_at": formatter.string(from: capturedAt),
+        "image_delivered_to_model": true,
+        "latest_capture_age_seconds": 0,
+      ],
+      "timeline": [],
+      "guidance":
+        "The attached image is the only current-screen evidence for this turn. Answer the user's question from it; do not substitute stored history or OCR metadata.",
+    ]
+  }
+
+  static func payload(arguments: RuntimeJSONPayloadBox) async -> [String: Any] {
+    await payload(arguments: arguments.value)
+  }
+
+  static func payloadBox(arguments: RuntimeJSONPayloadBox) async -> RuntimeJSONPayloadBox {
+    RuntimeJSONPayloadBox(await payload(arguments: arguments.value))
+  }
+
   static func payload(arguments: [String: Any]) async -> [String: Any] {
     let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
     let staleThresholdSeconds = max(
@@ -427,20 +494,20 @@ enum ScreenContextWorkContextBuilder {
       return permissionDeniedPayload(windowMinutes: minutes)
     }
 
-	    guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
-	      if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
-	        return [
-	          "ok": true,
-	          "name": "get_work_context",
-	          "window_minutes": minutes,
-	          "screen_now": fresh,
-	          "timeline": [],
-	          "latest_capture_age_seconds": 0,
-	          "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
-	          "guidance":
-	            "The local Rewind timeline database is unavailable, but a fresh live screen capture succeeded. Use capture_screen if raw pixels are necessary.",
-	        ]
-	      }
+    guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
+      if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
+        return [
+          "ok": true,
+          "name": "get_work_context",
+          "window_minutes": minutes,
+          "screen_now": fresh,
+          "timeline": [],
+          "latest_capture_age_seconds": 0,
+          "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
+          "guidance":
+            "The local Rewind timeline database is unavailable, but a fresh live screen capture succeeded. Use capture_screen if raw pixels are necessary.",
+        ]
+      }
       return [
         "ok": false,
         "name": "get_work_context",
@@ -564,7 +631,7 @@ enum ScreenContextWorkContextBuilder {
       "timeline": timeline,
       "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
       "guidance":
-        "This is the user's recent on-screen activity. Act on it directly instead of asking them to screenshot or re-explain what they were doing.",
+        "This is recent historical on-screen activity, not proof of the current visible screen. Use it for history; for a direct current-screen question, obtain a live capture instead of answering from this payload.",
     ]
     if let failureCode {
       payload["failure_code"] = failureCode.rawValue
@@ -636,7 +703,9 @@ enum ScreenContextWorkContextBuilder {
     }
     if let screenNow = payload["screen_now"] as? [String: Any] {
       var compactScreen: [String: Any] = [:]
-      for key in ["available", "app_name", "window_title", "captured_at", "age_seconds", "latest_capture_age_seconds", "source"] {
+      for key in [
+        "available", "app_name", "window_title", "captured_at", "age_seconds", "latest_capture_age_seconds", "source",
+      ] {
         if let value = screenNow[key] {
           compactScreen[key] = value
         }
@@ -657,7 +726,8 @@ enum ScreenContextWorkContextBuilder {
     let screenNowAvailable = screenNow?["available"] as? Bool
     let failureRaw = (payload["failure_code"] as? String) ?? (screenNow?["failure_code"] as? String)
     let timelineCount = (payload["timeline"] as? [[String: Any]])?.count
-    let latestAge = (screenNow?["latest_capture_age_seconds"] as? Int) ?? (payload["latest_capture_age_seconds"] as? Int)
+    let latestAge =
+      (screenNow?["latest_capture_age_seconds"] as? Int) ?? (payload["latest_capture_age_seconds"] as? Int)
     let ocr = screenNow?["ocr_preview"] as? String
     return (
       ok: (payload["ok"] as? Bool) == true,

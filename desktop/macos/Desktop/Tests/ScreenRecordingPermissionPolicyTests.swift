@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -65,7 +66,8 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       let src = try sourceFile(path)
       XCTAssertNil(
         src.range(
-          of: "openScreenRecordingPreferences\\([\\s\\S]{0,240}(requestAllScreenCapturePermissions|triggerScreenRecordingPermission)",
+          of:
+            "openScreenRecordingPreferences\\([\\s\\S]{0,240}(requestAllScreenCapturePermissions|triggerScreenRecordingPermission)",
           options: .regularExpression),
         "\(path) still opens Settings before requesting screen-recording access")
     }
@@ -74,6 +76,85 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
   func testUiPermissionFollowsTccGrant() {
     XCTAssertTrue(ScreenRecordingPermissionPolicy.uiPermissionGranted(tccGranted: true))
     XCTAssertFalse(ScreenRecordingPermissionPolicy.uiPermissionGranted(tccGranted: false))
+  }
+
+  func testDeniedScreenRecordingAlwaysRoutesToSettings() {
+    XCTAssertEqual(
+      ScreenCaptureService.screenRecordingRequestDestination(hasPermissionNow: true),
+      .alreadyGranted)
+    XCTAssertEqual(
+      ScreenCaptureService.screenRecordingRequestDestination(hasPermissionNow: false),
+      .systemSettings)
+  }
+
+  @MainActor
+  func testDragPayloadIsAFileURL() {
+    let appURL = URL(fileURLWithPath: "/Applications/omi-screen-drag-test.app")
+    let pasteboard = NSPasteboard(name: .init("omi-screen-recording-drag-test"))
+    pasteboard.clearContents()
+
+    XCTAssertTrue(
+      pasteboard.writeObjects([AppBundleDragSourceNSView.pasteboardWriter(for: appURL)]))
+    XCTAssertEqual(pasteboard.string(forType: .fileURL), appURL.absoluteString)
+  }
+
+  @MainActor
+  func testDragSourceRendersIconBeforeInteraction() {
+    let icon = NSImage(size: NSSize(width: 8, height: 8), flipped: false) { rect in
+      NSColor.red.setFill()
+      rect.fill()
+      return true
+    }
+    let view = AppBundleDragSourceNSView(frame: NSRect(x: 0, y: 0, width: 32, height: 32))
+    view.image = icon
+    let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+    view.cacheDisplay(in: view.bounds, to: bitmap)
+
+    XCTAssertGreaterThan(bitmap.colorAt(x: 16, y: 16)?.alphaComponent ?? 0, 0.5)
+  }
+
+  @MainActor
+  func testDragIconShrinksAsItEntersSystemSettings() {
+    let settingsFrame = CGRect(x: 100, y: 100, width: 600, height: 500)
+
+    XCTAssertEqual(
+      AppBundleDragSourceNSView.dragIconSize(
+        pointer: CGPoint(x: 80, y: 300), targetFrame: settingsFrame),
+      AppBundleDragSourceNSView.fullDragIconSize)
+    XCTAssertEqual(
+      AppBundleDragSourceNSView.dragIconSize(
+        pointer: CGPoint(x: 100, y: 300), targetFrame: settingsFrame),
+      AppBundleDragSourceNSView.fullDragIconSize)
+    XCTAssertEqual(
+      AppBundleDragSourceNSView.dragIconSize(
+        pointer: CGPoint(x: 140, y: 300), targetFrame: settingsFrame),
+      AppBundleDragSourceNSView.compactDragIconSize)
+  }
+
+  @MainActor
+  func testDragHelperSkipsFadeForReducedMotion() {
+    XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: false), 0)
+    XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: true), 1)
+  }
+
+  /// The drag card sits centered in the bottom quarter of the screen (below the
+  /// Settings list, never covering the drop target), x-centered on the anchor.
+  @MainActor
+  func testDragCardSitsInBottomQuarterOfScreen() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+    let anchor = CGRect(x: 900, y: 300, width: 600, height: 500)
+
+    let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
+      anchor: anchor, cardSize: card, visibleFrame: visible)
+    XCTAssertEqual(frame.midX, anchor.midX)
+    XCTAssertLessThanOrEqual(frame.maxY, visible.minY + visible.height / 4)
+
+    // No anchor → centered on the screen, still in the bottom quarter.
+    let centered = CloudConnectorGuidanceOverlay.dragCardFrame(
+      anchor: nil, cardSize: card, visibleFrame: visible)
+    XCTAssertEqual(centered.midX, visible.midX)
+    XCTAssertLessThanOrEqual(centered.maxY, visible.minY + visible.height / 4)
   }
 
   func testCaptureKitFailureDoesNotOverrideGrantedTccPermission() {

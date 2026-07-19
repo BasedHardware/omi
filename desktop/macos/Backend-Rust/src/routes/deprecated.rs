@@ -14,8 +14,6 @@ use axum::{
 };
 use serde_json::json;
 
-use crate::AppState;
-
 /// Standard 410 Gone response for deprecated endpoints.
 async fn deprecated_handler(req: Request) -> Response {
     let path = req.uri().path().to_string();
@@ -38,7 +36,7 @@ async fn deprecated_handler(req: Request) -> Response {
 
 /// Register all deprecated routes so they return 410 instead of 404.
 /// This lets old clients get a clear deprecation message rather than a confusing 404.
-pub fn deprecated_routes() -> Router<AppState> {
+pub(crate) fn deprecated_routes() -> Router {
     Router::new()
         // ── Chat context & generation (0 traffic, Swift uses Python) ──────────
         .route("/v2/chat-context", post(deprecated_handler))
@@ -271,4 +269,52 @@ pub fn deprecated_routes() -> Router<AppState> {
             "/v1/proxy/deepgram/ws/v1/listen",
             get(deprecated_handler).post(deprecated_handler),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{body::to_bytes, http::Method};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn legacy_data_routes_return_the_structured_gone_contract_without_state() {
+        let cases = [
+            (Method::POST, "/v2/chat-context"),
+            (Method::GET, "/v2/chat-sessions"),
+            (Method::PATCH, "/v2/chat-sessions/session-1"),
+            (Method::DELETE, "/v1/action-items/item-1"),
+            (Method::GET, "/v3/memories"),
+            (Method::POST, "/v1/proxy/deepgram/v1/listen"),
+        ];
+
+        for (method, path) in cases {
+            let response = deprecated_routes()
+                .oneshot(
+                    Request::builder()
+                        .method(method.clone())
+                        .uri(path)
+                        .body(axum::body::Body::empty())
+                        .expect("valid request"),
+                )
+                .await
+                .expect("deprecated router response");
+
+            assert_eq!(response.status(), StatusCode::GONE, "{method} {path}");
+            let body = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("response body");
+            let body: serde_json::Value =
+                serde_json::from_slice(&body).expect("JSON response body");
+
+            assert_eq!(body["error"], "gone", "{method} {path}");
+            assert_eq!(body["migration"], "https://api.omi.me", "{method} {path}");
+            assert!(
+                body["message"].as_str().is_some_and(
+                    |message| message.contains(method.as_str()) && message.contains(path)
+                ),
+                "{method} {path}"
+            );
+        }
+    }
 }

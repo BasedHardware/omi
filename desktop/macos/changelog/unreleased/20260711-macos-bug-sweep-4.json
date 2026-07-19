@@ -1,3 +1,0 @@
-{
-    "change": "Fixed audio loss and data races on macOS: duplicate-id recordings no longer overwrite earlier audio, Bluetooth reads/writes no longer race, the Memory graph layout no longer corrupts during render, and legacy Rewind migration no longer drops recent writes"
-}

@@ -69,6 +69,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class ExternalIntegrationFanoutError(RuntimeError):
+    """At least one durable finalization webhook did not acknowledge delivery."""
+
+
 def _notify_app_owner(app_id: str, title: str, body: str):
     """Send a push notification to the app owner about webhook health."""
     try:
@@ -161,8 +165,20 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 # **************************************************
 
 
-async def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
-    """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1)."""
+async def trigger_external_integrations(
+    uid: str,
+    conversation: Conversation,
+    *,
+    idempotency_key: str | None = None,
+    require_delivery: bool = False,
+) -> list:
+    """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1).
+
+    Finalization workers provide a durable key so a lease replay can safely
+    retry an interrupted external fanout without creating a second effect.
+    They also require a delivery acknowledgement, preserving the existing
+    best-effort behavior for non-finalization callers.
+    """
     if not conversation or conversation.discarded:
         return []
     if conversation.is_locked:
@@ -174,6 +190,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         return []
 
     results = {}
+    failed_deliveries: list[str] = []
 
     async def _single(app: App):
         if not app.external_integration.webhook_url:
@@ -197,6 +214,8 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             logger.info(f'trigger_external_integrations: circuit breaker open for {app.id}')
+            if require_delivery:
+                failed_deliveries.append(app.id)
             return
 
         try:
@@ -206,6 +225,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                 response = await client.post(
                     url,
                     json=payload,
+                    headers={'X-Omi-Idempotency-Key': idempotency_key} if idempotency_key else None,
                 )
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
@@ -217,6 +237,8 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                 logger.info(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
+                if require_delivery:
+                    failed_deliveries.append(app.id)
                 return
 
             cb.record_success()
@@ -252,10 +274,15 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
             error_str = type(e).__name__
             action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
             await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
-            logger.error(f"Plugin integration error: {e}")
+            logger.error('Plugin integration request failed app=%s error=%s', app.id, type(e).__name__)
+            if require_delivery:
+                failed_deliveries.append(app.id)
             return
 
     await gather_safe(*[_single(app) for app in filtered_apps], label="trigger_integrations", max_concurrency=10)
+
+    if failed_deliveries:
+        raise ExternalIntegrationFanoutError(f'{len(failed_deliveries)} durable integration deliveries failed')
 
     messages = []
     for key, message in results.items():
@@ -588,7 +615,12 @@ def _process_proactive_notification(uid: str, app: App, data):
 
     chat_messages = []
     if 'user_chat' in filter_scopes:
-        chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
+        # Skip any malformed/legacy stored message rather than letting one bad record raise a
+        # ValidationError that aborts the whole notification. The sole caller swallows exceptions
+        # from here, so an unguarded build silently dropped the proactive notification every run
+        # until the bad row aged out of the last-10 window. deserialize_many_safe (#8882) is the
+        # shared safe-deserialize path for exactly this class.
+        chat_messages = list(reversed(Message.deserialize_many_safe(get_app_messages(uid, app.id, limit=10))))
 
     # Build prompt with substitutions
     for param in filter_scopes:
@@ -604,7 +636,8 @@ def _process_proactive_notification(uid: str, app: App, data):
             )
     prompt = prompt.replace('    ', '').strip()
 
-    message = get_llm('app_integration').invoke(prompt).content
+    with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+        message = get_llm('app_integration').invoke(prompt).content
     if not message or len(message) < min_message_char_limit:
         logger.info(f"Plugins {app.id}, message too short {uid}")
         return None

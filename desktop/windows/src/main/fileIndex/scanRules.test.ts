@@ -1,23 +1,54 @@
 import { describe, it, expect } from 'vitest'
 import { shouldVisitDir, shouldIndexFile, SKIP_DIRS, MAX_DEPTH, MAX_FILE_SIZE } from './scanRules'
 
+const GENERATED_AND_DEPENDENCY_DIRS = [
+  '.Trash',
+  'node_modules',
+  '.git',
+  '__pycache__',
+  '.venv',
+  'venv',
+  '.cache',
+  '.npm',
+  '.yarn',
+  'Pods',
+  'DerivedData',
+  '.build',
+  'build',
+  'dist',
+  '.next',
+  '.nuxt',
+  'target',
+  'vendor',
+  'Library',
+  '.local',
+  '.cargo',
+  '.rustup'
+] as const
+
 describe('shouldVisitDir', () => {
-  it('skips noise directories', () => {
-    expect(shouldVisitDir('node_modules', 1)).toBe(false)
-    expect(shouldVisitDir('.git', 1)).toBe(false)
-    expect(shouldVisitDir('__pycache__', 1)).toBe(false)
-    expect(shouldVisitDir('.Trash', 1)).toBe(false)
-    expect(SKIP_DIRS.has('.Trash')).toBe(true)
+  it.each(GENERATED_AND_DEPENDENCY_DIRS)('skips ignored directory %s', (name) => {
+    expect(SKIP_DIRS.has(name)).toBe(true)
+    expect(shouldVisitDir(name, 1)).toBe(false)
   })
-  it('skips noise directories case-insensitively on Windows paths', () => {
-    expect(shouldVisitDir('Node_Modules', 1)).toBe(false)
-    expect(shouldVisitDir('.GIT', 1)).toBe(false)
-    expect(shouldVisitDir('__PYCACHE__', 1)).toBe(false)
+
+  it.each(['Node_Modules', '.GIT', '__PYCACHE__', 'DERIVEDDATA', '.NEXT', 'LIBRARY'])(
+    'skips %s case-insensitively on Windows paths',
+    (name) => {
+      expect(shouldVisitDir(name, 1)).toBe(false)
+    }
+  )
+
+  it('does not skip similarly named project directories', () => {
+    expect(shouldVisitDir('build-tools', 1)).toBe(true)
+    expect(shouldVisitDir('vendor-notes', 1)).toBe(true)
   })
+
   it('visits normal dirs within depth', () => {
     expect(shouldVisitDir('src', 1)).toBe(true)
     expect(shouldVisitDir('src', MAX_DEPTH)).toBe(true)
   })
+
   it('stops past max depth', () => {
     expect(shouldVisitDir('src', MAX_DEPTH + 1)).toBe(false)
   })

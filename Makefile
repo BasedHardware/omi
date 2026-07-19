@@ -4,7 +4,7 @@ PYTHON ?= $(shell if [ -x backend/venv/bin/python ]; then printf backend/venv/bi
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
 
-.PHONY: setup setup-main setup-hooks preflight dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
+.PHONY: setup setup-main setup-hooks preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
 
 setup: setup-main setup-hooks
 	@echo "Worktree setup complete."
@@ -16,7 +16,14 @@ setup-hooks:
 	@bash scripts/install-git-hooks.sh
 
 preflight:
-	python3 .github/scripts/run_checks.py --lane local --base origin/main
+	python3 .github/scripts/pr_preflight.py --lane local --base origin/main
+
+runtime-image-source-closure:
+	python3 backend/scripts/runtime_image_contracts.py check
+
+runtime-image-smoke:
+	@test -n "$(SERVICE)" || (echo "SERVICE is required (for example: make runtime-image-smoke SERVICE=pusher)" >&2; exit 2)
+	python3 backend/scripts/runtime_image_contracts.py build-smoke --service "$(SERVICE)" --image "$(or $(IMAGE),omi-$(SERVICE):dev)"
 
 dev-check:
 	bash scripts/dev-harness/dev-check.sh

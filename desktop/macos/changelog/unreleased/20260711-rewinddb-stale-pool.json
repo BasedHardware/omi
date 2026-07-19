@@ -1,3 +1,0 @@
-{
-    "change": "Fixed local storage continuing to use a stale database connection after an automatic corruption recovery, which could hide recent data or repeat errors until the next restart"
-}

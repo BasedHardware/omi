@@ -43,16 +43,17 @@ export function stableHash(value: string | undefined): string {
   return createHash("sha256").update(value ?? "").digest("hex");
 }
 
-const REQUEST_SCOPED_MCP_ENV_KEYS = new Set([
+const VOLATILE_MCP_ENV_KEYS = new Set([
   "OMI_BRIDGE_PIPE",
   "OMI_CONTEXT_FILE",
   "OMI_REQUEST_ID",
   "OMI_CLIENT_ID",
-  "OMI_PROTOCOL_VERSION",
   "OMI_SESSION_ID",
   "OMI_RUN_ID",
   "OMI_ATTEMPT_ID",
   "OMI_ADAPTER_SESSION_ID",
+  "OMI_PROTOCOL_VERSION",
+  "OMI_QUERY_MODE",
 ]);
 
 export function stableJsonStringify(value: unknown): string {
@@ -85,7 +86,7 @@ export function stableMcpServerConfig(value: unknown): unknown {
             return true;
           }
           const name = (entry as Record<string, unknown>).name;
-          return typeof name !== "string" || !REQUEST_SCOPED_MCP_ENV_KEYS.has(name);
+          return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name);
         })
         .sort((left, right) => {
           const leftName =
@@ -123,6 +124,9 @@ export function bindingMetadata(input: ExecuteAgentRunInput, adapter?: RuntimeAd
     : input.mcpServers ?? [];
   return JSON.stringify({
     mcpServersHash: stableJsonHash(stableMcpServerConfig(effectiveMcpServers)),
+    systemPromptCacheIdentity: input.systemPromptCacheIdentity ?? null,
+    dynamicContextIdentity: input.dynamicContextIdentity ?? null,
+    contextPlanId: input.contextPlanId ?? null,
   });
 }
 
@@ -403,6 +407,7 @@ export function sessionFromRow(row: Record<string, unknown>): AgentSession {
     defaultAdapterId: text(row.default_adapter_id),
     defaultCwd: nullableText(row.default_cwd),
     modelProfile: nullableText(row.model_profile),
+    executionProfileGeneration: Number(row.current_profile_generation ?? 1),
     metadataJson: text(row.metadata_json),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
@@ -420,6 +425,7 @@ export function runFromRow(row: Record<string, unknown>): AgentRun {
     idempotencyKey: nullableText(row.idempotency_key),
     status: text(row.status) as RunStatus,
     mode: text(row.mode) as RunMode,
+    profileGeneration: Number(row.profile_generation ?? 1),
     inputJson: text(row.input_json),
     systemPromptHash: nullableText(row.system_prompt_hash),
     modelProfile: nullableText(row.model_profile),
@@ -496,6 +502,7 @@ export function attemptFromRow(row: Record<string, unknown>): RunAttempt {
     attemptId: text(row.attempt_id),
     runId: text(row.run_id),
     attemptNo: Number(row.attempt_no),
+    profileGeneration: Number(row.profile_generation ?? 1),
     status: text(row.status) as AttemptStatus,
     adapterId: text(row.adapter_id),
     adapterInstanceId: text(row.adapter_instance_id),
@@ -525,6 +532,7 @@ export function bindingFromRow(row: Record<string, unknown>): AdapterBinding {
     sessionId: text(row.session_id),
     adapterId: text(row.adapter_id),
     bindingGeneration: Number(row.binding_generation),
+    profileGeneration: Number(row.profile_generation ?? 1),
     adapterNativeSessionId: nullableText(row.adapter_native_session_id),
     adapterInstanceId: nullableText(row.adapter_instance_id),
     resumeFidelity: text(row.resume_fidelity) as ResumeFidelity,
@@ -537,7 +545,6 @@ export function bindingFromRow(row: Record<string, unknown>): AdapterBinding {
     updatedAtMs: Number(row.updated_at_ms),
     lastUsedAtMs: nullableNumber(row.last_used_at_ms),
     invalidatedAtMs: nullableNumber(row.invalidated_at_ms),
-    lastDeliveredTurnCreatedAtMs: Number(row.last_delivered_turn_created_at_ms ?? 0),
   };
 }
 
@@ -600,16 +607,7 @@ export function canonicalAdapterEventType(event: OutboundMessageDraft): string |
 
 export function refreshMcpAttemptContext(
   mcpServers: Record<string, unknown>[],
-  context: {
-    ownerId: string;
-    requestId: string;
-    clientId: string;
-    protocolVersion: number;
-    sessionId: string;
-    runId: string;
-    attemptId: string;
-    adapterSessionId?: string;
-  }
+  context: { capabilityRef: string },
 ): void {
   for (const server of mcpServers) {
     const env = Array.isArray(server.env) ? server.env : [];
@@ -626,7 +624,7 @@ export function refreshMcpAttemptContext(
     if (typeof contextFilePath !== "string" || !contextFilePath.trim()) {
       continue;
     }
-    writeFileSync(contextFilePath, JSON.stringify(context), { encoding: "utf8" });
+    writeFileSync(contextFilePath, JSON.stringify({ capabilityRef: context.capabilityRef }), { encoding: "utf8" });
   }
 }
 
@@ -641,7 +639,11 @@ export function mcpServersForBinding(
       return server;
     }
     const normalized: Record<string, unknown> = { ...server };
-    const env = Array.isArray(normalized.env) ? normalized.env : [];
+    const env = (Array.isArray(normalized.env) ? normalized.env : []).filter((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return true;
+      const name = (entry as Record<string, unknown>).name;
+      return typeof name !== "string" || !VOLATILE_MCP_ENV_KEYS.has(name) || name === "OMI_CONTEXT_FILE";
+    });
     normalized.env = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
     return normalized;
   });
@@ -673,6 +675,7 @@ export const runColumnMap: Record<string, string> = {
   clientId: "client_id",
   requestId: "request_id",
   idempotencyKey: "idempotency_key",
+  profileGeneration: "profile_generation",
   inputJson: "input_json",
   systemPromptHash: "system_prompt_hash",
   modelProfile: "model_profile",
@@ -696,6 +699,7 @@ export const attemptColumnMap: Record<string, string> = {
   attemptId: "attempt_id",
   runId: "run_id",
   attemptNo: "attempt_no",
+  profileGeneration: "profile_generation",
   adapterId: "adapter_id",
   adapterInstanceId: "adapter_instance_id",
   runtimeNodeId: "runtime_node_id",
@@ -721,6 +725,7 @@ export const bindingColumnMap: Record<string, string> = {
   sessionId: "session_id",
   adapterId: "adapter_id",
   bindingGeneration: "binding_generation",
+  profileGeneration: "profile_generation",
   adapterNativeSessionId: "adapter_native_session_id",
   adapterInstanceId: "adapter_instance_id",
   resumeFidelity: "resume_fidelity",
@@ -731,5 +736,4 @@ export const bindingColumnMap: Record<string, string> = {
   updatedAtMs: "updated_at_ms",
   lastUsedAtMs: "last_used_at_ms",
   invalidatedAtMs: "invalidated_at_ms",
-  lastDeliveredTurnCreatedAtMs: "last_delivered_turn_created_at_ms",
 };

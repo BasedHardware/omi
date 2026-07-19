@@ -8,9 +8,8 @@ import XCTest
 /// other per-user storages. The next signed-in user therefore read/wrote the
 /// previous account's staged tasks, goals, and task-chat history until relaunch.
 ///
-/// `signOut()` cannot be exercised hermetically (it calls `Auth.auth().signOut()`
-/// and mutates many process-global singletons), so this is a static wiring
-/// tripwire on the invalidation block rather than behavioral coverage.
+/// The invalidation list now lives at the effective-owner transition boundary,
+/// so it also covers automation and account switches rather than sign-out only.
 final class SignOutStorageInvalidationTests: XCTestCase {
 
   func testSignOutInvalidatesAllPerUserTaskStorages() throws {
@@ -19,7 +18,7 @@ final class SignOutStorageInvalidationTests: XCTestCase {
       contentsOf: URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
-        .appendingPathComponent("Sources/AuthService.swift"),
+        .appendingPathComponent("Sources/Chat/RuntimeOwnerIdentity.swift"),
       encoding: .utf8
     )
 

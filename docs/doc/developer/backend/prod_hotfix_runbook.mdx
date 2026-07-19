@@ -106,7 +106,7 @@ Prod Cloud Run intentionally omits `SERVICE_ACCOUNT_JSON` and `POSTHOG_PROJECT_A
 
 ### Dev batch STT topology
 
-The `backend`, `backend-sync`, and `backend-integration` services own their routed pre-recorded STT selection and every provider dependency in `backend/deploy/runtime_env.yaml`. Dev Parakeet must use the isolated `http://parakeet.omiapi.com` endpoint—never production `parakeet.omi.me`; prod uses `https://parakeet.omi.me`. The runtime validator treats a secret-backed selector conservatively and requires `DEEPGRAM_API_KEY`, `MODULATE_API_KEY`, and `HOSTED_PARAKEET_API_URL` together for rendered and live Cloud Run revisions.
+The `backend`, `backend-sync`, and `backend-integration` services own their routed pre-recorded STT selection and every provider dependency in `backend/deploy/runtime_env.yaml`. Dev Parakeet must use the isolated `http://parakeet.omiapi.com` endpoint—never production `parakeet.omi.me`; prod uses `http://parakeet.omi.me`. Serving policy is literal `parakeet,modulate-velma-2`, and the runtime validator requires both `MODULATE_API_KEY` and `HOSTED_PARAKEET_API_URL` for rendered and live Cloud Run revisions.
 
 After a dev revision is serving, run the opt-in smoke check with a valid dev authorization header:
 

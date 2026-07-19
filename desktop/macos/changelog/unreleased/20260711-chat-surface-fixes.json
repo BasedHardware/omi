@@ -1,3 +1,0 @@
-{
-    "change": "Fixed the chat view jumping instead of holding your place when loading earlier messages, and stopped push-to-talk from dropping a legitimately repeated word within a single turn"
-}

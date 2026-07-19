@@ -93,3 +93,22 @@ def test_get_x_posts_negative_limit_is_clamped(mcp):
 
     assert result == {"posts": []}
     assert fake.call_args.kwargs["limit"] == 1  # clamped up to the minimum
+
+
+def test_get_goals_non_bool_include_inactive_returns_invalid_params(mcp):
+    """A non-boolean include_inactive must return a clean -32602, not crash in parse_mcp_bool.
+
+    Sibling boolean flags (create_action_item.completed, get_memories.include_activity) already
+    wrap parse_mcp_bool in ToolExecutionError; get_goals did not, so parse_mcp_bool's ValueError
+    escaped execute_tool as HTTP 500.
+    """
+    with pytest.raises(mcp.ToolExecutionError) as exc:
+        mcp.execute_tool("test-uid", "get_goals", {"include_inactive": "maybe"})
+    assert exc.value.code == -32602
+
+
+def test_get_screen_activity_non_bool_summary_returns_invalid_params(mcp):
+    """A non-boolean summary must return a clean -32602, not crash in parse_mcp_bool (same gap)."""
+    with pytest.raises(mcp.ToolExecutionError) as exc:
+        mcp.execute_tool("test-uid", "get_screen_activity", {"summary": "maybe"})
+    assert exc.value.code == -32602

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -275,13 +276,20 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
 
     assert result.returncode == 1
     assert 'Raw Dart decode sites:' in result.stdout
-    assert 'app/lib/backend/schema/app.dart:32' in result.stdout
+    assert re.search(r'app/lib/backend/schema/app\.dart:\d+ \(field_access\)', result.stdout)
 
 
 def test_inventory_openapi_route_response_decode_migration_complete():
     report = inventory_app_client_schemas.build_report(SPEC_PATH)
     response_violations = [item for item in report['app_operation_manifest'] if item['raw_response_decode_site_count']]
     assert not response_violations
+    voice_operation = next(
+        item for item in report['app_operation_manifest'] if item['function_name'] == 'sendVoiceMessageStreamServer'
+    )
+
+    assert voice_operation['raw_response_decode_site_count'] == 0
+    assert voice_operation['stream_protocol_decode_site_count'] == 2
+    assert {site['context'] for site in voice_operation['stream_protocol_decode_sites']} == {'stream_protocol'}
 
 
 def test_inventory_route_raw_decode_gate_checks_total_decode_sites_for_targeted_routes():

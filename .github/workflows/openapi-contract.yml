@@ -44,6 +44,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # Preserve every main/manual compatibility result while cancelling obsolete
+  # PR revisions that can no longer merge.
+  group: openapi-contract-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: true
+
 jobs:
   openapi-contract:
     name: Public Developer API contract
@@ -52,17 +58,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version-file: backend/.python-version
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
@@ -91,20 +97,13 @@ jobs:
         working-directory: backend
         run: scripts/openapi_runner.sh scripts/route_policy_inventory.py --manifest route_policy_manifest.yaml --check --report-only
 
-      - name: Load base route policy baseline
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          git show FETCH_HEAD:backend/route_policy_legacy_missing_routes.txt > /tmp/route_policy_legacy_missing_routes.base.txt || true
-
       - name: Enforce backend route policy baseline
-        working-directory: backend
         run: |
-          args=(--manifest route_policy_manifest.yaml --enforce-missing-baseline)
-          if [[ -s /tmp/route_policy_legacy_missing_routes.base.txt ]]; then
-            args+=(--base-missing-baseline /tmp/route_policy_legacy_missing_routes.base.txt)
+          args=()
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            args+=(--base-ref FETCH_HEAD)
           fi
-          scripts/openapi_runner.sh scripts/route_policy_inventory.py "${args[@]}"
+          python backend/scripts/check_route_policy_baseline.py "${args[@]}"
 
       - name: Check generated app-client Dart schemas
         run: python backend/scripts/generate_dart_models.py --all --check

@@ -16,8 +16,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  metadata-preflight:
+    name: PR Metadata Preflight
+    if: github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      # The preflight can select uv-backed checks (e.g. backend-route-policy-baseline
+      # runs the OpenAPI runner) whenever a PR touches backend routes, so this job
+      # needs uv just like the sibling Hygiene job.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/openapi-requirements.txt
+
+      - name: Run current PR metadata preflight
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          scripts/pr-preflight \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --repository "${{ github.repository }}" \
+            --pr-number "${{ github.event.pull_request.number }}"
+
   changes:
     name: Detect Changes
+    if: github.event_name != 'pull_request' || !contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action)
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
@@ -29,7 +63,7 @@ jobs:
       has_workflows: ${{ steps.changes.outputs.has_workflows }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -41,11 +75,23 @@ jobs:
     name: Hygiene
     runs-on: ubuntu-latest
     needs: changes
+    if: github.event_name != 'pull_request' || !contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action)
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/openapi-requirements.txt
 
       - name: Save changed files
         run: |
@@ -69,11 +115,12 @@ jobs:
           scripts/pr-preflight \
             --base "${{ needs.changes.outputs.diff_base }}" \
             --repository "${{ github.repository }}" \
-            --pr-number "${{ github.event.pull_request.number }}"
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --event-payload-file "$GITHUB_EVENT_PATH"
 
       - name: Run deterministic check manifest on main pushes
         if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}"
+        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
 
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
@@ -127,7 +174,7 @@ jobs:
     if: needs.changes.outputs.has_format == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

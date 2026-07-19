@@ -40,6 +40,24 @@ final class AutomationSettingsSectionTests: XCTestCase {
     XCTAssertEqual(Section.automationMatch("FLOATING BAR"), .floatingBar)
   }
 
+  func testMergedSidebarAliasesKeepDeepLinksRoutable() {
+    // Merged nav (Account & Plan, Notifications & Privacy): the absorbed section
+    // ids must stay resolvable for automation/deep links and map to their merged
+    // sidebar item.
+    XCTAssertEqual(Section.automationMatch("privacy"), .privacy)
+    XCTAssertEqual(Section.automationMatch("plan-usage"), .planUsage)
+    XCTAssertEqual(Section.privacy.sidebarItem, .notifications)
+    XCTAssertEqual(Section.planUsage.sidebarItem, .account)
+    XCTAssertEqual(Section.account.sidebarItem, .account)
+    XCTAssertEqual(Section.notifications.sidebarItem, .notifications)
+    // Raw values are the automation snapshot contract (omi-hardening-smoke SET-01,
+    // e2e flow waits) — merged display labels must not leak into them.
+    XCTAssertEqual(Section.planUsage.rawValue, "Plan and Usage")
+    XCTAssertEqual(Section.privacy.rawValue, "Privacy")
+    XCTAssertEqual(Section.account.displayTitle, "Account & Plan")
+    XCTAssertEqual(Section.notifications.displayTitle, "Notifications & Privacy")
+  }
+
   func testUnknownAndEmptyReturnNil() {
     XCTAssertNil(Section.automationMatch("nonsense-section"))
     XCTAssertNil(Section.automationMatch(""))

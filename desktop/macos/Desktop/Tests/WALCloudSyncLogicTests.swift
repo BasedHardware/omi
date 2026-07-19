@@ -1,6 +1,7 @@
-import XCTest
-@testable import Omi_Computer
 import OmiWAL
+import XCTest
+
+@testable import Omi_Computer
 
 final class WALCloudSyncLogicTests: XCTestCase {
 
@@ -82,6 +83,44 @@ final class WALCloudSyncLogicTests: XCTestCase {
     )
     XCTAssertTrue(changed)
     XCTAssertEqual(wals[0].status, .synced)
+  }
+
+  func testReconcilePartialFailureRetainsWalForRetry() {
+    assertFailureRemainsRetryable(status: "partial_failure", failedSegments: 1, totalSegments: 2)
+  }
+
+  func testReconcileAllFailureRetainsWalForRetry() {
+    assertFailureRemainsRetryable(status: "failed", failedSegments: 2, totalSegments: 2)
+  }
+
+  private func assertFailureRemainsRetryable(
+    status: String, failedSegments: Int, totalSegments: Int
+  ) {
+    var wals = [makeWal(status: .uploaded)]
+    wals[0].jobId = "job-failure"
+    let fetch = SyncJobFetch(
+      outcome: .ok,
+      status: SyncJobStatusResponse(
+        jobId: "job-failure",
+        status: status,
+        totalSegments: totalSegments,
+        processedSegments: totalSegments,
+        successfulSegments: totalSegments - failedSegments,
+        failedSegments: failedSegments,
+        result: nil,
+        error: "synthetic transcription failure"
+      ))
+
+    let changed = WALCloudSyncLogic.applyReconcileFetch(
+      wals: &wals,
+      memberWalIds: [wals[0].id],
+      fetch: fetch,
+      fileExists: { _ in true }
+    )
+
+    XCTAssertTrue(changed)
+    XCTAssertEqual(wals[0].status, .miss)
+    XCTAssertNil(wals[0].jobId)
   }
 
   func testReconcileNonTerminalLeavesUploaded() {
@@ -203,7 +242,7 @@ final class WALCloudSyncLogicTests: XCTestCase {
   func testMergeIsNoOpWhenNothingReconciled() {
     let a = makeWal(timerStart: 1_700_000_000, status: .uploaded, jobId: "job-1")
     let snapshot = [a]
-    let reconciled = snapshot // unchanged
+    let reconciled = snapshot  // unchanged
     let live = [a]
     let merged = WALCloudSyncLogic.mergeReconciledUploads(
       live: live, snapshot: snapshot, reconciled: reconciled)

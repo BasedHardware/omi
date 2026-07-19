@@ -49,4 +49,38 @@ void main() {
       expect(provider.privateCloudSyncEnabled, isTrue);
     });
   });
+
+  group('UserProvider private cloud sync writing', () {
+    test('applies the value on a successful write', () async {
+      final provider = UserProvider(privateCloudSyncSetter: (_) async => true);
+      addTearDown(provider.dispose);
+
+      await provider.setPrivateCloudSync(true);
+
+      expect(provider.privateCloudSyncEnabled, isTrue);
+    });
+
+    test('throws and keeps the old state when the write is rejected', () async {
+      // Regression for #9466 (write path): setPrivateCloudSyncEnabled returns
+      // false on a rejected write (no response / non-200 / status != ok). The
+      // provider used to swallow it, so the UI showed a success snackbar while
+      // the toggle snapped back off — the user believed cloud storage was on
+      // and lost recordings. A rejected write must surface as an error.
+      final provider = UserProvider(privateCloudSyncSetter: (_) async => false);
+      addTearDown(provider.dispose);
+
+      await expectLater(provider.setPrivateCloudSync(true), throwsException);
+      expect(provider.privateCloudSyncEnabled, isFalse);
+    });
+
+    test('rethrows when the write throws', () async {
+      final provider = UserProvider(
+        privateCloudSyncSetter: (_) async => throw Exception('network down'),
+      );
+      addTearDown(provider.dispose);
+
+      await expectLater(provider.setPrivateCloudSync(true), throwsException);
+      expect(provider.privateCloudSyncEnabled, isFalse);
+    });
+  });
 }

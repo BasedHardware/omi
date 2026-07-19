@@ -1,12 +1,15 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
+
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from ._client import db
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -124,34 +127,30 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
         action_item_data.setdefault('provenance', [])
         action_item_data.setdefault('sort_order', 0)
         action_item_data.setdefault('indent_level', 0)
-    # Ensure timestamps are properly formatted
-    if 'created_at' in action_item_data and action_item_data['created_at']:
-        if isinstance(action_item_data['created_at'], str):
-            action_item_data['created_at'] = datetime.fromisoformat(
-                action_item_data['created_at'].replace('Z', '+00:00')
-            )
-
-    if 'updated_at' in action_item_data and action_item_data['updated_at']:
-        if isinstance(action_item_data['updated_at'], str):
-            action_item_data['updated_at'] = datetime.fromisoformat(
-                action_item_data['updated_at'].replace('Z', '+00:00')
-            )
-
-    if 'due_at' in action_item_data and action_item_data['due_at']:
-        if isinstance(action_item_data['due_at'], str):
-            action_item_data['due_at'] = datetime.fromisoformat(action_item_data['due_at'].replace('Z', '+00:00'))
-
-    if 'completed_at' in action_item_data and action_item_data['completed_at']:
-        if isinstance(action_item_data['completed_at'], str):
-            action_item_data['completed_at'] = datetime.fromisoformat(
-                action_item_data['completed_at'].replace('Z', '+00:00')
-            )
+    # Normalize any ISO date strings to aware datetimes. These fields can arrive as strings from
+    # tool- and LLM-created action items (not only from validated API models), so a single malformed
+    # string must not raise and 500 the whole create/update. Drop the bad value with a warning and let
+    # the field fall back to its default or stay unset, matching the tolerant date handling on the read
+    # path and in _coerce_utc_datetime.
+    for date_field in ('created_at', 'updated_at', 'due_at', 'completed_at'):
+        value = action_item_data.get(date_field)
+        if isinstance(value, str) and value:
+            try:
+                action_item_data[date_field] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except ValueError:
+                logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
+                action_item_data.pop(date_field, None)
 
     return action_item_data
 
 
 def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
+    # `completed` may be missing OR explicitly null (legacy/partial writes). setdefault
+    # won't overwrite an existing null, so drop it first and let status derive a concrete
+    # bool — strict client parsers reject a null `completed` and drop the whole page.
+    if action_item_data.get('completed') is None:
+        action_item_data.pop('completed', None)
     action_item_data.setdefault('status', 'completed' if action_item_data.get('completed') else 'active')
     action_item_data.setdefault('completed', action_item_data['status'] == 'completed')
     action_item_data.setdefault('owner', 'unknown')
@@ -222,7 +221,6 @@ def create_action_item(
     if document_id is not None and not document_id:
         raise ValueError('document_id must not be empty')
     doc_ref = action_items_ref.document(document_id) if document_id is not None else action_items_ref.document()
-    transaction = db.transaction()
 
     @firestore.transactional
     def create_in_generation(write_transaction):
@@ -269,7 +267,14 @@ def create_action_item(
         write_transaction.set(doc_ref, payload)
         return doc_ref.id
 
-    return cast(str, create_in_generation(transaction))
+    return cast(
+        str,
+        run_with_transaction_contention_retry(
+            db.transaction,
+            create_in_generation,
+            operation_name="action_item_create",
+        ),
+    )
 
 
 def create_action_items_batch(
@@ -321,7 +326,6 @@ def create_action_items_batch(
 
     if len(prepared_items) > 400:
         raise ValueError('action-item batches are limited to 400 items')
-    transaction = db.transaction()
 
     @firestore.transactional
     def create_batch_in_generation(write_transaction):
@@ -346,7 +350,14 @@ def create_action_items_batch(
             write_transaction.set(doc_ref, {**item, 'account_generation': account_generation})
         return doc_refs
 
-    return cast(List[str], create_batch_in_generation(transaction))
+    return cast(
+        List[str],
+        run_with_transaction_contention_retry(
+            db.transaction,
+            create_batch_in_generation,
+            operation_name="action_item_batch_create",
+        ),
+    )
 
 
 # *****************************
@@ -444,7 +455,9 @@ def get_action_items(
     docs = query.stream()
 
     action_items: List[Dict[str, Any]] = []
+    document_count = 0
     for doc in docs:
+        document_count += 1
         data: Dict[str, Any] = _typed_doc(doc)
         if data.get('deleted'):
             continue
@@ -452,12 +465,23 @@ def get_action_items(
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
 
-    # Sort results by due_at first (items without due_at come last), then by created_at.
+    record_firestore_read(
+        FirestoreReadFamily.ACTION_ITEMS_LIST,
+        FirestoreReadMode.UNBOUNDED,
+        document_count,
+    )
+
+    # Sort: incomplete items first, then by due_at (items without due_at come last), then
+    # by created_at. Active-first is load-bearing for the default (completed=None) fetch:
+    # clients page this list (e.g. limit=100) and filter client-side, so without it a user
+    # with 100+ completed items that have due dates would have every active item pushed off
+    # page 1 — the task list then looks empty / all-done (see the reported regression).
     # The final order differs from the Firestore order_by (due_at/created_at DESC), so pagination
     # must be applied AFTER this sort. Slicing the Firestore-ordered set with offset/limit and then
     # re-sorting only that slice returns the wrong items for any page (even page 0 with a limit).
     action_items.sort(
         key=lambda x: (
+            bool(x.get('completed')),
             x.get('due_at') is None,
             x.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
             -(x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
@@ -540,6 +564,43 @@ def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[Dic
     return get_action_items(uid, conversation_id=conversation_id)
 
 
+def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Dict[str, int]:
+    """Return total / completed / incomplete action-item counts for one conversation.
+
+    Uses Firestore count() aggregation with the same conversation_id predicate as
+    get_action_items_by_conversation, so a client can render a task-progress badge
+    (e.g. 2 of 3 done) without paging the items. Soft-retired items (``deleted: true``)
+    are hidden from the list/read paths, so they are excluded here too; otherwise the
+    badge would drift from what the client can list. incomplete = total - completed,
+    clamped at 0 so the three values stay internally consistent.
+    """
+    base = (
+        db.collection('users')
+        .document(uid)
+        .collection(action_items_collection)
+        .where(filter=FieldFilter('conversation_id', '==', conversation_id))
+    )
+    total = int(base.count().get()[0][0].value)
+    completed = int(base.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
+
+    # Exclude soft-retired items so the badge matches the visible list (get_action_items skips
+    # data.get('deleted')). Deleted items are rare, so stream just that subset and subtract, rather
+    # than requiring a filtered-aggregation composite index.
+    deleted_total = 0
+    deleted_completed = 0
+    for doc in base.where(filter=FieldFilter('deleted', '==', True)).stream():
+        deleted_total += 1
+        if (doc.to_dict() or {}).get('completed'):
+            deleted_completed += 1
+
+    total = max(0, total - deleted_total)
+    completed = max(0, completed - deleted_completed)
+    # total and completed come from separate (non-atomic) count() aggregations, so a concurrent write
+    # between them can leave completed > total. Cap it so the three values stay internally consistent.
+    completed = min(completed, total)
+    return {'total': total, 'completed': completed, 'incomplete': max(0, total - completed)}
+
+
 def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[str, Any]]:
     """
     Get multiple action items by their IDs in a single batch operation.
@@ -603,7 +664,6 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
 
     if 'goal_id' in update_data or 'workstream_id' in update_data:
-        transaction = db.transaction()
         now = datetime.now(timezone.utc)
 
         @firestore.transactional
@@ -627,7 +687,13 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
             write_transaction.update(action_item_ref, {**update_data, 'updated_at': now})
             return True
 
-        return bool(update_linked(transaction))
+        return bool(
+            run_with_transaction_contention_retry(
+                db.transaction,
+                update_linked,
+                operation_name="action_item_linked_update",
+            )
+        )
 
     # Check if exists
     if not action_item_ref.get().exists:

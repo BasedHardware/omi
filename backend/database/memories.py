@@ -405,12 +405,22 @@ def _merge_evidence(  # type: ignore[reportUnusedFunction]  # reserved: thin ali
 
 def delete_memories(uid: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
-    batch = database.batch()
     user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
+    # Chunk deletes to stay under the Firestore 500-writes-per-batch limit. A user with more than
+    # 500 memories would otherwise make the single batch.commit() raise and delete nothing. Mirrors
+    # the chunking in unlock_all_memories.
+    batch = database.batch()
+    count = 0
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
-    batch.commit()
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = database.batch()
+            count = 0
+    if count > 0:
+        batch.commit()
 
 
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
@@ -725,10 +735,20 @@ def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
+    # Chunk deletes to stay under the Firestore 500-writes-per-batch limit. Account deletion and
+    # "delete all memories" hit this for any user with more than 500 memories: the single
+    # batch.commit() would raise and remove nothing. Mirrors the chunking in unlock_all_memories.
     batch = database.batch()
+    count = 0
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
-    batch.commit()
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = database.batch()
+            count = 0
+    if count > 0:
+        batch.commit()
 
 
 def ripple_source_deletion(uid: str, source_id: str, *, firestore_client: Any = None) -> Dict[str, Any]:

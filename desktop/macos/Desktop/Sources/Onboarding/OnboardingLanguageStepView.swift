@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingLanguageStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator
@@ -35,10 +35,10 @@ struct OnboardingLanguageStepView: View {
       description: "Omi listens in all of them — your first pick is the primary, used for prompts and summaries.",
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         LazyVGrid(
-          columns: [GridItem(.adaptive(minimum: 108), spacing: 8)],
-          alignment: .leading, spacing: 8
+          columns: [GridItem(.adaptive(minimum: 108), spacing: OmiSpacing.sm)],
+          alignment: .leading, spacing: OmiSpacing.sm
         ) {
           ForEach(chipOptions, id: \.code) { option in
             OnboardingSelectableChip(
@@ -57,16 +57,16 @@ struct OnboardingLanguageStepView: View {
         }
 
         if showingCustomLanguage {
-          HStack(spacing: 10) {
+          HStack(spacing: OmiSpacing.sm) {
             TextField("Ukrainian, Korean, Turkish…", text: $coordinator.customLanguage)
               .textFieldStyle(.plain)
-              .padding(.horizontal, 16)
-              .padding(.vertical, 12)
+              .padding(.horizontal, OmiSpacing.lg)
+              .padding(.vertical, OmiSpacing.md)
               .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                   .fill(OmiColors.backgroundSecondary)
                   .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                       .stroke(Color.white.opacity(0.08), lineWidth: 1)
                   )
               )
@@ -76,7 +76,7 @@ struct OnboardingLanguageStepView: View {
             Button("Add") {
               coordinator.addCustomLanguage()
             }
-            .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
+            .buttonStyle(OmiButtonStyle(.secondary))
           }
         }
 
@@ -89,7 +89,7 @@ struct OnboardingLanguageStepView: View {
         Button(saving ? "Saving…" : "Continue") {
           saveAndContinue()
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .buttonStyle(OmiButtonStyle(.primary))
         .keyboardShortcut(.defaultAction)
         .disabled(coordinator.selectedLanguageCodes.isEmpty || saving)
 

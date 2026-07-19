@@ -2970,7 +2970,7 @@
     "upgradePlan": "Améliorer le forfait",
     "billingMonthly": "Mensuel",
     "billingYearly": "Annuel",
-    "savePercent": "Économisez ~17%",
+    "savePercent": "Économisez ~{percent}%",
     "popular": "Populaire",
     "currentPlan": "Actuel",
     "neoSubtitle": "{count} questions par mois",
@@ -3090,7 +3090,7 @@
     "syncCustomSttWarningMessage": "Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d'Omi et ils comptent dans la limite de transcription de votre forfait.",
     "transcribeLaterTitle": "Transcrire plus tard",
     "transcribeLaterDescription": "Enregistrez l'audio maintenant et transcrivez-le à la demande plutôt qu'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.",
-    "transcribeLaterNote": "Compatible avec les appareils Omi et Limitless pour le moment. L'audio reste sur votre téléphone tant que vous ne décidez pas de l'importer.",
+    "transcribeLaterNote": "Compatible avec le microphone du téléphone ainsi que les appareils Omi et Limitless. L'audio reste sur votre téléphone tant que vous ne décidez pas de l'importer.",
     "transcribeLaterStorageFull": "L'espace de stockage de votre téléphone est presque plein : l'enregistrement est donc en pause. Libérez de l'espace ou importez vos enregistrements pour qu'il reprenne automatiquement.",
     "unmute": "Réactiver le son",
     "newRecording": "Nouvel enregistrement",
@@ -3178,5 +3178,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Stockage de l'appareil",
+    "deviceStoragePercentFull": "{percent} % plein",
+    "deviceStorageUsedOfTotal": "{used} sur {total} utilisés",
+    "deviceStorageFree": "{free} libre",
+    "deviceStorageNearlyFull": "Appareil presque plein — synchronisez pour libérer de l'espace.",
+    "phoneMicOfflineFallbackMessage": "Aucune connexion — enregistrement local. La transcription se fera dès votre retour en ligne.",
+    "dataEncryptedBanner": "Tes données sont protégées par défaut par un chiffrement fort, et tu gardes le contrôle sur leur stockage et leur utilisation."
 }

@@ -18,8 +18,15 @@ class UserProvider with ChangeNotifier {
   /// fetch so the loader can preserve the last known state. Injectable for tests.
   final Future<bool?> Function() _privateCloudSyncFetcher;
 
-  UserProvider({Future<bool?> Function()? privateCloudSyncFetcher})
-      : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled;
+  /// Persists the private-cloud-sync flag. Returns `false` when the write did
+  /// not take effect (no response / non-200 / status != ok). Injectable for tests.
+  final Future<bool> Function(bool value) _privateCloudSyncSetter;
+
+  UserProvider({
+    Future<bool?> Function()? privateCloudSyncFetcher,
+    Future<bool> Function(bool value)? privateCloudSyncSetter,
+  })  : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled,
+        _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled;
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
@@ -320,11 +327,16 @@ class UserProvider with ChangeNotifier {
 
   Future<void> setPrivateCloudSync(bool value) async {
     try {
-      final success = await setPrivateCloudSyncEnabled(value);
-      if (success) {
-        _privateCloudSyncEnabled = value;
-        notifyListeners();
+      final success = await _privateCloudSyncSetter(value);
+      // A rejected write (no response / non-200 / status != ok) must surface as
+      // an error, not be swallowed. Otherwise the caller shows a success message
+      // while the toggle snaps back to its old state — the user believes cloud
+      // storage is on and loses the recordings they meant to keep (#9466).
+      if (!success) {
+        throw Exception('Server rejected private cloud sync update');
       }
+      _privateCloudSyncEnabled = value;
+      notifyListeners();
     } catch (e, stackTrace) {
       Logger.error('Failed to set private cloud sync: $e\n$stackTrace');
       rethrow;

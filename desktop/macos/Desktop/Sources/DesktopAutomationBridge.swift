@@ -3,6 +3,7 @@ import CryptoKit
 import Foundation
 import Network
 import OmiSupport
+import VoiceTurnDomain
 
 enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
@@ -12,21 +13,35 @@ enum DesktopAutomationLaunchOptions {
   static let tokenEnvironmentKey = "OMI_AUTOMATION_TOKEN"
   static let tokenFileEnvironmentKey = "OMI_AUTOMATION_TOKEN_FILE"
 
-  private static let generatedToken = "omi_auto_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
+  private static let generatedToken =
+    "omi_auto_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
 
   static var isEnabled: Bool {
-    guard AppBuild.isNonProduction else {
+    isEnabled(
+      allowsLocalAutomation: AppBuild.allowsLocalAutomation,
+      arguments: CommandLine.arguments,
+      environment: ProcessInfo.processInfo.environment
+    )
+  }
+
+  static func isEnabled(
+    allowsLocalAutomation: Bool,
+    arguments: [String],
+    environment: [String: String]
+  ) -> Bool {
+    guard allowsLocalAutomation else {
       return false
     }
     // Explicit opt-out always wins, so a dev build can be run "clean" if needed.
-    if ProcessInfo.processInfo.environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
+    if environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
       return false
     }
-    // Auto-enable on any non-production bundle (Omi Dev + every `omi-*` named test
-    // bundle) so agents can drive the app without remembering a launch flag.
-    return CommandLine.arguments.contains(enableFlag)
-      || ProcessInfo.processInfo.environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
-      || AppBuild.isNonProduction
+    // Auto-enable on local bundles (Omi Dev + every `omi-*` named test bundle) so agents
+    // can drive the app without remembering a launch flag. Published previews are excluded
+    // by `allowsLocalAutomation` above even if their process environment is contaminated.
+    return arguments.contains(enableFlag)
+      || environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
+      || allowsLocalAutomation
   }
 
   static var port: UInt16 {
@@ -331,8 +346,18 @@ private struct DesktopAutomationHealth: Codable {
   let ok: Bool
   let name: String
   let bundleIdentifier: String
+  let processID: Int32
+  let logFilePath: String
+  let logLaunchID: String
   let bridgePort: UInt16
   let requiresAuth: Bool
+  let backendEnvironment: String
+  let pythonBackendURL: String
+  let rustBackendURL: String
+  let agentRuntimeRunning: Bool
+  let agentRuntimeExpectedProtocolVersion: Int
+  let agentRuntimeProtocolVersion: Int?
+  let agentRuntimeVersion: String?
 }
 
 struct DesktopAutomationRouteTrace: Codable {
@@ -378,7 +403,7 @@ private func automationSafeErrorDetail(_ raw: String) -> String {
 }
 
 private func automationActionErrorDescription(_ error: Error) -> String {
-  if case let APIError.httpError(statusCode, detail) = error {
+  if case APIError.httpError(let statusCode, let detail) = error {
     let suffix = detail.map { " detail=\(automationSafeErrorDetail($0))" } ?? ""
     return "api_http_error status=\(statusCode)\(suffix)"
   }
@@ -392,7 +417,7 @@ private struct DesktopAutomationResponse<T: Codable>: Codable {
 }
 
 final class DesktopAutomationStateStore {
-  static let shared = DesktopAutomationStateStore()
+  nonisolated(unsafe) static let shared = DesktopAutomationStateStore()
   private let lock = NSLock()
 
   private var snapshot = DesktopAutomationSnapshot(
@@ -458,7 +483,7 @@ private final class TimeoutRaceBox<T>: @unchecked Sendable {
     self.continuation = continuation
   }
 
-  func resume(_ value: T?) {
+  func resume(_ value: sending T?) {
     lock.lock()
     defer { lock.unlock() }
     guard !resumed else { return }
@@ -496,7 +521,8 @@ private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
   // Bound the MainActor hop: if the main thread is wedged (blocking Keychain read
   // during sign-in), fall back to the last cached snapshot so `/state` still
   // answers instead of hanging the whole bridge. See awaitWithTimeout.
-  guard let live = await awaitWithTimeout(liveSnapshotMainActorTimeout, operation: liveAutomationSnapshotFromMainActor) else {
+  guard let live = await awaitWithTimeout(liveSnapshotMainActorTimeout, operation: liveAutomationSnapshotFromMainActor)
+  else {
     log("DesktopAutomationBridge: live /state refresh timed out (main thread busy); serving cached snapshot")
     var stale = await cachedAutomationSnapshot()
     stale.snapshotStale = true
@@ -770,12 +796,15 @@ final class DesktopAutomationActionRegistry {
       configuration.shippedCohortsEnabled = boolParam(
         params["shipped_cohorts_enabled"], default: false)
       configuration.dailyLimit = max(0, intParam(params["daily_limit"], default: configuration.dailyLimit))
-      configuration.minimumSpacing = TimeInterval(max(
-        0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
-      configuration.quietHoursStartMinute = min(max(
-        0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
-      configuration.quietHoursEndMinute = min(max(
-        0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
+      configuration.minimumSpacing = TimeInterval(
+        max(
+          0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
+      configuration.quietHoursStartMinute = min(
+        max(
+          0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
+      configuration.quietHoursEndMinute = min(
+        max(
+          0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
       ProactiveTaskInterruptionSettings.save(configuration)
       if params["notifications_enabled"] != nil {
         UserDefaults.standard.set(
@@ -805,6 +834,9 @@ final class DesktopAutomationActionRegistry {
       summary: "Evaluate a synthetic bounded recommendation through the real interruption gate",
       params: ["can_wait", "expires_in_seconds"]
     ) { params in
+      guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        return ["error": "runtime_owner_unavailable"]
+      }
       let nonce = UUID().uuidString.lowercased()
       let trace = NotificationService.shared.sendContextualTaskInterruption(
         TaskInterruptionCandidate(
@@ -814,10 +846,12 @@ final class DesktopAutomationActionRegistry {
           headline: "Review a relevant update",
           whyNow: "The linked context changed materially.",
           recommendedAction: "Review update",
-          expiresAt: Date().addingTimeInterval(TimeInterval(
-            intParam(params["expires_in_seconds"], default: 300))),
+          expiresAt: Date().addingTimeInterval(
+            TimeInterval(
+              intParam(params["expires_in_seconds"], default: 300))),
           canWait: boolParam(params["can_wait"], default: false)
-        )
+        ),
+        authorizationSnapshot: authorizationSnapshot
       )
       return [
         "reason": trace.reason.rawValue,
@@ -863,20 +897,23 @@ final class DesktopAutomationActionRegistry {
       } else {
         subject = nil
       }
-      guard let event = TaskLocalContextEvent.normalized(
-        kind: kind,
-        rawReference: reference,
-        subject: subject,
-        urgency: TaskContextUrgency(rawValue: params["urgency"] ?? "can_wait") ?? .canWait
-      ) else {
+      guard
+        let event = TaskLocalContextEvent.normalized(
+          kind: kind,
+          rawReference: reference,
+          subject: subject,
+          urgency: TaskContextUrgency(rawValue: params["urgency"] ?? "can_wait") ?? .canWait
+        )
+      else {
         throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
       }
       let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      let referenceHash = matched.referenceHash
       await TaskContextualResurfacingService.shared.observe(matched)
       let shouldFlush = boolParam(params["flush"], default: true)
       if shouldFlush { await TaskContextualResurfacingService.shared.flush() }
       return [
-        "reference_hash": matched.referenceHash,
+        "reference_hash": referenceHash,
         "pending_workstreams": "\(await TaskContextualResurfacingService.shared.pendingWorkstreamCount())",
         "flushed": shouldFlush ? "true" : "false",
       ]
@@ -918,10 +955,11 @@ final class DesktopAutomationActionRegistry {
           else { throw DesktopAutomationActionError.invalidParams("kernel returned invalid JSON") }
           return value
         }
-        let prepared = try object(try await TaskChatRuntime.controlTool(
-          name: "prepare_workstream_continuity",
-          input: ["workstreamId": workstreamID, "taskIds": []]
-        ))
+        let prepared = try object(
+          try await TaskChatRuntime.controlTool(
+            name: "prepare_workstream_continuity",
+            input: ["workstreamId": workstreamID, "taskIds": []]
+          ))
         guard let session = prepared["session"] as? [String: Any],
           let sessionID = session["agentSessionId"] as? String
         else { throw DesktopAutomationActionError.invalidParams("kernel session unavailable") }
@@ -929,42 +967,44 @@ final class DesktopAutomationActionRegistry {
         let operation = "prepare_artifact"
         let resource = "workstream:\(workstreamID)"
         let expiry = Int(Date().addingTimeInterval(5 * 60).timeIntervalSince1970 * 1_000)
-        let dispatch = try object(try await TaskChatRuntime.controlTool(
-          name: "create_desktop_dispatch",
-          input: [
-            "kind": "approval",
-            "priority": 1,
-            "title": "Automation prepared artifact fixture",
-            "decisionPrompt": "Authorize this non-production artifact fixture?",
-            "sourceSessionId": sessionID,
-            "capability": capability,
-            "operation": operation,
-            "resourceRef": resource,
-            "payload": ["automation_fixture": true],
-            "expiresAtMs": expiry,
-          ]
-        ))
+        let dispatch = try object(
+          try await TaskChatRuntime.controlTool(
+            name: "create_desktop_dispatch",
+            input: [
+              "kind": "approval",
+              "priority": 1,
+              "title": "Automation prepared artifact fixture",
+              "decisionPrompt": "Authorize this non-production artifact fixture?",
+              "sourceSessionId": sessionID,
+              "capability": capability,
+              "operation": operation,
+              "resourceRef": resource,
+              "payload": ["automation_fixture": true],
+              "expiresAtMs": expiry,
+            ]
+          ))
         guard let dispatchObject = dispatch["dispatch"] as? [String: Any],
           let dispatchID = dispatchObject["dispatchId"] as? String
         else { throw DesktopAutomationActionError.invalidParams("kernel dispatch unavailable") }
-        let resolved = try object(try await TaskChatRuntime.controlTool(
-          name: "resolve_desktop_dispatch",
-          input: [
-            "dispatchId": dispatchID,
-            "status": "resolved",
-            "resolvedBy": "desktop_automation",
-            "resolution": ["decision": "allow"],
-            "grant": [
-              "sessionId": sessionID,
-              "capability": capability,
-              "operation": operation,
-              "resourcePattern": resource,
-              "effect": "allow",
-              "source": "user",
-              "expiresAtMs": expiry,
-            ],
-          ]
-        ))
+        let resolved = try object(
+          try await TaskChatRuntime.controlTool(
+            name: "resolve_desktop_dispatch",
+            input: [
+              "dispatchId": dispatchID,
+              "status": "resolved",
+              "resolvedBy": "desktop_automation",
+              "resolution": ["decision": "allow"],
+              "grant": [
+                "sessionId": sessionID,
+                "capability": capability,
+                "operation": operation,
+                "resourcePattern": resource,
+                "effect": "allow",
+                "source": "user",
+                "expiresAtMs": expiry,
+              ],
+            ]
+          ))
         guard let grant = resolved["grant"] as? [String: Any],
           let createdGrantID = grant["grantId"] as? String
         else { throw DesktopAutomationActionError.invalidParams("kernel grant unavailable") }
@@ -997,7 +1037,8 @@ final class DesktopAutomationActionRegistry {
     // TextEditor. Writes real memories on success, like the sheet would.
     register(
       name: "memory_log_import_probe",
-      summary: "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
+      summary:
+        "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
       params: ["source", "text", "fixture"]
     ) { params in
       guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
@@ -1251,22 +1292,47 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.endPushToTalkForAutomation()
     }
 
+    // Manager-level PTT harness: this crosses the real shortcut lifecycle,
+    // routing decision, realtime admission, warm buffering, and replay seam.
+    // Unlike `ptt_test_turn`, it does not bypass PushToTalkManager; unlike a
+    // physical test, it needs neither microphone permission nor a device.
+    register(
+      name: "ptt_manager_turn",
+      summary:
+        "Inject a PCM16/16k mono hold through PushToTalkManager and realtime admission; returns lifecycle diagnostics",
+      params: ["pcm"]
+    ) { params in
+      guard let path = params["pcm"],
+        let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !pcm16k.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+
+      var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
+      guard result["listening"] == "true" else { return result }
+      let chunkSize = 3_200
+      var offset = 0
+      var injected = 0
+      while offset < pcm16k.count {
+        let end = min(offset + chunkSize, pcm16k.count)
+        if PushToTalkManager.shared.injectRealtimePTTAutomationAudio(pcm16k.subdata(in: offset..<end)) {
+          injected += end - offset
+        }
+        offset = end
+      }
+      let stopped = PushToTalkManager.shared.endPushToTalkForAutomation()
+      result["injected_bytes"] = "\(injected)"
+      result["finalized"] = stopped["finalized"] ?? "false"
+      for (key, value) in RealtimeHubController.shared.automationPTTDiagnostics() {
+        result[key] = value
+      }
+      return result
+    }
+
     register(
       name: "ptt_turn_snapshot",
-      summary: "Return the typed PTT lifecycle state and bounded diagnostic counters"
+      summary: "Return typed PTT lifecycle state, pending-tool fences, and safe screen-evidence diagnostics"
     ) { _ in
-      let coordinator = VoiceTurnCoordinator.shared
-      let turn = coordinator.model.turn
-      let terminalReason = turn?.terminalReason?.rawValue ?? ""
-      let phase = turn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
-      let route = turn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
-      return [
-        "phase": phase,
-        "route": route,
-        "terminal_reason": terminalReason,
-        "stale_event_count": "\(coordinator.model.staleEventCount)",
-        "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
-      ]
+      RealtimeHubController.shared.automationPTTDiagnostics()
     }
 
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
@@ -1277,10 +1343,12 @@ final class DesktopAutomationActionRegistry {
       params: ["pcm", "timeout", "provider"]
     ) { params in
       guard let path = params["pcm"],
-            let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty else {
+        let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty
+      else {
         return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"]
       }
-      let provider = params["provider"].flatMap(RealtimeOmniProvider.init(rawValue:))
+      let provider =
+        params["provider"].flatMap(RealtimeOmniProvider.init(rawValue:))
         ?? RealtimeOmniSettings.shared.effectiveProvider
       let base = DesktopBackendEnvironment.pythonBaseURL()
       let authHeader: String
@@ -1360,9 +1428,7 @@ final class DesktopAutomationActionRegistry {
       guard AuthState.shared.isSignedIn else {
         return ["signed_out": "true", "was_signed_in": "false"]
       }
-      try await MainActor.run {
-        try AuthService.shared.signOut()
-      }
+      try await AuthService.shared.signOut()
       return [
         "signed_out": "true",
         "was_signed_in": "true",
@@ -1479,12 +1545,15 @@ final class DesktopAutomationActionRegistry {
       params: ["state"]
     ) { params in
       let s = (params["state"] ?? "thinking").lowercased()
+      guard let debugState = VoiceTurnDebugPresentationState(rawValue: s) else {
+        return ["error": "state must be idle, listening, thinking, or answering"]
+      }
       let mgr = FloatingControlBarManager.shared
       guard let bar = mgr.barState else { return ["error": "no bar state"] }
       if s != "idle", !mgr.isVisible { mgr.show() }
-      bar.isVoiceResponseActive = (s == "answering")
-      bar.isVoiceListening = (s == "listening")
-      bar.isThinking = (s == "thinking")
+      guard VoiceTurnCoordinator.shared.applyDebugPresentationState(debugState) else {
+        return ["error": "a non-debug voice turn is active"]
+      }
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
 
@@ -1499,8 +1568,7 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
-      _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
-      if let error = await provider.automationResetChatForHarness() {
+      if let error = await provider.automationResetMainChatForHarness() {
         return ["error": error]
       }
       return ["reset": "true"]
@@ -1727,7 +1795,8 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "suspend_agent_stream",
-      summary: "Freeze the agent stdio stream (SIGSTOP) to induce a chat stall; auto-resumes after durationMs. Non-prod only.",
+      summary:
+        "Freeze the agent stdio stream (SIGSTOP) to induce a chat stall; auto-resumes after durationMs. Non-prod only.",
       params: ["durationMs"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -1776,14 +1845,15 @@ final class DesktopAutomationActionRegistry {
       while Date() < deadline {
         var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
         let messageCount = Int(detail["message_count"] ?? "") ?? 0
-        observedSubmission = observedSubmission
+        observedSubmission =
+          observedSubmission
           || messageCount > submission.baselineMessageCount
           || detail["is_sending"] == "true"
           || detail["is_streaming"] == "true"
         if observedSubmission,
-           detail["error"] == nil,
-           detail["is_sending"] == "false",
-           detail["is_streaming"] == "false"
+          detail["error"] == nil,
+          detail["is_sending"] == "false",
+          detail["is_streaming"] == "false"
         {
           detail["idle"] = "true"
           detail["submission_observed"] = "true"
@@ -2105,10 +2175,75 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_awareness_snapshot",
-      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging"
-    ) { _ in
-      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON()
+      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging",
+      params: ["limit"]
+    ) { params in
+      let limit = max(1, min(200, intParam(params["limit"], default: 50)))
+      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON(limit: limit)
       return ["snapshot": snapshot]
+    }
+
+    register(
+      name: "agent_lifecycle_convergence_snapshot",
+      summary: "Read canonical child-run status alongside the rendered pill and journal-completion projection",
+      params: ["runIds"],
+      category: "read",
+      surfaces: ["floating_bar", "main_chat", "realtime"],
+      safety: "read_only"
+    ) { params in
+      let runIDs = Set(
+        (params["runIds"] ?? "")
+          .split(separator: ",")
+          .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+          .filter { !$0.isEmpty }
+          .prefix(20)
+      )
+      return ["snapshot": await AgentPillsManager.shared.lifecycleConvergenceSnapshot(runIDs: runIDs)]
+    }
+
+    register(
+      name: "coordinator_inspect_run",
+      summary: "Inspect one owner-scoped kernel run and its bounded tool-invocation ledger",
+      params: ["runId"]
+    ) { params in
+      guard let runId = params["runId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !runId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing runId")
+      }
+      let run = try await DesktopCoordinatorService.shared.inspectRun(runId: runId)
+      return ["run": run]
+    }
+
+    register(
+      name: "coordinator_continue_agent",
+      summary: "Continue one owner-scoped canonical agent session and return its new run handles",
+      params: ["sessionId", "prompt", "surfaceKind"]
+    ) { params in
+      guard let sessionId = params["sessionId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !sessionId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing sessionId")
+      }
+      guard let prompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !prompt.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing prompt")
+      }
+      let inspection = try await DesktopCoordinatorService.shared.continueAgent(
+        sessionId: sessionId,
+        prompt: prompt,
+        originSurface: DesktopCoordinatorOriginSurface(surfaceKind: params["surfaceKind"]),
+        model: nil,
+        cwd: nil
+      )
+      return [
+        "session_id": inspection.sessionId ?? "",
+        "run_id": inspection.runId ?? "",
+        "attempt_id": inspection.attemptId ?? "",
+        "status": inspection.status,
+        "error": inspection.errorMessage ?? "",
+      ]
     }
 
     register(
@@ -2131,13 +2266,33 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_route_intent",
-      summary: "Route an intent through deterministic coordinator projection rules",
-      params: ["intent", "surfaceKind", "taskId"]
+      summary: "Route a structured proposal through the canonical agent kernel",
+      params: [
+        "intent", "surfaceKind", "taskId", "proposal", "snapshotVersion",
+        "sessionId", "runId", "parentRunId", "provider", "agentCount",
+      ]
     ) { params in
+      let proposal: DesktopCoordinatorIntentProposal
+      switch params["proposal"] {
+      case "spawn_agent": proposal = .spawnAgent
+      case "continue_run": proposal = .continueRun
+      case "clarify": proposal = .clarify(missing: ["automation_input"])
+      default: proposal = .answerInline
+      }
+      let syntaxFacts = DesktopCoordinatorIntentSyntaxFacts(
+        delegationNegated: nil,
+        explicitSessionId: params["sessionId"],
+        explicitRunId: params["runId"],
+        parentRunId: params["parentRunId"],
+        explicitProvider: params["provider"],
+        requestedAgentCount: params["agentCount"].flatMap(Int.init))
       let decision = try await DesktopCoordinatorService.shared.routeIntentJSON(
         intent: params["intent"] ?? "",
         surfaceKind: params["surfaceKind"],
-        taskId: params["taskId"]
+        taskId: params["taskId"],
+        snapshotVersion: params["snapshotVersion"],
+        proposal: proposal,
+        syntaxFacts: syntaxFacts
       )
       return ["decision": decision]
     }
@@ -2301,6 +2456,14 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "preview_screen_recording_drag_helper",
+      summary: "Open Screen Recording settings and show the drag-to-enable helper"
+    ) { _ in
+      await MainActor.run { ScreenCaptureService.openScreenRecordingPreferences() }
+      return CloudConnectorGuidanceOverlay.shared.automationState()
+    }
+
+    register(
       name: "open_conversation",
       summary: "Open a conversation detail view (same path as POST /conversation/open)",
       params: ["conversationId", "showTranscript", "timeoutMs"]
@@ -2329,6 +2492,20 @@ final class DesktopAutomationActionRegistry {
         "show_transcript": showTranscript ? "true" : "false",
         "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
       ]
+    }
+
+    register(
+      name: "set_conversations_search",
+      summary: "Set the Conversations page search query (drives the real debounced search path)",
+      params: ["query"]
+    ) { params in
+      try await ensureConversationsTabVisibleForAutomation()
+      NotificationCenter.default.post(
+        name: .desktopAutomationSetConversationsSearchRequested,
+        object: nil,
+        userInfo: ["query": params["query"] ?? ""]
+      )
+      return ["query": params["query"] ?? ""]
     }
 
     register(
@@ -2965,7 +3142,8 @@ final class DesktopAutomationActionRegistry {
       guard let appState = AppState.current else {
         return ["error": "app state unavailable"]
       }
-      let personName = params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let personName =
+        params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         ?? "[[MARKER:speaker-naming]] Harness Speaker"
       let segmentIndex = max(0, Int(params["segmentIndex"] ?? "") ?? 0)
 
@@ -3058,7 +3236,8 @@ final class DesktopAutomationActionRegistry {
     // metadata here — never its contents — so the bridge response can't leak it.
     register(
       name: "dump_feedback_payload_dryrun",
-      summary: "Assemble the feedback report payload (title + desktop_diagnostics.json + log-attachment metadata) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+      summary:
+        "Assemble the feedback report payload (title + desktop_diagnostics.json + log-attachment metadata) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
       params: ["message"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -3124,6 +3303,67 @@ final class DesktopAutomationActionRegistry {
       return ["blocking_main_thread_ms": "\(durationMs)"]
     }
 
+    // AUTH-03: force the stored idToken's expiry into the past through AuthService's own
+    // storage abstraction, so a harness can relaunch and prove the app REFRESHES an
+    // expired token without signing the user out. The old harness trick
+    // (`defaults write <bundle> auth_tokenExpiry -float 1000`) tampers a key the app no
+    // longer reads now that tokens are keychain-backed — it measured nothing and reported
+    // a false regression. This seam is storage-agnostic and never exposes token material.
+    // Non-prod only (double-gated: here and inside AuthService).
+    register(
+      name: "expire_auth_token",
+      summary:
+        "Expire the stored idToken via AuthService's real storage path (keychain or UserDefaults) so a relaunch must refresh it without signing out — AUTH-03. Status only, no token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "expire_auth_token is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.expireStoredTokenForAutomation() }
+    }
+
+    // AUTH-03 read-back: which backend actually holds the tokens, and is the stored
+    // idToken currently expired? Lets a harness assert "expired -> relaunch -> refreshed,
+    // still signed in" against the REAL storage rather than a UserDefaults key the app may
+    // no longer use. Presence/expiry booleans only — never token material. Non-prod only.
+    register(
+      name: "auth_token_status",
+      summary:
+        "Read-only auth token status (signed_in, storage backend, has_id_token, has_refresh_token, is_token_expired) — AUTH-03. No token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "auth_token_status is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.tokenStatusForAutomation() }
+    }
+
+    // CHAT-07: post `NSWorkspace.didWakeNotification` on the WORKSPACE notification
+    // center — the top of the real wake chain. Every production consumer then fires
+    // exactly as on a physical wake: RealtimeHubController re-warms/defers its
+    // session ("system_wake"), and AppState's observer re-broadcasts the
+    // default-center `.systemDidWake` for downstream consumers. (Posting only the
+    // default-center `.systemDidWake` would MISS RealtimeHub, which observes the
+    // workspace center directly.) Transcription restart stays guarded by
+    // wasTranscribingBeforeSleep, so a synthetic wake is a safe no-op there.
+    // Read-only with respect to user data; non-prod only.
+    register(
+      name: "simulate_system_wake",
+      summary:
+        "Post NSWorkspace.didWakeNotification on the workspace center (the top of the real wake chain: RealtimeHub re-warm + AppState .systemDidWake re-broadcast) so post-wake restart paths run without a real sleep — CHAT-07 harness. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "simulate_system_wake is disabled on production bundles"]
+      }
+      await MainActor.run {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.didWakeNotification, object: nil)
+      }
+      log("DesktopAutomationBridge: simulate_system_wake posted NSWorkspace.didWakeNotification")
+      return ["posted": "NSWorkspace.didWakeNotification"]
+    }
+
     // PERM-06: trigger the permission-flow "Quit & Reopen" restart — the exact
     // AppState.restartApp() path used after granting Accessibility / Screen
     // Recording — so a harness can prove the SAME bundle relaunches with the
@@ -3132,7 +3372,8 @@ final class DesktopAutomationActionRegistry {
     // response flushes before restartApp() terminates the process. Non-prod only.
     register(
       name: "quit_and_reopen",
-      summary: "Trigger the permission-flow Quit & Reopen restart (AppState.restartApp) — relaunches the same bundle; auth/onboarding session persists. Non-prod only.",
+      summary:
+        "Trigger the permission-flow Quit & Reopen restart (AppState.restartApp) — relaunches the same bundle; auth/onboarding session persists. Non-prod only.",
       params: ["delayMs"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -3175,7 +3416,7 @@ private func intParam(_ raw: String?, default fallback: Int) -> Int {
   return Int(raw) ?? fallback
 }
 
-final class DesktopAutomationBridge {
+final class DesktopAutomationBridge: @unchecked Sendable {
   static let shared = DesktopAutomationBridge()
 
   private let queue = DispatchQueue(label: "com.omi.desktop.automation-bridge")
@@ -3397,13 +3638,25 @@ final class DesktopAutomationBridge {
         statusCode: 403)
     }
     if request.method == "GET", request.path == "/health", request.headers["authorization"] == nil {
+      let runtime = await AgentRuntimeProcess.shared.diagnosticsSnapshot()
       return jsonResponse(
         DesktopAutomationHealth(
           ok: true,
           name: "omi-desktop-automation",
           bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+          processID: getpid(),
+          logFilePath: omiLogFilePath(),
+          logLaunchID: omiLogLaunchID(),
           bridgePort: DesktopAutomationLaunchOptions.port,
-          requiresAuth: true
+          requiresAuth: true,
+          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends
+            ? "development" : "production",
+          pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
+          rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
+          agentRuntimeRunning: runtime.running,
+          agentRuntimeExpectedProtocolVersion: AgentRuntimeProcess.expectedProtocolVersion,
+          agentRuntimeProtocolVersion: runtime.protocolVersion,
+          agentRuntimeVersion: runtime.runtimeVersion
         )
       )
     }
@@ -3551,8 +3804,9 @@ final class DesktopAutomationBridge {
         let destination: String
         let generation: UInt64
       }
-      guard let payload = try? JSONDecoder().decode(
-        DesktopAutomationExecuteExportRequest.self, from: request.body)
+      guard
+        let payload = try? JSONDecoder().decode(
+          DesktopAutomationExecuteExportRequest.self, from: request.body)
       else {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
@@ -3585,8 +3839,9 @@ final class DesktopAutomationBridge {
         let connector: String
         let generation: UInt64
       }
-      guard let payload = try? JSONDecoder().decode(
-        DesktopAutomationOpenImportRequest.self, from: request.body)
+      guard
+        let payload = try? JSONDecoder().decode(
+          DesktopAutomationOpenImportRequest.self, from: request.body)
       else {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
@@ -3624,7 +3879,8 @@ final class DesktopAutomationBridge {
         DesktopAutomationResponse(
           ok: false,
           result: RemovedRoute(
-            message: "The legacy Gmail import route was removed because automation responses must not expose email contents or trigger memory writes.",
+            message:
+              "The legacy Gmail import route was removed because automation responses must not expose email contents or trigger memory writes.",
             replacement: "Use POST /action with gmail_read_probe for privacy-safe Gmail status checks."
           ),
           error: "gmail_read_removed"
@@ -3785,7 +4041,7 @@ final class DesktopAutomationBridge {
       guard let url = URL(string: origin), let host = url.host, let port = url.port else {
         return false
       }
-      guard (url.scheme == "http" || url.scheme == "https"), port == Int(DesktopAutomationLaunchOptions.port) else {
+      guard url.scheme == "http" || url.scheme == "https", port == Int(DesktopAutomationLaunchOptions.port) else {
         return false
       }
       guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {

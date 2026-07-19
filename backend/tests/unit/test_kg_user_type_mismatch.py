@@ -168,6 +168,11 @@ def _build_fakes() -> dict[str, ModuleType]:
     llm_kg = add("utils.llm.knowledge_graph")
     llm_kg.extract_knowledge_from_memory = MagicMock()
 
+    # process_conversation imports date_in_tz from here after the origin/main merge.
+    llm_temporal = add("utils.llm.temporal")
+    for attr in ["date_in_tz", "current_date_in_tz", "current_date_for_uid"]:
+        setattr(llm_temporal, attr, MagicMock())
+
     @contextmanager
     def _track_usage_stub(*_args, **_kwargs):
         yield
@@ -231,6 +236,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     utils_calendar_linking = add("utils.conversations.calendar_linking")
     utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)
     utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
+
+    lifecycle_service = add("utils.conversations.lifecycle")
+    lifecycle_service.persist_processed_conversation = MagicMock(return_value=True)
 
     # utils.conversations.* and utils.memory.* leaves imported by process_conversation.
     subjects = add("utils.conversations.subjects")

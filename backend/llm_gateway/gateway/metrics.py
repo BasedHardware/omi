@@ -7,7 +7,9 @@ from typing import Protocol
 
 from prometheus_client import Counter, Histogram
 
+from llm_gateway.gateway.accounting import AccountingEvent
 from llm_gateway.gateway.errors import GatewayError
+from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
 from llm_gateway.gateway.schemas import FailureClass
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,10 @@ _REQUEST_LABELS = [
     'fallback_reason',
     'outcome',
     'error_class',
+    'budget_source',
+    'output_budget',
+    'completion_size',
+    'finish_reason',
 ]
 
 REQUEST_LATENCY_SECONDS = Histogram(
@@ -64,6 +70,12 @@ STREAM_TTFB_SECONDS = Histogram(
     buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 40, 60, 120),
 )
 
+ACCOUNTING_EVENTS_TOTAL = Counter(
+    'llm_gateway_accounting_events_total',
+    'LLM gateway accounting-event delivery by bounded provider and accounting state',
+    ['api_surface', 'provider', 'payer', 'usage_status', 'cost_status', 'delivery'],
+)
+
 
 class ExecutorResultLike(Protocol):
     @property
@@ -87,6 +99,9 @@ class ExecutorResultLike(Protocol):
     @property
     def used_lkg(self) -> bool: ...
 
+    @property
+    def output_budget(self) -> OutputBudgetDecision: ...
+
 
 def observe_success(
     started_at: float,
@@ -95,6 +110,8 @@ def observe_success(
     credential_source: str,
     request_id: str,
     api_surface: str = 'openai_chat_completions',
+    completion_size: str = 'unknown',
+    finish_reason: str = 'unknown',
 ) -> None:
     observe_route_result(
         started_at,
@@ -112,6 +129,10 @@ def observe_success(
         api_surface=api_surface,
         streaming=False,
         phase='terminal',
+        budget_source=result.output_budget.source,
+        output_budget=output_budget_bucket(result.output_budget.max_completion_tokens),
+        completion_size=completion_size,
+        finish_reason=finish_reason,
     )
 
 
@@ -163,6 +184,10 @@ def observe_route_result(
     streaming: bool,
     phase: str,
     ttfb_seconds: float | None = None,
+    budget_source: str = 'none',
+    output_budget: str = 'none',
+    completion_size: str = 'unknown',
+    finish_reason: str = 'unknown',
 ) -> None:
     labels = {
         'lane_id': _bounded(lane_id),
@@ -178,6 +203,10 @@ def observe_route_result(
         'fallback_reason': _enum_label(fallback_reason, default='none'),
         'outcome': _bounded(outcome),
         'error_class': _bounded(error_class),
+        'budget_source': _budget_source_label(budget_source),
+        'output_budget': _output_budget_label(output_budget),
+        'completion_size': _completion_size_label(completion_size),
+        'finish_reason': _finish_reason_label(finish_reason),
     }
     REQUESTS_TOTAL.labels(**labels).inc()
     REQUEST_LATENCY_SECONDS.labels(**labels).observe(time.monotonic() - started_at)
@@ -187,9 +216,11 @@ def observe_route_result(
             provider=labels['provider'],
             credential_source=labels['credential_source'],
         ).observe(ttfb_seconds)
-    logger.info(
+    terminal_log = logger.warning if outcome == 'error' else logger.info
+    terminal_log(
         'llm_gateway_terminal request_id=%s surface=%s streaming=%s phase=%s lane=%s route=%s provider=%s '
-        'model=%s credential_source=%s outcome=%s error_class=%s fallback_used=%s ttfb_seconds=%s',
+        'model=%s credential_source=%s outcome=%s error_class=%s failure_class=%s fallback_used=%s '
+        'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s',
         request_id,
         _bounded(api_surface),
         _bool_label(streaming),
@@ -201,7 +232,12 @@ def observe_route_result(
         labels['credential_source'],
         labels['outcome'],
         labels['error_class'],
+        labels['fallback_reason'],
         labels['fallback_used'],
+        labels['budget_source'],
+        labels['output_budget'],
+        labels['completion_size'],
+        labels['finish_reason'],
         f'{ttfb_seconds:.6f}' if ttfb_seconds is not None else 'none',
     )
 
@@ -214,12 +250,25 @@ def observe_request_rejection(*, api_surface: str, error_class: str, request_id:
     surface_label = _bounded(api_surface)
     error_label = _bounded(error_class)
     REQUEST_REJECTIONS_TOTAL.labels(api_surface=surface_label, error_class=error_label).inc()
-    logger.info(
+    logger.warning(
         'llm_gateway_request_rejected request_id=%s surface=%s error_class=%s',
         request_id,
         surface_label,
         error_label,
     )
+
+
+def observe_accounting_event(event: AccountingEvent, *, delivery: str) -> None:
+    """Observe accounting delivery without user, request, or model labels."""
+    delivery_label = delivery if delivery in {'written', 'duplicate', 'failed', 'dropped'} else 'unknown'
+    ACCOUNTING_EVENTS_TOTAL.labels(
+        api_surface=_bounded(event.api_surface),
+        provider=_bounded(event.provider),
+        payer=_bounded(event.payer),
+        usage_status=_bounded(event.usage_status.value),
+        cost_status=_bounded(event.cost_status.value),
+        delivery=delivery_label,
+    ).inc()
 
 
 def report_observation_failure(*, api_surface: str, request_id: str) -> None:
@@ -254,6 +303,27 @@ def _enum_label(value: object, *, default: str = 'unknown') -> str:
 def _bounded(value: str) -> str:
     normalized = value.strip().lower().replace(' ', '_')
     return normalized[:128] if normalized else 'unknown'
+
+
+def _budget_source_label(value: str) -> str:
+    return value if value in {'none', 'caller', 'route_default'} else 'unknown'
+
+
+def _output_budget_label(value: str) -> str:
+    return (
+        value
+        if value
+        in {'none', 'le_64', 'le_128', 'le_256', 'le_512', 'le_1024', 'le_2048', 'le_4096', 'le_8192', 'gt_8192'}
+        else 'unknown'
+    )
+
+
+def _completion_size_label(value: str) -> str:
+    return value if value in {'unknown', 'le_64', 'le_256', 'le_1024', 'le_4096', 'le_16384', 'gt_16384'} else 'unknown'
+
+
+def _finish_reason_label(value: str) -> str:
+    return value if value in {'unknown', 'stop', 'length', 'content_filter', 'tool_calls'} else 'unknown'
 
 
 def _bool_label(value: bool) -> str:

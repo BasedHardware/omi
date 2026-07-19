@@ -23,12 +23,18 @@ from utils.notifications import send_notification, send_notification_async
 from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
-    PrerecordedSTTConfigurationError,
-    get_deepgram_model_for_language,
     postprocess_words,
     prerecorded,
     prerecorded_from_bytes,
+    get_prerecorded_service,
 )
+from utils.stt.outcomes import (
+    TranscriptionFailure,
+    TranscriptionOutcome,
+    empty_unexpected_failure,
+    failure_from_exception,
+)
+from utils.stt.vad import VADAudioDecodeError, VADProcessingError, linear16_pcm_is_silent, vad_is_empty_strict
 from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_context, Features
 import logging
 
@@ -124,6 +130,21 @@ def _prepare_voice_message_url(path: str) -> str:
     return url
 
 
+def _validated_wav_is_silent(path: str, *, provider: str) -> bool:
+    """Return strict VAD silence without converting decode failures to silence."""
+
+    try:
+        return vad_is_empty_strict(path)
+    except VADAudioDecodeError as error:
+        raise TranscriptionFailure(
+            TranscriptionOutcome.INVALID_INPUT,
+            provider=provider,
+            retryable=False,
+        ) from error
+    except Exception as error:
+        raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
+
+
 def _transcribe_voice_message_url(
     url: str,
     path: str,
@@ -131,7 +152,7 @@ def _transcribe_voice_message_url(
     detect_language: bool = True,
 ) -> Tuple[Optional[str], Optional[str]]:
     """Run the synchronous prerecorded-STT pipeline for one signed URL."""
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    provider, stt_language, stt_model = get_prerecorded_service(language)
     is_multi = stt_language == 'multi'
     try:
         if is_multi and detect_language:
@@ -141,26 +162,30 @@ def _transcribe_voice_message_url(
         else:
             words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
             detected_language = stt_language
-    except PrerecordedSTTConfigurationError:
-        raise
-    except RuntimeError as e:
-        logger.error(f'Voice message transcription failed for {path}: {e}')
-        return None, stt_language if not is_multi else 'en'
+    except Exception as error:
+        failure = failure_from_exception(error, provider=provider)
+        logger.warning(
+            'Voice message transcription failed: outcome=%s provider=%s retryable=%s',
+            failure.outcome.value,
+            failure.provider,
+            failure.retryable,
+        )
+        raise failure from error
 
     if not words:
-        logger.info('no words')
-        return None, detected_language
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+        raise empty_unexpected_failure(provider)
+    try:
+        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    except Exception as error:
+        raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
     del words
     if not transcript_segments:
-        logger.error('failed to get deepgram segments')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
     transcript_segments.clear()
     if len(text) == 0:
-        logger.info('voice message text is empty')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
     return text, detected_language
 
@@ -170,10 +195,16 @@ def transcribe_voice_message_segment(
     uid: str,
     language: str = 'multi',
 ) -> Tuple[Optional[str], Optional[str]]:
-    url = _prepare_voice_message_url(path)
-
     if not language:
         language = resolve_voice_message_language(uid, None)
+    provider, provider_language, _ = get_prerecorded_service(language)
+    # Schedule deletion before the VAD gate as well: silence is a valid
+    # terminal outcome, not a reason to retain temporary customer audio.
+    url = _prepare_voice_message_url(path)
+    if _validated_wav_is_silent(path, provider=provider):
+        detected_language = provider_language if provider_language != 'multi' else None
+        return None, detected_language
+
     return _transcribe_voice_message_url(url, path, language)
 
 
@@ -186,7 +217,7 @@ def transcribe_pcm_bytes(
     channels: int = 1,
     keywords: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    """Transcribe raw PCM audio bytes directly via Deepgram pre-recorded API.
+    """Transcribe raw PCM audio bytes through the selected pre-recorded STT provider.
 
     Skips GCS upload and WAV conversion for maximum speed.
     Used by desktop PTT batch mode.
@@ -194,51 +225,66 @@ def transcribe_pcm_bytes(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    provider, stt_language, stt_model = get_prerecorded_service(language)
     is_multi = stt_language == 'multi'
 
-    # Let RuntimeError propagate so the router can distinguish backend failure from no-speech
-    if is_multi:
-        result = prerecorded_from_bytes(
-            audio_bytes,
-            sample_rate=sample_rate,
-            diarize=False,
-            encoding=encoding,
-            channels=channels,
-            language=stt_language,
-            model=stt_model,
-            return_language=True,
-            keywords=keywords,
-        )
-        words, detected_language = result
-    else:
-        words = prerecorded_from_bytes(
-            audio_bytes,
-            sample_rate=sample_rate,
-            diarize=False,
-            encoding=encoding,
-            channels=channels,
-            language=stt_language,
-            model=stt_model,
-            keywords=keywords,
-        )
-        detected_language = stt_language
+    if encoding == 'linear16':
+        try:
+            if linear16_pcm_is_silent(audio_bytes, sample_rate=sample_rate, channels=channels):
+                return None, stt_language if not is_multi else None
+        except VADAudioDecodeError as error:
+            raise TranscriptionFailure(
+                TranscriptionOutcome.INVALID_INPUT,
+                provider=provider,
+                retryable=False,
+            ) from error
+        except VADProcessingError as error:
+            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
+
+    try:
+        if is_multi:
+            result = prerecorded_from_bytes(
+                audio_bytes,
+                sample_rate=sample_rate,
+                diarize=False,
+                encoding=encoding,
+                channels=channels,
+                language=stt_language,
+                model=stt_model,
+                return_language=True,
+                keywords=keywords,
+            )
+            words, detected_language = result
+        else:
+            words = prerecorded_from_bytes(
+                audio_bytes,
+                sample_rate=sample_rate,
+                diarize=False,
+                encoding=encoding,
+                channels=channels,
+                language=stt_language,
+                model=stt_model,
+                keywords=keywords,
+            )
+            detected_language = stt_language
+    except Exception as error:
+        raise failure_from_exception(error, provider=provider) from error
 
     if not words:
-        logger.info('transcribe_pcm_bytes: no words')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    try:
+        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    except Exception as error:
+        raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
     del words
     if not transcript_segments:
-        logger.error('transcribe_pcm_bytes: failed to get segments')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
     transcript_segments.clear()
     if len(text) == 0:
-        logger.info('transcribe_pcm_bytes: text is empty')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
     return text, detected_language
 
@@ -248,32 +294,10 @@ def process_voice_message_segment(
     uid: str,
     language: str = 'multi',
 ):
-    url = get_syncing_file_temporal_signed_url(path)
-    schedule_syncing_temporal_file_deletion(path)
-
     if not language:
         language = resolve_voice_message_language(uid, None)
-
-    # Get the appropriate Deepgram model for this language
-    stt_language, stt_model = get_deepgram_model_for_language(language)
-
-    try:
-        words = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
-    except PrerecordedSTTConfigurationError:
-        raise
-    except RuntimeError as e:
-        logger.error(f'Voice message transcription failed for {path}: {e}')
-        return []
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
-    del words
-    if not transcript_segments:
-        logger.error('failed to get deepgram segments')
-        return []
-
-    text = " ".join([segment.text for segment in transcript_segments]).strip()
-    transcript_segments.clear()
-    if len(text) == 0:
-        logger.info('voice message text is empty')
+    text, _detected_language = transcribe_voice_message_segment(path, uid, language)
+    if text is None:
         return []
 
     # create message
@@ -319,10 +343,21 @@ async def process_voice_message_segment_stream(
     uid: str,
     language: str = 'multi',
 ) -> AsyncGenerator[str, None]:
-    url = await run_blocking(storage_executor, _prepare_voice_message_url, path)
-
     if not language:
         language = await run_blocking(db_executor, resolve_voice_message_language, uid, None)
+    provider, _, _ = get_prerecorded_service(language)
+    # The storage lifecycle must cover silent files too. Keep both signing and
+    # deletion scheduling on the storage executor before VAD decides whether
+    # transcription should proceed.
+    url = await run_blocking(storage_executor, _prepare_voice_message_url, path)
+    is_silent = await run_blocking(
+        sync_executor,
+        _validated_wav_is_silent,
+        path,
+        provider=provider,
+    )
+    if is_silent:
+        return
 
     text, _detected_language = await run_blocking(
         sync_executor,

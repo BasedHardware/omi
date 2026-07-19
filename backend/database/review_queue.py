@@ -138,7 +138,9 @@ def purge_stale_review_conflicts_for_memories(
 
 def _review_conflict_sort_key(item: Dict[str, Any]) -> tuple[float, datetime]:
     impact_value: float = cast(float, item.get('impact') or 0.0)
-    created_value: datetime = cast(datetime, item.get('created_at') or datetime.min)
+    # Use a tz-aware sentinel: stored created_at is tz-aware, and on an impact tie the sort compares
+    # the datetimes, so a naive datetime.min would raise "can't compare naive and aware" -> 500.
+    created_value: datetime = cast(datetime, item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc))
     return (impact_value, created_value)
 
 

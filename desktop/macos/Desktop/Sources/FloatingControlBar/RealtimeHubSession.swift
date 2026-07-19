@@ -1,5 +1,26 @@
 import Foundation
 import Network
+import VoiceTurnDomain
+
+/// Boxes a non-Sendable value so the session's serial-queue (`q`) and main-actor
+/// closures can capture it. All access is serialized on `q` (or the main actor),
+/// so sharing the reference is race-free — the same model the `@unchecked
+/// Sendable` class relies on.
+private struct SessionCallbackBox<T>: @unchecked Sendable {
+  let value: T
+  init(_ value: T) { self.value = value }
+}
+
+/// A provider continuation is recovery work for one already-owned physical turn. Expose why it
+/// did not start so the controller can distinguish a healthy in-flight cycle from a terminal
+/// transport/exhaustion failure instead of waiting blindly for the ordinary response deadline.
+enum RealtimePostToolContinuationStartResult: Equatable {
+  case started
+  case alreadyInFlight
+  case stale
+  case exhausted
+  case transportUnavailable
+}
 
 // MARK: - Realtime Hub Session
 //
@@ -94,21 +115,30 @@ enum RealtimeHubBargeInStrategy: Equatable {
 }
 
 #if DEBUG
-struct RealtimeHubInputLifecycleSnapshot: Equatable {
-  let isOpen: Bool
-  let activityOpen: Bool
-  let pendingAudioChunkCount: Int
-  let pendingVideoFrameCount: Int
-  let pendingCommit: Bool
-  let responseIdentityCount: Int
-  let inputIdentityCount: Int
-}
+  struct RealtimeHubInputLifecycleSnapshot: Equatable {
+    let isOpen: Bool
+    let activityOpen: Bool
+    let pendingAudioChunkCount: Int
+    let pendingVideoFrameCount: Int
+    let pendingCommit: Bool
+    let responseIdentityCount: Int
+    let inputIdentityCount: Int
+    let testingResponseCreateCount: Int
+    let testingLastResponseToolChoice: String?
+    let testingLastResponseInstruction: String?
+  }
 #endif
 
-final class RealtimeHubSession: NSObject {
+final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private let provider: RealtimeHubProvider
   private let auth: HubAuth
   private let instructions: String
+  private let availableDirectedProviders: [String]
+  /// Opaque cache-plan fields only; never raw conversation material.
+  private let contextPlanID: String
+  private let stableCacheIdentity: String
+  private let dynamicContextIdentity: String
+  private let contextCacheReplaced: Bool
   private weak var delegate: RealtimeHubSessionDelegate?
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
@@ -131,14 +161,22 @@ final class RealtimeHubSession: NSObject {
 
   private var isOpen = false
   private var terminated = false
+  #if DEBUG
+    // The hermetic local-profile harness intentionally has no network socket. Its
+    // explicit readiness seam is a successful local transport boundary, not a
+    // disconnected production session.
+    private var acceptsTestingTransport = false
+    private var testingResponseCreateCount = 0
+    private var testingLastResponseToolChoice: String?
+    private var testingLastResponseInstruction: String?
+  #endif
   private var activeEventIdentity: RealtimeHubEventIdentity?
   private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
   private var pendingAudio: [Data] = []
   /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
   /// markReady. A cold first turn would otherwise drop the frame before connect.
   private var pendingVideo: [(b64: String, mime: String)] = []
-  /// Hidden text inputs awaiting a provider-acceptable input window. Voice turn context
-  /// must survive the same cold-start/activity-window race as audio and screen frames.
+  /// Headless-test text awaiting a provider-acceptable input window.
   private var pendingTextInputs: [(text: String, logLabel: String)] = []
   private var pendingCommit = false
   /// OpenAI: call_id → function name, captured from response.output_item.added.
@@ -167,6 +205,10 @@ final class RealtimeHubSession: NSObject {
   private var geminiResponsePending = false
   private var pendingOpenAIToolCallIds = Set<String>()
   private var pendingGeminiToolCallIds = Set<String>()
+  /// A provider may close the function-call cycle without producing a user-facing
+  /// response. One explicit internal continuation is permitted for that exact voice
+  /// turn; further retries would create an unbounded tool/turn loop.
+  private var postToolContinuationAttempted = false
   private var geminiSyntheticToolCallCounter = 0
 
   // Per-turn token usage for managed (ephemeral) billing — client-reported. Reset at
@@ -175,18 +217,37 @@ final class RealtimeHubSession: NSObject {
   // responses); Gemini sends cumulative usageMetadata (we keep the latest).
   private var usageInText = 0
   private var usageInAudio = 0
+  private var usageInImage = 0
   private var usageInCached = 0
   private var usageOutText = 0
   private var usageOutAudio = 0
+  /// Evidence is local-only. This opaque descriptor lets the local log correlate the
+  /// attachment with Gemini's later per-modality usage without logging pixels or app text.
+  private var activeScreenEvidence: RealtimeScreenEvidenceDescriptor?
 
   /// Log prefix that names the provider + model on every line, so it's always
   /// clear which model produced which event.
   private var tag: String { "RealtimeHub[\(provider == .openai ? "openai" : "gemini"):\(provider.modelID)]" }
 
-  init(provider: RealtimeHubProvider, auth: HubAuth, instructions: String, delegate: RealtimeHubSessionDelegate) {
+  init(
+    provider: RealtimeHubProvider,
+    auth: HubAuth,
+    instructions: String,
+    availableDirectedProviders: [String] = [],
+    contextPlanID: String = "",
+    stableCacheIdentity: String = "",
+    dynamicContextIdentity: String = "",
+    contextCacheReplaced: Bool = false,
+    delegate: RealtimeHubSessionDelegate
+  ) {
     self.provider = provider
     self.auth = auth
     self.instructions = instructions
+    self.availableDirectedProviders = availableDirectedProviders
+    self.contextPlanID = contextPlanID
+    self.stableCacheIdentity = stableCacheIdentity
+    self.dynamicContextIdentity = dynamicContextIdentity
+    self.contextCacheReplaced = contextCacheReplaced
     self.delegate = delegate
     super.init()
   }
@@ -198,6 +259,7 @@ final class RealtimeHubSession: NSObject {
   }
 
   private func _start() {
+    guard !terminated else { return }
     guard let request = makeRequest(), let url = request.url else {
       notifyError("Could not build \(provider.displayName) request URL")
       return
@@ -208,6 +270,7 @@ final class RealtimeHubSession: NSObject {
       rawWS = ws
       ws.onOpen = { [weak self] in
         guard let self else { return }
+        guard !self.terminated else { return }
         log("RealtimeHub: raw WS open (\(self.provider.displayName))")
         self.sendSessionSetup()
       }
@@ -232,36 +295,56 @@ final class RealtimeHubSession: NSObject {
 
   func stop() {
     q.async { [weak self] in
-      guard let self else { return }
-      self.task?.cancel(with: .goingAway, reason: nil)
-      self.task = nil
-      self.rawWS?.close()
-      self.rawWS = nil
-      self.isOpen = false
-      self.pendingAudio.removeAll()
-      self.pendingVideo.removeAll()
-      self.pendingTextInputs.removeAll()
-      self.pendingCommit = false
-      self.openAIFunctionNames.removeAll()
-      self.dispatchedToolItems.removeAll()
-      self.activityOpen = false
-      self.pendingActivityStart = false
-      self.openAIResponseActive = false
-      self.openAIResponseCreatePending = false
-      self.openAIActiveResponseID = nil
-      self.openAIPendingResponseIdentities.removeAll()
-      self.openAIResponseIdentities.removeAll()
-      self.openAIPendingInputIdentities.removeAll()
-      self.openAIInputItemIdentities.removeAll()
-      self.geminiResponsePending = false
-      self.activeEventIdentity = nil
-      self.completedGeminiEventIdentity = nil
+      self?.stopOnQueue()
     }
+  }
+
+  /// Close the transport and drain its serialization queue before returning.
+  /// Owner replacement awaits this before the replacement owner becomes visible.
+  func stopAndWait() async {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        self?.stopOnQueue()
+        continuation.resume()
+      }
+    }
+  }
+
+  private func stopOnQueue() {
+    task?.cancel(with: .goingAway, reason: nil)
+    task = nil
+    rawWS?.close()
+    rawWS = nil
+    isOpen = false
+    pendingAudio.removeAll()
+    pendingVideo.removeAll()
+    pendingTextInputs.removeAll()
+    pendingCommit = false
+    openAIFunctionNames.removeAll()
+    dispatchedToolItems.removeAll()
+    activityOpen = false
+    pendingActivityStart = false
+    openAIResponseActive = false
+    openAIResponseCreatePending = false
+    openAIActiveResponseID = nil
+    openAIPendingResponseIdentities.removeAll()
+    openAIResponseIdentities.removeAll()
+    openAIPendingInputIdentities.removeAll()
+    openAIInputItemIdentities.removeAll()
+    geminiResponsePending = false
+    postToolContinuationAttempted = false
+    activeEventIdentity = nil
+    completedGeminiEventIdentity = nil
   }
 
   private func notifyError(_ message: String) {
     guard !terminated else { return }
     terminated = true
+    // Make this physical session non-sendable on q before the main-actor
+    // controller observes the error and schedules teardown.
+    isOpen = false
+    task = nil
+    rawWS = nil
     let d = delegate
     Task { @MainActor in d?.hubDidError(message, source: self) }
   }
@@ -313,52 +396,61 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
-#if DEBUG
-  func inputLifecycleSnapshot() async -> RealtimeHubInputLifecycleSnapshot {
-    await withCheckedContinuation { continuation in
-      q.async {
-        continuation.resume(
-          returning: RealtimeHubInputLifecycleSnapshot(
-            isOpen: self.isOpen,
-            activityOpen: self.activityOpen,
-            pendingAudioChunkCount: self.pendingAudio.count,
-            pendingVideoFrameCount: self.pendingVideo.count,
-            pendingCommit: self.pendingCommit,
-            responseIdentityCount: self.openAIResponseIdentities.count,
-            inputIdentityCount: self.openAIInputItemIdentities.count))
+  #if DEBUG
+    func inputLifecycleSnapshot() async -> RealtimeHubInputLifecycleSnapshot {
+      await withCheckedContinuation { continuation in
+        q.async {
+          continuation.resume(
+            returning: RealtimeHubInputLifecycleSnapshot(
+              isOpen: self.isOpen,
+              activityOpen: self.activityOpen,
+              pendingAudioChunkCount: self.pendingAudio.count,
+              pendingVideoFrameCount: self.pendingVideo.count,
+              pendingCommit: self.pendingCommit,
+              responseIdentityCount: self.openAIResponseIdentities.count,
+              inputIdentityCount: self.openAIInputItemIdentities.count,
+              testingResponseCreateCount: self.testingResponseCreateCount,
+              testingLastResponseToolChoice: self.testingLastResponseToolChoice,
+              testingLastResponseInstruction: self.testingLastResponseInstruction))
+        }
       }
     }
-  }
 
-  func markReadyForTesting() {
-    q.async { [weak self] in self?.markReady() }
-  }
-
-  func seedOpenAIIdentityMapsForTesting(
-    identity: RealtimeHubEventIdentity,
-    responseID: String,
-    inputItemID: String
-  ) async {
-    await withCheckedContinuation { continuation in
-      q.async {
-        self.openAIResponseActive = true
-        self.openAIActiveResponseID = responseID
-        self.openAIResponseIdentities[responseID] = identity
-        self.openAIInputItemIdentities[inputItemID] = identity
-        continuation.resume()
+    func markReadyForTesting() {
+      q.async { [weak self] in
+        self?.acceptsTestingTransport = true
+        self?.markReady()
       }
     }
-  }
 
-  func receiveOpenAIEventForTesting(_ event: [String: Any]) async {
-    await withCheckedContinuation { continuation in
-      q.async {
-        self.handleOpenAI(event)
-        continuation.resume()
+    func seedOpenAIIdentityMapsForTesting(
+      identity: RealtimeHubEventIdentity,
+      responseID: String,
+      inputItemID: String
+    ) async {
+      await withCheckedContinuation { continuation in
+        q.async {
+          self.openAIResponseActive = true
+          self.openAIActiveResponseID = responseID
+          self.openAIResponseIdentities[responseID] = identity
+          self.openAIInputItemIdentities[inputItemID] = identity
+          continuation.resume()
+        }
       }
     }
-  }
-#endif
+
+    func receiveOpenAIEventForTesting(_ event: [String: Any]) async {
+      await withCheckedContinuation { continuation in
+        // `[String: Any]` is not Sendable (`Any` isn't); box it so the session
+        // queue closure can carry it across the concurrency boundary.
+        let eventBox = SessionCallbackBox(event)
+        q.async {
+          self.handleOpenAI(eventBox.value)
+          continuation.resume()
+        }
+      }
+    }
+  #endif
 
   /// Send one image as a video frame INSIDE the current open activity window (Gemini).
   /// Manual-VAD requires media to ride a user turn bracketed by activityStart…activityEnd;
@@ -366,23 +458,23 @@ final class RealtimeHubSession: NSObject {
   /// when it answers. This is the ONLY image delivery this model accepts — a separate
   /// image-only turn (after the speech turn closed) is rejected with close 1007.
   func sendVideoFrame(_ image: Data, mime: String, allowClosedActivityWindow: Bool = false) {
-	    guard provider == .gemini else { return }
-	    let b64 = image.base64EncodedString()
-	    q.async { [weak self] in
-	      guard let self else { return }
-	      // Buffer until the socket is open AND a turn is active, then flush in markReady.
-	      // A cold first turn dumps audio + this frame before connect (~300ms); without
-	      // buffering the frame is dropped and the model answers blind.
-	      guard self.isOpen, self.activityOpen || allowClosedActivityWindow else {
-	        self.pendingVideo.append((b64, mime))
-	        log("\(self.tag): screen frame buffered until open (\(image.count) bytes)")
-	        return
-	      }
-	      let phase = self.activityOpen ? "in-turn" : "after-activity-end"
-	      log("\(self.tag): screen frame sent \(phase) (\(image.count) bytes)")
-	      self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": mime]]])
-	    }
-	  }
+    guard provider == .gemini else { return }
+    let b64 = image.base64EncodedString()
+    q.async { [weak self] in
+      guard let self else { return }
+      // Buffer until the socket is open AND a turn is active, then flush in markReady.
+      // A cold first turn dumps audio + this frame before connect (~300ms); without
+      // buffering the frame is dropped and the model answers blind.
+      guard self.isOpen, self.activityOpen || allowClosedActivityWindow else {
+        self.pendingVideo.append((b64, mime))
+        log("\(self.tag): screen frame buffered until open (\(image.count) bytes)")
+        return
+      }
+      let phase = self.activityOpen ? "in-turn" : "after-activity-end"
+      log("\(self.tag): screen frame sent \(phase) (\(image.count) bytes)")
+      self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": mime]]])
+    }
+  }
 
   /// TEST SEAM (ptt_test_turn only, bridge is non-prod-only): inject the probe text as
   /// realtime user input so the model answers the forced transcript instead of the
@@ -408,8 +500,87 @@ final class RealtimeHubSession: NSObject {
     await sendTextInput(text, logLabel: "test text input")
   }
 
-  func sendTurnContextText(_ text: String) async -> Bool {
-    await sendTextInput(text, logLabel: "turn context")
+  /// A provider can complete a tool-only response after accepting the final tool
+  /// result without emitting a user-facing reply. Continue the same physical turn
+  /// once, never as a synthetic user request. The continuation is bounded here so
+  /// every caller shares the same no-loop contract.
+  func resumeAfterToolOnlyCycle(
+    identity: RealtimeHubEventIdentity,
+    completion: @escaping (RealtimePostToolContinuationStartResult) -> Void
+  ) {
+    // The caller's completion is non-Sendable; box it so the session queue can
+    // carry it across without forcing the caller's closure to be @Sendable.
+    let completionBox = SessionCallbackBox(completion)
+    q.async { [weak self] in
+      guard let self else {
+        completionBox.value(.transportUnavailable)
+        return
+      }
+
+      guard self.activeEventIdentity == identity else {
+        completionBox.value(.stale)
+        return
+      }
+      guard self.isOpen else {
+        completionBox.value(.transportUnavailable)
+        return
+      }
+
+      let providerHasResponseInFlight: Bool
+      switch self.provider {
+      case .openai:
+        providerHasResponseInFlight = self.openAIResponseActive || !self.pendingOpenAIToolCallIds.isEmpty
+      case .gemini:
+        providerHasResponseInFlight =
+          self.activityOpen || self.geminiResponsePending || !self.pendingGeminiToolCallIds.isEmpty
+      }
+      if self.postToolContinuationAttempted {
+        completionBox.value(providerHasResponseInFlight ? .alreadyInFlight : .exhausted)
+        return
+      }
+      guard !providerHasResponseInFlight else {
+        completionBox.value(.alreadyInFlight)
+        return
+      }
+
+      switch self.provider {
+      case .openai:
+        self.postToolContinuationAttempted = true
+        self.requestResponse(
+          audio: true,
+          toolChoice: "none",
+          instructions: Self.openAIPostToolContinuationInstruction,
+          reason: "post_tool_continuation")
+        log("\(self.tag): requested explicit OpenAI post-tool continuation")
+      case .gemini:
+        self.postToolContinuationAttempted = true
+        self.completedGeminiEventIdentity = nil
+        self.activityOpen = true
+        for wire in Self.geminiPostToolContinuationWires() {
+          self.send(json: wire)
+        }
+        self.activityOpen = false
+        self.geminiResponsePending = true
+        log("\(self.tag): requested explicit Gemini post-tool continuation")
+      }
+      completionBox.value(.started)
+    }
+  }
+
+  static let geminiPostToolContinuationInstruction =
+    "The tool work for the user's most recent request is complete. Do not call any more tools. "
+    + "Now give the concise, natural spoken answer to that same request using the tool result already provided."
+
+  static let openAIPostToolContinuationInstruction =
+    "The tool work for the user's most recent request is complete. Give the concise, natural spoken "
+    + "answer to that same request now, using the tool result already provided. Do not call any tools."
+
+  static func geminiPostToolContinuationWires() -> [[String: Any]] {
+    [
+      ["realtimeInput": ["activityStart": [:]]],
+      ["realtimeInput": ["text": geminiPostToolContinuationInstruction]],
+      ["realtimeInput": ["activityEnd": [:]]],
+    ]
   }
 
   private func sendTextInput(_ text: String, logLabel: String) async -> Bool {
@@ -484,6 +655,7 @@ final class RealtimeHubSession: NSObject {
       } else {
         self.activeEventIdentity = nil
       }
+      self.postToolContinuationAttempted = false
       guard self.provider == .gemini else { return }
       // Barge-in on a live Gemini generation uses a fresh session at the controller
       // boundary. This same-session flag is only a local gate for abandoned/stale
@@ -571,7 +743,11 @@ final class RealtimeHubSession: NSObject {
         self.openAIResponseIdentities.removeAll()
         self.openAIPendingInputIdentities.removeAll()
         self.openAIInputItemIdentities.removeAll()
-        self.send(json: ["type": "input_audio_buffer.clear"])
+        // A pre-connect cancellation has no provider buffer to clear. Sending on
+        // the absent transport would terminalize a session that may still connect.
+        if self.isOpen {
+          self.send(json: ["type": "input_audio_buffer.clear"])
+        }
       case .gemini:
         self.pendingGeminiToolCallIds.removeAll()
         if self.activityOpen, self.isOpen {
@@ -583,51 +759,143 @@ final class RealtimeHubSession: NSObject {
   }
 
   /// Return a tool's result to the model and let it continue (speak).
-  func sendToolResult(callId: String, name: String, output: String) {
+  ///
+  /// Gemini handles realtime video and tool responses as concurrent streams, so sending a
+  /// screenshot as `realtimeInput.video` and then unblocking the function can race: the model
+  /// may answer from older context before it processes the frame. Gemini 3 supports inline
+  /// FunctionResponse parts; attach the fresh pixels there so the paused screenshot call resumes
+  /// only with the exact image it captured.
+  func sendToolResult(
+    callId: String,
+    name: String,
+    output: String,
+    screenEvidence: RealtimeScreenEvidenceAttachment? = nil,
+    onWireEnqueued: ((Bool) -> Void)? = nil
+  ) {
+    // `onWireEnqueued` is caller-owned and non-Sendable; box it so the session
+    // queue can carry it across without forcing the caller's closure @Sendable.
+    let onWireEnqueuedBox = SessionCallbackBox(onWireEnqueued)
     q.async { [weak self] in
       guard let self else { return }
       switch self.provider {
       case .openai:
-        self.pendingOpenAIToolCallIds.remove(callId)
-        self.send(json: [
-          "type": "conversation.item.create",
-          "item": ["type": "function_call_output", "call_id": callId, "output": output],
-        ])
-        if self.pendingOpenAIToolCallIds.isEmpty {
-          self.requestResponse(audio: true)
+        if let screenEvidence {
+          self.activeScreenEvidence = screenEvidence.descriptor
+          let b64 = screenEvidence.jpeg.base64EncodedString()
+          log(
+            "\(self.tag): ptt_screen_evidence stage=tool_wire_prepared evidence=\(screenEvidence.descriptor.opaqueID) "
+              + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(b64.utf8.count)")
+          self.send(json: [
+            "type": "conversation.item.create",
+            "item": [
+              "type": "message", "role": "user",
+              "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
+            ],
+          ]) { [weak self] imageError in
+            guard let self, imageError == nil else {
+              onWireEnqueuedBox.value?(false)
+              return
+            }
+            self.enqueueOpenAIToolResult(
+              callId: callId,
+              output: output,
+              onWireEnqueued: onWireEnqueuedBox.value)
+          }
         } else {
-          log("\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create")
+          self.enqueueOpenAIToolResult(
+            callId: callId,
+            output: output,
+            onWireEnqueued: onWireEnqueuedBox.value)
         }
       case .gemini:
         self.pendingGeminiToolCallIds.remove(callId)
-        self.send(json: [
-          "toolResponse": [
-            "functionResponses": [["id": callId, "name": name, "response": ["result": output]]]
-          ]
-        ])
+        if let screenEvidence {
+          self.activeScreenEvidence = screenEvidence.descriptor
+        }
+        let wire = Self.geminiToolResponse(
+          callId: callId,
+          name: name,
+          output: output,
+          screenEvidence: screenEvidence)
+        if let screenEvidence {
+          let serializedBytes = (try? JSONSerialization.data(withJSONObject: wire))?.count ?? 0
+          log(
+            "\(self.tag): ptt_screen_evidence stage=tool_wire_prepared evidence=\(screenEvidence.descriptor.opaqueID) "
+              + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(serializedBytes)")
+        }
+        self.send(json: wire) { error in
+          onWireEnqueuedBox.value?(error == nil)
+        }
       }
     }
   }
 
-  /// OpenAI screenshot path: add the captured image as a user message item so it's in
-  /// context for the next response. (Gemini sends the screen as an in-turn video frame at
-  /// turn start — see RealtimeHubController.beginTurn — not via this path.)
-  func injectImage(_ image: Data) {
-    let b64 = image.base64EncodedString()
-    q.async { [weak self] in
-      guard let self, self.provider == .openai else { return }
-      self.send(json: [
-        "type": "conversation.item.create",
-        "item": [
-          "type": "message", "role": "user",
-          "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
-        ],
-      ])
+  /// Runs on the session queue after an optional image write has completed. The completion is a
+  /// local transport fact only: the websocket accepted both exact function-response writes; it
+  /// is not a provider acknowledgement or proof that Gemini/OpenAI has processed the image.
+  private func enqueueOpenAIToolResult(
+    callId: String,
+    output: String,
+    onWireEnqueued: ((Bool) -> Void)?
+  ) {
+    pendingOpenAIToolCallIds.remove(callId)
+    send(json: [
+      "type": "conversation.item.create",
+      "item": ["type": "function_call_output", "call_id": callId, "output": output],
+    ]) { [weak self] error in
+      guard let self, error == nil else {
+        onWireEnqueued?(false)
+        return
+      }
+      onWireEnqueued?(true)
+      if self.pendingOpenAIToolCallIds.isEmpty {
+        self.requestResponse(audio: true)
+      } else {
+        log(
+          "\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create"
+        )
+      }
     }
   }
 
+  static func geminiToolResponse(
+    callId: String,
+    name: String,
+    output: String,
+    screenEvidence: RealtimeScreenEvidenceAttachment?
+  ) -> [String: Any] {
+    var functionResponse: [String: Any] = [
+      "id": callId,
+      "name": name,
+      "response": ["result": output],
+    ]
+    if let screenEvidence {
+      let displayName = "live-screenshot.jpg"
+      functionResponse["response"] = [
+        "result": output,
+        "image": ["$ref": displayName],
+        "evidence_id": screenEvidence.descriptor.evidenceID,
+      ]
+      functionResponse["parts"] = [
+        [
+          "inlineData": [
+            "mimeType": "image/jpeg",
+            "data": screenEvidence.jpeg.base64EncodedString(),
+            "displayName": displayName,
+          ]
+        ]
+      ]
+    }
+    return ["toolResponse": ["functionResponses": [functionResponse]]]
+  }
+
   // OpenAI: ask for a response with the given modality (audio for spoken turns).
-  private func requestResponse(audio: Bool) {
+  private func requestResponse(
+    audio: Bool,
+    toolChoice: String? = nil,
+    instructions: String? = nil,
+    reason: String = "turn"
+  ) {
     guard provider == .openai else { return }
     guard !openAIResponseActive else {
       log("\(tag): skip response.create — a response is already in progress")
@@ -640,7 +908,15 @@ final class RealtimeHubSession: NSObject {
       openAIPendingResponseIdentities.append(
         PendingOpenAIResponseIdentity(identity: identity, canceled: false))
     }
-    send(json: ["type": "response.create", "response": ["output_modalities": [audio ? "audio" : "text"]]])
+    var response: [String: Any] = ["output_modalities": [audio ? "audio" : "text"]]
+    if let toolChoice {
+      response["tool_choice"] = toolChoice
+    }
+    if let instructions {
+      response["instructions"] = instructions
+    }
+    log("\(tag): response.create reason=\(reason) tool_choice=\(toolChoice ?? "session_default")")
+    send(json: ["type": "response.create", "response": response])
   }
 
   // MARK: - Request / setup
@@ -721,7 +997,7 @@ final class RealtimeHubSession: NSObject {
           ],
           "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
         ],
-        "tools": RealtimeHubTools.openAITools,
+        "tools": RealtimeHubTools.openAITools(availableDirectedProviders: availableDirectedProviders),
         "tool_choice": "auto",
       ],
     ]
@@ -753,7 +1029,12 @@ final class RealtimeHubSession: NSObject {
             ],
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
-          "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
+          "tools": [
+            [
+              "functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations(
+                availableDirectedProviders: availableDirectedProviders)
+            ]
+          ],
           "inputAudioTranscription": [:],
           "outputAudioTranscription": [:],
           // turnCoverage = ALL_VIDEO so an injected screenshot frame is part of the turn
@@ -772,7 +1053,7 @@ final class RealtimeHubSession: NSObject {
   }
 
   private func markReady() {
-    guard !isOpen else { return }
+    guard !terminated, !isOpen else { return }
     isOpen = true
     log("\(tag): ready")
     // Open the speech window if a turn started before we connected (Gemini).
@@ -849,9 +1130,13 @@ final class RealtimeHubSession: NSObject {
     _ body: @escaping @MainActor (RealtimeHubSessionDelegate) -> Void
   ) {
     guard let delegate else { return }
+    // `body` (@MainActor closure) and `delegate` are non-Sendable; box both for
+    // the main hop. They are only ever used on the main actor.
+    let delegateBox = SessionCallbackBox(delegate)
+    let bodyBox = SessionCallbackBox(body)
     DispatchQueue.main.async {
       MainActor.assumeIsolated {
-        body(delegate)
+        bodyBox.value(delegateBox.value)
       }
     }
   }
@@ -918,6 +1203,7 @@ final class RealtimeHubSession: NSObject {
   private func resetTurnUsage() {
     usageInText = 0
     usageInAudio = 0
+    usageInImage = 0
     usageInCached = 0
     usageOutText = 0
     usageOutAudio = 0
@@ -932,6 +1218,7 @@ final class RealtimeHubSession: NSObject {
     let outD = usage["output_token_details"] as? [String: Any]
     usageInText += n(inD, "text_tokens")
     usageInAudio += n(inD, "audio_tokens")
+    usageInImage += n(inD, "image_tokens")
     usageInCached += n(inD, "cached_tokens")
     usageOutText += n(outD, "text_tokens")
     usageOutAudio += n(outD, "audio_tokens")
@@ -939,22 +1226,30 @@ final class RealtimeHubSession: NSObject {
 
   /// Gemini: usageMetadata is cumulative for the turn → keep the latest (replace, not sum).
   private func accumulateGeminiUsage(_ um: [String: Any]) {
-    func split(_ arr: Any?) -> (text: Int, audio: Int) {
-      var t = 0, a = 0
+    func split(_ arr: Any?) -> (text: Int, audio: Int, image: Int) {
+      var t = 0
+      var a = 0
+      var i = 0
       for d in (arr as? [[String: Any]]) ?? [] {
         let c = (d["tokenCount"] as? Int) ?? (d["tokenCount"] as? NSNumber)?.intValue ?? 0
-        if (d["modality"] as? String)?.uppercased() == "AUDIO" { a += c } else { t += c }
+        switch (d["modality"] as? String)?.uppercased() {
+        case "AUDIO": a += c
+        case "IMAGE": i += c
+        default: t += c
+        }
       }
-      return (t, a)
+      return (t, a, i)
     }
     let pin = split(um["promptTokensDetails"])
     let pout = split(um["responseTokensDetails"])
-    if pin.text == 0 && pin.audio == 0 {
+    if pin.text == 0 && pin.audio == 0 && pin.image == 0 {
       usageInText = (um["promptTokenCount"] as? Int) ?? 0
       usageInAudio = 0
+      usageInImage = 0
     } else {
       usageInText = pin.text
       usageInAudio = pin.audio
+      usageInImage = pin.image
     }
     if pout.text == 0 && pout.audio == 0 {
       usageOutText = (um["candidatesTokenCount"] as? Int) ?? (um["responseTokenCount"] as? Int) ?? 0
@@ -969,7 +1264,17 @@ final class RealtimeHubSession: NSObject {
   /// Report the turn's usage to the backend (managed sessions only — BYOK pays direct).
   /// Resets first so a second finishTurn (barge-in edge) can't double-report.
   private func reportUsageIfNeeded() {
-    let it = usageInText, ia = usageInAudio, ic = usageInCached, ot = usageOutText, oa = usageOutAudio
+    let it = usageInText
+    let ia = usageInAudio
+    let ic = usageInCached
+    let ot = usageOutText
+    let oa = usageOutAudio
+    if let evidence = activeScreenEvidence {
+      log(
+        "\(tag): ptt_screen_evidence stage=provider_turn_done evidence=\(evidence.opaqueID) "
+          + "image_tokens=\(usageInImage)")
+      activeScreenEvidence = nil
+    }
     resetTurnUsage()
     guard auth.isEphemeral, it + ia + ic + ot + oa > 0 else { return }
     let providerName = provider == .gemini ? "gemini" : "openai"
@@ -977,7 +1282,11 @@ final class RealtimeHubSession: NSObject {
     Task {
       await APIClient.shared.reportRealtimeUsage(
         provider: providerName, model: model,
-        inputText: it, inputAudio: ia, inputCached: ic, outputText: ot, outputAudio: oa)
+        inputText: it, inputAudio: ia, inputCached: ic, outputText: ot, outputAudio: oa,
+        contextPlanID: self.contextPlanID,
+        stableCacheIdentity: self.stableCacheIdentity,
+        dynamicContextIdentity: self.dynamicContextIdentity,
+        contextCacheReplaced: self.contextCacheReplaced)
     }
   }
 
@@ -1052,13 +1361,15 @@ final class RealtimeHubSession: NSObject {
   private func isCurrentOpenAIResponseEvent(_ e: [String: Any]) -> Bool {
     guard openAIResponseActive else { return false }
     guard !openAIResponseCreatePending, let expected = openAIActiveResponseID else { return false }
-    let eventResponseID = (e["response_id"] as? String)
+    let eventResponseID =
+      (e["response_id"] as? String)
       ?? ((e["response"] as? [String: Any])?["id"] as? String)
     return eventResponseID == expected
   }
 
   private func openAIResponseIdentity(for event: [String: Any]) -> RealtimeHubEventIdentity? {
-    let responseID = (event["response_id"] as? String)
+    let responseID =
+      (event["response_id"] as? String)
       ?? ((event["response"] as? [String: Any])?["id"] as? String)
     return responseID.flatMap { openAIResponseIdentities[$0] }
   }
@@ -1081,7 +1392,13 @@ final class RealtimeHubSession: NSObject {
     if let usage = (e["response"] as? [String: Any])?["usage"] as? [String: Any] {
       accumulateOpenAIUsage(usage)
     }
-    let output = (e["response"] as? [String: Any])?["output"] as? [[String: Any]] ?? []
+    let response = e["response"] as? [String: Any]
+    let output = response?["output"] as? [[String: Any]] ?? []
+    let status = response?["status"] as? String ?? "unknown"
+    let outputKinds = output.compactMap { $0["type"] as? String }.joined(separator: ",")
+    let statusDetail = ((response?["status_details"] as? [String: Any])?["type"] as? String) ?? "none"
+    let outputSummary = outputKinds.isEmpty ? "none" : outputKinds
+    log("\(tag): response.done status=\(status) detail=\(statusDetail) output=\(outputSummary)")
     var firedTool = false
     for item in output where (item["type"] as? String) == "function_call" {
       guard let callId = item["call_id"] as? String, !dispatchedToolItems.contains(callId) else {
@@ -1114,7 +1431,10 @@ final class RealtimeHubSession: NSObject {
   // MARK: Gemini events
 
   private func handleGemini(_ e: [String: Any]) {
-    if e["setupComplete"] != nil { markReady(); return }
+    if e["setupComplete"] != nil {
+      markReady()
+      return
+    }
     if let um = e["usageMetadata"] as? [String: Any] { accumulateGeminiUsage(um) }
     if let toolCall = e["toolCall"] as? [String: Any],
       let calls = toolCall["functionCalls"] as? [[String: Any]]
@@ -1202,16 +1522,71 @@ final class RealtimeHubSession: NSObject {
 
   // MARK: - Send (on q)
 
-  private func send(json: [String: Any]) {
+  private func send(json: [String: Any], completion: ((Error?) -> Void)? = nil) {
+    // `completion` is non-Sendable; box it so the raw-WS / URLSession completion
+    // closures can carry it across the session queue.
+    let completionBox = SessionCallbackBox(completion)
     guard let data = try? JSONSerialization.data(withJSONObject: json),
       let text = String(data: data, encoding: .utf8)
-    else { return }
-    if usesRawWS {
-      rawWS?.sendText(text)
+    else {
+      failSend(RealtimeHubSessionSendError.encodingFailed, completion: completion)
       return
     }
-    task?.send(.string(text)) { [weak self] error in
-      if let error { self?.q.async { self?.notifyError(error.localizedDescription) } }
+    #if DEBUG
+      if acceptsTestingTransport {
+        if (json["type"] as? String) == "response.create" {
+          testingResponseCreateCount += 1
+          testingLastResponseToolChoice = (json["response"] as? [String: Any])?["tool_choice"] as? String
+          testingLastResponseInstruction = (json["response"] as? [String: Any])?["instructions"] as? String
+        }
+        completion?(nil)
+        return
+      }
+    #endif
+    if usesRawWS {
+      guard let rawWS else {
+        failSend(RealtimeHubSessionSendError.notConnected, completion: completion)
+        return
+      }
+      rawWS.sendText(text) { [weak self] error in
+        guard let self else { return }
+        self.q.async {
+          if let error { self.notifyError(error.localizedDescription) }
+          completionBox.value?(error)
+        }
+      }
+      return
+    }
+    guard let task else {
+      failSend(RealtimeHubSessionSendError.notConnected, completion: completion)
+      return
+    }
+    task.send(.string(text)) { [weak self] error in
+      guard let self else { return }
+      self.q.async {
+        if let error { self.notifyError(error.localizedDescription) }
+        completionBox.value?(error)
+      }
+    }
+  }
+
+  /// Every local send failure is a terminal session failure, including synchronous no-transport
+  /// and encoding paths. A screen-evidence receipt must never wait for a provider deadline after
+  /// the session has already proved it cannot enqueue the exact wire.
+  private func failSend(_ error: Error, completion: ((Error?) -> Void)?) {
+    notifyError(error.localizedDescription)
+    completion?(error)
+  }
+}
+
+private enum RealtimeHubSessionSendError: LocalizedError {
+  case encodingFailed
+  case notConnected
+
+  var errorDescription: String? {
+    switch self {
+    case .encodingFailed: "Could not encode realtime transport data."
+    case .notConnected: "Realtime transport is not connected."
     }
   }
 }
@@ -1224,6 +1599,7 @@ extension RealtimeHubSession: URLSessionWebSocketDelegate {
   ) {
     log("RealtimeHub: WS didOpen (OpenAI)")
     q.async {
+      guard !self.terminated else { return }
       self.receiveLoop()
       self.sendSessionSetup()
     }
