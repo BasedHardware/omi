@@ -58,6 +58,10 @@ final class BleAudioService: ObservableObject {
       logger.warning("Already processing audio")
       return
     }
+    // Claim the slot synchronously, before the first await, so two overlapping
+    // startProcessing calls cannot both pass the guard and double-create the
+    // processor (the second would orphan the first's processor + stream task).
+    isProcessing = true
 
     self.transcriptionService = transcriptionService
     self.audioDataHandler = audioDataHandler
@@ -70,6 +74,8 @@ final class BleAudioService: ObservableObject {
     // Check if codec is supported
     if !AudioDecoderFactory.isSupported(codec) {
       logger.error("Unsupported audio codec: \(codec.name)")
+      // Release the claimed slot and drop the handlers captured above.
+      stopProcessing()
       return
     }
 
@@ -113,16 +119,24 @@ final class BleAudioService: ObservableObject {
         self?.logger.error("Audio stream error: \(error.localizedDescription)")
       }
 
-      await MainActor.run {
-        self?.isProcessing = false
-      }
+      // The stream ended or errored. Run full cleanup (not just isProcessing =
+      // false), otherwise the processor, Combine subscriptions, and handlers
+      // dangle and the session cannot cleanly restart.
+      await self?.handleAudioStreamEnded()
     }
   }
 
-  /// Stop processing audio
-  func stopProcessing() {
+  /// Full teardown after the device audio stream ends or errors on its own.
+  private func handleAudioStreamEnded() {
     guard isProcessing else { return }
+    logger.info("Audio stream ended; tearing down processing")
+    stopProcessing()
+  }
 
+  /// Stop processing audio. Idempotent: safe to call after the stream has
+  /// already ended (the old `guard isProcessing` early-return skipped cleanup
+  /// in exactly that case, leaving the session unrecoverable).
+  func stopProcessing() {
     audioStreamTask?.cancel()
     audioStreamTask = nil
     processor?.reset()
