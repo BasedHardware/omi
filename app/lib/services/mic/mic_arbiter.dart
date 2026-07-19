@@ -29,10 +29,13 @@ class ArbitratedMic implements IMicRecorderService {
   final MicArbiter _arbiter;
   final String _owner;
 
-  ArbitratedMic({required IMicRecorderService inner, required MicArbiter arbiter, required String owner})
-    : _inner = inner,
-      _arbiter = arbiter,
-      _owner = owner;
+  ArbitratedMic({
+    required IMicRecorderService inner,
+    required MicArbiter arbiter,
+    required String owner,
+  })  : _inner = inner,
+        _arbiter = arbiter,
+        _owner = owner;
 
   @override
   Future<void> start({

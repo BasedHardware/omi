@@ -54,20 +54,20 @@ void main() {
   });
 
   Future<void> startService() => service.start(
-    onByteReceived: cb.bytes.add,
-    onRecording: () => cb.recording++,
-    onStop: () => cb.stops++,
-    onInitializing: () => cb.initializing++,
-    onStalled: () => cb.stalls++,
-    onInterruption: cb.interruptions.add,
-  );
+        onByteReceived: cb.bytes.add,
+        onRecording: () => cb.recording++,
+        onStop: () => cb.stops++,
+        onInitializing: () => cb.initializing++,
+        onStalled: () => cb.stalls++,
+        onInterruption: cb.interruptions.add,
+      );
 
   Future<void> startBatchService() => service.startBatch(
-    onStop: () => cb.stops++,
-    onInterruption: cb.interruptions.add,
-    onBatchStalled: () => cb.batchStalls++,
-    onError: (code, message) => cb.errors.add(code),
-  );
+        onStop: () => cb.stops++,
+        onInterruption: cb.interruptions.add,
+        onBatchStalled: () => cb.batchStalls++,
+        onError: (code, message) => cb.errors.add(code),
+      );
 
   test('start calls host api and maps state events to callbacks', () async {
     await startService();

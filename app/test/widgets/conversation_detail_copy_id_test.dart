@@ -49,9 +49,11 @@ class CopyConversationIdHarness extends StatelessWidget {
             return ElevatedButton(
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: conversationId));
-                ScaffoldMessenger.of(
-                  innerContext,
-                ).showSnackBar(SnackBar(content: Text(AppLocalizations.of(innerContext).conversationIdCopied)));
+                ScaffoldMessenger.of(innerContext).showSnackBar(
+                  SnackBar(
+                    content: Text(AppLocalizations.of(innerContext).conversationIdCopied),
+                  ),
+                );
                 HapticFeedback.lightImpact();
               },
               child: const Text('Tap to copy'),
@@ -99,12 +101,15 @@ void main() {
   group('Copy Conversation ID action', () {
     testWidgets('writes the conversation id to the system clipboard', (tester) async {
       String? copied;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (MethodCall call) async {
-        if (call.method == 'Clipboard.setData') {
-          copied = (call.arguments as Map)['text'] as String?;
-        }
-        return null;
-      });
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
       // Use addTearDown so the mock handler is reset even if the test fails
       // partway through, preventing leakage into the next testWidgets case.
       addTearDown(() {
@@ -112,7 +117,9 @@ void main() {
       });
 
       const conversationId = 'conv_2026demo_abcdef0123456789';
-      await tester.pumpWidget(buildTestApp(const CopyConversationIdHarness(conversationId: conversationId)));
+      await tester.pumpWidget(
+        buildTestApp(const CopyConversationIdHarness(conversationId: conversationId)),
+      );
 
       await tester.tap(find.text('Tap to copy'));
       await tester.pump();
@@ -131,7 +138,10 @@ void main() {
       });
 
       await tester.pumpWidget(
-        buildTestApp(const CopyConversationIdHarness(conversationId: 'irrelevant'), locale: const Locale('ja')),
+        buildTestApp(
+          const CopyConversationIdHarness(conversationId: 'irrelevant'),
+          locale: const Locale('ja'),
+        ),
       );
 
       await tester.tap(find.text('Tap to copy'));

@@ -173,9 +173,9 @@ class _ScheduledCooldown {
 
 class _TransferHarness {
   _TransferHarness({bool autoUploadEnabled = true, List<String>? backlog, List<String>? drainedWalIds})
-    : _autoUploadEnabled = autoUploadEnabled,
-      backlog = backlog ?? <String>['wal-1'],
-      drainedWalIds = drainedWalIds ?? <String>[] {
+      : _autoUploadEnabled = autoUploadEnabled,
+        backlog = backlog ?? <String>['wal-1'],
+        drainedWalIds = drainedWalIds ?? <String>[] {
     coordinator = RecordingTransferCoordinator(
       reconcile: _reconcile,
       discover: _discover,

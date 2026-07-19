@@ -513,9 +513,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   _buildNavItem(
                     icon: FontAwesomeIcons.list,
                     title: context.l10n.conversationDisplay,
-                    onTap: () => Navigator.of(
-                      context,
-                    ).push(MaterialPageRoute(builder: (context) => const ConversationDisplaySettings())),
+                    onTap: () => Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (context) => const ConversationDisplaySettings())),
                   ),
                   const SizedBox(height: 12),
 
