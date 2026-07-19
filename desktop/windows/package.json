@@ -103,6 +103,8 @@
     "react-router-dom": "^7.15.1",
     "tailwind-merge": "^3.6.0",
     "three": "^0.184.0",
+    "three-instanced-uniforms-mesh": "^0.52.4",
+    "three-stdlib": "^2.36.1",
     "ws": "^8.21.0",
     "zod": "^4.4.3",
     "@mediapipe/tasks-audio": "0.10.35"

@@ -13,6 +13,7 @@
 // user's hardware GPU — the BEFORE/AFTER delta and the draw-call reduction are
 // the hardware-independent signal). Run: `pnpm test:e2e:kg-perf`.
 import { describe, test } from 'node:test'
+import assert from 'node:assert/strict'
 import { _electron as electron } from 'playwright'
 import { fileURLToPath } from 'node:url'
 import { mkdtempSync, rmSync, mkdirSync } from 'node:fs'
@@ -127,6 +128,26 @@ describe('Brain-map performance at real-account scale', () => {
     console.log(
       `[kg-perf] DEFAULT nodes=${GRAPH.nodes.length} edges=${GRAPH.edges.length} fps=${fpsDefault} drawCalls=${callsDefault}`
     )
+
+    // Picking after instancing: hovering a node must still name it (instanceId
+    // hit-testing on the InstancedMesh). Sweep the dense cloud centre; the pointer
+    // cursor flips to 'pointer' the moment the raycast hits an instanced sphere.
+    const box = await page
+      .locator('canvas')
+      .filter({ has: page.locator('visible=true') })
+      .first()
+      .boundingBox()
+      .catch(() => null)
+    let hovered = false
+    for (let dx = -60; dx <= 60 && !hovered; dx += 20) {
+      for (let dy = -60; dy <= 60 && !hovered; dy += 20) {
+        await page.mouse.move(640 + dx, 400 + dy)
+        await page.waitForTimeout(60)
+        hovered = await page.evaluate(() => document.body.style.cursor === 'pointer')
+      }
+    }
+    assert.ok(hovered, 'hovering a node must set the pointer cursor (instanceId picking works)')
+    console.log(`[kg-perf] PICKING hover→pointer OK (canvas ${box ? `${Math.round(box.width)}x${Math.round(box.height)}` : 'n/a'})`)
 
     // Escape hatch: if a "Show all" control exists (post-change), exercise it.
     const showAll = page.getByRole('button', { name: /show all/i })

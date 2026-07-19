@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Billboard, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import { LineSegments2, LineSegmentsGeometry, LineMaterial } from 'three-stdlib'
+import { InstancedUniformsMesh } from 'three-instanced-uniforms-mesh'
 import type { KnowledgeGraph } from '../../../../shared/types'
 import {
   useGraphSimulation,
@@ -71,107 +72,255 @@ function hashPhase(id: string): number {
   return (h / 997) * Math.PI * 2
 }
 
-function GraphNodeMesh({
+// Per-node visual constants, memo-derived from the node list. Kept out of the
+// frame loop (color/phase/radius never change once a node exists).
+type NodeVisual = { id: string; color: THREE.Color; phase: number; radius: number }
+// Reused scratch objects for the per-frame matrix compose (never allocate in a loop).
+const IDENTITY_QUAT = new THREE.Quaternion()
+const scratchMat = new THREE.Matrix4()
+const scratchScale = new THREE.Vector3()
+
+// ALL node spheres, drawn as THREE InstancedMeshes (core / glow / bloom) instead
+// of 3 meshes per node. This makes the sphere draw calls CONSTANT (3) regardless
+// of node count. The per-node emissive pulse and glow opacity/scale — which would
+// otherwise force one shared material value for every node — are kept per-node by
+// `three-instanced-uniforms-mesh` (setUniformAt patches the material shader to
+// read a per-instance attribute), so the twinkle stays byte-identical to the
+// per-mesh version: same lerp, same sin(t*2+phase) per-node phase, same flare on
+// entry, same grow-in. One consolidated useFrame owns all the math (the r3f
+// "mutate imperatively in one loop" pattern) and also writes each node's eased
+// position into posMap so edges/labels follow.
+function GraphNodes({
   sim,
-  node,
+  nodes,
   centerNodeId,
   reduced,
   posMap,
   frameLoop,
-  labelFade,
-  showLabel,
   interactive,
   onHover,
   onSelect
 }: {
   sim: GraphSimulation
-  node: NodePosition
+  nodes: NodePosition[]
   centerNodeId?: string
   reduced: boolean
-  // Shared map (owned by GraphScene, recreated on mount) where each node writes
-  // its eased on-screen position so the edges can connect to it.
   posMap: Map<string, THREE.Vector3>
   frameLoop: 'always' | 'demand'
-  // 3D only: fade a label by how far its node sits BEHIND the cloud center
-  // relative to the camera, so back-of-cloud titles recede instead of stacking
-  // on the front ones. Off (labels full-opacity) on the flat 2D surfaces.
-  labelFade: boolean
-  // Whether THIS node draws its title. Under 'all' every node is true; under
-  // 'declutter' only the top hubs + hovered/selected. False → no troika Text
-  // mesh is mounted at all (the single biggest per-node cost at scale).
-  showLabel: boolean
-  // Interactive scenes wire pointer hover/click so any node can be named on
-  // demand even when its permanent label is decluttered away.
   interactive: boolean
   onHover?: (id: string | null) => void
   onSelect?: (id: string) => void
 }): React.JSX.Element {
+  const invalidate = useThree((state) => state.invalidate)
+  const count = Math.max(1, nodes.length)
+
+  // Static per-node visuals (color/phase/radius). Rebuilt only when the node list
+  // changes — never inside the frame loop.
+  const visuals = useMemo<NodeVisual[]>(
+    () =>
+      nodes.map((n) => {
+        const isFixed = n.id === centerNodeId
+        return {
+          id: n.id,
+          color: new THREE.Color(nodeColor(n.nodeType, isFixed)),
+          phase: hashPhase(n.id),
+          radius: radiusFor(n, isFixed)
+        }
+      }),
+    [nodes, centerNodeId]
+  )
+
+  // Three instanced layers. Core is lit (MeshStandard, per-instance emissive
+  // pulse); glow + bloom are additive-ish MeshBasic shells. Core/glow use
+  // InstancedUniformsMesh so emissiveIntensity/opacity vary per instance; bloom's
+  // opacity is constant so a plain InstancedMesh suffices.
+  const layers = useMemo(() => {
+    const coreGeo = new THREE.SphereGeometry(1, 16, 16)
+    const coreMat = new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.1 })
+    const core = new InstancedUniformsMesh(coreGeo, coreMat, count)
+    const glowGeo = new THREE.SphereGeometry(1, 12, 12)
+    const glowMat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })
+    const glow = new InstancedUniformsMesh(glowGeo, glowMat, count)
+    const bloomGeo = new THREE.SphereGeometry(1, 8, 8)
+    const bloomMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0.04,
+      depthWrite: false
+    })
+    const bloom = new THREE.InstancedMesh(bloomGeo, bloomMat, count)
+    for (const m of [core, glow, bloom]) {
+      m.frustumCulled = false
+      m.matrixAutoUpdate = false
+    }
+    return { coreGeo, coreMat, core, glowGeo, glowMat, glow, bloomGeo, bloomMat, bloom }
+  }, [count])
+  useEffect(
+    () => () => {
+      for (const g of [layers.coreGeo, layers.glowGeo, layers.bloomGeo]) g.dispose()
+      for (const m of [layers.coreMat, layers.glowMat, layers.bloomMat]) m.dispose()
+    },
+    [layers]
+  )
+
+  // Set per-instance colors once per node-list change: diffuse via instanceColor,
+  // and the core's emissive color to match (the pulse only scales its intensity).
+  useEffect(() => {
+    const { core, glow, bloom } = layers
+    for (let i = 0; i < visuals.length; i++) {
+      const c = visuals[i].color
+      core.setColorAt(i, c)
+      glow.setColorAt(i, c)
+      bloom.setColorAt(i, c)
+      core.setUniformAt('emissive', i, c)
+    }
+    /* eslint-disable react-hooks/immutability -- r3f: three.js instance buffers are flagged for the needsUpdate write; imperative upload by design */
+    if (core.instanceColor) core.instanceColor.needsUpdate = true
+    if (glow.instanceColor) glow.instanceColor.needsUpdate = true
+    if (bloom.instanceColor) bloom.instanceColor.needsUpdate = true
+    /* eslint-enable react-hooks/immutability */
+  }, [layers, visuals])
+
+  // Per-node animation state, keyed by id so an existing node keeps its eased
+  // position + grown-in scale when the node list changes (only genuinely new
+  // nodes fly in from their seed and grow 0→1) — matching the keyed-mesh version.
+  const stateRef = useRef(new Map<string, { eased: THREE.Vector3; grow: number }>())
+  const target = useRef(new THREE.Vector3())
+
+  // r3f imperative loop: mutate three.js instance buffers/uniforms in place every
+  // frame (never React state). The immutability rule flags the needsUpdate writes
+  // on the memo'd meshes — that is exactly the sanctioned r3f pattern here.
+  /* eslint-disable react-hooks/immutability */
+  useFrame((frame) => {
+    const { core, glow, bloom } = layers
+    const store = stateRef.current
+    const t = frame.clock.elapsedTime
+    let anyMoving = false
+
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i]
+      const vis = visuals[i]
+      let st = store.get(n.id)
+      if (!st) {
+        st = { eased: new THREE.Vector3(n.x, n.y, n.z), grow: reduced ? 1 : 0 }
+        store.set(n.id, st)
+      }
+      const live = sim.liveNode(n.id)
+      if (live) target.current.set(live.x ?? 0, live.y ?? 0, live.z ?? 0)
+      else target.current.copy(st.eased)
+
+      if (reduced) {
+        st.eased.copy(target.current)
+        st.grow = 1
+      } else {
+        st.eased.lerp(target.current, 0.045)
+        if (st.eased.distanceToSquared(target.current) < 0.01) st.eased.copy(target.current)
+        if (st.grow < 1) st.grow = Math.min(1, st.grow + 0.05)
+        if (st.eased.distanceToSquared(target.current) > 0.01 || st.grow < 1) anyMoving = true
+      }
+
+      // Publish eased position for edges + labels (reuse the stored Vector3).
+      let v = posMap.get(n.id)
+      if (!v) {
+        v = new THREE.Vector3()
+        posMap.set(n.id, v)
+      }
+      v.copy(st.eased)
+
+      // Same shine math as the per-mesh version: per-node phase twinkle + entry flare.
+      const entering = !reduced && st.grow < 1
+      const pulse = reduced ? 0.6 : 0.5 + 0.5 * Math.sin(t * 2 + vis.phase)
+      const flare = entering ? 1.8 : 1
+      const grow = st.grow
+
+      scratchScale.setScalar(vis.radius * grow)
+      scratchMat.compose(st.eased, IDENTITY_QUAT, scratchScale)
+      core.setMatrixAt(i, scratchMat)
+      core.setUniformAt('emissiveIntensity', i, (0.85 + 0.45 * pulse) * flare)
+
+      scratchScale.setScalar(vis.radius * 1.9 * grow * (1 + 0.18 * pulse))
+      scratchMat.compose(st.eased, IDENTITY_QUAT, scratchScale)
+      glow.setMatrixAt(i, scratchMat)
+      glow.setUniformAt('opacity', i, (0.12 + 0.14 * pulse) * flare)
+
+      scratchScale.setScalar(vis.radius * 3 * grow)
+      scratchMat.compose(st.eased, IDENTITY_QUAT, scratchScale)
+      bloom.setMatrixAt(i, scratchMat)
+    }
+    core.instanceMatrix.needsUpdate = true
+    glow.instanceMatrix.needsUpdate = true
+    bloom.instanceMatrix.needsUpdate = true
+    if (frameLoop === 'demand' && (anyMoving || !reduced)) invalidate()
+  })
+  /* eslint-enable react-hooks/immutability */
+
+  // Picking on the core layer: r3f reports the hit instanceId, which indexes the
+  // node list. Only wired for interactive scenes (cursor moves). Replaces the
+  // per-mesh pointer handlers with instanceId hit-testing (same behavior).
+  const handlers = interactive
+    ? {
+        onPointerMove: (e: { stopPropagation: () => void; instanceId?: number }) => {
+          e.stopPropagation()
+          const id = e.instanceId != null ? nodes[e.instanceId]?.id : undefined
+          if (id) {
+            onHover?.(id)
+            document.body.style.cursor = 'pointer'
+          }
+        },
+        onPointerOut: (e: { stopPropagation: () => void }) => {
+          e.stopPropagation()
+          onHover?.(null)
+          document.body.style.cursor = ''
+        },
+        onPointerDown: (e: { stopPropagation: () => void; instanceId?: number }) => {
+          e.stopPropagation()
+          const id = e.instanceId != null ? nodes[e.instanceId]?.id : undefined
+          if (id) onSelect?.(id)
+        }
+      }
+    : {}
+
+  return (
+    <>
+      <primitive object={layers.core} {...handlers} />
+      <primitive object={layers.glow} />
+      <primitive object={layers.bloom} />
+    </>
+  )
+}
+
+// One troika label for a single node, positioned each frame from the node's eased
+// position (published by GraphNodes into posMap). Only mounted for the nodes that
+// should be labeled (top hubs + hovered/selected under declutter, or all nodes on
+// the small onboarding/card graphs), so troika text count stays small. Depth-fade
+// (3D only) is identical to the per-mesh version: dim a title by how far its node
+// sits behind the cloud center, quantized to 1/8 so troika rarely re-syncs.
+function GraphNodeLabel({
+  node,
+  centerNodeId,
+  posMap,
+  labelFade,
+  frameLoop
+}: {
+  node: NodePosition
+  centerNodeId?: string
+  posMap: Map<string, THREE.Vector3>
+  labelFade: boolean
+  frameLoop: 'always' | 'demand'
+}): React.JSX.Element {
   const groupRef = useRef<THREE.Group>(null)
-  const coreMat = useRef<THREE.MeshStandardMaterial>(null)
-  const glowMat = useRef<THREE.MeshBasicMaterial>(null)
-  const glowMesh = useRef<THREE.Mesh>(null)
-  // troika Text instance (drei <Text> forwards its ref here); has fillOpacity + sync().
   const textRef = useRef<{ fillOpacity: number; sync: () => void } | null>(null)
   const lastFade = useRef(1)
-  const target = useRef(new THREE.Vector3(node.x, node.y, node.z))
   const isFixed = node.id === centerNodeId
-  const color = nodeColor(node.nodeType, isFixed)
   const radius = radiusFor(node, isFixed)
-  // The center ("you") label gets a bit bigger than the proportional size.
   const labelSize = labelFontSize(node.sizeScale) * (isFixed ? 1.35 : 1)
-  const phase = useMemo(() => hashPhase(node.id), [node.id])
-  // Depth scale for the fade: the same analytic radius the camera frames to, so
-  // a node a full cloud-radius behind center fades to the floor opacity.
   const fadeSpan = useMemo(() => fullGraphRadius(), [])
   const invalidate = useThree((state) => state.invalidate)
 
-  // Read the live simulation position each frame (no React state in the loop)
-  // and ease toward it so motion stays smooth. New nodes fly out from the
-  // center and grow 0 → full size, then settle into a gentle continuous shine.
   useFrame((state) => {
     const g = groupRef.current
     if (!g) return
-    const live = sim.liveNode(node.id)
-    if (live) target.current.set(live.x ?? 0, live.y ?? 0, live.z ?? 0)
-
-    let shouldContinue = false
-    if (reduced) {
-      g.position.copy(target.current)
-      g.scale.setScalar(1)
-    } else {
-      // Low lerp factor = slow, smooth glide toward the target (used both for
-      // the initial reveal and for the gentle reshuffle drift between screens).
-      g.position.lerp(target.current, 0.045)
-      if (g.position.distanceToSquared(target.current) < 0.01) g.position.copy(target.current)
-      if (g.scale.x < 1) g.scale.setScalar(Math.min(1, g.scale.x + 0.05))
-      shouldContinue = g.position.distanceToSquared(target.current) > 0.01 || g.scale.x < 1
-    }
-    // Record the eased on-screen position so the connecting lines follow the
-    // sphere exactly (instead of snapping to the raw sim position). The map is
-    // plain React-owned state, so this can never throw / blank the canvas.
-    let v = posMap.get(node.id)
-    if (!v) {
-      v = new THREE.Vector3()
-      posMap.set(node.id, v)
-    }
-    v.copy(g.position)
-
-    // Shine: pulse the emissive core + halo so the modules glow and feel alive.
-    // While a node is still growing in it flares brighter, giving the reveal a
-    // satisfying "pop" before it settles to its idle twinkle.
-    const entering = !reduced && g.scale.x < 1
-    const t = state.clock.elapsedTime
-    const pulse = reduced ? 0.6 : 0.5 + 0.5 * Math.sin(t * 2 + phase)
-    const flare = entering ? 1.8 : 1
-    if (coreMat.current) coreMat.current.emissiveIntensity = (0.85 + 0.45 * pulse) * flare
-    if (glowMat.current) glowMat.current.opacity = (0.12 + 0.14 * pulse) * flare
-    if (glowMesh.current) glowMesh.current.scale.setScalar(1 + 0.18 * pulse)
-
-    // Depth fade (3D only): dim a label by how far its node sits BEHIND the cloud
-    // center as seen from the camera (origin is the pinned "you" node / cloud
-    // center). Quantized to 1/8 so troika only re-syncs a handful of times across
-    // an orbit, not every frame. This is what keeps the front titles crisp while
-    // the far side recedes — the readability win over a raw 3D cloud.
+    const p = posMap.get(node.id)
+    if (p) g.position.copy(p)
     if (labelFade && textRef.current) {
       const cam = state.camera
       const behind = Math.max(0, cam.position.distanceTo(g.position) - cam.position.length())
@@ -184,91 +333,23 @@ function GraphNodeMesh({
         if (frameLoop === 'demand') invalidate()
       }
     }
-    if (frameLoop === 'demand' && shouldContinue) invalidate()
   })
 
-  // Interactive pointer wiring: hovering names a node (and shows a pointer
-  // cursor); clicking pins its label as the selection. Handlers are attached only
-  // in interactive scenes so the fixed-camera onboarding/card graphs are
-  // untouched. stopPropagation keeps a hover from also hitting nodes behind it.
-  const hoverHandlers = interactive
-    ? {
-        onPointerOver: (e: { stopPropagation: () => void }) => {
-          e.stopPropagation()
-          onHover?.(node.id)
-          document.body.style.cursor = 'pointer'
-        },
-        onPointerOut: (e: { stopPropagation: () => void }) => {
-          e.stopPropagation()
-          onHover?.(null)
-          document.body.style.cursor = ''
-        },
-        onPointerDown: (e: { stopPropagation: () => void }) => {
-          e.stopPropagation()
-          onSelect?.(node.id)
-        }
-      }
-    : {}
-
   return (
-    <group
-      ref={groupRef}
-      position={[node.x, node.y, node.z]}
-      scale={reduced ? [1, 1, 1] : [0, 0, 0]}
-    >
-      <mesh {...hoverHandlers}>
-        {/* 16×16 (down from 32×32): at the on-screen size these spheres actually
-            render — small, glowing, and softened by the halo/bloom layers below
-            — the extra polys were invisible but every one of them still had to
-            be transformed and rasterized every animated frame across all nodes.
-            This is the single biggest per-frame triangle-count cut here. */}
-        <sphereGeometry args={[radius, 16, 16]} />
-        <meshStandardMaterial
-          ref={coreMat}
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.85}
-          roughness={0.3}
-          metalness={0.1}
-        />
-      </mesh>
-      {/* pulsing glow halo (scales with the shine) */}
-      <mesh ref={glowMesh}>
-        <sphereGeometry args={[radius * 1.9, 12, 12]} />
-        <meshBasicMaterial
-          ref={glowMat}
-          color={color}
-          transparent
-          opacity={0.12}
-          depthWrite={false}
-        />
-      </mesh>
-      {/* faint outer bloom for extra shine */}
-      <mesh>
-        <sphereGeometry args={[radius * 3, 8, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={0.04} depthWrite={false} />
-      </mesh>
-      {/* Under 'declutter' most nodes mount NO Text at all — troika text is the
-          heaviest per-node object, so not creating it (rather than hiding it) is
-          what buys back the frame budget at hundreds of nodes. */}
-      {showLabel && (
-        <Billboard position={[0, radius + labelSize * 0.9, 0]}>
-          <Text
-            ref={textRef as never}
-            // Font varies only ±20% with node size (matches collision/framing);
-            // the center label is bumped a bit larger.
-            fontSize={labelSize}
-            color="#ffffff"
-            anchorX="center"
-            anchorY="middle"
-            // Always on top of the lines/nodes so titles stay readable.
-            renderOrder={4}
-            depthOffset={-1}
-          >
-            {node.label}
-          </Text>
-        </Billboard>
-      )}
+    <group ref={groupRef} position={[node.x, node.y, node.z]}>
+      <Billboard position={[0, radius + labelSize * 0.9, 0]}>
+        <Text
+          ref={textRef as never}
+          fontSize={labelSize}
+          color="#ffffff"
+          anchorX="center"
+          anchorY="middle"
+          renderOrder={4}
+          depthOffset={-1}
+        >
+          {node.label}
+        </Text>
+      </Billboard>
     </group>
   )
 }
@@ -480,6 +561,23 @@ function GraphScene({
     if (!reduced && sim.settleFrame() && frameLoop === 'demand') invalidate()
   })
 
+  // Label overlay: one troika Text per node that should be named (all nodes on
+  // small graphs; top hubs + hovered/selected under declutter). Built here so the
+  // posMap ref-pass disable sits on a plain statement, not inside JSX.
+  const labelEls = nodes
+    .filter((n) => labeledIds === null || labeledIds.has(n.id))
+    // eslint-disable-next-line react-hooks/refs -- posMap is a lazy-init ref threaded to labels so they follow eased positions; intentional
+    .map((n) => (
+      <GraphNodeLabel
+        key={n.id}
+        node={n}
+        centerNodeId={centerNodeId}
+        posMap={posMap}
+        labelFade={interactive === true}
+        frameLoop={frameLoop}
+      />
+    ))
+
   return (
     <>
       <ambientLight intensity={0.8} />
@@ -487,27 +585,24 @@ function GraphScene({
       {/* Depth fog in 3D so far spheres/edges recede — a depth cue for the mesh
           layer. Billboard labels use troika's own shader and ignore scene fog, so
           the far-label declutter is handled separately by the per-node distance
-          fade in GraphNodeMesh. */}
+          fade in GraphNodeLabel. */}
       {interactive && <AdaptiveFog />}
       {interactive && <DrawCallProbe />}
       <GraphEdges sim={sim} edges={graph.edges} posMap={posMap} />
-      {/* eslint-disable-next-line react-hooks/refs -- posMap is a lazy-init ref read here to glue edges/nodes to eased positions; intentional */}
-      {nodes.map((n) => (
-        <GraphNodeMesh
-          key={n.id}
-          sim={sim}
-          node={n}
-          centerNodeId={centerNodeId}
-          reduced={reduced}
-          posMap={posMap}
-          frameLoop={frameLoop}
-          labelFade={interactive === true}
-          showLabel={labeledIds === null ? true : labeledIds.has(n.id)}
-          interactive={interactive === true}
-          onHover={setHoveredId}
-          onSelect={setSelectedId}
-        />
-      ))}
+      <GraphNodes
+        sim={sim}
+        nodes={nodes}
+        centerNodeId={centerNodeId}
+        reduced={reduced}
+        posMap={posMap}
+        frameLoop={frameLoop}
+        interactive={interactive === true}
+        onHover={setHoveredId}
+        onSelect={setSelectedId}
+      />
+      {/* Labels are a thin overlay: only the nodes that should be named mount a
+          troika Text, positioned from the eased positions GraphNodes publishes. */}
+      {labelEls}
       {interactive ? (
         <>
           <OrbitControls makeDefault enablePan enableZoom enableRotate />
