@@ -37,7 +37,8 @@
 
 import { trackEvent as defaultTrackEvent } from '../../analytics'
 import { getPreferences } from '../../preferences'
-import { gateDecision, voicedStats } from '../../ptt/gate'
+import { gateDecision, voicedStats, type AudioStats } from '../../ptt/gate'
+import { HINT_MS } from '../../ptt/constants'
 import type { PttCapture, PttCaptureOptions } from '../../ptt/capture'
 import {
   muteSystemAudioForHubCapture as defaultMuteForCapture,
@@ -72,6 +73,21 @@ const ORB_PUBLISH_INTERVAL_MS = 33
  *  pending-stream cap) so a very long hold on the cascade route can't grow without
  *  bound before the batch POST. */
 const CASCADE_BUFFER_MAX_BYTES = 16 * 1024 * 1024
+
+/** Release watchdog (2026-07-18 "stuck on Listening" wedge): once the user has
+ *  RELEASED (end/cancel), no turn may hold the machine forever. The reducer's own
+ *  deadlines bound every post-release phase — this is the belt-and-braces layer
+ *  above them, for the wedge class where the deadline machinery itself was broken
+ *  (e.g. a collaborator throw skipped the scheduling effect). Generous: it must
+ *  comfortably outlast the slowest legitimate pre-response dwell (the cascade's
+ *  20 s batch-transcription budget). It never fires for phases that legitimately
+ *  run long (playing / tools) — see `fireReleaseWatchdog`'s phase check. */
+export const RELEASE_WATCHDOG_MS = 45_000
+
+/** The watchdog's user-facing hint (mirrors the local PTT machine's watchdog copy). */
+export const RELEASE_WATCHDOG_HINT = 'Voice input timed out — try again'
+
+const ZERO_STATS: AudioStats = { totalSec: 0, voicedSec: 0, peak: 0 }
 
 export type VoiceHubTurnDriverDeps = {
   /** Build the warm-hub controller with the driver's event wiring. Production:
@@ -119,6 +135,9 @@ export type VoiceHubTurnDriverDeps = {
   trackEvent?: (event: string, properties: Record<string, unknown>) => void
   /** The live kill-switch pref (defaults to `getPreferences`). */
   prefs?: () => { pttHubEnabled?: boolean }
+  /** Schedule the post-release watchdog (defaults to a real `setTimeout` of
+   *  `RELEASE_WATCHDOG_MS`); injectable so tests fire it on command. */
+  scheduleReleaseWatchdog?: (fire: () => void) => { cancel(): void }
   // --- test seams ---
   scheduler?: VoiceTurnDeadlineScheduling
   mintTurnID?: () => VoiceTurnID
@@ -134,6 +153,8 @@ export class VoiceHubTurnDriver {
   private readonly deps: VoiceHubTurnDriverDeps
   private readonly prefs: () => { pttHubEnabled?: boolean }
   private readonly muteForCapture: () => void
+  private readonly restoreAudio: () => void
+  private readonly scheduleReleaseWatchdog: (fire: () => void) => { cancel(): void }
   private readonly now: () => number
   private readonly mintCaptureID: () => VoiceCaptureID
   private captureSeq = 0
@@ -159,6 +180,15 @@ export class VoiceHubTurnDriver {
   private turnTranscript = ''
   private assistantText = ''
   private turnRecorded = false
+  /** Running voiced-audio stats for THIS turn's captured PCM (all routes) — the
+   *  hub lane's release gate reads these at end() (the cascade lane gates on its
+   *  retained buffer instead). Accumulated per chunk; capture chunks are 4096
+   *  samples (256 ms), far above the 320-sample RMS frame, so the per-chunk
+   *  trailing-partial loss is negligible. */
+  private voiced: AudioStats = ZERO_STATS
+  /** Armed at release (end/cancel); force-finalizes a turn the machine failed to
+   *  free (see RELEASE_WATCHDOG_MS). Cancelled on terminal reconciliation. */
+  private watchdog: { cancel(): void } | null = null
 
   // Projection state ----------------------------------------------------------
   private lastProjection: VoiceTurnUIProjection = IDLE_PROJECTION
@@ -169,6 +199,13 @@ export class VoiceHubTurnDriver {
     this.deps = deps
     this.prefs = deps.prefs ?? getPreferences
     this.muteForCapture = deps.muteForCapture ?? defaultMuteForCapture
+    this.restoreAudio = deps.restoreSystemAudio ?? defaultRestoreSystemAudio
+    this.scheduleReleaseWatchdog =
+      deps.scheduleReleaseWatchdog ??
+      ((fire) => {
+        const handle = setTimeout(fire, RELEASE_WATCHDOG_MS)
+        return { cancel: () => clearTimeout(handle) }
+      })
     this.now = deps.now ?? (() => Date.now())
     // VoiceCaptureID is a branded NUMBER — a per-driver monotonic counter (this id
     // is only a reducer fencing token; it shares no namespace with the capture
@@ -266,6 +303,10 @@ export class VoiceHubTurnDriver {
     this.turnTranscript = ''
     this.assistantText = ''
     this.turnRecorded = false
+    this.voiced = ZERO_STATS
+    // A prior turn's release watchdog must not fire into this fresh turn.
+    this.watchdog?.cancel()
+    this.watchdog = null
 
     // The HOST picks the route (the reducer never does): flag-gated kill-switch.
     const route = selectPttRoute(this.hub, this.prefs())
@@ -307,6 +348,9 @@ export class VoiceHubTurnDriver {
     const turnID = this.turnID
     if (turnID === null) return
     this.committed = true
+    // The user has released: from here the turn MUST reach a terminal in bounded
+    // time. Armed before any dispatch so even a wedged finalize chain is covered.
+    this.armReleaseWatchdog(turnID)
     // `finalize` stops capture (host disposes the mic) and enters `finalizing`.
     this.dispatch({ type: 'finalize', turnID })
 
@@ -318,6 +362,26 @@ export class VoiceHubTurnDriver {
     }
 
     if (isHubRoute(this.route)) {
+      // Release gate, hub lane (2026-07-18 short-press wedge): decide from the
+      // captured PCM alone — BEFORE committing to the provider — whether this
+      // turn is worth a hub response. Mirrors the cascade gate below exactly:
+      // a 220–350 ms press (or a release that beat the capture spin-up, i.e.
+      // zero samples) must ALWAYS finalize deterministically here, never commit
+      // a near-empty turn the provider may silently never answer.
+      //   too-short / dead-mic → terminal `tooShort` ("Hold longer to record");
+      //   silent (real hold, live room, no speech) → terminal `silentRejected`
+      //     (quiet discard — never hand silence to the model).
+      // The terminal's `cancelHub` effect abandons the hub turn while KEEPING
+      // the warm socket, so the next press is still instant.
+      const hubGate = gateDecision(this.voiced)
+      if (hubGate === 'too-short' || hubGate === 'dead-mic') {
+        this.dispatch({ type: 'finish', turnID, reason: 'tooShort' })
+        return
+      }
+      if (hubGate === 'silent') {
+        this.dispatch({ type: 'finish', turnID, reason: 'silentRejected' })
+        return
+      }
       this.hub.commitTurn(turnID)
       if (this.hub.isWarm() && this.sessionID !== null) {
         // Warm hub: the commit is accepted now — advance to awaitingResponse.
@@ -344,6 +408,8 @@ export class VoiceHubTurnDriver {
   cancel(): void {
     const turnID = this.turnID
     if (turnID === null) return
+    // A cancel is a release too — the turn must terminate in bounded time.
+    this.armReleaseWatchdog(turnID)
     this.dispatch({ type: 'cancel', turnID, reason: 'cancelled' })
   }
 
@@ -357,6 +423,14 @@ export class VoiceHubTurnDriver {
     // first frame without waiting on the levels event or the capture handle.
     this.orbLevel = pcmPeakLevel(pcm)
     this.emit(false)
+
+    // Accumulate this turn's voiced stats (capture-rate PCM) for the release gates.
+    const stats = voicedStats(pcm)
+    this.voiced = {
+      totalSec: this.voiced.totalSec + stats.totalSec,
+      voicedSec: this.voiced.voicedSec + stats.voicedSec,
+      peak: Math.max(this.voiced.peak, stats.peak)
+    }
 
     // Retain for the cascade route (and seed the fallback safety net).
     if (!isHubRoute(this.route)) this.retainForCascade(pcm)
@@ -599,6 +673,8 @@ export class VoiceHubTurnDriver {
       }
       // Clear the driver's per-turn state and tell the bar to drop back to its
       // local orb (`active:false`).
+      this.watchdog?.cancel()
+      this.watchdog = null
       this.turnID = null
       this.captureID = null
       this.route = { kind: 'undecided' }
@@ -608,6 +684,89 @@ export class VoiceHubTurnDriver {
       this.orbLevel = 0
       this.emit(true)
     }
+  }
+
+  // MARK: - Release watchdog (no turn may hold ownership forever)
+
+  private armReleaseWatchdog(turnID: VoiceTurnID): void {
+    this.watchdog?.cancel()
+    this.watchdog = this.scheduleReleaseWatchdog(() => {
+      this.watchdog = null
+      this.fireReleaseWatchdog(turnID)
+    })
+  }
+
+  /** RELEASE_WATCHDOG_MS after release the turn is still ours: decide whether the
+   *  machine is wedged and, if so, force-finalize. Fires ONLY for a turn stuck in
+   *  a pre-response phase (capture/finalizing — the phases the 2026-07-18 wedge
+   *  froze in) or a driver↔coordinator desync; a turn that advanced to
+   *  awaitingResponse/tools/playing is governed by the reducer's own deadlines
+   *  and is deliberately left alone (a long spoken reply must never be cut). */
+  private fireReleaseWatchdog(armedTurnID: VoiceTurnID): void {
+    if (this.turnID !== armedTurnID) return
+    const turn = this.coordinator.model.turn
+    const phase = turn?.phase.kind
+    const desynced = turn === null || turn.id !== armedTurnID
+    const stuckPreResponse =
+      phase === 'recording' ||
+      phase === 'lockedRecording' ||
+      phase === 'pendingLockDecision' ||
+      phase === 'finalizing'
+    if (!desynced && !stuckPreResponse) return
+
+    console.error(
+      `[hub-diag] release watchdog fired: turn stuck ${desynced ? 'desynced' : `in ${phase}`} ` +
+        `${RELEASE_WATCHDOG_MS}ms after release — force-finalizing`
+    )
+    // Normal path first: a cleanup terminal runs the full host teardown (capture,
+    // hub cancel, output lease, system-audio restore) and the reconciliation above
+    // clears the driver's per-turn state.
+    try {
+      this.dispatch({ type: 'cleanup' })
+    } catch {
+      // The machinery is the thing that's broken — fall through to manual cleanup.
+    }
+    // Belt-and-braces: in the desync/wedge class the host teardown may have run
+    // against the WRONG turn id (or not at all). Every call is idempotent.
+    try {
+      this.disposeCapture()
+    } catch {
+      /* keep going — release everything we can */
+    }
+    try {
+      this.output.endTurn(armedTurnID)
+    } catch {
+      /* keep going */
+    }
+    try {
+      this.hub.voiceTurnDidTerminate(armedTurnID)
+    } catch {
+      /* keep going */
+    }
+    try {
+      this.restoreAudio()
+    } catch {
+      /* keep going */
+    }
+    if (this.turnID === armedTurnID) {
+      // The dispatch above could not reconcile — force the driver idle by hand.
+      this.turnID = null
+      this.captureID = null
+      this.route = { kind: 'undecided' }
+      this.sessionID = null
+      this.cascadeBuffer = []
+      this.cascadeBufferBytes = 0
+      this.orbLevel = 0
+    }
+    // Surface what happened instead of a silent idle, then auto-clear the hint.
+    this.lastProjection = { ...IDLE_PROJECTION, hint: RELEASE_WATCHDOG_HINT }
+    this.emit(true)
+    setTimeout(() => {
+      if (this.turnID === null && this.lastProjection.hint === RELEASE_WATCHDOG_HINT) {
+        this.lastProjection = IDLE_PROJECTION
+        this.emit(true)
+      }
+    }, HINT_MS)
   }
 
   /** Append this turn's user transcript + assistant reply to the ONE chat engine,

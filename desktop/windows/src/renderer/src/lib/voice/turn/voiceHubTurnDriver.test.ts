@@ -4,6 +4,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   VoiceHubTurnDriver,
+  RELEASE_WATCHDOG_HINT,
   concatInt16,
   pcm16ToBytes,
   bytesToPcm16,
@@ -125,6 +126,8 @@ type Harness = {
   capture: ReturnType<typeof makeFakeCapture>
   scheduler: ManualScheduler
   states: VoiceHubBarState[]
+  /** The release watchdog seam — `fire()` simulates RELEASE_WATCHDOG_MS elapsing. */
+  watchdog: { armed: boolean; cancelled: boolean; fire: () => void }
   spies: {
     interruptPlayback: ReturnType<typeof vi.fn>
     transcribe: ReturnType<typeof vi.fn>
@@ -158,8 +161,19 @@ function makeDriver(
     restoreSystemAudio: vi.fn(),
     trackEvent: vi.fn()
   }
+  const watchdog: Harness['watchdog'] = { armed: false, cancelled: false, fire: () => {} }
   const deps: VoiceHubTurnDriverDeps = {
     createHub: hub.factory,
+    scheduleReleaseWatchdog: (fire) => {
+      watchdog.armed = true
+      watchdog.cancelled = false
+      watchdog.fire = fire
+      return {
+        cancel: () => {
+          watchdog.cancelled = true
+        }
+      }
+    },
     interruptPlayback: spies.interruptPlayback,
     publishState: (s) => states.push(s),
     startCapture: capture.start,
@@ -176,7 +190,7 @@ function makeDriver(
     mintCaptureID: () => ++turnSeq as unknown as VoiceCaptureID,
     now: () => (clock += 1000) // strictly increasing so the orb throttle never blocks
   }
-  return { driver: new VoiceHubTurnDriver(deps), hub, capture, scheduler, states, spies }
+  return { driver: new VoiceHubTurnDriver(deps), hub, capture, scheduler, states, watchdog, spies }
 }
 
 const flush = (): Promise<void> => Promise.resolve().then(() => {})
@@ -247,7 +261,7 @@ describe('begin (flag on, hub warm)', () => {
     h.hub.setAvailability(true)
     h.driver.begin({ backfillMs: 0 })
     await flush()
-    h.capture.feed(loud())
+    h.capture.feed(voiced1s()) // a real utterance — passes the hub release gate
     h.driver.end() // finalize + commit + hubCommitAccepted (warm)
     expect(h.hub.calls.commitTurn).toHaveLength(1)
 
@@ -315,6 +329,7 @@ describe('barge-in', () => {
 describe('chat recording', () => {
   const finishTurn = (h: Harness): void => {
     const ev = h.hub.events()
+    h.capture.feed(voiced1s()) // pass the hub release gate so the commit path runs
     h.driver.end()
     ev.onSpeakingStart?.()
     ev.onTurnDone?.(null)
@@ -419,6 +434,7 @@ describe('chat recording', () => {
     const ev = h.hub.events()
     ev.onInputTranscript?.('what time is it', true, null)
     ev.onAssistantText?.("it's noon", false, null)
+    h.capture.feed(voiced1s())
     h.driver.end()
     ev.onSpeakingStart?.() // playback begins (lease held) — the reply is still speaking
     ev.onTurnDone?.(null) // provider finished GENERATING (playback NOT yet drained)
@@ -490,6 +506,7 @@ describe('system-audio duck', () => {
     h.hub.setAvailability(true)
     h.driver.begin({ backfillMs: 0 })
     await flush()
+    h.capture.feed(voiced1s())
     h.driver.end()
     const ev = h.hub.events()
     ev.onSpeakingStart?.()
@@ -526,7 +543,7 @@ describe('warm-wait fallback', () => {
     h.hub.setAvailability(false, true) // available (session exists) but not warm -> hubWarmWait
     h.driver.begin({ backfillMs: 0 })
     await flush()
-    h.capture.feed(loud())
+    h.capture.feed(voiced1s()) // a real utterance — passes the hub release gate
     h.driver.end() // finalize + hubCommitDeferred (not warm)
     // The hub controller would fire onCascadeHandoff off handoffWarmWaitToCascade;
     // simulate the reducer firing the 1 s hubWarm deadline, then the controller's handoff.
@@ -655,6 +672,7 @@ describe('post-commit provider death (A7c follow-up #1)', () => {
     h.driver.begin({ backfillMs: 0 })
     // Socket ready → the release commits into awaitingResponse.
     h.hub.events().onConnected?.('sess' as VoiceSessionID)
+    h.capture.feed(voiced1s()) // pass the hub release gate (onChunk is wired at begin)
     h.driver.end()
     // The provider dies mid-reply (post-commit): the controller surfaces onError.
     h.hub.events().onError?.({
@@ -697,7 +715,7 @@ async function driveToAwaitingResponse(h: Harness): Promise<void> {
   h.hub.setAvailability(true)
   h.driver.begin({ backfillMs: 0 })
   await flush()
-  h.capture.feed(loud())
+  h.capture.feed(voiced1s()) // pass the hub release gate
   h.driver.end()
 }
 
@@ -780,5 +798,179 @@ describe('hub tool loop (PR-C)', () => {
     h.hub.events().onToolRequest?.({ name: 'x', callId: 'c1', argumentsJSON: '{}' }, null)
     expect(h.hub.calls.sendToolResult).toHaveLength(1)
     expect(h.hub.calls.sendToolResult[0].output).toMatch(/^Error:/)
+  })
+})
+
+// ---- hub release gate (the 2026-07-18 short-press wedge) --------------------
+// A 220–350 ms press (recordable only since the Mac-parity 220 ms threshold) on
+// the HUB lane used to commit a near-empty turn to the provider — which may never
+// answer — and a release that beat the capture spin-up committed literally zero
+// audio. The hub lane now mirrors the cascade release gate exactly: such turns
+// ALWAYS finalize deterministically at release, ownership is freed, and the warm
+// socket is kept for the next press.
+
+describe('hub release gate (short/empty hub-owned captures)', () => {
+  it('a too-short hub press never commits: tooShort terminal, socket kept, hint, next press fresh', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(loud()) // 4 samples ≪ MIN_TOTAL_AUDIO_SEC
+    h.driver.end()
+
+    // Never committed to the provider; the hub turn was abandoned (socket kept)
+    // and per-turn ownership released.
+    expect(h.hub.calls.commitTurn).toHaveLength(0)
+    expect(h.hub.calls.cancelTurn).toHaveLength(1)
+    expect(h.hub.calls.didTerminate).toHaveLength(1)
+    // Mac's cascade hint, not a silent discard and never a hang.
+    expect(h.states.some((s) => s.hint === 'Hold longer to record')).toBe(true)
+    expect(h.states.at(-1)!.active).toBe(false)
+
+    // The machine is free: the next press starts a fresh hub turn immediately.
+    h.driver.begin({ backfillMs: 0 })
+    expect(h.hub.calls.beginTurn).toHaveLength(2)
+    expect(h.states.at(-1)!.isListening).toBe(true)
+  })
+
+  it('release racing capture spin-up (zero samples) finalizes tooShort and disposes the orphan mic', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    // Release BEFORE the capture promise resolves — the exact wedged-press shape.
+    h.driver.end()
+
+    expect(h.hub.calls.commitTurn).toHaveLength(0)
+    expect(h.states.some((s) => s.hint === 'Hold longer to record')).toBe(true)
+    expect(h.states.at(-1)!.active).toBe(false)
+
+    // The late-resolving capture is an orphan and must be disposed, not leaked.
+    await flush()
+    expect(h.capture.cap.dispose).toHaveBeenCalled()
+
+    // Next press starts fresh.
+    h.driver.begin({ backfillMs: 0 })
+    expect(h.hub.calls.beginTurn).toHaveLength(2)
+    expect(h.states.at(-1)!.isListening).toBe(true)
+  })
+
+  it('a real hub hold with no speech is discarded quietly (silentRejected, no hint)', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    // 1 s of low-level room noise: total ≥ 0.35 s, peak above the dead-mic floor,
+    // nothing voiced — mirror the cascade lane's quiet discard.
+    h.capture.feed(new Int16Array(16000).fill(100))
+    h.driver.end()
+
+    expect(h.hub.calls.commitTurn).toHaveLength(0)
+    expect(h.states.every((s) => s.hint === '')).toBe(true)
+    expect(h.states.at(-1)!.active).toBe(false)
+  })
+
+  it('a voiced hub press still commits (no regression on real speech)', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end()
+    expect(h.hub.calls.commitTurn).toHaveLength(1)
+  })
+})
+
+// ---- release watchdog (no turn may hold ownership forever) ------------------
+// Belt-and-braces above the reducer's own deadlines: if the deadline machinery
+// itself is broken (the wedge class — e.g. a collaborator throw skipped the
+// scheduling effect before the coordinator contained throws), a turn stuck in a
+// pre-response phase after release is force-finalized and the machine freed.
+
+describe('release watchdog', () => {
+  it('force-finalizes a turn stuck pre-response after release; the next press starts fresh', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const h = makeDriver({ pttHubEnabled: true })
+      h.hub.setAvailability(false) // omniSTT cascade route
+      // The batch STT hangs forever AND (wedge class) the machine's transcription
+      // deadline never fires (the manual scheduler stands in for a lost timer).
+      h.spies.transcribe.mockImplementation(() => new Promise<string>(() => {}))
+      h.driver.begin({ backfillMs: 0 })
+      await flush()
+      h.capture.feed(voiced1s())
+      h.driver.end() // -> transcriptionStarted, phase stays 'finalizing'
+      expect(h.watchdog.armed).toBe(true)
+      expect(h.watchdog.cancelled).toBe(false)
+
+      h.watchdog.fire()
+
+      // Ownership fully released: hub per-turn state, orb idle, hint surfaced.
+      expect(h.hub.calls.didTerminate.length).toBeGreaterThan(0)
+      const last = h.states.at(-1)!
+      expect(last.active).toBe(false)
+      expect(last.hint).toBe(RELEASE_WATCHDOG_HINT)
+
+      // The machine is free: a new press begins a fresh turn.
+      h.driver.begin({ backfillMs: 0 })
+      expect(h.states.at(-1)!.isListening).toBe(true)
+      expect(h.states.at(-1)!.active).toBe(true)
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+
+  it('never fires into a turn that advanced past finalize (long replies untouched)', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end() // committed -> awaitingResponse (reducer deadlines own it now)
+
+    h.watchdog.fire()
+
+    // Nothing was forced: the turn is still live and un-hinted.
+    expect(h.states.at(-1)!.active).toBe(true)
+    expect(h.hub.calls.didTerminate).toHaveLength(0)
+    expect(h.states.every((s) => s.hint !== RELEASE_WATCHDOG_HINT)).toBe(true)
+
+    // And the turn still completes normally afterwards.
+    const ev = h.hub.events()
+    ev.onSpeakingStart?.()
+    ev.onTurnDone?.(null)
+    ev.onSpeakingEnd?.()
+    expect(h.states.at(-1)!.active).toBe(false)
+    expect(h.hub.calls.didTerminate).toHaveLength(1)
+  })
+
+  it('is cancelled by a normal terminal (no stray force-finalize after success)', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end()
+    const ev = h.hub.events()
+    ev.onSpeakingStart?.()
+    ev.onTurnDone?.(null)
+    ev.onSpeakingEnd?.() // -> terminal(success)
+    expect(h.watchdog.cancelled).toBe(true)
+  })
+
+  it('an armed watchdog from a superseded turn never fires into its successor', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end() // arms the watchdog; turn now awaitingResponse
+    const staleFire = h.watchdog.fire
+
+    h.driver.begin({ backfillMs: 0 }) // barge-in successor (cancels + re-owns)
+    await flush()
+    staleFire() // the old handle firing late must be inert
+
+    expect(h.states.at(-1)!.active).toBe(true)
+    expect(h.states.every((s) => s.hint !== RELEASE_WATCHDOG_HINT)).toBe(true)
   })
 })
