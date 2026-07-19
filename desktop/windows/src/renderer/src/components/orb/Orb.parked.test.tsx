@@ -69,10 +69,21 @@ describe('Orb — parked-window idle gate', () => {
     expect(setVisibleCalls.at(-1)).toBe(true)
   })
 
-  it('never subscribes / never goes dark for a non-bar mount (no omiBar)', () => {
+  it('never goes dark for a non-bar mount (no omiBar at all)', () => {
     // Sidebar / onboarding mounts have no bar-parked feed; the orb must stay live.
     render(<Orb size={22} state="idle" visible />)
     expect(setVisibleCalls.at(-1)).toBe(true)
+    expect(setVisibleCalls).not.toContain(false)
+  })
+
+  it('stays live when onParked is present but never fires (main targets only the bar)', () => {
+    // The shared preload exposes omiBar in EVERY window, so a sidebar/onboarding
+    // orb DOES subscribe — but main sends bar:parked only to the bar webContents,
+    // so the callback never fires there. Merely subscribing must not dim the orb.
+    installBarApi()
+    render(<Orb size={22} state="idle" visible />)
+    expect(parkedCb).toBeTypeOf('function') // subscribed…
+    expect(setVisibleCalls.at(-1)).toBe(true) // …but never parked → stays live
     expect(setVisibleCalls).not.toContain(false)
   })
 
