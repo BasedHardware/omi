@@ -3,7 +3,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1939,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3643,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4448,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3243,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5510,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1570
   },
@@ -11,7 +11,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Syncs the local rating shadow to external message.rating changes so an un-rate tap is no longer swallowed after a server refresh.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Rebase reconciliation applies the pinned swift-format to the main-branch app-detail safety fixes; runtime behavior is unchanged.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "Tasks now bind first-load, loading, error, and retry state to the selected To Do or Done view so completed cache rows cannot suppress an active-view fetch.",
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "Strict concurrency imports annotate legacy AppKit image usage without changing runtime behavior."
   },
