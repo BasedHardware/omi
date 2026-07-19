@@ -248,6 +248,30 @@ describe('syncTaskActionItems conflict rule + orphan adoption', () => {
     expect(row.synced).toBe(1)
   })
 
+  it('tombstone guard: a pending-delete backend_id is NOT re-inserted (no resurrection)', () => {
+    // A hydrate list still containing a just-deleted id must not resurrect the row.
+    const res = syncTaskActionItemsOn(
+      db,
+      [sync({ backendId: 'b1', description: 'deleted task' })],
+      {
+        now: 5000,
+        isTombstoned: (id) => id === 'b1'
+      }
+    )
+    expect(res.inserted).toBe(0)
+    expect(res.skipped).toBe(1)
+    expect(getLocalActionItemsOn(db, {}).length).toBe(0)
+  })
+
+  it('tombstone guard: a non-tombstoned id inserts normally', () => {
+    const res = syncTaskActionItemsOn(db, [sync({ backendId: 'b1', description: 'live task' })], {
+      now: 5000,
+      isTombstoned: () => false
+    })
+    expect(res.inserted).toBe(1)
+    expect(getLocalActionItemsOn(db, {}).length).toBe(1)
+  })
+
   it('60s rule: a RECENT local change newer than incoming is preserved (skipped)', () => {
     const rec = insertLocalActionItemOn(db, ai({ description: 'local', backendId: 'b1' }))
     markSyncedActionItemOn(db, rec.id, 'b1', 10_000) // local updated_at = 10000

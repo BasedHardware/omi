@@ -50,6 +50,7 @@ import type {
   TaskCreateFields,
   TaskUpdateFields,
   TaskDashboardSlices,
+  TaskOpFailure,
   LiveNote,
   GoalGenerateResult,
   GoalCandidateResult,
@@ -260,6 +261,11 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('tasks:changed', listener)
     return () => ipcRenderer.removeListener('tasks:changed', listener)
+  },
+  onTasksOpFailed: (cb: (failure: TaskOpFailure) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, failure: TaskOpFailure): void => cb(failure)
+    ipcRenderer.on('tasks:opFailed', listener)
+    return () => ipcRenderer.removeListener('tasks:opFailed', listener)
   },
   goalsGenerateCandidate: () =>
     ipcRenderer.invoke('goals:generateCandidate') as Promise<GoalCandidateResult>,

@@ -309,6 +309,62 @@ describe('optimistic delete', () => {
     expect(h.deleteActionItemByBackendId).toHaveBeenCalledTimes(1)
     expect(h.insertLocalActionItem).not.toHaveBeenCalled()
   })
+
+  it('a hydrate during an in-flight delete does not resurrect the row (passes the tombstone guard)', async () => {
+    h.deleteActionItemByBackendId.mockReturnValue([9])
+    // DELETE never resolves → the tombstone stays set while the hydrate runs.
+    h.netFetch.mockImplementation(async (_u: string, init?: { method?: string }) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'DELETE') return new Promise(() => {}) // hang forever
+      return h.jsonResponse({ action_items: [backendItem({ id: 'b1' })], has_more: false })
+    })
+    const { engine } = await freshEngine()
+    engine.deleteTask('b1') // sets the tombstone
+    await engine.hydrateIncomplete()
+    // The hydrate's sync call carries a guard that reports the deleted id as pending,
+    // so the storage insert branch skips it (proven against a real DB in dbTasks.test).
+    const lastSync = h.syncTaskActionItems.mock.calls.at(-1) as unknown as
+      | [unknown, { isTombstoned?: (id: string) => boolean }]
+      | undefined
+    expect(lastSync?.[1]?.isTombstoned?.('b1')).toBe(true)
+  })
+
+  it('verify: a failed delete whose task is still on the server restores the row + signals failure', async () => {
+    h.deleteActionItemByBackendId.mockReturnValue([9])
+    h.netFetch.mockImplementation(async (_u: string, init?: { method?: string }) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'DELETE') return h.jsonResponse({}, false, 429) // storm: delete rejected
+      if (method === 'GET') return h.jsonResponse(backendItem({ id: 'b1' })) // still present
+      return h.jsonResponse({})
+    })
+    const { engine } = await freshEngine()
+    engine.deleteTask('b1')
+    await flush()
+    // Restored through the normal sync path…
+    const restore = h.syncTaskActionItems.mock.calls.at(-1) as unknown as
+      | [{ backendId: string }[], unknown]
+      | undefined
+    expect(restore?.[0]?.[0]?.backendId).toBe('b1')
+    // …and the failure is surfaced (not silent), and the tombstone retired.
+    expect(h.send).toHaveBeenCalledWith('tasks:opFailed', expect.objectContaining({ op: 'delete' }))
+    expect(engine.__isTombstonedForTest('b1')).toBe(false)
+  })
+
+  it('verify: a failed delete whose task is GONE stays deleted and clears the tombstone', async () => {
+    h.deleteActionItemByBackendId.mockReturnValue([9])
+    h.netFetch.mockImplementation(async (_u: string, init?: { method?: string }) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'DELETE') return h.jsonResponse({}, false, 429)
+      if (method === 'GET') return h.jsonResponse({ detail: 'not found' }, false, 404) // gone
+      return h.jsonResponse({})
+    })
+    const { engine } = await freshEngine()
+    engine.deleteTask('b1')
+    await flush()
+    expect(h.syncTaskActionItems).not.toHaveBeenCalled() // no restore
+    expect(h.send).not.toHaveBeenCalledWith('tasks:opFailed', expect.anything())
+    expect(engine.__isTombstonedForTest('b1')).toBe(false) // guard cleared (delete stuck)
+  })
 })
 
 describe('retryUnsynced', () => {

@@ -2147,11 +2147,16 @@ export function markSyncedActionItem(
 
 export function syncTaskActionItems(
   items: SyncActionItem[],
-  opts?: { overrideStagedDeletions?: boolean; now?: number }
+  opts?: {
+    overrideStagedDeletions?: boolean
+    now?: number
+    isTombstoned?: (backendId: string) => boolean
+  }
 ): { skipped: number; adopted: number; inserted: number; updated: number } {
   return syncTaskActionItemsOn(taskStoreDb(), items, {
     overrideStagedDeletions: opts?.overrideStagedDeletions,
-    now: opts?.now ?? Date.now()
+    now: opts?.now ?? Date.now(),
+    isTombstoned: opts?.isTombstoned
   })
 }
 
