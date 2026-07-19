@@ -40,7 +40,7 @@ Three signals, captured on the same boots:
   `app.getAppMetrics()` per Electron process + a main-process **event-loop lag probe** (a
   self-rescheduling timer records how late it fires = main-thread blocking) + `timedStep()`
   per-operation attribution. Inert (zero cost) unless the env var is set — safe in packaged builds.
-- **`tools/jitter-probe.mjs`** (new): a standalone `node` process running a ~125Hz timer,
+- **`scripts/jitter-probe.mjs`** (new): a standalone `node` process running a ~125Hz timer,
   recording per-bucket scheduling lag. A separate process starved of timely scheduling is a
   proxy for whole-system saturation (what makes the OS cursor feel slow). Run alongside the boot.
 - Perf marks (`src/shared/perf.ts`) for phase timing.

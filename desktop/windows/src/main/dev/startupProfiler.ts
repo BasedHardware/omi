@@ -9,6 +9,7 @@
 import { app } from 'electron'
 import { appendFileSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
+import { cpus } from 'os'
 
 const SAMPLE_INTERVAL_MS = 150
 const DEFAULT_DURATION_MS = 20_000
@@ -54,7 +55,7 @@ export function startStartupProfiler(): void {
   const emit = (obj: Record<string, unknown>): void => {
     appendFileSync(path, JSON.stringify({ t: Math.round(performance.now() - t0), ...obj }) + '\n')
   }
-  emit({ ev: 'start', pid: process.pid, cores: require('os').cpus().length })
+  emit({ ev: 'start', pid: process.pid, cores: cpus().length })
 
   // Main event-loop lag probe: a self-rescheduling timer that logs how much it
   // overshot LAG_PROBE_MS. Overshoot == main thread was busy that long.
