@@ -21,6 +21,7 @@ import {
   materializeAgentSpawnCard,
   normalizeCompletionStatus,
   readAgentCardStamp,
+  sweepOrphanedAgentCompletionCards,
   type AgentCardStamp
 } from './agentThreadCards'
 
@@ -237,5 +238,93 @@ describe('agent thread cards — the exactly-two boundary', () => {
     // resolves to null → no shared-thread cards.
     expect(readAgentCardStamp(undefined)).toBeNull()
     expect(readAgentCardStamp({ visible: true })).toBeNull()
+  })
+})
+
+describe('agent thread cards — orphan/terminal load-time sweep', () => {
+  function seedRun(
+    store: SqliteAgentStore,
+    sessionId: string,
+    stamp: AgentCardStamp,
+    status: string
+  ): string {
+    const run = store.insertRun({
+      sessionId,
+      clientId: 'c',
+      requestId: 'r',
+      status: status as never,
+      mode: 'act',
+      inputJson: JSON.stringify({
+        prompt: 'build X',
+        systemPrompt: '',
+        metadata: agentCardStampMetadata(stamp)
+      })
+    })
+    return run.runId
+  }
+
+  it('heals a run that went terminal holding a spawn card but no completion card', () => {
+    const store = newStore()
+    const resolved = resolveSurfaceSession(store, { ownerId: 'owner', surfaceRef: ref }, () => 1000)
+    const stamp = stampFor(resolved.conversationId)
+
+    // A background run launched (spawn card written) then the app crashed / the run
+    // was orphaned by startup reconciliation — terminal in the db, no completion card.
+    const runId = seedRun(store, resolved.agentSessionId, stamp, 'orphaned')
+    materializeAgentSpawnCard(store, {
+      runId,
+      sessionId: resolved.agentSessionId,
+      stamp,
+      nowMs: 1000
+    })
+
+    const healed = sweepOrphanedAgentCompletionCards(store, { nowMs: () => 2000 })
+    expect(healed).toHaveLength(1)
+    expect(healed[0].chatId).toBe('default')
+    const block = healed[0].record.block
+    expect(block.type).toBe('agentCompletion')
+    if (block.type === 'agentCompletion') {
+      expect(block.runId).toBe(runId)
+      expect(block.status).toBe('failed') // orphaned → failed
+      expect(block.output).toMatch(/interrupted/i) // clear reason, never an empty body
+    }
+
+    // Exactly two cards, and a second sweep heals nothing (idempotent).
+    expect(listAgentThreadCards(store, resolved.conversationId).map((c) => c.block.type)).toEqual([
+      'agentSpawn',
+      'agentCompletion'
+    ])
+    expect(sweepOrphanedAgentCompletionCards(store, { nowMs: () => 3000 })).toHaveLength(0)
+    expect(listAgentThreadCards(store, resolved.conversationId)).toHaveLength(2)
+  })
+
+  it('does NOT fabricate a completion for a terminal run that never got a spawn card', () => {
+    const store = newStore()
+    const resolved = resolveSurfaceSession(store, { ownerId: 'owner', surfaceRef: ref }, () => 1000)
+    const stamp = stampFor(resolved.conversationId)
+    // Terminal + stamped, but no spawn card was ever written → out of scope.
+    seedRun(store, resolved.agentSessionId, stamp, 'failed')
+
+    expect(sweepOrphanedAgentCompletionCards(store)).toHaveLength(0)
+    expect(listAgentThreadCards(store, resolved.conversationId)).toHaveLength(0)
+  })
+
+  it('leaves a still-running card-producing run alone (only terminal runs are swept)', () => {
+    const store = newStore()
+    const resolved = resolveSurfaceSession(store, { ownerId: 'owner', surfaceRef: ref }, () => 1000)
+    const stamp = stampFor(resolved.conversationId)
+    const runId = seedRun(store, resolved.agentSessionId, stamp, 'running')
+    materializeAgentSpawnCard(store, {
+      runId,
+      sessionId: resolved.agentSessionId,
+      stamp,
+      nowMs: 1000
+    })
+
+    expect(sweepOrphanedAgentCompletionCards(store)).toHaveLength(0)
+    // Just the spawn card — the completion waits for a real terminal.
+    expect(listAgentThreadCards(store, resolved.conversationId).map((c) => c.block.type)).toEqual([
+      'agentSpawn'
+    ])
   })
 })

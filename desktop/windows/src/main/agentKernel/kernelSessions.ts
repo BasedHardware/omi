@@ -35,6 +35,7 @@ import {
   materializeAgentCompletionCard,
   materializeAgentSpawnCard,
   readAgentCardStamp,
+  sweepOrphanedAgentCompletionCards as sweepOrphanedCompletionCards,
   type AgentCardStamp,
   type AgentThreadCardRecord,
   type MaterializedAgentCard
@@ -329,6 +330,16 @@ export class KernelSessions extends KernelArtifacts {
       })
     )
     return record ? { record, chatId: stamp.producingChatId } : null
+  }
+
+  /** Load-time heal: materialize the missing completion card for any card-producing
+   *  run that reached a terminal db state (incl. `orphaned` from startup
+   *  reconciliation, which never reaches the live subscriber) while holding a spawn
+   *  card. Bounded + idempotent — run once when the card handlers register. */
+  sweepOrphanedAgentCompletionCards(limit = AGENT_CARD_SCAN_LIMIT): MaterializedAgentCard[] {
+    return this.withTransaction(() =>
+      sweepOrphanedCompletionCards(this.store, { nowMs: () => Date.now(), limit })
+    )
   }
 
   /** The shared-thread agent cards for a main_chat thread, oldest-first — the

@@ -69,6 +69,15 @@ const AGENT_CARD_TURN_KIND = 'agentCard'
 // Recent-turn scan window for idempotency + the renderer read. A producing
 // conversation accrues at most two card turns per background run; 200 covers a
 // long chat's worth of interleaved normal turns without an unbounded scan.
+//
+// BOUNDED-RECENT-SCAN ASSUMPTION: idempotency (has*Card), the renderer read
+// (listAgentThreadCards), and the orphan sweep all look back at most this many
+// turns. A card whose turn has since been pushed older than 200 turns in one
+// conversation would not be found — acceptable given the two-cards-per-run cadence
+// (a run's spawn + completion land close together; a heal happens near the
+// terminal, not hundreds of turns later). If a conversation ever needs cards
+// resolved across a very deep history, switch these reads to a runId-indexed
+// lookup rather than widening this window.
 export const AGENT_CARD_SCAN_LIMIT = 200
 
 interface AgentCardTurnMetadata {
@@ -187,19 +196,47 @@ export interface AgentCardRunView {
   errorMessage: string | null
 }
 
-/** Normalize a kernel terminal run status to the card's display vocabulary. */
-export function normalizeCompletionStatus(runStatus: string): 'succeeded' | 'stopped' | 'failed' {
+export type CompletionStatus = 'succeeded' | 'stopped' | 'failed'
+
+/** Normalize a kernel terminal run status to the card's display vocabulary. The
+ *  five terminal db states collapse to three: succeeded; cancelled → stopped;
+ *  failed / timed_out / orphaned → failed (the raw status still drives the
+ *  interrupted/timed-out message via {@link fallbackInterruptedOutput}). */
+export function normalizeCompletionStatus(runStatus: string): CompletionStatus {
   if (runStatus === 'succeeded') return 'succeeded'
   if (runStatus === 'cancelled') return 'stopped'
   return 'failed'
 }
 
-function completionStatusLabel(status: 'succeeded' | 'stopped' | 'failed'): string {
+function completionStatusLabel(status: CompletionStatus): string {
   return status === 'succeeded' ? 'finished' : status === 'stopped' ? 'was stopped' : 'failed'
 }
 
 const OUTPUT_MAX = 4000
 const SNIPPET_MAX = 160
+
+/** A clear reason when a non-succeeded run carries no explicit error text — the
+ *  crash-interrupted / timed-out / silently-orphaned cases, so the card never
+ *  renders "Failed" with an empty body. */
+function fallbackInterruptedOutput(runStatus: string): string {
+  switch (runStatus) {
+    case 'orphaned':
+      return 'The background agent was interrupted before it finished.'
+    case 'timed_out':
+      return 'The background agent timed out before it finished.'
+    case 'cancelled':
+      return '' // the "Stopped" label already conveys this
+    default:
+      return 'The background agent did not finish.'
+  }
+}
+
+function completionOutput(run: AgentCardRunView, status: CompletionStatus): string {
+  if (status === 'succeeded') return (run.finalText ?? '').slice(0, OUTPUT_MAX)
+  const explicit = (run.errorMessage ?? '').trim()
+  if (explicit) return explicit.slice(0, OUTPUT_MAX)
+  return fallbackInterruptedOutput(run.status)
+}
 
 /** Write the launch (`agentSpawn`) card into the producing conversation, once.
  *  Idempotent: a repeat for the same runId is a no-op returning null. */
@@ -237,10 +274,7 @@ export function materializeAgentCompletionCard(
   const { run, stamp } = input
   if (hasAgentCompletionCard(store, stamp.producingConversationId, run.runId)) return null
   const status = normalizeCompletionStatus(run.status)
-  const output = ((status === 'succeeded' ? run.finalText : run.errorMessage) ?? '').slice(
-    0,
-    OUTPUT_MAX
-  )
+  const output = completionOutput(run, status)
   const block: AgentThreadCardBlock = {
     type: 'agentCompletion',
     id: randomUUID(),
@@ -273,4 +307,68 @@ export function listAgentThreadCards(
     if (block) out.push({ turnId: turn.turnId, createdAtMs: turn.createdAtMs, block })
   }
   return out
+}
+
+/** The five terminal run db states (matches TERMINAL_STATUSES in kernelSupport). */
+const TERMINAL_RUN_DB_STATUSES = ['succeeded', 'failed', 'cancelled', 'timed_out', 'orphaned']
+
+/**
+ * Load-time heal: any card-producing run that has reached a TERMINAL db state
+ * while holding a spawn card but NO completion card gets its completion card
+ * materialized now. This closes the crash-mid-run / reconcile-before-subscribe
+ * gap — startup reconciliation flips abandoned runs to `orphaned` and writes
+ * `run.orphaned` straight into the events table (below the kernel), so the live
+ * subscriber NEVER sees it; without this sweep those spawn cards would sit stuck
+ * on "Running" forever.
+ *
+ * Bounded (most-recent `limit` card-producing terminal runs) and idempotent
+ * (materializeAgentCompletionCard is a no-op when a completion already exists),
+ * so it is safe to run on every registration. The spawn-card guard scopes it to
+ * runs a card producer actually launched — a plain terminal run with no spawn
+ * card is left alone.
+ */
+export function sweepOrphanedAgentCompletionCards(
+  store: AgentStore,
+  opts?: { nowMs?: () => number; limit?: number }
+): MaterializedAgentCard[] {
+  const nowMs = opts?.nowMs ?? (() => Date.now())
+  const limit = opts?.limit ?? AGENT_CARD_SCAN_LIMIT
+  const rows = store.allRows(
+    `SELECT run_id, session_id, status, final_text, error_message, input_json
+     FROM runs
+     WHERE status IN (${TERMINAL_RUN_DB_STATUSES.map(() => '?').join(', ')})
+       AND input_json LIKE '%"${AGENT_CARD_STAMP_KEY}"%'
+     ORDER BY updated_at_ms DESC
+     LIMIT ?`,
+    [...TERMINAL_RUN_DB_STATUSES, limit]
+  )
+  const healed: MaterializedAgentCard[] = []
+  for (const row of rows) {
+    let metadata: unknown
+    try {
+      metadata = (JSON.parse(String(row.input_json ?? '{}')) as { metadata?: unknown }).metadata
+    } catch {
+      continue
+    }
+    const stamp = readAgentCardStamp(metadata)
+    if (!stamp) continue
+    const runId = String(row.run_id)
+    // Heal only a run that launched a card (has a spawn card) but never got its
+    // completion card — never fabricate a completion for an unrelated terminal run.
+    if (!hasAgentSpawnCard(store, stamp.producingConversationId, runId)) continue
+    if (hasAgentCompletionCard(store, stamp.producingConversationId, runId)) continue
+    const record = materializeAgentCompletionCard(store, {
+      run: {
+        runId,
+        sessionId: String(row.session_id),
+        status: String(row.status),
+        finalText: row.final_text == null ? null : String(row.final_text),
+        errorMessage: row.error_message == null ? null : String(row.error_message)
+      },
+      stamp,
+      nowMs: nowMs()
+    })
+    if (record) healed.push({ record, chatId: stamp.producingChatId })
+  }
+  return healed
 }

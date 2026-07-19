@@ -896,9 +896,16 @@ export async function handleAgentControlToolCall(
         // spawn with no originating chat gets no stamp (and thus no cards). The
         // stamp only records provenance; it never widens spawn authority.
         const cardTitle = parsed.title ?? `Background: ${parsed.objective.slice(0, 80)}`
-        const producingSurface = context.callerSessionId
-          ? context.kernel.getProducingCardSurface(context.callerSessionId)
-          : null
+        let producingSurface: ReturnType<typeof context.kernel.getProducingCardSurface> = null
+        try {
+          producingSurface = context.callerSessionId
+            ? context.kernel.getProducingCardSurface(context.callerSessionId)
+            : null
+        } catch {
+          // A provenance lookup must NEVER abort a spawn — fail open to no stamp
+          // (the run just gets no shared-thread cards).
+          producingSurface = null
+        }
         const cardStampMetadata = producingSurface
           ? agentCardStampMetadata({
               producingConversationId: producingSurface.conversationId,

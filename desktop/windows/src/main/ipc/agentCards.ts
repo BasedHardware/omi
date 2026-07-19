@@ -20,8 +20,17 @@ import { controlPlaneOwnerId, getAgentRuntimeKernel } from '../agentKernel/contr
 import type { MaterializedAgentCard } from '../agentKernel/agentThreadCards'
 import type { AgentThreadCardMsg } from '../../shared/types'
 
-/** Kernel run-lifecycle event types that mean a background run reached terminal. */
-const TERMINAL_RUN_EVENT_TYPES = new Set(['run.succeeded', 'run.failed', 'run.cancelled'])
+/** Kernel run-lifecycle event types that mean a background run reached terminal —
+ *  ALL FIVE terminal states. `run.timed_out` / `run.orphaned` are handled live too;
+ *  the load-time sweep below is what actually heals `run.orphaned` from startup
+ *  reconciliation (which is emitted below the kernel and never reaches subscribers). */
+const TERMINAL_RUN_EVENT_TYPES = new Set([
+  'run.succeeded',
+  'run.failed',
+  'run.cancelled',
+  'run.timed_out',
+  'run.orphaned'
+])
 
 function toMsg(card: MaterializedAgentCard): AgentThreadCardMsg {
   return { chatId: card.chatId, createdAtMs: card.record.createdAtMs, block: card.record.block }
@@ -57,6 +66,18 @@ export function registerAgentCardHandlers(): void {
         // Observer only — never let a card write destabilize the event loop.
       }
     })
+
+    // Load-time heal: a run that crashed mid-flight or was orphaned by startup
+    // reconciliation reaches a terminal db state with a spawn card but no
+    // completion card, and reconciliation's `run.orphaned` is written below the
+    // kernel (never through notifySubscribers), so the live subscriber above can
+    // never see it. Sweep those to a completion card once, here, so a stuck
+    // "Running" spawn card always resolves. Bounded + idempotent; fail-open.
+    try {
+      for (const card of kernel.sweepOrphanedAgentCompletionCards()) broadcast(card)
+    } catch {
+      // Observer only — a heal failure must never block boot.
+    }
   }
 
   // Renderer projection read: the shared-thread cards for a main_chat thread. Read
