@@ -13,7 +13,7 @@ import {
   type NodePosition
 } from '../../lib/useGraphSimulation'
 import { nodeColor } from './nodeColor'
-import { labeledNodeIds, DEFAULT_LABEL_TOPK } from '../../lib/graphDisplay'
+import { topRankedIds, DEFAULT_LABEL_TOPK } from '../../lib/graphDisplay'
 import { useWebglRecovery } from '../../lib/useWebglRecovery'
 import { BrainGraphFallback } from './BrainGraphFallback'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
@@ -47,14 +47,11 @@ export type BrainGraphProps = {
   onVisibleChange?: (visible: boolean) => void
   // Label strategy. 'all' (default) draws a title on every node — right for the
   // small onboarding/inline-card graphs. 'declutter' draws titles only for the
-  // `labelTopK` most-connected nodes plus whatever the user hovers or selects,
-  // which is what keeps the large interactive brain map from becoming an
+  // DEFAULT_LABEL_TOPK most-connected nodes plus whatever the user hovers or
+  // selects, which is what keeps the large interactive brain map from becoming an
   // unreadable wall of overlapping text. Interaction (hover/select) is only
   // wired when interactive is true.
   labelMode?: 'all' | 'declutter'
-  // How many of the most-connected nodes stay permanently labeled under
-  // 'declutter'. Ignored when labelMode is 'all'.
-  labelTopK?: number
 }
 
 // Must match GraphSimulation.nodeRadius so the spheres and the collision force
@@ -504,8 +501,7 @@ function GraphScene({
   interactive,
   shuffleKey,
   frameLoop = 'always',
-  labelMode = 'all',
-  labelTopK = DEFAULT_LABEL_TOPK
+  labelMode = 'all'
 }: BrainGraphProps): React.JSX.Element {
   // The interactive full-screen brain map runs the layout in 3D (OrbitControls lets
   // the user rotate to read depth, mirroring macOS's SceneKit MemoryGraphPage); the
@@ -517,14 +513,24 @@ function GraphScene({
   // Label declutter + interaction. Under 'all' every node is labeled (small
   // graphs). Under 'declutter' only the top-K hubs are permanently labeled, plus
   // whatever the user hovers or clicks — so a large graph reads cleanly but any
-  // node still names itself on demand. Hover/select changes here re-render the
-  // node list (cheap: a Set membership flip), and frameLoop='always' repaints.
+  // node still names itself on demand.
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // The permanently-labeled base set is invariant to hover/selection, so it is
+  // memoized on the ranking inputs only — a hover must not re-run rankNodes.
+  const baseLabeled = useMemo(
+    () => (labelMode === 'all' ? null : topRankedIds(graph, DEFAULT_LABEL_TOPK, centerNodeId)),
+    [labelMode, graph, centerNodeId]
+  )
+  // Cheap per-interaction union: add the hovered/selected node to the base set.
   const labeledIds = useMemo(() => {
-    if (labelMode === 'all') return null
-    return labeledNodeIds(graph, labelTopK, { centerNodeId, hoveredId, selectedId })
-  }, [labelMode, graph, labelTopK, centerNodeId, hoveredId, selectedId])
+    if (baseLabeled === null) return null
+    if (!hoveredId && !selectedId) return baseLabeled
+    const ids = new Set(baseLabeled)
+    if (hoveredId) ids.add(hoveredId)
+    if (selectedId) ids.add(selectedId)
+    return ids
+  }, [baseLabeled, hoveredId, selectedId])
 
   // Eased on-screen position of each node, written by the meshes and read by the
   // edges so the lines stay glued to the spheres. Owned here (not on the sim) and
@@ -699,8 +705,7 @@ export function BrainGraph({
   frameLoop = 'always',
   onReady,
   onVisibleChange,
-  labelMode = 'all',
-  labelTopK
+  labelMode = 'all'
 }: BrainGraphProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(true)
@@ -915,7 +920,6 @@ export function BrainGraph({
               shuffleKey={shuffleKey}
               frameLoop={frameLoop}
               labelMode={labelMode}
-              labelTopK={labelTopK}
             />
           </Canvas>
         </ErrorBoundary>

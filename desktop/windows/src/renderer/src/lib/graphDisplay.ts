@@ -41,16 +41,23 @@ export function rankNodes(graph: KnowledgeGraph, centerNodeId?: string): KGNode[
   })
 }
 
+// The one predicate for "does this cap actually hide nodes" — shared by capGraph
+// and isCapped so the two can never drift. A non-positive, non-finite, or
+// >= node-count cap does NOT bite (that is the "show all" case).
+function capBites(nodeCount: number, cap: number): boolean {
+  return Number.isFinite(cap) && cap > 0 && cap < nodeCount
+}
+
 // Restrict the graph to its `cap` most important nodes, pruning any edge whose
-// endpoints didn't both survive. A non-positive, non-finite, or >= node-count cap
-// returns the graph UNCHANGED (same object ref) — that is the "show all" path, so
-// the full graph always stays reachable and correct.
+// endpoints didn't both survive. When the cap doesn't bite it returns the graph
+// UNCHANGED (same object ref) — that is the "show all" path, so the full graph
+// always stays reachable and correct.
 export function capGraph(
   graph: KnowledgeGraph,
   cap: number,
   centerNodeId?: string
 ): KnowledgeGraph {
-  if (!Number.isFinite(cap) || cap <= 0 || cap >= graph.nodes.length) return graph
+  if (!capBites(graph.nodes.length, cap)) return graph
   const keep = new Set(
     rankNodes(graph, centerNodeId)
       .slice(0, cap)
@@ -64,7 +71,22 @@ export function capGraph(
 
 /** True when `cap` would actually hide nodes (i.e. a "Show all" control is useful). */
 export function isCapped(graph: KnowledgeGraph, cap: number): boolean {
-  return Number.isFinite(cap) && cap > 0 && cap < graph.nodes.length
+  return capBites(graph.nodes.length, cap)
+}
+
+// The `topK` most important node ids — the base set that stays permanently
+// labeled under declutter. Invariant to hover/selection, so callers can memoize
+// it and only re-derive when the graph/ranking changes (a hover must not re-rank).
+export function topRankedIds(
+  graph: KnowledgeGraph,
+  topK: number,
+  centerNodeId?: string
+): Set<string> {
+  const ranked = rankNodes(graph, centerNodeId)
+  const k = Math.min(Math.max(0, topK), ranked.length)
+  const ids = new Set<string>()
+  for (let i = 0; i < k; i++) ids.add(ranked[i].id)
+  return ids
 }
 
 // The node ids whose labels should render. Declutter kills the "text soup" by
@@ -76,9 +98,7 @@ export function labeledNodeIds(
   topK: number,
   opts: { centerNodeId?: string; hoveredId?: string | null; selectedId?: string | null } = {}
 ): Set<string> {
-  const ids = new Set<string>()
-  const ranked = rankNodes(graph, opts.centerNodeId)
-  for (let i = 0; i < Math.min(Math.max(0, topK), ranked.length); i++) ids.add(ranked[i].id)
+  const ids = topRankedIds(graph, topK, opts.centerNodeId)
   if (opts.centerNodeId) ids.add(opts.centerNodeId)
   if (opts.hoveredId) ids.add(opts.hoveredId)
   if (opts.selectedId) ids.add(opts.selectedId)

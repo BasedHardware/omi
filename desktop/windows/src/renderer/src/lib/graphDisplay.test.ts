@@ -5,6 +5,7 @@ import {
   rankNodes,
   capGraph,
   isCapped,
+  topRankedIds,
   labeledNodeIds,
   DEFAULT_NODE_CAP,
   DEFAULT_LABEL_TOPK
@@ -103,6 +104,18 @@ describe('isCapped', () => {
     expect(isCapped(star, 5)).toBe(false)
     expect(isCapped(star, Infinity)).toBe(false)
     expect(isCapped(star, 0)).toBe(false)
+  })
+})
+
+describe('topRankedIds', () => {
+  it('returns the top-K node ids and is invariant to hover/selection (memoizable base)', () => {
+    expect([...topRankedIds(star, 2)].sort()).toEqual(['a', 'hub'])
+    // center pinned first even at low degree
+    expect(topRankedIds(star, 1, 'z').has('z')).toBe(true)
+  })
+  it('clamps K to the node count and handles 0', () => {
+    expect(topRankedIds(star, 999).size).toBe(star.nodes.length)
+    expect(topRankedIds(star, 0).size).toBe(0)
   })
 })
 
