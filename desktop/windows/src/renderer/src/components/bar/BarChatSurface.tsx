@@ -56,8 +56,9 @@ function RowStatusDot({ active }: { active: boolean }): React.JSX.Element {
 
 /** One floating-agent-pill row in the bar list: title + status chip + live
  *  one-liner, opening that run's OWN transcript on click. A finished pill offers
- *  Dismiss; an active pill offers Stop (when a canceller is wired). Both action
- *  buttons stopPropagation so they don't also open the pill. */
+ *  Dismiss; an active pill offers Stop (when a canceller is wired). The open,
+ *  Dismiss, and Stop targets are sibling buttons (the row itself has no click
+ *  handler), so an action click never also opens the pill. */
 function PillRow({
   pill,
   onOpen,
@@ -95,10 +96,7 @@ function PillRow({
       {finished ? (
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDismiss(pill.id)
-          }}
+          onClick={() => onDismiss(pill.id)}
           aria-label="Dismiss agent"
           title="Dismiss"
           className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"
@@ -108,10 +106,7 @@ function PillRow({
       ) : onStop ? (
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onStop(pill)
-          }}
+          onClick={() => onStop(pill)}
           aria-label="Stop agent"
           title="Stop"
           className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-neutral-500 transition-colors hover:bg-white/[0.06] hover:text-neutral-200"

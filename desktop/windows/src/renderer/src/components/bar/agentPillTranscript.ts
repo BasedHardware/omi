@@ -129,3 +129,19 @@ export function pillChipClasses(token: AgentPillTintToken): string {
       return 'bg-neutral-700/50 text-neutral-400'
   }
 }
+
+/** Drop cached per-pill assistant text for pills that no longer exist (evicted by
+ *  soft-cap / viewed-TTL, or dismissed) so the useAgentPills text map can't grow
+ *  without bound. Returns the SAME reference when nothing was pruned, so it never
+ *  churns a new object into state. */
+export function retainTextForPills(
+  textByPillId: Record<string, string>,
+  pills: readonly Pick<AgentPill, 'id'>[]
+): Record<string, string> {
+  const live = new Set(pills.map((p) => p.id))
+  const keys = Object.keys(textByPillId)
+  if (keys.every((id) => live.has(id))) return textByPillId
+  const next: Record<string, string> = {}
+  for (const id of keys) if (live.has(id)) next[id] = textByPillId[id]
+  return next
+}

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { AgentPill } from './agentPills'
 import {
   pillChipClasses,
+  retainTextForPills,
   runDetailFinalText,
   runDetailToProjectionRow,
   synthesizePillTranscript,
@@ -165,5 +166,24 @@ describe('pillChipClasses', () => {
     for (const cls of [running, done, failed, stopped, queued]) {
       expect(cls).not.toMatch(/purple|violet|fuchsia|indigo/)
     }
+  })
+})
+
+describe('retainTextForPills', () => {
+  it('drops cached text for pills that no longer exist (eviction/dismiss leak guard)', () => {
+    const map = { 'pill-1': 'a', 'pill-2': 'b', 'pill-3': 'c' }
+    const kept = retainTextForPills(map, [pill({ id: 'pill-1' }), pill({ id: 'pill-3' })])
+    expect(kept).toEqual({ 'pill-1': 'a', 'pill-3': 'c' })
+    expect('pill-2' in kept).toBe(false)
+  })
+
+  it('returns the SAME reference when every cached id is still live (no churn)', () => {
+    const map = { 'pill-1': 'a', 'pill-2': 'b' }
+    const same = retainTextForPills(map, [pill({ id: 'pill-1' }), pill({ id: 'pill-2' })])
+    expect(same).toBe(map)
+  })
+
+  it('prunes everything when no pills remain', () => {
+    expect(retainTextForPills({ 'pill-1': 'a' }, [])).toEqual({})
   })
 })

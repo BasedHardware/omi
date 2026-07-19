@@ -24,6 +24,7 @@ import {
   type PillProjectionRow
 } from '../components/bar/agentPills'
 import {
+  retainTextForPills,
   runDetailFinalText,
   runDetailToProjectionRow,
   synthesizePillTranscript,
@@ -123,18 +124,19 @@ export function useAgentPills(activePillId: string | null): AgentPillsApi {
     const runListPoll = async (): Promise<void> => {
       const rows = await callList()
       if (cancelled || rows === null) return
-      setPills((prev) => {
-        const now = Date.now()
-        const merged = mergeProjectedPills(prev, rows, now).pills
-        const expired = expireViewedFinished(
-          merged,
-          now,
-          VIEWED_FINISHED_TTL_MS,
-          activePillIdRef.current
-        )
-        const trimmed = trimForSoftCap(expired, activePillIdRef.current)
-        return samePills(prev, trimmed) ? prev : trimmed
-      })
+      const now = Date.now()
+      const merged = mergeProjectedPills(pillsRef.current, rows, now).pills
+      const expired = expireViewedFinished(
+        merged,
+        now,
+        VIEWED_FINISHED_TTL_MS,
+        activePillIdRef.current
+      )
+      const trimmed = trimForSoftCap(expired, activePillIdRef.current)
+      setPills((prev) => (samePills(prev, trimmed) ? prev : trimmed))
+      // Drop cached assistant text for pills the lifecycle just evicted (soft-cap /
+      // viewed-TTL), so the text map can't grow unbounded across a long session.
+      setFinalTextByPillId((prev) => retainTextForPills(prev, trimmed))
     }
 
     // Per-run poll → refresh status + transcript for each active pill with a
