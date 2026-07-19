@@ -10,6 +10,7 @@ import XCTest
 /// with more than 500 hydrated incomplete tasks sent `limit > 500`, so every
 /// auto-refresh (app activation, Cmd+R) got HTTP 422 and silently failed. The
 /// limit is now clamped to the backend cap.
+@MainActor
 final class TasksStoreApiPageLimitTests: XCTestCase {
   func testClampNeverExceedsBackendCap() {
     XCTAssertEqual(TasksStore.clampedApiPageLimit(742), TasksStore.apiPageLimitCap)
