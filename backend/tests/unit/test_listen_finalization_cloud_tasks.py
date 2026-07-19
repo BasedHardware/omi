@@ -802,11 +802,13 @@ async def test_pusher_finalization_survives_session_close_after_handoff(monkeypa
 
     detached = list(pusher_router._detached_finalization_tasks)
     assert len(detached) == 1, 'finalization must keep running after session cleanup'
+    assert pusher_router.PUSHER_DETACHED_FINALIZATION_TASKS._value.get() == 1
     session_torn_down.set()
     await asyncio.wait_for(detached[0], timeout=5)
 
     claim.assert_called_once()
     completed.assert_called_once_with('job-1', 3, 7)
+    assert pusher_router.PUSHER_DETACHED_FINALIZATION_TASKS._value.get() == 0
     # The origin socket is gone; the result frame is dropped, not raised.
     assert websocket.sent == []
 

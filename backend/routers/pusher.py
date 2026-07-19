@@ -39,7 +39,7 @@ from utils.webhooks import (
 )
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts, is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
-from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
+from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS, PUSHER_DETACHED_FINALIZATION_TASKS
 from utils.observability.journeys import JourneyAttempt, JourneyOutcome, record_capture_finalization_terminal
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -101,9 +101,11 @@ _detached_finalization_tasks: Set[asyncio.Task[Any]] = set()
 def _spawn_detached_finalization(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
     task = asyncio.create_task(coro)
     _detached_finalization_tasks.add(task)
+    PUSHER_DETACHED_FINALIZATION_TASKS.set(len(_detached_finalization_tasks))
 
     def on_done(t: asyncio.Task[Any]) -> None:
         _detached_finalization_tasks.discard(t)
+        PUSHER_DETACHED_FINALIZATION_TASKS.set(len(_detached_finalization_tasks))
         if t.cancelled():
             return
         exc = t.exception()
