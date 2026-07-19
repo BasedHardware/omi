@@ -157,6 +157,27 @@ def _bounded_exception_type(error: BaseException) -> str:
     return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
 
 
+async def _resolve_fair_use_soft_cap_plan(uid: str):
+    """Return the stored plan, falling back to the default soft-cap tier on read failure."""
+    try:
+        fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+        return fair_use_sub.plan if fair_use_sub else None
+    except Exception as e:
+        logger.warning(
+            'event=sync_fair_use outcome=subscription_plan_fallback exception_type=%s',
+            _bounded_exception_type(e),
+        )
+        record_fallback(
+            component='other',
+            from_mode='subscription_plan',
+            to_mode='default_cap',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
+
+
 def _bounded_sync_failure_reason(reason: str | None) -> str:
     return reason if reason in _SYNC_FAILURE_REASON_CODES else 'other'
 
@@ -1790,25 +1811,7 @@ async def _run_full_pipeline_background_async(
                         raise_on_error=bool(content_id),
                     )
                 if sync_lane == SyncLane.FRESH.value:
-                    fair_use_plan = None
-                    try:
-                        fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
-                        fair_use_plan = fair_use_sub.plan if fair_use_sub else None
-                    except Exception as e:
-                        # A plan lookup only selects the soft-cap tier. Do not lose an
-                        # otherwise durable transcription when that optional read fails.
-                        logger.warning(
-                            'event=sync_fair_use outcome=subscription_plan_fallback exception_type=%s',
-                            _bounded_exception_type(e),
-                        )
-                        record_fallback(
-                            component='other',
-                            from_mode='subscription_plan',
-                            to_mode='default_cap',
-                            reason='policy',
-                            outcome='degraded',
-                            log=logger,
-                        )
+                    fair_use_plan = await _resolve_fair_use_soft_cap_plan(uid)
                     speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
                     triggered_caps = await run_blocking(
                         db_executor, check_soft_caps, uid, speech_totals=speech_totals, plan=fair_use_plan
