@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import ObjectiveC
 
 /// Synchronous session fence for conversation cache transaction admission.
 ///
@@ -68,7 +69,7 @@ struct ConversationRepositorySnapshot: Equatable {
   let source: ConversationSnapshotSource
 }
 
-protocol ConversationRemoteDataSource {
+protocol ConversationRemoteDataSource: Sendable {
   func list(query: ConversationListQuery) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation
@@ -79,7 +80,7 @@ protocol ConversationRemoteDataSource {
   func delete(id: String) async throws
 }
 
-protocol ConversationLocalDataSource {
+protocol ConversationLocalDataSource: Sendable {
   func list(query: ConversationListQuery) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation?
@@ -260,10 +261,29 @@ final class ConversationRepository {
   private(set) var isLoading = false
   private(set) var error: String?
   var onSnapshot: ((ConversationRepositorySnapshot) -> Void)?
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
 
   init(remote: ConversationRemoteDataSource, local: ConversationLocalDataSource) {
     self.remote = remote
     self.local = local
+    // Owner fencing: an in-place account switch posts only
+    // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
+    // previous owner's conversations keep rendering for the next account and
+    // ConversationsPage.onAppear skips its reload because the array is
+    // non-empty. Mirrors TasksStore.resetSessionState's subscription.
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.reset()
+      }
+    }
+  }
+
+  deinit {
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 
   convenience init() {
@@ -510,8 +530,9 @@ final class ConversationRepository {
   private func rollbackPendingField(id: String, operation: MutationOperation) {
     let shouldRollback = clearPendingField(id: id, operation: operation)
     if shouldRollback,
-       let baseline = mutationBaselines[id],
-       let index = conversations.firstIndex(where: { $0.id == id }) {
+      let baseline = mutationBaselines[id],
+      let index = conversations.firstIndex(where: { $0.id == id })
+    {
       conversations[index] = operation.rollback(conversations[index], to: baseline)
       applyPending(id: id)
     }
@@ -536,8 +557,9 @@ final class ConversationRepository {
       return
     }
     if let incomingRevision = canonical.updatedAt,
-       let existingRevision = existing.updatedAt,
-       incomingRevision < existingRevision {
+      let existingRevision = existing.updatedAt,
+      incomingRevision < existingRevision
+    {
       return
     }
     mutationBaselines[id] = canonical
@@ -604,8 +626,9 @@ final class ConversationRepository {
     guard let index = conversations.firstIndex(where: { $0.id == conversation.id }) else { return }
     let existing = conversations[index]
     if let incoming = conversation.updatedAt,
-       let current = existing.updatedAt,
-       incoming < current {
+      let current = existing.updatedAt,
+      incoming < current
+    {
       return
     }
     conversations[index] = conversation

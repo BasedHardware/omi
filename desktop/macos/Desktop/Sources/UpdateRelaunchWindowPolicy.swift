@@ -88,7 +88,8 @@ struct UpdateRelaunchWindowPolicy {
       return nil
     }
 
-    let payload = defaults.data(forKey: pendingRelaunchPayloadKey)
+    let payload =
+      defaults.data(forKey: pendingRelaunchPayloadKey)
       .flatMap { try? JSONDecoder().decode(PendingUpdateRelaunch.self, from: $0) }
       ?? PendingUpdateRelaunch(
         restoreMainWindow: defaults.bool(forKey: restoreMainWindowKey),

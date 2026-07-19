@@ -9052,7 +9052,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get billingYearly => 'Ετήσιο';
 
   @override
-  String get savePercent => 'Εξοικονομήστε ~17%';
+  String savePercent(int percent) {
+    return 'Εξοικονομήστε ~$percent%';
+  }
 
   @override
   String get popular => 'Δημοφιλές';
@@ -9409,7 +9411,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Προς το παρόν λειτουργεί με συσκευές Omi και Limitless. Ο ήχος παραμένει στο τηλέφωνό σας μέχρι να επιλέξετε να τον ανεβάσετε.';
+      'Λειτουργεί με το μικρόφωνο του τηλεφώνου και με συσκευές Omi και Limitless. Ο ήχος παραμένει στο τηλέφωνό σας μέχρι να επιλέξετε να τον ανεβάσετε.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9642,4 +9644,33 @@ class AppLocalizationsEl extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Σφάλμα σύνδεσης με Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Αποθηκευτικός χώρος συσκευής';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% γεμάτο';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used από $total σε χρήση';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ελεύθερα';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Η συσκευή είναι σχεδόν γεμάτη — συγχρονίστε για να ελευθερώσετε χώρο.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Καμία σύνδεση — γίνεται τοπική εγγραφή. Θα απομαγνητοφωνηθεί μόλις συνδεθείτε ξανά.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Τα δεδομένα σας προστατεύονται από προεπιλογή με ισχυρή κρυπτογράφηση και εσείς ελέγχετε πώς αποθηκεύονται και χρησιμοποιούνται.';
 }

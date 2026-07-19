@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var hasPaidSubscription: Bool {
@@ -16,11 +16,12 @@ extension SettingsContentView {
   }
 
   var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    // Operator (mass-market, green) on the left, Architect (premium, purple)
+    // Operator (mass-market, green) on the left, Architect (premium, white accent)
     // on the right. Hide the user's current plan — they already see it above.
     // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
     let order = ["unlimited": 0, "operator": 1, "architect": 2]
-    return mergedPlanCatalog
+    return
+      mergedPlanCatalog
       .filter { !isCurrentSubscriptionPlan($0) }
       .sorted { lhs, rhs in
         let lhsOrder = order[lhs.id, default: Int.max]
@@ -66,7 +67,7 @@ extension SettingsContentView {
   /// Operator→Unlimited remapping in `/v1/users/me/subscription`.
   func isCurrentSubscriptionOperator() -> Bool {
     guard let subscription = userSubscription?.subscription,
-          let currentPriceId = subscription.currentPriceId
+      let currentPriceId = subscription.currentPriceId
     else { return false }
     for plan in mergedPlanCatalog {
       guard plan.title == "Operator" else { continue }
@@ -132,17 +133,16 @@ extension SettingsContentView {
   }
 
   func planAccentColor(for planId: String) -> Color {
-    // Architect is the premium/purple tier; Operator + legacy Unlimited
+    // Architect is the premium white-accent tier; Operator + legacy Unlimited
     // are the mass-market green tier.
-    planId == "architect" ? OmiColors.purplePrimary : OmiColors.success
+    planId == "architect" ? OmiColors.accent : OmiColors.success
   }
 
   func planSummaryText(for plan: SubscriptionPlanOption) -> String {
     preferredStartingPrice(for: plan)?.priceString ?? ""
   }
 
-  func preferredStartingPrice(for plan: SubscriptionPlanOption) -> SubscriptionPriceOption?
-  {
+  func preferredStartingPrice(for plan: SubscriptionPlanOption) -> SubscriptionPriceOption? {
     let prices = sortedPrices(for: plan)
     if let monthly = prices.first(where: { price in
       let title = price.title.lowercased()
@@ -308,58 +308,58 @@ extension SettingsContentView {
     let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
 
-    VStack(alignment: .leading, spacing: 16) {
-      HStack(alignment: .top, spacing: 12) {
-        VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
           Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
-            .scaledFont(size: 10, weight: .bold)
+            .scaledFont(size: OmiType.micro, weight: .bold)
             .foregroundColor(accent)
             .tracking(0.8)
 
           Text(plan.title)
-            .scaledFont(size: 18, weight: .bold)
+            .scaledFont(size: OmiType.heading, weight: .bold)
             .foregroundColor(OmiColors.textPrimary)
 
           if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
             Text(subtitle)
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
           }
         }
 
         Spacer()
 
-        VStack(alignment: .trailing, spacing: 2) {
+        VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
           Text(planSummaryText(for: plan))
-            .scaledFont(size: 17, weight: .bold)
+            .scaledFont(size: OmiType.subheading, weight: .bold)
             .foregroundColor(isSelected ? accent : OmiColors.textPrimary)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
 
           Text("starting price")
-            .scaledFont(size: 10, weight: .medium)
+            .scaledFont(size: OmiType.micro, weight: .medium)
             .foregroundColor(isSelected ? accent.opacity(0.8) : OmiColors.textTertiary)
         }
         .fixedSize(horizontal: true, vertical: false)
       }
 
       Text(plan.description ?? planDescription(for: plan.id))
-        .scaledFont(size: 13)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textSecondary)
 
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         ForEach(plan.features.prefix(4), id: \.self) { feature in
-          HStack(spacing: 8) {
+          HStack(spacing: OmiSpacing.sm) {
             ZStack {
               Circle()
                 .fill(accent.opacity(0.16))
                 .frame(width: 18, height: 18)
               Image(systemName: "checkmark")
-                .scaledFont(size: 9, weight: .bold)
+                .scaledFont(size: OmiType.micro, weight: .bold)
                 .foregroundColor(accent)
             }
             Text(feature)
-              .scaledFont(size: 13, weight: .medium)
+              .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(OmiColors.textSecondary)
           }
         }
@@ -369,41 +369,40 @@ extension SettingsContentView {
         Divider()
           .overlay(OmiColors.backgroundQuaternary)
 
-        VStack(alignment: .leading, spacing: 10) {
-          VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             Button(action: {
-              withAnimation(.easeInOut(duration: 0.2)) {
+              OmiMotion.withGated(.easeInOut(duration: 0.2)) {
                 isPromoCodeExpanded.toggle()
               }
             }) {
-              HStack(spacing: 6) {
+              HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "tag")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                 Text("Promo code")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                 Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
-                  .scaledFont(size: 10)
+                  .scaledFont(size: OmiType.micro)
               }
               .foregroundColor(OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
 
             if isPromoCodeExpanded {
-              VStack(alignment: .leading, spacing: 6) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 TextField("Enter promo code", text: $upgradePromotionCode)
-                  .textFieldStyle(.roundedBorder)
-                  .scaledFont(size: 13)
+                  .settingsTextInputStyle()
                   .disabled(activeCheckoutPriceId != nil)
                   .onChange(of: upgradePromotionCode) {
                     subscriptionError = nil
                   }
 
                 if let error = subscriptionError {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "exclamationmark.circle")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text(error)
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                   }
                   .foregroundColor(OmiColors.warning)
                 }
@@ -413,10 +412,10 @@ extension SettingsContentView {
           }
 
           Text("Choose billing")
-            .scaledFont(size: 12, weight: .semibold)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
             .foregroundColor(OmiColors.textTertiary)
 
-          HStack(spacing: 10) {
+          HStack(spacing: OmiSpacing.sm) {
             ForEach(sortedPrices(for: plan)) { price in
               Button(action: {
                 startCheckout(for: price.id)
@@ -427,18 +426,18 @@ extension SettingsContentView {
                       .controlSize(.small)
                       .frame(maxWidth: .infinity)
                   } else {
-                    VStack(spacing: 3) {
+                    VStack(spacing: OmiSpacing.hairline) {
                       Text(price.title)
-                        .scaledFont(size: 12, weight: .bold)
+                        .scaledFont(size: OmiType.caption, weight: .bold)
                       Text(price.priceString)
-                        .scaledFont(size: 11)
-                        .foregroundColor(Color.white.opacity(0.92))
+                        .scaledFont(size: OmiType.caption)
+                        .foregroundColor(OmiColors.backgroundPrimary.opacity(0.92))
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(OmiColors.backgroundPrimary)
                     .frame(maxWidth: .infinity)
                   }
                 }
-                .padding(.vertical, 10)
+                .padding(.vertical, OmiSpacing.sm)
               }
               .buttonStyle(.borderedProminent)
               .tint(accent)
@@ -449,43 +448,44 @@ extension SettingsContentView {
       } else if isCurrentPlan {
         HStack {
           Text("Current Plan")
-            .scaledFont(size: 12, weight: .bold)
+            .scaledFont(size: OmiType.caption, weight: .bold)
           Spacer()
           Image(systemName: "checkmark.circle.fill")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
         }
         .foregroundColor(accent)
-        .padding(.vertical, 10)
+        .padding(.vertical, OmiSpacing.sm)
       } else {
         Button(action: {
           selectedPlanIdForCheckout = plan.id
         }) {
           HStack {
             Text("Select \(plan.title)")
-              .scaledFont(size: 12, weight: .bold)
+              .scaledFont(size: OmiType.caption, weight: .bold)
             Spacer()
             Image(systemName: "arrow.right")
-              .scaledFont(size: 11, weight: .bold)
+              .scaledFont(size: OmiType.caption, weight: .bold)
           }
-          .padding(.vertical, 10)
+          .foregroundColor(OmiColors.backgroundPrimary)
+          .padding(.vertical, OmiSpacing.sm)
         }
         .buttonStyle(.borderedProminent)
         .tint(accent)
       }
     }
-    .padding(20)
+    .padding(OmiSpacing.xxl)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: 18)
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
         .fill(isSelected ? accent.opacity(0.12) : OmiColors.backgroundPrimary.opacity(0.68))
         .overlay(
-          RoundedRectangle(cornerRadius: 18)
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
             .stroke(
               isSelected ? accent.opacity(0.85) : OmiColors.backgroundQuaternary,
               lineWidth: isSelected ? 1.5 : 1)
         )
     )
-    .contentShape(RoundedRectangle(cornerRadius: 18))
+    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
     .onTapGesture {
       guard canPurchase else { return }
       selectedPlanIdForCheckout = plan.id
@@ -742,20 +742,21 @@ extension SettingsContentView {
         // Sync assistant settings from server in parallel
         async let assistantSyncTask: () = SettingsSyncManager.shared.syncFromServer()
 
-        let (dailySummary, notifications, language, recording, cloudSync, transcription, _) = try
-          await (
-            dailySummaryTask,
-            notificationsTask,
-            languageTask,
-            recordingTask,
-            cloudSyncTask,
-            transcriptionTask,
-            assistantSyncTask
-          )
+        let (dailySummary, notifications, language, recording, cloudSync, transcription, _) = try await (
+          dailySummaryTask,
+          notificationsTask,
+          languageTask,
+          recordingTask,
+          cloudSyncTask,
+          transcriptionTask,
+          assistantSyncTask
+        )
 
         await MainActor.run {
           dailySummaryEnabled = dailySummary.enabled
           dailySummaryHour = dailySummary.hour
+          dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
+            forHour: dailySummary.hour, referenceDate: Date())
           notificationsEnabled = notifications.enabled
           notificationFrequency = notifications.frequency
           // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
@@ -831,8 +832,9 @@ extension SettingsContentView {
           // the trial cache) — without this they'd stay paywalled until the
           // next app restart even after their Operator/Architect plan is active.
           if subscription.subscription.plan != .basic,
-             subscription.subscription.status == .active,
-             AppState.current?.isPaywalled == true {
+            subscription.subscription.status == .active,
+            AppState.current?.isPaywalled == true
+          {
             AppState.current?.isPaywalled = false
             log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
           }
@@ -907,8 +909,9 @@ extension SettingsContentView {
     )
 
     if subscription.subscription.plan != .basic,
-       subscription.subscription.status == .active,
-       AppState.current?.isPaywalled == true {
+      subscription.subscription.status == .active,
+      AppState.current?.isPaywalled == true
+    {
       AppState.current?.isPaywalled = false
       log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
     }
@@ -928,8 +931,8 @@ extension SettingsContentView {
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
     if hasPaidSubscription,
-       let subscription = userSubscription?.subscription,
-       !subscription.cancelAtPeriodEnd
+      let subscription = userSubscription?.subscription,
+      !subscription.cancelAtPeriodEnd
     {
       Task {
         do {

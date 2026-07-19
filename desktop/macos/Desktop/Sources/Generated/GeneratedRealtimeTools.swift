@@ -24,6 +24,7 @@ enum HubTool: String {
   case createCalendarEvent = "create_calendar_event"
   case askHigherModel = "ask_higher_model"
   case screenshot = "screenshot"
+  case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
 }
 
@@ -73,19 +74,10 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "list_agent_sessions",
-    "description": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+    "description": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, omit status filters: session archive state is not run completion. List recent sessions, then answer from latestRun.finalText or inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     "parameters": {
       "type": "object",
       "properties": {
-        "status": {
-          "type": "string",
-          "enum": [
-            "open",
-            "archived",
-            "closed"
-          ],
-          "description": "Optional session status filter."
-        },
         "surfaceKind": {
           "type": "string",
           "enum": [
@@ -97,7 +89,7 @@ enum GeneratedRealtimeTools {
             "floating_bar",
             "floating_pill"
           ],
-          "description": "Optional canonical surface filter."
+          "description": "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces."
         },
         "limit": {
           "type": "number",
@@ -110,7 +102,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "get_agent_run",
-    "description": "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+    "description": "Inspect one canonical Omi-managed agent run. Prefer an agentRef or runId from list_agent_sessions. For a completed child, answer from run.finalText and do not expose the internal id.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -267,7 +259,7 @@ enum GeneratedRealtimeTools {
             "openclaw",
             "hermes"
           ],
-          "description": "Optional local provider override."
+          "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent."
         },
         "parent_run_id": {
           "type": "string",
@@ -523,7 +515,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "check_permission_status",
-    "description": "Check whether Omi has the requested macOS permission. This is a fast local action; use it directly when the user asks to check permissions, never by spawning an agent.",
+    "description": "Check whether Omi has the requested macOS permission through the kernel-authorized native executor.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -546,7 +538,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "request_permission",
-    "description": "Request Omi's macOS permission directly by opening the native prompt or the relevant System Settings pane. Use for Screen Recording, microphone, notifications, Accessibility, Automation, or Full Disk Access. Never use spawn_agent for a permission request.",
+    "description": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -581,7 +573,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "create_calendar_event",
-    "description": "Create a Google Calendar event for the user. Use for simple calendar requests like 'put this on my calendar', 'schedule lunch tomorrow', or 'create an event'. Requires start_time and end_time as ISO-8601 strings with timezone. Use spawn_agent instead for multi-step scheduling, finding availability, rescheduling, deleting, or coordinating with people.",
+    "description": "Create one specified Google Calendar event. Requires start_time and end_time as ISO-8601 strings with timezone. This capability does not find availability, reschedule, delete, or coordinate with people.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -646,6 +638,23 @@ enum GeneratedRealtimeTools {
       "type": "object",
       "properties": {},
       "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "report_screen_observation",
+    "description": "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "observation": {
+          "type": "string",
+          "description": "Concise visual grounding observation from the attached image; this is not the user-facing answer."
+        }
+      },
+      "required": [
+        "observation"
+      ]
     }
   },
   {

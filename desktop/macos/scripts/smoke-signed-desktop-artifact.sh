@@ -11,6 +11,11 @@ DMG_PATH=""
 RELEASE_TAG=""
 EXPECTED_CHANNEL="${OMI_SIGNED_ARTIFACT_SMOKE_CHANNEL:-beta}"
 EXPECTED_TEAM_ID="${OMI_SIGNED_ARTIFACT_SMOKE_TEAM_ID:-9536L8KLMP}"
+EXPECTED_BUNDLE_ID="${OMI_SIGNED_ARTIFACT_SMOKE_BUNDLE_ID:-com.omi.computer-macos}"
+EXPECTED_URL_SCHEME="${OMI_SIGNED_ARTIFACT_SMOKE_URL_SCHEME:-omi-computer}"
+EXPECTED_PYTHON_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_PYTHON_API_URL:-https://api.omi.me}"
+EXPECTED_DESKTOP_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_DESKTOP_API_URL:-https://desktop-backend-hhibjajaja-uc.a.run.app/}"
+IS_EXTERNAL_PREVIEW=false
 RUN_LAUNCH=false
 RUN_NETWORK=false
 RUN_AUTH=false
@@ -43,6 +48,13 @@ Options:
   --dmg PATH                 DMG artifact to verify/mount when available
   --tag TAG                  Expected release tag, vX.Y.Z+BUILD-macos
   --expected-channel NAME    Expected channel label for result metadata (default: beta)
+  --expected-bundle-id ID    Expected app bundle identifier
+  --expected-url-scheme URL  Expected app URL scheme
+  --expected-python-api-url URL
+                             Expected OMI_PYTHON_API_URL in the artifact
+  --expected-desktop-api-url URL
+                             Expected OMI_DESKTOP_API_URL in the artifact
+  --preview                  Assert external-preview isolation (no Sparkle feed)
   --launch                   Launch the app and assert it stays alive briefly
   --network                  Probe configured backend/appcast URLs
   --auth                     Run auth persistence probe (requires env below)
@@ -74,6 +86,7 @@ Smoke paths covered:
   - Signed Keychain canary
   - Backend routing
   - Sparkle/update metadata
+  - External-preview isolation
   - Native helper/runtime bundle integrity
   - Minimal chat path
   - Recording permission surface sanity
@@ -124,6 +137,11 @@ parse_args() {
       --dmg) require_option_value "$1" "${2:-}"; DMG_PATH="$2"; shift 2 ;;
       --tag) require_option_value "$1" "${2:-}"; RELEASE_TAG="$2"; shift 2 ;;
       --expected-channel) require_option_value "$1" "${2:-}"; EXPECTED_CHANNEL="$2"; shift 2 ;;
+      --expected-bundle-id) require_option_value "$1" "${2:-}"; EXPECTED_BUNDLE_ID="$2"; shift 2 ;;
+      --expected-url-scheme) require_option_value "$1" "${2:-}"; EXPECTED_URL_SCHEME="$2"; shift 2 ;;
+      --expected-python-api-url) require_option_value "$1" "${2:-}"; EXPECTED_PYTHON_API_URL="$2"; shift 2 ;;
+      --expected-desktop-api-url) require_option_value "$1" "${2:-}"; EXPECTED_DESKTOP_API_URL="$2"; shift 2 ;;
+      --preview) IS_EXTERNAL_PREVIEW=true; shift ;;
       --launch) RUN_LAUNCH=true; shift ;;
       --network) RUN_NETWORK=true; shift ;;
       --auth) RUN_AUTH=true; shift ;;
@@ -307,17 +325,32 @@ PY
 assert_bundle_identity() {
   [[ -d "$APP_BUNDLE/Contents" ]] || fail "app bundle not found: $APP_BUNDLE"
 
-  local bundle_id version build executable url_scheme feed_url
+  local bundle_id version build executable url_scheme feed_url external_preview_marker automatic_checks
   bundle_id="$(plist_read CFBundleIdentifier)"
   version="$(plist_read CFBundleShortVersionString)"
   build="$(plist_read CFBundleVersion)"
   executable="$(plist_read CFBundleExecutable)"
   feed_url="$(plist_read SUFeedURL)"
   url_scheme="$(/usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes:0:CFBundleURLSchemes:0" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true)"
+  external_preview_marker="$(plist_read OMIExternalPreview)"
+  automatic_checks="$(plist_read SUEnableAutomaticChecks)"
 
-  [[ "$bundle_id" == "com.omi.computer-macos" ]] || fail "bundle id must be com.omi.computer-macos, got ${bundle_id:-missing}"
-  [[ "$url_scheme" == "omi-computer" ]] || fail "URL scheme must be omi-computer, got ${url_scheme:-missing}"
-  [[ "$feed_url" == "https://api.omi.me/v2/desktop/appcast.xml" ]] || fail "SUFeedURL mismatch: ${feed_url:-missing}"
+  [[ "$bundle_id" == "$EXPECTED_BUNDLE_ID" ]] || fail "bundle id must be $EXPECTED_BUNDLE_ID, got ${bundle_id:-missing}"
+  [[ "$url_scheme" == "$EXPECTED_URL_SCHEME" ]] || fail "URL scheme must be $EXPECTED_URL_SCHEME, got ${url_scheme:-missing}"
+  if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
+    [[ "$bundle_id" =~ ^com[.]omi[.]preview[.][a-z0-9-]+$ ]] \
+      || fail "external preview bundle id must use the preview namespace"
+    [[ "$url_scheme" =~ ^omi-preview-[a-z0-9-]+$ ]] \
+      || fail "external preview URL scheme must use the preview namespace"
+    [[ "$external_preview_marker" == "true" || "$external_preview_marker" == "1" ]] \
+      || fail "external preview marker must be enabled"
+    [[ -z "$feed_url" ]] || fail "external preview must not carry a shared Sparkle feed"
+    [[ "$automatic_checks" == "false" || "$automatic_checks" == "0" ]] \
+      || fail "external preview must disable automatic update checks"
+  else
+    [[ "$feed_url" == "https://api.omi.me/v2/desktop/appcast.xml" ]] \
+      || fail "SUFeedURL mismatch: ${feed_url:-missing}"
+  fi
   [[ -n "$executable" && -x "$APP_BUNDLE/Contents/MacOS/$executable" ]] || fail "main executable missing or not executable"
 
   if [[ -n "$RELEASE_TAG" ]]; then
@@ -328,7 +361,11 @@ assert_bundle_identity() {
     [[ "$build" == "$expected_build" ]] || fail "build mismatch: expected $expected_build, got ${build:-missing}"
   fi
 
-  pass "Launch + identity metadata is aligned"
+  if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
+    pass "External-preview identity and update isolation are aligned"
+  else
+    pass "Launch + identity metadata is aligned"
+  fi
 }
 
 assert_signing_and_entitlements() {
@@ -352,12 +389,12 @@ assert_signing_and_entitlements() {
   local app_identifier
   app_identifier="$(/usr/libexec/PlistBuddy -c "Print :com.apple.application-identifier" "$entitlements" 2>/dev/null || true)"
   if [[ -n "$app_identifier" ]]; then
-    [[ "$app_identifier" == "$EXPECTED_TEAM_ID.com.omi.computer-macos" ]] \
-      || fail "application identifier entitlement mismatch: expected $EXPECTED_TEAM_ID.com.omi.computer-macos, got $app_identifier"
+    [[ "$app_identifier" == "$EXPECTED_TEAM_ID.$EXPECTED_BUNDLE_ID" ]] \
+      || fail "application identifier entitlement mismatch: expected $EXPECTED_TEAM_ID.$EXPECTED_BUNDLE_ID, got $app_identifier"
   fi
   if /usr/libexec/PlistBuddy -c "Print :keychain-access-groups" "$entitlements" >/dev/null 2>&1; then
-    /usr/libexec/PlistBuddy -c "Print :keychain-access-groups" "$entitlements" | grep -q "$EXPECTED_TEAM_ID.com.omi.computer-macos" \
-      || fail "keychain-access-groups must include $EXPECTED_TEAM_ID.com.omi.computer-macos when present"
+    /usr/libexec/PlistBuddy -c "Print :keychain-access-groups" "$entitlements" | grep -q "$EXPECTED_TEAM_ID.$EXPECTED_BUNDLE_ID" \
+      || fail "keychain-access-groups must include $EXPECTED_TEAM_ID.$EXPECTED_BUNDLE_ID when present"
   fi
 
   if command -v spctl >/dev/null 2>&1; then
@@ -372,18 +409,24 @@ assert_backend_routing_config() {
   local env_file="$APP_BUNDLE/Contents/Resources/.env"
   [[ -f "$env_file" ]] || fail "release .env missing"
 
-  grep -Eq '^OMI_PYTHON_API_URL=https://api[.]omi[.]me/?$' "$env_file" \
-    || fail "release .env must point OMI_PYTHON_API_URL at https://api.omi.me"
-  grep -q '^OMI_DESKTOP_API_URL=https://desktop-backend-' "$env_file" \
-    || fail "release .env must include hosted OMI_DESKTOP_API_URL"
+  grep -Fqx "OMI_PYTHON_API_URL=$EXPECTED_PYTHON_API_URL" "$env_file" \
+    || fail "artifact .env must use expected OMI_PYTHON_API_URL"
+  grep -Fqx "OMI_DESKTOP_API_URL=$EXPECTED_DESKTOP_API_URL" "$env_file" \
+    || fail "artifact .env must use expected OMI_DESKTOP_API_URL"
   ! grep -Eq 'localhost|127[.]0[.]0[.]1|0[.]0[.]0[.]0|ngrok|dev-serve' "$env_file" \
-    || fail "release .env contains local/dev tunnel backend reference"
+    || fail "artifact .env contains a local/dev tunnel backend reference"
 
-  pass "Backend routing config has no local/dev leakage"
+  pass "Backend routing config matches the declared external backend"
 }
 
 assert_sparkle_and_artifacts() {
-  [[ "$EXPECTED_CHANNEL" =~ ^(beta|stable|staging)$ ]] || fail "unexpected release channel: $EXPECTED_CHANNEL"
+  [[ "$EXPECTED_CHANNEL" =~ ^(beta|stable|staging|preview)$ ]] || fail "unexpected release channel: $EXPECTED_CHANNEL"
+  if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
+    [[ "$EXPECTED_CHANNEL" == "preview" ]] || fail "external preview artifacts must use the preview channel label"
+    [[ -z "$SPARKLE_ZIP" ]] || fail "external previews must not publish a shared Sparkle ZIP"
+  else
+    [[ "$EXPECTED_CHANNEL" != "preview" ]] || fail "only external previews may use the preview channel label"
+  fi
   pass "Expected channel label recorded as $EXPECTED_CHANNEL"
   if [[ -n "$SOURCE_APP_BUNDLE" ]]; then
     assert_bundle_matches_current "$SOURCE_APP_BUNDLE" "source --app"
@@ -418,7 +461,9 @@ assert_sparkle_and_artifacts() {
   fi
 
   [[ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]] || fail "Sparkle.framework missing"
-  if [[ -n "$SPARKLE_ZIP" ]]; then
+  if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
+    pass "External preview is excluded from shared Sparkle publishing"
+  elif [[ -n "$SPARKLE_ZIP" ]]; then
     pass "Sparkle/update metadata and authoritative ZIP artifacts are present"
   else
     pass "Sparkle framework metadata is present"

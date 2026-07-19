@@ -18,6 +18,8 @@ from utils.memory.memory_tools import (
     facts_from_bundle,
 )
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
+from utils.memory_ingestion.ids import canonical_json
+from utils.llm.usage_tracker import Features, track_usage
 
 try:
     from utils.llm.durable_memory_patches import PROMOTION_RUBRIC as _promotion_rubric
@@ -156,8 +158,7 @@ def _json_default(value: Any) -> str:
     return str(value)
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(',', ':'), default=_json_default)
+_canonical_json = canonical_json
 
 
 def _summarize_tool_result(result: Payload) -> Payload:
@@ -474,7 +475,8 @@ def run_l2_promotion_agent(
     status = 'success'
 
     while True:
-        response = _invoke_llm(bound_model, messages)
+        with track_usage(bundle_uid, Features.MEMORIES):
+            response = _invoke_llm(bound_model, messages)
         tool_calls = _response_tool_calls(response)
         if not tool_calls:
             messages.append({'role': 'assistant', 'content': _content_from_response(response)})

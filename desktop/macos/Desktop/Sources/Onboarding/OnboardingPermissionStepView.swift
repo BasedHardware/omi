@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingPermissionStepView: View {
   @Environment(\.scenePhase) private var scenePhase
@@ -24,6 +24,7 @@ struct OnboardingPermissionStepView: View {
   let onForceComplete: (() -> Void)?
 
   @State private var isRequesting = false
+  @State private var showReopenPrompt = false
   @State private var hasAutoAdvanced = false
   @State private var advanceTask: Task<Void, Never>?
   @State private var screenRecordingRefreshTask: Task<Void, Never>?
@@ -38,14 +39,18 @@ struct OnboardingPermissionStepView: View {
       title: title,
       description: description,
       showsSkip: true,
-      onSkip: onSkip,
+      onSkip: {
+        // Skipping a permission step should also clear the floating drag card.
+        PermissionDragGuidance.dismiss()
+        onSkip()
+      },
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 20) {
-        VStack(alignment: .leading, spacing: 18) {
-          HStack(spacing: 14) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xl) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          HStack(spacing: OmiSpacing.md) {
             ZStack {
-              RoundedRectangle(cornerRadius: 20, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
                 .fill(OmiColors.backgroundSecondary)
                 .frame(width: 58, height: 58)
 
@@ -54,7 +59,7 @@ struct OnboardingPermissionStepView: View {
                 .foregroundColor(OmiColors.textSecondary)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(reasonTitle)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(OmiColors.textPrimary)
@@ -73,10 +78,12 @@ struct OnboardingPermissionStepView: View {
             .lineSpacing(4)
 
           if permissionType == "screen_recording", appState.isScreenRecordingStale {
-            Text("macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Omi Dev off, then on again, then quit and reopen the app.")
-              .font(.system(size: 13, weight: .medium))
-              .foregroundColor(OmiColors.warning)
-              .fixedSize(horizontal: false, vertical: true)
+            Text(
+              "macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Omi Dev off, then on again, then quit and reopen the app."
+            )
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(OmiColors.warning)
+            .fixedSize(horizontal: false, vertical: true)
           }
 
           if permissionType == "full_disk_access", let email = coordinator.userEmail() {
@@ -84,7 +91,6 @@ struct OnboardingPermissionStepView: View {
               .font(.system(size: 13, weight: .medium))
               .foregroundColor(OmiColors.textTertiary)
           }
-
 
           if let error = coordinator.lastActionError, !isGranted {
             Text(error)
@@ -110,7 +116,7 @@ struct OnboardingPermissionStepView: View {
               }
             }
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .buttonStyle(OmiButtonStyle(.primary))
           .disabled(isRequesting)
 
         }
@@ -130,6 +136,12 @@ struct OnboardingPermissionStepView: View {
         if granted {
           scheduleAutoAdvance()
         }
+      }
+      .alert("Reopen Omi to finish", isPresented: $showReopenPrompt) {
+        Button("Reopen Omi") { appState.restartApp() }
+        Button("Later", role: .cancel) { onContinue() }
+      } message: {
+        Text("Omi needs to reopen to apply the permissions you just granted.")
       }
       .onDisappear {
         advanceTask?.cancel()
@@ -170,7 +182,15 @@ struct OnboardingPermissionStepView: View {
       try? await Task.sleep(nanoseconds: 350_000_000)
       guard !Task.isCancelled else { return }
       await MainActor.run {
-        onContinue()
+        // The restart-carrying step (the last drag permission) offers the re-open
+        // once granted, instead of silently advancing — one restart applies every
+        // deferred grant. Other steps just continue.
+        if requiresRestart {
+          PermissionDragGuidance.dismiss()
+          showReopenPrompt = true
+        } else {
+          onContinue()
+        }
       }
     }
   }

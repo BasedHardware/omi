@@ -596,7 +596,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       confirmColor: Colors.red,
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed == true && context.mounted) {
       Navigator.of(context).pop(); // Go back to previous screen
       context.read<SyncProvider>().deleteWal(widget.wal);
     }

@@ -8,6 +8,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import db as default_db
+from database.read_boundary import MalformedDocError, parse_snapshot_strict, parse_snapshots
 from models.memory_recurrence import CanonicalRecurrenceSignal
 from models.workstream_association import (
     RecurrenceInboxReceipt,
@@ -55,7 +56,13 @@ def _control_ref(uid: str, *, firestore_client: Any = None):
 
 
 def _validate_generation(snapshot: Any, account_generation: int) -> None:
-    control = TaskWorkflowControl.model_validate(snapshot.to_dict() or {}) if snapshot.exists else TaskWorkflowControl()
+    if not snapshot.exists:
+        control = TaskWorkflowControl()
+    else:
+        try:
+            control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
+        except MalformedDocError as error:
+            raise RecurrenceGenerationMismatchError('task workflow control is malformed') from error
     if control.account_generation != account_generation:
         raise RecurrenceGenerationMismatchError('account generation mismatch')
     if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
@@ -63,7 +70,7 @@ def _validate_generation(snapshot: Any, account_generation: int) -> None:
 
 
 def _from_snapshot(snapshot: Any) -> RecurrenceInboxReceipt:
-    return RecurrenceInboxReceipt.model_validate(snapshot.to_dict() or {})
+    return parse_snapshot_strict(RecurrenceInboxReceipt, snapshot)
 
 
 def _storage(receipt: RecurrenceInboxReceipt) -> dict[str, Any]:
@@ -130,7 +137,7 @@ def list_pending_recurrence_receipts(
         .where(filter=FieldFilter('account_generation', '==', account_generation))
         .limit(limit)
     )
-    return [_from_snapshot(snapshot) for snapshot in query.stream()]
+    return parse_snapshots(RecurrenceInboxReceipt, query.stream())
 
 
 def complete_recurrence_receipt(

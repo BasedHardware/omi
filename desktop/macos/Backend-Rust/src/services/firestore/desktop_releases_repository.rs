@@ -1,7 +1,41 @@
 use super::*;
 
+fn parse_release(
+    doc: &Value,
+) -> Result<crate::routes::updates::ReleaseInfo, Box<dyn std::error::Error + Send + Sync>> {
+    let fields = doc.get("fields").ok_or("Missing fields")?;
+    let changelog = fields
+        .get("changelog")
+        .and_then(|changelog| changelog.get("arrayValue"))
+        .and_then(|array| array.get("values"))
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.get("stringValue").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(crate::routes::updates::ReleaseInfo {
+        version: values::string_field(fields, "version").unwrap_or_default(),
+        build_number: values::i32_field(fields, "build_number")
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(0),
+        download_url: values::string_field(fields, "download_url").unwrap_or_default(),
+        manual_download_url: values::string_field(fields, "manual_download_url"),
+        ed_signature: values::string_field(fields, "ed_signature").unwrap_or_default(),
+        published_at: values::string_field(fields, "published_at").unwrap_or_default(),
+        changelog,
+        is_live: values::bool_field(fields, "is_live").unwrap_or(false),
+        is_critical: values::bool_field(fields, "is_critical").unwrap_or(false),
+        channel: values::string_field(fields, "channel"),
+    })
+}
+
 impl FirestoreService {
-    pub async fn get_desktop_releases(
+    pub(crate) async fn get_desktop_releases(
         &self,
     ) -> Result<Vec<crate::routes::updates::ReleaseInfo>, Box<dyn std::error::Error + Send + Sync>>
     {
@@ -37,7 +71,7 @@ impl FirestoreService {
             let data: Value = response.json().await?;
             if let Some(documents) = data.get("documents").and_then(|d| d.as_array()) {
                 for doc in documents {
-                    if let Ok(release) = self.parse_release(doc) {
+                    if let Ok(release) = parse_release(doc) {
                         releases.push(release);
                     }
                 }
@@ -58,55 +92,8 @@ impl FirestoreService {
         Ok(releases)
     }
 
-    /// Parse Firestore document to ReleaseInfo
-    fn parse_release(
-        &self,
-        doc: &Value,
-    ) -> Result<crate::routes::updates::ReleaseInfo, Box<dyn std::error::Error + Send + Sync>> {
-        let fields = doc.get("fields").ok_or("Missing fields")?;
-
-        let changelog = if let Some(arr) = fields
-            .get("changelog")
-            .and_then(|c| c.get("arrayValue"))
-            .and_then(|a| a.get("values"))
-            .and_then(|v| v.as_array())
-        {
-            arr.iter()
-                .filter_map(|v| v.get("stringValue").and_then(|s| s.as_str()))
-                .map(|s| s.to_string())
-                .collect()
-        } else {
-            vec![]
-        };
-
-        // channel: None = unpromoted (staging), Some("stable") = promoted stable
-        let channel = self.parse_string(fields, "channel");
-
-        Ok(crate::routes::updates::ReleaseInfo {
-            version: self.parse_string(fields, "version").unwrap_or_default(),
-            build_number: self
-                .parse_int(fields, "build_number")
-                .and_then(|value| u32::try_from(value).ok())
-                .unwrap_or(0),
-            download_url: self
-                .parse_string(fields, "download_url")
-                .unwrap_or_default(),
-            manual_download_url: self.parse_string(fields, "manual_download_url"),
-            ed_signature: self
-                .parse_string(fields, "ed_signature")
-                .unwrap_or_default(),
-            published_at: self
-                .parse_string(fields, "published_at")
-                .unwrap_or_default(),
-            changelog,
-            is_live: self.parse_bool(fields, "is_live").unwrap_or(false),
-            is_critical: self.parse_bool(fields, "is_critical").unwrap_or(false),
-            channel,
-        })
-    }
-
     /// Create a new desktop release in Firestore
-    pub async fn create_desktop_release(
+    pub(crate) async fn create_desktop_release(
         &self,
         release: &crate::routes::updates::ReleaseInfo,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -165,7 +152,7 @@ impl FirestoreService {
 
     /// Promote a desktop release to the next channel: staging → beta → stable
     /// Returns (old_channel, new_channel)
-    pub async fn promote_desktop_release(
+    pub(crate) async fn promote_desktop_release(
         &self,
         doc_id: &str,
     ) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
@@ -185,7 +172,7 @@ impl FirestoreService {
 
         let doc: Value = response.json().await?;
         let fields = doc.get("fields").ok_or("Missing fields in document")?;
-        let current_channel = self.parse_string(fields, "channel").unwrap_or_default();
+        let current_channel = values::string_field(fields, "channel").unwrap_or_default();
 
         // Determine next channel
         let (old_channel, new_channel) = match current_channel.as_str() {
@@ -236,5 +223,45 @@ impl FirestoreService {
         );
 
         Ok((old_channel, new_channel))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_release_manifest_without_service_or_credentials() {
+        let release = parse_release(&json!({
+            "fields": {
+                "version": {"stringValue": "1.2.3"},
+                "build_number": {"integerValue": "42"},
+                "download_url": {"stringValue": "https://example.com/app.zip"},
+                "manual_download_url": {"stringValue": "https://example.com"},
+                "ed_signature": {"stringValue": "signature"},
+                "published_at": {"stringValue": "2026-07-12T00:00:00Z"},
+                "changelog": {"arrayValue": {"values": [
+                    {"stringValue": "First"},
+                    {"integerValue": "ignored"},
+                    {"stringValue": "Second"}
+                ]}},
+                "is_live": {"booleanValue": true},
+                "is_critical": {"booleanValue": false},
+                "channel": {"stringValue": "beta"}
+            }
+        }))
+        .expect("valid release document");
+
+        assert_eq!(release.version, "1.2.3");
+        assert_eq!(release.build_number, 42);
+        assert_eq!(release.changelog, ["First", "Second"]);
+        assert!(release.is_live);
+        assert!(!release.is_critical);
+        assert_eq!(release.channel.as_deref(), Some("beta"));
+    }
+
+    #[test]
+    fn rejects_release_document_without_fields() {
+        assert!(parse_release(&json!({})).is_err());
     }
 }

@@ -46,13 +46,14 @@ def test_contract_manifest_rejects_missing_domain():
 
 
 def test_capture_fixture_freezes_cross_modality_semantics():
-    fixture = load_fixture('capture_v1.json')
+    fixture = load_fixture('capture_v2.json')
 
     assert fixture['schema_version'] == 1
+    assert fixture['policy_version'] == 'capture.v2'
     for case in fixture['cases']:
         assert set(case['inputs']) == {'transcript', 'screen'}
-        assert callable(TEST_ADAPTERS['transcript_capture_v1'])
-        assert callable(TEST_ADAPTERS['screen_capture_v1'])
+        assert callable(TEST_ADAPTERS['transcript_capture_v2'])
+        assert callable(TEST_ADAPTERS['screen_capture_v2'])
         transcript = run_capture_case(case, 'transcript')
         screen = run_capture_case(case, 'screen')
         assert transcript == screen
@@ -62,30 +63,39 @@ def test_capture_fixture_freezes_cross_modality_semantics():
     by_id = {case['id']: case['expected'] for case in fixture['cases']}
     assert by_id['clear_commitment'] == {'outcome': 'auto_accept_silent', 'interruption': 'none'}
     assert by_id['unaccepted_request']['outcome'] == 'pending_candidate'
+    assert by_id['owned_direct_request_at_confidence_floors']['outcome'] == 'pending_candidate'
+    assert by_id['owned_direct_request_below_ownership_floor']['outcome'] == 'ignore'
     assert by_id['public_channel_not_owned']['outcome'] == 'ignore'
 
 
 def test_association_and_ranking_fixtures_include_negative_and_empty_cases():
     association = load_fixture('association_v1.json')
-    ranking = load_fixture('ranking_v1.json')
+    ranking = load_fixture('ranking_v2.json')
 
     association_by_id = {case['id']: run_recorded_association_case(case) for case in association['cases']}
     assert association_by_id['entity_only']['workstream_id'] is None
     assert association_by_id['immaterial_repeat']['material'] is False
+    assert ranking['schema_version'] == 2
+    assert ranking['policy_version'] == 'ranking.v2'
 
     for case in ranking['cases']:
         selected = run_recorded_ranking_case(case)
         assert set(selected).isdisjoint(case['must_not_select'])
-    assert next(case for case in ranking['cases'] if case['id'] == 'empty_is_valid')['recorded_judgment'] == []
-    missing_evidence = next(case for case in ranking['cases'] if case['id'] == 'missing_evidence_excluded')
-    assert run_recorded_ranking_case(missing_evidence) == ['grounded_with_evidence']
+    assert (
+        next(case for case in ranking['cases'] if case['id'] == 'recent_only_correctly_returns_empty')[
+            'recorded_judgment'
+        ]
+        == []
+    )
+    missing_evidence = next(case for case in ranking['cases'] if case['id'] == 'missing_evidence_fails_closed')
+    assert run_recorded_ranking_case(missing_evidence) == ['grounded_due_task']
 
 
 def test_fixture_runner_is_byte_stable():
     kwargs = {
-        'capture': load_fixture('capture_v1.json'),
+        'capture': load_fixture('capture_v2.json'),
         'association': load_fixture('association_v1.json'),
-        'ranking': load_fixture('ranking_v1.json'),
+        'ranking': load_fixture('ranking_v2.json'),
     }
     first = json.dumps(run_fixture_suite(**kwargs), sort_keys=True, separators=(',', ':'))
     second = json.dumps(run_fixture_suite(**kwargs), sort_keys=True, separators=(',', ':'))
@@ -132,6 +142,35 @@ def test_source_manifest_negative_check_rejects_scanner_discovered_unregistered_
         validate_source_manifest(manifest, discovered_anchors=discovered)
 
 
+@pytest.mark.parametrize(
+    'dependency_path',
+    [
+        'backend/venv/lib/python3.11/site-packages/dependency_fixture.py',
+        'backend/.venv/lib/python3.11/site-packages/dependency_fixture.py',
+        'backend/vendor/site-packages/dependency_fixture.py',
+    ],
+)
+def test_writer_scanner_ignores_non_utf8_dependency_trees(tmp_path, dependency_path):
+    dependency = tmp_path / dependency_path
+    dependency.parent.mkdir(parents=True, exist_ok=True)
+    # Valid Big5 source fixture, deliberately invalid UTF-8. Dependency code
+    # must be excluded before the production writer parser reads it.
+    dependency.write_bytes(b'# -*- coding: big5 -*-\n# \xa4\x40\n')
+
+    project_writer = tmp_path / 'backend' / 'services' / 'new_writer.py'
+    project_writer.parent.mkdir(parents=True, exist_ok=True)
+    project_writer.write_text(
+        'from database import action_items as action_items_db\n'
+        'def write(uid, data):\n'
+        '    return action_items_db.create_action_item(uid, data)\n',
+        encoding='utf-8',
+    )
+
+    assert discover_backend_writer_anchors(repository_root=tmp_path) == {
+        ('backend/services/new_writer.py', 'action_items_db.create_action_item')
+    }
+
+
 def test_source_manifest_rejects_stale_writer_anchor(discovered_writer_anchors):
     manifest = deepcopy(load_source_manifest())
     manifest['sources'][0]['writer_anchors'].append(
@@ -152,7 +191,7 @@ def test_source_manifest_rejects_missing_owner_path(tmp_path):
 
 def test_fixture_loader_rejects_path_traversal():
     with pytest.raises(ValueError, match='simple filename'):
-        load_fixture('../capture_v1.json')
+        load_fixture('../capture_v2.json')
 
 
 def test_contract_rejects_candidate_payload_ambiguity_and_invalid_local_evidence():

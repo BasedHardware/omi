@@ -22,6 +22,9 @@ enum BridgeUnavailableReason: Equatable, Sendable {
   /// Bridge process started but exited / OOM'd. Maps from
   /// `BridgeError.processExited` and `.outOfMemory`.
   case crashed
+  /// A typed launch or handshake failure. The retry flow retains this cause
+  /// instead of collapsing all startup failures into generic unavailability.
+  case failedToStart(AgentRuntimeBridgeLifecycle.StartFailure)
   /// Catch-all for "we don't know why it's not running"; maps from
   /// `BridgeError.notRunning`, `.restarting`, and any other un-classified
   /// start failure.
@@ -90,7 +93,7 @@ extension ChatErrorState {
       switch reason {
       case .nodeMissing, .runtimeMissing:
         return .installRuntime
-      case .crashed, .unknown:
+      case .crashed, .failedToStart, .unknown:
         return .retry
       }
     case .interrupted:
@@ -107,7 +110,14 @@ extension ChatErrorState {
       return "Please sign in to continue."
     case .timeout:
       return "AI took too long to respond."
-    case .bridgeUnavailable:
+    case .bridgeUnavailable(let reason):
+      if case .failedToStart(let failure) = reason {
+        switch failure {
+        case .handshakeTimedOut: return "AI took too long to start. Try again."
+        case .incompatibleHandshake: return "AI needs to restart before it can respond. Try again."
+        case .exitedDuringStartup, .launchFailed: return "AI couldn't start. Try again."
+        }
+      }
       return "AI isn't available right now."
     case .interrupted:
       return "Response stopped."
@@ -131,6 +141,7 @@ extension ChatErrorState {
   ///   - `.bridgeScriptNotFound` → `.bridgeUnavailable(.runtimeMissing)`
   ///   - `.processExited`        → `.bridgeUnavailable(.crashed)`
   ///   - `.outOfMemory`          → `.bridgeUnavailable(.crashed)`
+  ///   - `.failedToStart`        → `.bridgeUnavailable(.unknown)` with retry
   ///   - `.notRunning`           → `.bridgeUnavailable(.unknown)`
   ///   - `.restarting`           → `.bridgeUnavailable(.unknown)`
   ///   - `.authMissing`          → `.authRequired`
@@ -156,6 +167,8 @@ extension ChatErrorState {
       return .bridgeUnavailable(reason: .runtimeMissing)
     case .processExited, .outOfMemory:
       return .bridgeUnavailable(reason: .crashed)
+    case .failedToStart(let failure):
+      return .bridgeUnavailable(reason: .failedToStart(failure))
     case .notRunning, .restarting:
       return .bridgeUnavailable(reason: .unknown)
     case .authMissing:

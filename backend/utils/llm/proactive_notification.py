@@ -5,6 +5,7 @@ from typing import Mapping, Optional, cast
 from pydantic import BaseModel, Field
 
 from utils.llm.clients import get_llm
+from utils.llm.temporal import current_date_in_tz
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,8 @@ class RelevanceResult(BaseModel):
 
 
 GATE_PROMPT = """You decide whether {user_name}'s current conversation contains something worth interrupting them about.
+
+Today is {current_date}. Treat this as the present when judging whether anything is upcoming, time-sensitive, or in the future. Dates in {current_date}'s year or later are normal and current; never decide a correctly stated date is wrong or in the future based on your own assumptions about the year.
 
 IMPORTANT: Most conversations do NOT warrant a notification. Your default answer is is_relevant=false.
 
@@ -101,6 +104,8 @@ class NotificationDraft(BaseModel):
 
 GENERATE_PROMPT = """{user_name}'s conversation was flagged as containing something worth a notification.
 
+Today is {current_date}. Treat this as the present; a correctly stated date in {current_date}'s year or later is normal, not an error or something to warn the user about.
+
 The reason it was flagged: {gate_reasoning}
 
 Generate ONE specific, actionable notification.
@@ -145,6 +150,8 @@ class ValidationResult(BaseModel):
 
 
 CRITIC_PROMPT = """You are the last gate before this notification hits {user_name}'s phone. Your job is to BLOCK bad notifications. Most notifications should be REJECTED.
+
+Today is {current_date}. REJECT any notification that claims a correctly stated date is in the future, or that the user's clock, calendar, or system date is wrong, when that is based only on an assumption about what year it is. Dates in {current_date}'s year or later are normal.
 
 NOTIFICATION: "{notification_text}"
 REASONING: "{draft_reasoning}"
@@ -340,6 +347,7 @@ def evaluate_relevance(
     goals: list[Record],
     current_messages: list[Record],
     recent_notifications: list[Record],
+    current_date: Optional[str] = None,
 ) -> RelevanceResult:
     """Cheap first pass: is this conversation worth generating a notification for?"""
     goals_text = _format_goals(goals)
@@ -352,6 +360,7 @@ def evaluate_relevance(
         goals_text=goals_text,
         current_conversation=current_conversation,
         recent_notifications=notifications_text,
+        current_date=current_date or current_date_in_tz(None),
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(RelevanceResult)
@@ -374,6 +383,7 @@ def generate_notification(
     frequency: int,
     gate_reasoning: str,
     output_language: str = 'en',
+    current_date: Optional[str] = None,
 ) -> NotificationDraft:
     """Generate the actual notification text, only called when gate passes."""
     goals_text = _format_goals(goals)
@@ -393,6 +403,7 @@ def generate_notification(
         frequency_guidance=guidance,
         gate_reasoning=gate_reasoning,
         language_instruction=_language_instruction(output_language),
+        current_date=current_date or current_date_in_tz(None),
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(NotificationDraft)
@@ -412,6 +423,7 @@ def validate_notification(
     current_messages: list[Record],
     goals: list[Record],
     output_language: str = 'en',
+    current_date: Optional[str] = None,
 ) -> ValidationResult:
     """Final human-perspective check: would you actually want this on your phone?"""
     current_conversation = _format_current_conversation(current_messages, user_name)
@@ -424,6 +436,7 @@ def validate_notification(
         current_conversation=current_conversation,
         goals_text=goals_text,
         language_instruction=_language_instruction(output_language, for_critic=True),
+        current_date=current_date or current_date_in_tz(None),
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(ValidationResult)
@@ -436,6 +449,8 @@ def validate_notification(
 # ---------------------------------------------------------------------------
 
 PROACTIVE_PROMPT_TEMPLATE = """You analyze {user_name}'s live conversations to find ONE specific, high-value insight they would NOT figure out on their own.
+
+Today is {current_date}. Treat this as the present when reasoning about deadlines, "tomorrow", or whether something is upcoming. Never flag a correctly stated date as wrong or in the future based on an assumption about the year.
 
 CORE QUESTION: Is {user_name} about to make a mistake, missing a non-obvious connection to their goals/history, or forgetting a commitment?
 
@@ -510,6 +525,7 @@ def evaluate_proactive_notification(
     current_messages: list[Record],
     recent_notifications: list[Record],
     frequency: int,
+    current_date: Optional[str] = None,
 ) -> ProactiveNotificationResult:
     """Legacy single-call evaluation. Kept for eval tests."""
     goals_text = _format_goals(goals)
@@ -527,6 +543,7 @@ def evaluate_proactive_notification(
         current_conversation=current_conversation,
         recent_notifications=notifications_text,
         frequency_guidance=guidance,
+        current_date=current_date or current_date_in_tz(None),
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(ProactiveNotificationResult)

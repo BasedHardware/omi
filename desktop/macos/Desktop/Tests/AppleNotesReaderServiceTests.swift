@@ -11,10 +11,32 @@ final class AppleNotesReaderServiceTests: XCTestCase {
       userInfo: [NSLocalizedDescriptionKey: "SQLite error 23: authorization denied"]
     )
 
-    guard case .authorizationDenied(let path) = AppleNotesReaderService.classifyReadError(error, path: "/notes/NoteStore.sqlite") else {
+    guard
+      case .authorizationDenied(let path) = AppleNotesReaderService.classifyReadError(
+        error, path: "/notes/NoteStore.sqlite")
+    else {
       return XCTFail("Expected authorizationDenied classification")
     }
     XCTAssertEqual(path, "/notes/NoteStore.sqlite")
+  }
+
+  func testIsLikelyAttachmentDoesNotDropOrdinaryNotesContainingExecSubstring() {
+    // Regression: a raw `contains("exec")` substring match wrongly classified ordinary
+    // notes as attachment/metadata artifacts and silently dropped them from the import.
+    for title in ["Q3 execution plan", "Executive summary", "executed the migration", "executive decisions"] {
+      XCTAssertFalse(
+        AppleNotesReaderService.isLikelyAttachment(title: title, summary: "notes and details"),
+        "note titled \"\(title)\" must not be filtered as an attachment"
+      )
+    }
+  }
+
+  func testIsLikelyAttachmentStillFiltersArtifactTokens() {
+    // The metadata/artifact tokens the filter targets must still be caught.
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "kMDItemFSName", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "SOLITE", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "exec", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "", summary: ""))
   }
 
   func testResolveSelectedFolderAcceptsAndInfersNotesContainer() throws {
@@ -47,10 +69,10 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     try await dbQueue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO ZICCLOUDSYNCINGOBJECT
-            (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
-          VALUES (?, ?, ?, ?, ?, ?)
-        """,
+            INSERT INTO ZICCLOUDSYNCINGOBJECT
+              (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
+            VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [1, "Legacy folder import", "Parent folder still works", 42.0, 1, 0]
       )
     }
@@ -89,10 +111,10 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     try await dbQueue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO ZICCLOUDSYNCINGOBJECT
-            (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
-          VALUES (?, ?, ?, ?, ?, ?)
-        """,
+            INSERT INTO ZICCLOUDSYNCINGOBJECT
+              (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
+            VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [1, "Launch checklist", "Ship Notes connector", 42.0, 1, 0]
       )
     }
@@ -219,15 +241,15 @@ final class AppleNotesReaderServiceTests: XCTestCase {
       try dbQueue.write { db in
         try db.execute(
           sql: """
-            CREATE TABLE ZICCLOUDSYNCINGOBJECT (
-              Z_PK INTEGER PRIMARY KEY,
-              ZTITLE TEXT,
-              ZSUMMARY TEXT,
-              ZMODIFICATIONDATE REAL,
-              ZNOTE INTEGER,
-              ZMARKEDFORDELETION INTEGER
-            )
-          """
+              CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+                Z_PK INTEGER PRIMARY KEY,
+                ZTITLE TEXT,
+                ZSUMMARY TEXT,
+                ZMODIFICATIONDATE REAL,
+                ZNOTE INTEGER,
+                ZMARKEDFORDELETION INTEGER
+              )
+            """
         )
       }
     }

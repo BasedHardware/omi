@@ -8974,7 +8974,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get billingYearly => 'Årlig';
 
   @override
-  String get savePercent => 'Spar ~17%';
+  String savePercent(int percent) {
+    return 'Spar ~$percent%';
+  }
 
   @override
   String get popular => 'Populært';
@@ -9328,7 +9330,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Fungerer indtil videre med Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.';
+      'Fungerer med telefonens mikrofon samt Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9558,4 +9560,33 @@ class AppLocalizationsDa extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Fejl ved forbindelse til Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Enhedens lager';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% fyldt';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used af $total brugt';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ledig';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Enheden er næsten fuld — synkronisér for at frigøre plads.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Ingen forbindelse – der optages lokalt. Det bliver transskriberet, når du er online igen.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dine data er som standard sikret med stærk kryptering, og du bestemmer, hvordan de opbevares og bruges.';
 }

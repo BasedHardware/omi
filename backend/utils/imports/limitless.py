@@ -22,6 +22,7 @@ from models.structured import Structured
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
+from utils.conversations import lifecycle as lifecycle_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -327,7 +328,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     )
 
                     # Save directly to database (skip all AI processing)
-                    conversations_db.upsert_conversation(uid, conversation.model_dump())
+                    lifecycle_service.persist_imported_conversation(uid, conversation.model_dump())
                     conversations_created += 1
 
                 except Exception as e:

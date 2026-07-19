@@ -8,6 +8,13 @@ from datetime import datetime, timedelta, timezone
 import redis
 import logging
 
+from database.api_key_metadata import (
+    DEV_API_KEY_AUTH_CONTEXT_VERSION,
+    MCP_API_KEY_AUTH_CONTEXT_VERSION,
+    ApiKeyCacheReadMode,
+    ApiKeyCacheReadResult,
+)
+
 logger = logging.getLogger(__name__)
 
 # redis.Redis is untyped under strict Pyright; treat the client as Any at this
@@ -314,7 +321,10 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
     counts = r.mget(keys)
     if counts is None:
         return {}
-    return {app_id: int(count) if count else 0 for app_id, count in zip(app_ids, counts)}
+    # Clamp to >= 0: the install counter is a plain INCR/DECR with no floor, so drift (a disable with no
+    # matching enable, or a DECR on an evicted key) can leave a negative value. A negative install count
+    # would later hit math.log(1 + installs) in compute_app_score and 500 the whole marketplace sort.
+    return {app_id: max(0, int(count)) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
@@ -551,9 +561,9 @@ def cache_mcp_api_key_auth_context(
     key_id: Optional[str] = None,
     app_id: Optional[str] = None,
     memory_grant_seeded: bool = True,
-    auth_context_version: int = 2,
+    auth_context_version: int = MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ttl: int = 3600,
-) -> None:
+) -> bool:
     """Caches the user_id, key identity, and scopes for a given MCP API key."""
     cache_data = {
         "user_id": user_id,
@@ -565,6 +575,7 @@ def cache_mcp_api_key_auth_context(
     }
     r.set(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data), ex=ttl)
     r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
+    return True
 
 
 @try_catch_decorator
@@ -574,27 +585,45 @@ def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
     return auth_context.get("user_id") if auth_context else None
 
 
-@try_catch_decorator
-def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, Any]]:
-    """Retrieves MCP API key auth context, accepting older uid-only cache values."""
-    cached = r.get(f'mcp_api_key_auth:{hashed_key}')
-    if not cached:
-        cached = r.get(f'mcp_api_key:{hashed_key}')
-    if not cached:
-        return None
-    decoded = cached.decode() if isinstance(cached, bytes) else cached
+def read_cached_mcp_api_key_auth_context(hashed_key: str) -> ApiKeyCacheReadResult:
+    """Read MCP auth context while distinguishing cache absence from failure."""
     try:
-        cache_data: object = json.loads(decoded)
-    except (TypeError, ValueError):
-        return {"user_id": decoded, "scopes": None, "key_id": None, "app_id": None}
-    return cast(Dict[str, Any], cache_data) if isinstance(cache_data, dict) else None
+        cached = r.get(f'mcp_api_key_auth:{hashed_key}')
+        if cached:
+            decoded = cached.decode() if isinstance(cached, bytes) else cached
+            cache_data: object = json.loads(decoded)
+            if not isinstance(cache_data, dict):
+                return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+            return ApiKeyCacheReadResult(
+                mode=ApiKeyCacheReadMode.HIT,
+                data=cast(Dict[str, Any], cache_data),
+            )
+
+        legacy_cached = r.get(f'mcp_api_key:{hashed_key}')
+        if not legacy_cached:
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
+        legacy_user_id = legacy_cached.decode() if isinstance(legacy_cached, bytes) else legacy_cached
+        if not isinstance(legacy_user_id, str):
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+        return ApiKeyCacheReadResult(
+            mode=ApiKeyCacheReadMode.HIT,
+            data={"user_id": legacy_user_id, "scopes": None, "key_id": None, "app_id": None},
+        )
+    except Exception as exc:
+        logger.error("Error reading MCP API key auth cache: %s", exc)
+        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
 
 
-@try_catch_decorator
-def delete_cached_mcp_api_key(hashed_key: str) -> None:
-    """Deletes a cached MCP API key."""
-    r.delete(f'mcp_api_key:{hashed_key}')
-    r.delete(f'mcp_api_key_auth:{hashed_key}')
+def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, Any]]:
+    """Compatibility adapter returning data only for a successful cache hit."""
+    result = read_cached_mcp_api_key_auth_context(hashed_key)
+    return result.data if result.mode == ApiKeyCacheReadMode.HIT else None
+
+
+def delete_cached_mcp_api_key_strict(hashed_key: str) -> bool:
+    """Atomically delete both MCP auth cache keys, raising on Redis failure."""
+    r.delete(f'mcp_api_key:{hashed_key}', f'mcp_api_key_auth:{hashed_key}')
+    return True
 
 
 # ******************************************************
@@ -602,6 +631,7 @@ def delete_cached_mcp_api_key(hashed_key: str) -> None:
 # ******************************************************
 
 
+@try_catch_decorator
 def cache_dev_api_key(
     hashed_key: str,
     user_id: str,
@@ -609,26 +639,46 @@ def cache_dev_api_key(
     ttl: int = 3600,
     key_id: Optional[str] = None,
     app_id: Optional[str] = None,
-) -> None:
+    auth_context_version: int = DEV_API_KEY_AUTH_CONTEXT_VERSION,
+) -> bool:
     """Caches Developer API key auth context for uid-only and memory app/key authorization."""
-    cache_data = {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
+    cache_data = {
+        "user_id": user_id,
+        "scopes": scopes,
+        "key_id": key_id,
+        "app_id": app_id,
+        "auth_context_version": auth_context_version,
+    }
     r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
+    return True
 
 
-@try_catch_decorator
+def read_cached_dev_api_key_data(hashed_key: str) -> ApiKeyCacheReadResult:
+    """Read Developer auth context while distinguishing absence from failure."""
+    try:
+        cached = r.get(f'dev_api_key:{hashed_key}')
+        if not cached:
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
+        decoded = cached.decode() if isinstance(cached, bytes) else cached
+        loaded: object = json.loads(decoded)
+        if not isinstance(loaded, dict):
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.HIT, data=cast(Dict[str, Any], loaded))
+    except Exception as exc:
+        logger.error("Error reading Developer API key auth cache: %s", exc)
+        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+
+
 def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
-    """Retrieves the user_id and scopes for a given hashed Developer API key from cache."""
-    cached = r.get(f'dev_api_key:{hashed_key}')
-    if not cached:
-        return None
-    loaded: object = json.loads(cached.decode())
-    return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else None
+    """Compatibility adapter returning data only for a successful cache hit."""
+    result = read_cached_dev_api_key_data(hashed_key)
+    return result.data if result.mode == ApiKeyCacheReadMode.HIT else None
 
 
-@try_catch_decorator
-def delete_cached_dev_api_key(hashed_key: str) -> None:
-    """Deletes a cached Developer API key."""
+def delete_cached_dev_api_key_strict(hashed_key: str) -> bool:
+    """Delete a Developer auth cache key, raising on Redis failure."""
     r.delete(f'dev_api_key:{hashed_key}')
+    return True
 
 
 # ******************************************************

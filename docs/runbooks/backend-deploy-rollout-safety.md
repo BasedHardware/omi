@@ -56,6 +56,21 @@ python3 backend/scripts/deploy_status_report.py \
 
 The command fails if the expected revision is not both latest ready and serving 100% traffic.
 
+## Development post-deploy acceptance
+
+After a successful Auto Deploy Backend to Development run, Verify Development
+Backend Deployment runs read-only acceptance against the exact deployment run.
+It derives the expected Cloud Run revision names and image tag from the source
+commit, Actions run ID, and attempt; it then verifies the four Cloud Run
+services and the backend-listen GKE Deployment, Service, and ready
+EndpointSlice. The evidence artifact contains only revision, image, timeout,
+traffic, and rollout metadata—never environment values or secret contents.
+
+To rerun it after a transient GitHub or GCP failure, dispatch the workflow with
+the source deployment's full commit SHA, run ID, and attempt number. Do not use
+it as a broad health probe: a newer deployment serving in place of that exact
+revision is intentionally a failure.
+
 ## Secret-first GKE rollout gate
 
 Before restarting any GKE workload that consumes `backend-secrets`, workflows should apply/sync the ExternalSecret, wait for `Ready`, then verify key presence without printing values:

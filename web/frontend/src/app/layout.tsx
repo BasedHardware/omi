@@ -6,6 +6,7 @@ import ConditionalFooter from '../components/shared/conditional-footer';
 import envConfig from '../constants/envConfig';
 import { GleapInit } from '@/src/components/shared/gleap';
 import { GoogleAnalytics } from '@/src/components/shared/google-analytics';
+import { PublicBuildCanary } from '../components/public-build-canary';
 
 const inter = Mulish({
   subsets: ['latin'],
@@ -33,6 +34,7 @@ export default function RootLayout({
         <script src="https://elfsightcdn.com/platform.js" async></script>
       </head>
       <body className={inter.className}>
+        <PublicBuildCanary />
         <AppHeader />
         {/* Elfsight Announcement Bar */}
         <div

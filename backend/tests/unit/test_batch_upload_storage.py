@@ -105,6 +105,11 @@ def merge():
     surface_routing_stub = ModuleType("utils.memory.surface_routing")
     setattr(surface_routing_stub, "pin_memory_system", MagicMock(return_value=_MemorySystem.LEGACY))
 
+    # These tests exercise the merge module's audio-copy helper only. Stub the
+    # lifecycle boundary so the fixture remains isolated from its unrelated
+    # durable-finalization dependencies.
+    lifecycle_stub = ModuleType("utils.conversations.lifecycle")
+
     fakes: dict[str, ModuleType] = {
         "database": database_pkg,
         "database._client": client_stub,
@@ -117,6 +122,7 @@ def merge():
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,
         "utils.memory.surface_routing": surface_routing_stub,
+        "utils.conversations.lifecycle": lifecycle_stub,
     }
     fakes.update(model_stubs)
 

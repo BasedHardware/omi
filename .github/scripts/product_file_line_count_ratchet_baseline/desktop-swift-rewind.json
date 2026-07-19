@@ -1,0 +1,13 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1610,
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3501,
+    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1856
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "Decodes GRDB Int64 min/max aggregate columns via a fixed cast so score-range queries return values instead of always-nil defaults.",
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
+    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": "Search-result rows load a downsampled ImageIO thumbnail instead of the full-resolution screenshot, so a long results list no longer retains full-size images behind a 120x80 view."
+  },
+  "threshold": 1500
+}

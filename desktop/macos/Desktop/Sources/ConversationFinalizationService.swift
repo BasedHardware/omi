@@ -47,7 +47,8 @@ actor ConversationFinalizationService {
         )
       }
       let exhaustedLocalFallbackIds = Set(exhaustedLocalFallbackSessions.compactMap(\.id))
-      for session in sessionsById where session.isReadyForRetry() || session.status != .failed || session.retryCount >= maxRetries {
+      for session in sessionsById
+      where session.isReadyForRetry() || session.status != .failed || session.retryCount >= maxRetries {
         if let sessionId = session.id, exhaustedLocalFallbackIds.contains(sessionId) {
           await finalizeExhaustedCloudSessionFromLocalSegments(session)
           continue
@@ -144,10 +145,11 @@ actor ConversationFinalizationService {
         end: seg.endTime
       )
       if let last = merged.last,
-         last.speaker_id == upload.speaker_id,
-         last.speaker == upload.speaker,
-         last.is_user == upload.is_user,
-         last.person_id == upload.person_id {
+        last.speaker_id == upload.speaker_id,
+        last.speaker == upload.speaker,
+        last.is_user == upload.is_user,
+        last.person_id == upload.person_id
+      {
         merged[merged.count - 1] = APIClient.UploadSegment(
           text: last.text + " " + upload.text,
           speaker: last.speaker,
@@ -257,8 +259,9 @@ actor ConversationFinalizationService {
 
     if let backendId = session.backendId, !backendId.isEmpty {
       if let clientConversationId = session.clientConversationId,
-         !clientConversationId.isEmpty,
-         backendId != clientConversationId {
+        !clientConversationId.isEmpty,
+        backendId != clientConversationId
+      {
         log(
           "ConversationFinalization: Rejecting mismatched backend binding for session \(sessionId); resolving exact client recording id instead"
         )
@@ -270,7 +273,8 @@ actor ConversationFinalizationService {
         ) {
           return
         }
-        throw TranscriptionStorageError.invalidState("Bound backend conversation conflicts with client recording identity")
+        throw TranscriptionStorageError.invalidState(
+          "Bound backend conversation conflicts with client recording identity")
       }
       let conversation: ServerConversation
       if allowForceProcess {
@@ -373,10 +377,12 @@ actor ConversationFinalizationService {
       conversation = match
     }
 
-    guard DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
-      status: conversation.status,
-      source: conversation.source
-    ), conversation.id == match.id else {
+    guard
+      DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
+        status: conversation.status,
+        source: conversation.source
+      ), conversation.id == match.id
+    else {
       return false
     }
 
@@ -458,12 +464,14 @@ actor ConversationFinalizationService {
       return false
     }
 
-    guard DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
-      id: conversation.id,
-      boundBackendId: conversationId,
-      status: conversation.status,
-      source: conversation.source
-    ) else {
+    guard
+      DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+        id: conversation.id,
+        boundBackendId: conversationId,
+        status: conversation.status,
+        source: conversation.source
+      )
+    else {
       return false
     }
 
@@ -490,8 +498,9 @@ actor ConversationFinalizationService {
         // recorded audio/transcript we still hold locally (#9083). Try to finalize from saved local
         // segments first so the recording is not lost.
         if let session,
-           let recovered = try? await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId),
-           recovered {
+          let recovered = try? await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId),
+          recovered
+        {
           log("ConversationFinalization: Recovered exhausted session \(sessionId) from local data after finalize error")
           return
         }

@@ -12,7 +12,7 @@ enum AuthStorageCanary {
     var read: (_ service: String, _ account: String) -> String?
     var delete: (_ service: String, _ account: String) -> Void
 
-    static let live = Hooks(
+    nonisolated(unsafe) static let live = Hooks(
       set: { value, service, account in
         DesktopKeychainStore.setString(value, service: service, account: account)
       },

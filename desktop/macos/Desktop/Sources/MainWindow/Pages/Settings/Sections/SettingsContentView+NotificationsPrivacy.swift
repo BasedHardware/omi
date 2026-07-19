@@ -1,28 +1,22 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var notificationsSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // Notifications
       settingsCard(settingId: "notifications.settings") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "bell.badge.fill")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
-
-            Text("Notifications")
-              .scaledFont(size: 15, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+            settingsCardHeader(icon: "bell.badge.fill", title: "Notifications")
 
             Spacer()
 
             Toggle("", isOn: $notificationsEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: notificationsEnabled) { _, newValue in
                 updateNotificationSettings(enabled: newValue)
@@ -30,7 +24,7 @@ extension SettingsContentView {
           }
 
           Text("Control how often you receive notifications")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           if notificationsEnabled {
@@ -44,7 +38,7 @@ extension SettingsContentView {
               settingId: "notifications.focus"
             ) {
               Toggle("", isOn: $focusNotificationsEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: focusNotificationsEnabled) { _, newValue in
                   FocusAssistantSettings.shared.notificationsEnabled = newValue
@@ -60,7 +54,7 @@ extension SettingsContentView {
               settingId: "notifications.task"
             ) {
               Toggle("", isOn: $taskNotificationsEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: taskNotificationsEnabled) { _, newValue in
                   TaskAssistantSettings.shared.notificationsEnabled = newValue
@@ -76,7 +70,7 @@ extension SettingsContentView {
               settingId: "notifications.insight"
             ) {
               Toggle("", isOn: $insightNotificationsEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: insightNotificationsEnabled) { _, newValue in
                   InsightAssistantSettings.shared.notificationsEnabled = newValue
@@ -92,7 +86,7 @@ extension SettingsContentView {
               settingId: "notifications.memory"
             ) {
               Toggle("", isOn: $memoryNotificationsEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: memoryNotificationsEnabled) { _, newValue in
                   MemoryAssistantSettings.shared.notificationsEnabled = newValue
@@ -107,20 +101,14 @@ extension SettingsContentView {
 
       // Daily Summary
       settingsCard(settingId: "notifications.dailysummary") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "text.badge.checkmark")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
-
-            Text("Daily Summary")
-              .scaledFont(size: 15, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+            settingsCardHeader(icon: "text.badge.checkmark", title: "Daily Summary")
 
             Spacer()
 
             Toggle("", isOn: $dailySummaryEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: dailySummaryEnabled) { _, newValue in
                 updateDailySummarySettings(enabled: newValue)
@@ -128,7 +116,7 @@ extension SettingsContentView {
           }
 
           Text("Receive a daily summary of your conversations and activities")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           if dailySummaryEnabled {
@@ -139,15 +127,19 @@ extension SettingsContentView {
               title: "Summary Time", subtitle: "When to send your daily summary",
               settingId: "notifications.summarytime"
             ) {
-              Picker("", selection: $dailySummaryHour) {
-                ForEach(hourOptions, id: \.self) { hour in
-                  Text(formatHour(hour)).tag(hour)
-                }
-              }
-              .pickerStyle(.menu)
-              .frame(width: 100)
-              .onChange(of: dailySummaryHour) { _, newValue in
-                updateDailySummarySettings(hour: newValue)
+              DatePicker(
+                "",
+                selection: $dailySummaryTime,
+                displayedComponents: .hourAndMinute
+              )
+              .datePickerStyle(.stepperField)
+              .labelsHidden()
+              .fixedSize()
+              .onChange(of: dailySummaryTime) { _, selectedTime in
+                let hour = SettingsControlMetrics.dailySummaryHour(from: selectedTime)
+                guard hour != dailySummaryHour else { return }
+                dailySummaryHour = hour
+                updateDailySummarySettings(hour: hour)
               }
             }
           }
@@ -160,13 +152,11 @@ extension SettingsContentView {
   // MARK: - Privacy Section
 
   var privacySection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // Data Controls
       settingsCard(settingId: "privacy.storerecordings") {
-        VStack(alignment: .leading, spacing: 16) {
-          Text("Data Controls")
-            .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          settingsCardHeader(icon: "shield", title: "Data Controls")
 
           privacyToggleRow(
             icon: "mic.fill",
@@ -192,65 +182,56 @@ extension SettingsContentView {
 
       // Encryption
       settingsCard(settingId: "privacy.encryption") {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 10) {
-            Image(systemName: "shield.lefthalf.filled")
-              .scaledFont(size: 14)
-              .foregroundColor(OmiColors.purplePrimary)
-              .frame(width: 20)
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          settingsCardHeader(icon: "shield.lefthalf.filled", title: "Encryption")
 
-            Text("Encryption")
-              .scaledFont(size: 14, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
-          }
-
-          HStack(spacing: 10) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "checkmark.circle.fill")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(.green)
               .frame(width: 20, alignment: .leading)
 
             Text("Server-side encryption")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textSecondary)
 
             Text("Active")
-              .scaledFont(size: 10, weight: .semibold)
+              .scaledFont(size: OmiType.micro, weight: .semibold)
               .foregroundColor(.green)
-              .padding(.horizontal, 5)
-              .padding(.vertical, 1)
+              .padding(.horizontal, OmiSpacing.xxs)
+              .padding(.vertical, OmiSpacing.hairline)
               .background(Color.green.opacity(0.15))
-              .cornerRadius(3)
+              .cornerRadius(OmiChrome.stripRadius)
           }
 
           Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
       }
 
       // What We Track
       settingsCard(settingId: "privacy.tracking") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           Button(action: {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
               isTrackingExpanded.toggle()
             }
           }) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "list.bullet")
-                .scaledFont(size: 14)
-                .foregroundColor(OmiColors.purplePrimary)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(OmiColors.textSecondary)
                 .frame(width: 20)
 
               Text("What We Track")
-                .scaledFont(size: 14, weight: .medium)
+                .scaledFont(size: OmiType.body, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
               Spacer()
 
               Image(systemName: "chevron.right")
-                .scaledFont(size: 11, weight: .semibold)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
                 .foregroundColor(OmiColors.textTertiary)
                 .rotationEffect(.degrees(isTrackingExpanded ? 90 : 0))
             }
@@ -258,7 +239,7 @@ extension SettingsContentView {
           .buttonStyle(.plain)
 
           if isTrackingExpanded {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
               trackingItem("Onboarding steps completed")
               trackingItem("Settings changes")
               trackingItem("App installations and usage")
@@ -277,19 +258,19 @@ extension SettingsContentView {
 
       // Privacy Guarantees
       settingsCard(settingId: "privacy.privacy") {
-        VStack(alignment: .leading, spacing: 10) {
-          HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "hand.raised.fill")
-              .scaledFont(size: 14)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(OmiColors.textSecondary)
               .frame(width: 20)
 
             Text("Privacy Guarantees")
-              .scaledFont(size: 14, weight: .medium)
+              .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
           }
 
-          VStack(alignment: .leading, spacing: 6) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             privacyBullet("Anonymous tracking with randomly generated IDs")
             privacyBullet("No personal info stored in analytics")
             privacyBullet("Data is never sold or shared with third parties")

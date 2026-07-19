@@ -14,9 +14,81 @@ workstream resolves the same kernel conversation and artifact history.
   “temporarily during migration”).
 - Build per-surface continuity rings, early-bubble reconciliation, or
   sync-by-mirroring between notch and main chat.
-- Treat backend message rows as authoritative for agent context or continuity
-  (backend chat may be a downstream projection/export only).
+- Treat backend message rows as authoritative for agent context or continuity.
+  Backend chat is the journal's downstream mirror plus an event-triggered import
+  feed for genuinely remote client turns; imported rows become canonical only
+  after the kernel accepts their stable remote/canonical identity.
 - Let Swift own session identity, model context assembly, or run truth.
+
+A bounded, decode-only upgrade reader may consume a store written by an older
+release. It must never accept new writes, must preserve the original canonical
+turn identity, checkpoint an entry only after journal acceptance, and must have
+a behavioral migration test. It may retain the source read-only for the bounded
+rollback window; this is migration input, not a second store.
+
+## Canonical journal contract
+
+- `conversation_turns` is the current turn projection; the monotonic
+  `(conversationGeneration, turnSeq)` revision stream is the replay contract.
+  `turnSeq` identifies the latest revision and therefore is not conversational
+  chronology: context renderers order current turn heads by their immutable
+  creation time. The exchange insertion boundary makes the assistant creation
+  time strictly later than its user turn even when an imported clock ties them.
+  One-at-a-time legacy imports are normalized before admission, and the first
+  journal revision sequence is the durable insertion ordinal for any remaining
+  timestamp tie.
+  Independent user/assistant delivery acknowledgements must not invert a
+  logical exchange in the next typed or PTT prompt.
+- Journal mutations and backend-outbox insertion commit atomically. Backend chat
+  writes are a downstream projection with a payload hash. Event-triggered remote
+  reconciliation reads owner-scoped pages, deduplicates by stable remote and
+  canonical turn IDs, and advances a durable ID frontier—never a timestamp.
+  The physical backend reader uses an owner/filter-validated Firestore document
+  cursor, so a newer insertion between pages cannot shift or skip older turns.
+  Backend rows preserve canonical client ID, structured blocks, and resources.
+  Outbox delivery uses the existing desktop-message wire shape with the
+  canonical turn ID in `client_message_id`, so a reverted release reads ordinary
+  backend history rather than an incompatible journal-only format.
+- Swift notifications are wakeups. `KernelTurnProjection` resumes from its
+  contiguous sequence checkpoint, detects gaps, and replays by sequence.
+- Main chat, floating chat, realtime voice, and Task Chat record and update
+  through the same journal RPCs. Journal acceptance publishes the immediate
+  pending projection; Swift cannot append a pre-journal optimistic row, persist
+  it independently, or acknowledge it.
+- A `realtime_voice` turn is a projection of its exact main-chat companion: it
+  preserves the same external chat identity and is admitted into that chat's
+  visible timeline. Matching an external ID is not sufficient for any other
+  surface kind.
+- Pre-journal backend and Task Chat history have bounded, checkpointed one-time
+  import paths. After migration, main-chat list/resolve and owner activation may
+  request a cooldown-coalesced remote reconciliation; an idle timer never polls
+  backend history. The kernel journal remains the sole mutation owner.
+- For one rollback-readable release, daemon startup repairs old-binary session
+  rows without immutable profiles and journal rows without sequence/producer/
+  hash revisions. Orphaned pending/streaming turns terminalize once rather than
+  rendering an immortal spinner or entering the backend outbox.
+- A logical surface exchange records its zero-to-two visible turns in one
+  kernel transaction. Swift projects only the committed receipt; rejection of
+  either half leaves neither a canonical row nor a visible orphan. Projection
+  replay is fenced by immutable owner identity plus a local epoch, so suspended
+  owner-A reads cannot mutate checkpoints or UI after owner B takes over.
+- Realtime background-agent admission returns one compact canonical child
+  session/run/attempt lifecycle plus a matching semantic digest for the provider.
+  A parent journal receipt without that child is failure; legacy raw
+  session/run/attempt payload aliases are never provider-visible.
+- A local Hermes or OpenClaw override is selected only when the current user
+  explicitly names that exact provider. A provider value proposed by a model,
+  stale context, or a generic delegation request is not authority and is
+  stripped before child-session admission, leaving the child on regular Omi
+  managed routing.
+- Each terminal canonical child run converges into exactly one visible pill
+  status and one `agentCompletion` block on its producing journal turn. A
+  continuation reuses its child session but has a new run identity, so its own
+  completion is a distinct block on that same producing receipt. A one-shot
+  local poll may accelerate that projection but cannot be its only delivery
+  path: owner-scoped reconciliation repairs interrupted, replaced, or restarted
+  PTT projections from the canonical run. The next PTT request can retrieve the
+  same bounded terminal result from the canonical child lifecycle.
 
 ## Surfaces
 
@@ -35,6 +107,24 @@ workstream resolves the same kernel conversation and artifact history.
   per workstream, compatibility migration, minimized continuation
 - `desktop/macos/agent/tests/chat-continuity-invariant.test.ts` — ratchet against
   a second authoritative transcript store and per-surface history APIs
+- `desktop/macos/agent/tests/conversation-journal.test.ts` — monotonic replay,
+  generation fencing, idempotent producers, and atomic backend delivery
+- `desktop/macos/agent/tests/context-snapshot.test.ts` — immutable conversation
+  chronology after user/assistant reconciliation revisions arrive out of order
+- `desktop/macos/agent/tests/runtime-stdio-contract.test.ts` — the real JSONL
+  child process accepts Swift journal messages and preserves idempotency
+- `desktop/macos/Desktop/Tests/CrossSurfaceContractSmokeTests.swift` plus
+  `desktop/macos/agent/tests/cross-surface-contract-smoke.test.ts` — compact
+  typed-chat/PTT identity, replay, permission, provider, and lifecycle contract
+- `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts` — no Swift
+  transcript writer, voice outbox, or timestamp cursor can return
+- `desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift` and the named
+  continuity gauntlet — terminal run, rendered pill, and producing
+  `agentCompletion` converge for the same run identity
+- `desktop/macos/Desktop/Tests/ChatJournalWritePathTests.swift` — terminalization
+  supersedes only streaming coalesces (durable content writes stay journalable),
+  and journal replay preserves local-only row fields (`metadata`, `rating`,
+  `notificationScreenshot`) across a wholesale projection replace
 - Continuity gauntlet (manual / harness): typed → PTT → typed follow-up → spawn →
   status (`desktop/macos/scripts/agent-continuity-gauntlet.sh` when present)
 

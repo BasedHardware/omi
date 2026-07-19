@@ -9000,7 +9000,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get billingYearly => 'Годишње';
 
   @override
-  String get savePercent => 'Уштедите ~17%';
+  String savePercent(int percent) {
+    return 'Уштедите ~$percent%';
+  }
 
   @override
   String get popular => 'Популарно';
@@ -9355,7 +9357,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Za sada radi sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.';
+      'Radi sa mikrofonom telefona i sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9587,4 +9589,33 @@ class AppLocalizationsSr extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Грешка при повезивању са Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Меморија уређаја';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% попуњено';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used од $total искоришћено';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free слободно';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Уређај је скоро пун — синхронизујте да ослободите простор.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Nema veze — snima se lokalno. Biće transkribovano kada ponovo budete na mreži.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Ваши подаци су подразумевано заштићени јаким шифровањем, а ви контролишете како се чувају и користе.';
 }

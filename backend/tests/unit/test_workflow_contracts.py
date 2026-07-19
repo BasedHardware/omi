@@ -1,5 +1,9 @@
 import importlib.util
-from pathlib import Path
+import json
+import re
+from pathlib import Path, PurePosixPath
+
+import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -13,10 +17,15 @@ def _load_script(name: str):
     return module
 
 
-def test_memory_policy_core_change_selects_inv_mem_guard():
-    """Narrow memory policy PRs always pull INV-MEM guard tests."""
+@pytest.fixture(scope="module")
+def selector_and_all_tests():
     selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+    return selector, selector.discover_all_tests()
+
+
+def test_memory_policy_core_change_selects_inv_mem_guard(selector_and_all_tests):
+    """Narrow memory policy PRs always pull INV-MEM guard tests."""
+    selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(
         ["backend/utils/memory/chat_memory_adapter.py"],
@@ -26,9 +35,8 @@ def test_memory_policy_core_change_selects_inv_mem_guard():
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
-def test_workflow_contract_sources_select_adjacent_tests():
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
 
     full_run_cases = {
         "backend/database/memory_vector_repair_outbox_worker.py": "tests/unit/test_vector_repair_outbox_worker.py",
@@ -39,10 +47,23 @@ def test_workflow_contract_sources_select_adjacent_tests():
     selected_cases = {
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
         "backend/utils/memory/canonical_memory_adapter.py": "testing/e2e/test_canonical_memory_pipeline.py",
+        "backend/routers/conversations.py": "tests/unit/test_conversation_lifecycle_contract.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
         "backend/routers/sync.py": "tests/unit/test_sync_v2.py",
         "backend/utils/sync/pipeline.py": "tests/unit/test_sync_v2.py",
         "backend/routers/transcribe.py": "tests/unit/test_listen_pipeline.py",
+        "backend/config/prerecorded_stt.py": "tests/unit/test_parakeet_prerecorded.py",
+        "backend/scripts/validate-backend-runtime-env.py": "tests/unit/test_backend_runtime_env_validator.py",
+        "backend/scripts/firebase_release_probe_token.py": "tests/unit/test_firebase_release_probe_token.py",
+        "scripts/voice-provider-probe.sh": "tests/unit/test_voice_provider_probe.py",
+        ".github/workflows/desktop_backend_auto_dev.yml": "tests/unit/test_voice_provider_probe.py",
+        "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
+        ".github/workflows/gcp_backend_pusher.yml": "tests/unit/test_verify_pusher_rollout_budget.py",
+        "backend/scripts/verify_pusher_rollout_budget.py": "tests/unit/test_verify_pusher_rollout_budget.py",
+        "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
+        ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_verify_backend_release_vector.py",
+        ".github/workflows/gcp_llm_gateway.yml": "tests/unit/test_preflight_cloud_run_deploy.py",
+        ".github/workflows/gcp_llm_gateway_auto_dev.yml": "tests/unit/test_llm_gateway_deploy_contract.py",
         "backend/jobs/short_term_lifecycle_worker.py": "tests/unit/test_ws_b_short_term_lifecycle.py",
         "backend/utils/memory_ingestion/export_runner.py": "tests/unit/test_memory_ingestion_pipeline.py",
     }
@@ -59,10 +80,21 @@ def test_workflow_contract_sources_select_adjacent_tests():
         assert selected == all_tests
 
 
-def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
+def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    selected, reason = selector.tests_for_changed_paths(
+        ["backend/charts/pusher/templates/deployment.yaml"],
+        all_tests,
+    )
+
+    assert "tests/unit/test_rendered_deployment_contract.py" in selected
+    assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
+def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector_and_all_tests):
     """Docs/AGENTS skip selection; metrics is not a FULL_RUN_GLOBS hit."""
-    selector = _load_script("select_backend_unit_tests")
-    all_tests = selector.discover_all_tests()
+    selector, all_tests = selector_and_all_tests
 
     for path in (
         "backend/AGENTS.md",
@@ -75,7 +107,7 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
 
     selected, reason = selector.tests_for_changed_paths(["backend/utils/metrics.py"], all_tests)
     # Not a FULL_RUN_GLOBS path; unmapped flat utils still use the fallback.
-    assert reason == "backend changes did not match a narrow area", reason
+    assert reason == "backend/utils/metrics.py did not match a backend test-selection contract", reason
     assert selected == all_tests
 
     selected, reason = selector.tests_for_changed_paths(["backend/routers/sync.py"], all_tests)
@@ -87,6 +119,203 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs():
         selected, reason = selector.tests_for_changed_paths([path], all_tests)
         assert selected == all_tests, path
         assert reason == f"{path} requires the full backend unit suite"
+
+
+def test_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    selected, reason = selector.tests_for_changed_paths(
+        [
+            "backend/new_unmapped_runtime.py",
+            "backend/tests/unit/test_workflow_contracts.py",
+        ],
+        all_tests,
+    )
+
+    assert selected == all_tests
+    assert reason == "backend/new_unmapped_runtime.py did not match a backend test-selection contract"
+
+
+def test_mapped_source_with_direct_test_remains_narrow(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    selected, reason = selector.tests_for_changed_paths(
+        [
+            "backend/routers/sync.py",
+            "backend/tests/unit/test_sync_v2.py",
+        ],
+        all_tests,
+    )
+
+    assert "tests/unit/test_sync_v2.py" in selected
+    assert selected != all_tests
+    assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
+def test_removed_test_forces_full_discovered_suite(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    selected, reason = selector.tests_for_changed_paths(
+        ["backend/tests/unit/test_removed_contract.py"],
+        all_tests,
+    )
+
+    assert selected == all_tests
+    assert reason == "backend/tests/unit/test_removed_contract.py was removed or is outside backend test discovery"
+
+
+def test_every_external_workflow_contract_source_triggers_backend_unit_workflow():
+    contracts = json.loads((BACKEND_DIR / "testing/workflow_contracts.json").read_text(encoding="utf-8"))
+    workflow_text = (BACKEND_DIR.parent / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+
+    external_sources = {
+        source
+        for workflow in contracts["workflows"]
+        for source in workflow.get("sources", [])
+        if not source.startswith("backend/")
+    }
+    triggers = re.findall(r"^\s*-\s+['\"]([^'\"]+)['\"]\s*$", workflow_text, flags=re.MULTILINE)
+    missing = {
+        source
+        for source in external_sources
+        if not any(
+            source == trigger or ("*" not in source and PurePosixPath(source).match(trigger)) for trigger in triggers
+        )
+    }
+
+    assert missing == set()
+
+
+def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
+    """#9440: CI is full-suite authority; push latency must remain bounded."""
+    repo = BACKEND_DIR.parent
+    workflow_text = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+    pre_push = (repo / "scripts/pre-push").read_text(encoding="utf-8")
+    runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
+
+    assert "scripts/run-unit-ci.sh --changed-files" in workflow_text
+    assert "scripts/run-unit-ci.sh --all" in workflow_text
+    assert "backend/scripts/run-unit-ci.sh" not in pre_push
+    assert "backend/scripts/needs-typecheck.sh" in pre_push
+    assert '"$SCRIPT_DIR/needs-typecheck.sh" "$2"' in runner
+    assert 'PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40' in pre_push
+    assert "pre-push is intentionally a bounded local-feedback gate" in pre_push
+    assert 'BACKEND_FAST_UNIT_WARN_SECONDS="0.1"' in runner
+    assert 'BACKEND_FAST_UNIT_FAIL_SECONDS="1.0"' in runner
+
+
+def test_expensive_pr_contracts_cancel_only_superseded_pull_request_runs():
+    repo = BACKEND_DIR.parent
+    workflows = {
+        "backend-unit-tests.yml": "backend-unit-tests-",
+        "openapi-contract.yml": "openapi-contract-",
+    }
+
+    for filename, group_prefix in workflows.items():
+        workflow = (repo / ".github/workflows" / filename).read_text(encoding="utf-8")
+        assert "concurrency:" in workflow
+        assert f"group: {group_prefix}${{{{ github.event_name == 'pull_request'" in workflow
+        assert "format('pr-{0}', github.event.pull_request.number)" in workflow
+        assert "format('run-{0}', github.run_id)" in workflow
+        assert "cancel-in-progress: true" in workflow
+
+
+def test_backend_test_runner_defaults_python_to_utf8():
+    runner = (BACKEND_DIR / "test.sh").read_text(encoding="utf-8")
+    utf8_export = 'export PYTHONUTF8="${PYTHONUTF8:-1}"'
+
+    assert utf8_export in runner
+    assert runner.index(utf8_export) < runner.index('PYTHON_BIN="${PYTHON:-}"')
+
+
+def test_pre_push_requires_backend_python_lazily():
+    pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text(encoding="utf-8")
+    setup_prefix = pre_push[: pre_push.index("run_step()")]
+
+    assert "require_backend_python()" in setup_prefix
+    assert 'if [[ ! -x "$BACKEND_PYTHON" ]]' not in setup_prefix
+    for function_name in (
+        "check_backend_runtime_env_if_needed",
+        "check_backend_typecheck_if_needed",
+        "check_backend_unit_tests_if_needed",
+        "check_openapi_contract_if_needed",
+    ):
+        function_start = pre_push.index(f"{function_name}()")
+        function_end = pre_push.find("\n}\n", function_start)
+        assert "require_backend_python" in pre_push[function_start:function_end], function_name
+
+
+def test_pre_push_runs_each_named_check_phase_once():
+    pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text(encoding="utf-8")
+    check_calls = re.findall(r"^run_step (check_[A-Za-z0-9_]+)$", pre_push, flags=re.MULTILINE)
+    duplicates = sorted({name for name in check_calls if check_calls.count(name) > 1})
+
+    assert duplicates == []
+
+
+def test_shared_change_detection_and_backend_isolation_are_ci_wired():
+    repo = BACKEND_DIR.parent
+    detect_changes = (repo / ".github/actions/detect-changes/action.yml").read_text(encoding="utf-8")
+    manifest = (repo / ".github/checks-manifest.yaml").read_text(encoding="utf-8")
+    backend_checks = (repo / ".github/workflows/backend-checks.yml").read_text(encoding="utf-8")
+    repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
+    desktop_checks = (repo / ".github/workflows/desktop-checks.yml").read_text(encoding="utf-8")
+    agent_proxy_auto_deploy = (repo / ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml").read_text(
+        encoding="utf-8"
+    )
+    swift_test_suites = (repo / "desktop/macos/scripts/swift-test-suites.sh").read_text(encoding="utf-8")
+    pre_push = (repo / "scripts/pre-push").read_text(encoding="utf-8")
+
+    assert 'FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)' in detect_changes
+    assert "has_backend_isolation_gate" in detect_changes
+    assert 'scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD' in desktop_checks
+    assert "- 'backend/utils/__init__.py'" in agent_proxy_auto_deploy
+    assert "- 'backend/utils/executors.py'" in agent_proxy_auto_deploy
+    assert "^backend/agent-proxy/Dockerfile$" in detect_changes
+    assert "scan_import_time_side_effects.py" in manifest
+    assert "check_module_stub_pollution.py" in manifest
+    assert '"--check-allowlist-monotonic", "{base}"' in manifest
+    assert "backend/agent-proxy" in manifest
+    assert "backend/dependencies.py" in manifest
+    assert "unmanaged_thread_offload" in manifest
+    assert "scan_import_time_side_effects.py" not in backend_checks
+    assert "check_module_stub_pollution.py" not in backend_checks
+    assert "run_checks.py --lane ci" in repo_checks
+    assert 'BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"' in pre_push
+    assert 'scripts/changed-files "$DIFF_BASE" "$local_oid"' in pre_push
+    assert "scripts/pr-preflight --lane local" in pre_push
+    assert "backend/scripts/run-unit-ci.sh" not in pre_push
+    assert 'PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40' in pre_push
+    assert "scan_import_time_side_effects.py" not in pre_push
+    assert "check_module_stub_pollution.py" not in pre_push
+    assert "check_desktop_test_quality.py" in manifest
+    assert 'python3 "$SCRIPT_DIR/check_desktop_test_quality.py"' in swift_test_suites
+    assert 'if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then' in swift_test_suites
+
+
+def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
+    repo = BACKEND_DIR.parent
+    detect_changes = (repo / '.github/actions/detect-changes/action.yml').read_text(encoding='utf-8')
+    mobile_checks = (repo / '.github/workflows/mobile-app-checks.yml').read_text(encoding='utf-8')
+    generated = mobile_checks.split('\n  generated-files:\n', 1)[1].split('\n  analyze:\n', 1)[0]
+    android = mobile_checks.split('\n  android-compile-smoke:\n', 1)[1]
+    changes = mobile_checks.split('\n  changes:\n', 1)[1].split('\n  generated-files:\n', 1)[0]
+
+    assert 'if [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then' in detect_changes
+    assert (
+        'if [ "$has_dart" = "true" ] || [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then'
+        not in detect_changes
+    )
+    assert 'fetch-depth: 1' in generated
+    assert 'fetch-depth: 1' in android
+    assert 'fetch-depth: 0' in changes
+
+
+def test_installed_pre_push_hook_falls_back_for_older_worktrees():
+    installer = (BACKEND_DIR.parent / "scripts/install-git-hooks.sh").read_text(encoding="utf-8")
+
+    assert 'if [ -x "$ROOT/scripts/pre-push-singleflight" ]' in installer
+    assert 'exec "$ROOT/scripts/pre-push" "$@"' in installer
 
 
 def test_workflow_contracts_static_check_accepts_current_allowlist():
@@ -140,6 +369,42 @@ def test_workflow_contracts_static_check_skips_workflows_without_tuple_check(tmp
                 "sources": ["backend/routers/sync.py"],
                 "tests": ["tests/unit/test_sync_v2.py"],
                 "checks": [],
+            }
+        ],
+    }
+
+    assert checker.check_no_large_tuple_results(contracts) == []
+
+
+def test_workflow_contracts_static_check_ignores_non_python_glob_matches(tmp_path, monkeypatch):
+    checker = _load_script("check_workflow_contracts")
+    fake_repo = tmp_path / "repo"
+    source_dir = fake_repo / "backend" / "utils" / "memory"
+    source_dir.mkdir(parents=True)
+    (source_dir / "contract.py").write_text("def safe_contract() -> tuple[int, int, int]:\n    return 1, 2, 3\n")
+    (source_dir / "ARCHITECTURE.md").write_text("# architecture\n")
+    pycache = source_dir / "__pycache__"
+    pycache.mkdir()
+    (pycache / "contract.cpython-311.pyc").write_bytes(b"\xa7\r\r\n")
+
+    monkeypatch.setattr(checker, "REPO_DIR", fake_repo)
+    contracts = {
+        "checks": {
+            "no_large_tuple_results": {
+                "allowlist": [
+                    {
+                        "path": "backend/utils/memory/contract.py",
+                        "function": "safe_contract",
+                    }
+                ]
+            }
+        },
+        "workflows": [
+            {
+                "risk": "high",
+                "sources": ["backend/utils/memory/**"],
+                "tests": ["tests/unit/test_contract.py"],
+                "checks": ["no_large_tuple_results"],
             }
         ],
     }

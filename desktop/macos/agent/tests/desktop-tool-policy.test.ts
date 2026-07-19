@@ -120,6 +120,33 @@ describe("desktop tool policy", () => {
     expect(dev.decision).toBe("dispatch_required");
   });
 
+  it("treats a macOS permission request as a production user-approved capability", () => {
+    const base = {
+      toolName: "request_permission",
+      selectedBundles: ["desktop.permissions.request"] as const,
+      operation: "request_permission",
+      resourceRef: "permission:screen_recording",
+      nowMs: 1_000,
+    };
+
+    const pending = evaluateDesktopToolPolicy(base);
+    expect(pending.decision).toBe("dispatch_required");
+    expect(pending.requiredBundles).toEqual(["desktop.permissions.request"]);
+    expect(pending.descriptor.approvalPolicy).toBe("user_approval");
+
+    const granted = evaluateDesktopToolPolicy({
+      ...base,
+      grants: [{
+        bundle: "desktop.permissions.request" as const,
+        operation: "request_permission",
+        resourceRef: "permission:screen_recording",
+        effect: "allow" as const,
+        expiresAtMs: 2_000,
+      }],
+    });
+    expect(granted.decision).toBe("allow");
+  });
+
   it("honors scoped allow grants without broadening other sensitive requests", () => {
     const nowMs = 1_000;
     const granted = evaluateDesktopToolPolicy({

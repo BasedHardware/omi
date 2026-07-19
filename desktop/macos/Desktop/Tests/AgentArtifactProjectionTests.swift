@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class AgentArtifactProjectionTests: XCTestCase {
+@MainActor final class AgentArtifactProjectionTests: XCTestCase {
   func testParsesArtifactMetadataProjection() throws {
     let result = """
       {
@@ -119,8 +119,8 @@ private final class DelayedArtifactProjectionLoader: AgentArtifactProjectionLoad
     staleReleaseContinuation = nil
   }
 
-  func controlTool(name: String, input: [String: Any]) async throws -> String {
-    let sessionId = input["sessionId"] as? String ?? ""
+  func controlTool(name: String, input: RuntimeJSONPayloadBox) async throws -> String {
+    let sessionId = input.value["sessionId"] as? String ?? ""
     if sessionId == "session-stale" {
       staleRequestStarted = true
       staleStartedContinuation?.resume()

@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from models.task_recommendation import DeterministicFacts, RecommendationSubjectKind
+from models.task_recommendation import DeterministicFacts, FeedbackSubjectKind, RecommendationSubjectKind
 from utils.task_intelligence import recommendations
 from utils.task_intelligence.capture_policy import CapturePolicyResult, run_capture_policy
 
@@ -22,11 +22,11 @@ def _capture_stub_output(payload: dict[str, Any], *, modality: str) -> Normalize
     return dict(stub_output)
 
 
-def transcript_capture_v1(payload: dict[str, Any]) -> NormalizedSignals:
+def transcript_capture_v2(payload: dict[str, Any]) -> NormalizedSignals:
     return _capture_stub_output(payload, modality='transcript')
 
 
-def screen_capture_v1(payload: dict[str, Any]) -> NormalizedSignals:
+def screen_capture_v2(payload: dict[str, Any]) -> NormalizedSignals:
     return _capture_stub_output(payload, modality='screen')
 
 
@@ -40,8 +40,8 @@ def legacy_reconciliation_contract(payload: dict[str, Any]) -> NormalizedSignals
 
 TEST_ADAPTERS: dict[str, FixtureAdapter] = {
     'direct_command_contract': direct_command_contract,
-    'transcript_capture_v1': transcript_capture_v1,
-    'screen_capture_v1': screen_capture_v1,
+    'transcript_capture_v2': transcript_capture_v2,
+    'screen_capture_v2': screen_capture_v2,
     'legacy_reconciliation_contract': legacy_reconciliation_contract,
 }
 KNOWN_TEST_ADAPTERS = frozenset(TEST_ADAPTERS)
@@ -53,7 +53,7 @@ def run_capture_case(case: dict[str, Any], modality: str) -> CapturePolicyResult
     input_payload = case.get('inputs', {}).get(modality)
     if not isinstance(input_payload, dict):
         raise ValueError(f'capture case {case.get("id")} is missing {modality} input')
-    adapter = TEST_ADAPTERS[f'{modality}_capture_v1']
+    adapter = TEST_ADAPTERS[f'{modality}_capture_v2']
     return run_capture_policy(adapter(input_payload))
 
 
@@ -87,19 +87,51 @@ def _fixture_ranking_subject(subject: dict[str, Any], *, device_id: str | None) 
     recent_material_activity = bool(
         subject.get('recent_material_activity', raw_facts.get('recent_material_activity', False))
     )
+    kind = RecommendationSubjectKind(subject.get('subject_kind', RecommendationSubjectKind.task.value))
+    feedback_kind = FeedbackSubjectKind.workstream if kind == RecommendationSubjectKind.agent_open_loop else None
     return recommendations.build_evaluation_subject(
-        kind=RecommendationSubjectKind.task,
+        kind=kind,
         subject_id=subject_id,
-        destination_task_id=subject_id,
-        headline=f'Fixture {subject_id}',
-        label=None,
+        feedback_subject_kind=feedback_kind,
+        feedback_subject_id=subject.get('workstream_id') if feedback_kind else None,
+        destination_task_id=subject_id if kind == RecommendationSubjectKind.task else None,
+        destination_workstream_id=subject.get('workstream_id'),
+        headline=str(subject.get('headline') or f'Fixture {subject_id}'),
+        label=subject.get('label'),
         evidence=evidence,
         facts=facts,
         is_open=bool(raw_facts.get('open', True)),
         unexpired=bool(raw_facts.get('unexpired', True)),
         recent_material_activity=recent_material_activity,
         material_token='fixture-v1',
+        evidence_preview=subject.get('evidence_preview'),
+        explicit_user_intent=bool(subject.get('explicit_user_intent', False)),
     )
+
+
+def validate_ranking_selection(case: dict[str, Any], selected: list[str]) -> list[str]:
+    """Return bounded fixture-contract violations for recorded and live judgments."""
+
+    selected_set = set(selected)
+    violations: list[str] = []
+    forbidden = sorted(selected_set.intersection(case.get('must_not_select', [])))
+    if forbidden:
+        violations.append('forbidden:' + ','.join(forbidden))
+    missing = sorted(set(case.get('must_select', [])).difference(selected_set))
+    if missing:
+        violations.append('missing:' + ','.join(missing))
+    for index, choices in enumerate(case.get('must_select_one_of', [])):
+        if not selected_set.intersection(choices):
+            violations.append(f'missing_one_of:{index}')
+    max_selected = int(case.get('max_selected', 3))
+    if len(selected) > max_selected:
+        violations.append(f'too_many:{len(selected)}>{max_selected}')
+    if case.get('expected_empty') is True and selected:
+        violations.append('expected_empty')
+    for index, duplicate_group in enumerate(case.get('duplicate_groups', [])):
+        if len(selected_set.intersection(duplicate_group)) > 1:
+            violations.append(f'duplicate_group:{index}')
+    return violations
 
 
 def run_recorded_ranking_case(case: dict[str, Any]) -> list[str]:
@@ -113,8 +145,11 @@ def run_recorded_ranking_case(case: dict[str, Any]) -> list[str]:
     device_id = current_context.get('device_id') if isinstance(current_context, dict) else None
     built_subjects = [_fixture_ranking_subject(subject, device_id=device_id) for subject in subjects]
     shortlist_ids = {subject.subject_id for subject in recommendations.filter_shortlist(built_subjects, set())}
-    if len(selected) > 3 or not set(selected).issubset(shortlist_ids):
+    if not set(selected).issubset(shortlist_ids):
         raise ValueError('recorded ranking selected an ineligible or excess subject')
+    violations = validate_ranking_selection(case, selected)
+    if violations:
+        raise ValueError('recorded ranking violates fixture contract: ' + ','.join(violations))
     return selected
 
 
@@ -146,6 +181,7 @@ __all__ = [
     'run_fixture_suite',
     'run_recorded_association_case',
     'run_recorded_ranking_case',
-    'screen_capture_v1',
-    'transcript_capture_v1',
+    'screen_capture_v2',
+    'transcript_capture_v2',
+    'validate_ranking_selection',
 ]

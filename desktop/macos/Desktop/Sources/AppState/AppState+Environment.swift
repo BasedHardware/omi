@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 extension AppState {
@@ -30,6 +30,10 @@ extension AppState {
             let backendServedKeys = ["GEMINI_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
             if backendServedKeys.contains(key) {
               log("  Skipped \(key) (fetched from backend via APIKeyService)")
+              continue
+            }
+            guard BundleEnvironment.shouldApplyBundledValue(for: key) else {
+              log("  Skipped \(key) (explicit launch environment override)")
               continue
             }
             let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
