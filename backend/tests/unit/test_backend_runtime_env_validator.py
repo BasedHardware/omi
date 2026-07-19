@@ -411,6 +411,52 @@ def test_firestore_readiness_contract_requires_isolated_job_dependency(workflow_
     assert any('deploy must depend on the isolated Firestore readiness job' in error.message for error in errors)
 
 
+def test_automatic_firestore_readiness_contract_requires_current_main_then_admitted_sha():
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows/gcp_backend_auto_dev.yml'
+    workflow = validator._load_yaml(workflow_path)
+
+    assert validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow) == []
+
+    stale_source_workflow = copy.deepcopy(workflow)
+    current_main_checkout = next(
+        step
+        for step in stale_source_workflow['jobs']['firestore_readiness']['steps']
+        if step.get('name') == 'Checkout current main for automatic source admission'
+    )
+    current_main_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
+
+    errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), stale_source_workflow)
+
+    assert (
+        validator.ValidationError(
+            f'cloud_run_workflow/{workflow_path}',
+            'automatic Firestore readiness must check out current main then the admitted SHA',
+        )
+        in errors
+    )
+
+
+def test_automatic_firestore_readiness_contract_requires_readiness_admitted_sha_for_deploy():
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows/gcp_backend_auto_dev.yml'
+    workflow = validator._load_yaml(workflow_path)
+    deploy_checkout = next(
+        step for step in workflow['jobs']['deploy']['steps'] if step.get('uses') == 'actions/checkout@v7'
+    )
+    deploy_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
+
+    errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow)
+
+    assert (
+        validator.ValidationError(
+            f'cloud_run_workflow/{workflow_path}',
+            'backend deploy checkout must remain bound to the readiness-approved commit',
+        )
+        in errors
+    )
+
+
 @pytest.mark.parametrize('workflow_name', ['gcp_backend.yml', 'gcp_backend_auto_dev.yml'])
 def test_firestore_readiness_contract_requires_validation_before_artifact_upload(workflow_name):
     validator = load_validator()
