@@ -8984,7 +8984,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get billingYearly => 'Roční';
 
   @override
-  String get savePercent => 'Ušetřete ~17%';
+  String savePercent(int percent) {
+    return 'Ušetřete ~$percent%';
+  }
 
   @override
   String get popular => 'Oblíbené';

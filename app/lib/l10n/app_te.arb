@@ -10521,7 +10521,7 @@
     "upgradePlan": "ప్లాన్ అప్‌గ్రేడ్",
     "billingMonthly": "నెలవారీ",
     "billingYearly": "సంవత్సరానికి",
-    "savePercent": "~17% ఆదా చేయండి",
+    "savePercent": "~{percent}% ఆదా చేయండి",
     "popular": "ప్రజాదరణ",
     "currentPlan": "ప్రస్తుత",
     "neoSubtitle": "నెలకు {count} ప్రశ్నలు",

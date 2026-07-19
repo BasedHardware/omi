@@ -2935,7 +2935,7 @@
     "upgradePlan": "Uppgradera plan",
     "billingMonthly": "Månadsvis",
     "billingYearly": "Årsvis",
-    "savePercent": "Spara ~17%",
+    "savePercent": "Spara ~{percent}%",
     "popular": "Populärt",
     "currentPlan": "Nuvarande",
     "neoSubtitle": "{count} frågor per månad",

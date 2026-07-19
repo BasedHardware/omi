@@ -10521,7 +10521,7 @@
     "upgradePlan": "Абнавіць план",
     "billingMonthly": "Штомесяц",
     "billingYearly": "Штогод",
-    "savePercent": "Зэканомце ~17%",
+    "savePercent": "Зэканомце ~{percent}%",
     "popular": "Папулярны",
     "currentPlan": "Бягучы",
     "neoSubtitle": "{count} пытанняў у месяц",

@@ -8999,7 +8999,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get billingYearly => 'वार्षिक';
 
   @override
-  String get savePercent => '~17% बचत करा';
+  String savePercent(int percent) {
+    return '~$percent% बचत करा';
+  }
 
   @override
   String get popular => 'लोकप्रिय';

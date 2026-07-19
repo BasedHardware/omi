@@ -9072,7 +9072,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get billingYearly => 'Taunan';
 
   @override
-  String get savePercent => 'Makatipid ~17%';
+  String savePercent(int percent) {
+    return 'Makatipid ~$percent%';
+  }
 
   @override
   String get popular => 'Sikat';

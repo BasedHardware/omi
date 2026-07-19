@@ -2483,12 +2483,6 @@ export interface PendingSyncResponse {
   synced_items: Array<ActionItemResponse>;
 }
 
-export interface PeopleLeaderboardResponse {
-  conversations_considered: number;
-  days: number;
-  people?: Array<PersonLeaderboardEntry>;
-}
-
 export interface Person {
   created_at?: string | null;
   id: string;
@@ -2497,14 +2491,6 @@ export interface Person {
   speech_samples?: Array<string>;
   speech_samples_version?: number;
   updated_at?: string | null;
-}
-
-export interface PersonLeaderboardEntry {
-  conversation_count: number;
-  last_talked_at?: string | null;
-  name: string;
-  person_id: string;
-  speaking_seconds: number;
 }
 
 export interface PhoneCallQuota {
@@ -4045,9 +4031,7 @@ export interface OmiApiSchemas {
   "PaymentUpgradeSubscriptionResponse": PaymentUpgradeSubscriptionResponse;
   "PaywallStatusResponse": PaywallStatusResponse;
   "PendingSyncResponse": PendingSyncResponse;
-  "PeopleLeaderboardResponse": PeopleLeaderboardResponse;
   "Person": Person;
-  "PersonLeaderboardEntry": PersonLeaderboardEntry;
   "PhoneCallQuota": PhoneCallQuota;
   "PhoneMutationResponse": PhoneMutationResponse;
   "PhoneNumberResponse": PhoneNumberResponse;
@@ -7376,16 +7360,6 @@ export interface OmiApiPaths {
       operationId: "get_or_create_person_v1_users_people_post";
       responses: {
         "200": Person;
-        "401": void;
-        "422": HTTPValidationError;
-      };
-    };
-  };
-  "/v1/users/people/leaderboard": {
-    get: {
-      operationId: "get_people_leaderboard_v1_users_people_leaderboard_get";
-      responses: {
-        "200": PeopleLeaderboardResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14204,28 +14178,6 @@ export async function get_or_create_person_v1_users_people_post(header: { author
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_people_leaderboard_v1_users_people_leaderboard_get(query: { days?: number, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PeopleLeaderboardResponse> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/users/people/leaderboard`;
-  const _params = query ? Object.entries(query)
-    .filter(([, v]) => v !== undefined && v !== null)
-    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
-  const _search = _params ? `?${_params}` : "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "GET",
-    headers: {
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
-}
-
 export async function get_single_person_v1_users_people__person_id__get(path: { person_id: string }, query: { include_speech_samples?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Person> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/people/${path.person_id}`;
@@ -15587,4 +15539,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 382 client methods generated.
+// Total: 381 client methods generated.

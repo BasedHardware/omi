@@ -113,43 +113,58 @@ class TranscriptProcessor:
             self.translation_coordinator and self.translation_coordinator._flushing  # type: ignore[reportPrivateUsage]
         ):
             return
-        async with self.translation_lock:
-            conversation = (
-                await self.cache.get(conversation_id)
-                if conversation_id == self.host.state.current_conversation_id
-                else await self._load_conversation(conversation_id)
+        # TranslationCoordinator invokes this callback from a bare task and only catches
+        # (RuntimeError, ValueError), so a persist failure escaping here aborts the batch loop and
+        # silently drops the translations for every remaining segment. Keep the failure contained.
+        try:
+            async with self.translation_lock:
+                conversation = (
+                    await self.cache.get(conversation_id)
+                    if conversation_id == self.host.state.current_conversation_id
+                    else await self._load_conversation(conversation_id)
+                )
+                if not conversation:
+                    return
+                for index, segment in enumerate(conversation.get('transcript_segments', [])):
+                    if segment['id'] != segment_id:
+                        continue
+                    translations = segment.get('translations', [])
+                    translation = Translation(lang=self.host.translation_language, text=translated_text).model_dump()
+                    replacement = next(
+                        (
+                            i
+                            for i, value in enumerate(translations)
+                            if value.get('lang') == self.host.translation_language
+                        ),
+                        None,
+                    )
+                    if replacement is None:
+                        translations.append(translation)
+                    else:
+                        translations[replacement] = translation
+                    conversation['transcript_segments'][index]['translations'] = translations
+                    await self.host.persistence.call(
+                        conversations_db.update_conversation_segments,
+                        self.host.request.uid,
+                        conversation_id,
+                        conversation['transcript_segments'],
+                        data_protection_level=(
+                            self.cache.protection_level
+                            if conversation_id == self.host.state.current_conversation_id
+                            else None
+                        ),
+                    )
+                    if conversation_id == self.host.state.current_conversation_id:
+                        self.cache.update_segments(conversation['transcript_segments'])
+                        self.host.send_event(TranslationEvent(segments=[conversation['transcript_segments'][index]]))
+                    return
+        except Exception as error:
+            logger.error(
+                'Translation persist failed segment=%s uid=%s type=%s',
+                segment_id,
+                self.host.request.uid,
+                type(error).__name__,
             )
-            if not conversation:
-                return
-            for index, segment in enumerate(conversation.get('transcript_segments', [])):
-                if segment['id'] != segment_id:
-                    continue
-                translations = segment.get('translations', [])
-                translation = Translation(lang=self.host.translation_language, text=translated_text).model_dump()
-                replacement = next(
-                    (i for i, value in enumerate(translations) if value.get('lang') == self.host.translation_language),
-                    None,
-                )
-                if replacement is None:
-                    translations.append(translation)
-                else:
-                    translations[replacement] = translation
-                conversation['transcript_segments'][index]['translations'] = translations
-                await self.host.persistence.call(
-                    conversations_db.update_conversation_segments,
-                    self.host.request.uid,
-                    conversation_id,
-                    conversation['transcript_segments'],
-                    data_protection_level=(
-                        self.cache.protection_level
-                        if conversation_id == self.host.state.current_conversation_id
-                        else None
-                    ),
-                )
-                if conversation_id == self.host.state.current_conversation_id:
-                    self.cache.update_segments(conversation['transcript_segments'])
-                    self.host.send_event(TranslationEvent(segments=[conversation['transcript_segments'][index]]))
-                return
 
     async def _update_live_conversation(
         self,

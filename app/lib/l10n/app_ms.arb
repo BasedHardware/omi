@@ -2935,7 +2935,7 @@
     "upgradePlan": "Naik taraf pelan",
     "billingMonthly": "Bulanan",
     "billingYearly": "Tahunan",
-    "savePercent": "Jimat ~17%",
+    "savePercent": "Jimat ~{percent}%",
     "popular": "Popular",
     "currentPlan": "Semasa",
     "neoSubtitle": "{count} soalan sebulan",

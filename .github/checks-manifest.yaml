@@ -34,6 +34,11 @@ checks:
     triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
+  - id: desktop-changelog-io-tests
+    command: ["python3", ".github/scripts/test_desktop_changelog.py"]
+    triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9717: changelog JSON I/O must decode/encode as UTF-8 regardless of contributor host locale"
   - id: agents-md-lean
     command: ["python3", ".github/scripts/check_agents_md_lean.py"]
     triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
@@ -129,12 +134,12 @@ checks:
     reason: "development WIF pilot fixtures must reject secret access, apply, and scope expansion"
   - id: public-build-contract
     command: ["python3", ".github/scripts/check_public_build_contract.py"]
-    triggers: [".github/actions/deploy-public-build/**", ".github/actions/prepare-public-build/**", ".github/actions/public-build-candidate-promotion/**", ".github/workflows/gcp_admin.yml", ".github/workflows/gcp_app.yml", ".github/workflows/gcp_frontend.yml", ".github/workflows/gcp_personas.yml", ".github/workflows/public-build-config-preflight.yml", ".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py", "config/public-build-contract.json", "config/public-build-values.json", "config/deployment-setting-classification.json", "web/admin/Dockerfile", "web/app/Dockerfile", "web/frontend/Dockerfile", "web/personas-open-source/Dockerfile", "web/admin/components/public-build-canary.tsx", "web/app/src/components/public-build-canary.tsx", "web/frontend/src/components/public-build-canary.tsx", "web/personas-open-source/src/components/public-build-canary.tsx"]
+    triggers: [".github/actions/deploy-public-build/**", ".github/actions/prepare-public-build/**", ".github/actions/public-build-candidate-promotion/**", ".github/workflows/gcp_admin.yml", ".github/workflows/gcp_app.yml", ".github/workflows/gcp_frontend.yml", ".github/workflows/gcp_personas.yml", ".github/workflows/public-build-config-preflight.yml", ".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py", "config/public-build-contract.json", "config/public-build-values.json", "config/deployment-setting-classification.json", "web/admin/Dockerfile", "web/app/Dockerfile", "web/frontend/Dockerfile", "web/personas-open-source/Dockerfile", "web/admin/components/public-build-canary.tsx", "web/app/src/components/public-build-canary.tsx", "web/frontend/src/components/public-build-canary.tsx", "web/personas-open-source/src/components/public-build-canary.tsx", "web/personas-open-source/src/app/api/social-profile/route.ts"]
     lanes: ["local", "ci"]
     reason: "reviewed public inputs, Docker guards, client canaries, no-traffic candidates, and promotion wiring must match one contract"
   - id: public-build-contract-fixtures
     command: ["python3", ".github/scripts/test_check_public_build_contract.py"]
-    triggers: [".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py"]
+    triggers: [".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py", "web/personas-open-source/src/app/api/social-profile/route.ts"]
     lanes: ["local", "ci"]
     reason: "public-build contract and GitHub variable scope fixtures must remain executable"
   - id: backend-async-blockers
@@ -197,6 +202,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]
     lanes: ["local", "ci"]
     reason: "workflow boundary sources changed"
+  - id: pusher-rollout-readiness-budget
+    command: ["python3", "backend/scripts/verify_pusher_rollout_budget.py"]
+    triggers: ["backend/charts/pusher/**", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", "backend/scripts/verify_pusher_rollout_budget.py", "backend/tests/unit/test_verify_pusher_rollout_budget.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9988: Pusher's Kubernetes deadline and workflow wait must cover chart-derived availability at the HPA ceiling"
   - id: conversation-lifecycle-write-guard
     command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
@@ -207,6 +217,11 @@ checks:
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/scripts/test_desktop_swift_ci_contract.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+  - id: desktop-candidate-source-gate
+    command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
+    triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml"]
+    lanes: ["local", "ci"]
+    reason: "candidate tags require a successful Desktop Swift Build & Tests check for their exact source SHA"
   - id: desktop-manifest-routes
     command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/scripts/test_desktop_manifest_routes.py"]
@@ -290,6 +305,16 @@ checks:
     triggers: ["desktop/macos/agent/src/runtime/agent-spawn-journal.ts", "desktop/macos/agent/fixtures/spawn-receipt/**", "desktop/macos/agent/tests/spawn-receipt-fixtures.test.ts", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh", "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift", "desktop/macos/Desktop/Tests/RealtimeHubSpawnAgentTests.swift"]
     lanes: ["local", "ci"]
     reason: "cross-language realtime spawn receipt producer/consumer contract"
+  - id: release-eligibility-contract
+    command: ["python3", ".github/scripts/check_release_eligibility.py"]
+    triggers: [".github/workflows/release-eligibility.yml", ".github/actions/release-eligibility/**", ".github/scripts/verify_release_eligibility.py", ".github/scripts/check_release_eligibility.py", ".github/scripts/test_check_release_eligibility.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9989 keeps the automatic release proof main-scoped, SHA-bound, and routed through the canonical deterministic CI runner"
+  - id: release-eligibility-contract-fixtures
+    command: ["python3", ".github/scripts/test_check_release_eligibility.py"]
+    triggers: [".github/workflows/release-eligibility.yml", ".github/actions/release-eligibility/**", ".github/scripts/verify_release_eligibility.py", ".github/scripts/check_release_eligibility.py", ".github/scripts/test_check_release_eligibility.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9989 exercises non-main, ambiguous SHA, mismatched checkout, and workflow-contract rejection cases"
 
 exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"

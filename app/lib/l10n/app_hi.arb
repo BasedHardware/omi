@@ -2936,7 +2936,7 @@
     "upgradePlan": "प्लान अपग्रेड करें",
     "billingMonthly": "मासिक",
     "billingYearly": "वार्षिक",
-    "savePercent": "~17% बचाएं",
+    "savePercent": "~{percent}% बचाएं",
     "popular": "लोकप्रिय",
     "currentPlan": "वर्तमान",
     "neoSubtitle": "प्रति माह {count} प्रश्न",
