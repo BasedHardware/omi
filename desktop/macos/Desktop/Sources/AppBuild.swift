@@ -118,6 +118,18 @@ enum AppBuild {
     buildConfiguration.isExternalPreview
   }
 
+  /// Legacy "Omi Computer.app" cleanup force-terminates running
+  /// `com.omi.computer-macos` processes and deletes the old bundle — strictly
+  /// stable-lineage housekeeping. Only the stable identity may run it: Omi Beta
+  /// or a dev bundle doing so would kill the user's running stable app.
+  static var mayRunLegacyStableAppCleanup: Bool {
+    mayRunLegacyStableAppCleanup(bundleIdentifier: bundleIdentifier)
+  }
+
+  static func mayRunLegacyStableAppCleanup(bundleIdentifier: String) -> Bool {
+    bundleIdentifier == productionBundleIdentifier
+  }
+
   /// Only local development bundles expose the loopback automation/debug bridge. Published
   /// preview apps share the non-production namespace but must never expose that bridge.
   static var allowsLocalAutomation: Bool {
