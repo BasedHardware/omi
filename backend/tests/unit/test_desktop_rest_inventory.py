@@ -175,7 +175,6 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     # Desktop calls these but no matching backend route exists — likely dead
     # endpoints or naming drift to be resolved in a follow-up slice.
     '/v1/action-items/batch-scores',
-    '/v1/goals/completed',
     '/v1/personas/check-username',
     '/v1/personas/generate-prompt',
     '/v3/memories/mark-all-read',
