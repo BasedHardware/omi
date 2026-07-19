@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,6 +7,8 @@ from database.desktop_update_channels import (
     _build_channel_pointer,
     _build_beta_rollback_pointer,
     _rollback_macos_beta_transaction,
+    _emergency_promote_macos_beta_transaction,
+    emergency_promote_macos_beta_channel,
     get_channel_release,
     normalize_release_manifest,
     register_release_manifest,
@@ -281,4 +284,152 @@ class TestMacosBetaRollbackRules:
                 release_id=windows["release_id"],
                 expected_current_release_id=current["release_id"],
                 expected_generation=7,
+            )
+
+
+class TestMacosBetaEmergencyPromotionRules:
+    def test_advances_only_newer_beta_and_creates_append_only_audit(self):
+        current = {
+            "platform": "macos",
+            "channel": "beta",
+            "release_id": "v0.12.84+12084-macos",
+            "version": "0.12.84+12084",
+            "build_number": 12084,
+            "generation": 7,
+        }
+        target = normalize_release_manifest(
+            _manifest(release_id="v0.12.85+12085-macos", version="0.12.85+12085", build_number=12085)
+        )
+        occurred_at = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+        expires_at = occurred_at + timedelta(hours=1)
+        pointer_snapshot = MagicMock(exists=True)
+        pointer_snapshot.to_dict.return_value = current
+        manifest_snapshot = MagicMock(exists=True)
+        manifest_snapshot.to_dict.return_value = target
+        pointer_ref = MagicMock()
+        pointer_ref.get.return_value = pointer_snapshot
+        manifest_ref = MagicMock()
+        manifest_ref.get.return_value = manifest_snapshot
+        audit_ref = MagicMock()
+        transaction = MagicMock()
+        evidence = {
+            "signed_smoke_url": "https://example.test/smoke.json",
+            "signed_smoke_sha256": "d" * 64,
+            "behavioral_url": "https://example.test/behavior.json",
+            "behavioral_sha256": "e" * 64,
+            "source_gate_url": "https://example.test/check",
+            "zip_sha256": "b" * 64,
+            "dmg_sha256": "c" * 64,
+        }
+
+        result = _emergency_promote_macos_beta_transaction.to_wrap(
+            transaction,
+            pointer_ref,
+            manifest_ref,
+            audit_ref,
+            release_id=target["release_id"],
+            source_sha=target["source_sha"],
+            expected_current_release_id=current["release_id"],
+            expected_generation=7,
+            incident_id="10063",
+            reason="qualification runner is unavailable during an incident",
+            expires_at=expires_at,
+            approvers=["alice", "bob"],
+            evidence=evidence,
+            audit_id="audit-123",
+            occurred_at=occurred_at,
+        )
+
+        assert result["pointer"] == {
+            "platform": "macos",
+            "channel": "beta",
+            "release_id": target["release_id"],
+            "version": target["version"],
+            "build_number": 12085,
+            "generation": 8,
+            "updated_at": occurred_at,
+        }
+        assert result["audit"]["emergencyPromotion"] is True
+        assert result["audit"]["platform"] == "macos"
+        assert result["audit"]["channel"] == "beta"
+        assert result["audit"]["approvers"] == ["alice", "bob"]
+        transaction.create.assert_called_once_with(audit_ref, result["audit"])
+        transaction.set.assert_called_once_with(pointer_ref, result["pointer"])
+
+    def test_rejects_altered_artifact_evidence_before_the_pointer_write(self):
+        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
+        target = normalize_release_manifest(
+            _manifest(release_id="v0.12.85+12085-macos", version="0.12.85+12085", build_number=12085)
+        )
+        pointer_snapshot = MagicMock(exists=True)
+        pointer_snapshot.to_dict.return_value = current
+        manifest_snapshot = MagicMock(exists=True)
+        manifest_snapshot.to_dict.return_value = target
+        pointer_ref, manifest_ref, audit_ref, transaction = MagicMock(), MagicMock(), MagicMock(), MagicMock()
+        pointer_ref.get.return_value = pointer_snapshot
+        manifest_ref.get.return_value = manifest_snapshot
+        evidence = {
+            "signed_smoke_url": "https://example.test/smoke.json",
+            "signed_smoke_sha256": "d" * 64,
+            "behavioral_url": "https://example.test/behavior.json",
+            "behavioral_sha256": "e" * 64,
+            "source_gate_url": "https://example.test/check",
+            "zip_sha256": "f" * 64,
+            "dmg_sha256": "c" * 64,
+        }
+        with pytest.raises(ValueError, match="artifact evidence"):
+            _emergency_promote_macos_beta_transaction.to_wrap(
+                transaction,
+                pointer_ref,
+                manifest_ref,
+                audit_ref,
+                release_id=target["release_id"],
+                source_sha=target["source_sha"],
+                expected_current_release_id=current["release_id"],
+                expected_generation=7,
+                incident_id="10063",
+                reason="runner unavailable",
+                expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
+                approvers=["alice", "bob"],
+                evidence=evidence,
+                audit_id="audit-123",
+                occurred_at=datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc),
+            )
+        transaction.create.assert_not_called()
+        transaction.set.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("approvers", "expires_at", "evidence", "message"),
+        [
+            (["alice"], "2026-07-19T13:00:00Z", None, "exactly two"),
+            (["alice", "alice"], "2026-07-19T13:00:00Z", None, "exactly two"),
+            (["alice", "bob"], "2026-07-19T11:59:00Z", None, "expired"),
+            (["alice", "bob"], "2026-07-19T17:00:01Z", None, "may not exceed"),
+            (["alice", "bob"], "2026-07-19T13:00:00Z", {}, "evidence is incomplete"),
+        ],
+    )
+    def test_rejects_invalid_or_expired_break_glass_authorization(self, approvers, expires_at, evidence, message):
+        now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+        valid_evidence = {
+            "signed_smoke_url": "https://example.test/smoke.json",
+            "signed_smoke_sha256": "d" * 64,
+            "behavioral_url": "https://example.test/behavior.json",
+            "behavioral_sha256": "e" * 64,
+            "source_gate_url": "https://example.test/check",
+            "zip_sha256": "b" * 64,
+            "dmg_sha256": "c" * 64,
+        }
+        with pytest.raises(ValueError, match=message):
+            emergency_promote_macos_beta_channel(
+                "v0.12.85+12085-macos",
+                source_sha="a" * 40,
+                expected_current_release_id="v0.12.84+12084-macos",
+                expected_generation=7,
+                incident_id="10063",
+                reason="runner unavailable",
+                expires_at=expires_at,
+                approvers=approvers,
+                evidence=valid_evidence if evidence is None else evidence,
+                firestore_client=MagicMock(),
+                now=now,
             )
