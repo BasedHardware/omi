@@ -76,6 +76,22 @@ def test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces(gate
         is True
     )
 
+    public_chat_manifest = tmp_path / 'runtime_env.yaml'
+    raw_manifest = manifest.read_text(encoding='utf-8')
+    public_chat_manifest.write_text(
+        raw_manifest.replace(
+            "PUBLIC_SHARED_CONVERSATION_CHAT_MODE:\n              value: 'off'",
+            "PUBLIC_SHARED_CONVERSATION_CHAT_MODE:\n              value: gateway",
+        ),
+        encoding='utf-8',
+    )
+    listener_values.write_text('env: []\n', encoding='utf-8')
+    assert gateway_gate.gateway_promotion_requested(
+        manifest_path=public_chat_manifest,
+        environment='prod',
+        listener_values_path=listener_values,
+    )
+
 
 def test_verify_gateway_serving_derives_url_only_from_ready_attached_ilb(gateway_gate) -> None:
     calls: list[list[str]] = []

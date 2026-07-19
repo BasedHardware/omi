@@ -114,6 +114,9 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'true'
             category: rollout
@@ -324,6 +327,17 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+              provisional: true
+              category: service_auth
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+              provisional: true
+              category: service_auth
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'true'
               category: rollout
@@ -437,6 +451,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'true'
               category: rollout
@@ -534,6 +551,9 @@ environments:
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'true'
@@ -840,6 +860,9 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: 'off'
             category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
@@ -971,6 +994,17 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: 'off'
               category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+              provisional: true
+              category: service_auth
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+              provisional: true
+              category: service_auth
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
@@ -1116,6 +1150,9 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: 'off'
               category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
@@ -1209,6 +1246,9 @@ environments:
               default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:

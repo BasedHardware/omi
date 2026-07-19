@@ -387,6 +387,7 @@ jobs:
             --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
             --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
             --vpc-egress private-ranges-only \
+            --lane omi:auto:public-shared-conversation-chat \
             --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       # The endpoint is rendered only after the deployment gate derived it
@@ -405,6 +406,8 @@ jobs:
           MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
           MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
           OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9' }}
+          PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
+          PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
           SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}

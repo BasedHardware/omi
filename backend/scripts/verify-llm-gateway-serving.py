@@ -62,7 +62,10 @@ def gateway_promotion_requested(
         manifest = _as_dict(yaml.safe_load(handle))
     environment_config = _as_dict(_as_dict(manifest.get('environments')).get(environment))
     for env_entries in _gateway_mode_env_maps(environment_config):
-        if _gateway_mode_enabled(env_entries.get('OMI_LLM_GATEWAY_FEATURE_MODE')):
+        if any(
+            _gateway_mode_enabled(env_entries.get(name))
+            for name in ('OMI_LLM_GATEWAY_FEATURE_MODE', 'PUBLIC_SHARED_CONVERSATION_CHAT_MODE')
+        ):
             return True
     values_path = listener_values_path or BACKEND_LISTEN_VALUES_DIR / f'{environment}_omi_backend_listen_values.yaml'
     with values_path.open('r', encoding='utf-8') as handle:
@@ -72,7 +75,7 @@ def gateway_promotion_requested(
         raise ValueError(f'{values_path} missing env list')
     return any(
         isinstance(entry, Mapping)
-        and entry.get('name') == 'OMI_LLM_GATEWAY_FEATURE_MODE'
+        and entry.get('name') in {'OMI_LLM_GATEWAY_FEATURE_MODE', 'PUBLIC_SHARED_CONVERSATION_CHAT_MODE'}
         and _gateway_mode_enabled(entry.get('value'))
         for entry in listener_env
     )
