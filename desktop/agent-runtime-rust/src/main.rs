@@ -51,6 +51,12 @@ struct ContextSource {
     payload: Map<String, Value>,
 }
 
+#[derive(Clone)]
+struct OwnerRevocationReceipt {
+    owner_id: String,
+    revoked_run_ids: Vec<String>,
+}
+
 struct Runtime {
     managed_base_url: Option<String>,
     credentials: Option<ManagedCredentials>,
@@ -60,6 +66,8 @@ struct Runtime {
     surfaces: HashMap<(String, String, String, String), String>,
     context_sources: HashMap<(String, String, String), ContextSource>,
     next_session: u64,
+    owner_id: Option<String>,
+    last_revocation: Option<OwnerRevocationReceipt>,
     output: mpsc::UnboundedSender<Message>,
     completed: mpsc::UnboundedSender<String>,
 }
@@ -79,6 +87,8 @@ impl Runtime {
             surfaces: HashMap::new(),
             context_sources: HashMap::new(),
             next_session: 1,
+            owner_id: None,
+            last_revocation: None,
             output,
             completed,
         }
@@ -92,8 +102,13 @@ impl Runtime {
     }
 
     fn handle(&mut self, input: Message) {
+        if is_owner_scoped_message(&input.kind) && !self.require_active_owner(&input.fields) {
+            return;
+        }
         match input.kind.as_str() {
             "refresh_token" => self.refresh_token(input.fields),
+            "refresh_owner" => self.refresh_owner(input.fields),
+            "revoke_owner_runtime" => self.revoke_owner_runtime(input.fields),
             "configure_default_execution_profile" => {
                 self.configure_default_execution_profile(input.fields)
             }
@@ -109,6 +124,23 @@ impl Runtime {
             "stop" => self.stop(),
             _ => {}
         }
+    }
+
+    fn require_active_owner(&self, fields: &Map<String, Value>) -> bool {
+        let requested_owner = string_field(fields, "ownerId");
+        let authorized = self
+            .owner_id
+            .as_ref()
+            .is_some_and(|owner_id| requested_owner.as_deref() == Some(owner_id));
+        if !authorized {
+            self.emit_error(
+                string_field(fields, "requestId"),
+                string_field(fields, "clientId"),
+                "authentication",
+                "request owner does not match the active runtime owner",
+            );
+        }
+        authorized
     }
 
     fn configure_default_execution_profile(&mut self, fields: Map<String, Value>) {
@@ -560,10 +592,149 @@ impl Runtime {
         let Some(bearer_token) = string_field(&fields, "token") else {
             return;
         };
+        if !self.establish_owner(&owner_id) {
+            return;
+        }
         self.credentials = Some(ManagedCredentials {
             owner_id,
             bearer_token,
         });
+        self.last_revocation = None;
+    }
+
+    fn refresh_owner(&mut self, fields: Map<String, Value>) {
+        let Some(owner_id) = string_field(&fields, "ownerId") else {
+            return;
+        };
+        if self.establish_owner(&owner_id) {
+            self.last_revocation = None;
+        }
+    }
+
+    fn establish_owner(&mut self, owner_id: &str) -> bool {
+        match self.owner_id.as_deref() {
+            None => {
+                self.owner_id = Some(owner_id.to_owned());
+                true
+            }
+            Some(active_owner) => active_owner == owner_id,
+        }
+    }
+
+    fn revoke_owner_runtime(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id, owner_id)) =
+            required_fields!(&fields, "requestId", "clientId", "ownerId")
+        else {
+            let owner_id = string_field(&fields, "ownerId").unwrap_or_default();
+            self.emit_owner_revocation(
+                string_field(&fields, "requestId"),
+                string_field(&fields, "clientId"),
+                owner_id,
+                false,
+                false,
+                Vec::new(),
+            );
+            return;
+        };
+        if self.owner_id.is_none() {
+            if let Some(receipt) = self
+                .last_revocation
+                .as_ref()
+                .filter(|receipt| receipt.owner_id == owner_id)
+            {
+                self.emit_owner_revocation(
+                    Some(request_id),
+                    Some(client_id),
+                    owner_id,
+                    true,
+                    true,
+                    receipt.revoked_run_ids.clone(),
+                );
+                return;
+            }
+            self.emit_owner_revocation(
+                Some(request_id),
+                Some(client_id),
+                owner_id,
+                false,
+                false,
+                Vec::new(),
+            );
+            return;
+        }
+        if self.owner_id.as_deref() != Some(owner_id.as_str()) {
+            self.emit_owner_revocation(
+                Some(request_id),
+                Some(client_id),
+                owner_id,
+                false,
+                false,
+                Vec::new(),
+            );
+            return;
+        }
+        let mut revoked_run_ids = self.running.keys().cloned().collect::<Vec<_>>();
+        revoked_run_ids.sort();
+        for cancel in self.running.values() {
+            let _ = cancel.send(true);
+        }
+        self.clear_owner_state(&owner_id);
+        self.owner_id = None;
+        self.credentials = None;
+        self.last_revocation = Some(OwnerRevocationReceipt {
+            owner_id: owner_id.clone(),
+            revoked_run_ids: revoked_run_ids.clone(),
+        });
+        self.emit_owner_revocation(
+            Some(request_id),
+            Some(client_id),
+            owner_id,
+            true,
+            false,
+            revoked_run_ids,
+        );
+    }
+
+    fn clear_owner_state(&mut self, owner_id: &str) {
+        self.preferences.remove(owner_id);
+        self.surfaces
+            .retain(|(stored_owner_id, _, _, _), _| stored_owner_id != owner_id);
+        let session_ids = self
+            .sessions
+            .iter()
+            .filter_map(|(session_id, session)| {
+                (session.owner_id == owner_id).then_some(session_id.clone())
+            })
+            .collect::<Vec<_>>();
+        self.sessions
+            .retain(|_, session| session.owner_id != owner_id);
+        self.context_sources
+            .retain(|(session_id, _, _), _| !session_ids.contains(session_id));
+    }
+
+    fn emit_owner_revocation(
+        &self,
+        request_id: Option<String>,
+        client_id: Option<String>,
+        owner_id: String,
+        ok: bool,
+        duplicate: bool,
+        revoked_run_ids: Vec<String>,
+    ) {
+        self.emit(
+            "owner_runtime_revoked",
+            envelope(
+                request_id.as_deref(),
+                client_id.as_deref(),
+                json!({
+                    "ownerId": owner_id,
+                    "ok": ok,
+                    "duplicate": duplicate,
+                    "revokedRunIds": revoked_run_ids,
+                    "invalidatedBindingIds": []
+                }),
+            ),
+        );
     }
 
     fn query(&mut self, fields: Map<String, Value>) {
@@ -840,6 +1011,20 @@ fn valid_adapter(adapter_id: &str) -> bool {
     adapter_id == "rx4"
 }
 
+fn is_owner_scoped_message(kind: &str) -> bool {
+    matches!(
+        kind,
+        "configure_default_execution_profile"
+            | "resolve_surface_session"
+            | "migrate_session_execution_profile"
+            | "context_source_update"
+            | "get_context_snapshot"
+            | "invalidate_session"
+            | "query"
+            | "interrupt"
+    )
+}
+
 fn valid_context_source(source: &str) -> bool {
     context_source_kinds().contains(&source)
 }
@@ -985,6 +1170,10 @@ mod tests {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
         let mut runtime = Runtime::new(Some("https://api.omi.me/v2".into()), output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"o"}"#)
+                .expect("owner fixture must parse"),
+        );
         runtime.handle(parse_line(r#"{"type":"query","requestId":"r","clientId":"c","sessionId":"s","ownerId":"o","prompt":"hello"}"#).expect("fixture must parse"));
         let error = receiver.recv().await.expect("query must reject");
         assert_eq!(error.kind, "error");
@@ -1000,7 +1189,11 @@ mod tests {
         let (completed, _) = mpsc::unbounded_channel();
         let mut runtime = Runtime::new(None, output, completed);
         runtime.handle(
-            parse_line(r#"{"type":"interrupt","requestId":"r","clientId":"c"}"#)
+            parse_line(r#"{"type":"refresh_owner","ownerId":"o"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.handle(
+            parse_line(r#"{"type":"interrupt","requestId":"r","clientId":"c","ownerId":"o"}"#)
                 .expect("fixture must parse"),
         );
         let ack = receiver.recv().await.expect("interrupt must acknowledge");
@@ -1014,6 +1207,10 @@ mod tests {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
         let mut runtime = Runtime::new(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
 
         runtime.handle(parse_line(r#"{"type":"configure_default_execution_profile","requestId":"profile","clientId":"client","ownerId":"owner","adapterId":"rx4","modelProfile":"omi-fast","workingDirectory":"/tmp/omi"}"#).expect("profile fixture must parse"));
         let profile = receiver.recv().await.expect("profile response must emit");
@@ -1067,9 +1264,65 @@ mod tests {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
         let mut runtime = Runtime::new(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .expect("owner fixture must parse"),
+        );
         runtime.handle(parse_line(r#"{"type":"configure_default_execution_profile","requestId":"profile","clientId":"client","ownerId":"owner","adapterId":"pi-mono","modelProfile":null,"workingDirectory":"/tmp/omi"}"#).expect("profile fixture must parse"));
         let error = receiver.recv().await.expect("invalid adapter must reject");
         assert_eq!(error.kind, "error");
         assert_eq!(error.fields["failure"]["failureCode"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn owner_revocation_cancels_runs_and_reuses_its_receipt() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = Runtime::new(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner-a"}"#)
+                .expect("owner fixture must parse"),
+        );
+        let (cancel, cancelled) = watch::channel(false);
+        runtime.running.insert("run-a".into(), cancel);
+
+        runtime.handle(parse_line(r#"{"type":"revoke_owner_runtime","requestId":"revoke-1","clientId":"client","ownerId":"owner-a"}"#).expect("revoke fixture must parse"));
+        let revoked = receiver.recv().await.expect("revoke receipt must emit");
+        assert_eq!(revoked.kind, "owner_runtime_revoked");
+        assert_eq!(revoked.fields["ok"], true);
+        assert_eq!(revoked.fields["duplicate"], false);
+        assert_eq!(revoked.fields["revokedRunIds"], json!(["run-a"]));
+        assert!(*cancelled.borrow());
+        assert!(runtime.owner_id.is_none());
+
+        runtime.handle(parse_line(r#"{"type":"revoke_owner_runtime","requestId":"revoke-2","clientId":"client","ownerId":"owner-a"}"#).expect("duplicate revoke fixture must parse"));
+        let duplicate = receiver.recv().await.expect("duplicate receipt must emit");
+        assert_eq!(duplicate.fields["ok"], true);
+        assert_eq!(duplicate.fields["duplicate"], true);
+        assert_eq!(duplicate.fields["revokedRunIds"], json!(["run-a"]));
+    }
+
+    #[tokio::test]
+    async fn token_refresh_cannot_replace_an_established_owner() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = Runtime::new(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner-a"}"#)
+                .expect("owner fixture must parse"),
+        );
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_token","ownerId":"owner-b","token":"token-b"}"#)
+                .expect("token fixture must parse"),
+        );
+        assert_eq!(runtime.owner_id.as_deref(), Some("owner-a"));
+        assert!(runtime.credentials.is_none());
+
+        runtime.handle(
+            parse_line(r#"{"type":"configure_default_execution_profile","requestId":"profile","clientId":"client","ownerId":"owner-b","adapterId":"rx4","modelProfile":null,"workingDirectory":"/tmp/omi"}"#)
+                .expect("profile fixture must parse"),
+        );
+        let error = receiver.recv().await.expect("owner mismatch must reject");
+        assert_eq!(error.fields["failure"]["failureCode"], "authentication");
     }
 }
