@@ -26,8 +26,7 @@ final class WifiFrameStreamParserTests: XCTestCase {
 
   func testPaddingBoundaryStaysAlignedAcrossChunkSplits() {
     // Three blocks, each one frame followed by padding.
-    let stream = paddedBlock(payloadLength: 10) + paddedBlock(payloadLength: 10)
-      + paddedBlock(payloadLength: 10)
+    let stream = (0..<3).reduce(into: Data()) { acc, _ in acc.append(paddedBlock(payloadLength: 10)) }
 
     // Feed the stream in awkward chunk sizes that split blocks mid-padding and
     // mid-frame — exactly the case that desynced the old buffer-relative math.
