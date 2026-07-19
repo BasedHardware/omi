@@ -21,6 +21,13 @@ export class StreamingResampler {
   private readonly step: number // input samples advanced per output sample
   private hist = 0 // last input sample of the previous quantum (virtual index 0)
   private frac = 0 // fractional read position into the current virtual buffer
+  // Reused output scratch, grown on demand. process() runs on the audio render
+  // thread every 128-sample quantum, so it allocates nothing per call beyond the
+  // one owned Float32Array it returns (via slice) — no closure, no boxed number[],
+  // no Float32Array.from iteration. The scratch itself never escapes: callers may
+  // retain the returned slice across calls (the phase-continuity test does), so
+  // the return must stay independently owned.
+  private scratch = new Float32Array(64)
 
   constructor(fromRate: number, toRate: number) {
     this.step = fromRate / toRate
@@ -33,18 +40,29 @@ export class StreamingResampler {
     const n = input.length
     if (n === 0) return input
     const step = this.step
-    const at = (i: number): number => (i <= 0 ? this.hist : input[i - 1])
-    const out: number[] = []
+    const hist = this.hist
+    // Upper bound on samples emitted (positions frac, frac+step, … that stay < n):
+    // ceil covers the fractional tail, +2 absorbs float slop so the fill can never
+    // run past the scratch. Overestimating only affects capacity, not the result.
+    // cap can be ≤ 0 when step > n (frac ≥ n ⇒ the loop runs zero times, returns
+    // empty) — inert: a non-positive cap never trips the grow guard (length ≥ 64).
+    const cap = Math.ceil((n - this.frac) / step) + 2
+    if (cap > this.scratch.length) this.scratch = new Float32Array(cap)
+    const out = this.scratch
+    let count = 0
     let p = this.frac
     while (p < n) {
       const i = Math.floor(p)
       const f = p - i
-      out.push(at(i) * (1 - f) + at(i + 1) * f)
+      // V[i] = hist when i==0 else input[i-1]; V[i+1] = input[i] (i>=0 ⇒ i+1>=1).
+      // Inlined — this branch was a fresh closure (`at`) allocated every quantum.
+      const a = i === 0 ? hist : input[i - 1]
+      out[count++] = a * (1 - f) + input[i] * f
       p += step
     }
     this.hist = input[n - 1]
     this.frac = p - n // shift origin: next virtual index 0 == current input[n-1]
-    return Float32Array.from(out)
+    return out.slice(0, count) // owned copy — safe to retain across calls
   }
 }
 
