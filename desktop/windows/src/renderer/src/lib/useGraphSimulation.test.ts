@@ -134,4 +134,23 @@ describe('GraphSimulation', () => {
       expect(Math.abs(sim.liveNode(n.id)!.z ?? 0)).toBeLessThan(1e-9)
     }
   })
+
+  it('never adopts a cached 2D layout for a 3D sim of the same node set', () => {
+    // Regression: the layout cache used to be keyed by node ids alone, so the 2D
+    // Memories card (which settles first) poisoned the cache for the full-screen
+    // 3D page — every node adopted z=0 and the "3D" scene was a flat plane with
+    // zero parallax (orbiting read as panning).
+    const flat = new GraphSimulation('user', 2)
+    flat.setGraph(gBig)
+    flat.settle(60)
+
+    const deep = new GraphSimulation('user', 3)
+    deep.setGraph(gBig)
+    deep.settle(60)
+    const zs = gBig.nodes
+      .filter((n) => n.id !== 'user')
+      .map((n) => Math.abs(deep.liveNode(n.id)!.z ?? 0))
+    // A cache hit on the 2D layout would leave every z exactly 0.
+    expect(Math.max(...zs)).toBeGreaterThan(5)
+  })
 })

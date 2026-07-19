@@ -1,11 +1,40 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchKnowledgeGraph, rebuildKnowledgeGraph } from '../lib/knowledgeGraphClient'
 import type { KnowledgeGraph } from '../../../shared/types'
+import { toast } from '../lib/toast'
 
 const cache = {
   graph: null as KnowledgeGraph | null,
   error: null as string | null,
   loaded: false
+}
+
+// Poll cadence after kicking a rebuild: the server-side job is an LLM pass over
+// up to 500 memories, so give it a generous ~60s before giving up (the old
+// graph stays on screen either way).
+const REBUILD_POLL_DELAYS_MS = [2000, 3000, 5000, 8000, 12000, 15000, 15000]
+
+const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+// Polls `fetch` until it returns a non-empty graph — i.e. the background rebuild
+// has landed and overwritten the snapshot the rebuild endpoint cleared. When the
+// graph was ALREADY empty before the rebuild, the first response is authoritative
+// (there is no old graph to protect, and "still empty" may be the correct final
+// answer). Returns null when every attempt still saw the cleared snapshot; the
+// caller keeps the graph it already has. Fetch errors propagate to the caller.
+// Exported for tests.
+export async function pollRebuiltGraph(
+  fetch: () => Promise<KnowledgeGraph>,
+  hadGraph: boolean,
+  delays: readonly number[] = REBUILD_POLL_DELAYS_MS,
+  sleep: (ms: number) => Promise<void> = wait
+): Promise<KnowledgeGraph | null> {
+  for (const delay of delays) {
+    await sleep(delay)
+    const g = await fetch()
+    if (g.nodes.length > 0 || !hadGraph) return g
+  }
+  return null
 }
 
 function errMessage(e: unknown): string {
@@ -55,21 +84,36 @@ export function useKnowledgeGraph(): {
     }
   }, [])
 
-  // Rebuild kicks off a server-side background job, then re-fetches. The job is
-  // async server-side, so the immediate re-fetch may still show the old graph;
-  // that's acceptable for v1 (the user can refetch). Errors surface via state.
+  // Rebuild kicks off a server-side background job. The endpoint synchronously
+  // CLEARS the stored graph before re-deriving it (backend
+  // routers/knowledge_graph.py: delete → background task), so an immediate
+  // re-fetch deterministically returns the cleared, empty snapshot. Adopting
+  // that would blank the brain map everywhere — this hook's module cache feeds
+  // both the Memories card and the full-screen page. Instead we keep the graph
+  // currently on screen and poll until the rebuilt one lands (see
+  // pollRebuiltGraph); on timeout or error the old graph stays and a toast
+  // explains, so refresh can never leave a blank page.
   const rebuild = async (): Promise<void> => {
     setRebuilding(true)
     setError(null)
     try {
       await rebuildKnowledgeGraph()
-      const g = await fetchKnowledgeGraph()
-      cache.graph = g
-      setGraph(g)
+      const hadGraph = (cache.graph?.nodes.length ?? 0) > 0
+      const g = await pollRebuiltGraph(fetchKnowledgeGraph, hadGraph)
+      if (g) {
+        cache.graph = g
+        cache.error = null
+        setGraph(g)
+      } else {
+        toast('Rebuild is still running', {
+          body: 'Your brain map will update once the rebuild finishes.'
+        })
+      }
     } catch (e) {
       const msg = errMessage(e)
       cache.error = msg
       setError(msg)
+      toast('Could not rebuild the brain map', { tone: 'error', body: msg })
     } finally {
       setRebuilding(false)
     }
