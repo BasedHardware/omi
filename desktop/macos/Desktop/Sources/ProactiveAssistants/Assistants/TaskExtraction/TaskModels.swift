@@ -521,7 +521,8 @@ struct TaskExtractionResult: Codable, AssistantResult {
 
 /// Context injected into the extraction prompt for deduplication
 struct TaskExtractionContext {
-  let activeTasks: [(id: Int64, description: String, priority: String?, relevanceScore: Int?)]
+  /// Only backend action-item IDs are valid duplicate/refinement targets.
+  let activeTasks: [(id: String, description: String, priority: String?, relevanceScore: Int?)]
   let completedTasks: [(id: Int64, description: String)]
   let deletedTasks: [(id: Int64, description: String)]
   /// Descriptions of tasks already staged locally (not yet promoted to the
@@ -535,7 +536,9 @@ struct TaskExtractionContext {
 
 /// Result from vector/FTS search during tool-calling extraction
 struct TaskSearchResult: Codable {
-  let id: Int64
+  /// Stable backend action-item ID when this result can be mutated. Local and
+  /// staged rows remain search evidence but deliberately have no task ID.
+  let taskID: String?
   let description: String
   let status: String  // "active", "completed", "deleted"
   let similarity: Double?  // cosine similarity (nil for FTS-only matches)
@@ -543,7 +546,8 @@ struct TaskSearchResult: Codable {
   let relevanceScore: Int?  // relevance ranking score (higher = more important)
 
   enum CodingKeys: String, CodingKey {
-    case id, description, status, similarity
+    case taskID = "task_id"
+    case description, status, similarity
     case matchType = "match_type"
     case relevanceScore = "relevance_score"
   }

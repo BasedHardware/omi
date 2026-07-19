@@ -596,6 +596,33 @@ final class TaskIntelligenceSQLiteRoundTripTests: XCTestCase {
     XCTAssertEqual(restored.provenance?.first?.version, "2")
   }
 
+  func testActiveTaskContextExposesOnlyBackendTaskIDs() async throws {
+    _ = try await ActionItemStorage.shared.insertLocalActionItem(
+      ActionItemRecord(
+        backendId: "backend-task-42",
+        backendSynced: true,
+        description: "Review the release PR",
+        source: "test",
+        relevanceScore: 1
+      ),
+      authorization: .unrestricted
+    )
+    _ = try await ActionItemStorage.shared.insertLocalActionItem(
+      ActionItemRecord(
+        description: "Unsynced local task",
+        source: "test",
+        relevanceScore: 2
+      ),
+      authorization: .unrestricted
+    )
+
+    let topTasks = try await ActionItemStorage.shared.getTopRelevanceTasks()
+    let recentTasks = try await ActionItemStorage.shared.getRecentActiveTasks()
+
+    XCTAssertEqual(topTasks.compactMap(\.backendId), ["backend-task-42"])
+    XCTAssertEqual(recentTasks.compactMap(\.backendId), ["backend-task-42"])
+  }
+
   func testCanonicalCandidateOutboxIsHiddenRetryableAndReceiptReconciled() async throws {
     let row = try await StagedTaskStorage.shared.insertLocalStagedTask(
       StagedTaskRecord(
