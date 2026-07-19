@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.81",
+      "date": "2026-07-19",
+      "changes": [
+        "Improved beta chat recovery after a failed request."
+      ]
+    },
+    {
       "version": "0.12.80",
       "date": "2026-07-18",
       "changes": [
