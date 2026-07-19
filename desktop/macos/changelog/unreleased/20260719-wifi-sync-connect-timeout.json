@@ -1,3 +1,0 @@
-{
-  "change": "Fixed WiFi sync hanging on \"Connecting…\" forever when the device could not be reached"
-}

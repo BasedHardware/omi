@@ -1,3 +1,0 @@
-{
-  "change": "Fixed onboarding sometimes creating a duplicate goal when finishing setup after a transient error"
-}
