@@ -15,9 +15,16 @@ export const BAR_SNOOZE_MS = 2 * 60 * 60 * 1000
 // "Disable for 2 hours" while porting the same affordance.
 export const BAR_SNOOZE_LABEL = 'Disable notifications for 2 hours'
 
+// The user's always-available escape hatch for a wedged voice plane (2026-07-18
+// supervisor): rebuilds the whole voice stack (driver, hub socket, capture,
+// timers) without an app restart — what a silent voice failure used to require.
+export const BAR_RESET_VOICE_LABEL = 'Reset voice'
+
 export type BarContextMenuDeps = ContextMenuDeps & {
   /** Silence proactive notifications for a fixed window (the snooze item's action). */
   snooze: () => void
+  /** Rebuild the entire voice plane (main's `resetVoicePlane`). */
+  resetVoicePlane: () => void
 }
 
 /**
@@ -40,8 +47,12 @@ export function buildBarContextMenuTemplate(
     label: BAR_SNOOZE_LABEL,
     click: () => deps.snooze()
   }
+  const resetVoice: MenuItemConstructorOptions = {
+    label: BAR_RESET_VOICE_LABEL,
+    click: () => deps.resetVoicePlane()
+  }
   // A single separator joins the two groups only when the editing/link menu is
   // non-empty — preserving the "never leading/trailing/doubled separator" rule.
-  if (!base.length) return [snooze]
-  return [...base, { type: 'separator' }, snooze]
+  if (!base.length) return [snooze, resetVoice]
+  return [...base, { type: 'separator' }, snooze, resetVoice]
 }

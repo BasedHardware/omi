@@ -19,6 +19,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { auth } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange } from '../../lib/preferences'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
+import { useVoicePlaneSupervisor } from '../../hooks/useVoicePlaneSupervisor'
 import { useCodingAgents } from '../../hooks/useCodingAgents'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
@@ -64,6 +65,7 @@ const HUB_ORB_IDLE: VoiceHubBarState = {
   isListening: false,
   isThinking: false,
   isResponseActive: false,
+  seq: 0,
   orbLevel: 0,
   hint: ''
 }
@@ -176,6 +178,10 @@ export function BarApp(): React.JSX.Element {
   )
 
   // --- push-to-talk (always mounted; drives the orb + voice sends) ------------
+  // Voice-plane supervisor abort bridge (the hook mounts below, after the states
+  // it observes exist; this ref lets the earlier-constructed hubDelegate report
+  // aborts to it). See useVoicePlaneSupervisor.
+  const voiceSupNoteCancelRef = useRef<() => void>(() => {})
   const ptt = usePushToTalk({
     // A blocked voice turn involves no draft — the main window speaks the line.
     onCommit: (text) => void sendFromBar(text, true),
@@ -205,7 +211,12 @@ export function BarApp(): React.JSX.Element {
       enabled: () => getPreferences().pttHubEnabled === true,
       begin: (backfillMs) => window.omiBar.voiceHubBegin({ backfillMs }),
       end: () => window.omiBar.voiceHubEnd(),
-      cancel: () => window.omiBar.voiceHubCancel()
+      cancel: () => {
+        // An aborted hold owes the supervisor no terminal — report it so the
+        // trailing key-up can't arm a watch on a dead turn.
+        voiceSupNoteCancelRef.current()
+        window.omiBar.voiceHubCancel()
+      }
     }
   })
   // A capture that FAILS (mic unavailable → the machine cancels, so no
@@ -411,13 +422,35 @@ export function BarApp(): React.JSX.Element {
   const cancelPttRef = useRef(ptt.cancel)
   // eslint-disable-next-line react-hooks/refs -- latest-ref
   cancelPttRef.current = ptt.cancel
+
+  // Voice-plane supervisor (2026-07-18): enforces the press→observable-terminal
+  // contract at the outermost seam and triggers the full resetVoicePlane when
+  // the plane goes silently dead. Chip renders through BarHintStrip below.
+  const voiceSup = useVoicePlaneSupervisor({
+    hubActive: hubOrb.active,
+    hubResponseActive: hubOrb.isResponseActive,
+    hubHint: hubOrb.hint,
+    hubSeq: hubOrb.seq,
+    pttRecording: ptt.recording,
+    pttTranscribing: ptt.transcribing,
+    pttHint: ptt.hint,
+    pttError: ptt.error,
+    chatStatus: chat.status,
+    cancelLocal: () => cancelPttRef.current()
+  })
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the earlier-built hubDelegate + Esc listener
+  voiceSupNoteCancelRef.current = voiceSup.noteCancel
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       const s = escStateRef.current
       e.preventDefault()
-      if (s.recording || s.transcribing || s.speaking) cancelPttRef.current()
-      else if (s.view === 'conversation') setView('list')
+      if (s.recording || s.transcribing || s.speaking) {
+        // Esc aborts the turn — the supervisor must not expect a terminal.
+        voiceSupNoteCancelRef.current()
+        cancelPttRef.current()
+      } else if (s.view === 'conversation') setView('list')
       else window.omiOverlay.hide()
     }
     window.addEventListener('keydown', onKey)
@@ -590,7 +623,7 @@ export function BarApp(): React.JSX.Element {
                     setDraft={setDraft}
                     onSubmit={(text) => sendFromBar(text, typedVoice)}
                     limitNotice={limitNotice}
-                    pttNotice={ptt.hint || ptt.error || hubOrb.hint || null}
+                    pttNotice={voiceSup.chip || ptt.hint || ptt.error || hubOrb.hint || null}
                     pttKeyDown={ptt.onKeyDown}
                     pttKeyUp={ptt.onKeyUp}
                     recording={ptt.recording}
@@ -635,7 +668,11 @@ export function BarApp(): React.JSX.Element {
           2s hintVisibility deadline) — without it a failed hub-lane hold only fired
           the orb tremor and the chip stayed dark. */}
       <BarHintStrip
-        text={expanded || sliding === 'out' ? null : ptt.hint || ptt.error || hubOrb.hint || null}
+        text={
+          expanded || sliding === 'out'
+            ? null
+            : voiceSup.chip || ptt.hint || ptt.error || hubOrb.hint || null
+        }
       />
     </div>
   )

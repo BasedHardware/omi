@@ -3,6 +3,7 @@ import type { BrowserWindow } from 'electron'
 import { LINK_SCHEMES } from '../contextMenuTemplate'
 import { isAllowedExternalScheme } from '../externalUrl'
 import { setNotificationSnooze } from '../assistants/core/notify'
+import { resetVoicePlane } from '../voice/voicePlaneIpc'
 import { BAR_SNOOZE_MS, buildBarContextMenuTemplate } from './barContextMenuTemplate'
 
 /**
@@ -31,7 +32,10 @@ export function installBarContextMenu(win: BrowserWindow): void {
       },
       // "Disable for 2 hours" — silence proactive notifications, mirroring Mac's
       // FloatingControlBarManager.snooze(for: snoozeTwoHoursDuration).
-      snooze: () => setNotificationSnooze(Date.now() + BAR_SNOOZE_MS)
+      snooze: () => setNotificationSnooze(Date.now() + BAR_SNOOZE_MS),
+      // "Reset voice" — the user's manual escape hatch for a silently-wedged
+      // voice plane (2026-07-18 supervisor): full main-side rebuild, no restart.
+      resetVoicePlane: () => resetVoicePlane('context_menu')
     })
     // The snooze is always present, so this is never empty — but keep the guard so
     // an empty template (should it ever happen) never pops a blank menu.

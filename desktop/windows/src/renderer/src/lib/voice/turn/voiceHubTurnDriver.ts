@@ -36,6 +36,7 @@
 // hermetically against fakes.
 
 import { trackEvent as defaultTrackEvent } from '../../analytics'
+import { recordVoiceFlight as defaultFlightRecord } from '../flightRecord'
 import { getPreferences } from '../../preferences'
 import { gateDecision, voicedStats, type AudioStats } from '../../ptt/gate'
 import { HINT_MS } from '../../ptt/constants'
@@ -133,6 +134,9 @@ export type VoiceHubTurnDriverDeps = {
   restoreSystemAudio?: () => void
   /** Shared fallback telemetry emitter (defaults to the renderer `trackEvent`). */
   trackEvent?: (event: string, properties: Record<string, unknown>) => void
+  /** Flight-recorder tap (defaults to the shared renderer helper; tests spy).
+   *  Labels + numbers only — never transcript text. */
+  flightRecord?: (type: string, data?: Record<string, unknown>) => void
   /** The live kill-switch pref (defaults to `getPreferences`). */
   prefs?: () => { pttHubEnabled?: boolean }
   /** Schedule the post-release watchdog (defaults to a real `setTimeout` of
@@ -155,6 +159,7 @@ export class VoiceHubTurnDriver {
   private readonly muteForCapture: () => void
   private readonly restoreAudio: () => void
   private readonly scheduleReleaseWatchdog: (fire: () => void) => { cancel(): void }
+  private readonly flightRecord: (type: string, data?: Record<string, unknown>) => void
   private readonly now: () => number
   private readonly mintCaptureID: () => VoiceCaptureID
   private captureSeq = 0
@@ -189,11 +194,20 @@ export class VoiceHubTurnDriver {
   /** Armed at release (end/cancel); force-finalizes a turn the machine failed to
    *  free (see RELEASE_WATCHDOG_MS). Cancelled on terminal reconciliation. */
   private watchdog: { cancel(): void } | null = null
+  /** Set by `dispose()` (resetVoicePlane): this instance is dead — a fresh driver
+   *  replaces it. Guards the entry points so a stale IPC listener or late
+   *  callback can never resurrect a disposed stack's capture or socket. */
+  private disposed = false
 
   // Projection state ----------------------------------------------------------
   private lastProjection: VoiceTurnUIProjection = IDLE_PROJECTION
   private orbLevel = 0
   private lastOrbPublishAt = 0
+  /** Monotonic reducer-transition counter carried on every published state (the
+   *  supervisor's observed-progress signal). Bumped ONLY in onProjection —
+   *  throttled loudness emits re-send the same value, so the bar can tell real
+   *  phase progress from mere audio-level chatter. */
+  private projectionSeq = 0
 
   constructor(deps: VoiceHubTurnDriverDeps) {
     this.deps = deps
@@ -206,6 +220,7 @@ export class VoiceHubTurnDriver {
         const handle = setTimeout(fire, RELEASE_WATCHDOG_MS)
         return { cancel: () => clearTimeout(handle) }
       })
+    this.flightRecord = deps.flightRecord ?? defaultFlightRecord
     this.now = deps.now ?? (() => Date.now())
     // VoiceCaptureID is a branded NUMBER — a per-driver monotonic counter (this id
     // is only a reducer fencing token; it shares no namespace with the capture
@@ -233,7 +248,19 @@ export class VoiceHubTurnDriver {
 
     this.coordinator = new VoiceTurnCoordinator({
       scheduler: deps.scheduler,
-      mintTurnID: deps.mintTurnID
+      mintTurnID: deps.mintTurnID,
+      // Every reducer transition lands in the flight recorder — bounded labels
+      // only, so a field dump replays the exact phase walk without any PII.
+      onTimelineEntry: (e) =>
+        this.flightRecord('turn', {
+          seq: e.sequence,
+          turn: e.turnID === null ? null : String(e.turnID).slice(0, 8),
+          event: e.event,
+          before: e.phaseBefore?.kind ?? null,
+          after: e.phaseAfter?.kind ?? null,
+          route: e.route?.kind ?? null,
+          terminal: e.terminalReason
+        })
     })
     this.coordinator.setEffectHandler(this.host.effectHandler)
     this.coordinator.configure(this.host.presenter)
@@ -243,6 +270,7 @@ export class VoiceHubTurnDriver {
    *  the flag is off. Warming is what makes `hub.isAvailable()` true so the next
    *  press routes to the hub instead of falling straight to the cascade. */
   warm(): void {
+    if (this.disposed) return
     if (this.prefs().pttHubEnabled !== true) return
     // Eager warm is best-effort fire-and-forget: swallow the rejection so a failed
     // mint (both providers down) OR a teardown-during-warm abort (HubWarmAbortedError,
@@ -258,6 +286,7 @@ export class VoiceHubTurnDriver {
    *  disabled hub; the controller further no-ops when there's no session or a turn is
    *  active (deferring the refresh to that turn's termination). */
   requestSessionRefresh(reason: string): void {
+    if (this.disposed) return
     if (this.prefs().pttHubEnabled !== true) return
     this.hub.requestSessionRefresh(reason)
   }
@@ -270,9 +299,77 @@ export class VoiceHubTurnDriver {
     this.hub.teardownSession()
   }
 
+  /** resetVoicePlane: release EVERYTHING this driver may hold at any moment —
+   *  mid-turn, mid-reply, healthy or wedged — and leave the instance inert (the
+   *  host swaps in a fresh driver; a disposed one never runs again). Two layers,
+   *  mirroring `fireReleaseWatchdog`: the coordinator's own reset first (the
+   *  graceful path — cleanup terminal drives the host's full teardown through
+   *  effects), then belt-and-braces manual releases for the wedge class where
+   *  the machinery itself is broken. Every call is idempotent. */
+  dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+    this.flightRecord('driver_dispose', {
+      hadTurn: this.turnID !== null,
+      route: this.route.kind
+    })
+    const turnID = this.turnID
+    this.watchdog?.cancel()
+    this.watchdog = null
+    try {
+      // cleanup+reset terminal: cancels all deadlines, runs the host teardown
+      // (stopCapture, cancelHub, output lease, system-audio restore), publishes
+      // the idle projection.
+      this.coordinator.reset()
+    } catch {
+      /* the machinery may be the broken thing — fall through to manual cleanup */
+    }
+    try {
+      this.disposeCapture()
+    } catch {
+      /* keep going — release everything we can */
+    }
+    if (turnID !== null) {
+      try {
+        this.output.endTurn(turnID)
+      } catch {
+        /* keep going */
+      }
+      try {
+        this.hub.voiceTurnDidTerminate(turnID)
+      } catch {
+        /* keep going */
+      }
+    }
+    try {
+      this.hub.teardownSession()
+    } catch {
+      /* keep going */
+    }
+    try {
+      this.restoreAudio()
+    } catch {
+      /* keep going */
+    }
+    this.turnID = null
+    this.captureID = null
+    this.route = { kind: 'undecided' }
+    this.sessionID = null
+    this.capture = null
+    this.cascadeBuffer = []
+    this.cascadeBufferBytes = 0
+    this.orbLevel = 0
+    this.turnTranscript = ''
+    this.assistantText = ''
+    this.lastProjection = IDLE_PROJECTION
+    // Tell the bar to drop back to its local idle orb.
+    this.emit(true)
+  }
+
   /** A bar hold delegated its turn to this driver (flag on). Begins a main-owned
    *  turn: barge-in, route selection, hub begin, and main-owned capture. */
   begin(payload: { backfillMs: number }): void {
+    if (this.disposed) return
     // Barge-in seam (Mac `PushToTalkManager.startListening` → interruptCurrentResponse):
     // a new hold cuts off a still-playing cascade/TTS reply. Safe no-op when idle.
     // Hub playback is instead cancelled by the superseding `beginTurn(interrupting)`.
@@ -311,6 +408,7 @@ export class VoiceHubTurnDriver {
     // The HOST picks the route (the reducer never does): flag-gated kill-switch.
     const route = selectPttRoute(this.hub, this.prefs())
     this.route = route
+    this.flightRecord('driver_begin', { route: route.kind, superseding })
     this.dispatch({ type: 'selectRoute', turnID, route })
 
     // A4: duck other apps' audio for this main-owned capture (pref-gated inside).
@@ -374,6 +472,12 @@ export class VoiceHubTurnDriver {
       // The terminal's `cancelHub` effect abandons the hub turn while KEEPING
       // the warm socket, so the next press is still instant.
       const hubGate = gateDecision(this.voiced)
+      this.flightRecord('release_gate', {
+        lane: 'hub',
+        decision: hubGate,
+        voicedSec: Number(this.voiced.voicedSec.toFixed(2)),
+        totalSec: Number(this.voiced.totalSec.toFixed(2))
+      })
       if (hubGate === 'too-short' || hubGate === 'dead-mic') {
         this.dispatch({ type: 'finish', turnID, reason: 'tooShort' })
         return
@@ -408,6 +512,7 @@ export class VoiceHubTurnDriver {
   cancel(): void {
     const turnID = this.turnID
     if (turnID === null) return
+    this.flightRecord('driver_cancel', { route: this.route.kind })
     // A cancel is a release too — the turn must terminate in bounded time.
     this.armReleaseWatchdog(turnID)
     this.dispatch({ type: 'cancel', turnID, reason: 'cancelled' })
@@ -476,6 +581,7 @@ export class VoiceHubTurnDriver {
     //     (quiet reset — Mac discards silence without ceremony; STT models
     //     hallucinate phrases from silence, so it must never be sent).
     const decision = gateDecision(voicedStats(buffer))
+    this.flightRecord('release_gate', { lane: 'cascade', decision, samples: buffer.length })
     if (decision === 'too-short' || decision === 'dead-mic') {
       this.dispatch({ type: 'finish', turnID, reason: 'tooShort' })
       return
@@ -485,10 +591,12 @@ export class VoiceHubTurnDriver {
       return
     }
     this.dispatch({ type: 'transcriptionStarted', turnID })
+    this.flightRecord('transcribe_start', { samples: buffer.length })
     void this.deps
       .transcribe(buffer)
       .then((text) => {
         if (this.turnID !== turnID) return
+        this.flightRecord('transcribe_ok', { chars: text.length })
         this.dispatch({ type: 'transcriptionFinal', turnID, text })
         if (text) this.deps.onFinalText(text, turnID as unknown as string)
         // The user's capture+transcribe turn is done; the reply is a separate chat
@@ -497,6 +605,7 @@ export class VoiceHubTurnDriver {
       })
       .catch((err: Error) => {
         if (this.turnID !== turnID) return
+        this.flightRecord('transcribe_fail', { message: err.message.slice(0, 120) })
         this.dispatch({ type: 'transcriptionFailed', turnID, message: err.message })
       })
   }
@@ -506,6 +615,7 @@ export class VoiceHubTurnDriver {
   private hubEvents(): HubControllerEvents {
     return {
       onConnected: (sessionID) => {
+        this.flightRecord('hub_connected', { hadTurn: this.turnID !== null })
         this.sessionID = sessionID
         const turnID = this.turnID
         if (turnID === null) return
@@ -520,6 +630,7 @@ export class VoiceHubTurnDriver {
         }
       },
       onError: () => {
+        this.flightRecord('hub_error', { hadTurn: this.turnID !== null })
         const turnID = this.turnID
         if (turnID !== null) this.dispatch({ type: 'cancel', turnID, reason: 'providerFailed' })
       },
@@ -611,6 +722,7 @@ export class VoiceHubTurnDriver {
       onCascadeHandoff: ({ frames, committed }) => {
         const turnID = this.turnID
         if (turnID === null) return
+        this.flightRecord('hub_cascade_handoff', { frames: frames.length, committed })
         this.handedOff = true
         this.route = { kind: 'deepgramBatch' }
         // Seed the cascade with what the hub buffered so no opening words are lost.
@@ -718,6 +830,7 @@ export class VoiceHubTurnDriver {
       `[hub-diag] release watchdog fired: turn stuck ${desynced ? 'desynced' : `in ${phase}`} ` +
         `${RELEASE_WATCHDOG_MS}ms after release — force-finalizing`
     )
+    this.flightRecord('release_watchdog_fired', { phase: phase ?? null, desynced })
     // Normal path first: a cleanup terminal runs the full host teardown (capture,
     // hub cancel, output lease, system-audio restore) and the reconciliation above
     // clears the driver's per-turn state.
@@ -800,6 +913,7 @@ export class VoiceHubTurnDriver {
 
   private onProjection(projection: VoiceTurnUIProjection): void {
     this.lastProjection = projection
+    this.projectionSeq += 1
     this.emit(true)
   }
 
@@ -815,6 +929,7 @@ export class VoiceHubTurnDriver {
       isListening: p.isListening,
       isThinking: p.isThinking,
       isResponseActive: p.isResponseActive,
+      seq: this.projectionSeq,
       orbLevel: this.turnID !== null ? this.orbLevel : 0,
       // Forwarded UNCONDITIONALLY (not gated on an active turn): a terminal hint (e.g.
       // a post-commit provider death) is emitted on the same terminal transition that

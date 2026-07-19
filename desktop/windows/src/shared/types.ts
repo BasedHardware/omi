@@ -470,6 +470,13 @@ export type VoiceHubBarState = {
   isThinking: boolean
   /** The hub is speaking its reply (the orb's response-active pose). */
   isResponseActive: boolean
+  /** Monotonic count of reducer-published projections for the CURRENT driver.
+   *  Bumped ONLY on real turn-machine transitions (never on throttled loudness
+   *  emits), so a change = observed phase progress. The bar-side supervisor
+   *  refreshes its press→terminal watch on it: a healthy multi-round tool turn
+   *  keeps progressing and never trips the watch, while a wedged turn's seq
+   *  freezes (health = observed dataflow, not flags). */
+  seq: number
   /** Latest orb loudness in [0,1] sampled from the main-owned capture. */
   orbLevel: number
   /** Transient status/error hint for the bar (e.g. "Voice response failed — try
@@ -1129,6 +1136,17 @@ export type OmiBridgeApi = {
   /** Push the loudness of Omi's own audible reply (PCM player worklet peak,
    *  canonical linear 0..1) to the bar orb's playback-amplitude lane (main → bar). */
   publishVoicePlaybackLevel: (level: number) => void
+  // --- Voice-plane flight recorder + reset (2026-07-18 supervisor) ---
+  /** Append one bounded event to the main-process voice flight recorder.
+   *  Fire-and-forget; NO transcript text / PII — labels and numbers only. */
+  voiceFlightRecord: (type: string, data?: Record<string, unknown>) => void
+  /** Rebuild the ENTIRE voice plane from scratch (supervisor timeout or the
+   *  bar's "Reset voice" menu). Safe at any moment; main dumps the flight
+   *  recorder, restores system audio, and broadcasts `onVoicePlaneReset`. */
+  resetVoicePlane: (trigger: string) => void
+  /** A voice-plane reset was commanded — every window drops/rebuilds its voice
+   *  stack (main window rebuilds the hub driver; the bar clears its lanes). */
+  onVoicePlaneReset: (cb: (payload: { trigger: string }) => void) => () => void
   // --- Tray + lifecycle (Phase 1) ---
   /** Report the current listening state so main drives the tray icon/menu/tooltip. */
   trayReportState: (state: TrayListeningState) => void

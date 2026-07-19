@@ -52,44 +52,69 @@ export function VoiceHubDriverHost(): null {
   //   * cascade STT (omniSTT route + warm-wait fallback) — transport.batchTranscribe.
   //   * final transcript — the ONE chat engine's send (fromVoice ⇒ spoken reply).
   //   * orb projection — publishVoiceHubState (main → bar).
-  const [driver] = useState(
+  const buildDriver = (): VoiceHubTurnDriver =>
     // eslint-disable-next-line react-hooks/refs -- latest-ref (sendRef) is read at turn-commit time inside the once-built driver, never during render
+    new VoiceHubTurnDriver({
+      createHub: (events) =>
+        new HubController({
+          events,
+          // Seed a realtime session with the shared thread's recent turns (PR-B).
+          // Reads the SAME conversation the typed tail reads, via the chat hook so
+          // the chatId stays encapsulated.
+          fetchSeed: () => getSeedRef.current(),
+          // Advertise the host-built voice tool catalog (PR-C). Role is host-derived
+          // main-side (never model/renderer-claimed); empty until signed in.
+          fetchTools: () => window.omi?.voiceHubToolCatalog?.() ?? Promise.resolve([])
+        }),
+      interruptPlayback: (leaseID) => interruptCurrentResponse(leaseID),
+      publishState: (state) => window.omi?.publishVoiceHubState?.(state),
+      startCapture: (opts) => startPttCapture(opts),
+      transcribe: (pcm) => batchTranscribe(pcm, new AbortController().signal),
+      // CASCADE route: re-answer via the chat engine (fromVoice ⇒ spoken reply).
+      // Thread the per-press turnId so the kernel user-turn record shares the key a
+      // hub-native record would use (INV-CHAT-1 double-record belt-and-suspenders).
+      onFinalText: (text, turnId) =>
+        void sendRef.current(text, { fromVoice: true, idempotencyKey: turnId }),
+      // A completed HUB turn: APPEND its text to the ONE chat engine (INV-CHAT-1),
+      // no LLM/TTS re-run (the hub already spoke it). Threads `interrupted` (a
+      // barge-in still records a partial reply) and the per-press turnId (the
+      // kernel dedupe key).
+      onRecordTurn: (userText, assistantText, interrupted, turnId) =>
+        recordVoiceTurnRef.current(userText, assistantText, interrupted, turnId),
+      // Dispatch a spoken tool request IN-PROCESS via the shared host executor
+      // registry (PR-C). Authority is host-derived main-side; the model supplies
+      // only the name + arguments. Never throws — main returns "Error: …" strings.
+      executeTool: (name, argumentsJSON) =>
+        window.omi?.voiceToolExecute?.({ name, argumentsJSON }) ??
+        Promise.resolve('Error: tools are not available'),
+      muteForCapture: muteSystemAudioForHubCapture
+    })
+  // eslint-disable-next-line react-hooks/refs -- buildDriver only wires latest-refs into the driver's injected seams; they are read at event time, never during render
+  const [driver, setDriver] = useState(buildDriver)
+  // Latest-refs so the once-registered reset listener always disposes the LIVE
+  // driver and builds with the freshest closures.
+  const driverRef = useRef(driver)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-registered reset listener
+  driverRef.current = driver
+  const buildDriverRef = useRef(buildDriver)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-registered reset listener
+  buildDriverRef.current = buildDriver
+
+  // resetVoicePlane (2026-07-18 supervisor): rebuild the ENTIRE main-side voice
+  // stack from scratch — dispose the old driver (which releases the coordinator,
+  // capture, hub socket, output lease, watchdog, and system-audio mute), then
+  // swap in a fresh one. `useHubWarmLifecycle` below re-runs on the new driver
+  // identity and re-warms it, so the next press lands on a clean, warm plane.
+  // Safe at any moment: dispose() is idempotent and phase-agnostic.
+  useEffect(
     () =>
-      new VoiceHubTurnDriver({
-        createHub: (events) =>
-          new HubController({
-            events,
-            // Seed a realtime session with the shared thread's recent turns (PR-B).
-            // Reads the SAME conversation the typed tail reads, via the chat hook so
-            // the chatId stays encapsulated.
-            fetchSeed: () => getSeedRef.current(),
-            // Advertise the host-built voice tool catalog (PR-C). Role is host-derived
-            // main-side (never model/renderer-claimed); empty until signed in.
-            fetchTools: () => window.omi?.voiceHubToolCatalog?.() ?? Promise.resolve([])
-          }),
-        interruptPlayback: (leaseID) => interruptCurrentResponse(leaseID),
-        publishState: (state) => window.omi?.publishVoiceHubState?.(state),
-        startCapture: (opts) => startPttCapture(opts),
-        transcribe: (pcm) => batchTranscribe(pcm, new AbortController().signal),
-        // CASCADE route: re-answer via the chat engine (fromVoice ⇒ spoken reply).
-        // Thread the per-press turnId so the kernel user-turn record shares the key a
-        // hub-native record would use (INV-CHAT-1 double-record belt-and-suspenders).
-        onFinalText: (text, turnId) =>
-          void sendRef.current(text, { fromVoice: true, idempotencyKey: turnId }),
-        // A completed HUB turn: APPEND its text to the ONE chat engine (INV-CHAT-1),
-        // no LLM/TTS re-run (the hub already spoke it). Threads `interrupted` (a
-        // barge-in still records a partial reply) and the per-press turnId (the
-        // kernel dedupe key).
-        onRecordTurn: (userText, assistantText, interrupted, turnId) =>
-          recordVoiceTurnRef.current(userText, assistantText, interrupted, turnId),
-        // Dispatch a spoken tool request IN-PROCESS via the shared host executor
-        // registry (PR-C). Authority is host-derived main-side; the model supplies
-        // only the name + arguments. Never throws — main returns "Error: …" strings.
-        executeTool: (name, argumentsJSON) =>
-          window.omi?.voiceToolExecute?.({ name, argumentsJSON }) ??
-          Promise.resolve('Error: tools are not available'),
-        muteForCapture: muteSystemAudioForHubCapture
-      })
+      window.omi?.onVoicePlaneReset?.(() => {
+        driverRef.current.dispose()
+        const next = buildDriverRef.current()
+        driverRef.current = next
+        setDriver(next)
+      }),
+    []
   )
 
   // Forward the reply's PLAYBACK loudness to the bar. The PCM player (main-window

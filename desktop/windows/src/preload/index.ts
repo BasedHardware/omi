@@ -609,6 +609,16 @@ const omi: OmiBridgeApi = {
     ipcRenderer.send('voiceHub:publishState', state),
   publishVoicePlaybackLevel: (level: number) =>
     ipcRenderer.send('voiceHub:publishPlaybackLevel', level),
+  // --- Voice-plane flight recorder + reset (2026-07-18 supervisor) ---
+  voiceFlightRecord: (type: string, data?: Record<string, unknown>) =>
+    ipcRenderer.send('voice:flightRecord', type, data),
+  resetVoicePlane: (trigger: string) => ipcRenderer.send('voice:resetPlane', trigger),
+  onVoicePlaneReset: (cb: (payload: { trigger: string }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: { trigger: string }): void =>
+      cb(payload)
+    ipcRenderer.on('voice:planeReset', listener)
+    return () => ipcRenderer.removeListener('voice:planeReset', listener)
+  },
   // --- Tray + lifecycle (Phase 1) ---
   trayReportState: (state) => ipcRenderer.send('tray:state', state),
   onTrayToggleListening: (cb: () => void) => {

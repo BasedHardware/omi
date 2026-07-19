@@ -36,6 +36,7 @@
 // path and a fallen-back turn's audio can never leak into the next hub turn.
 
 import { trackEvent } from '../../analytics'
+import { recordVoiceFlight } from '../flightRecord'
 import { getPreferences } from '../../preferences'
 import {
   resolveEffectiveVoiceProvider,
@@ -807,6 +808,15 @@ export class HubController {
       aliveForMs,
       hasActiveTurn: hadActiveTurn
     })
+    // Flight recorder: every socket death with its classification — the exact
+    // trail the circuit-death diagnosis needed. Bounded labels, no payloads.
+    recordVoiceFlight('hub_close', {
+      category,
+      closeCode: closeCode ?? null,
+      aliveForMs,
+      hadActiveTurn,
+      strikes: this.reconnectStrikes
+    })
     this.events.onError?.({ reason: message, retryable, aliveForMs })
     this.scheduleReconnectForClose(category, aliveForMs)
   }
@@ -852,6 +862,7 @@ export class HubController {
         // half-open probe fails and re-opens it. Auto re-warm has stopped (no timer armed
         // here), so it can't re-emit until an external warm trigger drives the next probe.
         this.circuitOpenUntil = this.now() + HubController.CIRCUIT_COOLDOWN_MS
+        recordVoiceFlight('hub_circuit_open', { cooldownMs: HubController.CIRCUIT_COOLDOWN_MS })
         trackEvent('fallback_triggered', {
           component: 'ptt_cascade',
           from: 'hub',

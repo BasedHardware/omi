@@ -614,3 +614,39 @@ describe('VoiceTurnCoordinator — drain robustness', () => {
     expect(coordinator.model.staleEventCount).toBe(2)
   })
 })
+
+describe('onTimelineEntry tap (flight recorder)', () => {
+  it('streams every timeline append to the tap, in order', () => {
+    const scheduler = new ManualVoiceTurnScheduler()
+    const seen: string[] = []
+    const coordinator = new VoiceTurnCoordinator({
+      scheduler,
+      mintTurnID: newTurnID,
+      onTimelineEntry: (e) => seen.push(e.event)
+    })
+    const turnID = coordinator.begin('hold')
+    coordinator.send({ type: 'cancel', turnID, reason: 'cancelled' })
+    expect(seen.length).toBe(coordinator.timelineSnapshot().length)
+    expect(seen).toEqual(coordinator.timelineSnapshot().map((e) => e.event))
+  })
+
+  it('a throwing tap is contained — the machine keeps running', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const scheduler = new ManualVoiceTurnScheduler()
+      const coordinator = new VoiceTurnCoordinator({
+        scheduler,
+        mintTurnID: newTurnID,
+        onTimelineEntry: () => {
+          throw new Error('tap boom')
+        }
+      })
+      const turnID = coordinator.begin('hold')
+      coordinator.send({ type: 'cancel', turnID, reason: 'cancelled' })
+      expect(coordinator.activeTurnID).toBeNull()
+      expect(coordinator.model.turn?.phase).toEqual({ kind: 'terminal', reason: 'cancelled' })
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+})

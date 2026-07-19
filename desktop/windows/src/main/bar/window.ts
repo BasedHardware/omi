@@ -50,6 +50,7 @@ import {
   type Rect
 } from './placement'
 import { SummonGesture, type GestureKind } from './gesture'
+import { recordVoiceFlight } from '../voice/flightRecorder'
 import {
   evaluatePeekWatchdog,
   nextInteractivity,
@@ -782,6 +783,7 @@ function onGestureStart(): void {
     // own hold threshold decides recording; a hold keeps the pill up + drives
     // the orb). Click the pill to expand into the chat surface.
     pttTrace(`gesture START (sampler) presented=${gestureStartedVisible}`)
+    recordVoiceFlight('main', 'gesture', { phase: 'down', presented: gestureStartedVisible })
     if (!gestureStartedVisible) showBar('peek', 'summon')
     sendPtt('down')
   } else {
@@ -800,6 +802,7 @@ function onGestureEnd(kind: GestureKind): void {
   gestureActiveHold = false
   diag(`gesture END kind=${kind} startedPresented=${gestureStartedVisible} mode=${currentMode}`)
   pttTrace(`gesture END kind=${kind} sampler=${samplerAvailable}`)
+  recordVoiceFlight('main', 'gesture', { phase: 'up', kind, sampler: samplerAvailable })
   if (!samplerAvailable) return
   sendPtt('up')
   // A tap on an already-open bar closes it (deferred to release so a HOLD on
@@ -934,12 +937,15 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
   // same bar→main hop as sendChat. The bar sends these ONLY when the flag is on;
   // flag off, they never fire and the bar runs its local cascade exactly as today.
   ipcMain.on('bar:voiceHubBegin', (_e, payload: { backfillMs: number }) => {
+    recordVoiceFlight('main', 'hub_lane', { control: 'begin' })
     sendToMain('voiceHub:begin', payload)
   })
   ipcMain.on('bar:voiceHubEnd', () => {
+    recordVoiceFlight('main', 'hub_lane', { control: 'end' })
     sendToMain('voiceHub:end')
   })
   ipcMain.on('bar:voiceHubCancel', () => {
+    recordVoiceFlight('main', 'hub_lane', { control: 'cancel' })
     sendToMain('voiceHub:cancel')
   })
   // Main window → bar: projected warm-hub turn state for the orb (phase + level).
