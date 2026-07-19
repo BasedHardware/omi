@@ -967,6 +967,17 @@ async def sync_local_files_v2(
                 request_id=x_request_id if isinstance(x_request_id, str) else None,
                 cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
             )
+        if await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
+            logger.info('sync_v2: daily audio ceiling reached uid=%s', uid)
+            return await _fair_use_restriction_response(
+                uid=uid,
+                retry_after=_retry_after_until_next_utc_day(),
+                client_platform=client_device_context.platform,
+                device_hash=client_device_context.device_hash,
+                app_version=client_device_context.app_version,
+                request_id=x_request_id if isinstance(x_request_id, str) else None,
+                cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
+            )
 
     should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
