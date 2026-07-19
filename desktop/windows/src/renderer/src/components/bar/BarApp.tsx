@@ -20,7 +20,6 @@ import { auth } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange } from '../../lib/preferences'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { useVoicePlaneSupervisor } from '../../hooks/useVoicePlaneSupervisor'
-import { useCodingAgents } from '../../hooks/useCodingAgents'
 import { useAgentPills } from '../../hooks/useAgentPills'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
@@ -34,16 +33,12 @@ import {
   deriveBarVoiceState,
   isBarBusy,
   isPlaybackLevelFresh,
-  deriveAgentRows,
-  pillLabel,
-  nextConversationDraft,
-  type BarAgentRow
+  pillLabel
 } from './barDisplay'
 import type {
   BarMode,
   BarShowPayload,
   BarChatState,
-  CodingAgentId,
   WaveformSource,
   VoiceHubBarState
 } from '../../../../shared/types'
@@ -102,12 +97,6 @@ export function BarApp(): React.JSX.Element {
     () => !!getPreferences().floatingBarTypedVoiceEnabled
   )
   const [chat, setChat] = useState<BarChatState>(EMPTY_CHAT)
-  // Connected coding agents (shared fetch with Settings → Agents).
-  const { agents } = useCodingAgents()
-  // Which adapter is running the current task (the shared engine only projects a
-  // single global agentsActive; agent_selected names the adapter). At most one
-  // row shows "Working…".
-  const [activeAgentId, setActiveAgentId] = useState<CodingAgentId | null>(null)
   const [view, setView] = useState<'list' | 'conversation' | 'agent'>('list')
   // Which floating agent pill's transcript is open (view === 'agent'). Its id
   // protects the pill from viewed-TTL expiry / soft-cap eviction while open.
@@ -121,11 +110,6 @@ export function BarApp(): React.JSX.Element {
     dismiss: dismissPill,
     transcriptFor
   } = useAgentPills(activePillId)
-  // Which row the open conversation belongs to: null = the Omi Chat thread, else
-  // the coding-agent row that opened it (drives the header title + draft seed).
-  // The engine + history stay one shared thread (INV-CHAT-1) — this only steers
-  // the entry framing so "Claude Code" no longer opens a view titled "Omi Chat".
-  const [target, setTarget] = useState<BarAgentRow | null>(null)
   const [draft, setDraft] = useState('')
   const modeRef = useRef<BarMode | null>(null)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for IPC listeners
@@ -180,17 +164,6 @@ export function BarApp(): React.JSX.Element {
   useEffect(() => window.omiBar.onChatState((s) => setChat(s)), [])
   // Pull the current thread on mount (in case we missed prior broadcasts).
   useEffect(() => window.omiBar.requestChatState(), [])
-
-  // --- coding agents (list view rows) -----------------------------------------
-  // Track which adapter is running the current task; the terminal signal is the
-  // global agentsActive dropping (no per-task "done" broadcast exists).
-  useEffect(
-    () =>
-      window.omi.onCodingAgentEvent((e) => {
-        if (e.type === 'agent_selected') setActiveAgentId(e.adapterId)
-      }),
-    []
-  )
 
   // --- push-to-talk (always mounted; drives the orb + voice sends) ------------
   // Voice-plane supervisor abort bridge (the hook mounts below, after the states
@@ -380,9 +353,8 @@ export function BarApp(): React.JSX.Element {
       setLimitNotice(null)
       void senderRef.current.sync()
       // Each fresh reveal starts at the list (a summon is a pill; expanding lands
-      // on the list, not a stale conversation) with no agent target carried over.
+      // on the list, not a stale conversation).
       setView('list')
-      setTarget(null)
       setActivePillId(null)
       // Signature motion: the orb materializes from nothing on every reveal.
       setGenesisNonce((n) => n + 1)
@@ -581,17 +553,10 @@ export function BarApp(): React.JSX.Element {
               : null
         : null
 
-  // Connected coding agents to list under "Omi Chat" (at most one "Working…").
-  const agentRows = deriveAgentRows(agents, activeAgentId, agentsActive)
-
-  // Open the inline conversation for a clicked row. `null` = the Omi Chat thread;
-  // an agent row titles the header with its name and seeds the delegation phrasing
-  // detectAgentTask matches, so the user's next words are handed to that agent
-  // (they can clear it for a normal Omi turn). Returning to Omi drops a stale seed
-  // but never a message the user actually typed (nextConversationDraft).
-  const openConversation = (next: BarAgentRow | null): void => {
-    setDraft((current) => nextConversationDraft({ target: next, previous: target, current }))
-    setTarget(next)
+  // Open the inline Omi Chat conversation (the only transition from the hub's ask
+  // state to the response state — driven by a SEND). The engine + history are one
+  // shared thread (INV-CHAT-1); the draft carries the typed text across.
+  const openConversation = (): void => {
     setView('conversation')
   }
 
@@ -687,10 +652,9 @@ export function BarApp(): React.JSX.Element {
                 ) : (
                   <BarChatSurface
                     chat={barChat}
-                    agents={agentRows}
                     view={view === 'conversation' ? 'conversation' : 'list'}
                     expanded={expanded}
-                    conversationTitle={target ? target.displayName : 'Omi Chat'}
+                    conversationTitle="Omi Chat"
                     onOpenConversation={openConversation}
                     pills={pills}
                     onOpenPill={openPill}

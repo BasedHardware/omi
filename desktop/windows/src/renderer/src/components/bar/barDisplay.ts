@@ -3,12 +3,7 @@
 // are the load-bearing rules of the rework (orb is the sole status indicator;
 // the pill stays open while a voice exchange is in flight).
 import type { OrbState } from '../../orb/choreography'
-import type {
-  BarChatStatus,
-  CodingAgentId,
-  CodingAgentInfo,
-  WaveformSource
-} from '../../../../shared/types'
+import type { BarChatStatus, WaveformSource } from '../../../../shared/types'
 
 export type BarActivity = {
   /** PTT is capturing the user's voice right now (local to the bar). */
@@ -151,67 +146,6 @@ export function deriveBarVoiceState(args: {
     hubSpeaking,
     status: hubSpeaking ? 'speaking' : chatStatus
   }
-}
-
-/** A coding-agent row in the bar's expanded list. */
-export type BarAgentRow = { id: CodingAgentId; displayName: string; working: boolean }
-
-/**
- * The connected coding agents to list in the bar (Mac-parity: same set
- * Settings→Agents manages, but only the ones actually reachable — a summon list
- * is for acting, not setup). `working` marks the one currently running a task:
- * the shared chat engine projects a single global `agentsActive`, and the last
- * `agent_selected` event names which adapter it is, so at most one row shows
- * "Working…". Anything not connected stays out of the quick list.
- */
-export function deriveAgentRows(
-  agents: CodingAgentInfo[],
-  activeAgentId: CodingAgentId | null,
-  agentsActive: boolean
-): BarAgentRow[] {
-  return agents
-    .filter((a) => a.connected)
-    .map((a) => ({
-      id: a.id,
-      displayName: a.displayName,
-      working: agentsActive && activeAgentId === a.id
-    }))
-}
-
-/** Status line for an agent row: what it's doing now, else that it's ready. */
-export function agentRowStatus(row: BarAgentRow): string {
-  return row.working ? 'Working…' : 'Ready'
-}
-
-/** The draft an agent row seeds when it opens the conversation: the agent's name
- *  in the leading-mention form `detectAgentTask` recognizes ("Claude Code, "),
- *  so whatever the user types next is delegated to that agent. The trailing
- *  comma + space is the delimiter NAME_LEADS matches; every agent displayName
- *  ("Claude Code" / "OpenClaw" / "Hermes" / "Codex") is a recognized alias. */
-export function agentDraftPrefill(displayName: string): string {
-  return `${displayName}, `
-}
-
-/**
- * The draft to show when the conversation opens for `target` (null = Omi Chat),
- * given the current draft and the previously-open `target`. Seeds the agent
- * delegation phrasing when an agent row opens, drops a now-stale agent seed when
- * returning to Omi, and never clobbers text the user actually typed. Pure so the
- * bar's re-entry rule (agent header + prefill on an agent, clean Omi Chat after)
- * is unit-tested without a DOM.
- */
-export function nextConversationDraft(args: {
-  target: BarAgentRow | null
-  previous: BarAgentRow | null
-  current: string
-}): string {
-  const { target, previous, current } = args
-  const staleSeed = previous ? current === agentDraftPrefill(previous.displayName) : false
-  if (target) {
-    if (current.trim() === '' || staleSeed) return agentDraftPrefill(target.displayName)
-    return current
-  }
-  return staleSeed ? '' : current
 }
 
 /** The collapsed-pill wordmark, tracking the whole voice turn (not just the

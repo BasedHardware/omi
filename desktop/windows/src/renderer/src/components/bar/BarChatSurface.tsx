@@ -7,24 +7,9 @@
 // window.omiBar.sendChat). This component owns NO chat engine.
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { ChatMessages } from '../chat/ChatMessages'
-import { agentRowStatus, type BarAgentRow } from './barDisplay'
 import { displayLabel, displayTintToken, isFinished, type AgentPill } from './agentPills'
 import { pillChipClasses } from './agentPillTranscript'
 import type { BarChatState } from '../../../../shared/types'
-
-function ChevronRight(): React.JSX.Element {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M6 3.5 10.5 8 6 12.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
 
 function ChevronLeft(): React.JSX.Element {
   return (
@@ -176,24 +161,24 @@ const ChatComposer = memo(function ChatComposer({
 
 export type BarChatSurfaceProps = {
   chat: BarChatState
-  /** Connected coding agents to list under "Omi Chat". */
-  agents: BarAgentRow[]
   view: 'list' | 'conversation'
   /** Whether the bar is expanded (the chat surface is visible). Drives focus-on-
    *  appear: this component stays mounted while the bar is a collapsed pill, so the
    *  hub input is only focused once the surface actually opens. */
   expanded: boolean
-  /** Title for the open conversation's header — "Omi Chat" for the Omi thread, the
-   *  agent's displayName (e.g. "Claude Code") when an agent row opened it. */
+  /** Title for the open conversation's header. The bar's chat is always the one
+   *  shared Omi thread (INV-CHAT-1), so this is "Omi Chat"; kept a prop so the
+   *  header stays data-driven rather than hardcoded. */
   conversationTitle: string
-  /** Open the inline conversation: `null` = the Omi Chat thread (used both by a
-   *  hub SEND — the only transition from the ask state — and, historically, a row
-   *  click), or a clicked agent row (so the parent can title the header + seed the
-   *  agent-delegation draft). */
-  onOpenConversation: (target: BarAgentRow | null) => void
-  /** Live/recent floating agent pills — one per spawned kernel run (B3). They
-   *  COMPLEMENT the connected-agent summon rows above; a pill row opens that
-   *  run's OWN transcript (onOpenPill), never the shared Omi thread. */
+  /** Open the inline Omi Chat conversation. The ONLY transition from the hub's
+   *  ask state (Mac's .mainInput) to the response state (.mainResponse), driven by
+   *  a SEND (Enter or the Send button). */
+  onOpenConversation: () => void
+  /** Live/recent floating agent pills — one per spawned kernel run (B3). Each pill
+   *  row opens that run's OWN transcript (onOpenPill), never the shared Omi thread.
+   *  This is the ONLY agent surface in the bar's hub (Mac parity: the list is
+   *  strictly pills-for-actual-runs; there are no idle connected-agent rows —
+   *  connecting agents lives in Settings → Agents). */
   pills: AgentPill[]
   /** Open a pill's per-run transcript view (keyed by pill id). */
   onOpenPill: (id: string) => void
@@ -312,12 +297,10 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
     p.setDraft('')
     followRef.current = true
     // Flip to the conversation BEFORE awaiting the send so the reply streams into
-    // the response state. onOpenConversation(null) = the Omi thread; the shared
-    // draft was just cleared, so it re-seeds nothing (nextConversationDraft keeps
-    // the empty draft). A send refused by the usage limit still lands here and
-    // surfaces its notice + restored text inline, exactly as an in-conversation
-    // refusal does.
-    if (p.view === 'list') p.onOpenConversation(null)
+    // the response state (always the shared Omi thread). A send refused by the
+    // usage limit still lands here and surfaces its notice + restored text inline,
+    // exactly as an in-conversation refusal does.
+    if (p.view === 'list') p.onOpenConversation()
     const seq = ++submitSeq.current
     void p.onSubmit(text).then((notice) => {
       // A REFUSED send never reaches the transcript, so clearing the input would
@@ -411,36 +394,10 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
           </div>
         ) : null}
 
-        {/* Connected coding agents. A row opens the SAME inline conversation —
-            agent progress streams into the shared thread (no separate store). */}
-        {props.agents.map((agent) => (
-          <button
-            key={agent.id}
-            type="button"
-            onClick={() => props.onOpenConversation(agent)}
-            className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
-          >
-            <RowStatusDot active={agent.working} />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-neutral-100">{agent.displayName}</div>
-              <div className="truncate text-xs text-neutral-500">{agentRowStatus(agent)}</div>
-            </div>
-            <span className="shrink-0 text-neutral-600 transition-colors group-hover:text-neutral-400">
-              <ChevronRight />
-            </span>
-          </button>
-        ))}
-        {/* Live/recent spawned agent runs (B3). Distinct from the summon rows
-            above: each opens its OWN run transcript, not the shared thread. A
-            thin rule sets them apart only when both sets are present. */}
+        {/* Live/recent spawned agent runs (B3) — the bar's only agent surface.
+            Each pill opens its OWN run transcript, not the shared Omi thread. */}
         {props.pills.length > 0 ? (
-          <div
-            className={
-              props.agents.length > 0
-                ? 'mt-1 flex flex-col gap-1 border-t border-white/[0.06] pt-1'
-                : 'flex flex-col gap-1'
-            }
-          >
+          <div className="flex flex-col gap-1">
             {props.pills.map((pill) => (
               <PillRow
                 key={pill.id}
