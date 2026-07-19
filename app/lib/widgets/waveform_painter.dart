@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -59,9 +58,6 @@ class WaveformPainter extends CustomPainter {
       // Use raw amplitude with no adjustments
       final height = amplitude * size.height;
       final centerY = size.height / 2;
-
-      // Draw waveform bar from center, extending both up and down
-      final halfHeight = height / 2;
 
       final progressBarIndex = (barCount * playbackProgress).floor();
       final useActivePaint = isPlaying && i <= progressBarIndex;

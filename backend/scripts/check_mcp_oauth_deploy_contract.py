@@ -17,25 +17,27 @@ RUNTIME_ENV = BACKEND / "deploy" / "runtime_env.yaml"
 LISTEN_VALUES = BACKEND / "charts" / "backend-listen" / "prod_omi_backend_listen_values.yaml"
 SECRETS_VALUES = BACKEND / "charts" / "backend-secrets" / "prod_omi_backend_secrets_values.yaml"
 
-REQUIRED_MCP_OAUTH_KEYS = (
+MCP_OAUTH_CONFIG_KEYS = (
     "MCP_AUTHORIZATION_SERVER_URL",
     "MCP_RESOURCE_URL",
     "MCP_OAUTH_CHATGPT_CLIENT_ID",
-    "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
     "MCP_OAUTH_CHATGPT_REDIRECT_URIS",
     "MCP_OAUTH_PUBLIC_CLIENT_ID",
     "MCP_OAUTH_PUBLIC_REDIRECT_URIS",
     "MCP_OAUTH_CLAUDE_CLIENT_ID",
     "MCP_OAUTH_CLAUDE_CLIENT_NAME",
     "MCP_OAUTH_CLAUDE_REDIRECT_URIS",
+)
+
+MCP_OAUTH_SECRET_KEYS = (
+    "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
     "MCP_OAUTH_CLIENTS_JSON",
 )
 
-REQUIRED_CLAUDE_OAUTH_KEYS = (
+MCP_OAUTH_CLAUDE_CONFIG_KEYS = (
     "MCP_OAUTH_CLAUDE_CLIENT_ID",
     "MCP_OAUTH_CLAUDE_CLIENT_NAME",
     "MCP_OAUTH_CLAUDE_REDIRECT_URIS",
-    "MCP_OAUTH_CLIENTS_JSON",
 )
 
 
@@ -49,6 +51,17 @@ def _env_names_from_listen_values(values: dict[str, Any]) -> set[str]:
     for entry in values.get("env", []) or []:
         if isinstance(entry, dict) and entry.get("name"):
             names.add(str(entry["name"]))
+    return names
+
+
+def _config_map_names_from_listen_values(values: dict[str, Any]) -> set[str]:
+    names: set[str] = set()
+    for entry in values.get("envFrom", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        config_map = entry.get("configMapRef")
+        if isinstance(config_map, dict) and config_map.get("name"):
+            names.add(str(config_map["name"]))
     return names
 
 
@@ -68,10 +81,20 @@ def _prod_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     return prod if isinstance(prod, dict) else {}
 
 
-def _runtime_env_keys(manifest: dict[str, Any]) -> set[str]:
+def _runtime_env_binding(manifest: dict[str, Any], key: str) -> dict[str, Any]:
     gke = _prod_manifest(manifest).get("gke", {}).get("backend-listen", {})
     env = gke.get("env", {}) if isinstance(gke, dict) else {}
-    return set(env.keys()) if isinstance(env, dict) else set()
+    binding = env.get(key, {}) if isinstance(env, dict) else {}
+    return binding if isinstance(binding, dict) else {}
+
+
+def _cloud_run_env_binding(manifest: dict[str, Any], service_name: str, key: str) -> dict[str, Any]:
+    cloud_run = _prod_manifest(manifest).get("cloud_run", {})
+    services = cloud_run.get("services", {}) if isinstance(cloud_run, dict) else {}
+    service = services.get(service_name, {}) if isinstance(services, dict) else {}
+    env = service.get("env", {}) if isinstance(service, dict) else {}
+    binding = env.get(key, {}) if isinstance(env, dict) else {}
+    return binding if isinstance(binding, dict) else {}
 
 
 def _cloud_run_secret_keys(manifest: dict[str, Any], service_name: str) -> set[str]:
@@ -157,25 +180,40 @@ def validate_mcp_oauth_deploy_contract() -> list[str]:
     listen_values = _load_yaml(LISTEN_VALUES)
     secrets_values = _load_yaml(SECRETS_VALUES)
 
-    runtime_keys = _runtime_env_keys(manifest)
-    cloud_run_backend_secret_keys = _cloud_run_secret_keys(manifest, "backend")
     listen_keys = _env_names_from_listen_values(listen_values)
+    listen_config_maps = _config_map_names_from_listen_values(listen_values)
     secret_keys = _secret_keys_from_secrets_values(secrets_values)
 
-    for key in REQUIRED_MCP_OAUTH_KEYS:
+    for key in MCP_OAUTH_CONFIG_KEYS:
+        expected_config_map = "prod-omi-backend-config"
+        if expected_config_map not in listen_config_maps:
+            errors.append(f"backend-listen prod values missing ConfigMap {expected_config_map}")
+            break
+        binding = _runtime_env_binding(manifest, key)
+        config_map = binding.get("config_map") if isinstance(binding, dict) else None
+        if (
+            not isinstance(config_map, dict)
+            or config_map.get("name") != expected_config_map
+            or config_map.get("key") != key
+        ):
+            errors.append(f"runtime_env.yaml prod gke/backend-listen must source {key} from ConfigMap")
+
+    for key in MCP_OAUTH_SECRET_KEYS:
         if key not in listen_keys:
-            errors.append(f"backend-listen prod values missing env {key}")
+            errors.append(f"backend-listen prod values missing secret env {key}")
         if key not in secret_keys:
             errors.append(f"backend-secrets prod values missing secretKey {key}")
 
-    for key in REQUIRED_CLAUDE_OAUTH_KEYS:
-        if key not in runtime_keys:
-            errors.append(f"runtime_env.yaml prod gke/backend-listen missing env {key}")
-        if key not in cloud_run_backend_secret_keys:
-            errors.append(f"runtime_env.yaml prod cloud_run/backend missing secret {key}")
-        binding = _cloud_run_secret_binding(manifest, "backend", key)
-        if binding and binding.get("secret") != key:
-            errors.append(f"runtime_env.yaml prod cloud_run/backend secret {key} must bind Secret Manager key {key}")
+    for key in MCP_OAUTH_CLAUDE_CONFIG_KEYS:
+        binding = _cloud_run_env_binding(manifest, "backend", key)
+        if binding.get("env_var") != key:
+            errors.append(f"runtime_env.yaml prod cloud_run/backend must render {key} from its GitHub variable")
+
+    if "MCP_OAUTH_CLIENTS_JSON" not in _cloud_run_secret_keys(manifest, "backend"):
+        errors.append("runtime_env.yaml prod cloud_run/backend missing secret MCP_OAUTH_CLIENTS_JSON")
+    binding = _cloud_run_secret_binding(manifest, "backend", "MCP_OAUTH_CLIENTS_JSON")
+    if binding and binding.get("secret") != "MCP_OAUTH_CLIENTS_JSON":
+        errors.append("runtime_env.yaml prod cloud_run/backend must bind Secret Manager MCP_OAUTH_CLIENTS_JSON")
 
     errors.extend(_validate_live_env_consistency())
     return errors

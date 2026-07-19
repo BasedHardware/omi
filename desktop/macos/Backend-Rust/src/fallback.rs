@@ -34,6 +34,7 @@ const ALLOWED_COMPONENTS: &[&str] = &[
     "webhook",
     "realtime_hub",
     "ptt_cascade",
+    "chat_retrieval",
     "gemini_model",
     "gemini_proxy",
     "gemini_stream_proxy",

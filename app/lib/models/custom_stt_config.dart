@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/utils/logger.dart';

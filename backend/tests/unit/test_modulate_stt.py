@@ -97,21 +97,24 @@ class TestLanguageRouting(unittest.TestCase):
         self.assertEqual(lang, 'multi')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
-    def test_modulate_unsupported_lang_fallback(self):
+    def test_modulate_unsupported_language_fails_closed(self):
         service, lang, model = get_stt_service_for_language('xx-unsupported')
-        self.assertEqual(service, STTService.deepgram)
-        self.assertEqual(lang, 'en')
-        self.assertEqual(model, 'nova-3')
+        self.assertIsNone(service)
+        self.assertIsNone(lang)
+        self.assertIsNone(model)
 
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_deepgram_default(self):
+    def test_retired_deepgram_config_uses_non_deepgram_default(self):
         service, lang, model = get_stt_service_for_language('en')
-        self.assertEqual(service, STTService.deepgram)
+        self.assertEqual(service, STTService.parakeet)
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
-    def test_deepgram_first_wins(self):
+    def test_retired_deepgram_token_is_ignored_before_modulate(self):
         service, lang, model = get_stt_service_for_language('en')
-        self.assertEqual(service, STTService.deepgram)
+        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(model, 'velma-2')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'dg-nova-3'])
     def test_modulate_first_wins(self):
@@ -281,7 +284,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock.set_wav_header(b'')
             sock._send_queue = asyncio.Queue(maxsize=1)
             sock._send_queue.put_nowait(b'fill')
-            sock.send(b'overflow')
+            assert sock.send(b'overflow') is False
             await asyncio.sleep(0)
             return sock
 
@@ -777,6 +780,24 @@ class _FakeParakeetWebSocket:
 
 
 class TestProcessAudioParakeet(unittest.TestCase):
+    def test_websocket_queue_full_reports_rejection(self):
+        from utils.stt.streaming import ParakeetWebSocketSocket
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                socket = ParakeetWebSocketSocket(lambda _segments: None, 'ws://parakeet.local/v3/stream', 16000)
+                socket._send_queue = asyncio.Queue(maxsize=1)
+                socket._send_queue.put_nowait(b'occupied')
+                assert socket.send(b'overflow') is False
+                assert socket.is_connection_dead is True
+                assert socket.death_reason == 'parakeet ws send queue full'
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
     @patch('utils.stt.streaming.websockets')
     def test_process_audio_parakeet_waits_for_websocket_connection(self, mock_ws_module):
@@ -803,7 +824,7 @@ class TestProcessAudioParakeet(unittest.TestCase):
 
                     allow_enter.set()
                     sock = await asyncio.wait_for(socket_task, timeout=1)
-                    sock.send(b'pcm')
+                    self.assertTrue(sock.send(b'pcm'))
                     await sock.drain_and_close()
 
                 self.assertEqual(ws.sent, [b'pcm', 'finalize'])
@@ -1233,22 +1254,25 @@ class TestPassthroughSkipsRemap(unittest.TestCase):
 
 
 class TestLanguageRoutingExtended(unittest.TestCase):
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_multi_lang_disabled(self):
+    def test_retired_config_does_not_change_language_handling(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
-        self.assertEqual(service, STTService.deepgram)
+        self.assertEqual(service, STTService.parakeet)
         self.assertEqual(lang, 'fr')
 
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_multi_lang_enabled_french(self):
+    def test_retired_config_does_not_reenable_multi_deepgram_mode(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
-        self.assertEqual(service, STTService.deepgram)
-        self.assertEqual(lang, 'multi')
+        self.assertEqual(service, STTService.parakeet)
+        self.assertEqual(lang, 'fr')
 
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_empty_language_fallback(self):
+    def test_empty_language_defaults_to_english_without_deepgram(self):
         service, lang, model = get_stt_service_for_language('')
-        self.assertEqual(service, STTService.deepgram)
+        self.assertEqual(service, STTService.parakeet)
         self.assertEqual(lang, 'en')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
@@ -1284,14 +1308,13 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
 
 class TestPrerecordedServiceRouting(unittest.TestCase):
-
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_default_routes_to_deepgram(self):
+    def test_retired_model_routes_to_parakeet_default(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('en')
-        self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
-        self.assertEqual(model, 'nova-3')
+        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2',))
     def test_modulate_routes_correctly(self):
@@ -1311,39 +1334,36 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(lang, 'pt')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-2',))
-    def test_custom_deepgram_model(self):
+    def test_custom_retired_model_routes_to_parakeet_default(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('en')
-        self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
-        self.assertEqual(model, 'nova-2')
+        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_multi_language_routes_to_deepgram(self):
+    def test_multi_language_routes_to_parakeet_default(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('multi')
-        self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
+        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
         self.assertEqual(lang, 'multi')
 
 
 class TestPrerecordedProviderFactory(unittest.TestCase):
-
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_factory_returns_deepgram_by_default(self):
-        from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
+    def test_factory_returns_parakeet_for_retired_model(self):
+        from utils.stt.pre_recorded import ParakeetPrerecordedProvider, get_prerecorded_provider
 
         provider = get_prerecorded_provider()
-        self.assertIsInstance(provider, DeepgramPrerecordedProvider)
-        self.assertEqual(provider._model, 'nova-3')
+        self.assertIsInstance(provider, ParakeetPrerecordedProvider)
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-2',))
-    def test_factory_returns_deepgram_custom_model(self):
-        from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
+    def test_factory_ignores_custom_retired_model(self):
+        from utils.stt.pre_recorded import ParakeetPrerecordedProvider, get_prerecorded_provider
 
         provider = get_prerecorded_provider()
-        self.assertIsInstance(provider, DeepgramPrerecordedProvider)
-        self.assertEqual(provider._model, 'nova-2')
+        self.assertIsInstance(provider, ParakeetPrerecordedProvider)
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2',))
     def test_factory_returns_modulate(self):
@@ -1351,6 +1371,15 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
 
         provider = get_prerecorded_provider()
         self.assertIsInstance(provider, ModulatePrerecordedProvider)
+
+    @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2', 'dg-nova-3'))
+    def test_unsupported_language_fails_closed_without_deepgram_fallback(self):
+        from utils.stt.pre_recorded import get_prerecorded_provider, get_prerecorded_service
+
+        with self.assertRaises(RuntimeError):
+            get_prerecorded_service('hi')
+        with self.assertRaises(RuntimeError):
+            get_prerecorded_provider('hi')
 
     def test_providers_implement_abc(self):
         from utils.stt.pre_recorded import (

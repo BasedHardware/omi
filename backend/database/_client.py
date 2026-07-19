@@ -7,7 +7,7 @@ from google.cloud import firestore
 from database.document_ids import document_id_from_seed
 from database.google_credentials import prepare_google_credentials
 
-__all__ = ["db", "document_id_from_seed", "get_firestore_client", "get_firestore_client_dependency", "get_users_uid"]
+__all__ = ["db", "document_id_from_seed", "get_firestore_client", "get_users_uid"]
 
 _firestore_client = None
 _firestore_client_lock = Lock()
@@ -38,10 +38,6 @@ def get_firestore_client() -> Any:
             if _firestore_client is None:
                 _firestore_client = _build_firestore_client()
     return _firestore_client
-
-
-def get_firestore_client_dependency() -> Any:
-    return get_firestore_client()
 
 
 class _LazyFirestoreClient:

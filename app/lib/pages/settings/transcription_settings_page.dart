@@ -534,6 +534,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final modelPath = _urlController.text;
       final hasModel = modelPath.isNotEmpty && await File(modelPath).exists();
       if (!hasModel) {
+        if (!mounted) return;
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -584,9 +585,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.errorSaving(e.toString())), backgroundColor: Colors.red.shade700),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.errorSaving(e.toString())), backgroundColor: Colors.red.shade700),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

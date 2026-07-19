@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 enum OnboardingRightPaneMode {
   case graph
@@ -87,7 +87,7 @@ struct OnboardingStepScaffold<Content: View>: View {
 
         GeometryReader { geometry in
           ScrollView(showsIndicators: false) {
-            VStack(spacing: 28) {
+            VStack(spacing: OmiSpacing.xxl) {
               progressRow(centered: true)
               titleBlock(centered: true)
               content
@@ -97,8 +97,8 @@ struct OnboardingStepScaffold<Content: View>: View {
               minWidth: 0, maxWidth: .infinity, minHeight: geometry.size.height,
               maxHeight: .infinity, alignment: .center
             )
-            .padding(.horizontal, 40)
-            .padding(.vertical, 36)
+            .padding(.horizontal, OmiSpacing.page)
+            .padding(.vertical, OmiSpacing.section)
           }
         }
       }
@@ -115,14 +115,14 @@ struct OnboardingStepScaffold<Content: View>: View {
         .background(OmiColors.backgroundTertiary)
 
       ScrollView(showsIndicators: false) {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
           progressRow(centered: false)
           titleBlock(centered: false)
           content
         }
         .frame(maxWidth: 500, alignment: .leading)
-        .padding(.horizontal, 40)
-        .padding(.vertical, 36)
+        .padding(.horizontal, OmiSpacing.page)
+        .padding(.vertical, OmiSpacing.section)
       }
     }
     .background(OmiColors.backgroundPrimary)
@@ -143,12 +143,12 @@ struct OnboardingStepScaffold<Content: View>: View {
         .buttonStyle(.plain)
       }
     }
-    .padding(.horizontal, 24)
-    .padding(.vertical, 16)
+    .padding(.horizontal, OmiSpacing.xxl)
+    .padding(.vertical, OmiSpacing.lg)
   }
 
   private func progressRow(centered: Bool) -> some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       ForEach(0..<totalSteps, id: \.self) { index in
         Capsule()
           .fill(index <= stepIndex ? Color.white : Color.white.opacity(0.1))
@@ -159,7 +159,7 @@ struct OnboardingStepScaffold<Content: View>: View {
   }
 
   private func titleBlock(centered: Bool) -> some View {
-    VStack(alignment: centered ? .center : .leading, spacing: 14) {
+    VStack(alignment: centered ? .center : .leading, spacing: OmiSpacing.md) {
       if !eyebrow.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         Text(eyebrow.uppercased())
           .font(.system(size: 12, weight: .semibold))
@@ -229,7 +229,7 @@ private struct OnboardingSecondBrainPane: View {
           Divider()
             .background(Color.white.opacity(0.08))
 
-          VStack(alignment: .leading, spacing: 10) {
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Who you are")
               .font(.system(size: 12, weight: .semibold))
               .foregroundColor(OmiColors.textTertiary)
@@ -243,8 +243,8 @@ private struct OnboardingSecondBrainPane: View {
               .fixedSize(horizontal: false, vertical: true)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 24)
-          .padding(.vertical, 18)
+          .padding(.horizontal, OmiSpacing.xxl)
+          .padding(.vertical, OmiSpacing.lg)
           .background(OmiColors.backgroundPrimary.opacity(0.92))
         }
       }
@@ -252,7 +252,7 @@ private struct OnboardingSecondBrainPane: View {
     .overlay(alignment: .top) {
       if case .graph = mode, !graphViewModel.isEmpty {
         OnboardingGraphBrandMark()
-          .padding(.top, 18)
+          .padding(.top, OmiSpacing.lg)
       }
     }
     .task {
@@ -267,7 +267,7 @@ private struct OnboardingSecondBrainPane: View {
   private var graphBody: some View {
     switch mode {
     case .message(let title, let detail):
-      VStack(spacing: 12) {
+      VStack(spacing: OmiSpacing.md) {
         Text(title)
           .font(.system(size: 28, weight: .bold))
           .foregroundColor(OmiColors.textPrimary)
@@ -283,7 +283,7 @@ private struct OnboardingSecondBrainPane: View {
 
     case .graph:
       if graphViewModel.isEmpty {
-        VStack(spacing: 14) {
+        VStack(spacing: OmiSpacing.md) {
           Text("Your graph appears once Omi has something real to map.")
             .font(.system(size: 15, weight: .medium))
             .foregroundColor(OmiColors.textTertiary)
@@ -296,28 +296,28 @@ private struct OnboardingSecondBrainPane: View {
           MemoryGraphSceneView(viewModel: graphViewModel)
             .ignoresSafeArea()
 
-          VStack(spacing: 10) {
+          VStack(spacing: OmiSpacing.sm) {
             Text("This is your 2nd brain")
               .font(.system(size: 15, weight: .semibold))
               .foregroundColor(.white)
-              .padding(.horizontal, 14)
-              .padding(.vertical, 7)
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.xs)
 
-            HStack(spacing: 20) {
+            HStack(spacing: OmiSpacing.xl) {
               graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
               graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
               graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
             }
           }
-          .padding(.horizontal, 16)
-          .padding(.bottom, 10)
+          .padding(.horizontal, OmiSpacing.lg)
+          .padding(.bottom, OmiSpacing.sm)
         }
       }
     }
   }
 
   private func graphHintItem(icon: String, label: String) -> some View {
-    HStack(spacing: 4) {
+    HStack(spacing: OmiSpacing.xxs) {
       Image(systemName: icon)
         .font(.system(size: 11))
       Text(label)
@@ -348,10 +348,10 @@ private struct OnboardingGraphBrandMark: View {
         .foregroundColor(.white)
         .offset(y: -1)
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 7)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.xs)
     .background(Color.black.opacity(0.28))
-    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
     .accessibilityLabel("omi.me")
   }
 }
@@ -368,38 +368,15 @@ private func onboardingTextLogoImage() -> NSImage? {
   return logoImage
 }
 
-struct OnboardingCardButtonStyle: ButtonStyle {
-  let isPrimary: Bool
-
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.system(size: 15, weight: .semibold))
-      .foregroundColor(isPrimary ? .black : OmiColors.textPrimary)
-      .padding(.horizontal, 18)
-      .padding(.vertical, 12)
-      .background(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(isPrimary ? Color.white : OmiColors.backgroundTertiary)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(Color.white.opacity(isPrimary ? 0 : 0.08), lineWidth: 1)
-      )
-      .opacity(configuration.isPressed ? 0.92 : 1)
-      .scaleEffect(configuration.isPressed ? 0.985 : 1)
-      .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-  }
-}
-
 struct OnboardingInsightCard: View {
   let icon: String
   let title: String
   let detail: String
 
   var body: some View {
-    HStack(alignment: .top, spacing: 14) {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
       ZStack {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
           .fill(OmiColors.backgroundQuaternary)
           .frame(width: 42, height: 42)
 
@@ -408,7 +385,7 @@ struct OnboardingInsightCard: View {
           .foregroundColor(OmiColors.textSecondary)
       }
 
-      VStack(alignment: .leading, spacing: 6) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         Text(title)
           .font(.system(size: 15, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
@@ -421,12 +398,12 @@ struct OnboardingInsightCard: View {
 
       Spacer()
     }
-    .padding(18)
+    .padding(OmiSpacing.lg)
     .background(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .fill(OmiColors.backgroundSecondary)
         .overlay(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
             .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     )
@@ -443,8 +420,8 @@ struct OnboardingSelectableChip: View {
       Text(title)
         .font(.system(size: 14, weight: .semibold))
         .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
         .background(
           Capsule()
             .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)

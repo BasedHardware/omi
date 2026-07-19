@@ -20,6 +20,7 @@ os.environ.setdefault(
 )
 
 from database import user_usage  # noqa: E402
+from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode  # noqa: E402
 
 
 @pytest.fixture
@@ -105,3 +106,26 @@ def test_realtime_ptt_included_via_grand_total(mock_db):
 def test_only_proactive_counts_zero(mock_db):
     _setup_docs(mock_db, {"2026-06-23": {"conv_apps.gpt-5.call_count": 100, "memories.gpt-4.call_count": 50}})
     assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 0
+
+
+def test_monthly_usage_since_observes_every_scanned_hourly_document(mock_db, monkeypatch):
+    docs = [
+        _Snap({'transcription_seconds': 15}),
+        _Snap({'transcription_seconds': 25}),
+    ]
+    query = MagicMock()
+    query.where.return_value = query
+    query.stream.return_value = iter(docs)
+    mock_db.collection.return_value.document.return_value.collection.return_value = query
+
+    observed = []
+    monkeypatch.setattr(user_usage, 'record_firestore_read', lambda *args: observed.append(args))
+
+    usage = user_usage.get_monthly_usage_stats_since(
+        'uid',
+        datetime(2026, 6, 23, tzinfo=timezone.utc),
+        datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert usage['transcription_seconds'] == 40
+    assert observed == [(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.UNBOUNDED, 2)]

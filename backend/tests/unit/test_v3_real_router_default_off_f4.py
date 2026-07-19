@@ -16,7 +16,7 @@ try:
 except Exception as exc:  # pragma: no cover - exercised by minimal system pytest env
     pytest.skip(f'real FastAPI/TestClient proof requires backend venv dependencies: {exc}', allow_module_level=True)
 
-from utils.memory.v3_composed_get_service import V3ComposedResponse
+from utils.memory.v3.composed_get_service import V3ComposedResponse
 
 SENSITIVE_SENTINELS = [
     "secret-uid-123",

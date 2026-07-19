@@ -14,6 +14,7 @@ from models.memory_contracts import (
     LifecycleState,
     deterministic_contract_id,
 )
+from utils.memory_ingestion.ids import canonical_json
 
 try:
     from .clients import get_llm
@@ -211,8 +212,7 @@ def _content_from_response(response: Any) -> str:
     return str(content)
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+_canonical_json = canonical_json
 
 
 def _is_quote_wrapper(memory_text: Optional[str]) -> bool:

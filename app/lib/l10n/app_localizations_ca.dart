@@ -9041,7 +9041,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get billingYearly => 'Anual';
 
   @override
-  String get savePercent => 'Estalvia ~17%';
+  String savePercent(int percent) {
+    return 'Estalvia ~$percent%';
+  }
 
   @override
   String get popular => 'Popular';
@@ -9397,7 +9399,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'De moment, funciona amb dispositius Omi i Limitless. L\'àudio es queda al teu telèfon fins que decideixis pujar-lo.';
+      'Funciona amb el micròfon del telèfon i amb dispositius Omi i Limitless. L\'àudio es queda al teu telèfon fins que decideixis pujar-lo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9629,4 +9631,33 @@ class AppLocalizationsCa extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Error en connectar amb Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Emmagatzematge del dispositiu';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% ple';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used de $total utilitzat';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free lliure';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'El dispositiu és gairebé ple — sincronitza per alliberar espai.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Sense connexió: s\'està gravant localment. Es transcriurà quan tornis a tenir connexió.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Les teves dades estan protegides per defecte amb un xifratge fort, i tu controles com s\'emmagatzemen i s\'utilitzen.';
 }

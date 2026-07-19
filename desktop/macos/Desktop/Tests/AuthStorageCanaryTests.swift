@@ -7,7 +7,10 @@ final class AuthStorageCanaryTests: XCTestCase {
     var value: String?
     let result = AuthStorageCanary.execute(
       hooks: .init(
-        set: { newValue, _, _ in value = newValue; return true },
+        set: { newValue, _, _ in
+          value = newValue
+          return true
+        },
         read: { _, _ in value },
         delete: { _, _ in value = nil }
       ))

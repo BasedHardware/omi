@@ -18,6 +18,22 @@ arc_sha256_file() {
   fi
 }
 
+arc_file_matches_sha256() {
+  local file="$1"
+  local expected="$2"
+  [ -f "$file" ] || return 1
+  [ "$(arc_sha256_file "$file")" = "$expected" ]
+}
+
+arc_restore_verified_cache_file() {
+  local cache_file="$1"
+  local expected="$2"
+  local destination="$3"
+  arc_file_matches_sha256 "$cache_file" "$expected" || return 1
+  cp -f "$cache_file" "$destination"
+  arc_file_matches_sha256 "$destination" "$expected"
+}
+
 # Hash names, kinds, permission modes, symlink destinations, and file contents
 # deterministically. Input callers exclude working node_modules; output callers
 # intentionally include the complete prepared trees copied into the app bundle.

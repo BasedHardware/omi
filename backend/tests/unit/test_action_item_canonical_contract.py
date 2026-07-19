@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 import database.action_items as action_items_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.action_item import (
     ActionItemCreateRequest,
     ActionItemResponse,
@@ -275,3 +276,34 @@ def test_action_item_router_rejects_unverifiable_workstream_link_before_write(mo
         action_items_router.create_action_item(request, uid='user-1')
 
     assert error.value.status_code == 409
+
+
+def test_action_item_router_maps_exhausted_contention_to_retryable_503(monkeypatch):
+    monkeypatch.setattr(
+        action_items_router.action_items_db,
+        'create_action_item',
+        MagicMock(side_effect=FirestoreContentionExhausted('contention')),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        action_items_router.create_action_item(ActionItemCreateRequest(description='Retry me'), uid='user-1')
+
+    assert error.value.status_code == 503
+    assert error.value.detail == 'Service temporarily unavailable'
+
+
+def test_action_item_batch_router_maps_exhausted_contention_to_retryable_503(monkeypatch):
+    monkeypatch.setattr(
+        action_items_router.action_items_db,
+        'create_action_items_batch',
+        MagicMock(side_effect=FirestoreContentionExhausted('contention')),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        action_items_router.create_action_items_batch(
+            [ActionItemCreateRequest(description='Retry me')],
+            uid='user-1',
+        )
+
+    assert error.value.status_code == 503
+    assert error.value.detail == 'Service temporarily unavailable'

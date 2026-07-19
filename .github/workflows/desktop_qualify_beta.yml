@@ -1,0 +1,108 @@
+name: Qualify Desktop Beta Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Newest v*-macos candidate tag to qualify'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-beta-qualification
+  cancel-in-progress: false
+
+# This workflow deliberately runs only on the dedicated, trusted macOS runner.
+# Do not add pull_request or push triggers: the runner has Docker and a GitHub
+# App token that can edit candidate evidence and request beta promotion.
+jobs:
+  qualify:
+    runs-on: [self-hosted, macos, omi-desktop-qualification]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout qualification controls
+        uses: actions/checkout@v7
+        with:
+          # Manual workflow dispatch permits choosing a ref. Never execute
+          # branch-controlled scripts on this privileged self-hosted runner.
+          ref: main
+          fetch-depth: 0
+
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      - name: Download and validate newest candidate evidence
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$'; then
+            echo "Invalid macOS release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          for tool in docker gh python3; do
+            command -v "$tool" >/dev/null 2>&1 || {
+              echo "Desktop beta qualification runner requires $tool." >&2
+              exit 1
+            }
+          done
+          docker info >/dev/null 2>&1 || {
+            echo "Desktop beta qualification runner requires a healthy Docker runtime." >&2
+            exit 1
+          }
+
+          git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          LATEST_TAG=$(git tag -l 'v*-macos' --sort=-v:refname | head -1)
+          TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
+          CHECKOUT_SHA=$(git rev-parse "$RELEASE_TAG")
+          rm -rf /tmp/desktop-beta-qualification
+          mkdir -p /tmp/desktop-beta-qualification
+          gh release view "$RELEASE_TAG" --repo "$REPO" \
+            --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
+            > /tmp/desktop-beta-qualification/release.json
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern 'desktop-smoke-result.json' \
+            --dir /tmp/desktop-beta-qualification
+
+          python3 .github/scripts/check-desktop-auto-beta-candidate.py \
+            --release-json /tmp/desktop-beta-qualification/release.json \
+            --smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
+            --release-tag "$RELEASE_TAG" \
+            --latest-tag "$LATEST_TAG" \
+            --tag-sha "$TARGET_SHA" \
+            --checkout-sha "$CHECKOUT_SHA" \
+            --output /tmp/desktop-beta-qualification/candidate-gate.json
+
+      - name: Qualify exact candidate on hermetic stack
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          desktop/macos/scripts/qualify-desktop-beta.sh \
+            --automatic \
+            --no-promote \
+            --signed-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
+            --candidate-gate-result /tmp/desktop-beta-qualification/candidate-gate.json \
+            "$RELEASE_TAG"
+
+      - name: Request protected beta promotion
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh workflow run desktop_promote_beta.yml --repo "$REPO" \
+            -f release_tag="$RELEASE_TAG" \
+            -f automatic=true

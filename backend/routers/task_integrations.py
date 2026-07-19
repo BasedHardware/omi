@@ -363,7 +363,10 @@ async def create_task_via_integration(
     # Parse due date if provided
     due_date = None
     if request.due_date:
-        due_date = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
+        try:
+            due_date = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid due_date; expected an ISO 8601 date string")
 
     result = await create_task_internal(
         uid=uid,

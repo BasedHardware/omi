@@ -145,7 +145,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:36Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -158,7 +158,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "plugins"
+    }
   },
   {
     "id": 38,
@@ -298,7 +302,7 @@
       }
     ],
     "updated": "2026-06-20T02:27:36Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -311,7 +315,11 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "plugins"
+    }
   },
   {
     "id": 37,
@@ -459,7 +467,7 @@
       }
     ],
     "updated": "2026-06-23T01:20:17Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -469,7 +477,8 @@
       "threshold": "14999ms (~15s)"
     },
     "labels": {
-      "instatus_component": "plugins"
+      "instatus_component": "plugins",
+      "severity": "ticket"
     },
     "isPaused": false,
     "notification_settings": {

@@ -11,8 +11,8 @@ import XCTest
 /// short-circuits before any network request, so this needs no HTTP mocking.
 final class APIClientSetupCompletedTests: XCTestCase {
 
-    func testEmptyURLReportsNotCompleted() async {
-        let completed = await APIClient.shared.isAppSetupCompleted(url: "", uid: "test-uid")
-        XCTAssertFalse(completed, "An empty completion URL must report setup as NOT completed")
-    }
+  func testEmptyURLReportsNotCompleted() async {
+    let completed = await APIClient.shared.isAppSetupCompleted(url: "", uid: "test-uid")
+    XCTAssertFalse(completed, "An empty completion URL must report setup as NOT completed")
+  }
 }

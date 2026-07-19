@@ -16,8 +16,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  metadata-preflight:
+    name: PR Metadata Preflight
+    if: github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      # The preflight can select uv-backed checks (e.g. backend-route-policy-baseline
+      # runs the OpenAPI runner) whenever a PR touches backend routes, so this job
+      # needs uv just like the sibling Hygiene job.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/openapi-requirements.txt
+
+      - name: Run current PR metadata preflight
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          scripts/pr-preflight \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --repository "${{ github.repository }}" \
+            --pr-number "${{ github.event.pull_request.number }}"
+
   changes:
     name: Detect Changes
+    if: github.event_name != 'pull_request' || !contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action)
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
@@ -27,12 +61,9 @@ jobs:
       has_format: ${{ steps.changes.outputs.has_format }}
       has_python: ${{ steps.changes.outputs.has_python }}
       has_workflows: ${{ steps.changes.outputs.has_workflows }}
-      has_desktop_async_after_ratchet: ${{ steps.changes.outputs.has_desktop_async_after_ratchet }}
-      has_desktop_auth_session_ratchet: ${{ steps.changes.outputs.has_desktop_auth_session_ratchet }}
-      has_desktop_defaults_ratchet: ${{ steps.changes.outputs.has_desktop_defaults_ratchet }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -44,35 +75,31 @@ jobs:
     name: Hygiene
     runs-on: ubuntu-latest
     needs: changes
+    if: github.event_name != 'pull_request' || !contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action)
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/openapi-requirements.txt
 
       - name: Save changed files
         run: |
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
-      - name: Check merge conflict markers
-        if: github.event_name != 'pull_request'
-        run: |
-          failed=0
-          while IFS= read -r file; do
-            if [ -f "$file" ] && grep -I -nE '^(<<<<<<<|>>>>>>>)' "$file"; then
-              failed=1
-            fi
-          done < /tmp/changed-files.txt
-
-          if [ "$failed" -eq 1 ]; then
-            echo "FAIL: unresolved merge conflict markers found in changed files"
-            exit 1
-          fi
-
-      - name: Architecture guardrail warnings
-        if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/check_arch_guardrails.py --changed-files /tmp/changed-files.txt
+      - name: Test package architecture map guardrail
+        run: python3 .github/scripts/test_check_package_architecture_maps.py
 
       - name: Test product invariant PR-body checker
         run: python3 .github/scripts/test_check_product_invariants.py
@@ -88,24 +115,33 @@ jobs:
           scripts/pr-preflight \
             --base "${{ needs.changes.outputs.diff_base }}" \
             --repository "${{ github.repository }}" \
-            --pr-number "${{ github.event.pull_request.number }}"
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --event-payload-file "$GITHUB_EVENT_PATH"
+
+      - name: Run deterministic check manifest on main pushes
+        if: github.event_name != 'pull_request'
+        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
 
       - name: Test brand UI ratchet helper
         run: python3 .github/scripts/test_check_brand_ui.py
 
-      - name: Check brand UI purple ratchet (INV-UI-1)
-        if: github.event_name == 'pull_request'
-        run: |
-          python3 .github/scripts/check_brand_ui.py \
-            --changed-files /tmp/changed-files.txt \
-            --base "${{ needs.changes.outputs.diff_base }}"
+      - name: Check typed error flow-control ratchet
+        run: python3 .github/scripts/check_isinstance_return_ratchet.py
 
-      - name: Check desktop changelog data
-        if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/desktop-changelog.py validate
+      - name: Test lifecycle header checker
+        run: python3 .github/scripts/test_check_lifecycle_headers.py
+
+      - name: Test version-prefixed filename lint
+        run: python3 .github/scripts/test_check_version_prefixed_filenames.py
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
+
+      - name: Test deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py --self-test
+
+      - name: Check deployment concurrency policy
+        run: python3 .github/scripts/check-deployment-concurrency.py
 
       - name: Check desktop release terminology
         run: python3 .github/scripts/check-desktop-release-terminology.py
@@ -121,22 +157,6 @@ jobs:
 
       - name: Check release process guards
         run: python3 .github/scripts/check-release-process-guards.py
-
-      - name: Summarize deferred-work markers
-        continue-on-error: true
-        run: python3 .github/scripts/deferred-work-marker-count.py --format github-summary >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check desktop UserDefaults key ratchet
-        if: needs.changes.outputs.has_desktop_defaults_ratchet == 'true'
-        run: python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
-
-      - name: Check desktop asyncAfter ratchet
-        if: needs.changes.outputs.has_desktop_async_after_ratchet == 'true'
-        run: python3 desktop/macos/scripts/check-async-after-ratchet.py
-
-      - name: Check desktop auth session ratchet (INV-AUTH-1)
-        if: needs.changes.outputs.has_desktop_auth_session_ratchet == 'true'
-        run: python3 .github/scripts/check_desktop_auth_session.py
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'
@@ -154,7 +174,7 @@ jobs:
     if: needs.changes.outputs.has_format == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

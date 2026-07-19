@@ -10,13 +10,13 @@ from typing import Any
 from config.memory_rollout import MemoryRolloutConfig, MemoryRolloutMode
 from utils.memory.memory_system import MemorySystem, list_canonical_cohort_uids
 from utils.memory.memory_system_pin import pin_memory_system
-from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.control_reader_contract import (
     V3ControlReaderRequest,
     V3ControlRouteFamily,
     decide_v3_control_route,
 )
-from utils.memory.v3_control_state_adapter import read_v3_control
+from utils.memory.v3.control_state_adapter import read_v3_control
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,13 @@ def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecis
     """Resolve canonical write readiness without collapsing enrolled failures into legacy fallback."""
 
     if db_client is None:
+        if uid in set(list_canonical_cohort_uids()):
+            return CanonicalWriteDecision(
+                enabled=False,
+                memory_system=MemorySystem.CANONICAL,
+                fail_closed=True,
+                reason="missing_db_client",
+            )
         return CanonicalWriteDecision(
             enabled=False,
             memory_system=MemorySystem.LEGACY,
