@@ -1,0 +1,3 @@
+{
+  "change": "Fixed undoing a task deletion losing the task's category, tags, recurrence, and completion state"
+}

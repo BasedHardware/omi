@@ -1008,6 +1008,21 @@ final class WALService: ObservableObject {
     return wal
   }
 
+  /// Remove a just-created SD-card WAL that never received any data (a failed
+  /// or aborted sync). `createSdCardWal` reserves a `.miss` entry before the
+  /// download starts; leaving it after a failure permanently inflates the
+  /// persisted "pending" count. A WAL that downloaded frames has a `filePath`
+  /// (set by `writeFramesToDiskAndWait`) and is kept.
+  func removeSdCardWalIfEmpty(walId: String) {
+    guard let index = wals.firstIndex(where: { $0.id == walId }) else { return }
+    let wal = wals[index]
+    guard wal.storage == .sdcard, wal.status == .miss, wal.filePath == nil else { return }
+    wals.remove(at: index)
+    updatePendingWals()
+    saveWals()
+    logger.info("Removed empty SD card WAL after failed/aborted sync: \(walId)")
+  }
+
   /// Update WAL with downloaded data
   func updateWalWithDownloadedData(walId: String, downloadedBytes: Int, frames: [Data]) {
     guard let index = wals.firstIndex(where: { $0.id == walId }) else {

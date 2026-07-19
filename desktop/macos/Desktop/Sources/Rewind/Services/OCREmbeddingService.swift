@@ -25,6 +25,15 @@ actor OCREmbeddingService {
   private var pendingItems: [PendingItem] = []
   private var flushTask: Task<Void, Never>?
 
+  /// Monotonic owner generation. `reset()` bumps it at the account-transition
+  /// boundary; an in-flight `flushPendingEmbeddings()` captures the value it
+  /// started under and re-checks it after every `await` before writing, so a
+  /// flush that was already mid-flight when the pool retargeted discards its
+  /// stale batch instead of writing the previous owner's embeddings into the
+  /// next owner's database. Actors are re-entrant, so cancelling `flushTask`
+  /// and clearing `pendingItems` alone does not stop a running flush.
+  private var ownerGeneration = 0
+
   /// Content hashes of recently embedded texts to skip duplicates
   private var recentHashes: Set<String> = []
   private let maxRecentHashes = 5000
@@ -35,7 +44,44 @@ actor OCREmbeddingService {
   /// Max pending items before force-flushing (Gemini batch limit is 100)
   private let maxPendingItems = 100
 
-  private init() {}
+  /// Injectable dependencies for the flush path. Production wires these to the
+  /// live Gemini embedder and the Rewind database; tests inject a gated embedder
+  /// so the owner-reset re-entrancy window can be driven deterministically.
+  typealias BatchEmbedder = @Sendable (_ texts: [String], _ taskType: String?) async throws -> [[Float]]
+  typealias EmbeddingWriter = @Sendable (_ screenshotId: Int64, _ embedding: Data) async throws -> Void
+  private let batchEmbedder: BatchEmbedder
+  private let embeddingWriter: EmbeddingWriter
+
+  private init() {
+    self.batchEmbedder = { texts, taskType in
+      try await EmbeddingService.shared.embedBatch(texts: texts, taskType: taskType)
+    }
+    self.embeddingWriter = { screenshotId, embedding in
+      try await RewindDatabase.shared.updateScreenshotEmbedding(id: screenshotId, embedding: embedding)
+    }
+  }
+
+  /// Test-only initializer that injects the flush path's embedder and writer so
+  /// the owner-reset re-entrancy fence can be exercised without live services.
+  init(batchEmbedderForTesting: @escaping BatchEmbedder, embeddingWriterForTesting: @escaping EmbeddingWriter) {
+    self.batchEmbedder = batchEmbedderForTesting
+    self.embeddingWriter = embeddingWriterForTesting
+  }
+
+  /// Number of screenshots queued for the next batch flush (test introspection).
+  var pendingCount: Int { pendingItems.count }
+
+  /// Drop all owner-bound queued state. Called at the account-transition
+  /// boundary: queued items carry the previous owner's DB rowids and OCR
+  /// text, and flushing them after the pool retargets would write the
+  /// previous owner's embeddings into the next owner's database.
+  func reset() {
+    ownerGeneration &+= 1
+    flushTask?.cancel()
+    flushTask = nil
+    pendingItems = []
+    recentHashes = []
+  }
 
   // MARK: - Text Formatting
 
@@ -99,6 +145,12 @@ actor OCREmbeddingService {
 
     guard !pendingItems.isEmpty else { return }
 
+    // Snapshot the owner generation this flush started under. If `reset()` runs
+    // during any await below (actors are re-entrant), the captured value goes
+    // stale and we abandon the batch rather than writing the previous owner's
+    // embeddings into the next owner's database.
+    let generation = ownerGeneration
+
     // Take the current batch and clear the buffer
     let batch = pendingItems
     pendingItems = []
@@ -129,7 +181,15 @@ actor OCREmbeddingService {
 
       let texts = chunk.map { $0.formattedText }
       do {
-        let embeddings = try await EmbeddingService.shared.embedBatch(texts: texts, taskType: "RETRIEVAL_DOCUMENT")
+        let embeddings = try await batchEmbedder(texts, "RETRIEVAL_DOCUMENT")
+
+        // The embed call above suspended; if the owner retargeted while it was
+        // in flight, these rowids belong to the previous owner's database.
+        // Abandon the rest of the batch instead of cross-writing.
+        guard generation == ownerGeneration else {
+          log("OCREmbeddingService: Owner changed mid-flush — dropping \(chunk.count) stale items")
+          return
+        }
 
         for (i, embedding) in embeddings.enumerated() where i < chunk.count {
           let item = chunk[i]
@@ -138,7 +198,7 @@ actor OCREmbeddingService {
           // Apply embedding to all IDs that share this content hash
           let allIds = duplicateGroups[item.contentHash] ?? [item.id]
           for screenshotId in allIds {
-            try await RewindDatabase.shared.updateScreenshotEmbedding(id: screenshotId, embedding: data)
+            try await embeddingWriter(screenshotId, data)
           }
 
           // Track hash to skip future duplicates
@@ -158,7 +218,13 @@ actor OCREmbeddingService {
         )
       } catch {
         logError("OCREmbeddingService: Batch embed failed for \(chunk.count) items", error: error)
-        // Re-queue failed items for next flush
+        // Re-queue failed items for next flush — but only if we are still the
+        // same owner. Re-queueing across a retarget would seed the next owner's
+        // buffer with the previous owner's rowids.
+        guard generation == ownerGeneration else {
+          log("OCREmbeddingService: Owner changed mid-flush — not re-queueing \(chunk.count) stale items")
+          return
+        }
         pendingItems.append(contentsOf: chunk)
         startFlushTimerIfNeeded()
       }

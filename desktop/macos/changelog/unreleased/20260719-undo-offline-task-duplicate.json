@@ -1,0 +1,3 @@
+{
+  "change": "Fixed undoing the deletion of a task created offline creating a duplicate copy of the task"
+}

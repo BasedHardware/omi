@@ -1,0 +1,3 @@
+{
+  "change": "Fixed deleting, completing, or editing a just-created task while offline silently not sticking (the task reappeared on next launch)"
+}

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed queued Rewind OCR embeddings from the previous account being written into the next account's database after switching accounts"
+}
