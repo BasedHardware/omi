@@ -552,7 +552,14 @@ def get_conversation_by_id(
 
     populate_speaker_names(uid, [conversation])
 
-    return conversation
+    # A legacy/poisoned record (e.g. a structured.category no longer in CategoryEnum)
+    # must not 500 this single-item fetch via response_model coercion — mirror the
+    # per-record guard already used by the list/search siblings above.
+    try:
+        return FullConversation.model_validate(conversation)
+    except Exception as e:  # noqa: BLE001 - malformed legacy record must not 500
+        logger.warning(f"Conversation {conversation_id} failed MCP response validation: {e}")
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
 
 # ---------------------------------------------------------------------------
