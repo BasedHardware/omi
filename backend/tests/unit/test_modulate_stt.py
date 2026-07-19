@@ -12,7 +12,6 @@ from utils.stt.streaming import (
     _build_wav_header,
     get_stt_service_for_language,
     make_stream_callback,
-    modulate_languages,
     sort_segments_by_start,
     sort_transcript_segments_in_place,
 )
@@ -85,7 +84,7 @@ class TestSTTServiceEnum(unittest.TestCase):
 class TestLanguageRouting(unittest.TestCase):
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
     def test_modulate_routing_english(self):
-        service, lang, model = get_stt_service_for_language('en')
+        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'en')
         self.assertEqual(model, 'velma-2')
@@ -106,24 +105,24 @@ class TestLanguageRouting(unittest.TestCase):
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
     def test_retired_deepgram_config_uses_non_deepgram_default(self):
-        service, lang, model = get_stt_service_for_language('en')
+        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.parakeet)
         self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     def test_retired_deepgram_token_is_ignored_before_modulate(self):
-        service, lang, model = get_stt_service_for_language('en')
+        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(model, 'velma-2')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'dg-nova-3'])
     def test_modulate_first_wins(self):
-        service, lang, model = get_stt_service_for_language('en')
+        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
 
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     def test_dg_unsupported_falls_through_to_modulate(self):
-        service, lang, model = get_stt_service_for_language('af')
+        service, lang, model = get_stt_service_for_language('af', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'af')
         self.assertEqual(model, 'velma-2')
@@ -1256,17 +1255,19 @@ class TestPassthroughSkipsRemap(unittest.TestCase):
 class TestLanguageRoutingExtended(unittest.TestCase):
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_does_not_change_language_handling(self):
+    def test_retired_config_falls_back_to_the_capable_single_language_provider(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
-        self.assertEqual(service, STTService.parakeet)
+        self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'fr')
+        self.assertEqual(model, 'velma-2')
 
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_does_not_reenable_multi_deepgram_mode(self):
+    def test_retired_config_falls_back_to_the_capable_multilingual_provider(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
-        self.assertEqual(service, STTService.parakeet)
-        self.assertEqual(lang, 'fr')
+        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(lang, 'multi')
+        self.assertEqual(model, 'velma-2')
 
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
@@ -1277,32 +1278,32 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
     def test_locale_code_en_us_routes_to_modulate(self):
-        service, lang, model = get_stt_service_for_language('en-US')
+        service, lang, model = get_stt_service_for_language('en-US', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'en')
         self.assertEqual(model, 'velma-2')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
     def test_locale_code_fr_ca_routes_to_modulate(self):
-        service, lang, model = get_stt_service_for_language('fr-CA')
+        service, lang, model = get_stt_service_for_language('fr-CA', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'fr')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
     def test_locale_code_pt_br_routes_to_modulate(self):
-        service, lang, model = get_stt_service_for_language('pt-BR')
+        service, lang, model = get_stt_service_for_language('pt-BR', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'pt')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
     def test_locale_code_zh_cn_routes_to_modulate(self):
-        service, lang, model = get_stt_service_for_language('zh-CN')
+        service, lang, model = get_stt_service_for_language('zh-CN', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'zh')
 
     @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
     def test_locale_underscore_en_us(self):
-        service, lang, model = get_stt_service_for_language('en_US')
+        service, lang, model = get_stt_service_for_language('en_US', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'en')
 

@@ -461,6 +461,9 @@
         "backend/utils/listen_pusher_session.py",
         "backend/utils/pusher.py",
         "backend/utils/stt/live_failure.py",
+        "backend/utils/stt/streaming.py",
+        "backend/config/stt_provider_policy.py",
+        "backend/charts/parakeet/**",
         "backend/utils/transcribe_decisions.py",
         "backend/pusher/main.py",
         "backend/utils/conversations/finalizer.py",
@@ -475,18 +478,23 @@
         "tests/unit/test_pusher_heartbeat.py",
         "tests/unit/test_pusher_conversation_retry.py",
         "tests/unit/test_live_stt_failure.py",
+        "tests/unit/test_listen_runtime_regressions.py",
         "tests/unit/test_transcribe_decisions.py",
+        "tests/unit/test_stt_provider_policy.py",
+        "tests/unit/test_streaming_deepgram_backoff.py",
         "tests/unit/utils/test_listen_pusher_session.py",
         "tests/unit/test_transcribe_teardown_flush.py",
         "tests/unit/test_listen_pusher_stack_ci_wiring.py",
-        "testing/e2e/test_listen_stt.py"
+        "testing/e2e/test_listen_stt.py",
+        "testing/e2e/test_listen_pusher_wire_contract.py"
       ],
       "checks": [],
       "invariants": [
         "teardown flushes tail audio before pusher close",
         "pending conversation requests retry until ack or give-up limit",
         "pusher heartbeat prevents idle connection drops",
-        "listen-to-pusher boundary changes run the credential-free local Firestore, Redis, and Parakeet-stub stack gauntlet in blocking PR CI"
+        "a client Parakeet preference cannot route a live session to an incompatible model",
+        "listen-to-pusher boundary changes run the credential-free local Firestore, Redis, and Parakeet-stub stack gauntlet in PR CI"
       ]
     },
     {

@@ -467,7 +467,10 @@ class Stack:
                 'language': 'en',
                 'private_cloud_sync_enabled': True,
                 'data_protection_level': 'standard',
-                'transcription_preferences': {'uses_custom_stt': False},
+                # This gauntlet exercises the English-only Parakeet stub. Make
+                # the user's single-language choice explicit so selection
+                # requests English rather than multi-language auto-detection.
+                'transcription_preferences': {'uses_custom_stt': False, 'single_language_mode': True},
             }
         )
 
