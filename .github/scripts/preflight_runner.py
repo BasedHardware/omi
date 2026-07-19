@@ -143,6 +143,10 @@ def join_existing(state_dir: Path, wanted_fingerprint: str) -> int | None:
     return int(result.get("exit_code", 1))
 
 
+def forwardable_signals() -> list[int]:
+    return [getattr(signal, name) for name in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, name)]
+
+
 def run_owned(
     state_dir: Path,
     lock_dir: Path,
@@ -175,13 +179,14 @@ def run_owned(
     def forward_signal(signum: int, _frame: object) -> None:
         if child is not None and child.poll() is None:
             try:
-                os.killpg(child.pid, signum)
-            except ProcessLookupError:
+                if hasattr(os, "killpg"):
+                    os.killpg(child.pid, signum)
+                else:
+                    child.send_signal(signum)
+            except (ProcessLookupError, OSError, ValueError):
                 pass
 
-    previous_handlers = {
-        signum: signal.signal(signum, forward_signal) for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-    }
+    previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in forwardable_signals()}
     exit_code = 1
     try:
         print(f"Pre-push single-flight log: {log_path}")
