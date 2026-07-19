@@ -16,8 +16,9 @@ endpoint.
 class FakeStreamingSTTSocket:
     """Minimal STT socket surface used by routers.transcribe._stream_handler."""
 
-    def __init__(self, callback):
+    def __init__(self, callback, *, die_on_first_send=False):
         self.callback = callback
+        self.die_on_first_send = die_on_first_send
         self.sent_chunks = []
         self.finish_calls = 0
         self.drain_calls = 0
@@ -33,10 +34,14 @@ class FakeStreamingSTTSocket:
     def death_reason(self):
         return self._death_reason
 
-    def send(self, data: bytes) -> None:
+    def send(self, data: bytes) -> bool:
         self.sent_chunks.append(data)
+        if self.die_on_first_send:
+            self._dead = True
+            self._death_reason = "synthetic provider disconnected"
+            return False
         if self._emitted:
-            return
+            return True
         self._emitted = True
         self.callback(
             [
@@ -52,6 +57,7 @@ class FakeStreamingSTTSocket:
                 }
             ]
         )
+        return True
 
     async def drain_and_close(self):
         self.drain_calls += 1
@@ -60,22 +66,38 @@ class FakeStreamingSTTSocket:
         self.finish_calls += 1
 
 
-def install_streaming_stt_fake(monkeypatch):
-    """Patch routers.transcribe.process_audio_dg and return created fake sockets."""
-    import routers.transcribe as transcribe_router
+def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
+    """Patch the listen receiver provider boundary and return fake sockets.
+
+    Deepgram is retired from serving, so the fake now patches the enabled
+    provider entry points (Parakeet/Modulate) and returns an enabled service.
+    """
+    from routers.listen import receiver as listen_receiver
+    from routers.listen import runtime as listen_runtime
 
     sockets = []
 
-    async def fake_process_audio_dg(
-        callback, language, sample_rate, channels, model="nova-3", keywords=None, is_active=None
-    ):
-        socket = FakeStreamingSTTSocket(callback)
+    async def fake_process_audio_parakeet(callback, *args, **kwargs):
+        socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send)
         sockets.append(socket)
         return socket
 
-    monkeypatch.setattr(transcribe_router, "process_audio_dg", fake_process_audio_dg)
-    monkeypatch.setattr(transcribe_router, "has_transcription_credits", lambda *args, **kwargs: True)
-    monkeypatch.setattr(transcribe_router, "record_usage", lambda *args, **kwargs: None)
+    async def fake_process_audio_modulate(callback, *args, **kwargs):
+        socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send)
+        sockets.append(socket)
+        return socket
+
+    # The receiver dispatches on stt_service; patch both enabled providers so
+    # the fake is reached regardless of which one the runtime selects.
+    monkeypatch.setattr(listen_receiver, "process_audio_parakeet", fake_process_audio_parakeet)
+    monkeypatch.setattr(listen_receiver, "process_audio_modulate", fake_process_audio_modulate)
+    monkeypatch.setattr(
+        listen_runtime,
+        "get_stt_service_for_language",
+        lambda *_args, **_kwargs: (listen_runtime.STTService.parakeet, "en", "parakeet"),
+    )
+    monkeypatch.setattr(listen_receiver, "is_gate_enabled", lambda: False)
+    monkeypatch.setattr(listen_runtime, "record_usage", lambda *args, **kwargs: None)
     return sockets
 
 

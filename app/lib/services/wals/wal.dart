@@ -95,7 +95,7 @@ class Wal {
   WalStorage storage;
 
   String? filePath;
-  List<List<int>> data = [];
+  List<List<int>> data;
   int storageOffset = 0;
   int storageTotalBytes = 0;
   int fileNum = 1;
@@ -168,7 +168,7 @@ class Wal {
     this.storageOffset = 0,
     this.storageTotalBytes = 0,
     this.fileNum = 1,
-    this.data = const [],
+    List<List<int>>? data,
     this.totalFrames = 0,
     this.syncedFrameOffset = 0,
     this.originalStorage,
@@ -177,7 +177,7 @@ class Wal {
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
-  }) {
+  }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
 

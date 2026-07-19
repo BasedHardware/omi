@@ -50,6 +50,16 @@ class FakeGatewayResponse:
         return self.body
 
 
+class ErrorGatewayResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        request = gateway_client.httpx.Request('POST', 'http://gateway.test/v1/chat/completions')
+        response = gateway_client.httpx.Response(self.status_code, request=request)
+        raise gateway_client.httpx.HTTPStatusError('gateway request failed', request=request, response=response)
+
+
 class FakeGatewayClient:
     """Fake ``httpx.Client`` for tests. Returns a canned response from post()."""
 
@@ -175,7 +185,11 @@ def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeyp
     assert captured['json']['messages'] == [{'role': 'user', 'content': 'classified prompt'}]
     assert captured['json']['response_format']['type'] == 'json_schema'
     assert captured['json']['response_format']['json_schema']['schema']['properties']['value']['type'] == 'boolean'
-    assert captured['client_kwargs'] == {'timeout': gateway_client.CHAT_EXTRACTION_TIMEOUT_SECONDS}
+    timeout = captured['client_kwargs']['timeout']
+    assert timeout.connect == 3.0
+    assert timeout.pool == 3.0
+    assert timeout.read == gateway_client.CHAT_EXTRACTION_TIMEOUT_SECONDS
+    assert timeout.write == gateway_client.CHAT_EXTRACTION_TIMEOUT_SECONDS
 
 
 def test_chat_structured_gateway_allows_background_timeout_override(monkeypatch):
@@ -195,7 +209,11 @@ def test_chat_structured_gateway_allows_background_timeout_override(monkeypatch)
     )
 
     assert result == chat.RequiresContext(value=True)
-    assert captured['client_kwargs'] == {'timeout': gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS}
+    timeout = captured['client_kwargs']['timeout']
+    assert timeout.connect == 3.0
+    assert timeout.pool == 3.0
+    assert timeout.read == 15.0
+    assert timeout.write == 15.0
 
 
 def test_strict_schema_normalizes_action_item_extraction_for_openai():
@@ -356,6 +374,43 @@ def test_chat_structured_gateway_records_fallback_reason_metric(monkeypatch):
             1,
         )
     ]
+
+
+def test_chat_structured_gateway_propagates_configuration_http_errors(monkeypatch):
+    counter = FakeCounter()
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: ErrorGatewayResponse(503))
+
+    with pytest.raises(gateway_client.httpx.HTTPStatusError):
+        gateway_client.invoke_chat_structured_gateway(
+            'classified prompt',
+            chat.RequiresContext,
+            feature='chat_extraction.requires_context',
+        )
+
+    assert counter.calls == [
+        (
+            {
+                'feature': 'chat_extraction.requires_context',
+                'mode': 'error',
+                'outcome': 'error',
+                'reason': 'http_503',
+            },
+            1,
+        )
+    ]
+
+
+def test_chat_structured_gateway_falls_back_on_hard_proxy_http_errors(monkeypatch):
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: ErrorGatewayResponse(502))
+
+    result = gateway_client.invoke_chat_structured_gateway(
+        'classified prompt',
+        chat.RequiresContext,
+        feature='chat_extraction.requires_context',
+    )
+
+    assert result is None
 
 
 def test_chat_structured_gateway_failure_does_not_log_raw_prompt_or_response(monkeypatch, caplog):

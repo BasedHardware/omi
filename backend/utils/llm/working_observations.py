@@ -11,6 +11,7 @@ from database.memory_non_active_routes import (
     persist_non_active_route_outcome,
 )
 from models.memory_contracts import WorkingObservationArchiveItem, deterministic_contract_id
+from utils.llm.usage_tracker import Features, track_usage
 
 GetLlm = Callable[[str], object]
 ChatMessage = tuple[str, str]
@@ -205,7 +206,8 @@ def extract_l1_memory_archive_items_from_text(
         return []
 
     try:
-        response = model.invoke(messages)
+        with track_usage(uid, Features.MEMORIES):
+            response = model.invoke(messages)
         parsed = parser.parse(_content_from_response(response))
         items = _with_deterministic_archive_ids(parsed.items, uid, source_id, source_type)
     except Exception as exc:

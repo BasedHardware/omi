@@ -16,6 +16,7 @@ Validates:
 import os
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Optional, cast
 from unittest.mock import patch, MagicMock
 
@@ -505,6 +506,8 @@ class TestTrialBoundaryDynamic:
     def setup_method(self):
         self.fn, self.ns = _get_trial_metadata_fn()
         self.trial_length = self.ns['TRIAL_LENGTH_SECONDS']
+        self.now = 1_700_000_000
+        self.ns['time'] = SimpleNamespace(time=lambda: self.now)
 
     def _mock_user_at_age(self, age_seconds):
         """Mock a basic-plan user at a specific account age."""
@@ -512,7 +515,7 @@ class TestTrialBoundaryDynamic:
         sub.plan = PlanType.basic
         self.ns['users_db'].get_user_valid_subscription.return_value = sub
         self.ns['users_db'].is_byok_active.return_value = False
-        creation_ms = (time.time() - age_seconds) * 1000
+        creation_ms = (self.now - age_seconds) * 1000
         user_record = MagicMock()
         user_record.user_metadata.creation_timestamp = creation_ms
         self.ns['firebase_auth'].get_user.return_value = user_record
@@ -529,7 +532,7 @@ class TestTrialBoundaryDynamic:
         self._mock_user_at_age(self.trial_length - 1)
         result = self.fn('uid_test')
         assert result.trial_expired is False
-        assert result.trial_remaining_seconds >= 1
+        assert result.trial_remaining_seconds == 1
 
     def test_one_second_after_trial_length(self):
         """User at TRIAL_LENGTH_SECONDS + 1 is expired."""

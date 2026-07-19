@@ -1444,7 +1444,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get payYourSttProvider => '免费使用 Omi。您只需直接向 STT 提供商付费。';
 
   @override
-  String get freeMinutesMonth => '包含 600 免费分钟/月。';
+  String get freeMinutesMonth => '包含 300 免费分钟/月。';
 
   @override
   String get omiUnlimited => 'Omi 无限版';
@@ -4616,7 +4616,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
 
   @override
-  String get basicPlanDescription => '600 高级分钟 + 设备端无限';
+  String get basicPlanDescription => '300 高级分钟 + 设备端无限';
 
   @override
   String get minutes => '分钟';
@@ -5884,7 +5884,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudProvider => '云服务提供商';
 
   @override
-  String get premiumMinutesInfo => '每月 600 分钟高级时长。本地标签页提供无限免费转录。';
+  String get premiumMinutesInfo => '每月 300 分钟高级时长。本地标签页提供无限免费转录。';
 
   @override
   String get viewUsage => '查看使用量';
@@ -5962,7 +5962,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryDrainSignificantly => '电池消耗将显著增加。';
 
   @override
-  String get premiumMinutesMonth => '每月600分钟高级配额。设备端选项卡提供无限免费转录。';
+  String get premiumMinutesMonth => '每月300分钟高级配额。设备端选项卡提供无限免费转录。';
 
   @override
   String get audioProcessedLocally => '音频在本地处理。可离线使用，更私密，但消耗更多电量。';
@@ -8831,7 +8831,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get billingYearly => '年付';
 
   @override
-  String get savePercent => '节省约17%';
+  String savePercent(int percent) {
+    return '节省约$percent%';
+  }
 
   @override
   String get popular => '热门';
@@ -9174,7 +9176,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterDescription => '先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。';
 
   @override
-  String get transcribeLaterNote => '目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
+  String get transcribeLaterNote => '支持手机麦克风以及 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
 
   @override
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
@@ -9398,4 +9400,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return '连接 Ray-Ban Meta 时出错：$error';
   }
+
+  @override
+  String get deviceStorageTitle => '设备存储';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '已用 $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total 中已使用 $used';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '剩余 $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => '设备快满了 — 请同步以释放空间。';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => '无网络连接 — 正在本地录制。恢复联网后将自动转写。';
+
+  @override
+  String get dataEncryptedBanner => '您的数据默认通过强加密保护，并且由您掌控其存储和使用方式。';
 }

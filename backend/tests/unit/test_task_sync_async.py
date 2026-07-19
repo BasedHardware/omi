@@ -2,8 +2,9 @@
 
 The auto-sync helpers in utils/task_sync.py (auto_sync_action_item, _sync_to_cloud_service,
 auto_sync_action_items_batch) are async and run the task-integration sync off the request path. They
-read the user's task integration and marked the action item exported through synchronous Firestore
-calls (users_db.get_default_task_integration, users_db.get_task_integration,
+read the user's task integration, marked Apple Reminder items pending, and marked the action item
+exported through synchronous Firestore calls (users_db.get_default_task_integration,
+users_db.get_task_integration, action_items_db.batch_set_sync_requested,
 action_items_db.update_action_item), each of which blocks the event loop for the duration of the call.
 This test parses the source (no import) and asserts each is routed through an awaited
 run_blocking(db_executor, ...) and never called directly. The await check guards against a dangling
@@ -15,7 +16,12 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 TASK_SYNC = BACKEND_DIR / 'utils' / 'task_sync.py'
-BLOCKING_CALLS = ('get_default_task_integration', 'get_task_integration', 'update_action_item')
+BLOCKING_CALLS = (
+    'get_default_task_integration',
+    'get_task_integration',
+    'batch_set_sync_requested',
+    'update_action_item',
+)
 
 
 def _module():

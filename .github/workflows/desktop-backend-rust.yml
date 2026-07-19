@@ -19,7 +19,7 @@ jobs:
       run:
         working-directory: desktop/macos/Backend-Rust
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

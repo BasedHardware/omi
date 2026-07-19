@@ -1,0 +1,141 @@
+---
+title: "Listen Finalization Jobs"
+description: "Durable outbox, Cloud Tasks worker, and recovery runbook for listen conversation finalization"
+---
+
+# Listen finalization jobs
+
+## Design boundary
+
+`conversation_finalization_jobs` is a Firestore outbox for persisted,
+content-bearing listen conversations. The document id is deterministic for
+`(uid, conversation_id, finalization_revision)` and is the only durable owner
+of finalization state. A finalizer job contains identifiers, bounded status
+metadata, timestamps, a lease, a per-claim lease epoch, and a dispatch
+generation—never transcript text, BYOK keys, request headers, or raw exception
+bodies. Finalizer logs also use bounded failure codes rather than provider
+exception text.
+
+Cloud Tasks is intentionally at-least-once and carries exactly:
+
+```json
+{"job_id":"<opaque firestore id>","dispatch_generation":3}
+```
+
+The target route is `POST /v1/conversation-finalization-jobs/run`. It is
+internal, excluded from OpenAPI, and accepts only an OIDC token from the
+configured task invoker. The handler rejects extra task fields, so content and
+credentials cannot be introduced accidentally through task payload expansion.
+
+## State machine and ownership
+
+| Status | Meaning | Recovery |
+| --- | --- | --- |
+| `queued` | Intent persisted; no worker currently holds the lease. | Cloud Tasks delivery or reconciler replay. |
+| `leased` | One pusher/finalizer worker owns the current claim epoch. | A duplicate delivery returns retryable conflict; an expired lease can be reclaimed with a new epoch. |
+| `completed` | The persisted conversation is terminally completed and the job is acknowledged. | No replay. |
+| `dead_letter` | The configured final Cloud Tasks attempt failed. | Inspect and explicitly replay after resolving the cause. |
+| `blocked_byok` | The conversation requires request-scoped BYOK credentials. | A user must present valid keys again to resume the inline pusher path. |
+
+The live pusher frame may carry request-scoped BYOK keys, but that frame is
+never a durable record. It also carries `finalization_job_id` and
+`dispatch_generation`, so the pusher claims the same Firestore lease as the
+task worker. In Cloud Tasks mode, non-BYOK conversations skip the live pusher
+handoff entirely; a live BYOK session with valid keys still resumes through the
+lease-claiming pusher path. Listen never calls `process_conversation()` inline.
+
+## Configuration and rollout
+
+The default is deliberately safe and compatible:
+
+```text
+LISTEN_FINALIZATION_DISPATCH_MODE=inline
+```
+
+Production enables the durable worker through a **dedicated** queue and an
+OIDC/IAM binding for the `backend-sync` finalizer service. Do not reuse
+`sync-jobs` or `audio-merge`. The required runtime settings are:
+
+```text
+LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks
+LISTEN_FINALIZATION_TASKS_QUEUE=conversation-finalization
+LISTEN_FINALIZATION_TASKS_HANDLER_URL=https://<finalizer>/v1/conversation-finalization-jobs/run
+LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE=https://<finalizer>/v1/conversation-finalization-jobs/run
+LISTEN_FINALIZATION_TASKS_INVOKER_SA=<cloud-tasks-invoker-service-account>
+LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS=5
+HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT=1500
+LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS=300
+```
+
+`SYNC_TASKS_PROJECT` and `SYNC_TASKS_LOCATION` are shared Cloud Tasks client
+configuration. The finalizer's queue deadline, HTTP timeout, and Redis run-lock
+TTL must remain compatible; the default 1,500-second handler timeout matches
+the existing durable-work contract. The production deploy creates or updates
+the dedicated queue with five attempts and four concurrent dispatches. Other
+environments remain deliberately unconfigured, so the exact-ID customer route
+fails closed with `503` there instead of executing inline.
+
+## Customer exact-ID finalization
+
+`POST /v1/conversations/{conversation_id}/finalize` uses this same outbox for
+an already-persisted customer conversation. It returns a `processing`
+conversation promptly after the outbox transaction commits; the Cloud Tasks
+worker then owns enrichment, memory extraction, and integration fanout under
+the job lease. The job stores the route's `force_process` decision, while the
+admission transaction persists calendar meeting context on the conversation
+alongside the lifecycle transition. Replay therefore retains the prior
+request's correctness semantics.
+
+This route requires `LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks`. If that
+durable worker is not configured, it returns `503` before changing the
+conversation instead of falling back to an in-process task or a pusher request
+that the HTTP caller cannot service. A task-create acknowledgement failure is
+different: the committed outbox row remains `queued` and the reconciler retries
+the opaque handoff.
+
+Clients can poll `GET /v1/conversations/{conversation_id}/finalization` for
+the authoritative job id, status, terminal flag, retryable flag, and bounded
+attempt counts. `queued` is the retryable state; a `dead_letter` job is
+terminal and its conversation is transitioned to `failed` and `discarded`, not
+left on `processing`.
+
+This first migration deliberately excludes `POST /v1/conversations` (the
+Redis current-conversation pointer), `reprocess`, and routes that create a
+conversation while processing request content. Their identity and generation
+contracts need their own durable-admission migration.
+
+## Reconciliation and runbook
+
+`reconcile_listen_finalization_jobs()` runs at backend startup and every five
+minutes. It only enqueues work when Cloud Tasks dispatch is enabled. The
+reconciler reads a server-side bounded page of due jobs using
+`reconcile_after_at`; terminal jobs do not retain that field. It transactionally
+increments `dispatch_generation`, then enqueues a new named task. An old
+delivery becomes `stale_generation` and must not execute. Status totals use
+Firestore aggregation counts and overdue-age sampling is bounded, so historical
+terminal jobs cannot turn periodic reconciliation into an ever-growing scan.
+
+Operational signals:
+
+| Metric | Action threshold |
+| --- | --- |
+| `listen_finalization_oldest_nonterminal_age_seconds` | Alert on sustained age above the queue/lease budget. |
+| `listen_finalization_jobs{status="queued"}` / `{status="leased"}` | Alert on sustained backlog, not a single recovery. |
+| `listen_finalization_retries_total` | Investigate a rate increase with queue/worker error rates. |
+| `listen_finalization_dead_letter_total` / `{status="dead_letter"}` | Page for terminal failures; they require explicit replay. |
+| `omi_fallback_total{component="pusher",reason="enqueue_failed"}` | Investigate task configuration or task API availability. |
+
+To replay a terminal job safely:
+
+1. Inspect the job document and the referenced conversation; never copy
+   transcript/BYOK data into tickets or logs.
+2. Fix the underlying worker/provider/configuration failure.
+3. In a Firestore transaction, transition `dead_letter` to `queued`, increment
+   `dispatch_generation`, clear its lease, and record the approved operator
+   action in the incident.
+4. Enqueue the named task with only the new `job_id` and generation. Verify the
+   job reaches `completed` and the conversation reaches `completed`.
+
+Do not replay `blocked_byok` using Omi credentials. A durable offline BYOK
+design needs a separate approved credential broker with its own retention,
+rotation, deletion, audit, and IAM review.

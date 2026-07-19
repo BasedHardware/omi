@@ -12,9 +12,9 @@ final class PushToTalkSpeechGateTests: XCTestCase {
   }
 
   func testHubSpeechGateRejectsBroadbandNoise() {
-    var state: UInt64 = 0x1234abcd
+    var state: UInt64 = 0x1234_abcd
     let audio = pcm16k(seconds: 1.0) { _ in
-      state = state &* 6364136223846793005 &+ 1442695040888963407
+      state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
       let normalized = Double(Int64(bitPattern: state >> 16) % 20001 - 10000) / 10000.0
       return Int16(max(-12000, min(12000, Int(normalized * 12000))))
     }
@@ -46,7 +46,7 @@ final class PushToTalkSpeechGateTests: XCTestCase {
 
     var state: UInt64 = 0xbeef
     let noise = pcm16k(seconds: 0.7) { _ in
-      state = state &* 2862933555777941757 &+ 3037000493
+      state = state &* 2_862_933_555_777_941_757 &+ 3_037_000_493
       return Int16(Int(state % 24001) - 12000)
     }
     let noisy = PushToTalkManager.speechLikeAudioSeconds(pcm16k: noise)

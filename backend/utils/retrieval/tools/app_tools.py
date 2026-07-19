@@ -96,8 +96,18 @@ def _sync_noop(**kwargs: Any) -> None:
     return None
 
 
-# Global mapping of tool names to status messages
+# Global mapping of tool names to status messages. Bounded so a long-lived worker that loads app
+# tools for many distinct apps over its process lifetime cannot grow this map without limit.
+_MAX_TOOL_STATUS_MESSAGES = 2048
 _tool_status_messages: Dict[str, str] = {}
+
+
+def _remember_tool_status(tool_name: str, status_message: str) -> None:
+    # Re-inserting refreshes recency; evict the oldest entry once the cap is reached.
+    _tool_status_messages.pop(tool_name, None)
+    while len(_tool_status_messages) >= _MAX_TOOL_STATUS_MESSAGES:
+        _tool_status_messages.pop(next(iter(_tool_status_messages)), None)
+    _tool_status_messages[tool_name] = status_message
 
 
 def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type[BaseModel]:
@@ -176,7 +186,7 @@ def create_app_tool(
 
     # Store status message in global mapping for UI display (if provided)
     if app_tool.status_message:
-        _tool_status_messages[tool_name] = app_tool.status_message
+        _remember_tool_status(tool_name, app_tool.status_message)
 
     # Create a Pydantic model from the schema (or empty model if no parameters)
     if app_tool.parameters and app_tool.parameters.get('properties'):

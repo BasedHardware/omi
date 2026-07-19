@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 extension AppState {
@@ -64,17 +64,27 @@ extension AppState {
 
   // MARK: - Folder Management
 
-  /// Load folders from API
-  func loadFolders() async {
+  /// Load folders from API. `fetch` is a test seam (production uses APIClient).
+  func loadFolders(fetch: (() async throws -> [Folder])? = nil) async {
     guard !isLoadingFolders else { return }
 
     isLoadingFolders = true
+    let generation = ownerScopeGeneration
 
     do {
-      let fetchedFolders = try await APIClient.shared.getFolders()
+      let fetchedFolders: [Folder]
+      if let fetch {
+        fetchedFolders = try await fetch()
+      } else {
+        fetchedFolders = try await APIClient.shared.getFolders()
+      }
+      // Owner fence: a previous account's in-flight response must not
+      // repopulate folders after an account switch reset them.
+      guard generation == ownerScopeGeneration else { return }
       folders = fetchedFolders
       log("Folders: Loaded \(fetchedFolders.count) folders")
     } catch {
+      guard generation == ownerScopeGeneration else { return }
       logError("Folders: Failed to load", error: error)
     }
 
@@ -82,11 +92,14 @@ extension AppState {
   }
 
   /// Create a new folder
-  func createFolder(name: String, description: String? = nil, color: String? = nil) async -> Folder?
-  {
+  func createFolder(name: String, description: String? = nil, color: String? = nil) async -> Folder? {
+    let generation = ownerScopeGeneration
     do {
       let folder = try await APIClient.shared.createFolder(
         name: name, description: description, color: color)
+      // Fence like loadFolders: an in-flight mutation must not repopulate the
+      // next account's folders after an in-place account switch reset them.
+      guard generation == ownerScopeGeneration else { return nil }
       folders.append(folder)
       log("Folders: Created folder '\(name)'")
       return folder
@@ -98,8 +111,10 @@ extension AppState {
 
   /// Delete a folder
   func deleteFolder(_ folderId: String, moveToFolderId: String? = nil) async {
+    let generation = ownerScopeGeneration
     do {
       try await APIClient.shared.deleteFolder(id: folderId, moveToFolderId: moveToFolderId)
+      guard generation == ownerScopeGeneration else { return }
       folders.removeAll { $0.id == folderId }
       if selectedFolderId == folderId {
         selectedFolderId = nil
@@ -112,9 +127,11 @@ extension AppState {
 
   /// Update a folder
   func updateFolder(_ folderId: String, name: String?, description: String?, color: String?) async {
+    let generation = ownerScopeGeneration
     do {
       let updated = try await APIClient.shared.updateFolder(
         id: folderId, name: name, description: description, color: color)
+      guard generation == ownerScopeGeneration else { return }
       if let index = folders.firstIndex(where: { $0.id == folderId }) {
         folders[index] = updated
       }
@@ -174,21 +191,32 @@ extension AppState {
 
   // MARK: - People (Speaker Profiles)
 
-  /// Fetches all people from the OMI API
-  func fetchPeople() async {
+  /// Fetches all people from the OMI API. `fetch` is a test seam.
+  func fetchPeople(fetch: (() async throws -> [Person])? = nil) async {
+    let generation = ownerScopeGeneration
     do {
-      let fetchedPeople = try await APIClient.shared.getPeople()
+      let fetchedPeople: [Person]
+      if let fetch {
+        fetchedPeople = try await fetch()
+      } else {
+        fetchedPeople = try await APIClient.shared.getPeople()
+      }
+      // Owner fence: see loadFolders.
+      guard generation == ownerScopeGeneration else { return }
       people = fetchedPeople
       log("People: Loaded \(fetchedPeople.count) people")
     } catch {
+      guard generation == ownerScopeGeneration else { return }
       logError("People: Failed to load", error: error)
     }
   }
 
   /// Creates a new person and adds to local cache
   func createPerson(name: String) async -> Person? {
+    let generation = ownerScopeGeneration
     do {
       let person = try await APIClient.shared.createPerson(name: name)
+      guard generation == ownerScopeGeneration else { return nil }
       people.append(person)
       log("People: Created person '\(name)' with id \(person.id)")
       return person
@@ -217,7 +245,7 @@ extension AppState {
       let idSet = Set(segmentIds)
       if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
         for segIdx in conversations[idx].transcriptSegments.indices
-          where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
+        where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
           let old = conversations[idx].transcriptSegments[segIdx]
           conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
             id: old.id,

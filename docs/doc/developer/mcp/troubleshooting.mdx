@@ -13,6 +13,21 @@ description: "Debug and fix common MCP connection issues"
     - Generate a new key in the Omi app: **Settings → Developer → MCP**
     - Ensure the key hasn't been revoked
   </Accordion>
+  <Accordion title="Calling the REST API with an MCP key (404 or 401)" icon="code">
+    An `omi_mcp_...` key authenticates the MCP endpoints only. Two things follow:
+
+    - **Use the `/v1/mcp/` REST endpoints** — e.g. `GET /v1/mcp/memories`, `GET /v1/mcp/memories/search?query=...`, `GET /v1/mcp/conversations`, `GET /v1/mcp/action-items`. They accept the same key as the MCP server and return plain JSON.
+    - **`/v1/memories` and `/v2/memories` do not exist.** Requests to them return `404 Not Found` regardless of the key.
+
+    ```bash
+    curl -H "Authorization: Bearer omi_mcp_YOUR_KEY" \
+      "https://api.omi.me/v1/mcp/memories?limit=5"
+    ```
+
+    To call the [Developer API](/doc/developer/api/overview) (`/v1/dev/...`) instead, create a separate
+    key in **Settings → Developer → Create Key**; it starts with `omi_dev_`. Using either key on the
+    other's endpoints returns a `401` that names the endpoints that key does authenticate.
+  </Accordion>
   <Accordion title="No tools showing up" icon="toolbox">
     - Send an `initialize` request first — tools are only available after initialization
     - Check that your client supports the Streamable HTTP transport (2025-03-26 spec)

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from models.conversation import Conversation
@@ -38,6 +41,22 @@ MEMORIES_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / '
 GOALS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'goals_wire.g.dart'
 TASK_INTELLIGENCE_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'task_intelligence_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
+
+
+def test_dart_generator_cli_uses_utf8_when_the_process_locale_does_not():
+    env = os.environ.copy()
+    env.update({'LANG': 'C', 'LC_ALL': 'C', 'PYTHONCOERCECLOCALE': '0', 'PYTHONUTF8': '0'})
+
+    completed = subprocess.run(
+        [sys.executable, str(generate_dart_models.__file__), '--all', '--check'],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT_DIR,
+        env=env,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_conversation_wire_dart_is_generated_from_app_client_openapi():

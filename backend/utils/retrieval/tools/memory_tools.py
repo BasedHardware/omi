@@ -2,7 +2,7 @@
 Tools for accessing user memories and facts.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 import contextvars
 
@@ -10,6 +10,7 @@ from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 from langchain_core.runnables import RunnableConfig
 
 import database.memories as memory_db
+import database.notifications as notification_db
 import database.vector_db as vector_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
@@ -21,6 +22,7 @@ from utils.memory.chat_memory_adapter import (
     search_memory_default_chat_memories_vector_decision_text,
 )
 from utils.memory.default_read_rollout import MemoryReadDecision
+from utils.conversations.render import format_local_date, resolve_display_tz
 from utils.retrieval.hybrid import rrf_rerank
 from utils.retrieval.tools.result_bounds import cap_items_for_llm, bounded_result
 import logging
@@ -340,6 +342,14 @@ def search_memories_tool(
     # Cap limit at 20
     limit = min(limit, 20)
 
+    # Memory dates go to the chat model; the UTC date rolls over at a different instant than
+    # the user's, so a raw UTC date is a day late for them in the evening (issue #6214).
+    try:
+        display_tz, _ = resolve_display_tz(notification_db.get_user_time_zone(uid))
+    except Exception as tz_error:
+        logger.warning(f"search_memories_tool - timezone lookup failed, formatting dates in UTC: {tz_error}")
+        display_tz = timezone.utc
+
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
         matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
@@ -352,7 +362,7 @@ def search_memories_tool(
         result = f"Found {len(matches)} memories matching '{query}':\n\n"
         for match in matches:
             memory = match.memory
-            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+            date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
             result += (
                 f"- {memory.content} (relevance: {match.score:.2f}, "
                 f"category: {memory.category.value}, date: {date_str})\n"
@@ -443,7 +453,7 @@ def search_memories_tool(
         for item in memory_objects:
             memory = item['memory']
             score = item['score']
-            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+            date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
             result += (
                 f"- {memory.content} (relevance: {score:.2f}, category: {memory.category.value}, date: {date_str})\n"
             )

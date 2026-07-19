@@ -43,6 +43,27 @@ def main() -> int:
         errors.append('gateway service token env has no value or valid secret reference')
 
     _require('OPENAI_API_KEY', gateway_env, errors, 'gateway')
+    _require('ANTHROPIC_API_KEY', gateway_env, errors, 'gateway')
+    _require('OPENROUTER_API_KEY', gateway_env, errors, 'gateway')
+    _require('METRICS_SECRET', gateway_env, errors, 'gateway')
+    _require('GOOGLE_CLOUD_PROJECT', gateway_env, errors, 'gateway')
+    _require('GCP_LOCATION', gateway_env, errors, 'gateway')
+    if gateway_env.get('LLM_GATEWAY_ACCOUNTING_ENABLED', {}).get('value') != 'true':
+        errors.append('gateway must enable LLM_GATEWAY_ACCOUNTING_ENABLED=true')
+    _require('LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS', gateway_env, errors, 'gateway')
+    _require('LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES', gateway_env, errors, 'gateway')
+
+    readiness = gateway_values.get('readinessProbe')
+    if not isinstance(readiness, dict):
+        errors.append('gateway has no readinessProbe')
+    else:
+        exec_probe = readiness.get('exec') if isinstance(readiness.get('exec'), dict) else None
+        command = exec_probe.get('command') if exec_probe is not None else None
+        probe_script = command[-1] if isinstance(command, list) and command else ''
+        if '/ready' not in str(probe_script):
+            errors.append('gateway readinessProbe must exec authenticated /ready')
+        if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in str(probe_script):
+            errors.append('gateway readinessProbe must send OMI_LLM_GATEWAY_SERVICE_TOKEN')
 
     for error in errors:
         print(f'ERROR: {error}')

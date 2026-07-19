@@ -1,39 +1,79 @@
-# utils/llm
+# `backend/utils/llm`
 
-LLM orchestration for the backend. Everything that builds prompts, calls a model, and shapes
-the result lives here. Import rule (from `backend/AGENTS.md`): this package may import from
-`database/` but never from `routers/` or `main.py`.
+LLM-backed feature layer for the backend. Every module here turns a product
+feature (chat, memory extraction, notifications, personas, app generation, …)
+into one or more model calls, and routes those calls through a shared
+**gateway-first** transport with a legacy direct-provider fallback.
 
-Model access is lazy: construct clients through the getters in `clients.py` / `providers.py`
-at call time, never at import (import purity is enforced in CI).
+The package is large because it collects *all* per-feature LLM prompts and
+response parsers in one place. New code should join the matching group below
+rather than adding another top-level concern.
 
-## Model access and gateway
+## Transport & routing core
 
-- `clients.py` — model instances and the `get_llm(feature)` entry point, with prompt caching and usage callbacks.
-- `providers.py`, `model_config.py` — provider registry and the pure model-token / required-env config contract.
-- `byok_errors.py` — typed bring-your-own-key error surface.
-- `gateway_*.py` (`gateway_client`, `gateway_serving`, `gateway_anthropic`, `gateway_byok`, `gateway_shadow`, `gateway_observability`) — the Omi-managed `omi:auto:*` LLM gateway lane: client, serving, provider adapters, BYOK routing, shadow comparison, and observability.
+The shared plumbing every feature call goes through.
 
-## Chat and conversation
+- `gateway_client.py` — resolves the LLM gateway base URL / service token and
+  low-level request helpers.
+- `gateway_serving.py` — gateway-first serving with fallback to a legacy
+  provider on hard transport failures.
+- `gateway_anthropic.py` — gateway-first Anthropic Messages client with a
+  direct-transport fallback.
+- `gateway_byok.py` — BYOK (bring-your-own-key) credential envelope helpers for
+  gateway routing.
+- `gateway_shadow.py` — dev/shadow comparison wrapping (sampled, prod-gated).
+- `gateway_observability.py` — records gateway vs. direct outcomes for
+  comparison and health.
+- `clients.py` — LLM client construction plus the shared error callback wiring.
+- `providers.py` / `model_config.py` — provider-specific chat-model
+  construction and model/profile selection per feature.
+- `byok_errors.py` — classifies and normalizes BYOK/provider LLM errors.
+- `usage_tracker.py` — feature-level token-usage accounting.
 
-- `chat.py` — chat message processing and tool use.
-- `conversation_processing.py`, `conversation_folder.py`, `followup.py` — post-conversation analysis, foldering, and follow-up generation.
+## Chat & conversation
 
-## Memory
+- `chat.py` — chat prompt assembly, context handling, response normalization.
+- `conversation_processing.py` — post-conversation structuring (speaker id
+  matching, discard detection, summarization).
+- `conversation_folder.py` — conversation → folder assignment.
+- `followup.py` — follow-up question generation.
+- `reply_draft.py` — review-first reply drafts; returns `needs_review` drafts and never sends.
+- `persona.py` — persona chat, memory condensation for personas.
+- `openglass.py` — vision (image description) model calls.
 
-- `memories.py`, `working_memory.py`, `working_observations.py` — memory extraction and the working-memory tier.
-- `durable_memory_patches.py`, `l2_memory_routes.py`, `knowledge_graph.py` — durable patches, L2 routing, and knowledge-graph rebuild.
+## Memory & knowledge graph
 
-## Persona, clone, and drafting
+- `memories.py` — memory extraction (standard + high-recall).
+- `working_observations.py` — working-observation batch synthesis
+  (`working_memory.py` is a backward-compatible shim, WS-G11).
+- `knowledge_graph.py` — node/edge extraction from memories.
+- `promotion_proposals.py` / `promotion_routes.py` — durable-memory patch
+  proposals and their routing (`durable_memory_patches.py` and
+  `l2_memory_routes.py` are backward-compatible shims, WS-G11).
 
-- `persona.py` — persona (voice) management.
-- `reply_draft.py` — the review-first reply-draft primitive shared by the on-behalf responder.
-- `on_behalf.py` — the AI clone: drafts a reply as the user for one contact and returns a server-owned safety-floor verdict (see `utils/clone_policy.py`). Send authorization is a local/persisted decision, never a request field.
-- `clone_benchmark.py` — scores the clone against the user's own past replies.
+## Proactive, notifications & insights
 
-## Generation, notifications, and signals
+- `notifications.py` — relevance retrieval and notification content.
+- `proactive_notification.py` — proactive notification drafting + validation.
+- `goals.py` — goal-tracking LLM utilities.
+- `trends.py` — trend extraction.
+- `temporal.py` — current-date grounding injected into prompts.
 
-- `app_generator.py`, `app_generation_prompts.py` — app/persona generation.
-- `notifications.py`, `proactive_notification.py` — notification copy and proactive triggers.
-- `goals.py`, `trends.py`, `promotion_proposals.py`, `promotion_routes.py` — goal tracking, trends, and promotion proposals/routing.
-- `external_integrations.py`, `openglass.py`, `fair_use_classifier.py`, `usage_tracker.py` — integration prompts, OpenGlass vision, fair-use classification, and per-feature usage tracking.
+## Apps, integrations & policy
+
+- `app_generator.py` / `app_generation_prompts.py` — AI app generation.
+- `external_integrations.py` — structured summaries for external integrations.
+- `fair_use_classifier.py` — LLM-based purpose detection for fair-use policy.
+
+## Conventions
+
+- Prefer routing new calls through the gateway core above; do not add a new
+  direct-provider path.
+- Backward-compatible shims (`working_memory.py`, `durable_memory_patches.py`,
+  `l2_memory_routes.py`) only re-export from their real modules — put
+  implementation in the target module, not the shim.
+- Keep prompts and provider selection separate from route and auth handling.
+- Construct provider clients lazily and sanitize provider responses before
+  logging them.
+- Add hermetic backend-unit coverage for routing and fallback changes; fallback
+  branches use the shared fallback telemetry helper.

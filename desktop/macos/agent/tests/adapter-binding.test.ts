@@ -30,6 +30,31 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
     store.close();
   });
 
+  it("keeps a warm binding when only the dynamic context identity advances", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+
+    await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "request-cache-1",
+      systemPromptCacheIdentity: "sha256:stable-policy",
+      dynamicContextIdentity: "sha256:turn-1",
+      contextPlanId: "sha256:plan-1",
+    });
+    await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "request-cache-2",
+      systemPromptCacheIdentity: "sha256:stable-policy",
+      dynamicContextIdentity: "sha256:turn-2",
+      contextPlanId: "sha256:plan-2",
+    });
+
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
+    expect(store.allRows("SELECT payload_json FROM events WHERE type = 'binding.resumed'")[0]?.payload_json)
+      .toContain("dynamicContextIdentity");
+    store.close();
+  });
+
   it("treats null cwd bindings as compatible with the default cwd", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const runInput = {

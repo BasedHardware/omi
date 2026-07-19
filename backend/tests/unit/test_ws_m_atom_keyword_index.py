@@ -373,10 +373,6 @@ class TestKeywordSearchAndHybrid:
         upsert_atom_keyword_doc(item)
 
         monkeypatch.setattr(
-            "utils.memory.memory_service.resolve_pinned_memory_system",
-            lambda uid, **_: MemorySystem.CANONICAL,
-        )
-        monkeypatch.setattr(
             "utils.memory.memory_service.canonical_read_enabled",
             lambda uid, db_client=None: True,
         )

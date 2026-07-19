@@ -8,7 +8,7 @@ import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 BOOTSTRAP_PATH = BACKEND_DIR / "utils" / "listen_session_bootstrap.py"
-TRANSCRIBE_PATH = BACKEND_DIR / "routers" / "transcribe.py"
+RUNTIME_PATH = BACKEND_DIR / "routers" / "listen" / "runtime.py"
 
 
 def test_bootstrap_offloads_firestore_reads():
@@ -33,15 +33,15 @@ def test_bootstrap_offloads_firestore_reads():
         assert required in awaited_targets
 
 
-def test_stream_handler_uses_listen_connect_bootstrap():
-    source = TRANSCRIBE_PATH.read_text(encoding="utf-8")
-    handler_start = source.index("async def _stream_handler(")
-    handler_end = source.index('logger.info(f"_stream_handler ended', handler_start)
-    handler = source[handler_start:handler_end]
-    assert "load_listen_connect_base" in handler
-    assert "finalize_listen_connect_context" in handler
-    assert "get_user_transcription_preferences(uid)" not in handler
-    assert "has_transcription_credits(uid" not in handler
+def test_runtime_uses_listen_connect_bootstrap():
+    source = RUNTIME_PATH.read_text(encoding="utf-8")
+    bootstrap_start = source.index("async def _bootstrap(")
+    bootstrap_end = source.index("    async def _heartbeat", bootstrap_start)
+    bootstrap = source[bootstrap_start:bootstrap_end]
+    assert "load_listen_connect_base" in bootstrap
+    assert "finalize_listen_connect_context" in bootstrap
+    assert "get_user_transcription_preferences(" not in bootstrap
+    assert "has_transcription_credits(" not in bootstrap
 
 
 def test_project_listen_connect_decisions_pins_vocabulary_and_translation():

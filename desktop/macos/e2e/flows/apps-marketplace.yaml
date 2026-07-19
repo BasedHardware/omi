@@ -5,6 +5,9 @@ description: Hermetic Apps marketplace catalog snapshot via bridge action
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  - desktop/macos/Desktop/Sources/OmiSupport/Dictionary+Deduplication.swift
+  - desktop/macos/Desktop/Sources/Providers/AppProvider.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Apps.swift
 preconditions:
   - automation_bridge_ready
 

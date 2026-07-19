@@ -7,7 +7,8 @@ from pathlib import Path
 import yaml
 import pytest
 
-from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config
+from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
+from llm_gateway.gateway.schemas import Surface
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -49,6 +50,7 @@ class DirectUse:
 DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
     DirectUse('utils/llm/app_generator.py', 'OpenAI'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
@@ -56,7 +58,6 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
-    DirectUse('utils/llm/gateway_byok.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),
@@ -88,15 +89,25 @@ def test_every_model_config_feature_has_inventory_and_gateway_lane():
     assert missing_lanes == []
 
 
-def test_generated_gateway_lanes_preserve_model_config_route_options():
+def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
     config = load_gateway_config(prod_mode=True)
+    overrides = load_generated_route_overrides()
 
     for feature in get_all_configured_features():
-        model = get_model(feature)
-        provider = get_provider(feature)
+        override = overrides.get(feature)
+        model = override.primary.model if override is not None else get_model(feature)
+        provider = override.primary.provider if override is not None else get_provider(feature)
         route = config.route_artifacts[f'route.{feature}.model_config.001']
 
-        assert route.provider_options == get_route_options(feature, model, provider)
+        expected_options = get_route_options(feature, model, provider)
+        if override is not None:
+            expected_options.update(override.provider_options)
+        expected_provider_model = (
+            f'google/{model}' if provider == 'openrouter' and model.startswith('gemini') else model
+        )
+        assert route.primary.model == expected_provider_model
+        assert route.primary.provider == provider
+        assert route.provider_options == expected_options
 
 
 def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():
@@ -105,7 +116,13 @@ def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_su
     for feature in get_all_configured_features():
         if get_provider(feature) == 'anthropic':
             lane = config.lanes[feature_lane_id(feature)]
-            assert lane.capabilities.streaming is False
+            if feature == 'chat_agent':
+                assert lane.surface == Surface.ANTHROPIC_MESSAGES
+                assert lane.capabilities.streaming is True
+                assert lane.capabilities.tools is True
+            else:
+                assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
+                assert lane.capabilities.streaming is False
 
 
 def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():

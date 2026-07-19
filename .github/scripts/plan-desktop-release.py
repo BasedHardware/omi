@@ -9,8 +9,8 @@ import subprocess
 import time
 from pathlib import Path
 
-
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
+DESKTOP_SWIFT_CHECK_NAME = "Desktop Swift Build & Tests"
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
 AUTO_RELEASE_QUIET_SECONDS = 10 * 60
 
@@ -84,14 +84,27 @@ def latest_change_age_seconds(paths: list[str]) -> int | None:
         return None
 
 
-def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str | None, str | None]:
+def latest_releasable_source_sha(ref: str | None, paths: list[str]) -> str | None:
+    """Return the newest queued desktop-content commit, not an unrelated HEAD commit."""
+    if not paths:
+        return None
+
+    revision = f"{ref}..HEAD" if ref else "HEAD"
+    try:
+        source_sha = git(["log", "-1", "--format=%H", revision, "--", *paths])
+    except subprocess.CalledProcessError:
+        return None
+    return source_sha or None
+
+
+def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str | None, str | None, str | None]:
     result = subprocess.run(
         [
             "gh",
             "api",
-            f"repos/{repository}/commits/{sha}/check-runs",
+            f"repos/{repository}/commits/{sha}/check-runs?filter=latest",
             "--jq",
-            f'.check_runs[] | select(.name=="{CODEMAGIC_CHECK_NAME}") | [.status, (.conclusion // "")] | @tsv',
+            f'.check_runs[] | select(.name=="{check_name}") | [.status, (.conclusion // "")] | @tsv',
         ],
         text=True,
         stdout=subprocess.PIPE,
@@ -109,6 +122,26 @@ def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str |
     status = parts[0] if parts else None
     conclusion = parts[1] if len(parts) > 1 else None
     return status, conclusion, None
+
+
+def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str | None, str | None]:
+    return github_check_status(repository, sha, CODEMAGIC_CHECK_NAME)
+
+
+def required_desktop_swift_check_reason(repository: str, sha: str) -> str | None:
+    status, conclusion, error = github_check_status(repository, sha, DESKTOP_SWIFT_CHECK_NAME)
+    if error:
+        return f"could not read required check for source SHA {sha}: {error}"
+    if status is None:
+        return f"required check {DESKTOP_SWIFT_CHECK_NAME} is missing for source SHA {sha}"
+    if status != "completed":
+        return f"required check {DESKTOP_SWIFT_CHECK_NAME} for source SHA {sha} is {status}"
+    if conclusion != "success":
+        return (
+            f"required check {DESKTOP_SWIFT_CHECK_NAME} for source SHA {sha} "
+            f"completed with {conclusion or 'no conclusion'}"
+        )
+    return None
 
 
 def active_release_reason(repository: str, latest_tag: str | None) -> str | None:
@@ -152,7 +185,9 @@ def main() -> int:
 
     latest_tag = latest_desktop_tag()
     changes = releasable_desktop_changes_since(latest_tag)
+    source_sha = latest_releasable_source_sha(latest_tag, changes) or git(["rev-parse", "HEAD"])
     set_output("latest_tag", latest_tag or "")
+    set_output("source_sha", source_sha)
 
     if not changes and args.mode == "force_release":
         print("No releasable desktop app changes since the latest desktop tag, but force_release was requested.")
@@ -185,6 +220,12 @@ def main() -> int:
                 f"({wait_seconds}s remaining).",
             )
             return 0
+
+    source_check_reason = required_desktop_swift_check_reason(args.repository, source_sha)
+    if source_check_reason:
+        set_output("should_release", "false")
+        set_output("reason", f"Desktop candidate source gate blocked: {source_check_reason}.")
+        return 0
 
     if args.mode != "force_release":
         active_reason = active_release_reason(args.repository, latest_tag)
