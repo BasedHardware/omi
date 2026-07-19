@@ -182,6 +182,102 @@ test('summon hotkey reveals the pill (peek), never the expanded chat (C5)', asyn
   assert.equal(s.focused, false, 'the summoned pill must not steal focus')
 })
 
+// Reveal-size guard (fullscreen cross-DPI bug): a summoned bar must reveal at the
+// computed size for its target monitor, never oversized. The live bug was a bar
+// summoned while another app was FULLSCREEN on a mixed-DPI multi-monitor setup
+// revealing ~1.5× too large (off-center + blurry) — Windows sized the final
+// on-screen setBounds under the parked corner's monitor scale. unparkWindow now
+// re-applies setBounds when the size drifted. This asserts the revealed window is
+// not oversized relative to BAR_WINDOW_WIDTH/MAX_HEIGHT (+rounding slack); the
+// drift predicate itself is unit-tested in placement.test.ts (boundsSizeDrifted).
+test('summon reveals the bar at the computed size, never oversized (fullscreen DPI)', async (t) => {
+  const { app, cleanup } = await launch()
+  t.after(cleanup)
+  await app.firstWindow()
+
+  await app.evaluate(() => globalThis.__omiE2E.barEnable())
+  await findBarPage(app)
+  await app.evaluate(() => globalThis.__omiE2E.barSummonFire())
+
+  let st = null
+  for (let i = 0; i < 100; i++) {
+    st = await app.evaluate(() => globalThis.__omiE2E.barState())
+    if (st.visible) break
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  assert.ok(st && st.visible, 'summon should reveal the bar')
+
+  const b = await app.evaluate(({ BrowserWindow }, id) => {
+    const win = id != null ? BrowserWindow.fromId(id) : null
+    return win ? win.getBounds() : null
+  }, st.id)
+  assert.ok(b, 'bar window bounds should be readable')
+  // BAR_WINDOW_WIDTH = 560, BAR_WINDOW_MAX_HEIGHT = 640; +4px absorbs the ±1px
+  // rounding a fractional (1.5×) monitor produces. The bug revealed 840×960.
+  assert.ok(b.width <= 564, `bar revealed oversized: width ${b.width} (expected ≤ 564)`)
+  assert.ok(b.height <= 644, `bar revealed oversized: height ${b.height} (expected ≤ 644)`)
+})
+
+// The user's reported trigger: with an Omi window ITSELF FULLSCREEN, a summoned
+// bar revealed bigger/off-center. This drives that exact scenario — fullscreen the
+// main window, then summon — and asserts the bar reveals at the computed size, not
+// oversized. Note: on normally-composited hardware this passes without the fix
+// (an Electron/borderless fullscreen does not de-composite the monitor, so the
+// final on-screen setBounds sizes correctly); the fix's corrective re-apply is the
+// safety net for the case where the monitor IS de-composited. This is the live
+// guard for "fullscreen main window → correct bar size" regardless.
+test('main window fullscreen: summoned bar still reveals at the computed size', async (t) => {
+  const { app, cleanup } = await launch()
+  t.after(cleanup)
+  await app.firstWindow()
+
+  // Fullscreen the largest visible non-bar window (the main window).
+  const fs = await app.evaluate(({ BrowserWindow }) => {
+    const wins = BrowserWindow.getAllWindows().filter(
+      (w) => !w.webContents.getURL().includes('#/bar') && w.isVisible()
+    )
+    wins.sort(
+      (a, b) =>
+        b.getBounds().width * b.getBounds().height - a.getBounds().width * a.getBounds().height
+    )
+    const main = wins[0] || BrowserWindow.getAllWindows()[0]
+    main.setFullScreen(true)
+    return { id: main.id, isFullScreen: main.isFullScreen() }
+  })
+  await new Promise((r) => setTimeout(r, 800))
+
+  await app.evaluate(() => globalThis.__omiE2E.barEnable())
+  await findBarPage(app)
+  await app.evaluate(() => globalThis.__omiE2E.barSummonFire())
+
+  let st = null
+  for (let i = 0; i < 100; i++) {
+    st = await app.evaluate(() => globalThis.__omiE2E.barState())
+    if (st.visible) break
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  assert.ok(st && st.visible, 'summon should reveal the bar with the main window fullscreen')
+
+  const b = await app.evaluate(({ BrowserWindow }, id) => {
+    const win = id != null ? BrowserWindow.fromId(id) : null
+    return win ? win.getBounds() : null
+  }, st.id)
+  assert.ok(b, 'bar window bounds should be readable')
+  assert.ok(
+    b.width <= 564,
+    `bar revealed oversized with main fullscreen (fs=${fs.isFullScreen}): width ${b.width} (≤ 564)`
+  )
+  assert.ok(
+    b.height <= 644,
+    `bar revealed oversized with main fullscreen (fs=${fs.isFullScreen}): height ${b.height} (≤ 644)`
+  )
+
+  await app.evaluate(
+    ({ BrowserWindow }, id) => BrowserWindow.fromId(id)?.setFullScreen(false),
+    fs.id
+  )
+})
+
 // Regression for the blank-bar paint race (C11): main used to showInactive()
 // the HWND BEFORE the renderer had painted the revealing frame, so the compositor
 // flashed the previous un-revealed frame — a blank window on first hover. The fix

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   computeBarBounds,
   offscreenStageBounds,
+  boundsSizeDrifted,
   OFFSCREEN_STAGE_MARGIN,
   displayForPoint,
   isCursorInPeekFootprint,
@@ -171,6 +172,42 @@ describe('offscreenStageBounds (multi-monitor DPI regression)', () => {
     const stageAlone = offscreenStageBounds(final, [lower], PARKED)
     expect(stageAlone.x).toBe(final.x)
     expect(stageAlone.y).toBe(naiveStageTop)
+  })
+})
+
+describe('boundsSizeDrifted (fullscreen cross-DPI reveal-size guard)', () => {
+  // Live bug: summoning the bar while another app is FULLSCREEN on the target
+  // monitor revealed it oversized/off-center/blurry. Mechanism: the final
+  // on-screen setBounds moves the window off the 1.5× parked corner onto a 1.0×
+  // monitor that (behind a fullscreen-exclusive app) is not treated as a
+  // normally-composited destination, so Windows sizes it under the SOURCE (1.5×)
+  // scale — 560×640 → 840×960. unparkWindow re-applies setBounds when this
+  // predicate flags the drift (the window is by then geometrically on the target,
+  // so the re-apply sizes correctly). It must NOT fire on a normal reveal.
+  const bar = { x: 680, y: 0, width: 560, height: 640 }
+
+  it('flags the 1.5× inflation (oversized/off-center/blurry reveal)', () => {
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 840, height: 960 })).toBe(true)
+  })
+
+  it('does NOT flag an exact reveal (no spurious re-apply)', () => {
+    expect(boundsSizeDrifted(bar, { ...bar })).toBe(false)
+  })
+
+  it('tolerates ±1px fractional-scale rounding (1.5× monitor reveal)', () => {
+    // A correct reveal onto a 1.5× monitor can round to 561×640 — not a drift.
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 561, height: 640 })).toBe(false)
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 559, height: 641 })).toBe(false)
+  })
+
+  it('does not flag exactly at the ±2px tolerance boundary (> 2, not >= 2)', () => {
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 562, height: 640 })).toBe(false)
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 558, height: 642 })).toBe(false)
+  })
+
+  it('flags a drift beyond the rounding tolerance', () => {
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 563, height: 640 })).toBe(true)
+    expect(boundsSizeDrifted(bar, { x: 680, y: 0, width: 560, height: 644 })).toBe(true)
   })
 })
 

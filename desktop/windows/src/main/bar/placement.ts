@@ -128,6 +128,25 @@ export function offscreenStageBounds(
   return staged
 }
 
+/** Did a revealed window's ACTUAL size drift from what was requested? A Windows
+ *  cross-DPI `setBounds` artifact: when the final on-screen move crosses a monitor
+ *  DPI boundary AND the destination monitor is not treated as a normally-composited
+ *  on-monitor position — which happens when it sits behind a fullscreen-exclusive
+ *  app — Windows sizes the window under the SOURCE (parked-corner) monitor's scale
+ *  instead of the target's. On a 1.5× parked corner revealing onto a 1.0× monitor
+ *  that inflates 560×640 → 840×960: the window is oversized, its top-center pill
+ *  lands off-center, and the frame (painted at the wrong device scale) is blurry —
+ *  the exact reported symptom. The cure is a second `setBounds`: the window is now
+ *  geometrically ON the target monitor, so the re-apply sizes it under the correct
+ *  scale. This predicate decides whether that re-apply is needed; the 2px tolerance
+ *  absorbs the ±1px rounding a fractional-scale (1.5×) monitor produces on an exact
+ *  reveal, so a normal reveal never triggers a spurious re-apply. */
+export function boundsSizeDrifted(requested: Rect, actual: Rect): boolean {
+  return (
+    Math.abs(actual.width - requested.width) > 2 || Math.abs(actual.height - requested.height) > 2
+  )
+}
+
 /** The display whose bounds contain the point, else the nearest by center
  *  distance (mirrors screen.getDisplayNearestPoint for unit tests). */
 export function displayForPoint(
