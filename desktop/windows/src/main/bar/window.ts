@@ -133,6 +133,29 @@ const PARKED_POS = { x: -32000, y: -32000 }
 let barOnScreen = false
 /** True once the one-time off-screen prime show has run (the OS fade is spent). */
 let barPrimed = false
+/** Whether the bar renderer's animation loops (the orb + its waveform) should be
+ *  running — true while a reveal is ARMED (staging the revealed frame off-screen)
+ *  or the bar is ON-SCREEN, false once parked with nothing pending. Pushed to the
+ *  renderer as `bar:parked` so the orb folds it into its 0fps-hidden gate.
+ *
+ *  WHY main drives this: the persistent bar window is never `document.hidden` when
+ *  parked off-screen (Electron occlusion tracking is macOS-only), so the renderer
+ *  cannot tell on its own that it went invisible — and the parked window is NOT
+ *  Chromium-background-throttled either, so a self-throttled 30fps orb loop would
+ *  otherwise render at display rate forever after the first summon (perf-profile
+ *  2026-07-19 hotspot #2). We wake the loop at ARM (presentBar) — not at unpark —
+ *  so the revealed frame is staged before the window moves on-screen, keeping the
+ *  reveal choreography (genesis spring + paint-ack handshake) byte-identical. */
+let barRenderActive = false
+
+/** Push the renderer's loop gate, only on change. `parked` is the inverse of
+ *  render-active (the renderer reads it as "stop the orb"). */
+function setBarRenderActive(active: boolean): void {
+  if (barRenderActive === active) return
+  barRenderActive = active
+  send('bar:parked', !active)
+  diag(`renderActive ${active} (parked=${!active})`)
+}
 
 export function getBarWindow(): BrowserWindow | null {
   return barWindow
@@ -235,6 +258,7 @@ export function createBarWindow(): BrowserWindow {
     currentMode = null
     barOnScreen = false
     barPrimed = false
+    barRenderActive = false
     cancelPendingReveal()
   })
   win.webContents.on('did-fail-load', (_e, code, desc, url) =>
@@ -380,6 +404,11 @@ function cancelPendingReveal(): void {
  * compositor shows the previous off-screen frame first (the blank-bar race).
  */
 function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal, bounds: Rect): void {
+  // Wake the renderer's orb loop NOW (arm), before the paint-ack handshake stages
+  // the revealed frame off-screen — so the orb is live to paint that staged frame
+  // and the reveal choreography is unchanged. It is re-parked in hideBarNow (and in
+  // hideBar's cancel path if this reveal is aborted before it ever shows).
+  setBarRenderActive(true)
   // A pending hide-fallback must not fire mid-reveal.
   if (hideFallback) {
     clearTimeout(hideFallback)
@@ -696,6 +725,9 @@ export function hideBar(): void {
   if (pendingReveal) {
     cancelPendingReveal()
     if (!barOnScreen) {
+      // Armed a reveal (woke the orb in presentBar) but it never showed — re-park
+      // the renderer loop so a cancelled first summon doesn't leave the orb running.
+      setBarRenderActive(false)
       currentMode = null
       return
     }
@@ -726,6 +758,9 @@ function hideBarNow(): void {
   // HWND is exactly what triggers the OS window-show fade (the "plummet"). The
   // window stays shown; parking makes it invisible without a future fade.
   parkWindow(win)
+  // Stop the renderer's orb loop now that the window is parked off-screen — the
+  // orb costs nothing while invisible (the whole point of hotspot #2).
+  setBarRenderActive(false)
   win.setFocusable(false)
   applyClickThrough(win)
   currentMode = null
@@ -864,6 +899,9 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
   ipcMain.on('bar:ready', (e) => {
     if (!barWindow || e.sender.id !== barWindow.webContents.id) return
     barReady = true
+    // A fresh/reloaded renderer starts with parked=false (its hook default) — sync
+    // the real gate so a crash-reload while parked doesn't leave the orb running.
+    send('bar:parked', !barRenderActive)
     if (pendingShow) {
       const { mode, reveal, bounds } = pendingShow
       pendingShow = null
@@ -979,6 +1017,7 @@ export function destroyBar(): void {
   hideFallback = null
   barOnScreen = false
   barPrimed = false
+  barRenderActive = false
   if (barWindow && !barWindow.isDestroyed()) barWindow.destroy()
   barWindow = null
 }

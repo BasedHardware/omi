@@ -751,6 +751,11 @@ const omiBar: OmiBarApi = {
     ipcRenderer.on('bar:willHide', listener)
     return () => ipcRenderer.removeListener('bar:willHide', listener)
   },
+  onParked: (cb: (parked: boolean) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, parked: boolean): void => cb(!!parked)
+    ipcRenderer.on('bar:parked', listener)
+    return () => ipcRenderer.removeListener('bar:parked', listener)
+  },
   onPtt: (cb: (phase: 'down' | 'up') => void) => {
     const listener = (_e: Electron.IpcRendererEvent, phase: 'down' | 'up'): void => cb(phase)
     ipcRenderer.on('bar:ptt', listener)
