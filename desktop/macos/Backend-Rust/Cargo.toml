@@ -7,6 +7,8 @@ edition = "2021"
 unwrap_used = "deny"
 
 [dependencies]
+omi-desktop-core = { path = "../../shared-rust" }
+
 # Web framework
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
