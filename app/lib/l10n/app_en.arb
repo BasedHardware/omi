@@ -10668,7 +10668,7 @@
     "upgradePlan": "Upgrade Plan",
     "billingMonthly": "Monthly",
     "billingYearly": "Yearly",
-    "savePercent": "Save ~17%",
+    "savePercent": "Save ~{percent}%",
     "popular": "Popular",
     "currentPlan": "Current",
     "neoSubtitle": "{count} questions per month",
@@ -11326,5 +11326,12 @@
     "dataEncryptedBanner": "Your data is secured by default with strong encryption, and you stay in control of how it's stored and used.",
     "@dataEncryptedBanner": {
         "description": "Data privacy page banner summarizing encryption and user control"
+    },
+    "@savePercent": {
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
     }
 }

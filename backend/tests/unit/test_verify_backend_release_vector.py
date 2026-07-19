@@ -642,6 +642,58 @@ def test_retry_derives_a_new_vector_and_accepts_only_the_converged_attempt() -> 
     assert verifier.evaluate(retry, _documents(retry)) == []
 
 
+def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence() -> None:
+    """Regression for the missing positional ``errors`` argument.
+
+    ``main()`` builds ``errors`` via ``evaluate()`` and then renders
+    ``evidence(...)``. When the --candidate / --cloud-run-only paths landed,
+    the call site forgot to forward ``errors``, so a successful candidate or
+    serving-vector check raised ``TypeError: evidence() missing 1 required
+    positional argument: 'errors'`` before writing any evidence. Both edited
+    deploy workflows hit this path.
+    """
+    import tempfile
+
+    expectation = _expectation()
+    documents = _documents(expectation)
+
+    monkeypatch_collect = pytest.MonkeyPatch()
+    monkeypatch_collect.setattr(verifier, 'collect_documents', lambda commands: documents)
+
+    with tempfile.NamedTemporaryFile('r+', suffix='.json', delete=False) as handle:
+        evidence_path = Path(handle.name)
+
+    argv = [
+        'verify_backend_release_vector.py',
+        '--commit-sha',
+        expectation.commit_sha,
+        '--short-sha',
+        expectation.commit_sha[:7],
+        '--deploy-run-id',
+        expectation.deploy_run_id,
+        '--deploy-run-attempt',
+        expectation.deploy_run_attempt,
+        '--project',
+        'based-hardware-dev',
+        '--region',
+        'us-central1',
+        '--environment',
+        'dev',
+        '--evidence-path',
+        str(evidence_path),
+    ]
+    monkeypatch_collect.setattr(sys, 'argv', argv)
+    try:
+        rc = verifier.main()
+    finally:
+        monkeypatch_collect.undo()
+
+    assert rc == 0, 'a fully-converged serving vector must return success'
+    report = json.loads(evidence_path.read_text(encoding='utf-8'))
+    assert report['result'] == 'pass'
+    assert report['errors'] == []
+
+
 def test_evidence_records_the_derived_release_vector() -> None:
     expectation = _expectation()
 
@@ -661,6 +713,32 @@ def test_evidence_records_the_derived_release_vector() -> None:
         },
         'require_serving_traffic': True,
     }
+
+
+def test_candidate_cloud_run_only_verification_does_not_require_listener_mutations() -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run/')}
+
+    commands = verifier.build_read_only_commands(expectation, include_listener=False)
+    errors = verifier.evaluate(
+        expectation,
+        cloud_run_only,
+        require_serving_traffic=False,
+        include_listener=False,
+    )
+    report = verifier.evidence(
+        expectation,
+        cloud_run_only,
+        errors,
+        require_serving_traffic=False,
+        include_listener=False,
+    )
+
+    assert set(commands) == set(cloud_run_only)
+    assert errors == []
+    assert report['release_vector']['backend_listen_required'] is False
+    assert 'gke_listener' not in report
 
 
 def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion() -> None:
@@ -683,6 +761,50 @@ def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion(
     manual = (root / '.github' / 'workflows' / 'gcp_backend.yml').read_text(encoding='utf-8')
     manual_verification = manual[manual.index('Verify serving backend release vector') :]
     assert "github.event.inputs.deploy_targets == 'all'" in manual_verification
+
+
+def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_snapshot() -> None:
+    """Static workflow contract for #9950; live traffic mutation remains CI-owned."""
+    root = BACKEND_DIR.parent
+    workflows = (
+        '.github/workflows/gcp_backend.yml',
+        '.github/workflows/gcp_backend_auto_dev.yml',
+    )
+
+    for relative in workflows:
+        text = (root / relative).read_text(encoding='utf-8')
+
+        candidate_acceptance = text.index('Accept no-traffic Cloud Run candidate')
+        runtime_config = text.index('Apply non-secret backend runtime config')
+        backend_secrets = text.index('Deploy backend-secrets')
+        backend_listen = text.index('Deploy ${{ env.SERVICE }}-listen to GKE')
+        snapshot = text.index('Capture Cloud Run pre-promotion traffic snapshot')
+        promotion = text.index('Shift Cloud Run traffic to validated revisions')
+        serving_vector = text.index('Verify serving backend release vector')
+        restore = text.index('Restore Cloud Run traffic snapshot after failed promotion')
+
+        assert candidate_acceptance < runtime_config, relative
+        assert candidate_acceptance < backend_secrets, relative
+        assert candidate_acceptance < backend_listen, relative
+        assert candidate_acceptance < snapshot < promotion < serving_vector < restore, relative
+
+        snapshot_step = text[snapshot : text.index('\n      - name:', snapshot + 1)]
+        assert 'backend/scripts/cloud_run_traffic_snapshot.py capture' in snapshot_step
+        for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+            assert f'--service {service}' in snapshot_step
+
+        restore_step = text[restore : text.index('\n      - name:', restore + 1)]
+        expected_restore_condition = (
+            "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
+            "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
+            "|| steps.verify-serving-release-vector.outcome == 'failure') }}"
+        )
+        assert expected_restore_condition in restore_step
+        assert 'backend/scripts/cloud_run_traffic_snapshot.py restore' in restore_step
+
+        evidence_upload = text[text.index('Upload ') :]
+        assert 'cloud-run-pre-promotion-traffic-snapshot.json' in evidence_upload
+        assert 'cloud-run-traffic-restore.json' in evidence_upload
 
 
 def test_backend_listen_rollout_wait_can_cover_a_real_rollout():

@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.82",
+      "date": "2026-07-19",
+      "changes": [
+        "Fixed beta chat recovery after a failed request."
+      ]
+    },
+    {
+      "version": "0.12.81",
+      "date": "2026-07-19",
+      "changes": [
+        "Improved beta chat recovery after a failed request."
+      ]
+    },
+    {
+      "version": "0.12.80",
+      "date": "2026-07-18",
+      "changes": [
+        "Improved macOS beta qualification reliability during fault-path testing."
+      ]
+    },
+    {
       "version": "0.12.79",
       "date": "2026-07-18",
       "changes": [

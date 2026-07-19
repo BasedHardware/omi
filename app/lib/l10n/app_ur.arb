@@ -10521,7 +10521,7 @@
     "upgradePlan": "پلان اپ گریڈ کریں",
     "billingMonthly": "ماہانہ",
     "billingYearly": "سالانہ",
-    "savePercent": "~17% بچائیں",
+    "savePercent": "~{percent}% بچائیں",
     "popular": "مقبول",
     "currentPlan": "موجودہ",
     "neoSubtitle": "ماہانہ {count} سوالات",
