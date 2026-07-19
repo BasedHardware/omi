@@ -77,27 +77,37 @@ export function Memories(): React.JSX.Element {
   //    into different views". Holding the loader until they settle means the first
   //    thing shown is the final graph, flying in once. Stays settled once resolved
   //    (dataLoading is monotonic), so a later background revalidation swaps in place
-  //    rather than dropping back to the loader. A bounded fallback forces it if a
-  //    load signal never clears (a hung fetch), so the placeholder can't hang.
+  //    rather than dropping back to the loader.
   //  - canvasLive: BrainGraph reported a live WebGL context (onReady) — the canvas
   //    can actually paint. Reset to false when we tear the preview canvas down (see
-  //    mountPreview) so a revisit falls back to the loader until the fresh canvas
-  //    is ready, rather than crossfading straight to a blank pane.
+  //    the teardown effect) so a revisit falls back to the loader until the fresh
+  //    canvas is ready, rather than crossfading straight to a blank pane.
+  //
+  // revealForced is the bounded fallback that keeps the loader from latching
+  // forever, and it forces the FULL reveal (both axes), not just `settled`: if the
+  // lazy 3D chunk fails to load, LazyBrainGraph renders its static fallback and
+  // onReady never fires, so canvasLive would stay false and the placeholder would
+  // sit on top of that fallback indefinitely. Once the data has settled only the
+  // canvas is outstanding, so force the reveal soon after; before then wait longer
+  // (a slow fetch is legitimate — revealing early would flash a partial graph).
   const hasGraph = brainGraph.nodes.length > 0
   const [canvasLive, setCanvasLive] = useState(false)
-  const [settleTimedOut, setSettleTimedOut] = useState(false)
+  const [revealForced, setRevealForced] = useState(false)
   // dataLoading is monotonic (each source flips true→false once and never back —
-  // revalidation/refetch don't re-raise it), so `settled` needs no latch: once the
-  // sources have resolved it stays resolved, and a later background swap flows in
-  // without dropping to the loader.
+  // revalidation/refetch don't re-raise it), so `settled` needs no latch.
   const dataLoading = loading || graphLoading
+  const settled = !dataLoading
+  const normalReady = canvasLive && settled
   useEffect(() => {
-    if (!dataLoading || settleTimedOut || !hasGraph) return
-    const t = setTimeout(() => setSettleTimedOut(true), 15000)
+    if (normalReady || revealForced || !hasGraph) return
+    const t = setTimeout(() => setRevealForced(true), settled ? 4000 : 15000)
     return () => clearTimeout(t)
-  }, [dataLoading, settleTimedOut, hasGraph])
-  const settled = !dataLoading || settleTimedOut
-  const graphReady = canvasLive && settled
+  }, [normalReady, revealForced, hasGraph, settled])
+  const graphReady = normalReady || revealForced
+  // Feed the settled graph once we're ready to show it (data settled, or the
+  // fallback forced the reveal); until then EMPTY so the sim lays the final set
+  // out exactly once.
+  const showFinalGraph = settled || revealForced
 
   // Mount the preview's WebGL canvas for as long as the Memories route is active,
   // and tear it down only after the user has been away for a sustained window (to
@@ -119,12 +129,19 @@ export function Memories(): React.JSX.Element {
       setMountPreview(true)
       return
     }
-    const t = setTimeout(() => {
-      setMountPreview(false)
-      setCanvasLive(false)
-    }, 5000)
+    const t = setTimeout(() => setMountPreview(false), 5000)
     return () => clearTimeout(t)
   }, [previewRouteActive])
+
+  // Reset canvasLive whenever the canvas is actually torn down — the route teardown
+  // above, or the card's hasGraph gate dropping it — so a later remount re-earns
+  // onReady instead of us crossfading over a fresh, not-yet-painted canvas (stale
+  // canvasLive=true → a blank flash on remount). The cleanup runs on the unmount
+  // transition; the effect body sets no state.
+  useEffect(() => {
+    if (!(mountPreview && hasGraph)) return
+    return () => setCanvasLive(false)
+  }, [mountPreview, hasGraph])
 
   // Revalidate when the window regains focus, so memories the backend distilled
   // from new conversations during the session show up on return without an app
@@ -534,11 +551,11 @@ export function Memories(): React.JSX.Element {
               >
                 {mountPreview && (
                   <BrainGraph
-                    // Feed the final graph only once its data has settled; until
+                    // Feed the final graph only once we're ready to show it; until
                     // then an empty graph, so the sim lays out the final node set
                     // exactly once (and flies it in once) at reveal, rather than
                     // laying out each intermediate as floor/server-KG load in.
-                    graph={settled ? previewGraph : EMPTY_GRAPH}
+                    graph={showFinalGraph ? previewGraph : EMPTY_GRAPH}
                     centerNodeId={centerNodeId}
                     interactive={false}
                     labelMode="declutter"
@@ -548,6 +565,12 @@ export function Memories(): React.JSX.Element {
                     pauseWhenHidden={false}
                     frameLoop="demand"
                     onReady={() => setCanvasLive(true)}
+                    // Still fires on a WebGL context loss (independent of
+                    // pauseWhenHidden): drop back to the loader while
+                    // useWebglRecovery remounts the canvas, then onReady re-reveals.
+                    onVisibleChange={(v) => {
+                      if (!v) setCanvasLive(false)
+                    }}
                   />
                 )}
               </div>

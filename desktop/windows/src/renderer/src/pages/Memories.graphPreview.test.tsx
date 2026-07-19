@@ -141,14 +141,25 @@ describe('Memories brain-map preview — reveal gate', () => {
   it('holds the loader and renders NO graph nodes while the graph data is still loading', async () => {
     graphLoading = true
     await renderPage()
-    // Loading indicator is present…
-    expect(screen.getByText(/Building your memory map/i)).toBeTruthy()
+    // The loading indicator's text is always in the DOM (only its opacity toggles),
+    // so assert the actual VISIBLE state: the loader layer is opaque and the graph
+    // layer (BrainGraph's wrapper) is faded out.
+    const loader = screen.getByText(/Building your memory map/i).closest('div[aria-hidden]')
+    expect(loader?.className).toMatch(/opacity-100/)
+    const el = screen.getByTestId('preview-graph')
+    const graphLayer = el.parentElement
+    expect(graphLayer?.className).toMatch(/opacity-0(?!\d)/)
     // …and BrainGraph has been fed the empty graph, so no capped/settled frame has
     // rendered yet (the "no graph frame before the settle signal" guarantee).
-    const el = screen.getByTestId('preview-graph')
     expect(el.getAttribute('data-node-count')).toBe('0')
-    // It must NOT have jumped straight to the settled capped set.
     expect(brainGraphProps.every((p) => (p.graph?.nodes.length ?? 0) === 0)).toBe(true)
+  })
+
+  it('feeds the settled capped graph once the data has loaded', async () => {
+    graphLoading = false
+    await renderPage()
+    const el = screen.getByTestId('preview-graph')
+    expect(el.getAttribute('data-node-count')).toBe(String(DEFAULT_NODE_CAP))
   })
 
   it('feeds the settled capped graph once the data has loaded', async () => {
