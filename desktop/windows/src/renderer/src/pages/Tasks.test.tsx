@@ -66,6 +66,7 @@ let tasks: {
   tasksDelete: ReturnType<typeof vi.fn>
   tasksReconcile: ReturnType<typeof vi.fn>
   onTasksChanged: ReturnType<typeof vi.fn>
+  onTasksOpFailed: ReturnType<typeof vi.fn>
 }
 
 beforeEach(() => {
@@ -95,7 +96,8 @@ beforeEach(() => {
       return () => {
         changedCb = null
       }
-    })
+    }),
+    onTasksOpFailed: vi.fn(() => () => {})
   }
   ;(window as unknown as { omi: unknown }).omi = tasks
 })
