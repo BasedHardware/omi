@@ -11,6 +11,7 @@ import { HubChatPanel } from './HubChatPanel'
 import { HubChatHeader } from '../../chat/HubChatHeader'
 import { ChatAppPicker } from '../../chat/ChatAppPicker'
 import { HubConnectPanel } from './HubConnectPanel'
+import { preloadHubConnectContent } from './hubConnectSlot'
 import { getHubHomeWidgets } from './hubHomeWidgetsSlot'
 import { useHubStats } from './useHubStats'
 import { nextStage, isPanelMode } from './hubStage'
@@ -73,6 +74,22 @@ export function HomeHub(): React.JSX.Element {
 
   const dispatch = useCallback((event: HomeStageEvent): void => {
     setMode((m) => nextStage(m, event))
+  }, [])
+
+  // Warm the Connect stage's lazily-imported connections chunk shortly after the Hub
+  // mounts, so the first time the user opens Connect the tray renders instantly instead
+  // of flashing the Suspense fallback. This runs only here — HomeHub is the Home page,
+  // mounted only in the main window — so the code-split still holds for the bar/capture/
+  // glow windows, which never open Connect. Deferred to idle so it never competes with
+  // the Hub's own first paint.
+  useEffect(() => {
+    const ric = window.requestIdleCallback
+    if (ric) {
+      const id = ric(() => preloadHubConnectContent(), { timeout: 2000 })
+      return () => window.cancelIdleCallback?.(id)
+    }
+    const t = window.setTimeout(() => preloadHubConnectContent(), 200)
+    return () => window.clearTimeout(t)
   }, [])
 
   const send = useCallback(

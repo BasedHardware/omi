@@ -259,4 +259,66 @@ describe('Connections panel', () => {
       await cleanup()
     }
   })
+
+  // Regression for the reported bug: on FIRST open the Connect stage briefly showed the
+  // empty "Connections are coming soon." copy (the React.lazy Suspense fallback) before
+  // the tray popped in. The fix (a) makes the loading fallback a neutral spinner, never
+  // the empty copy, and (b) preloads the chunk on idle so the tray renders instantly.
+  // A MutationObserver records whether that phrase is EVER inserted into the DOM across
+  // the whole first-open — a transient flash a single poll would miss.
+  test('first Connect open never flashes the "coming soon" copy', async () => {
+    const { app, cleanup } = await launch()
+    try {
+      const page = await mainPage(app)
+
+      await page.evaluate(() => {
+        window.location.hash = '#/home'
+      })
+      await page.waitForSelector('[aria-label="Ask omi anything"]', { timeout: 15000 })
+
+      // Arm the observer BEFORE the first Connect open, so it catches a fallback that
+      // appears and disappears within a frame. It scans every inserted/changed node's
+      // text for the empty-state phrase.
+      await page.evaluate(() => {
+        const w = window
+        w.__comingSoonSeen = false
+        const scan = (node) => {
+          const text = node && node.textContent
+          if (typeof text === 'string' && text.includes('Connections are coming soon')) {
+            w.__comingSoonSeen = true
+          }
+        }
+        const obs = new MutationObserver((records) => {
+          for (const r of records) {
+            r.addedNodes.forEach(scan)
+            if (r.type === 'characterData') scan(r.target)
+          }
+        })
+        obs.observe(document.body, { childList: true, subtree: true, characterData: true })
+        w.__comingSoonObs = obs
+      })
+
+      // Give the idle preload a beat to warm the chunk (HomeHub schedules it on mount),
+      // then open the Connect stage via the ask bar's Connect toggle.
+      await new Promise((r) => setTimeout(r, 600))
+      await page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')].find(
+          (b) => b.getAttribute('aria-pressed') !== null && /Connect/.test(b.textContent || '')
+        )
+        if (!btn) throw new Error('Connect toggle not found')
+        btn.click()
+      })
+
+      // The tray must appear …
+      await page.waitForSelector('[data-testid="connect-tray"]', { timeout: 15000 })
+      // … and the empty "coming soon" copy must never have been inserted along the way.
+      const seen = await page.evaluate(() => {
+        window.__comingSoonObs?.disconnect()
+        return window.__comingSoonSeen === true
+      })
+      assert.equal(seen, false, 'the "coming soon" empty-state copy must never flash on first open')
+    } finally {
+      await cleanup()
+    }
+  })
 })

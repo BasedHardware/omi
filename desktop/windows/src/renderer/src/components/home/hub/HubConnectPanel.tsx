@@ -1,4 +1,5 @@
 import { createElement, Suspense } from 'react'
+import { Loader2 } from 'lucide-react'
 import { getHubConnectContent } from './hubConnectSlot'
 import { ErrorBoundary } from '../../ui/ErrorBoundary'
 
@@ -16,12 +17,34 @@ import { ErrorBoundary } from '../../ui/ErrorBoundary'
 // windows), the panel itself does NOT scroll (own an internal overflow region), and
 // `onDismiss` returns to the resting hub.
 
-// Resting state — shown when no content is registered AND as the Suspense fallback
-// while the lazily-imported connections chunk loads on first open.
+// Resting state — the genuinely-EMPTY state, shown only when no content is registered
+// (a partial rollout where Track 3's tray never registered). It is NOT the loading
+// state: while the connections chunk is still importing we render LoadingState, so the
+// "coming soon" copy can never flash in front of a tray that is about to appear. Also
+// the ErrorBoundary fallback: a failed chunk load degrades to this resting state
+// rather than white-screening the app.
 function RestingState(): React.JSX.Element {
   return (
     <div className="flex flex-1 items-center justify-center">
       <p className="text-[13px] font-medium text-home-muted">Connections are coming soon.</p>
+    </div>
+  )
+}
+
+// Loading state — the Suspense fallback while the lazily-imported connections chunk
+// loads on first open. Distinct from the empty RestingState by design: a loading
+// state must never render the empty/"coming soon" copy. A neutral spinner, not text,
+// so the momentary fallback reads as "loading", not "there is nothing here". In
+// practice HomeHub preloads the chunk (preloadHubConnectContent) so this rarely shows
+// at all — the tray renders instantly from the warmed chunk.
+function LoadingState(): React.JSX.Element {
+  return (
+    <div className="flex flex-1 items-center justify-center" data-testid="hub-connect-loading">
+      <Loader2
+        className="h-5 w-5 animate-spin text-home-faint"
+        strokeWidth={2}
+        aria-label="Loading connections"
+      />
     </div>
   )
 }
@@ -47,7 +70,7 @@ export function HubConnectPanel({ onDismiss }: { onDismiss: () => void }): React
         // The ErrorBoundary contains a failed chunk load (or a throw inside the
         // connections tree) to the resting state instead of white-screening the app.
         <ErrorBoundary label="HubConnectPanel" fallback={<RestingState />}>
-          <Suspense fallback={<RestingState />}>{createElement(content, { onDismiss })}</Suspense>
+          <Suspense fallback={<LoadingState />}>{createElement(content, { onDismiss })}</Suspense>
         </ErrorBoundary>
       ) : (
         <RestingState />
