@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   MAX_RECONNECT_ATTEMPTS,
   reconnectDelayMs,
+  reconnectDelayJitteredMs,
   isRetryableDropError,
+  isRateLimitedDropError,
   toSyncSegments,
   segmentsToTranscript,
   createSegmentRetainer
@@ -23,6 +25,36 @@ describe('reconnectDelayMs', () => {
   it('treats attempt 0/negative as the first delay (never zero)', () => {
     expect(reconnectDelayMs(0)).toBe(2000)
     expect(reconnectDelayMs(-3)).toBe(2000)
+  })
+})
+
+describe('reconnectDelayJitteredMs', () => {
+  it('adds up to +1s jitter onto the exponential base (rand injected)', () => {
+    expect(reconnectDelayJitteredMs(1, { rand: () => 0 })).toBe(2000) // base, zero jitter
+    expect(reconnectDelayJitteredMs(1, { rand: () => 0.5 })).toBe(2500) // +500ms
+    expect(reconnectDelayJitteredMs(1, { rand: () => 0.999 })).toBe(2999) // ~+1s
+  })
+
+  it('a 429 drop backs off from at least a 5s floor (do not hammer)', () => {
+    // Attempt 1 base is 2s, but a rate-limited drop floors at 5s.
+    expect(reconnectDelayJitteredMs(1, { rateLimited: true, rand: () => 0 })).toBe(5000)
+    // Once the exponential base exceeds the floor, the base wins.
+    expect(reconnectDelayJitteredMs(4, { rateLimited: true, rand: () => 0 })).toBe(16000)
+  })
+
+  it('stays capped at 32s(+jitter) even for a rate-limited drop', () => {
+    expect(reconnectDelayJitteredMs(9, { rateLimited: true, rand: () => 0 })).toBe(32000)
+  })
+})
+
+describe('isRateLimitedDropError', () => {
+  it('detects a 429 handshake rejection', () => {
+    expect(isRateLimitedDropError('Unexpected server response: 429')).toBe(true)
+  })
+  it('does not match unrelated numbers or other statuses', () => {
+    expect(isRateLimitedDropError('Omi /v4/listen closed (1006)')).toBe(false)
+    expect(isRateLimitedDropError('Unexpected server response: 503')).toBe(false)
+    expect(isRateLimitedDropError('error 4290')).toBe(false)
   })
 })
 
