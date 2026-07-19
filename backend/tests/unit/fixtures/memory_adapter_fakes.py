@@ -16,9 +16,11 @@ MEMORY_ADAPTER_FIXTURE_NOW = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
 
 def freeze_default_vector_eligibility_clock(monkeypatch, *, now: datetime = MEMORY_ADAPTER_FIXTURE_NOW) -> None:
     """Keep vector hydration's default eligibility check on the fixture clock."""
+    fixture_now = now
 
-    def _fixture_default_access_eligible(item, policy):
-        return is_default_access_eligible(item, policy, now=now)
+    def _fixture_default_access_eligible(item, policy, *, now: datetime | None = None):
+        evaluation_now = fixture_now if now is None else now
+        return is_default_access_eligible(item, policy, now=evaluation_now)
 
     monkeypatch.setattr(memory_search_gateway, "is_default_access_eligible", _fixture_default_access_eligible)
 
