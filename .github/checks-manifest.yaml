@@ -39,6 +39,16 @@ checks:
     triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9717: changelog JSON I/O must decode/encode as UTF-8 regardless of contributor host locale"
+  - id: chat-send-deadline
+    command: ["python3", ".github/scripts/check_chat_send_deadline.py"]
+    triggers: ["desktop/macos/Backend-Rust/src/routes/chat/**", "desktop/macos/Backend-Rust/src/request_deadline.rs", ".github/scripts/check_chat_send_deadline.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9835 (FC-per-hop-timeout): chat provider sends must consume the request budget via send_with_deadline; caught class #8640/#8911/#9135/#9644"
+  - id: chat-send-deadline-tests
+    command: ["python3", ".github/scripts/test_check_chat_send_deadline.py"]
+    triggers: [".github/scripts/check_chat_send_deadline.py", ".github/scripts/test_check_chat_send_deadline.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "chat send-deadline tripwire must keep rejecting direct sends and accepting the budgeted seam"
   - id: agents-md-lean
     command: ["python3", ".github/scripts/check_agents_md_lean.py"]
     triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
