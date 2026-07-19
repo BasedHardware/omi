@@ -193,6 +193,9 @@ export type VoiceTurnCoordinatorOptions = {
   /** The ONLY place a real PTT press manufactures a turn identity. */
   mintTurnID?: () => VoiceTurnID
   diagnostics?: VoiceTurnDiagnostics
+  /** Streaming tap on every timeline append (the flight recorder). Contained —
+   *  a throwing tap can never abort the drain. */
+  onTimelineEntry?: (entry: VoiceTurnTimelineEntry) => void
 }
 
 const deadlineKey = (turnID: VoiceTurnID, deadline: VoiceTurnDeadline): string =>
@@ -203,6 +206,7 @@ export class VoiceTurnCoordinator {
   private readonly timelineLimit: number
   private readonly mintTurnID: () => VoiceTurnID
   private readonly diagnostics: VoiceTurnDiagnostics | null
+  private readonly onTimelineEntry: ((entry: VoiceTurnTimelineEntry) => void) | null
 
   private readonly deadlineCancellations = new Map<
     string,
@@ -224,6 +228,7 @@ export class VoiceTurnCoordinator {
     this.timelineLimit = Math.max(1, options.timelineLimit ?? 256)
     this.mintTurnID = options.mintTurnID ?? (() => crypto.randomUUID() as VoiceTurnID)
     this.diagnostics = options.diagnostics ?? null
+    this.onTimelineEntry = options.onTimelineEntry ?? null
   }
 
   /** `null` whenever the turn is terminal — hosts must never treat a terminal
@@ -451,7 +456,7 @@ export class VoiceTurnCoordinator {
     // `reset` (which clears the turn) does not re-stamp the old terminal reason.
     const turnID = eventTurnID ?? after.turn?.id ?? before.turn?.id ?? null
     const terminalMatchID = eventTurnID ?? after.turn?.id ?? null
-    this.timeline.push({
+    const entry: VoiceTurnTimelineEntry = {
       sequence: this.timelineSequence,
       turnID,
       event: diagnosticLabel(event),
@@ -466,9 +471,11 @@ export class VoiceTurnCoordinator {
           : null,
       staleEventCount: after.staleEventCount,
       invalidTransitionCount: after.invalidTransitionCount
-    })
+    }
+    this.timeline.push(entry)
     if (this.timeline.length > this.timelineLimit) {
       this.timeline = this.timeline.slice(this.timeline.length - this.timelineLimit)
     }
+    this.contain('timeline_tap', () => this.onTimelineEntry?.(entry))
   }
 }

@@ -1120,6 +1120,17 @@ export type OmiBridgeApi = {
   onVoiceHubWake: (cb: () => void) => () => void
   /** Push the projected warm-hub turn state to the bar orb (main → bar). */
   publishVoiceHubState: (state: VoiceHubBarState) => void
+  // --- Voice-plane flight recorder + reset (2026-07-18 supervisor) ---
+  /** Append one bounded event to the main-process voice flight recorder.
+   *  Fire-and-forget; NO transcript text / PII — labels and numbers only. */
+  voiceFlightRecord: (type: string, data?: Record<string, unknown>) => void
+  /** Rebuild the ENTIRE voice plane from scratch (supervisor timeout or the
+   *  bar's "Reset voice" menu). Safe at any moment; main dumps the flight
+   *  recorder, restores system audio, and broadcasts `onVoicePlaneReset`. */
+  resetVoicePlane: (trigger: string) => void
+  /** A voice-plane reset was commanded — every window drops/rebuilds its voice
+   *  stack (main window rebuilds the hub driver; the bar clears its lanes). */
+  onVoicePlaneReset: (cb: (payload: { trigger: string }) => void) => () => void
   // --- Tray + lifecycle (Phase 1) ---
   /** Report the current listening state so main drives the tray icon/menu/tooltip. */
   trayReportState: (state: TrayListeningState) => void

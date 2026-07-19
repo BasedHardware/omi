@@ -95,6 +95,7 @@ import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
 import { registerAgentControlIpc } from './ipc/agentControl'
 import { registerAudioMuteHandlers } from './ipc/audioMute'
 import { systemAudioMuteBridge } from './audio/systemAudioMute'
+import { registerVoicePlaneIpc } from './voice/voicePlaneIpc'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -1179,6 +1180,9 @@ app.whenReady().then(async () => {
   // (INV-CHAT-1): bar IPC forwards send/state routing to the main window here,
   // since bar/window.ts has no reference to it.
   registerBarIpc((channel, ...args) => withMainWindow((w) => w.webContents.send(channel, ...args)))
+  // Voice-plane flight recorder + resetVoicePlane command (2026-07-18 supervisor):
+  // one cross-window event timeline plus the app-restart-equivalent scoped to voice.
+  registerVoicePlaneIpc()
   // Register the PERSISTED summon chord (default Shift+Space), so a rebind
   // survives restarts and a taken chord fails loudly (surfaced in Settings) at
   // launch. The legacy renderer `overlayShortcut` preference is re-applied by

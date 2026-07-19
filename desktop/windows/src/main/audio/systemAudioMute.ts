@@ -3,6 +3,7 @@ import { resolveAudioHelperPath } from './resolveHelperPath'
 import { encodeRequest, FrameDecoder } from '../ocr/helperProtocol'
 import { OP_MUTE, OP_RESTORE, OP_HELLO, PROTOCOL_VERSION } from './protocol'
 import { captureMessage } from '../sentry'
+import { recordVoiceFlight } from '../voice/flightRecorder'
 
 // Track-2-owned bridge to win-audio-helper.exe — mutes the default output device
 // while push-to-talk is capturing (macOS SystemAudioMuteController parity, ported
@@ -257,8 +258,18 @@ class SystemAudioMuteBridge {
         // Remember WHAT we muted: if the helper is killed before it can restore,
         // this id is the only way back to the user's audio.
         this.heldDeviceId = res.deviceId
+        // Flight-record the ENGAGED endpoint mute: it silences the default
+        // output device, so its overlap with reply playback is exactly the
+        // evidence the 2026-07-18 muted-reply failure needed (device id only —
+        // an opaque endpoint GUID, no PII).
+        recordVoiceFlight('main', 'system_audio', { action: 'mute', engaged: true })
       } else if (!res.muted && res.reason) {
         console.log(`[win-audio-helper] mute skipped: ${res.reason} (peak=${res.peak ?? 0})`)
+        recordVoiceFlight('main', 'system_audio', {
+          action: 'mute',
+          engaged: false,
+          reason: res.reason
+        })
       }
     } catch {
       /* helper missing / dead / slow — muting is best-effort, never blocks PTT */
@@ -274,6 +285,9 @@ class SystemAudioMuteBridge {
       await this.request(OP_RESTORE, JSON.stringify(deviceId ? { deviceId } : {}))
       // Only clear once the helper has confirmed — a rejected restore must leave
       // heldDeviceId set so the recovery path can retry it.
+      if (deviceId !== null) {
+        recordVoiceFlight('main', 'system_audio', { action: 'restore', held: true })
+      }
       this.heldDeviceId = null
       this.strandedRecoveries = 0
     } catch {
