@@ -389,6 +389,12 @@ function get(): Database.Database {
   // Wait out a concurrent writer (the KG worker) instead of failing with
   // SQLITE_BUSY. macOS sets the same 5s timeout.
   db.pragma('busy_timeout = 5000')
+  // Read-only speed pragmas (pure perf, zero durability tradeoff — unlike
+  // synchronous above, which deliberately stays FULL). temp_store=MEMORY keeps
+  // temp b-trees (ORDER BY / GROUP BY / transient indexes) off disk; cache_size
+  // negative is KiB, so -64000 = 64 MiB of page cache for read-heavy IPC.
+  db.pragma('temp_store = MEMORY')
+  db.pragma('cache_size = -64000')
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
