@@ -300,6 +300,21 @@ final class APIClientRoutingTests: XCTestCase {
       ))
   }
 
+  func testBetaIdentityBundleRoutesByChannelLikeProduction() {
+    // The Omi Beta app is production-family: the channel decides routing (pinned to
+    // beta at runtime), and it must not take the named-dev-bundle always-dev branch.
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        updateChannel: "beta"
+      ))
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        updateChannel: "stable"
+      ))
+  }
+
   func testNonProductionBundlesDefaultToDevelopmentBackends() {
     XCTAssertTrue(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(

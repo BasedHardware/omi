@@ -1,0 +1,59 @@
+import XCTest
+
+@testable import Omi_Computer
+
+/// The Omi Beta identity (`com.omi.computer-macos.beta`) must behave as a shipped
+/// production artifact — never as a dev/test bundle — while keeping its own update
+/// channel, storage root, and log path so it can run beside stable.
+final class AppBuildBetaIdentityTests: XCTestCase {
+  func testBetaIdentityIsProductionGrade() {
+    let config = AppBuild.configuration(
+      bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+      infoDictionary: [:])
+
+    XCTAssertFalse(config.isNonProduction)
+    XCTAssertFalse(config.allowsLocalAutomation)
+    XCTAssertTrue(config.allowsSparkleUpdates)
+    XCTAssertFalse(config.isExternalPreview)
+  }
+
+  func testStableIdentityGatingIsUnchanged() {
+    let config = AppBuild.configuration(
+      bundleIdentifier: AppBuild.productionBundleIdentifier,
+      infoDictionary: [:])
+
+    XCTAssertFalse(config.isNonProduction)
+    XCTAssertFalse(config.allowsLocalAutomation)
+    XCTAssertTrue(config.allowsSparkleUpdates)
+  }
+
+  func testNamedDevBundleStaysNonProduction() {
+    let config = AppBuild.configuration(
+      bundleIdentifier: "com.omi.omi-feature-test",
+      infoDictionary: [:])
+
+    XCTAssertTrue(config.isNonProduction)
+    XCTAssertTrue(config.allowsLocalAutomation)
+  }
+
+  func testProductionFamilyMembership() {
+    XCTAssertEqual(
+      AppBuild.productionFamilyBundleIdentifiers,
+      [AppBuild.productionBundleIdentifier, AppBuild.betaProductionBundleIdentifier])
+  }
+
+  func testProductionLogPathsAreSeparatePerIdentity() {
+    XCTAssertEqual(
+      OmiLogPathResolver.logPath(
+        isNonProduction: false,
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        processID: 1),
+      "/tmp/omi.log")
+    XCTAssertEqual(
+      OmiLogPathResolver.logPath(
+        isNonProduction: false,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        processID: 1),
+      "/tmp/omi-beta.log")
+  }
+}
