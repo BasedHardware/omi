@@ -553,9 +553,11 @@ export function BarApp(): React.JSX.Element {
               : null
         : null
 
-  // Open the inline Omi Chat conversation (the only transition from the hub's ask
-  // state to the response state — driven by a SEND). The engine + history are one
-  // shared thread (INV-CHAT-1); the draft carries the typed text across.
+  // Open the inline Omi Chat conversation (the hub's ask state → response state).
+  // Reached two ways: a SEND from the composer (which also fires the turn) OR a
+  // click on the static Omi Chat row (a pure view flip, no send). The engine +
+  // history are one shared thread (INV-CHAT-1); the draft carries the typed text
+  // across on the send path.
   const openConversation = (): void => {
     setView('conversation')
   }

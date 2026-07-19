@@ -515,6 +515,11 @@ test('hub Omi Chat row opens the conversation without sending (fix/win-bar-omi-c
   await barPage.locator('[aria-label="Back to list"]').waitFor({ state: 'visible' })
   const s = await app.evaluate(() => globalThis.__omiE2E.barState())
   assert.equal(s.focusable, true, 'the opened conversation surface stays focusable for typing')
+  // Positive proof no message was sent: the empty-thread invite renders (a thread
+  // with any turn would show the message list instead of this copy).
+  await barPage
+    .locator('.bar-content-active', { hasText: 'Ask Omi anything, or hold Space to talk.' })
+    .waitFor({ state: 'visible' })
   await barPage.screenshot({ path: path.join(shotsDir, 'bar-omi-chat-conversation.png') })
 
   // Back returns to the hub, where the Omi Chat row is present again.
