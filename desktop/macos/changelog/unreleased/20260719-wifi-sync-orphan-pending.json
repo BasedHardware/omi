@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a failed WiFi sync leaving a phantom entry in the pending-sync count that never cleared"
-}

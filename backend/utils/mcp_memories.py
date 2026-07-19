@@ -528,6 +528,7 @@ def search_default_mcp_memories_vector(
     rollout_decision: Optional[DefaultReadRolloutDecision] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> McpMemorySearchResult:
     """Search hydrated memory vectors for the concrete MCP memory-search caller.
 
@@ -556,6 +557,7 @@ def search_default_mcp_memories_vector(
             consumer=MemoryConsumer.mcp,
             vector_query=vector_query,
             required_projection_commit_id=required_projection_commit_id,
+            now=now,
             item_formatter=_format_memory_mcp_default_memory_item,
             score_attacher=_attach_mcp_vector_score,
         )

@@ -517,6 +517,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
         rollout_capabilities=_read_capabilities(),
         vector_query=vector_query,
         required_projection_commit_id='projection-1',
+        now=now,
     )
     assert isinstance(result, McpMemorySearchResult)
     assert result.read_decision == MemoryReadDecision.USE_MEMORY

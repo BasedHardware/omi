@@ -745,7 +745,7 @@ actor RewindIndexer {
   /// presentation time preserves variable/low-cadence capture timing.
   static func reconstructedScreenshots(from chunkInfo: VideoChunkInfo) async throws -> [Screenshot] {
     // Parse the chunk's capture time from its relative path (the day lives in
-    // the parent directory: "<yyyy-MM-dd>/chunk_HHmmss.mp4").
+    // the parent directory: "<yyyy-MM-dd>/chunk_HHmmss_<epochMillis>_<unique>.mp4").
     guard let timestamp = Self.parseChunkTimestamp(relativePath: chunkInfo.relativePath) else {
       throw RewindChunkExtractionError.unparseablePath
     }
@@ -855,23 +855,29 @@ actor RewindIndexer {
   /// Parse a chunk's capture timestamp from its stored relative path.
   ///
   /// New format (VideoChunkEncoder.generateChunkPath):
-  ///   "<yyyy-MM-dd>/chunk_<HHmmss>.<ext>" — day directory + time-only filename.
+  ///   "<yyyy-MM-dd>/chunk_<HHmmss>_<epochMillis>_<unique>.<ext>" — collision-proof capture-time filename.
   /// Legacy flat format: "chunk_<YYYYMMDD>_<HHMMSS>.hevc".
   ///
-  /// The encoder wrote both parts with local-time DateFormatters, so parse in the
-  /// current time zone to round-trip. Pure + static so rebuild parsing is testable.
+  /// Current paths carry an absolute epoch timestamp. Legacy day/time paths use
+  /// local-time DateFormatters, so parse those in the current time zone. Pure +
+  /// static so rebuild parsing is testable.
   static func parseChunkTimestamp(relativePath: String) -> Date? {
     let parts = relativePath.split(separator: "/").map(String.init)
     let filename = parts.last ?? relativePath
 
-    // New format: day directory + "chunk_HHmmss.<ext>".
-    if parts.count >= 2, let time = timeComponentFromChunkFilename(filename) {
+    // New format: day directory + "chunk_HHmmss[_<epochMillis>_<unique>].<ext>".
+    if parts.count >= 2, let captureTime = captureTimeComponentsFromChunkFilename(filename) {
+      if let epochMilliseconds = captureTime.epochMilliseconds {
+        return Date(timeIntervalSince1970: Double(epochMilliseconds) / 1_000)
+      }
+
       let dayStr = parts[parts.count - 2]
       let formatter = DateFormatter()
       formatter.locale = Locale(identifier: "en_US_POSIX")
       formatter.timeZone = .current
-      formatter.dateFormat = "yyyy-MM-dd'T'HHmmss"
-      if let date = formatter.date(from: "\(dayStr)T\(time)") {
+      formatter.dateFormat = captureTime.milliseconds == nil ? "yyyy-MM-dd'T'HHmmss" : "yyyy-MM-dd'T'HHmmss_SSS"
+      let fractionalPart = captureTime.milliseconds.map { "_\($0)" } ?? ""
+      if let date = formatter.date(from: "\(dayStr)T\(captureTime.clockTime)\(fractionalPart)") {
         return date
       }
     }
@@ -880,14 +886,63 @@ actor RewindIndexer {
     return parseLegacyChunkTimestamp(filename)
   }
 
-  /// Extract the "HHmmss" component from "chunk_HHmmss.<ext>", or nil if the
-  /// filename doesn't match the time-only chunk shape.
-  private static func timeComponentFromChunkFilename(_ filename: String) -> String? {
+  /// Extract capture-time components from current and legacy day-directory
+  /// filenames. Current chunks use `chunk_HHmmss_<epochMillis>_<unique>.<ext>`;
+  /// legacy `chunk_HHmmss.<ext>` files and a short-lived millisecond format
+  /// remain readable.
+  private static func captureTimeComponentsFromChunkFilename(
+    _ filename: String
+  ) -> (clockTime: String, milliseconds: String?, epochMilliseconds: Int64?)? {
     guard filename.hasPrefix("chunk_") else { return nil }
     let afterPrefix = filename.dropFirst("chunk_".count)
     let stem = afterPrefix.split(separator: ".").first.map(String.init) ?? String(afterPrefix)
-    guard stem.count == 6, stem.allSatisfy({ $0.isNumber }) else { return nil }
-    return stem
+    let components = stem.split(separator: "_", maxSplits: 1, omittingEmptySubsequences: false)
+    guard let time = components.first,
+      time.count == 6,
+      time.allSatisfy({ $0.isNumber })
+    else {
+      return nil
+    }
+
+    guard components.count == 2 else {
+      return (String(time), nil, nil)
+    }
+
+    let suffix = components[1].split(separator: "_", maxSplits: 1, omittingEmptySubsequences: false)
+    guard !suffix.isEmpty, !suffix[0].isEmpty else {
+      return nil
+    }
+
+    if suffix.count == 1 {
+      // A previous short-lived path shape used only a UUID suffix.
+      guard UUID(uuidString: String(suffix[0])) != nil else {
+        return nil
+      }
+      return (String(time), nil, nil)
+    }
+
+    guard suffix.count == 2,
+      !suffix[1].isEmpty,
+      UUID(uuidString: String(suffix[1])) != nil
+    else {
+      return nil
+    }
+
+    if suffix[0].count >= 12, suffix[0].allSatisfy({ $0.isNumber }) {
+      guard let epochMilliseconds = Int64(suffix[0])
+      else {
+        return nil
+      }
+      return (String(time), nil, epochMilliseconds)
+    }
+
+    // A short-lived path shape used milliseconds instead of an absolute time.
+    // Keep it readable at local-time precision while current paths use epoch
+    // milliseconds to avoid repeated-hour ambiguity during DST fall-back.
+    guard suffix[0].count == 3, suffix[0].allSatisfy({ $0.isNumber }) else {
+      return (String(time), nil, nil)
+    }
+    return (String(time), String(suffix[0]), nil)
   }
 
   private static func parseLegacyChunkTimestamp(_ filename: String) -> Date? {

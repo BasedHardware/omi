@@ -615,6 +615,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
         }
     )
     monkeypatch.setattr(memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
     def hit(item, score):
         return SearchVectorHit(

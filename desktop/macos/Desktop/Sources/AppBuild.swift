@@ -44,8 +44,12 @@ enum AppBuild {
       isNonProduction && !isExternalPreview
     }
 
+    var isNamedDevelopmentBundle: Bool {
+      isNonProduction && !isExternalPreview && bundleIdentifier != AppBuild.desktopDevBundleIdentifier
+    }
+
     var allowsSparkleUpdates: Bool {
-      !isExternalPreview
+      !isExternalPreview && !isNamedDevelopmentBundle
     }
 
     var hasValidExternalPreviewConfiguration: Bool {
@@ -104,8 +108,8 @@ enum AppBuild {
     buildConfiguration.allowsLocalAutomation
   }
 
-  /// Preview artifacts are delivered from their landing page, never from the shared Sparkle
-  /// feed. The updater additionally checks this at every call site.
+  /// Preview artifacts and local named developer bundles never consume the shared Sparkle feed.
+  /// The updater additionally checks this at every call site.
   static var allowsSparkleUpdates: Bool {
     buildConfiguration.allowsSparkleUpdates
   }
@@ -124,7 +128,7 @@ enum AppBuild {
   }
 
   static var isNamedDevelopmentBundle: Bool {
-    allowsLocalAutomation && bundleIdentifier != desktopDevBundleIdentifier
+    buildConfiguration.isNamedDevelopmentBundle
   }
 
   static var usesLazyDevPermissions: Bool {

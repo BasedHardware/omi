@@ -555,6 +555,7 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
         db_client=db_client,
         rollout_decision=decision,
         vector_query=vector_query,
+        now=now,
     )
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
     assert result.fallback_reason is None
