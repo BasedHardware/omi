@@ -42,6 +42,18 @@ final class AppBuildBetaIdentityTests: XCTestCase {
       [AppBuild.productionBundleIdentifier, AppBuild.betaProductionBundleIdentifier])
   }
 
+  func testManualDownloadURLCarriesBetaIdentity() {
+    XCTAssertEqual(
+      AppBuild.manualDownloadURL(channel: "beta", isBetaIdentity: true).absoluteString,
+      "https://api.omi.me/v2/desktop/download/latest?channel=beta&identity=beta")
+    XCTAssertEqual(
+      AppBuild.manualDownloadURL(channel: "beta", isBetaIdentity: false).absoluteString,
+      "https://api.omi.me/v2/desktop/download/latest?channel=beta")
+    XCTAssertEqual(
+      AppBuild.manualDownloadURL(channel: "stable", isBetaIdentity: false).absoluteString,
+      "https://api.omi.me/v2/desktop/download/latest?channel=stable")
+  }
+
   func testProductionLogPathsAreSeparatePerIdentity() {
     XCTAssertEqual(
       OmiLogPathResolver.logPath(

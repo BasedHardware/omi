@@ -839,8 +839,26 @@ async def download_beta_desktop_release(
     """
     Redirect to the latest beta desktop release DMG installer.
     Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
+
+    Serves the side-by-side "Omi Beta" app. Until the first release that ships
+    beta-identity artifacts is live, it falls back to the stable-identity DMG so
+    the public link keeps working. (Sparkle self-updates stay strict: only this
+    human install landing may fall back.)
     """
-    return await download_latest_desktop_release(platform=platform, channel="beta")
+    try:
+        return await download_latest_desktop_release(platform=platform, channel="beta", identity="beta")
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+    record_fallback(
+        component='other',
+        from_mode='desktop_download_beta_identity',
+        to_mode='desktop_download_stable_identity',
+        reason='config_incomplete',
+        outcome='degraded',
+        log=logger,
+    )
+    return await download_latest_desktop_release(platform=platform, channel="beta", identity="stable")
 
 
 def _preview_landing_response(result: Dict[str, Any]) -> HTMLResponse:

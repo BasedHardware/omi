@@ -203,7 +203,22 @@ enum AppBuild {
   }
 
   static var manualDownloadURL: URL {
-    URL(string: "https://api.omi.me/v2/desktop/download/latest?channel=\(currentUpdateChannel)")!
+    manualDownloadURL(channel: currentUpdateChannel, isBetaIdentity: isBetaProductionBundle)
+  }
+
+  static func manualDownloadURL(channel: String, isBetaIdentity: Bool) -> URL {
+    var components = URLComponents()
+    components.scheme = "https"
+    components.host = "api.omi.me"
+    components.path = "/v2/desktop/download/latest"
+    var queryItems = [URLQueryItem(name: "channel", value: channel)]
+    if isBetaIdentity {
+      // The Omi Beta app must re-download its own identity, never the stable app.
+      queryItems.append(URLQueryItem(name: "identity", value: "beta"))
+    }
+    components.queryItems = queryItems
+    // Fixed scheme/host/path always produce a URL; the fallback is unreachable.
+    return components.url ?? URL(fileURLWithPath: "/")
   }
 
   static var inferredUpdateChannel: String {

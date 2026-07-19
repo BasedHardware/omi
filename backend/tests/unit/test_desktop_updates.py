@@ -1356,3 +1356,46 @@ class TestBetaIdentityServing:
 
         assert resp.status_code == 200
         assert "https://example.com/dl/omi-beta.dmg" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_download_beta_endpoint_serves_the_beta_identity_dmg(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _dmg_asset(), _beta_dmg_asset("https://example.com/dl/omi-beta.dmg")],
+                metadata={"edSignature": "sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/beta")
+
+        assert resp.status_code == 200
+        assert "https://example.com/dl/omi-beta.dmg" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_download_beta_endpoint_falls_back_to_stable_identity_before_rollout(self):
+        # Until the first dual-identity release is live, the public beta link keeps
+        # serving the stable-identity DMG instead of breaking.
+        entries = [
+            _live_entry(channel="beta", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "sig"}),
+        ]
+        gh_release_without_beta = _make_github_release(
+            "v1.0.0+100-macos", body_kv={"isLive": "true"}, assets=[_zip_asset(), _dmg_asset()]
+        )
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch(
+                "routers.updates.get_omi_github_releases",
+                new_callable=AsyncMock,
+                return_value=[gh_release_without_beta],
+            ),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/beta")
+
+        assert resp.status_code == 200
+        assert "https://example.com/Omi.dmg" in resp.text
+        fallback.assert_called_once()
+        assert fallback.call_args.kwargs["from_mode"] == "desktop_download_beta_identity"
