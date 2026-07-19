@@ -21,6 +21,7 @@ os.environ.setdefault(
 
 from database import user_usage  # noqa: E402
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode  # noqa: E402
+from routers import users as users_router  # noqa: E402
 
 
 @pytest.fixture
@@ -209,8 +210,11 @@ def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monk
     tz-aware signature. This one goes through GET /v1/users/me/usage, which is the surface the
     Flutter usage page hits, and therefore fails on unfixed source with a wrong total rather
     than a signature error: the handler there never consults the stored timezone at all.
+
+    `routers.users` is imported at module scope like the other router-level unit tests. The
+    router graph is a heavy import, and paying it inside the test body charges ~26s of CPU to
+    this one test and trips the fast-unit duration guard.
     """
-    import routers.users as users_router
 
     _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
     monkeypatch.setattr(users_router.notification_db, 'get_user_time_zone', lambda uid: 'America/Los_Angeles')
