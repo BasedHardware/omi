@@ -63,7 +63,7 @@ describe('AmplitudeMapper acceptance table', () => {
     const peak = run(m, lin(-13), 0.2)
     expect(soft).toBeGreaterThan(0.35)
     expect(peak).toBeLessThanOrEqual(AMP_OUT_CEIL)
-    expect(peak).toBeGreaterThan(0.75)
+    expect(peak).toBeGreaterThan(0.7)
     // Dynamics: distinct syllable loudnesses land at visibly distinct levels.
     expect(mid - soft).toBeGreaterThan(0.08)
     expect(peak - mid).toBeGreaterThan(0.08)
@@ -82,11 +82,14 @@ describe('AmplitudeMapper acceptance table', () => {
     expect(settled).toBeGreaterThan(0.7)
   })
 
-  // Regression for the 2026-07-18 top-end trim ("visualizer maxes out a bit"):
-  // with 4dB of headroom every emphasized syllable (a few dB over the tracked
-  // ceiling) clamped to the cap. Session-typical peaks must ride high but
-  // visibly OFF the cap, ordinary emphasis must keep margin, and only a genuine
-  // outlier (> CEIL_HEADROOM_DB over the session ceiling) reaches OUT_CEIL.
+  // Regression for the 2026-07-18 top-end trims ("visualizer maxes out"):
+  // with too little headroom every emphasized syllable (a few dB over the
+  // tracked ceiling) clamped to the cap. Session-typical peaks must ride high
+  // but visibly OFF the cap, ordinary emphasis must keep margin, and only a
+  // genuine outlier (> CEIL_HEADROOM_DB over the session ceiling) reaches
+  // OUT_CEIL. Round 2 pinned the targets against the user's real-mic capture
+  // (normal speech peaks −8..−12dBFS): emphasis at +4dB stays under cap−0.02,
+  // and only a full-scale outlier caps.
   it('session-typical peaks ride high without slamming the cap', () => {
     const m = warmedMapper()
     run(m, lin(-13), 4) // let the ceiling settle onto this session's peaks
@@ -95,8 +98,9 @@ describe('AmplitudeMapper acceptance table', () => {
     expect(typical).toBeLessThan(0.85)
     // Ordinary emphasis (+4dB over the session ceiling) still keeps margin…
     expect(m.step(lin(-9), DT)).toBeLessThan(AMP_OUT_CEIL - 0.02)
-    // …only a genuine outlier (>7dB over) touches the cap.
-    expect(m.step(lin(-2), DT)).toBeCloseTo(AMP_OUT_CEIL, 5)
+    // …only a genuine outlier (>9dB over the tracked ceiling — full scale
+    // here) touches the cap.
+    expect(m.step(1, DT)).toBeCloseTo(AMP_OUT_CEIL, 5)
   })
 
   it('a quiet→loud sweep grows monotonically', () => {

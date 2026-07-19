@@ -99,6 +99,19 @@ describe('startPttCapture (IPC client)', () => {
     expect(capture.analyser.getOrbLevel?.()).toBeCloseTo(0.42, 9)
   })
 
+  it('forwards ptt-levels orbLevel to onLevels (push-based twin of getOrbLevel)', async () => {
+    const seen: number[] = []
+    const p = startPttCapture({ onLevels: (v) => seen.push(v) })
+    const id = lastStartId()
+    emit({ type: 'ptt-chunk', captureId: id, pcm: i16buf([0]) })
+    await p
+    emit({ type: 'ptt-levels', captureId: id, bins: [1], orbLevel: 0.42 })
+    emit({ type: 'ptt-levels', captureId: id, bins: [1] }) // no orbLevel → no call
+    emit({ type: 'ptt-levels', captureId: 'someone-else', bins: [1], orbLevel: 0.9 })
+    emit({ type: 'ptt-levels', captureId: id, bins: [1], orbLevel: 0.05 })
+    expect(seen).toEqual([0.42, 0.05])
+  })
+
   it('forwards ptt-capped to onCapped', async () => {
     const onCapped = vi.fn()
     const p = startPttCapture({ onCapped })
