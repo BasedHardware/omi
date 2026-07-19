@@ -2898,7 +2898,7 @@ abstract class AppLocalizations {
   /// No description provided for @freeMinutesMonth.
   ///
   /// In en, this message translates to:
-  /// **'600 free minutes/month included. Unlimited with '**
+  /// **'300 free minutes/month included. Unlimited with '**
   String get freeMinutesMonth;
 
   /// No description provided for @omiUnlimited.
@@ -8952,7 +8952,7 @@ abstract class AppLocalizations {
   /// Description of basic plan features in usage page
   ///
   /// In en, this message translates to:
-  /// **'600 premium mins + unlimited on-device'**
+  /// **'300 premium mins + unlimited on-device'**
   String get basicPlanDescription;
 
   /// Unit label for minutes
@@ -11370,7 +11370,7 @@ abstract class AppLocalizations {
   /// Info about premium minutes
   ///
   /// In en, this message translates to:
-  /// **'600 premium minutes/month. On-Device tab offers unlimited free transcription.'**
+  /// **'300 premium minutes/month. On-Device tab offers unlimited free transcription.'**
   String get premiumMinutesInfo;
 
   /// Link to view usage
@@ -11514,7 +11514,7 @@ abstract class AppLocalizations {
   /// Description of premium minutes quota
   ///
   /// In en, this message translates to:
-  /// **'600 premium minutes/month. On-Device tab offers unlimited free transcription. '**
+  /// **'300 premium minutes/month. On-Device tab offers unlimited free transcription. '**
   String get premiumMinutesMonth;
 
   /// Description of on-device processing
@@ -16794,8 +16794,8 @@ abstract class AppLocalizations {
   /// No description provided for @savePercent.
   ///
   /// In en, this message translates to:
-  /// **'Save ~17%'**
-  String get savePercent;
+  /// **'Save ~{percent}%'**
+  String savePercent(int percent);
 
   /// No description provided for @popular.
   ///
@@ -17412,7 +17412,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -17852,6 +17852,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error connecting to Ray-Ban Meta: {error}'**
   String errorConnectingRayBanMeta(String error);
+
+  /// Title of the on-device storage usage card on the Auto Sync page
+  ///
+  /// In en, this message translates to:
+  /// **'Device Storage'**
+  String get deviceStorageTitle;
+
+  /// Percentage of on-device storage used
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% full'**
+  String deviceStoragePercentFull(int percent);
+
+  /// Used vs total on-device storage, e.g. 338 MB of 469 MB used
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {total} used'**
+  String deviceStorageUsedOfTotal(String used, String total);
+
+  /// Amount of free on-device storage, e.g. 131 MB free
+  ///
+  /// In en, this message translates to:
+  /// **'{free} free'**
+  String deviceStorageFree(String free);
+
+  /// Warning shown when on-device storage is 95% or more full
+  ///
+  /// In en, this message translates to:
+  /// **'Device nearly full — sync to free space.'**
+  String get deviceStorageNearlyFull;
+
+  /// Snackbar shown when phone-mic recording auto-switches to local (batch) capture because the device is offline
+  ///
+  /// In en, this message translates to:
+  /// **'No connection — recording locally. It will be transcribed when you\'re back online.'**
+  String get phoneMicOfflineFallbackMessage;
+
+  /// Data privacy page banner summarizing encryption and user control
+  ///
+  /// In en, this message translates to:
+  /// **'Your data is secured by default with strong encryption, and you stay in control of how it\'s stored and used.'**
+  String get dataEncryptedBanner;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

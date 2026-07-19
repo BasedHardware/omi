@@ -1,9 +1,10 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class STTSessionStateTests: XCTestCase {
   func testResolveMode_defaultAppleSiliconMic_isLocal() {
-    var session = STTSessionState()
+    let session = STTSessionState()
     let mode = session.resolveMode(
       audioSource: .microphone,
       isAppleSilicon: true,
@@ -13,7 +14,7 @@ final class STTSessionStateTests: XCTestCase {
   }
 
   func testResolveMode_bleDevice_isCloud() {
-    var session = STTSessionState()
+    let session = STTSessionState()
     let mode = session.resolveMode(
       audioSource: .bleDevice,
       isAppleSilicon: true,
@@ -23,7 +24,7 @@ final class STTSessionStateTests: XCTestCase {
   }
 
   func testResolveMode_intelMac_isCloud() {
-    var session = STTSessionState()
+    let session = STTSessionState()
     let mode = session.resolveMode(
       audioSource: .microphone,
       isAppleSilicon: false,
@@ -33,7 +34,7 @@ final class STTSessionStateTests: XCTestCase {
   }
 
   func testResolveMode_debugForceCloud_isCloud() {
-    var session = STTSessionState()
+    let session = STTSessionState()
     let mode = session.resolveMode(
       audioSource: .microphone,
       isAppleSilicon: true,

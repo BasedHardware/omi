@@ -6,7 +6,8 @@ import pytest
 import yaml
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
-from utils.llm.model_config import get_all_configured_features
+from llm_gateway.gateway.schemas import Surface
+from utils.llm.model_config import get_all_configured_features, get_model
 
 LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
@@ -23,6 +24,40 @@ def test_loads_default_gateway_config():
     assert lane.last_known_good == LKG_ROUTE
     assert config.route_artifacts[ACTIVE_ROUTE].content_digest.startswith('sha256:')
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
+    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == 'gpt-5.4-nano'
+    assert config.route_artifacts[ACTIVE_ROUTE].provider_options['reasoning_effort'] == 'low'
+
+
+def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
+    config = load_gateway_config(prod_mode=True)
+
+    assert get_model('conv_discard') == 'gpt-4.1-nano'
+    assert get_model('memories') == 'gpt-4.1-mini'
+    assert get_model('fair_use') == 'gpt-5.1'
+    assert get_model('chat_agent') == 'claude-sonnet-4-6'
+
+    assert config.route_artifacts['route.conv_discard.model_config.001'].primary.model == 'gpt-5-nano'
+    assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'gpt-5.4-nano'
+    assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == 'gpt-5.6-luna'
+    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'claude-sonnet-5'
+    assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
+    assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options['effort'] == 'medium'
+    chat_agent_lane = config.lanes['omi:auto:chat-agent']
+    assert chat_agent_lane.surface == Surface.ANTHROPIC_MESSAGES
+    assert chat_agent_lane.capabilities.streaming is True
+    assert chat_agent_lane.capabilities.tools is True
+
+
+def test_unknown_gateway_route_override_fails(tmp_path):
+    write_config(
+        tmp_path,
+        generated_route_overrides=[
+            {'feature': 'not_a_configured_feature', 'primary': {'provider': 'openai', 'model': 'gpt-5-nano'}}
+        ],
+    )
+
+    with pytest.raises(ConfigValidationError, match='gateway route override references unknown feature'):
+        load_gateway_config(tmp_path, prod_mode=False)
 
 
 def test_chat_structured_routes_have_background_shadow_timeout_budget():
@@ -132,6 +167,7 @@ def write_config(
     active_overrides: dict | None = None,
     lkg_overrides: dict | None = None,
     route_artifacts: list[dict] | None = None,
+    generated_route_overrides: list[dict] | None = None,
 ) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     lane = {
@@ -167,6 +203,10 @@ def write_config(
     write_yaml(config_dir / 'lanes.yaml', {'lanes': [lane]})
     write_yaml(config_dir / 'route_artifacts.yaml', {'route_artifacts': route_artifacts})
     write_yaml(config_dir / 'feature_bundles.yaml', {'feature_bundles': [feature_bundle]})
+    if generated_route_overrides is not None:
+        write_yaml(
+            config_dir / 'generated_route_overrides.yaml', {'generated_route_overrides': generated_route_overrides}
+        )
 
 
 def capabilities(structured_output: str = 'json_schema') -> dict:

@@ -27,7 +27,9 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
     setState(() => _isSaving = true);
     try {
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
-      context.read<SyncProvider>().refreshWals();
+      if (mounted) {
+        context.read<SyncProvider>().refreshWals();
+      }
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

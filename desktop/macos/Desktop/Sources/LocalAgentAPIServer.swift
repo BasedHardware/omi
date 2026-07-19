@@ -105,7 +105,7 @@ enum LocalAgentAPISettings {
   }
 }
 
-struct LocalAgentTool {
+struct LocalAgentTool: @unchecked Sendable {
   let name: String
   let description: String
   let properties: [String: Any]
@@ -113,7 +113,24 @@ struct LocalAgentTool {
   let annotations: [String: Any]
 }
 
-final class LocalAgentAPIServer {
+/// Shared parsing for the `Content-Length` header of the loopback HTTP servers
+/// (LocalAgentAPIServer + DesktopAutomationBridge). Both slice the body with
+/// `data.index(bodyStart, offsetBy: contentLength)`, which traps on a negative
+/// length, and add `contentLength` to a distance, which overflows on a huge one.
+/// Since both servers parse before authenticating, a malformed length from any
+/// local process would otherwise crash the whole app. Fail closed instead.
+enum LoopbackHTTPParsing {
+  /// Returns the validated body length, or `nil` if the header value is malformed,
+  /// negative, or exceeds `maxBytes` (caller should reject the request).
+  static func parseContentLength(_ value: String, maxBytes: Int) -> Int? {
+    guard let parsed = Int(value), parsed >= 0, parsed <= maxBytes else {
+      return nil
+    }
+    return parsed
+  }
+}
+
+final class LocalAgentAPIServer: @unchecked Sendable {
   static let shared = LocalAgentAPIServer()
   private static let maxRequestBytes = 1024 * 1024
 
@@ -230,10 +247,13 @@ final class LocalAgentAPIServer {
       let value = pieces[1].trimmingCharacters(in: .whitespaces)
       headers[key] = value
       if key == "content-length" {
-        contentLength = Int(value) ?? 0
-        if contentLength > Self.maxRequestBytes {
+        // Reject a negative/over-large length before it reaches the body-slice
+        // range below (which would trap on an unauthenticated request).
+        guard let parsed = LoopbackHTTPParsing.parseContentLength(value, maxBytes: Self.maxRequestBytes)
+        else {
           return nil
         }
+        contentLength = parsed
       }
     }
 
@@ -321,7 +341,7 @@ final class LocalAgentAPIServer {
       guard let url = URL(string: origin), let host = url.host, let port = url.port else {
         return false
       }
-      guard (url.scheme == "http" || url.scheme == "https"), port == Int(LocalAgentAPISettings.port) else {
+      guard url.scheme == "http" || url.scheme == "https", port == Int(LocalAgentAPISettings.port) else {
         return false
       }
       guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {
@@ -497,13 +517,14 @@ final class LocalAgentAPIServer {
       failureCode: ScreenContextFailureCode(rawValue: code) ?? .unknown,
       permissionTCCGranted: CGPreflightScreenCaptureAccess()
     )
-    return jsonResponse([
-      "ok": false,
-      "error": code,
-      "reason": reason,
-      "hint": hint,
-      "screenshot_id": screenshotID,
-    ], statusCode: 422)
+    return jsonResponse(
+      [
+        "ok": false,
+        "error": code,
+        "reason": reason,
+        "hint": hint,
+        "screenshot_id": screenshotID,
+      ], statusCode: 422)
   }
 
   private func loadScreenshotDataEnsuringStorage(for screenshot: Screenshot) async throws -> Data {

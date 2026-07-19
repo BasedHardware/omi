@@ -21,6 +21,11 @@ def _is_payload(value: object) -> TypeGuard[Payload]:
 
 def mark_consolidated(uid: str, short_term_id: str, commit_id: Optional[str]) -> None:
     doc_ref = db.collection(users_collection).document(uid).collection(short_term_collection).document(short_term_id)
+    # A conflict's source_short_term_id can point at an absent short-term doc (canonical cohorts write
+    # memory_items, not short_term). Firestore .update() raises NotFound on a missing doc (unlike set),
+    # which would surface as a 500 on resolve; no-op instead, mirroring memory_app_key_grants.
+    if not doc_ref.get().exists:
+        return
     now = datetime.now(timezone.utc)
     doc_ref.update(
         {

@@ -74,6 +74,27 @@ CLIENT_WRITER_METHODS = {
 }
 CLIENT_CALL_PATTERN = re.compile(r'\.\s*(' + '|'.join(sorted(CLIENT_WRITER_METHODS)) + r')\s*\(')
 
+# Match the backend production-source boundary enforced by the import-purity
+# scanner. Local virtualenvs and vendored/build trees are dependencies, not
+# product writer surfaces; scanning them creates both false anchors and
+# encoding-dependent failures from third-party test fixtures.
+_BACKEND_SOURCE_EXCLUDED_DIR_NAMES = frozenset(
+    {
+        '__pycache__',
+        '.venv',
+        'venv',
+        'env',
+        '.env',
+        'site-packages',
+        '.openapi-venv',
+        'node_modules',
+        'build',
+        'dist',
+        'tests',
+        'testing',
+    }
+)
+
 
 def _read_json(path: Path) -> object:
     with path.open(encoding='utf-8') as handle:
@@ -141,7 +162,7 @@ def validate_contract_manifest(payload: dict[str, Any]) -> None:
 def _python_writer_anchors(path: Path, *, repository_root: Path) -> set[tuple[str, str]]:
     try:
         tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
-    except (OSError, SyntaxError) as exc:
+    except (OSError, SyntaxError, UnicodeError) as exc:
         raise ValueError(f'cannot inspect writer source {path}: {exc}') from exc
 
     module_aliases: dict[str, str] = {}
@@ -198,12 +219,7 @@ def discover_backend_writer_anchors(*, repository_root: Path = REPOSITORY_ROOT) 
     if backend_root.exists():
         for path in backend_root.rglob('*.py'):
             relative_parts = path.relative_to(backend_root).parts
-            if (
-                '__pycache__' in path.parts
-                or 'tests' in path.parts
-                or 'testing' in path.parts
-                or any(part.startswith('.') for part in relative_parts)
-            ):
+            if any(part in _BACKEND_SOURCE_EXCLUDED_DIR_NAMES or part.startswith('.') for part in relative_parts):
                 continue
             if path.name in {'action_items.py', 'goals.py'} and path.parent.name == 'database':
                 continue

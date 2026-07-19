@@ -5,14 +5,27 @@ description: Cursor-free smoke flow for the Omi desktop experience harness.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/BrowserAutomationTarget.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+Environment.swift
+  - desktop/macos/Desktop/Sources/AppBuild.swift
+  - desktop/macos/Desktop/Sources/BundleEnvironment.swift
+  - desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
   - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift
   - desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
   - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
   - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
+  - desktop/macos/Desktop/Sources/Logger.swift
   - desktop/macos/Desktop/Sources/ClientDeviceService.swift
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
+  - desktop/macos/Desktop/Sources/AgentSyncService.swift
+  - desktop/macos/Desktop/Sources/AgentVMService.swift
+  - desktop/macos/Desktop/Sources/APIKeyService.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
+  - desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/OmiSupport/DesktopDevRuntimeManifest.swift
+  - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarDemoView.swift

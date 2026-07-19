@@ -16,9 +16,9 @@ venv/
 .memory_pipeline_runs/
 .local/
 dump/
-/scripts/
 *.zip
 *.wav
+!backend/testing/release_fixtures/transcription-release-probe.wav
 node_modules
 yarn.lock
 

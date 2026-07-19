@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omi.me/schemas/desktop-release-evidence-v1.schema.json",
+  "title": "Omi Desktop Release Evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "type", "release_id", "phase", "generated_at", "overall", "surfaces", "metrics", "privacy"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {"const": "desktop-release-evidence"},
+    "release_id": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+(?:\\.[0-9]+)?\\+[0-9]+-macos$"},
+    "phase": {"enum": ["candidate", "beta", "stable"]},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "overall": {"enum": ["PASS", "WARN", "FAIL"]},
+    "surfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "classification", "expected", "actual", "message"],
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"enum": ["PASS", "WARN", "FAIL"]},
+          "classification": {"enum": ["aligned", "safe_residue", "reversible_drift", "customer_visible_split", "unknown"]},
+          "expected": {"type": "object"},
+          "actual": {"type": "object"},
+          "message": {"type": "string"},
+          "repair": {"type": "string"}
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "denominator", "time_window", "minimum_sample", "value"],
+        "properties": {
+          "id": {"type": "string"},
+          "status": {"enum": ["available", "unavailable"]},
+          "denominator": {"type": ["number", "string", "null"]},
+          "time_window": {"type": ["string", "null"]},
+          "minimum_sample": {"type": ["number", "string", "null"]},
+          "value": {"type": ["number", "string", "object", "array", "null"]},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_private_content_included", "omitted_fields"],
+      "properties": {
+        "raw_private_content_included": {"const": false},
+        "omitted_fields": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

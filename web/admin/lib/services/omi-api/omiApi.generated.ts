@@ -1002,6 +1002,12 @@ export interface Conversation {
   visibility?: ConversationVisibility;
 }
 
+export interface ConversationActionItemsCountResponse {
+  completed: number;
+  incomplete: number;
+  total: number;
+}
+
 export interface ConversationActionItemsDeleteResponse {
   deleted_count: number;
   status: string;
@@ -1048,6 +1054,15 @@ export interface ConversationCreateResponse {
   discarded: boolean;
   id: string;
   status: string;
+}
+
+export interface ConversationFinalizationStatusResponse {
+  attempt_count: number;
+  job_id: string;
+  retryable: boolean;
+  status: string;
+  task_retry_count: number;
+  terminal: boolean;
 }
 
 export interface ConversationMutationResponse {
@@ -2248,15 +2263,19 @@ export interface Message {
   app_id?: string | null;
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
+  client_message_id?: string | null;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
   files_id?: Array<string>;
   from_external_integration?: boolean;
   id: string;
+  journal_revision?: number | null;
   langsmith_run_id?: string | null;
   memories?: Array<MessageConversation>;
   memories_id?: Array<string>;
+  message_source?: string | null;
+  metadata?: string | null;
   plugin_id?: string | null;
   prompt_commit?: string | null;
   prompt_name?: string | null;
@@ -2264,6 +2283,7 @@ export interface Message {
   report_reason?: string | null;
   reported?: boolean;
   sender: MessageSender;
+  session_id?: string | null;
   text: string;
   type: MessageType;
 }
@@ -2519,7 +2539,7 @@ export interface PlanLimits {
   words_transcribed?: number | null;
 }
 
-export type PlanType = "basic" | "unlimited" | "architect" | "operator";
+export type PlanType = "basic" | "unlimited" | "architect" | "operator" | "plus" | "unlimited_v2";
 
 export interface PluginResult {
   content: string;
@@ -2628,15 +2648,19 @@ export interface ResponseMessage {
   ask_for_nps?: boolean | null;
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
+  client_message_id?: string | null;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
   files_id?: Array<string>;
   from_external_integration?: boolean;
   id: string;
+  journal_revision?: number | null;
   langsmith_run_id?: string | null;
   memories?: Array<MessageConversation>;
   memories_id?: Array<string>;
+  message_source?: string | null;
+  metadata?: string | null;
   plugin_id?: string | null;
   prompt_commit?: string | null;
   prompt_name?: string | null;
@@ -2644,6 +2668,7 @@ export interface ResponseMessage {
   report_reason?: string | null;
   reported?: boolean;
   sender: MessageSender;
+  session_id?: string | null;
   text: string;
   type: MessageType;
 }
@@ -3256,6 +3281,20 @@ export interface TranscriptSegment {
   translations?: Array<Translation> | null;
 }
 
+export interface TranscriptionErrorDetail {
+  error: string;
+  message: string;
+  outcome: TranscriptionOutcome;
+  provider: string;
+  retryable: boolean;
+}
+
+export interface TranscriptionErrorResponse {
+  detail: TranscriptionErrorDetail;
+}
+
+export type TranscriptionOutcome = "success" | "expected_silence" | "empty_unexpected" | "timeout" | "upstream_error" | "config_error" | "invalid_input";
+
 export interface TranscriptionPreferencesResponse {
   custom_stt_since?: string | null;
   language?: string;
@@ -3531,6 +3570,7 @@ export interface VerifyPhoneNumberResponse {
 
 export interface VoiceMessageTranscriptionResponse {
   language?: string | null;
+  outcome?: TranscriptionOutcome | null;
   stt_model?: string | null;
   stt_provider?: string | null;
   transcript: string;
@@ -3795,6 +3835,7 @@ export interface OmiApiSchemas {
   "ContinuationCheckpoint": ContinuationCheckpoint;
   "ContinuationCheckpointUpsert": ContinuationCheckpointUpsert;
   "Conversation": Conversation;
+  "ConversationActionItemsCountResponse": ConversationActionItemsCountResponse;
   "ConversationActionItemsDeleteResponse": ConversationActionItemsDeleteResponse;
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
   "ConversationAudio": ConversationAudio;
@@ -3802,6 +3843,7 @@ export interface OmiApiSchemas {
   "ConversationAudioSpanInfo": ConversationAudioSpanInfo;
   "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
+  "ConversationFinalizationStatusResponse": ConversationFinalizationStatusResponse;
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
   "ConversationRecordingResponse": ConversationRecordingResponse;
@@ -4111,6 +4153,9 @@ export interface OmiApiSchemas {
   "TokenResponse": TokenResponse;
   "TrainingDataOptInResponse": TrainingDataOptInResponse;
   "TranscriptSegment": TranscriptSegment;
+  "TranscriptionErrorDetail": TranscriptionErrorDetail;
+  "TranscriptionErrorResponse": TranscriptionErrorResponse;
+  "TranscriptionOutcome": TranscriptionOutcome;
   "TranscriptionPreferencesResponse": TranscriptionPreferencesResponse;
   "TranscriptionPreferencesUpdate": TranscriptionPreferencesUpdate;
   "Translation": Translation;
@@ -5165,6 +5210,17 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/conversations/{conversation_id}/action-items/count": {
+    get: {
+      operationId: "get_conversation_action_items_count_v1_conversations__conversation_id__action_items_count_get";
+      responses: {
+        "200": ConversationActionItemsCountResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations/{conversation_id}/action-items/{action_item_idx}": {
     patch: {
       operationId: "update_action_item_description_v1_conversations__conversation_id__action_items__action_item_idx__patch";
@@ -5221,6 +5277,17 @@ export interface OmiApiPaths {
       operationId: "set_conversation_events_state_v1_conversations__conversation_id__events_patch";
       responses: {
         "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/finalization": {
+    get: {
+      operationId: "get_conversation_finalization_status_v1_conversations__conversation_id__finalization_get";
+      responses: {
+        "200": ConversationFinalizationStatusResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -7818,8 +7885,12 @@ export interface OmiApiPaths {
       operationId: "transcribe_voice_message_v2_voice_message_transcribe_post";
       responses: {
         "200": VoiceMessageTranscriptionResponse;
+        "400": TranscriptionErrorResponse;
         "401": void;
         "422": HTTPValidationError;
+        "502": TranscriptionErrorResponse;
+        "503": TranscriptionErrorResponse;
+        "504": TranscriptionErrorResponse;
       };
     };
   };
@@ -9566,7 +9637,7 @@ export async function get_calendar_onboarding_status_v1_calendar_onboarding_stat
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function list_candidates_v1_candidates_get(query: { status?: CandidateStatus | null, limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CandidateListResponse> {
+export async function list_candidates_v1_candidates_get(query: { status?: CandidateStatus | null, limit?: number, offset?: number, surface?: "suggested" | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CandidateListResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/candidates`;
   const _params = query ? Object.entries(query)
@@ -9985,6 +10056,25 @@ export async function delete_conversation_action_items_v1_conversations__convers
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_conversation_action_items_count_v1_conversations__conversation_id__action_items_count_get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationActionItemsCountResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/action-items/count`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function update_action_item_description_v1_conversations__conversation_id__action_items__action_item_idx__patch(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: UpdateActionItemDescriptionRequest, init?: OmiApiClientInit): Promise<ConversationStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/action-items/{action_item_idx}`;
@@ -10103,6 +10193,25 @@ export async function set_conversation_events_state_v1_conversations__conversati
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_conversation_finalization_status_v1_conversations__conversation_id__finalization_get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationFinalizationStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/finalization`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -15472,4 +15581,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 380 client methods generated.
+// Total: 382 client methods generated.

@@ -6,6 +6,9 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/LiveNameSpeakerSheet.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/NameSpeakerSheet.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/SpeakerBubbleView.swift
 preconditions:
   - automation_bridge_ready
 

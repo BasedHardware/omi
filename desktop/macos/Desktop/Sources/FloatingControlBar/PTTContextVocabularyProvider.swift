@@ -12,38 +12,37 @@ struct PTTContextSnapshot {
 
 enum PTTContextVocabularyProvider {
   private static let maxKeywords = 100
-  private static let maxTextLengthPerScreenshot = 3_000
   private static let maxImmediateOCRLength = 2_000
-  private static let lookbackSeconds: TimeInterval = 120
 
   static func capture(at date: Date = Date(), preOverlayImage: CGImage? = nil) async -> PTTContextSnapshot {
     async let immediateOCRText = captureImmediateScreenText(preferredImage: preOverlayImage)
-    let recentActivityScreenshots = await loadRecentActivityScreenshots(around: date)
     let settingsVocabulary = await MainActor.run {
       AssistantSettings.shared.effectiveVocabulary
     }
+    return snapshot(
+      capturedAt: date,
+      settingsVocabulary: settingsVocabulary,
+      immediateOCRText: await immediateOCRText)
+  }
 
+  /// The final transcript can be rewritten only from explicit user vocabulary and pixels captured
+  /// during this PTT press. Historical Rewind/OCR terms may describe an old app or person and
+  /// must never alter what the user said on a fallback route.
+  static func snapshot(
+    capturedAt: Date,
+    settingsVocabulary: [String],
+    immediateOCRText: String?
+  ) -> PTTContextSnapshot {
     var collector = KeywordCollector(limit: maxKeywords)
     for term in settingsVocabulary {
       collector.add(term)
     }
 
-    let visibleText = await immediateOCRText
+    let visibleText = immediateOCRText
     if let visibleText, !visibleText.isEmpty {
       let clippedText = String(visibleText.prefix(maxImmediateOCRLength))
       collector.addExtractedTerms(from: clippedText, priority: true)
       collector.addVisibleTerms(from: clippedText)
-    }
-
-    for screenshot in recentActivityScreenshots {
-      collector.add(screenshot.appName)
-      if let title = screenshot.windowTitle {
-        collector.add(title)
-        collector.addExtractedTerms(from: title, priority: true)
-      }
-      if let ocrText = screenshot.ocrText, !ocrText.isEmpty {
-        collector.addExtractedTerms(from: String(ocrText.prefix(maxTextLengthPerScreenshot)), priority: false)
-      }
     }
 
     let keywords = collector.values
@@ -51,32 +50,18 @@ enum PTTContextVocabularyProvider {
     let immediateSourceCount = (visibleText?.isEmpty == false) ? 1 : 0
     log(
       "PTTContextVocabulary: captured \(keywords.count) transcription keyword(s) from "
-        + "\(recentActivityScreenshots.count) fresh recent-activity screenshot(s) + "
-        + "\(immediateSourceCount) immediate OCR source(s); sample=[\(sample)]")
+        + "\(immediateSourceCount) turn-scoped immediate OCR source(s); sample=[\(sample)]")
     return PTTContextSnapshot(
-      capturedAt: date,
+      capturedAt: capturedAt,
       keywords: keywords,
-      sourceCount: recentActivityScreenshots.count + immediateSourceCount
+      sourceCount: immediateSourceCount
     )
-  }
-
-  private static func loadRecentActivityScreenshots(around date: Date) async -> [Screenshot] {
-    do {
-      let startDate = date.addingTimeInterval(-lookbackSeconds)
-      return try await RewindDatabase.shared.getScreenshots(
-        from: startDate,
-        to: date.addingTimeInterval(2),
-        limit: 12
-      )
-    } catch {
-      logError("PTTContextVocabulary: failed to load fresh recent-activity screenshots", error: error)
-      return []
-    }
   }
 
   private static func captureImmediateScreenText(preferredImage: CGImage?) async -> String? {
     if let preferredImage,
-       let text = await extractVisibleText(from: preferredImage) {
+      let text = await extractVisibleText(from: preferredImage)
+    {
       log("PTTContextVocabulary: immediate OCR used pre-overlay display image")
       return text
     }
@@ -104,9 +89,11 @@ enum PTTContextVocabularyProvider {
     if let activeWindowImage {
       image = activeWindowImage
     } else {
-      image = await MainActor.run(resultType: CGImage?.self, body: {
-        ScreenCaptureManager.captureScreenImage()
-      })
+      image = await MainActor.run(
+        resultType: CGImage?.self,
+        body: {
+          ScreenCaptureManager.captureScreenImage()
+        })
     }
 
     guard let image else {
@@ -140,7 +127,8 @@ enum PTTTranscriptContextualCorrector {
   static func correct(_ transcript: String, keywords: [String]) -> String {
     let phraseCorrected = correctCommonPTTPhrases(in: transcript)
     let brandCorrected = correctOmiBrand(in: phraseCorrected)
-    let terms = keywords
+    let terms =
+      keywords
       .map { canonicalNameTerm($0) }
       .compactMap { $0 }
       .filter { $0.count >= 3 && $0.count <= 32 }
@@ -172,20 +160,21 @@ enum PTTTranscriptContextualCorrector {
   private static func correctGreetingTarget(in text: String, terms: [String]) -> String {
     let patterns = [
       #"(?i)^\s*(?:hey|hi|hello|yo|lol|help|ok|okay)(?:\s+|[,.;:!?-]+\s*)([A-Za-z][A-Za-z'\-]{1,31})"#,
-      #"(?i)^([A-Za-z][A-Za-z'\-]{1,31})(?=(?:[,.;:!?-]+\s*|\s+)(?:how|what|are|is|you)\b|[,.;:!?-])"#
+      #"(?i)^([A-Za-z][A-Za-z'\-]{1,31})(?=(?:[,.;:!?-]+\s*|\s+)(?:how|what|are|is|you)\b|[,.;:!?-])"#,
     ]
 
     for pattern in patterns {
       guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
       let nsText = text as NSString
       guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
-            match.numberOfRanges > 1 else { continue }
+        match.numberOfRanges > 1
+      else { continue }
 
       let candidate = nsText.substring(with: match.range(at: 1))
       guard !KeywordCollector.stopWords.contains(candidate.lowercased()),
-            let replacement = bestGreetingTargetReplacement(for: candidate, terms: terms),
-            replacement.caseInsensitiveCompare(candidate) != .orderedSame,
-            let range = Range(match.range(at: 1), in: text)
+        let replacement = bestGreetingTargetReplacement(for: candidate, terms: terms),
+        replacement.caseInsensitiveCompare(candidate) != .orderedSame,
+        let range = Range(match.range(at: 1), in: text)
       else { continue }
 
       var updated = text
@@ -200,20 +189,21 @@ enum PTTTranscriptContextualCorrector {
   private static func correctDirectedNameObject(in text: String, terms: [String]) -> String {
     let patterns = [
       #"(?i)\b(?:say|tell|send)\s+(?:hi|hello|hey)\s+(?:to|two|too)\s+([A-Za-z][A-Za-z'\-]{1,31})\b"#,
-      #"(?i)\b(?:say|tell|send)\s+([A-Za-z][A-Za-z'\-]{1,31})\s+(?:hi|hello|hey)\b"#
+      #"(?i)\b(?:say|tell|send)\s+([A-Za-z][A-Za-z'\-]{1,31})\s+(?:hi|hello|hey)\b"#,
     ]
 
     for pattern in patterns {
       guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
       let nsText = text as NSString
       guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
-            match.numberOfRanges > 1 else { continue }
+        match.numberOfRanges > 1
+      else { continue }
 
       let candidate = nsText.substring(with: match.range(at: 1))
       guard !KeywordCollector.stopWords.contains(candidate.lowercased()),
-            let replacement = bestGreetingTargetReplacement(for: candidate, terms: terms),
-            replacement.caseInsensitiveCompare(candidate) != .orderedSame,
-            let range = Range(match.range(at: 1), in: text)
+        let replacement = bestGreetingTargetReplacement(for: candidate, terms: terms),
+        replacement.caseInsensitiveCompare(candidate) != .orderedSame,
+        let range = Range(match.range(at: 1), in: text)
       else { continue }
 
       var updated = text
@@ -358,8 +348,9 @@ enum PTTTranscriptContextualCorrector {
     guard trimmed.range(of: #"^[A-Za-z][A-Za-z'\-]{2,31}$"#, options: .regularExpression) != nil else { return nil }
     guard !KeywordCollector.stopWords.contains(trimmed.lowercased()) else { return nil }
     if trimmed == trimmed.uppercased(),
-       trimmed.count <= 4,
-       trimmed.caseInsensitiveCompare("Omi") != .orderedSame {
+      trimmed.count <= 4,
+      trimmed.caseInsensitiveCompare("Omi") != .orderedSame
+    {
       return nil
     }
     return trimmed
@@ -444,7 +435,8 @@ actor PTTTranscriptCleanupService {
     let pattern = #"\b[A-Za-z][A-Za-z'\-]{1,31}\b"#
 
     for keyword in keywords {
-      let normalized = keyword
+      let normalized =
+        keyword
         .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         .trimmingCharacters(in: .whitespacesAndNewlines)
       guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
@@ -504,7 +496,7 @@ private struct KeywordCollector {
     "chat", "code", "done", "each", "for", "from", "has", "have", "here", "into", "just", "like", "more",
     "hello", "hi", "next", "not", "now", "okay", "open", "orange", "question", "reply", "running", "said",
     "say", "send", "sent", "show", "some", "task", "tell", "test", "text", "that", "the", "this", "thread",
-    "time", "to", "too", "two", "use", "user", "voice", "was", "what", "when", "with", "you", "your"
+    "time", "to", "too", "two", "use", "user", "voice", "was", "what", "when", "with", "you", "your",
   ]
 
   private let limit: Int
@@ -531,7 +523,7 @@ private struct KeywordCollector {
     let patterns = [
       #"\b[A-Z][A-Za-z'\-]{2,}(?:\s+[A-Z][A-Za-z'\-]{2,}){1,2}\b"#,
       #"\b[A-Z][A-Za-z'\-]{2,}\b"#,
-      #"\b[A-Z]{2,8}\b"#
+      #"\b[A-Z]{2,8}\b"#,
     ]
 
     for pattern in patterns {

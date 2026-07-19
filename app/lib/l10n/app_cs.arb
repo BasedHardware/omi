@@ -2904,7 +2904,7 @@
     "upgradePlan": "Upgradovat plán",
     "billingMonthly": "Měsíční",
     "billingYearly": "Roční",
-    "savePercent": "Ušetřete ~17%",
+    "savePercent": "Ušetřete ~{percent}%",
     "popular": "Oblíbené",
     "currentPlan": "Aktuální",
     "neoSubtitle": "{count} dotazů měsíčně",
@@ -3024,7 +3024,7 @@
     "syncCustomSttWarningMessage": "Používáte vlastního poskytovatele přepisu. Synchronizace těchto nahrávek je přepíše na serverech Omi a započítají se do limitu přepisu vašeho tarifu.",
     "transcribeLaterTitle": "Přepsat později",
     "transcribeLaterDescription": "Nahrávejte zvuk hned a přepisujte ho podle potřeby místo přepisu naživo. Nahrávky se uloží do telefonu a poté je nahrajete na server, aby z nich vznikly konverzace.",
-    "transcribeLaterNote": "Zatím funguje se zařízeními Omi a Limitless. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.",
+    "transcribeLaterNote": "Funguje s mikrofonem telefonu a se zařízeními Omi a Limitless. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.",
     "transcribeLaterStorageFull": "V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví.",
     "unmute": "Zapnout zvuk",
     "newRecording": "Nová nahrávka",
@@ -3112,5 +3112,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Úložiště zařízení",
+    "deviceStoragePercentFull": "{percent}% zaplněno",
+    "deviceStorageUsedOfTotal": "{used} z {total} využito",
+    "deviceStorageFree": "{free} volných",
+    "deviceStorageNearlyFull": "Zařízení je téměř plné — synchronizujte pro uvolnění místa.",
+    "phoneMicOfflineFallbackMessage": "Bez připojení – nahrává se lokálně. Přepíše se, až budete znovu online.",
+    "dataEncryptedBanner": "Vaše data jsou ve výchozím nastavení zabezpečena silným šifrováním a vy máte kontrolu nad tím, jak jsou ukládána a používána."
 }

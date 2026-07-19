@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 
 void main() {

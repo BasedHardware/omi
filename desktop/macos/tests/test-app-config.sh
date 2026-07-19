@@ -39,6 +39,13 @@ if ! grep -q "OMI_APP_NAME must contain at least one letter or number" /tmp/omi-
   fail "invalid app name did not explain the slug requirement"
 fi
 
+if derive_omi_app_config "feature-without-prefix" >/tmp/omi-app-config-prefix.out 2>/tmp/omi-app-config-prefix.err; then
+  fail "non-omi named app unexpectedly succeeded"
+fi
+if ! grep -q "must use the omi- prefix" /tmp/omi-app-config-prefix.err; then
+  fail "non-omi named app did not explain the required prefix"
+fi
+
 if OMI_BUNDLE_ID="com.omi.wrong" derive_omi_app_config "omi-subagent-test" >/tmp/omi-app-config-bundle.out 2>/tmp/omi-app-config-bundle.err; then
   fail "mismatched OMI_BUNDLE_ID unexpectedly succeeded"
 fi

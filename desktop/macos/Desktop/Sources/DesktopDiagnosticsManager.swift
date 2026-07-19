@@ -1,6 +1,6 @@
+import Darwin
 import Foundation
 import Sentry
-import Darwin
 
 enum DesktopHealthEventName: String {
   case authTokenStorageFallback = "auth_token_storage_fallback"
@@ -14,6 +14,7 @@ enum DesktopHealthEventName: String {
   case pttCommitted = "ptt_committed"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
   case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
+  case realtimeProviderExpectedSessionRotation = "realtime_provider_expected_session_rotation"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
   case fallbackTriggered = "fallback_triggered"
@@ -25,7 +26,7 @@ enum DesktopFallbackOutcome: String {
   case exhausted
 }
 
-struct DesktopHealthSnapshot {
+struct DesktopHealthSnapshot: @unchecked Sendable {
   let timestamp: Date
   let event: DesktopHealthEventName
   let properties: [String: Any]
@@ -38,8 +39,8 @@ struct DesktopHealthSnapshot {
   }
 }
 
-private extension ISO8601DateFormatter {
-  static let desktopDiagnostics: ISO8601DateFormatter = {
+extension ISO8601DateFormatter {
+  fileprivate nonisolated(unsafe) static let desktopDiagnostics: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter
@@ -53,7 +54,7 @@ private extension ISO8601DateFormatter {
 /// - **Sentry** (`logError` / `SentrySDK.capture`): only when a domain classifier marks the failure actionable.
 /// Do not call `AnalyticsManager.desktopHealthEvent` directly — it bypasses the ring buffer.
 final class DesktopDiagnosticsManager {
-  static let shared = DesktopDiagnosticsManager()
+  nonisolated(unsafe) static let shared = DesktopDiagnosticsManager()
 
   private let lock = NSLock()
   private var snapshots: [DesktopHealthSnapshot] = []
@@ -185,7 +186,8 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordApiAuthRetry(endpoint: String, outcome: String) {
-    let fallbackOutcome: DesktopFallbackOutcome = outcome == "succeeded" ? .recovered : (outcome == "retrying" ? .degraded : .exhausted)
+    let fallbackOutcome: DesktopFallbackOutcome =
+      outcome == "succeeded" ? .recovered : (outcome == "retrying" ? .degraded : .exhausted)
     recordFallback(
       area: "api_auth",
       from: "expired_token",
@@ -447,6 +449,8 @@ final class DesktopDiagnosticsManager {
     switch normalizedCategory {
     case RealtimeHubCloseCategory.expectedIdleTeardown.rawValue:
       event = .realtimeProviderExpectedIdleTeardown
+    case RealtimeHubCloseCategory.expectedSessionRotation.rawValue:
+      event = .realtimeProviderExpectedSessionRotation
     case RealtimeHubCloseCategory.providerPolicyCloseFast.rawValue,
       CredentialFailureClass.providerPolicyClose(provider: .openai).logValue:
       event = .realtimeProviderPolicyClose
@@ -459,6 +463,10 @@ final class DesktopDiagnosticsManager {
       "alive_for_seconds": Int(aliveFor),
       "active_turn": activeTurn,
     ]
+    if normalizedCategory == RealtimeHubCloseCategory.expectedSessionRotation.rawValue {
+      properties["recovery_action"] = "rotate_realtime_session"
+      properties["recovery_result"] = activeTurn ? "turn_terminated_and_rewarm_started" : "rewarm_started"
+    }
     if let authMode {
       properties["auth_mode"] = authMode.rawValue
     }
@@ -618,13 +626,13 @@ final class DesktopDiagnosticsManager {
   }
 
   #if DEBUG
-  func resetForTests() {
-    lock.lock()
-    snapshots.removeAll()
-    consecutiveNearZeroPTTTurns = 0
-    lastPTTWatchdogIncidentAt = nil
-    lock.unlock()
-  }
+    func resetForTests() {
+      lock.lock()
+      snapshots.removeAll()
+      consecutiveNearZeroPTTTurns = 0
+      lastPTTWatchdogIncidentAt = nil
+      lock.unlock()
+    }
   #endif
 
   private func record(
@@ -750,6 +758,7 @@ final class DesktopDiagnosticsManager {
     "ble_audio",
     "automation_bridge",
     "transcription_retry",
+    "task_reconcile",
     "other",
   ]
 
@@ -814,6 +823,8 @@ final class DesktopDiagnosticsManager {
     guard size > 0 else { return "unknown" }
     var model = [CChar](repeating: 0, count: size)
     sysctlbyname("hw.model", &model, &size, nil, 0)
-    return String(cString: model)
+    return model.withUnsafeBufferPointer { buffer in
+      buffer.baseAddress.map { String(cString: $0) } ?? "unknown"
+    }
   }
 }

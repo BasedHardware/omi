@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Shared dark palette for the native macOS app.
-/// Keep this aligned with the stronger parts of the older Flutter desktop styling:
-/// neutral dark surfaces, restrained borders, and a purple accent without neon overload.
+/// Neutral dark surfaces, restrained borders, and a single white accent (INV-UI-1:
+/// never purple — accents and primary actions use white/neutral treatments).
 package enum OmiColors {
   // MARK: - Background Colors
   package static let backgroundPrimary = Color(hex: 0x0F0F0F)
@@ -14,11 +14,8 @@ package enum OmiColors {
   // MARK: - Border Colors
   package static let border = Color(hex: 0x3A3940)
 
-  // MARK: - Accent System
-  package static let purplePrimary = Color(hex: 0x8B5CF6)
-  package static let purpleSecondary = Color(hex: 0xA855F7)
-  package static let purpleAccent = Color(hex: 0x7C3AED)
-  package static let purpleLight = Color(hex: 0xD946EF)
+  // MARK: - Accent System (single neutral accent, INV-UI-1)
+  package static let accent = Color(hex: 0xFFFFFF)
 
   // MARK: - Text Colors
   package static let textPrimary = Color(hex: 0xFFFFFF)
@@ -44,29 +41,16 @@ package enum OmiColors {
     Color(hex: 0x1E3A5F),  // Navy
     Color(hex: 0x2D4A3E),  // Dark teal
     Color(hex: 0x4A3728),  // Dark brown
-    Color(hex: 0x3D2E4A),  // Dark purple
+    Color(hex: 0x3A422D),  // Dark olive
     Color(hex: 0x4A3A2D),  // Dark amber
   ]
 
   /// User bubble color: richer than the page chrome, softer than a flat primary fill.
-  package static let userBubble = Color(hex: 0x43389F)
-
-  // MARK: - Gradients
-  package static let purpleGradient = LinearGradient(
-    colors: [purplePrimary, purpleAccent],
-    startPoint: .topLeading,
-    endPoint: .bottomTrailing
-  )
-
-  package static let purpleLightGradient = LinearGradient(
-    colors: [purpleSecondary, purpleLight],
-    startPoint: .topLeading,
-    endPoint: .bottomTrailing
-  )
+  package static let userBubble = Color(hex: 0x2C2C33)
 }
 
 // MARK: - Color Extension for Hex
-package extension Color {
+extension Color {
   package init(hex: UInt, alpha: Double = 1.0) {
     self.init(
       .sRGB,
@@ -78,7 +62,7 @@ package extension Color {
   }
 
   /// Initialize from a hex string like "#6B7280" or "6B7280"
-  init?(hex hexString: String) {
+  package init?(hex hexString: String) {
     var cleanedString = hexString.trimmingCharacters(in: .whitespacesAndNewlines)
     cleanedString = cleanedString.replacingOccurrences(of: "#", with: "")
 

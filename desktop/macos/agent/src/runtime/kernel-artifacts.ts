@@ -15,18 +15,6 @@ import {
   type LegacyMainChatSessionEntry,
   type ResolveSurfaceSessionInput,
 } from "./surface-session.js";
-import {
-  appendConversationTurn,
-  conversationIdForSession,
-  importConversationTurnsForSurface,
-  recordSurfaceTurn as persistSurfaceTurn,
-} from "./conversation-turns.js";
-import {
-  acknowledgeCompletionDelta,
-  assembleTurnContext,
-  bindingCarriesNativeHistory,
-  getVoiceSeedContext,
-} from "./turn-context.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -47,7 +35,6 @@ import type {
 } from "./types.js";
 import { buildDesktopActionQueue } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
-import { routeDesktopIntent } from "./desktop-intent-router.js";
 import { OmiArtifactStorage } from "./artifact-storage.js";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -134,6 +121,7 @@ import type {
 import { StaleAdapterBindingError } from "./kernel-types.js";
 
 import { KernelRuns } from "./kernel-runs.js";
+import { listRunToolInvocationSummaries } from "./tool-invocation-ledger.js";
 
 export class KernelArtifacts extends KernelRuns {
   queueArtifactDelivery(input: NewDesktopArtifactDelivery): DesktopArtifactDelivery {
@@ -195,6 +183,7 @@ export class KernelArtifacts extends KernelRuns {
       events: input.includeEvents ? this.readEventsForRun(run.runId, boundedLimit(input.eventLimit, 100, 500)) : [],
       parentDelegations: this.readParentDelegationsForRun(run.runId),
       childDelegations: this.readChildDelegationsForRun(run.runId),
+      toolInvocations: listRunToolInvocationSummaries(this.store, run.runId),
     };
   }
 

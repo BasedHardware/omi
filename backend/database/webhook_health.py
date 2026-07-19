@@ -36,6 +36,18 @@ def _evict_oldest(d: Dict[str, Any]) -> None:
         del d[k]
 
 
+def _set_disabled_state(app_id: str, value: bool) -> None:
+    """Record a disabled-state write and enforce the size cap. Caller must hold _cache_lock.
+
+    The is_app_webhook_disabled read path already caps the cache; the record/re-enable write paths
+    did not, so routing every write through here keeps the cache within _CACHE_MAX_SIZE on all paths.
+    """
+    gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
+    _disabled_cache[app_id] = (value, time.monotonic(), gen)
+    if len(_disabled_cache) > _CACHE_MAX_SIZE:
+        _evict_oldest(_disabled_cache)
+
+
 # Lua script: atomically record a failure and return graduated response action.
 # Returns: 0 = no action, 1 = day1 warn, 2 = day2 warn, 3 = disable
 _RECORD_FAILURE_LUA = """
@@ -143,8 +155,7 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoi
         if action == 3:
             r.setex(f'app_webhook_disabled:{app_id}', _HEALTH_TTL, '1')
             with _cache_lock:
-                gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
-                _disabled_cache[app_id] = (True, time.monotonic(), gen)
+                _set_disabled_state(app_id, True)
         return action
     except Exception as e:
         logger.warning(f'record_app_webhook_failure redis error app_id={app_id}: {e}')
@@ -212,8 +223,7 @@ def record_app_webhook_success(app_id: str, endpoint: str = ENDPOINT_REALTIME):
 def clear_app_webhook_health(app_id: str):
     """Clear all webhook health state for an app. Used on re-enable."""
     with _cache_lock:
-        gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
-        _disabled_cache[app_id] = (False, time.monotonic(), gen)
+        _set_disabled_state(app_id, False)
     try:
         keys_to_delete = [f'app_webhook_disabled:{app_id}']
         for ep in _ALL_ENDPOINTS:
@@ -272,8 +282,7 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
 def disable_app_in_firestore(app_id: str, error: str, failure_hours: int):
     """Mark an app as disabled in Firestore due to webhook failures."""
     with _cache_lock:
-        gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
-        _disabled_cache[app_id] = (True, time.monotonic(), gen)
+        _set_disabled_state(app_id, True)
     try:
         apps_collection = 'plugins_data'
         app_ref = db.collection(apps_collection).document(app_id)

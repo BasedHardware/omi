@@ -32,7 +32,9 @@ final class DesktopChatDriftGuardTests: XCTestCase {
       "Mirrors ChatProvider",
     ])
     .filter { !$0.path.hasSuffix("DesktopChatDriftGuardTests.swift") }
-    .map { "\($0.path):\($0.line.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\u{2014}", with: "-"))" }
+    .map {
+      "\($0.path):\($0.line.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\u{2014}", with: "-"))"
+    }
 
     let unexpectedMarkers = Set(markers).subtracting(allowedChatProviderMirrorMarkers)
 
