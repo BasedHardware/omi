@@ -43,6 +43,7 @@ import {
   markSyncedActionItemOn,
   syncTaskActionItemsOn,
   hardDeleteAbsentTasksOn,
+  hardDeleteAbsentCompletedTasksOn,
   getUnsyncedActionItemsOn,
   getAllActionItemEmbeddingsOn,
   updateActionItemEmbeddingOn,
@@ -2168,6 +2169,13 @@ export function syncTaskActionItems(
 
 export function hardDeleteAbsentTasks(apiIds: string[]): number[] {
   return hardDeleteAbsentTasksOn(taskStoreDb(), apiIds)
+}
+
+export function hardDeleteAbsentCompletedTasks(
+  apiIds: string[],
+  now: number = Date.now()
+): number[] {
+  return hardDeleteAbsentCompletedTasksOn(taskStoreDb(), apiIds, now)
 }
 
 export function getUnsyncedActionItems(opts?: {
