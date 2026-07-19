@@ -1697,6 +1697,30 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     status_code=500,
                     content={'status': 'terminal_cleanup_retry', 'job_status': latest_job.get('status')},
                 )
+            if ledger_fence_active and task_retry_count >= max_attempts - 1:
+                # A pipeline leaf can durably complete the content ledger and
+                # then fail before it publishes the matching Redis terminal
+                # result. This must win even on the task's final delivery:
+                # there may be no later Cloud Tasks retry to converge it.
+                try:
+                    converged = await run_blocking(
+                        db_executor,
+                        bind_or_converge_sync_ledger_completion,
+                        job_id=job_id,
+                        uid=uid,
+                        content_id=content_id,
+                        run_lock_token=lock_token,
+                    )
+                except SyncJobRunLeaseLost:
+                    release_lock = False
+                    logger.warning('event=sync_transcription_job outcome=lease_lost retry_material=preserved')
+                    return JSONResponse(status_code=409, content={'status': 'locked'})
+                if converged is not None:
+                    logger.info('event=sync_transcription_job outcome=reconciled_after_pipeline_exception')
+                    await _delete_staged_blobs_async(blob_paths)
+                    if sync_lane == SyncLane.BACKFILL.value:
+                        await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+                    return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
             failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
             if task_retry_count >= max_attempts - 1:

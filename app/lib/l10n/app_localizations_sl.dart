@@ -9012,7 +9012,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get billingYearly => 'Letno';
 
   @override
-  String get savePercent => 'Prihranite ~17%';
+  String savePercent(int percent) {
+    return 'Prihranite ~$percent%';
+  }
 
   @override
   String get popular => 'Priljubljeno';

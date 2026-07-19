@@ -2935,7 +2935,7 @@
     "upgradePlan": "Uuenda plaani",
     "billingMonthly": "Kuine",
     "billingYearly": "Aastane",
-    "savePercent": "Säästa ~17%",
+    "savePercent": "Säästa ~{percent}%",
     "popular": "Populaarne",
     "currentPlan": "Praegune",
     "neoSubtitle": "{count} küsimust kuus",

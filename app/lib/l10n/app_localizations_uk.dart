@@ -9002,7 +9002,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get billingYearly => 'Щорічно';
 
   @override
-  String get savePercent => 'Заощаджуйте ~17%';
+  String savePercent(int percent) {
+    return 'Заощаджуйте ~$percent%';
+  }
 
   @override
   String get popular => 'Популярний';

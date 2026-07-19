@@ -2935,7 +2935,7 @@
     "upgradePlan": "Αναβάθμιση πλάνου",
     "billingMonthly": "Μηνιαίο",
     "billingYearly": "Ετήσιο",
-    "savePercent": "Εξοικονομήστε ~17%",
+    "savePercent": "Εξοικονομήστε ~{percent}%",
     "popular": "Δημοφιλές",
     "currentPlan": "Τρέχον",
     "neoSubtitle": "{count} ερωτήσεις ανά μήνα",
