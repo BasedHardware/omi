@@ -91,6 +91,7 @@ def capture_snapshot(
     project: str,
     region: str,
     services: Sequence[str],
+    allow_missing: bool = False,
     fetcher: Callable[..., Mapping[str, Any]] = _fetch_service,
 ) -> dict[str, Any]:
     """Capture only the durable routing state needed to undo a promotion."""
@@ -98,10 +99,18 @@ def capture_snapshot(
         raise ValueError('at least one Cloud Run service is required')
     if len(set(services)) != len(services):
         raise ValueError('Cloud Run services must not be repeated')
-    captured = {
-        service: sanitize_service_document(service, fetcher(project=project, region=region, service=service))
-        for service in services
-    }
+    captured: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    for service in services:
+        try:
+            document = fetcher(project=project, region=region, service=service)
+        except subprocess.CalledProcessError as exc:
+            evidence = f"{getattr(exc, 'stderr', '')} {getattr(exc, 'output', '')}".lower()
+            if allow_missing and ('not found' in evidence or 'notfound' in evidence):
+                missing.append(service)
+                continue
+            raise
+        captured[service] = sanitize_service_document(service, document)
     for service, service_snapshot in captured.items():
         try:
             restore_targets(service_snapshot)
@@ -114,6 +123,7 @@ def capture_snapshot(
         'project': project,
         'region': region,
         'services': captured,
+        'missing_services': missing,
     }
 
 
@@ -130,8 +140,10 @@ def _load_snapshot(path: Path) -> dict[str, Any]:
         raise ValueError('traffic snapshot is missing project')
     if not isinstance(loaded.get('region'), str) or not loaded['region']:
         raise ValueError('traffic snapshot is missing region')
-    if not isinstance(loaded.get('services'), dict) or not loaded['services']:
+    if not isinstance(loaded.get('services'), dict):
         raise ValueError('traffic snapshot is missing services')
+    if not loaded['services'] and not loaded.get('missing_services'):
+        raise ValueError('traffic snapshot has neither captured nor missing services')
     return cast(dict[str, Any], loaded)
 
 
@@ -185,6 +197,16 @@ def restore_snapshot(
     project = cast(str, snapshot['project'])
     region = cast(str, snapshot['region'])
     services = cast(Mapping[str, Any], snapshot['services'])
+    if not services:
+        return {
+            'schema_version': SNAPSHOT_SCHEMA_VERSION,
+            'scope': 'backend Cloud Run traffic restoration',
+            'snapshot_sha256': _snapshot_digest(snapshot),
+            'result': 'pass',
+            'failed_services': [],
+            'services': {},
+            'note': 'no prior Cloud Run services existed; candidate remains non-serving',
+        }
     execute = runner or (lambda command: subprocess.run(command, check=True, capture_output=True, text=True))
     results: dict[str, dict[str, Any]] = {}
     for service, raw_service_snapshot in services.items():
@@ -233,6 +255,7 @@ def main() -> int:
     capture.add_argument('--project', required=True)
     capture.add_argument('--region', default=DEFAULT_REGION)
     capture.add_argument('--service', action='append', dest='services', default=[])
+    capture.add_argument('--allow-missing', action='store_true')
     capture.add_argument('--output', type=Path, required=True)
     restore = commands.add_parser('restore', help='restore Cloud Run traffic from a recorded snapshot')
     restore.add_argument('--snapshot', type=Path, required=True)
@@ -244,6 +267,7 @@ def main() -> int:
                 project=args.project,
                 region=args.region,
                 services=tuple(args.services or DEFAULT_SERVICES),
+                allow_missing=args.allow_missing,
             )
             _write_json(args.output, snapshot)
             print(f'captured sanitized Cloud Run traffic snapshot at {args.output}')

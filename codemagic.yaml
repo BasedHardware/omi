@@ -23,7 +23,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -175,6 +175,7 @@ workflows:
 
           flutter build ipa \
             --release \
+            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
@@ -241,7 +242,7 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -415,6 +416,7 @@ workflows:
 
           flutter build appbundle \
             --release \
+            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
@@ -462,7 +464,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -565,6 +567,7 @@ workflows:
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build ipa \
             --release \
+            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
@@ -840,7 +843,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -968,6 +971,7 @@ workflows:
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build appbundle \
             --release \
+            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
@@ -1014,7 +1018,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1754,7 +1758,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2

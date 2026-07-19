@@ -2,6 +2,7 @@ replicaCount: 1
 
 image:
   repository: gcr.io/based-hardware-dev/llm-gateway
+  digest: ""
   pullPolicy: Always
   tag: ""
 

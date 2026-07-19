@@ -92,6 +92,23 @@ def test_restore_snapshot_resolves_latest_revision_before_the_new_candidate_exis
     ]
 
 
+def test_bootstrap_snapshot_records_missing_services_and_has_no_traffic_to_restore() -> None:
+    def missing(**_kwargs):
+        raise subprocess.CalledProcessError(1, ["gcloud"], stderr="NOT_FOUND: resource was not found")
+
+    snapshot = snapshots.capture_snapshot(
+        project='based-hardware',
+        region='us-central1',
+        services=('backend-beta',),
+        allow_missing=True,
+        fetcher=missing,
+    )
+
+    assert snapshot['services'] == {}
+    assert snapshot['missing_services'] == ['backend-beta']
+    assert snapshots.restore_snapshot(snapshot)['result'] == 'pass'
+
+
 def test_restore_snapshot_attempts_every_service_and_sanitizes_a_failed_command() -> None:
     snapshot = {
         'schema_version': 1,

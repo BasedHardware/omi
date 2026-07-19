@@ -3649,8 +3649,8 @@ final class DesktopAutomationBridge: @unchecked Sendable {
           logLaunchID: omiLogLaunchID(),
           bridgePort: DesktopAutomationLaunchOptions.port,
           requiresAuth: true,
-          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends
-            ? "development" : "production",
+          backendEnvironment: DesktopBackendEnvironment.shouldUseBetaRingBackends
+            ? "beta" : (DesktopBackendEnvironment.shouldUseDevelopmentBackends ? "development" : "production"),
           pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
           rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
           agentRuntimeRunning: runtime.running,

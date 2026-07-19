@@ -70,7 +70,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description='Validate backend runtime env manifests against checked-in GKE config and Cloud Run state.'
     )
-    parser.add_argument('--env', choices=('dev', 'prod'), required=True)
+    parser.add_argument('--env', choices=('dev', 'beta', 'prod'), required=True)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument(
         '--cloud-run-state',
@@ -431,7 +431,7 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
     required_cloud_run_scopes: set[str] = set()
-    if env in {'dev', 'prod'}:
+    if env in {'dev', 'beta', 'prod'}:
         for service in ('backend', 'backend-sync', 'backend-integration'):
             if service not in cloud_run_services:
                 continue

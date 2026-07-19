@@ -58,9 +58,9 @@ JSON record to a versioned, retention-locked GCS bucket:
   "git_sha": "…",
   "eligibility_run_id": "…",      // CI run that built and tested this release
   "images": { "backend": "gcr.io/...@sha256:…", "pusher": "…" },
-  "helm_values": { "backend-listen": "gs://…/values/<id>/backend-listen.yaml#sha256:…" },
-  "run_config": { "backend": "gs://…/run/<id>/backend.yaml#sha256:…" },
+  "rendered_config": { "beta/backend-listen": "gs://…/config/<id>/beta/backend-listen.yaml#sha256:…" },
   "secret_versions": { "OPENAI_API_KEY": "projects/…/versions/42" },
+  "topology": { "beta": { "cloud_run_services": { "backend": "backend-beta" } } },
   "created_at": "…"
 }
 ```
@@ -113,9 +113,63 @@ main merge ──► build once ──► release record
   fallback/error rates in bounds, **and** a minimum exposure floor (active
   sessions, streamed minutes) — a quiet night must not qualify a release.
 
-Per-ring configuration lives in source-controlled values
-(`backend/deploy/runtime_env.yaml` lanes + Helm values), so every beta/prod
-difference is reviewable in the PR that introduces it.
+Per-ring configuration lives in source-controlled values and
+`backend/deploy/release_rings.yaml`; the record writer materializes and hashes
+the beta/prod objects before they can be deployed. It captures each ring's
+public ConfigMap at record-build time, turns every Cloud Run `env_var` into a literal,
+pins Cloud Run and ExternalSecret numeric versions, and writes a materialized
+`beta` runtime lane into the record. The beta renderer changes only stateless
+identities and endpoints. It intentionally preserves existing GPU endpoints,
+which is the explicit #10057 boundary.
+
+## Implemented workflow contract
+
+- `release-record.yml` runs only after a successful `Release Eligibility` run
+  for the current `main` tip. It builds backend, pusher, llm-gateway, and
+  agent-proxy once, records their OCI digests (backend-listen uses the backend
+  digest), resolves every Secret Manager reference to a numeric version, and
+  writes create-only config and record objects.
+- `deploy-release-ring.yml` accepts only `ring` and `release_id`. It uses the
+  selected GitHub environment and that environment's OIDC identity; it has no
+  SHA, tag, branch, Helm-revision, or image input. `prod` additionally requires
+  the literal `confirm=deploy-prod` after the GitHub environment approval.
+- A ring deploy captures Cloud Run traffic and Helm revisions before mutation,
+  writes a `started` receipt, creates no-traffic Cloud Run revisions using the
+  recorded public config and numeric secret versions, performs an authenticated
+  health smoke, and for beta proves an authenticated known-audio transcription
+  through the tagged candidate before applying the recorded
+  ConfigMap/ExternalSecret/Helm values by digest and switching traffic. Prod
+  depends on that verified beta evidence plus the soak, because prod has no
+  public candidate URL. A deterministic failure restores the snapshot once;
+  any failure to restore writes `partial_mutation`, holds the record, and
+  invokes the configured pager webhook.
+- `prod` additionally requires a verified beta receipt older than the configured
+  soak window (12 hours by default) and refuses a beta-held record. The prod
+  environment approval is where the operator records the initial Sentry,
+  fallback/error-rate, and exposure-floor review; automate those predicates
+  only after they have a proven query contract.
+- iOS TestFlight and Android internal builds carry a non-user-controlled beta
+  build identity and always use `api-beta.omi.me`. macOS beta uses that Python
+  API too. Its Rust desktop-backend keeps the signed production endpoint and
+  the separate `desktop_promote_prod.yml` roll-forward-only recovery class;
+  it is deliberately not claimed as a v1 release-ring workload.
+
+Before enabling either workflow, provision the `beta` and `prod` GitHub
+environments, a retention-locked/versioned `RELEASE_RECORDS_BUCKET`, and two
+least-privilege Workload Identity bindings. The prod binding must restrict
+claims to this repository **and** the `prod` environment; the record writer
+may read the production public ConfigMap and write records/config only, and the
+ring deployer may read records plus mutate only its own ring. It also needs
+read access to the existing, narrowly scoped `RELEASE_SECRET` used only to mint
+the beta candidate's short-lived probe identity. Before the first
+beta deploy, provision the beta Cloud Run service identities, namespace,
+public ConfigMap with beta Cloud Tasks targets, ExternalSecret Workload Identity,
+static ingress addresses/certificate, and DNS
+for `api-beta.omi.me`, `pusher-beta.omi.me`, and `agent-beta.omi.me`; the
+workflow fails closed if any prerequisite is absent. Protect `main` so the
+recursive `.github/workflows/**` CODEOWNERS rule and the `release-ring-guards`
+check are required. These are control-plane settings, not values to place in
+this repository.
 
 ## Deploying and rolling back
 
@@ -129,7 +183,8 @@ difference is reviewable in the PR that introduces it.
    verify with `backend/scripts/deploy_status_report.py`.
 5. On deterministic failure before or immediately after the traffic switch:
    restore the pre-mutation snapshot automatically (Cloud Run: shift traffic
-   back; GKE: one `helm rollback` attempt). If restoration also fails, write
+   back; a first-time beta service is deleted because it had no prior serving
+   state; GKE: one `helm rollback` attempt). If restoration also fails, write
    `partial_mutation` with the exact component diff, leave state visible, and
    page — no recursive recovery attempts.
 6. A failed record is marked held in `rings/<ring>/active.json` so auto-deploy
@@ -184,4 +239,6 @@ The target state above is adopted incrementally; sequencing, current scope,
 and per-surface status live in the tracking issue
 ([#10049](https://github.com/BasedHardware/omi/issues/10049)), not in this
 doc. Until a surface has joined the ring system, its currently documented
-workflow (e.g. `gcp_backend.yml`, the hotfix runbook) remains authoritative.
+workflow (e.g. the traffic-only hotfix runbook) remains authoritative. The old
+arbitrary-ref prod deploy workflows refuse prod artifact deploys; their
+traffic-only repair path remains a deliberately narrow emergency tool.
