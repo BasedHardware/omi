@@ -121,8 +121,9 @@ final class BleAudioService: ObservableObject {
 
       // The stream ended or errored. Run full cleanup (not just isProcessing =
       // false), otherwise the processor, Combine subscriptions, and handlers
-      // dangle and the session cannot cleanly restart.
-      await self?.handleAudioStreamEnded()
+      // dangle and the session cannot cleanly restart. This Task inherits the
+      // @MainActor isolation of BleAudioService, so the call is synchronous.
+      self?.handleAudioStreamEnded()
     }
   }
 
