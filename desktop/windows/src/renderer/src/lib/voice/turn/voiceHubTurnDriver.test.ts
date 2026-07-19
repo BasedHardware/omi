@@ -108,6 +108,7 @@ function makeFakeHub() {
 
 function makeFakeCapture() {
   let onChunk: ((pcm: Int16Array) => void) | undefined
+  let onLevels: ((orbLevel: number) => void) | undefined
   const cap: PttCapture = {
     analyser: { getByteFrequencyData: () => {}, getOrbLevel: () => 0 },
     drain: () => Promise.resolve(new Int16Array(0)),
@@ -115,9 +116,15 @@ function makeFakeCapture() {
   }
   const start = vi.fn((opts: PttCaptureOptions): Promise<PttCapture> => {
     onChunk = opts.onChunk
+    onLevels = opts.onLevels
     return Promise.resolve(cap)
   })
-  return { start, feed: (pcm: Int16Array) => onChunk?.(pcm), cap }
+  return {
+    start,
+    feed: (pcm: Int16Array) => onChunk?.(pcm),
+    feedLevel: (orbLevel: number) => onLevels?.(orbLevel),
+    cap
+  }
 }
 
 type Harness = {
@@ -291,6 +298,28 @@ describe('orb projection (main -> bar)', () => {
     expect(s.active).toBe(true)
     expect(s.isListening).toBe(true)
     expect(s.orbLevel).toBeGreaterThan(0)
+  })
+
+  // Regression (2026-07-18 round 2, "visualizer maxes out a lot" live finding):
+  // the published orbLevel must follow the capture's streamed ~30Hz 64ms-window
+  // levels lane once it delivers — NOT the 256ms chunk peaks, which bridge
+  // every inter-syllable dip and held the bars at syllable peaks (4Hz).
+  it('the streamed levels lane owns orbLevel once it delivers (chunk peak = first-frames fallback only)', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    // Before any levels frame: the chunk-peak fallback publishes (first-frames coverage).
+    h.states.length = 0
+    h.capture.feed(loud())
+    expect(h.states.at(-1)!.orbLevel).toBeGreaterThan(0.4) // peak of ±16000 ≈ 0.49
+    // The levels lane delivers — it owns the published level from now on…
+    h.capture.feedLevel(0.12)
+    expect(h.states.at(-1)!.orbLevel).toBeCloseTo(0.12, 5)
+    // …and a later LOUD chunk no longer overrides an inter-syllable dip.
+    h.capture.feedLevel(0.03)
+    h.capture.feed(loud())
+    expect(h.states.at(-1)!.orbLevel).toBeCloseTo(0.03, 5)
   })
 
   it('a silent chunk projects a zero orb level', async () => {

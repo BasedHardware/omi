@@ -22,6 +22,13 @@ export type PttCapture = {
 export type PttCaptureOptions = {
   /** Tee for each PCM chunk (backfill seed first, then live), in order. */
   onChunk?: (pcm: Int16Array) => void
+  /** Tee for each streamed orb loudness frame (the capture window's ~30Hz
+   *  64ms-time-domain peak — the orb's canonical unit). Push-based twin of the
+   *  handle's `source.getOrbLevel` for consumers that RELAY the level (the hub
+   *  driver's bar projection) instead of polling it: peaks of the 256ms PCM
+   *  chunks are the wrong statistic for the orb (no inter-syllable dips, held
+   *  4Hz — the "visualizer maxes out" live finding). */
+  onLevels?: (orbLevel: number) => void
   /** Fired once if the capture window's buffer hits its cap. */
   onCapped?: () => void
   /** Include this much pre-roll from the warm graph's ring — the hook passes the
@@ -86,7 +93,10 @@ export async function startPttCapture(opts: PttCaptureOptions = {}): Promise<Ptt
           if (ev.captureId !== captureId) return
           markStarted()
           latestBins = ev.bins
-          if (ev.orbLevel !== undefined) latestOrbLevel = ev.orbLevel
+          if (ev.orbLevel !== undefined) {
+            latestOrbLevel = ev.orbLevel
+            opts.onLevels?.(ev.orbLevel)
+          }
           break
         case 'ptt-capped':
           if (ev.captureId !== captureId) return

@@ -193,6 +193,13 @@ export class VoiceHubTurnDriver {
   // Projection state ----------------------------------------------------------
   private lastProjection: VoiceTurnUIProjection = IDLE_PROJECTION
   private orbLevel = 0
+  /** True once the capture's streamed ~30Hz levels lane has delivered a frame
+   *  this turn. Until then the per-chunk PCM peak stands in (self-contained
+   *  first-frames coverage); after, the levels lane owns `orbLevel` — the
+   *  256ms-chunk peak is the WRONG statistic for the orb (it bridges every
+   *  inter-syllable dip and holds at 4Hz, so the bars ride syllable peaks
+   *  continuously — the "visualizer maxes out" live finding, 2026-07-18). */
+  private levelsSeen = false
   private lastOrbPublishAt = 0
 
   constructor(deps: VoiceHubTurnDriverDeps) {
@@ -300,6 +307,7 @@ export class VoiceHubTurnDriver {
     this.cascadeBufferBytes = 0
     this.sessionID = null
     this.orbLevel = 0
+    this.levelsSeen = false
     this.turnTranscript = ''
     this.assistantText = ''
     this.turnRecorded = false
@@ -326,7 +334,8 @@ export class VoiceHubTurnDriver {
     void this.deps
       .startCapture({
         backfillMs: payload.backfillMs,
-        onChunk: (pcm) => this.onCaptureChunk(pcm)
+        onChunk: (pcm) => this.onCaptureChunk(pcm),
+        onLevels: (level) => this.onCaptureLevel(level)
       })
       .then((capture) => {
         if (this.turnID !== turnID) {
@@ -415,14 +424,31 @@ export class VoiceHubTurnDriver {
 
   // MARK: - Capture
 
+  /** Streamed orb loudness (the capture window's ~30Hz 64ms-time-domain peak —
+   *  the SAME statistic/cadence the local PTT route and the amplitude harness
+   *  calibrate against). This lane owns the published `orbLevel`: real
+   *  inter-syllable dips reach the bar, and the 33ms publish throttle actually
+   *  binds (per-chunk emission was 4Hz). */
+  private onCaptureLevel(level: number): void {
+    if (this.turnID === null) return
+    this.levelsSeen = true
+    this.orbLevel = level
+    this.emit(false)
+  }
+
   private onCaptureChunk(pcm: Int16Array): void {
     const turnID = this.turnID
     if (turnID === null) return
 
-    // Orb loudness straight off the PCM peak — self-contained, so it works from the
-    // first frame without waiting on the levels event or the capture handle.
-    this.orbLevel = pcmPeakLevel(pcm)
-    this.emit(false)
+    // Orb loudness off the PCM peak ONLY until the streamed levels lane delivers
+    // (self-contained first-frames coverage — no waiting on the levels event).
+    // A 256ms-chunk peak is the wrong steady-state statistic for the orb: it
+    // bridges every inter-syllable dip, so the bars would ride syllable peaks
+    // continuously (the "visualizer maxes out" live finding).
+    if (!this.levelsSeen) {
+      this.orbLevel = pcmPeakLevel(pcm)
+      this.emit(false)
+    }
 
     // Accumulate this turn's voiced stats (capture-rate PCM) for the release gates.
     const stats = voicedStats(pcm)
@@ -682,6 +708,7 @@ export class VoiceHubTurnDriver {
       this.cascadeBuffer = []
       this.cascadeBufferBytes = 0
       this.orbLevel = 0
+      this.levelsSeen = false
       this.emit(true)
     }
   }
@@ -757,6 +784,7 @@ export class VoiceHubTurnDriver {
       this.cascadeBuffer = []
       this.cascadeBufferBytes = 0
       this.orbLevel = 0
+      this.levelsSeen = false
     }
     // Surface what happened instead of a silent idle, then auto-clear the hint.
     this.lastProjection = { ...IDLE_PROJECTION, hint: RELEASE_WATCHDOG_HINT }
