@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2109,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4242
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2201,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4283
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Non-production owner-bound journal control keeps hermetic fault-reset behavior credential-free without weakening normal model startup credentials.",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Non-production owner-bound journal control keeps hermetic fault-reset behavior credential-free without weakening normal model startup credentials."
   },
   "threshold": 1500
 }
