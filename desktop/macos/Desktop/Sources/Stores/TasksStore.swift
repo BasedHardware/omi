@@ -2322,7 +2322,13 @@ class TasksStore: ObservableObject {
     }
     guard isCurrent(lease) else { return }
 
-    // 6. Call API in background, revert on failure
+    // 6. Call API in background, revert on failure. An unsynced local-only
+    // task has no backend row — the call would 404 and wrongly revert the
+    // local toggle; the pending create-sync will push current row state.
+    if operationOverrides == nil, ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      log("TasksStore: Skipped backend toggle for unsynced local task \(task.id)")
+      return
+    }
     do {
       let apiResult: TaskActionItem
       if let operationOverrides {
@@ -2649,7 +2655,12 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // Hard-delete on backend in background
+    // Hard-delete on backend in background. Unsynced local-only tasks have
+    // no backend row to delete.
+    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      log("TasksStore: Skipped backend delete for unsynced local task \(task.id)")
+      return
+    }
     do {
       try await APIClient.shared.deleteActionItem(
         id: task.id,
@@ -2770,7 +2781,12 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // 3. Call API in background
+    // 3. Call API in background. Unsynced local-only tasks have no backend
+    // row; the pending create-sync pushes current row state instead.
+    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      log("TasksStore: Skipped backend update for unsynced local task \(task.id)")
+      return
+    }
     do {
       let apiResult = try await APIClient.shared.updateActionItem(
         id: task.id,
@@ -2851,7 +2867,12 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // 3. Call API in background
+    // 3. Call API in background. Unsynced local-only tasks have no backend
+    // row; the pending create-sync pushes current row state instead.
+    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      log("TasksStore: Skipped backend tag update for unsynced local task \(task.id)")
+      return
+    }
     do {
       let apiResult = try await APIClient.shared.updateActionItem(
         id: task.id,
@@ -2914,8 +2935,8 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // Hard-delete on backend in background
-    for id in ids {
+    // Hard-delete on backend in background (skip unsynced local-only ids)
+    for id in ids where !ActionItemTaskIdentity(surfacedId: id).isLocalOnly {
       do {
         try await APIClient.shared.deleteActionItem(
           id: id,
