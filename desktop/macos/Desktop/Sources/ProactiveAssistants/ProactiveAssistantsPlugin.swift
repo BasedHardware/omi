@@ -298,20 +298,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
   }
 
-  /// Registers the system callback outside MainActor, then hands only its
-  /// authorization status to a MainActor handler. `query` is injected so the
-  /// off-main callback contract is exercised without a system permission prompt.
-  nonisolated static func queryStartupNotificationSettings(
-    query: @escaping @Sendable (@escaping @Sendable (UNAuthorizationStatus) -> Void) -> Void,
-    handler: @escaping @MainActor @Sendable (UNAuthorizationStatus) -> Void
-  ) {
-    query { authorizationStatus in
-      Task { @MainActor in
-        handler(authorizationStatus)
-      }
-    }
-  }
-
   @MainActor
   private static func handleStartupNotificationAuthorizationStatus(_ authorizationStatus: UNAuthorizationStatus) {
     guard authorizationStatus == .notDetermined else {
