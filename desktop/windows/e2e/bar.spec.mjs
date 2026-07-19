@@ -362,6 +362,15 @@ test('hub Ask-Omi input: focus stays on the hub; only send opens the conversatio
   const input = barPage.locator('.bar-content-active textarea[placeholder*="Ask Omi"]')
   await input.waitFor({ state: 'visible' })
 
+  // Auto-focus on expand (Mac AskAIInputView focusOnAppear): the hub input holds
+  // the cursor on the real expand path — no click needed. This is the end-to-end
+  // proof of the focus fix (BarChatSurface stays mounted while collapsed, so the
+  // focus effect must key on becoming-expanded, not just the view).
+  await barPage.waitForFunction(() => {
+    const el = document.querySelector('.bar-content-active textarea[placeholder*="Ask Omi"]')
+    return !!el && document.activeElement === el
+  })
+
   // Focusing + clicking the input must not navigate: no back chevron appears.
   await input.click()
   await barPage.evaluate(() => document.querySelector('.bar-content-active textarea')?.focus())

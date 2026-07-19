@@ -32,11 +32,12 @@ const baseChat: BarChatState = {
   status: 'idle'
 }
 
-function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSurfaceProps {
-  const props: BarChatSurfaceProps = {
+function makeProps(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSurfaceProps {
+  return {
     chat: baseChat,
     agents: [],
     view: 'list',
+    expanded: true,
     conversationTitle: 'Omi Chat',
     onOpenConversation: vi.fn(),
     onBack: vi.fn(),
@@ -51,6 +52,10 @@ function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSur
     maxListHeight: 300,
     ...overrides
   }
+}
+
+function renderSurface(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSurfaceProps {
+  const props = makeProps(overrides)
   render(<BarChatSurface {...props} />)
   return props
 }
@@ -69,6 +74,7 @@ function renderLiveSurface(
         chat={baseChat}
         agents={[]}
         view="conversation"
+        expanded={true}
         conversationTitle="Omi Chat"
         onOpenConversation={vi.fn()}
         onBack={vi.fn()}
@@ -145,6 +151,60 @@ describe('BarChatSurface', () => {
     const props = renderSurface({ view: 'list', draft: '' })
     fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Escape' })
     expect(props.setDraft).not.toHaveBeenCalled()
+  })
+
+  it('list: Esc with a whitespace-only draft still bubbles (a stray space must not eat the close)', () => {
+    // draft.trim() gates the local clear, so a blank-but-nonempty draft is treated
+    // as idle: Esc bubbles to the window handler that closes the bar.
+    const onWindowKeyDown = vi.fn()
+    window.addEventListener('keydown', onWindowKeyDown)
+    try {
+      renderSurface({ view: 'list', draft: '   ' })
+      fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Escape' })
+      expect(onWindowKeyDown).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', onWindowKeyDown)
+    }
+  })
+
+  it('list: a text-bearing Escape is consumed locally and never reaches the window handler; an empty one bubbles', () => {
+    // End-to-end propagation proof (not just the local callback): the hub Esc clears
+    // the draft in place AND stops propagating, so BarApp's window-level keydown —
+    // which hides the bar — does not also fire. An already-empty hub lets Esc
+    // through so a second press still closes the bar.
+    const onWindowKeyDown = vi.fn()
+    window.addEventListener('keydown', onWindowKeyDown)
+    try {
+      const withText = makeProps({ view: 'list', draft: 'unsent question' })
+      const { unmount } = render(<BarChatSurface {...withText} />)
+      fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Escape' })
+      expect(withText.setDraft).toHaveBeenCalledWith('')
+      expect(onWindowKeyDown).not.toHaveBeenCalled()
+      unmount()
+      onWindowKeyDown.mockClear()
+
+      const empty = makeProps({ view: 'list', draft: '' })
+      render(<BarChatSurface {...empty} />)
+      fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Escape' })
+      expect(empty.setDraft).not.toHaveBeenCalled()
+      expect(onWindowKeyDown).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', onWindowKeyDown)
+    }
+  })
+
+  it('list: the hub input is focused only once the surface EXPANDS, not while collapsed (persistent mount)', () => {
+    // Regression for the auto-focus Major: BarChatSurface stays mounted while the
+    // bar is a collapsed pill, so a focus effect keyed only on [view] fires once at
+    // startup against the hidden textarea and never again when the pill expands (the
+    // MODE flips while view stays 'list'). Mount collapsed → the input must NOT grab
+    // focus; flip expanded → it focuses (Mac AskAIInputView focusOnAppear).
+    const props = makeProps({ view: 'list', expanded: false })
+    const { rerender } = render(<BarChatSurface {...props} />)
+    const input = screen.getByPlaceholderText(/Ask Omi/i)
+    expect(document.activeElement).not.toBe(input)
+    rerender(<BarChatSurface {...props} expanded={true} />)
+    expect(document.activeElement).toBe(input)
   })
 
   it('list: renders a row per connected agent and opens the conversation FOR THAT agent on click', () => {

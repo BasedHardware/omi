@@ -153,8 +153,6 @@ export function deriveBarVoiceState(args: {
   }
 }
 
-/** One-line status for the list's "Omi Chat" row: what Omi is doing, a preview
- *  of the last turn, or an invitation when the thread is empty. */
 /** A coding-agent row in the bar's expanded list. */
 export type BarAgentRow = { id: CodingAgentId; displayName: string; working: boolean }
 

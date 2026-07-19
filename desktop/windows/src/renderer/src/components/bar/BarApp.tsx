@@ -615,6 +615,7 @@ export function BarApp(): React.JSX.Element {
                     chat={barChat}
                     agents={agentRows}
                     view={view}
+                    expanded={expanded}
                     conversationTitle={target ? target.displayName : 'Omi Chat'}
                     onOpenConversation={openConversation}
                     onBack={() => setView('list')}
