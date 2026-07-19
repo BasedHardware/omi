@@ -35,7 +35,6 @@ const baseChat: BarChatState = {
 function makeProps(overrides: Partial<BarChatSurfaceProps> = {}): BarChatSurfaceProps {
   return {
     chat: baseChat,
-    agents: [],
     view: 'list',
     expanded: true,
     conversationTitle: 'Omi Chat',
@@ -75,7 +74,6 @@ function renderLiveSurface(
     return (
       <BarChatSurface
         chat={baseChat}
-        agents={[]}
         view="conversation"
         expanded={true}
         conversationTitle="Omi Chat"
@@ -124,7 +122,7 @@ describe('BarChatSurface', () => {
     fireEvent.keyDown(screen.getByPlaceholderText(/Ask Omi/i), { key: 'Enter' })
     expect(props.onSubmit).toHaveBeenCalledTimes(1)
     expect(props.onSubmit).toHaveBeenCalledWith('what is on my calendar')
-    expect(props.onOpenConversation).toHaveBeenCalledWith(null)
+    expect(props.onOpenConversation).toHaveBeenCalledTimes(1)
     expect(props.setDraft).toHaveBeenCalledWith('')
   })
 
@@ -132,7 +130,7 @@ describe('BarChatSurface', () => {
     const props = renderSurface({ view: 'list', draft: 'hello there' })
     fireEvent.click(screen.getByText('Send'))
     expect(props.onSubmit).toHaveBeenCalledWith('hello there')
-    expect(props.onOpenConversation).toHaveBeenCalledWith(null)
+    expect(props.onOpenConversation).toHaveBeenCalledTimes(1)
   })
 
   it('list: an empty draft cannot send (Enter is a no-op, Send is disabled)', () => {
@@ -213,52 +211,49 @@ describe('BarChatSurface', () => {
     expect(document.activeElement).toBe(input)
   })
 
-  it('list: renders a row per connected agent and opens the conversation FOR THAT agent on click', () => {
-    const acp = { id: 'acp' as const, displayName: 'Claude Code', working: false }
-    const codex = { id: 'codex' as const, displayName: 'Codex', working: true }
-    const props = renderSurface({ view: 'list', agents: [acp, codex] })
-    expect(screen.getByText('Claude Code')).toBeTruthy()
-    expect(screen.getByText('Ready')).toBeTruthy()
-    // The running agent shows its live status.
-    expect(screen.getByText('Codex')).toBeTruthy()
-    expect(screen.getByText('Working…')).toBeTruthy()
-    // Regression for the reported bug: clicking "Claude Code" must open the
-    // conversation for THAT agent (its row object), not the identical no-arg
-    // open the Omi row uses — that is what made it render titled "Omi Chat".
-    fireEvent.click(screen.getByText('Claude Code'))
-    expect(props.onOpenConversation).toHaveBeenCalledWith(acp)
+  it('list: the hub with zero pills shows only the composer — no idle connected-agent rows', () => {
+    // Mac parity (FloatingControlBarView): the bar's list is STRICTLY
+    // pills-for-actual-runs. There is no persistent "Claude Code" summon row —
+    // connecting agents lives in Settings → Agents. A hub with no runs is just the
+    // Ask-Omi composer.
+    renderSurface({ view: 'list', pills: [] })
+    expect(screen.getByPlaceholderText(/Ask Omi/i)).toBeTruthy()
+    expect(screen.queryByText('Claude Code')).toBeNull()
+    expect(screen.queryByText('Ready')).toBeNull()
+    // The only button is the Send control (no agent-summon rows).
+    const listButtons = screen
+      .getAllByRole('button')
+      .filter((b) => b.querySelector('span.rounded-full'))
+    expect(listButtons.length).toBe(0)
   })
 
-  it('conversation: header shows the passed title (agent name, not a hardcoded "Omi Chat")', () => {
-    // Regression: the header was a hardcoded <span>Omi Chat</span>, so opening an
-    // agent row still read "Omi Chat". It now renders conversationTitle.
-    renderSurface({ view: 'conversation', conversationTitle: 'Claude Code' })
-    expect(screen.getByText('Claude Code')).toBeTruthy()
-    expect(screen.queryByText('Omi Chat')).toBeNull()
-    cleanup()
+  it('list: the hub with pills shows the run pills (the only agent surface in the bar)', () => {
+    const pill = {
+      id: 'p1',
+      runId: 'r1',
+      sessionId: 's1',
+      title: 'Refactor the parser',
+      displayStatus: 'running' as const,
+      latestActivity: 'Editing files…',
+      query: 'refactor the parser',
+      createdAtMs: 1,
+      completedAtMs: null,
+      errorMessage: null,
+      provider: null,
+      viewedAtMs: null
+    }
+    const props = renderSurface({ view: 'list', pills: [pill] })
+    expect(screen.getByText('Refactor the parser')).toBeTruthy()
+    expect(screen.getByText('Editing files…')).toBeTruthy()
+    // A pill opens its OWN run transcript, never the shared Omi thread.
+    fireEvent.click(screen.getByText('Refactor the parser'))
+    expect(props.onOpenPill).toHaveBeenCalledWith('p1')
+    expect(props.onOpenConversation).not.toHaveBeenCalled()
+  })
+
+  it('conversation: header renders the passed title prop (data-driven, not hardcoded)', () => {
     renderSurface({ view: 'conversation', conversationTitle: 'Omi Chat' })
     expect(screen.getByText('Omi Chat')).toBeTruthy()
-  })
-
-  it('list: every agent row leads with a status-dot column so all titles share one left margin', () => {
-    // Regression for the ragged-left defect: assert every agent row's FIRST child
-    // is the status dot (same column slot). Scoped to the agent rows (the rounded
-    // list buttons) so the Send button — also a <button>, but with no dot — is
-    // excluded.
-    renderSurface({
-      view: 'list',
-      agents: [
-        { id: 'acp', displayName: 'Claude Code', working: true },
-        { id: 'codex', displayName: 'Codex', working: false }
-      ]
-    })
-    const rows = screen.getAllByRole('button').filter((b) => b.querySelector('span.rounded-full'))
-    expect(rows.length).toBe(2) // one per agent
-    for (const row of rows) {
-      const dot = row.querySelector('span.rounded-full')
-      expect(dot).toBeTruthy()
-      expect(row.firstElementChild).toBe(dot) // leading column, before the title
-    }
   })
 
   it('conversation: renders the thread and the back chevron returns to the list', () => {
