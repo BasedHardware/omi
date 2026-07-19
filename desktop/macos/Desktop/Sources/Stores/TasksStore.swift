@@ -195,6 +195,16 @@ class TasksStore: ObservableObject {
   private var completedOffset = 0
   private var deletedOffset = 0
   private let pageSize = 100  // Reduced from 1000 for better performance
+
+  /// Backend cap on `limit` for `GET /v1/action-items` (`le=500`). A request
+  /// above this returns HTTP 422 and the whole refresh fails, so any computed
+  /// reload limit must be clamped to it.
+  static let apiPageLimitCap = 500
+
+  /// Clamp a computed page limit to the range the backend accepts (1...500).
+  static func clampedApiPageLimit(_ requested: Int) -> Int {
+    min(max(requested, 1), apiPageLimitCap)
+  }
   private var hasLoadedIncomplete = false
   private var hasLoadedCompleted = false
   private var hasLoadedDeleted = false
@@ -439,7 +449,7 @@ class TasksStore: ObservableObject {
 
     // Silently sync and reload incomplete tasks (local-first, like Memories)
     do {
-      let reloadLimit = max(pageSize, incompleteTasks.count)
+      let reloadLimit = Self.clampedApiPageLimit(max(pageSize, incompleteTasks.count))
       let response = try await fetchPage(
         completed: false,
         offset: 0,
