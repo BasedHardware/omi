@@ -1,3 +1,0 @@
-{
-  "change": "Fixed pressing Stop during a WiFi sync briefly showing an error message even though you cancelled it on purpose"
-}

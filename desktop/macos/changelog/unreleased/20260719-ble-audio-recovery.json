@@ -1,3 +1,0 @@
-{
-  "change": "Fixed BLE audio recording not recovering after the device audio stream dropped mid-session"
-}

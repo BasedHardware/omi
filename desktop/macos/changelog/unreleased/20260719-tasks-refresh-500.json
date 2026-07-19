@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the task list failing to refresh for users with more than 500 tasks"
-}
