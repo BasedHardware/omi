@@ -458,6 +458,12 @@ final class WifiSyncService: ObservableObject {
       _ = await connection.stopWifiSync()
     }
 
+    // Drop the reserved SD-card WAL if this sync downloaded nothing, so a
+    // failed/aborted transfer doesn't leave a permanent phantom 'pending' entry.
+    if let wal = currentWal {
+      activeWalService.removeSdCardWalIfEmpty(walId: wal.id)
+    }
+
     isSyncing = false
     status = .off
     currentWal = nil
