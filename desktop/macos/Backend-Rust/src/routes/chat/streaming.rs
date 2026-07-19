@@ -9,7 +9,7 @@ use std::{sync::Arc, time::Duration};
 
 use crate::auth::AuthUser;
 use crate::models::chat_completions::*;
-use crate::request_deadline::{RequestDeadline, CHAT_REQUEST_BUDGET};
+use crate::request_deadline::{RequestDeadline, REQUEST_BUDGET};
 use crate::services::FirestoreService;
 use crate::AppState;
 
@@ -604,7 +604,7 @@ where
             // request deadline in would put a total-response cap on a streaming turn,
             // which streaming deliberately does not have. Give the continuation its
             // own budget instead, so a stuck upstream is still bounded.
-            let continuation_deadline = RequestDeadline::new(CHAT_REQUEST_BUDGET);
+            let continuation_deadline = RequestDeadline::new(REQUEST_BUDGET);
             match complete_anthropic_server_tool_turn(
                 &continuation.client,
                 &continuation.api_key,
