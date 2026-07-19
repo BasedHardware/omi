@@ -34,6 +34,8 @@ run_hermetic() {
   python3 -m pip install -q pyyaml pytest
   python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
   python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows --check-rendered-cloud-run
+  python3 ../.github/scripts/check_backend_deploy_source_admission.py
+  python3 ../.github/scripts/test_check_backend_deploy_source_admission.py
   python3 scripts/check_mcp_oauth_deploy_contract.py
   python3 -m pytest \
     tests/unit/test_backend_runtime_env_validator.py \

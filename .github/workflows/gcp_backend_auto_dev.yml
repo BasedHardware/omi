@@ -1,10 +1,10 @@
 name: Auto Deploy Backend to Development
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'backend/**'
+  workflow_run:
+    workflows: ["Release Eligibility"]
+    branches: [main]
+    types: [completed]
 
 # Share the development backend mutation domain with manual deploys, traffic
 # repair, backend-listen, and LLM Gateway's shared backend-secrets updates.
@@ -21,11 +21,49 @@ env:
 
 jobs:
   firestore_readiness:
+    # A workflow_run can access deployment credentials, so never run source
+    # code until the first completed proof identifies the exact current commit
+    # on this repository's main branch. Every later checkout and release vector
+    # uses that admitted SHA rather than a mutable default branch ref.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     environment: development
     permissions:
       contents: 'read'
     runs-on: ubuntu-latest-m
+    outputs:
+      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
     steps:
+      # This checks out current main solely to run the guard script. Source
+      # selected by the workflow_run is not checked out or executed until the
+      # guard establishes it is still this exact main commit.
+      - name: Checkout current main for automatic source admission
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify Release Eligibility proof is current main
+        id: admitted_source
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          checkout_sha="$(git rev-parse --verify HEAD)"
+          python3 .github/scripts/verify_auto_backend_release_admission.py \
+            --sha "$RELEASE_SHA" \
+            --main-sha "$main_sha" \
+            --checkout-sha "$checkout_sha" \
+            --run-attempt "$RELEASE_RUN_ATTEMPT"
+          printf 'admitted_sha=%s\n' "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
       - name: Require read-only Firestore credentials
         env:
           GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
@@ -35,10 +73,10 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout approved Firestore source
+      - name: Checkout admitted Firestore source
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
 
       - name: Google Auth for read-only Firestore inventory
         uses: 'google-github-actions/auth@v3'
@@ -52,7 +90,7 @@ jobs:
         id: firestore_readiness
         env:
           FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ github.sha }}
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
@@ -66,7 +104,7 @@ jobs:
         if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
         env:
           FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ github.sha }}
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
@@ -101,7 +139,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
 
       - name: Google Auth
         id: auth
@@ -419,7 +457,7 @@ jobs:
           python3 backend/scripts/verify_backend_release_vector.py \
             --candidate \
             --cloud-run-only \
-            --commit-sha "${{ github.sha }}" \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
@@ -487,7 +525,7 @@ jobs:
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
             --candidate \
-            --commit-sha "${{ github.sha }}" \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
@@ -530,7 +568,7 @@ jobs:
         id: verify-serving-release-vector
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
-            --commit-sha "${{ github.sha }}" \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
