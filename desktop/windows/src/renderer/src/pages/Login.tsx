@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { signInWithGoogle } from '../lib/firebase'
+import { setPreferences } from '../lib/preferences'
 import omiLogo from '../assets/omilogo.png'
 
 export function Login(): React.JSX.Element {
@@ -11,6 +12,10 @@ export function Login(): React.JSX.Element {
     try {
       const user = await signInWithGoogle()
       console.log('Signed in as', user.email)
+      
+      // Auto-populate the user's display name from their Google account
+      // so they don't have to re-type it during onboarding
+      setPreferences({ displayName: user.displayName ?? '' })
     } catch (e) {
       console.error('Sign-in failed:', e)
       alert(`Sign-in failed: ${(e as Error).message}`)
