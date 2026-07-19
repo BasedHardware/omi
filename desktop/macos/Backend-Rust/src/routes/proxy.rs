@@ -889,6 +889,19 @@ async fn gemini_stream_proxy(
     ))
 }
 
+/// Fallback outcome for a Vertex-token → AI Studio streaming heal. Recovered
+/// only when the request was dispatched AND the upstream returned a success
+/// status; a send error or a non-success SSE status (AI Studio can accept the
+/// connection and still return 4xx/5xx) is Exhausted. Keeps the streaming heal
+/// consistent with the status-keyed non-streaming heal.
+fn stream_heal_outcome(send_succeeded: bool, status_is_success: bool) -> FallbackOutcome {
+    if send_succeeded && status_is_success {
+        FallbackOutcome::Recovered
+    } else {
+        FallbackOutcome::Exhausted
+    }
+}
+
 /// Non-BYOK streaming Gemini proxy: server key with Vertex AI / AI Studio routing.
 async fn gemini_stream_server_key(
     state: &AppState,
@@ -901,6 +914,13 @@ async fn gemini_stream_server_key(
     // Resolve provider route (same dispatch as non-streaming proxy)
     use crate::llm::model_qos::{resolve_route, Provider};
     let route = resolve_route(model, action);
+
+    // Track a Vertex-token → AI Studio heal so its fallback outcome can be
+    // recorded from the upstream HTTP status (below), not merely from whether
+    // the request was dispatched. AI Studio can accept the connection and still
+    // return a 4xx/5xx SSE error; recording Recovered on send success alone
+    // undercounts exhausted fallbacks (the non-streaming path keys off status).
+    let mut healed_from_vertex = false;
 
     // Build and send request: Vertex AI or AI Studio
     let upstream = if route.provider == Provider::VertexAi {
@@ -942,20 +962,12 @@ async fn gemini_stream_server_key(
                             .body(sanitized_body)
                             .send()
                             .await;
-                        // Mirror the non-streaming heal: a Vertex token failure
-                        // that reroutes to AI Studio is a real provider switch
-                        // and must emit fallback telemetry, not switch silently.
-                        record_fallback(
-                            "gemini_stream_proxy",
-                            "vertex_ai",
-                            "ai_studio",
-                            "auth",
-                            if healed.is_ok() {
-                                FallbackOutcome::Recovered
-                            } else {
-                                FallbackOutcome::Exhausted
-                            },
-                        );
+                        // A Vertex token failure that reroutes to AI Studio is a
+                        // real provider switch that must emit fallback telemetry.
+                        // The outcome is recorded below from the upstream HTTP
+                        // status so a 4xx/5xx SSE error counts as Exhausted, not
+                        // Recovered (mirrors the non-streaming heal).
+                        healed_from_vertex = true;
                         healed
                     } else {
                         tracing::error!(
@@ -998,6 +1010,23 @@ async fn gemini_stream_server_key(
             .send()
             .await
     };
+
+    // Record the Vertex → AI Studio heal outcome from the actual upstream
+    // result: Recovered only when the healed response carried a success status,
+    // Exhausted on any send error or non-success SSE status.
+    if healed_from_vertex {
+        let (send_ok, status_ok) = match &upstream {
+            Ok(resp) => (true, resp.status().is_success()),
+            Err(_) => (false, false),
+        };
+        record_fallback(
+            "gemini_stream_proxy",
+            "vertex_ai",
+            "ai_studio",
+            "auth",
+            stream_heal_outcome(send_ok, status_ok),
+        );
+    }
 
     let upstream = upstream.map_err(|e| map_upstream_error(e, "stream upstream request"))?;
 
@@ -1456,6 +1485,20 @@ mod tests {
         assert_eq!(vertex_to_ai_studio_fallback_reason(false, true), None);
         // Successful Vertex token path also must not emit fallback.
         assert_eq!(vertex_to_ai_studio_fallback_reason(true, false), None);
+    }
+
+    #[test]
+    fn stream_heal_outcome_keys_off_upstream_status_not_send() {
+        // Dispatched + success status → the heal actually recovered.
+        assert_eq!(stream_heal_outcome(true, true), FallbackOutcome::Recovered);
+        // AI Studio accepted the connection (send Ok) but returned a 4xx/5xx SSE
+        // error: the fallback did NOT recover — it is exhausted.
+        assert_eq!(stream_heal_outcome(true, false), FallbackOutcome::Exhausted);
+        // The heal request itself failed to send.
+        assert_eq!(
+            stream_heal_outcome(false, false),
+            FallbackOutcome::Exhausted
+        );
     }
 
     #[test]
