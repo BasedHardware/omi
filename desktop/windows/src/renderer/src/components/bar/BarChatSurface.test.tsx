@@ -211,20 +211,57 @@ describe('BarChatSurface', () => {
     expect(document.activeElement).toBe(input)
   })
 
-  it('list: the hub with zero pills shows only the composer — no idle connected-agent rows', () => {
-    // Mac parity (FloatingControlBarView): the bar's list is STRICTLY
-    // pills-for-actual-runs. There is no persistent "Claude Code" summon row —
-    // connecting agents lives in Settings → Agents. A hub with no runs is just the
-    // Ask-Omi composer.
+  it('list: the hub with zero pills shows the composer + Omi Chat row — no idle connected-agent rows', () => {
+    // Mac parity (FloatingControlBarView): the bar's list is the Ask-Omi composer,
+    // the static Omi Chat row (notchOmiChatRow), and STRICTLY pills-for-actual-runs
+    // below. There is no persistent "Claude Code" summon row — connecting agents
+    // lives in Settings → Agents.
     renderSurface({ view: 'list', pills: [] })
     expect(screen.getByPlaceholderText(/Ask Omi/i)).toBeTruthy()
+    expect(screen.getByText('Omi Chat')).toBeTruthy()
     expect(screen.queryByText('Claude Code')).toBeNull()
     expect(screen.queryByText('Ready')).toBeNull()
-    // The only button is the Send control (no agent-summon rows).
-    const listButtons = screen
+    // No agent-run rows (those carry a status chip in a rounded-full span).
+    const agentRows = screen
       .getAllByRole('button')
       .filter((b) => b.querySelector('span.rounded-full'))
-    expect(listButtons.length).toBe(0)
+    expect(agentRows.length).toBe(0)
+  })
+
+  it('list: the static Omi Chat row opens the conversation without sending', () => {
+    // The reported gap (post #209/#220): after the idle launcher rows were removed
+    // and the hub input made focus-only, there was NO way to open the Omi
+    // conversation from the bar without sending a message. Mac renders a static
+    // notchOmiChatRow for exactly this; Windows shows it always (its hub surface is
+    // persistent). A single click flips to the response state via onOpenConversation
+    // — a pure view flip, NOT a send (no draft seeding, onSubmit untouched).
+    const props = renderSurface({ view: 'list' })
+    fireEvent.click(screen.getByText('Omi Chat'))
+    expect(props.onOpenConversation).toHaveBeenCalledTimes(1)
+    expect(props.onSubmit).not.toHaveBeenCalled()
+    expect(props.setDraft).not.toHaveBeenCalled()
+  })
+
+  it('list: the Omi Chat row renders ABOVE the run pills when pills exist', () => {
+    const pill = {
+      id: 'p1',
+      runId: 'r1',
+      sessionId: 's1',
+      title: 'Refactor the parser',
+      displayStatus: 'running' as const,
+      latestActivity: 'Editing files…',
+      query: 'refactor the parser',
+      createdAtMs: 1,
+      completedAtMs: null,
+      errorMessage: null,
+      provider: null,
+      viewedAtMs: null
+    }
+    renderSurface({ view: 'list', pills: [pill] })
+    const omiRow = screen.getByText('Omi Chat')
+    const pillRow = screen.getByText('Refactor the parser')
+    // Omi Chat precedes the pill in document order (Mac: notchOmiChatRow above the pills).
+    expect(omiRow.compareDocumentPosition(pillRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('list: the hub with pills shows the run pills (the only agent surface in the bar)', () => {

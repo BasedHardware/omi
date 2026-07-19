@@ -25,6 +25,64 @@ function ChevronLeft(): React.JSX.Element {
   )
 }
 
+function ChevronRight(): React.JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M6 3.5 10.5 8 6 12.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function ChatBubbleIcon(): React.JSX.Element {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M13.5 7.3c0 2.15-2.35 3.9-5.25 3.9-.62 0-1.22-.08-1.77-.23L3.3 12.2l.72-2.02A3.5 3.5 0 0 1 3 7.3c0-2.15 2.35-3.9 5.25-3.9S13.5 5.15 13.5 7.3Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** The bar hub's static "Omi Chat" entry (Mac FloatingControlBarView's
+ *  notchOmiChatRow) — the assistant's own chat entry. A plain navigable ROW that
+ *  opens the shared Omi conversation WITHOUT sending anything (pure view flip, no
+ *  draft seeding). Sits between the Ask-Omi composer and the run pills. Styled
+ *  deliberately as a list row (leading chat glyph + trailing chevron), NOT like the
+ *  input above it: an input-styled entry whose single click navigated was the
+ *  reported #209 bug. Neutral only (no purple — brand rule). */
+function OmiChatRow({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-5 w-5 shrink-0 items-center justify-center text-neutral-400"
+      >
+        <ChatBubbleIcon />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-100">Omi Chat</span>
+      <span
+        aria-hidden="true"
+        className="shrink-0 text-neutral-600 transition-colors group-hover:text-neutral-300"
+      >
+        <ChevronRight />
+      </span>
+    </button>
+  )
+}
+
 /** Leading status column shared by EVERY list row so all titles line up on one
  *  left margin (no ragged edge). The dot pulses when that row is active — Omi
  *  thinking/speaking, or an agent running a task — and is a calm neutral marker
@@ -393,6 +451,12 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
             {props.pttNotice}
           </div>
         ) : null}
+
+        {/* The static "Omi Chat" row (Mac notchOmiChatRow) — always present so the
+            shared Omi conversation is reachable from the bar without sending a
+            message. A single click flips to the response state (no draft, no send).
+            Sits above the run pills when any exist. */}
+        <OmiChatRow onOpen={props.onOpenConversation} />
 
         {/* Live/recent spawned agent runs (B3) — the bar's only agent surface.
             Each pill opens its OWN run transcript, not the shared Omi thread. */}
