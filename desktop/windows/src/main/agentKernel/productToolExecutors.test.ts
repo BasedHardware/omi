@@ -149,7 +149,9 @@ describe('search_tasks', () => {
       status: 'active',
       similarity: 0.71,
       match_type: 'vector',
-      relevance_score: null
+      relevance_score: null,
+      source: 'action_item',
+      backendId: 'be-jane'
     },
     {
       id: 9,
@@ -157,7 +159,9 @@ describe('search_tasks', () => {
       status: 'completed',
       similarity: 0.55,
       match_type: 'vector',
-      relevance_score: null
+      relevance_score: null,
+      source: 'action_item',
+      backendId: 'be-done'
     }
   ]
 
@@ -166,14 +170,59 @@ describe('search_tasks', () => {
     expect(await exec({}, ctx())).toBe('Error: query is required')
   })
 
-  it('drops completed by default and formats rows', async () => {
+  it('drops completed by default and renders the mutation-resolvable backendId (not the rowid)', async () => {
     const vectorSearch = vi.fn(async () => results)
     const exec = createSearchTasksExecutor({ vectorSearch })
     const out = await exec({ query: 'email' }, ctx())
     expect(out).toContain('Found 1 task(s) matching "email":')
-    expect(out).toContain('1. [ ] Reply to Jane (similarity: 0.71, id: 42)')
+    // Regression: the id handed to the model is the backendId the mutation tools
+    // resolve — NOT the raw rowid 42, which used to make every follow-up mutation fail.
+    expect(out).toContain('1. [ ] Reply to Jane (similarity: 0.71, id: be-jane)')
+    expect(out).not.toContain('id: 42')
     expect(out).not.toContain('Done thing')
     expect(vectorSearch).toHaveBeenCalledWith('email')
+  })
+
+  it('emits local:<rowid> for an unsynced action item (matches get_action_items)', async () => {
+    const exec = createSearchTasksExecutor({
+      vectorSearch: vi.fn(async () => [
+        {
+          id: 42,
+          description: 'Just made this',
+          status: 'active',
+          similarity: 0.9,
+          match_type: 'vector',
+          relevance_score: null,
+          source: 'action_item' as const,
+          backendId: null
+        }
+      ])
+    })
+    const out = await exec({ query: 'x' }, ctx())
+    expect(out).toContain('id: local:42')
+  })
+
+  it('flags a staged-task draft as non-actionable (never a colliding local:<rowid>)', async () => {
+    const exec = createSearchTasksExecutor({
+      vectorSearch: vi.fn(async () => [
+        {
+          id: 1,
+          description: 'Extraction candidate',
+          status: 'active',
+          similarity: 0.88,
+          match_type: 'vector',
+          relevance_score: null,
+          source: 'staged_task' as const,
+          backendId: null
+        }
+      ])
+    })
+    const out = await exec({ query: 'x' }, ctx())
+    expect(out).toContain('Extraction candidate')
+    expect(out).toContain('draft — not yet saved, cannot be modified')
+    // A staged rowid must never be emitted as local:1 — it would address action_item 1.
+    expect(out).not.toContain('local:1')
+    expect(out).not.toContain('id: 1')
   })
 
   it('includes completed when include_completed=true', async () => {
@@ -261,7 +310,7 @@ describe('create_action_item', () => {
 
 describe('update_action_item', () => {
   const mutate = (task: ActionItemRecord | null) => ({
-    findByBackendId: vi.fn(async () => task),
+    resolveTask: vi.fn(async () => task),
     toggleTask: vi.fn(async () => {}),
     updateTask: vi.fn(async () => {}),
     deleteTask: vi.fn(async () => {})
@@ -310,13 +359,31 @@ describe('update_action_item', () => {
     await exec({ action_item_id: 'b1', description: '  tidy  ' }, ctx())
     expect(d.updateTask).toHaveBeenCalledWith('b1', { description: 'tidy' })
   })
+
+  it('resolves a local:<rowid> handle and writes against the task backendId', async () => {
+    const d = mutate(action({ id: 5, backendId: 'b1', description: 'old' }))
+    const exec = createUpdateActionItemExecutor(d)
+    await exec({ action_item_id: 'local:5', description: 'new' }, ctx())
+    expect(d.resolveTask).toHaveBeenCalledWith('local:5')
+    // The write targets the RESOLVED backendId, never the raw local: handle.
+    expect(d.updateTask).toHaveBeenCalledWith('b1', { description: 'new' })
+  })
+
+  it('unsynced task (no backendId) → honest error, no silent no-op write', async () => {
+    const d = mutate(action({ backendId: null, description: 'pending' }))
+    const exec = createUpdateActionItemExecutor(d)
+    const out = await exec({ action_item_id: 'local:5', description: 'new' }, ctx())
+    expect(out).toContain("hasn't finished syncing")
+    expect(d.updateTask).not.toHaveBeenCalled()
+    expect(d.toggleTask).not.toHaveBeenCalled()
+  })
 })
 
 // --- complete_task -----------------------------------------------------------
 
 describe('complete_task', () => {
   const mutate = (task: ActionItemRecord | null) => ({
-    findByBackendId: vi.fn(async () => task),
+    resolveTask: vi.fn(async () => task),
     toggleTask: vi.fn(async () => {}),
     updateTask: vi.fn(async () => {}),
     deleteTask: vi.fn(async () => {})
@@ -345,13 +412,28 @@ describe('complete_task', () => {
     expect(await exec({ task_id: 'b1' }, ctx())).toBe("OK: task 'Do it' marked as completed")
     expect(d.toggleTask).toHaveBeenCalledWith('b1', true)
   })
+
+  it('resolves a local:<rowid> handle and toggles the task backendId', async () => {
+    const d = mutate(action({ id: 5, backendId: 'b1', description: 'Do it', completed: false }))
+    const exec = createCompleteTaskExecutor(d)
+    await exec({ task_id: 'local:5' }, ctx())
+    expect(d.toggleTask).toHaveBeenCalledWith('b1', true)
+  })
+
+  it('unsynced task (no backendId) → honest error, no toggle', async () => {
+    const d = mutate(action({ backendId: null, description: 'pending', completed: false }))
+    const exec = createCompleteTaskExecutor(d)
+    const out = await exec({ task_id: 'local:5' }, ctx())
+    expect(out).toContain("hasn't finished syncing")
+    expect(d.toggleTask).not.toHaveBeenCalled()
+  })
 })
 
 // --- delete_task -------------------------------------------------------------
 
 describe('delete_task', () => {
   const mutate = (task: ActionItemRecord | null) => ({
-    findByBackendId: vi.fn(async () => task),
+    resolveTask: vi.fn(async () => task),
     toggleTask: vi.fn(async () => {}),
     updateTask: vi.fn(async () => {}),
     deleteTask: vi.fn(async () => {})
@@ -372,6 +454,21 @@ describe('delete_task', () => {
     const exec = createDeleteTaskExecutor(d)
     expect(await exec({ task_id: 'b1' }, ctx())).toBe("OK: task 'Trash me' deleted")
     expect(d.deleteTask).toHaveBeenCalledWith('b1')
+  })
+
+  it('resolves a local:<rowid> handle and deletes the task backendId', async () => {
+    const d = mutate(action({ id: 5, backendId: 'b1', description: 'Trash me' }))
+    const exec = createDeleteTaskExecutor(d)
+    await exec({ task_id: 'local:5' }, ctx())
+    expect(d.deleteTask).toHaveBeenCalledWith('b1')
+  })
+
+  it('unsynced task (no backendId) → honest error, no delete', async () => {
+    const d = mutate(action({ backendId: null, description: 'pending' }))
+    const exec = createDeleteTaskExecutor(d)
+    const out = await exec({ task_id: 'local:5' }, ctx())
+    expect(out).toContain("hasn't finished syncing")
+    expect(d.deleteTask).not.toHaveBeenCalled()
   })
 })
 

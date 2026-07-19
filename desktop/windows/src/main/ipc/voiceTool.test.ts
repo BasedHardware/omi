@@ -18,7 +18,12 @@ import { AgentRuntimeKernel } from '../agentKernel/kernel'
 import { AdapterRegistry } from '../agentKernel/adapterRegistry'
 import { SqliteAgentStore, type DatabaseFactory } from '../agentKernel/store'
 import { executeHostTool } from '../agentKernel/toolRelayBridge'
-import { createUpdateActionItemExecutor } from '../agentKernel/productToolExecutors'
+import {
+  createUpdateActionItemExecutor,
+  createSearchTasksExecutor,
+  createCompleteTaskExecutor
+} from '../agentKernel/productToolExecutors'
+import type { TaskSearchResult } from '../assistants/tasks/toolBackends'
 import type { ActionItemRecord } from '../../shared/types'
 import {
   buildVoiceHubToolCatalog,
@@ -197,7 +202,7 @@ describe('advertised voice schema ↔ executor param contract (regression)', () 
   // A voice tool's schemaOverride is what the model fills, and executeHostTool passes
   // those args to the executor with NO remap — so the advertised required param name
   // MUST be the one the executor reads. Regression: update_action_item advertised its
-  // required id as `id` while the executor reads `action_item_id` (findByBackendId),
+  // required id as `id` while the executor reads `action_item_id` (resolveTask),
   // so every voice-driven update bounced on "action_item_id is required". Drive the
   // REAL executor through the REAL dispatch with the advertised required param.
   it('a voice update_action_item using the advertised required param actually updates', async () => {
@@ -212,7 +217,7 @@ describe('advertised voice schema ↔ executor param contract (regression)', () 
     const updateTask = vi.fn(async () => {})
     const task = { backendId: 'b1', description: 'old' } as unknown as ActionItemRecord
     const executor = createUpdateActionItemExecutor({
-      findByBackendId: vi.fn(async (id: string) => (id === 'b1' ? task : null)),
+      resolveTask: vi.fn(async (id: string) => (id === 'b1' ? task : null)),
       toggleTask: vi.fn(async () => {}),
       updateTask,
       deleteTask: vi.fn(async () => {})
@@ -233,5 +238,78 @@ describe('advertised voice schema ↔ executor param contract (regression)', () 
     expect(out).not.toMatch(/action_item_id is required/)
     expect(out).toBe("OK: task 'old' updated")
     expect(updateTask).toHaveBeenCalledWith('b1', { description: 'new' })
+  })
+})
+
+describe('search_tasks id ↔ mutation contract (end-to-end via the host-tool door)', () => {
+  // The exact bug this PR fixes, driven LLM-free through executeHostTool: the model
+  // does search_tasks, takes the id from the result line, then mutates by that id.
+  // Pre-fix search_tasks emitted the local rowid, which the mutation tools (keyed on
+  // backendId) could never resolve, so the mutation silently no-op'd. This asserts the
+  // id the search tool hands out is the SAME one the mutation tool resolves and applies.
+  it('a task found via search_tasks can be completed by the id search_tasks returned', async () => {
+    // One shared in-memory task, synced (has a backendId).
+    const task: ActionItemRecord = {
+      backendId: 'srv-abc',
+      description: 'Reply to Jane',
+      completed: false
+    } as unknown as ActionItemRecord
+    const store = [{ id: 42, ...task }] // id 42 = local rowid (the old, wrong handle)
+
+    const searchResults: TaskSearchResult[] = store.map((t) => ({
+      id: t.id,
+      description: t.description,
+      status: t.completed ? 'completed' : 'active',
+      similarity: 0.8,
+      match_type: 'vector',
+      relevance_score: null,
+      source: 'action_item',
+      backendId: t.backendId
+    }))
+    // Resolve exactly as production does: backendId, or a local:<rowid> handle.
+    const resolveTask = async (id: string): Promise<ActionItemRecord | null> => {
+      if (id.startsWith('local:')) {
+        const rowid = Number(id.slice('local:'.length))
+        return (store.find((t) => t.id === rowid) as ActionItemRecord | undefined) ?? null
+      }
+      return (store.find((t) => t.backendId === id) as ActionItemRecord | undefined) ?? null
+    }
+    const toggleTask = vi.fn(async (backendId: string, completed: boolean) => {
+      const t = store.find((s) => s.backendId === backendId)
+      if (t) t.completed = completed
+    })
+
+    const productExecutors = new Map([
+      ['search_tasks', createSearchTasksExecutor({ vectorSearch: async () => searchResults })],
+      [
+        'complete_task',
+        createCompleteTaskExecutor({
+          resolveTask,
+          toggleTask,
+          updateTask: vi.fn(async () => {}),
+          deleteTask: vi.fn(async () => {})
+        })
+      ]
+    ])
+    const bridgeCtx = {
+      kernel: newKernel(),
+      sessionId: 'sess-1',
+      adapterId: 'pi-mono',
+      productExecutors
+    }
+
+    const searchOut = await executeHostTool('search_tasks', { query: 'jane' }, bridgeCtx)
+    // Extract the id the tool told the model to use.
+    const match = /id: ([^)]+)\)/.exec(searchOut)
+    expect(match).not.toBeNull()
+    const idForModel = match![1]
+    // The bug: this used to be the rowid '42'. It must be the backendId now.
+    expect(idForModel).toBe('srv-abc')
+
+    const completeOut = await executeHostTool('complete_task', { task_id: idForModel }, bridgeCtx)
+    // The mutation actually applied — no silent lie, and the store reflects it.
+    expect(completeOut).toBe("OK: task 'Reply to Jane' marked as completed")
+    expect(toggleTask).toHaveBeenCalledWith('srv-abc', true)
+    expect(store[0].completed).toBe(true)
   })
 })
