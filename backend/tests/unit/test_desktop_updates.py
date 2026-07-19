@@ -869,6 +869,96 @@ class TestDesktopUpdateAdminEndpoints:
         promote.assert_called_once_with("macos", "beta", "v1.0.0+200-macos", expected_generation=1)
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
 
+    @pytest.mark.asyncio
+    async def test_rolls_back_macos_beta_with_auditable_response(self):
+        result = {
+            "pointer": {
+                "platform": "macos",
+                "channel": "beta",
+                "release_id": "v0.12.73+12073-macos",
+                "generation": 8,
+            },
+            "audit": {
+                "audit_id": "immutable-audit-id",
+                "operation": "macos_beta_rollback",
+                "platform": "macos",
+                "channel": "beta",
+                "previous_release_id": "v0.12.84+12084-macos",
+                "previous_generation": 7,
+                "target_release_id": "v0.12.73+12073-macos",
+                "generation": 8,
+            },
+        }
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.rollback_macos_beta_channel", return_value=result) as rollback,
+            patch("routers.updates.delete_generic_cache") as delete_cache,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/v2/desktop/channels/rollback",
+                    headers={"secret-key": "real-secret"},
+                    json={
+                        "platform": "macos",
+                        "channel": "beta",
+                        "release_id": "v0.12.73+12073-macos",
+                        "expected_current_release_id": "v0.12.84+12084-macos",
+                        "expected_generation": 7,
+                    },
+                )
+
+        assert resp.status_code == 200
+        assert resp.json()["audit"] == result["audit"]
+        rollback.assert_called_once_with(
+            "v0.12.73+12073-macos",
+            expected_current_release_id="v0.12.84+12084-macos",
+            expected_generation=7,
+        )
+        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
+
+    @pytest.mark.asyncio
+    async def test_rollback_reports_stale_compare_and_swap(self):
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch(
+                "routers.updates.rollback_macos_beta_channel",
+                side_effect=ValueError("current release mismatch: expected old, current newer"),
+            ),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/v2/desktop/channels/rollback",
+                    headers={"secret-key": "real-secret"},
+                    json={
+                        "platform": "macos",
+                        "channel": "beta",
+                        "release_id": "v0.12.73+12073-macos",
+                        "expected_current_release_id": "v0.12.84+12084-macos",
+                        "expected_generation": 7,
+                    },
+                )
+
+        assert resp.status_code == 409
+        assert "current release mismatch" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("platform", "channel"), [("macos", "stable"), ("windows", "beta")])
+    async def test_rollback_rejects_stable_or_other_platform(self, platform, channel):
+        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+            resp = await client.post(
+                "/v2/desktop/channels/rollback",
+                headers={"secret-key": "any-secret"},
+                json={
+                    "platform": platform,
+                    "channel": channel,
+                    "release_id": "v0.12.73+12073-macos",
+                    "expected_current_release_id": "v0.12.84+12084-macos",
+                    "expected_generation": 7,
+                },
+            )
+
+        assert resp.status_code == 422
+
 
 # --- Update policy endpoint ---
 

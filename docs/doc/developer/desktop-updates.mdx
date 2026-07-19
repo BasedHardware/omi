@@ -42,6 +42,10 @@ The automatic path calls the same script with `--automatic`, adding signed-artif
 
 Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environment or GitHub's `prod` environment to pause automatic beta. Failures leave the candidate non-live. Stable nomination and `desktop_promote_prod.yml` remain manual-only.
 
+### Emergency macOS beta rollback
+
+`POST /v2/desktop/channels/rollback` is the only non-monotonic pointer operation. It is authenticated with `ADMIN_KEY` and accepts literal `platform: macos` and `channel: beta` values only. The request must include the target `release_id` plus the exact `expected_current_release_id` and `expected_generation`; all three are compared inside the Firestore transaction before either write occurs. The target must already be a registered macOS manifest with passed T2 qualification and an earlier build than the current beta pointer. The transaction creates an append-only immutable audit record and then advances only `desktop_update_channels/macos-beta`; it cannot write Stable, production, another channel, or another platform. The response returns that immutable audit payload and the new beta pointer. Normal `/v2/desktop/channels/promote` remains roll-forward only.
+
 After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
 
 ## Advisory release doctor
