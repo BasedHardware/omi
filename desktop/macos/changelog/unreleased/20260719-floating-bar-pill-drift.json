@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the movable floating bar drifting out of position after repeated Ask Omi queries"
+}

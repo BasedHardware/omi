@@ -126,7 +126,20 @@ extension APIClient {
     }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
-    request.allHTTPHeaderFields = try? await buildHeaders(requireAuth: true)
+
+    // Build the auth header explicitly. If token minting throws (e.g. an account
+    // transition races the reconciler, or the Keychain is locked right after
+    // login), do NOT fall through and send an UNAUTHENTICATED GET — that returns
+    // 401, was misread as `.transient`, and parked the WAL in a forever-retry.
+    // Surface `.unauthorized` so the reconciler reverts the WAL for re-upload via
+    // the authenticated upload path, which owns the forced refresh. Per
+    // INV-AUTH-1 the background poll is session-preserving: it never invalidates
+    // the Firebase session itself.
+    do {
+      request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    } catch {
+      return SyncJobFetch(outcome: .unauthorized)
+    }
 
     guard let (data, response) = try? await session.data(for: request),
       let http = response as? HTTPURLResponse
@@ -134,27 +147,19 @@ extension APIClient {
       return SyncJobFetch(outcome: .transient)
     }
 
-    if http.statusCode == 404 {
-      return SyncJobFetch(outcome: .notFound)
-    }
-    // 403 means the caller is not permitted to access this sync job. Unlike a
-    // transient transport failure, re-polling will not resolve it — the upload
-    // path already refreshed auth on 401, so a 403 here is a durable permission
-    // failure. Surface it as `.forbidden` so the reconciler reverts the WAL to
-    // `.miss` for re-upload (the backend dedupes by conversation/timestamp)
-    // instead of polling forever.
-    if http.statusCode == 403 {
-      return SyncJobFetch(outcome: .forbidden)
-    }
-    guard http.statusCode == 200 else {
-      return SyncJobFetch(outcome: .transient)
-    }
-
-    do {
-      let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
-      return SyncJobFetch(outcome: .ok, status: status)
-    } catch {
-      return SyncJobFetch(outcome: .transient)
+    // 401/403/404 are durable for this fetch: re-polling won't resolve them, so
+    // the reconciler reverts the WAL to `.miss` for re-upload (the backend
+    // dedupes by conversation/timestamp) instead of polling forever.
+    switch SyncJobFetchOutcome.forStatusCode(http.statusCode) {
+    case .ok:
+      do {
+        let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
+        return SyncJobFetch(outcome: .ok, status: status)
+      } catch {
+        return SyncJobFetch(outcome: .transient)
+      }
+    case let outcome:
+      return SyncJobFetch(outcome: outcome)
     }
   }
 
@@ -331,7 +336,22 @@ enum SyncJobFetchOutcome: Equatable {
   case ok
   case notFound
   case forbidden
+  case unauthorized
   case transient
+
+  /// Pure HTTP-status → outcome mapping for a sync-job status GET. `.ok` means
+  /// the 200 body still must be decoded by the caller (a decode failure is
+  /// `.transient`); every other case is terminal for this fetch. Extracted so
+  /// the mapping is unit-testable without a URLSession.
+  static func forStatusCode(_ statusCode: Int) -> SyncJobFetchOutcome {
+    switch statusCode {
+    case 200: return .ok
+    case 401: return .unauthorized
+    case 403: return .forbidden
+    case 404: return .notFound
+    default: return .transient
+    }
+  }
 }
 
 struct SyncJobFetch: Equatable {
