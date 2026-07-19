@@ -12,6 +12,7 @@ import { render, cleanup, act } from '@testing-library/react'
 const setVisibleCalls: boolean[] = []
 let parkedCb: ((p: boolean) => void) | null = null
 
+/* eslint-disable @typescript-eslint/no-empty-function -- no-op OrbAnimator stub */
 vi.mock('../../orb/orbAnimator', () => ({
   OrbAnimator: class {
     dispose(): void {}
@@ -26,8 +27,8 @@ vi.mock('../../orb/orbAnimator', () => ({
     setMorphTarget(): void {}
   }
 }))
+/* eslint-enable @typescript-eslint/no-empty-function */
 
-// eslint-disable-next-line import/first -- must import after the OrbAnimator mock is registered
 import { Orb } from './Orb'
 
 function installBarApi(): void {
