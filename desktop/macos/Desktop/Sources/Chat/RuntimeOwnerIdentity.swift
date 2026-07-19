@@ -351,6 +351,7 @@ enum RuntimeOwnerIdentity {
     // it captured. New-owner mutations remain parked by the fence.
     await FileIndexerService.shared.invalidateCache()
     await RewindIndexer.shared.reset()
+    await OCREmbeddingService.shared.reset()
     await RewindStorage.shared.reset()
     await RewindDatabase.shared.retargetEffectiveOwner(to: nextOwner)
     await TranscriptionStorage.shared.invalidateCache()

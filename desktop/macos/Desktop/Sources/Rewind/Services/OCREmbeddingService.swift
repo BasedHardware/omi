@@ -37,6 +37,20 @@ actor OCREmbeddingService {
 
   private init() {}
 
+  /// Number of screenshots queued for the next batch flush (test introspection).
+  var pendingCount: Int { pendingItems.count }
+
+  /// Drop all owner-bound queued state. Called at the account-transition
+  /// boundary: queued items carry the previous owner's DB rowids and OCR
+  /// text, and flushing them after the pool retargets would write the
+  /// previous owner's embeddings into the next owner's database.
+  func reset() {
+    flushTask?.cancel()
+    flushTask = nil
+    pendingItems = []
+    recentHashes = []
+  }
+
   // MARK: - Text Formatting
 
   /// Format screenshot text for embedding: prepend app context for better retrieval
