@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Sparkles } from 'lucide-react'
 import { toast } from '../../../../lib/toast'
 import { useMemories } from '../../../../hooks/useMemories'
 import { runMemoryPack } from '../../../../lib/mcpConnect'
@@ -13,10 +12,10 @@ import { ConnectorBrandMark } from './ConnectorBrandMark'
 // conversation. Reuses the shared memory-export Markdown (main formats the pack +
 // writes the clipboard + opens the chat). No hosted key, no OAuth.
 
-// Gemini has no shipped brand asset (and must not borrow another provider's
-// logo), so it renders a neutral lucide mark; ChatGPT/Claude use their brand mark.
-const LABEL: Record<'gemini' | 'chatgpt' | 'claude', { title: string; brand?: ConnectorBrand }> = {
-  gemini: { title: 'Gemini' },
+// Each provider renders its real brand mark (the same marks the macOS app shows):
+// Gemini ships the true four-colour spark, ChatGPT/Claude their logomarks.
+const LABEL: Record<'gemini' | 'chatgpt' | 'claude', { title: string; brand: ConnectorBrand }> = {
+  gemini: { title: 'Gemini', brand: 'gemini' },
   chatgpt: { title: 'ChatGPT', brand: 'chatgpt' },
   claude: { title: 'Claude', brand: 'claude' }
 }
@@ -54,8 +53,7 @@ export function MemoryPackRow({
 
   return (
     <ConnectorRow
-      icon={brand ? undefined : Sparkles}
-      iconNode={brand ? <ConnectorBrandMark brand={brand} /> : undefined}
+      iconNode={<ConnectorBrandMark brand={brand} />}
       title={`Memory pack for ${title}`}
       description="Copy a prompt + your memories, then paste into a new chat"
       action={
