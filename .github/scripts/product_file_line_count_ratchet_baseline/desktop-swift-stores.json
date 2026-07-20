@@ -1,6 +1,6 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3117
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3116
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Unsynced local_ task mutations skip backend calls that can only 404; auto-refresh clamps only the API page to the 500 cap while the local reload keeps every loaded row (no >500 truncation); undo-restore of a local-only task re-inserts one unsynced local row instead of fabricating a synced backend id + duplicate; retry-sync carries completed state; and undo-restore re-creates with the full field set."
