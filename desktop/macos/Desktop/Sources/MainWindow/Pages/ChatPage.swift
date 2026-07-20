@@ -455,6 +455,7 @@ struct ChatPage: View {
   private var inputArea: some View {
     ChatInputView(
       onSend: { text in
+        ActivationProgressStore.shared.markAskedOmi()
         AnalyticsManager.shared.chatMessageSent(
           messageLength: text.count, hasSelectedAppContext: selectedApp != nil, source: "main_chat")
         Task { await chatProvider.sendMainDraft(text) }

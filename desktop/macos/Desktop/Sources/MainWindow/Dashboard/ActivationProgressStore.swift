@@ -215,6 +215,9 @@ final class ActivationProgressStore: ObservableObject {
   private func reloadForCurrentOwner() {
     let ownerID = normalizedOwnerID()
     activeOwnerID = ownerID
+    // Transient session UI state must never survive an owner change — the
+    // next account must not inherit the previous account's celebration.
+    celebrationPending = false
     guard let ownerID,
       let data = defaults.data(forKey: ScopedDefaultsKey.homeActivationProgress(ownerID: ownerID)),
       let stored = try? JSONDecoder().decode(Progress.self, from: data)

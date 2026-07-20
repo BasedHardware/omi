@@ -132,6 +132,40 @@ final class ActivationProgressStoreTests: XCTestCase {
     XCTAssertFalse(storeB.isActivated)
   }
 
+  func testInPlaceOwnerSwitchClearsCelebrationAndProgress() async {
+    // Same store instance across an in-place account switch (the PR #9821
+    // bleed class): owner B must inherit neither A's progress nor A's
+    // transient celebration.
+    var ownerID: String? = "user-a"
+    let store = makeStore(ownerID: { ownerID })
+    store.markConversationCaptured(title: nil)
+    store.markAskedOmi()
+    XCTAssertTrue(store.isActivated)
+    XCTAssertTrue(store.celebrationPending)
+
+    ownerID = "user-b"
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    // The owner-change observer hops through a MainActor task.
+    for _ in 0..<10 {
+      await Task.yield()
+      if !store.celebrationPending && !store.isActivated { break }
+    }
+
+    XCTAssertFalse(store.celebrationPending)
+    XCTAssertFalse(store.isActivated)
+    XCTAssertEqual(store.progress, ActivationProgressStore.Progress())
+
+    // Switching back restores A's persisted progress — without celebration.
+    ownerID = "user-a"
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    for _ in 0..<10 {
+      await Task.yield()
+      if store.isActivated { break }
+    }
+    XCTAssertTrue(store.isActivated)
+    XCTAssertFalse(store.celebrationPending)
+  }
+
   func testSignedOutOwnerDoesNotPersist() {
     let store = makeStore(ownerID: { nil })
     store.markAskedOmi()
