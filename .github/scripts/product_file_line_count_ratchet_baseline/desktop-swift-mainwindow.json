@@ -1,6 +1,6 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1938,
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1952,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3643,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4448,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
@@ -8,7 +8,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1570
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Syncs the local rating shadow to external message.rating changes so an un-rate tap is no longer swallowed after a server refresh.",
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Keeps tool groups collapsed while streamed steps increment in the compact summary, with an explicit expansion policy and regression coverage.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Rebase reconciliation applies the pinned swift-format to the main-branch app-detail safety fixes; runtime behavior is unchanged.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state.",
