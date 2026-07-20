@@ -12,7 +12,7 @@ fail() {
 
 TMP_ROOTS=()
 cleanup() {
-  for path in "${TMP_ROOTS[@]}"; do
+  for path in "${TMP_ROOTS[@]:-}"; do
     [[ -n "$path" ]] && rm -rf "$path"
   done
 }
@@ -23,6 +23,21 @@ trap cleanup EXIT
 if ! "$SMOKE" --help >/tmp/omi-smoke-help.out; then
   fail "--help should succeed"
 fi
+
+python3 - "$SMOKE" <<'PY'
+import ast
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r're\.fullmatch\((r"[^"]+")\s*, marker\)', source)
+if match is None:
+    raise SystemExit("notification callback marker parser is missing")
+pattern = ast.literal_eval(match.group(1))
+if re.fullmatch(pattern, "main_actor=true authorization_status=0") is None:
+    raise SystemExit("notification callback marker parser must accept a numeric authorization status")
+PY
 
 for required in \
   "Launch + identity" \
