@@ -446,20 +446,20 @@ def _copy_audio_chunks_for_merge(
     for conv in conversations:
         conv_id = conv['id']
 
-        # List and copy chunks for this conversation
-        try:
-            chunks = list_audio_chunks(uid, conv_id)
-            for chunk in chunks:
-                has_chunks = True
+        # A copy failure here must propagate, not be swallowed. perform_merge_async deletes every
+        # source conversation's original audio chunks (step 9) after this returns, so a swallowed
+        # failure — while has_chunks may already be True from an earlier source — would let that
+        # deletion destroy audio that was never copied anywhere. Raising instead aborts the merge
+        # into _handle_merge_failure, which runs before any source is deleted.
+        chunks = list_audio_chunks(uid, conv_id)
+        for chunk in chunks:
+            has_chunks = True
 
-                # Preserve original filename (handles both single and batch blob naming)
-                original_filename = chunk['path'].split('/')[-1]
-                new_path = f'chunks/{uid}/{new_conversation_id}/{original_filename}'
-                source_blob = bucket.blob(chunk['path'])
-                bucket.copy_blob(source_blob, bucket, new_path)
-
-        except Exception as e:
-            logger.error(f"Error copying chunks for {conv_id}: {e}")
+            # Preserve original filename (handles both single and batch blob naming)
+            original_filename = chunk['path'].split('/')[-1]
+            new_path = f'chunks/{uid}/{new_conversation_id}/{original_filename}'
+            source_blob = bucket.blob(chunk['path'])
+            bucket.copy_blob(source_blob, bucket, new_path)
 
     # Create AudioFile records from copied chunks
     if has_chunks:
