@@ -12,6 +12,7 @@ use tokio::task::JoinHandle;
 pub mod safety;
 
 pub mod provider_policy;
+pub mod tool_relay;
 
 pub const DEFAULT_SUBAGENT_INBOX_CAPACITY: usize = 32;
 
