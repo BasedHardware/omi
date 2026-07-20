@@ -2111,7 +2111,7 @@ struct DashboardPage: View {
 
 // MARK: - Home Components
 
-private enum HomePalette {
+enum HomePalette {
   static let paper = Color(red: 0.018, green: 0.019, blue: 0.021)
   static let panel = Color(red: 0.045, green: 0.046, blue: 0.052)
   static let tile = Color(red: 0.078, green: 0.078, blue: 0.088)
@@ -2122,7 +2122,7 @@ private enum HomePalette {
   static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
   static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
   static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-  static let stageGlow = Color(red: 0.48, green: 0.30, blue: 0.95)
+  static let stageGlow = Color.white
   static let glow = stageGlow
 }
 
@@ -3014,7 +3014,7 @@ private struct HomeAIChoiceButton: View {
   }
 }
 
-private struct HomeOmiMarkIcon: View {
+struct HomeOmiMarkIcon: View {
   let size: CGFloat
   let cornerRadius: CGFloat
 
@@ -3347,116 +3347,6 @@ private struct HomeSourceTile: View {
         .scaledFont(size: OmiType.caption, weight: .bold)
         .foregroundStyle(HomePalette.secondary)
     }
-  }
-}
-
-private struct HomeStatItem: Identifiable {
-  let id = UUID()
-  let title: String
-  let value: String
-  let systemImage: String
-  let action: () -> Void
-}
-
-/// Slim summary strip: the four Home metrics fused into a single
-/// hairline-divided bar so they read as one glanceable object instead of
-/// four heavy widgets. Each cell still hovers and navigates.
-private struct HomeValueHero: View {
-  let snapshot: HomeValueSnapshot
-
-  var body: some View {
-    VStack(spacing: OmiSpacing.sm) {
-      HStack(spacing: OmiSpacing.xs) {
-        HomeOmiMarkIcon(size: 22, cornerRadius: 7)
-
-        Text("A SECOND BRAIN YOU CAN TRUST")
-          .scaledFont(size: OmiType.micro, weight: .bold)
-          .tracking(1.25)
-          .foregroundStyle(HomePalette.muted)
-      }
-
-      Text(snapshot.title)
-        .font(.system(size: 34, weight: .medium, design: .serif))
-        .foregroundStyle(HomePalette.ink)
-        .multilineTextAlignment(.center)
-        .fixedSize(horizontal: false, vertical: true)
-
-      Text(snapshot.subtitle)
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(HomePalette.secondary)
-        .multilineTextAlignment(.center)
-        .lineSpacing(3)
-        .frame(maxWidth: 720)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-    .padding(.horizontal, OmiSpacing.lg)
-    .accessibilityElement(children: .combine)
-  }
-}
-
-private struct HomeStatRibbon: View {
-  let items: [HomeStatItem]
-
-  var body: some View {
-    HStack(spacing: 0) {
-      ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-        if index > 0 {
-          Rectangle()
-            .fill(HomePalette.hairline.opacity(0.7))
-            .frame(width: 1)
-            .padding(.vertical, OmiSpacing.lg)
-        }
-        HomeStatRibbonCell(item: item)
-      }
-    }
-    // Pin the height so the hairline dividers (greedy Rectangles) size to the
-    // content instead of stretching the whole strip in taller windows.
-    .frame(height: 76)
-    .background(HomePalette.tile.opacity(0.88))
-    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-        .stroke(HomePalette.hairline.opacity(0.8), lineWidth: 1)
-    )
-    .shadow(color: .black.opacity(0.16), radius: 10, y: 8)
-  }
-}
-
-private struct HomeStatRibbonCell: View {
-  let item: HomeStatItem
-
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: item.action) {
-      VStack(spacing: OmiSpacing.xxs) {
-        HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
-          Image(systemName: item.systemImage)
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
-
-          Text(item.value)
-            .font(.system(size: 22, weight: .medium, design: .serif))
-            .foregroundStyle(HomePalette.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-        }
-
-        Text(item.title)
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.muted)
-          .lineLimit(1)
-          .minimumScaleFactor(0.78)
-      }
-      .frame(maxWidth: .infinity)
-      .padding(.vertical, OmiSpacing.md)
-      .padding(.horizontal, OmiSpacing.sm)
-      .background(isHovering ? HomePalette.tileHover : Color.clear)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .accessibilityLabel("\(item.title), \(item.value)")
   }
 }
 
