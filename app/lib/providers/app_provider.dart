@@ -14,6 +14,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class AppProvider extends BaseProvider {
+  /// Test seam — overrides [enableAppServer] in [toggleApp].
+  Future<bool> Function(String appId)? enableAppOverride;
+
   List<App> apps = [];
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
@@ -802,7 +805,7 @@ class AppProvider extends BaseProvider {
 
     try {
       if (isEnabled) {
-        success = await enableAppServer(appId);
+        success = await (enableAppOverride ?? enableAppServer)(appId);
         if (!success) {
           final context = globalNavigatorKey.currentState?.context;
           errorMessage = context != null && context.mounted
