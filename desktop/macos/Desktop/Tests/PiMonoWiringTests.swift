@@ -289,10 +289,41 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again.")
+      "I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again."
+    )
     XCTAssertEqual(
       availability.toolError,
-      "Error: I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again.")
+      "Error: I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again."
+    )
+  }
+
+  func testLocalAgentProviderDetectorFindsCodexAcpBridge() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-codex-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let executable = root.appendingPathComponent("codex-acp")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: ["PATH": root.path],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertEqual(availability.status, .available(command: executable.path))
+  }
+
+  func testLocalAgentProviderCodexMissingPromptCarriesInstallInstructions() {
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertFalse(availability.isAvailable)
+    XCTAssertTrue(availability.setupPrompt.contains("npm install -g @openai/codex @agentclientprotocol/codex-acp"))
+    XCTAssertTrue(availability.setupPrompt.contains("codex login"))
   }
 
   // MARK: - ApiKeysResponse shape assertion

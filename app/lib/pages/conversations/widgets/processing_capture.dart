@@ -91,7 +91,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice)) {
               return;
             }
-            final isCaptureActive = provider.recordingState == RecordingState.record ||
+            final isCaptureActive =
+                provider.recordingState == RecordingState.record ||
                 provider.recordingState == RecordingState.systemAudioRecord ||
                 provider.recordingState == RecordingState.deviceRecord ||
                 provider.recordingState == RecordingState.initialising ||
@@ -190,7 +191,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
     bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
 
-    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
+    bool isUsingPhoneMic =
+        captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause ||
         captureProvider.recordingState == RecordingState.interrupted;
@@ -198,7 +200,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // Check if any recording is active (phone mic, system audio, or device recording).
     // `interrupted` is included so the in-session UI stays visible while the
     // pipeline is transiently broken (e.g., iOS audio session interruption).
-    bool isAnyRecordingActive = captureProvider.recordingState == RecordingState.record ||
+    bool isAnyRecordingActive =
+        captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.systemAudioRecord ||
         captureProvider.recordingState == RecordingState.deviceRecord ||
         captureProvider.recordingState == RecordingState.initialising ||
@@ -334,7 +337,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   }
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
-    bool isDeviceRecording = provider.havingRecordingDevice &&
+    bool isDeviceRecording =
+        provider.havingRecordingDevice &&
         (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
 
     // Offline/batch mode: device or phone-mic audio is saved locally with no live
@@ -346,7 +350,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // A phone-mic batch session reports RecordingState.record too; exclude it here so
     // the Live "Listening" card never renders for it (it is handled above).
-    bool isPhoneRecording = !provider.isPhoneMicBatchRecording &&
+    bool isPhoneRecording =
+        !provider.isPhoneMicBatchRecording &&
         (provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.systemAudioRecord ||
             provider.recordingState == RecordingState.initialising ||
@@ -371,12 +376,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     String statusText = provider.recordingState == RecordingState.interrupted && provider.isCallActive
         ? context.l10n.paused
         : isPaused
-            ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-            : hasTerminalTranscriptionFailure
-                ? context.l10n.transcriptionUnavailable
-                : hasPhotos
-                    ? 'Capturing'
-                    : context.l10n.listening;
+        ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
+        : hasTerminalTranscriptionFailure
+        ? context.l10n.transcriptionUnavailable
+        : hasPhotos
+        ? 'Capturing'
+        : context.l10n.listening;
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
@@ -490,22 +495,22 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 decoration: BoxDecoration(
                   color: isPaused
                       ? isDeviceRecording
-                          ? const Color(0xFFFE5D50)
-                          : const Color(0xFF7C3AED)
+                            ? const Color(0xFFFE5D50)
+                            : const Color(0xFF7C3AED)
                       : isDeviceRecording
-                          ? const Color(0xFF35343B)
-                          : const Color(0xFFFF9500),
+                      ? const Color(0xFF35343B)
+                      : const Color(0xFFFF9500),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: FaIcon(
                     isPaused
                         ? isDeviceRecording
-                            ? FontAwesomeIcons.microphoneSlash
-                            : FontAwesomeIcons.play
+                              ? FontAwesomeIcons.microphoneSlash
+                              : FontAwesomeIcons.play
                         : isDeviceRecording
-                            ? FontAwesomeIcons.microphone
-                            : FontAwesomeIcons.pause,
+                        ? FontAwesomeIcons.microphone
+                        : FontAwesomeIcons.pause,
                     color: Colors.white,
                     size: 12,
                   ),
@@ -593,8 +598,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                       storageFull
                           ? context.l10n.paused
                           : muted
-                              ? context.l10n.muted
-                              : context.l10n.recording,
+                          ? context.l10n.muted
+                          : context.l10n.recording,
                       style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
@@ -618,8 +623,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             isPendant
                 ? (prefs.pendantDraining ? context.l10n.pendantSyncingRecordings : context.l10n.pendantRecordingNote)
                 : storageFull
-                    ? context.l10n.transcribeLaterStorageFull
-                    : (muted ? context.l10n.transcribeLaterPaused : context.l10n.transcribeLaterNote),
+                ? context.l10n.transcribeLaterStorageFull
+                : (muted ? context.l10n.transcribeLaterPaused : context.l10n.transcribeLaterNote),
             style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.35),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

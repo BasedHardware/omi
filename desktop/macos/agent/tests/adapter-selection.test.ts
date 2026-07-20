@@ -34,7 +34,6 @@ describe("adapter selection and activation", () => {
     expect(adapterIsActivated("hermes", { OMI_HERMES_ADAPTER_COMMAND: "hermes-adapter" })).toBe(true);
     expect(adapterIsActivated("openclaw", { OMI_OPENCLAW_ADAPTER_COMMAND: "openclaw-adapter" })).toBe(true);
     expect(adapterIsActivated("codex", {})).toBe(false);
-    expect(adapterIsActivated("codex", { OMI_CODEX_ADAPTER_COMMAND: "  " })).toBe(false);
     expect(adapterIsActivated("codex", { OMI_CODEX_ADAPTER_COMMAND: "codex-acp" })).toBe(true);
   });
 
@@ -70,8 +69,14 @@ describe("adapter selection and activation", () => {
     expect(adapterActivationError("openclaw")).toBe(
       "OpenClaw is not available. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again."
     );
+    expect(adapterActivationError("openclaw")).not.toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
+    expect(adapterProfile("codex")).toMatchObject({
+      adapterId: "codex",
+      activationEnv: "OMI_CODEX_ADAPTER_COMMAND",
+      capabilities: { supportsTools: false, supportsModelSwitching: false },
+    });
     expect(adapterActivationError("codex")).toBe(
-      "Codex is not available. Run `npm install -g @openai/codex` in your terminal, then run `codex` to sign in, and try again."
+      "Codex is not available. Make sure Codex is installed first, then try again."
     );
     expect(adapterActivationError("codex")).not.toContain("OMI_CODEX_ADAPTER_COMMAND");
   });
@@ -85,6 +90,7 @@ describe("adapter selection and activation", () => {
     expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"openclaw\"");
     expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"codex\"");
     expect(indexSource).toContain('adapterActivationError("hermes")');
+    expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"codex\"");
     expect(indexSource).toContain('adapterActivationError("openclaw")');
     expect(indexSource).toContain('adapterActivationError("codex")');
     expect(indexSource).toContain("query.ownerId = queryOwnerId");

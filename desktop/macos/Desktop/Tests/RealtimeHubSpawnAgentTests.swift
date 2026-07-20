@@ -188,6 +188,18 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .setupNeeded(.openclaw))
   }
 
+  func testDirectedCodexSetupNeededIsTypedAndCannotCreateAPill() {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009520"
+    let setupNeeded =
+      #"{"ok":false,"error":{"code":"provider_setup_needed","provider":"codex","message":"Codex needs setup"}}"#
+
+    XCTAssertEqual(
+      RealtimeSpawnAgentToolOutcome.classify(
+        output: setupNeeded,
+        expectedContinuityKey: continuityKey),
+      .setupNeeded(.codex))
+  }
+
   func testSharedSpawnReceiptFixturesAcceptValidAndRejectMalformed() throws {
     let fixtureDir = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

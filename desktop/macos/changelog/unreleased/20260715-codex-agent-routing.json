@@ -1,0 +1,3 @@
+{
+  "change": "Added Codex as a voice-delegable agent alongside OpenClaw and Hermes — push-to-talk now routes tasks to the agent you name (with spoken install steps if it isn't set up), picks the best installed agent when you don't, and falls back to another agent if the first one fails to start"
+}

@@ -1276,6 +1276,149 @@ describe("external realtime surface authority", () => {
     store.close();
   });
 
+  it("runs an explicitly requested Codex child to completion through a real ACP subprocess", async () => {
+    const { writeFileSync, chmodSync } = await import("node:fs");
+    const root = newRoot();
+    const stubScript = join(root, "codex-acp.js");
+    writeFileSync(stubScript, `
+const readline = require("readline");
+const rl = readline.createInterface({ input: process.stdin, terminal: false });
+function send(obj) { process.stdout.write(JSON.stringify(obj) + "\\n"); }
+rl.on("line", (line) => {
+  let msg;
+  try { msg = JSON.parse(line); } catch { return; }
+  if (msg.method === "initialize") send({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: 1 } });
+  else if (msg.method === "session/new") send({ jsonrpc: "2.0", id: msg.id, result: { sessionId: "codex-e2e-session" } });
+  else if (msg.method === "session/prompt") {
+    send({ jsonrpc: "2.0", method: "session/update", params: { sessionId: msg.params.sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "codex finished the requested task" } } } });
+    send({ jsonrpc: "2.0", id: msg.id, result: { stopReason: "end_turn" } });
+  } else if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, result: null });
+});
+`);
+    chmodSync(stubScript, 0o755);
+
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    const piMono = new FakeRuntimeAdapter("pi-mono");
+    registry.register("pi-mono", () => piMono);
+    const { CodexRuntimeAdapter } = await import("../src/adapters/codex.js");
+    registry.register("codex", () => new CodexRuntimeAdapter({
+      command: `"${process.execPath}" "${stubScript}"`,
+    }));
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const session = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    const run = kernel.beginExternalSurfaceRun({
+      ...beginInput(session.agentSessionId),
+      prompt: "Ask Codex to fix the failing tests in the background",
+    });
+    const routed = kernel.routeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: session.agentSessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "realtime-codex-spawn",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Fix the failing tests", provider: "codex", brief: "Fixing failing tests" },
+    });
+    const producerJournal = parseAgentSpawnProducerJournalDescriptor(
+      ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
+    );
+
+    const started = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: session.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+      authorizedProducerJournal: producerJournal,
+      authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-codex-spawn",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
+      getOwnerId: () => "owner",
+    }, "spawn_agent", routed.toolInput)) as Record<string, any>;
+
+    expect(started).toMatchObject({
+      ok: true,
+      session: {
+        defaultAdapterId: "codex",
+        providerBoundary: "local_user:codex",
+      },
+    });
+    const child = started.run as { runId: string };
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [child.runId]);
+      return row?.status === "succeeded";
+    });
+    const finished = store.getRow("SELECT status, final_text FROM runs WHERE run_id = ?", [child.runId]);
+    expect(finished.status).toBe("succeeded");
+    expect(String(finished.final_text)).toContain("codex finished the requested task");
+    expect(piMono.executed).toHaveLength(0);
+    store.close();
+  });
+
+  it("returns setup instructions when an uninstalled Codex is explicitly requested", async () => {
+    const root = newRoot();
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    registry.register("pi-mono", () => new FakeRuntimeAdapter("pi-mono"));
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const session = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    const run = kernel.beginExternalSurfaceRun(beginInput(session.agentSessionId));
+    const routed = kernel.routeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: session.agentSessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "realtime-codex-unavailable",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Fix the failing unit tests", provider: "codex" },
+    });
+    const producerJournal = parseAgentSpawnProducerJournalDescriptor(
+      ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
+    );
+
+    const rejected = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: session.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+      authorizedProducerJournal: producerJournal,
+      authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-codex-unavailable",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
+      getOwnerId: () => "owner",
+    }, "spawn_agent", routed.toolInput));
+
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: {
+        code: "provider_setup_needed",
+        provider: "codex",
+        retryable: true,
+      },
+    });
+    expect(rejected.error.message).toContain("Codex needs setup");
+    expect(rejected.error.message).toContain("npm install -g @openai/codex");
+    store.close();
+  });
+
   it("returns a sanitized structured result when external OpenClaw admission is unavailable", async () => {
     const root = newRoot();
     const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
@@ -1325,7 +1468,7 @@ describe("external realtime surface authority", () => {
       ok: false,
       error: {
         code: "provider_setup_needed",
-        message: "OpenClaw needs setup before it can run an agent.",
+        message: "OpenClaw needs setup before it can run an agent. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then ask again.",
         provider: "openclaw",
         retryable: true,
       },

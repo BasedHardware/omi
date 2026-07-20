@@ -1,11 +1,11 @@
 import Foundation
 
 enum AgentHarnessMode: String {
-    case piMono = "piMono"
-    case acp = "acp"
-    case hermes = "hermes"
-    case openclaw = "openclaw"
-    case codex = "codex"
+  case piMono = "piMono"
+  case acp = "acp"
+  case hermes = "hermes"
+  case openclaw = "openclaw"
+  case codex = "codex"
 }
 
 extension Optional where Wrapped == AgentHarnessMode {
@@ -16,79 +16,58 @@ extension Optional where Wrapped == AgentHarnessMode {
 }
 
 enum AgentAdapterId: String {
-    case piMono = "pi-mono"
-    case acp = "acp"
-    case hermes = "hermes"
-    case openclaw = "openclaw"
-    case codex = "codex"
+  case piMono = "pi-mono"
+  case acp = "acp"
+  case hermes = "hermes"
+  case openclaw = "openclaw"
+  case codex = "codex"
 }
 
 enum AgentRuntimeRouting {
-    static func harnessMode(for mode: ChatProvider.BridgeMode) -> AgentHarnessMode {
-        switch mode {
-        case .omiAI, .piMono:
-            return .piMono
-        case .userClaude:
-            return .acp
-        case .hermes:
-            return .hermes
-        case .openClaw:
-            return .openclaw
-        case .codex:
-            return .codex
-        }
+  static func harnessMode(for mode: ChatProvider.BridgeMode) -> AgentHarnessMode {
+    switch mode {
+    case .omiAI, .piMono:
+      return .piMono
+    case .userClaude:
+      return .acp
+    case .hermes:
+      return .hermes
+    case .openClaw:
+      return .openclaw
+    case .codex:
+      return .codex
     }
   }
 
-    static func harnessMode(from rawValue: String) -> AgentHarnessMode? {
-        switch rawValue {
-        case AgentHarnessMode.piMono.rawValue, "pi-mono":
-            return .piMono
-        case AgentHarnessMode.acp.rawValue:
-            return .acp
-        case AgentHarnessMode.hermes.rawValue:
-            return .hermes
-        case AgentHarnessMode.openclaw.rawValue, "openClaw":
-            return .openclaw
-        case AgentHarnessMode.codex.rawValue:
-            return .codex
-        default:
-            return nil
-        }
+  static func harnessMode(from rawValue: String) -> AgentHarnessMode? {
+    switch rawValue {
+    case AgentHarnessMode.piMono.rawValue, "pi-mono":
+      return .piMono
+    case AgentHarnessMode.acp.rawValue:
+      return .acp
+    case AgentHarnessMode.hermes.rawValue:
+      return .hermes
+    case AgentHarnessMode.openclaw.rawValue, "openClaw":
+      return .openclaw
+    case AgentHarnessMode.codex.rawValue:
+      return .codex
+    default:
+      return nil
     }
   }
 
-    static func adapterId(for harnessMode: AgentHarnessMode) -> AgentAdapterId {
-        switch harnessMode {
-        case .piMono:
-            return .piMono
-        case .acp:
-            return .acp
-        case .hermes:
-            return .hermes
-        case .openclaw:
-            return .openclaw
-        case .codex:
-            return .codex
-        }
-    }
-
-    /// Harnesses currently connected/available on this machine. Omi AI (pi-mono) is always
-    /// available; Hermes/OpenClaw/Codex are detected locally; Claude Code (acp) counts when the
-    /// user has selected it as their provider.
-    static func connectedHarnesses(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        bridgeMode: String? = UserDefaults.standard.string(forKey: "chatBridgeMode")
-    ) -> [AgentHarnessMode] {
-        var harnesses: [AgentHarnessMode] = [.piMono]
-        for provider in AgentPillsManager.DirectedProvider.allCases
-        where LocalAgentProviderDetector.isAvailable(provider, environment: environment) {
-            harnesses.append(provider.harnessMode)
-        }
-        if bridgeMode == ChatProvider.BridgeMode.userClaude.rawValue {
-            harnesses.append(.acp)
-        }
-        return harnesses
+  static func adapterId(for harnessMode: AgentHarnessMode) -> AgentAdapterId {
+    switch harnessMode {
+    case .piMono:
+      return .piMono
+    case .acp:
+      return .acp
+    case .hermes:
+      return .hermes
+    case .openclaw:
+      return .openclaw
+    case .codex:
+      return .codex
     }
 }
 
@@ -110,36 +89,17 @@ struct LocalAgentProviderAvailability: Equatable {
     return false
   }
 
-    /// Concise speech-friendly install guidance (no URLs/backticks).
-    /// The full `setupPrompt` (with exact commands) goes to the UI/tool output.
-    var spokenInstallGuide: String {
-        switch provider {
-        case .hermes:
-            return "I don't see Hermes installed. You can install it from the Nous Research GitHub with pip install, then run hermes model to configure it. Check the chat for the full steps."
-        case .openclaw:
-            return "I don't see OpenClaw installed. Install it on your path, or set the OMI openclaw adapter command environment variable. Check the chat for details."
-        case .codex:
-            return "I don't see Codex installed. Run npm install -g at openai codex, then run codex to sign in. Or I can install it for you — just ask."
-        }
-    }
-
-    var setupPrompt: String {
-        if case .needsAuth = status {
-            switch provider {
-            case .codex:
-                return "Codex is installed but not signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again."
-            case .hermes, .openclaw:
-                return "\(provider.displayName) needs setup before it can run. Check its sign-in, then try again."
-            }
-        }
-        switch provider {
-        case .hermes:
-            return "I don't see Hermes installed. Install the Hermes agent from Nous Research (hermes-agent.nousresearch.com), then try again."
-        case .openclaw:
-            return "I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again."
-        case .codex:
-            return "I don't see Codex installed. Install it with `npm i -g @openai/codex @agentclientprotocol/codex-acp`, then try again."
-        }
+  var setupPrompt: String {
+    switch provider {
+    case .hermes:
+      return
+        "I don't see Hermes installed. Install it by running: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash — then try again."
+    case .openclaw:
+      return
+        "I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again."
+    case .codex:
+      return
+        "I don't see Codex set up for Omi. Install it by running: npm install -g @openai/codex @agentclientprotocol/codex-acp — then sign in with codex login and try again."
     }
   }
 
@@ -849,6 +809,7 @@ extension LocalAgentProviderRouting {
         "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
         "\(homeDirectory)/.hermes/node/bin",
         "\(homeDirectory)/.hermes/hermes-agent",
+        "\(homeDirectory)/.codex/bin",
         "\(homeDirectory)/.local/bin",
       ]
     return candidates.reduce(into: [String]()) { result, directory in

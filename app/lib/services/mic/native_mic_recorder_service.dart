@@ -48,8 +48,8 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     PhoneMicHostApi? hostApi,
     bool registerFlutterApi = true,
     DateTime Function() now = DateTime.now,
-  })  : _hostApi = hostApi ?? PhoneMicHostApi(),
-        _now = now {
+  }) : _hostApi = hostApi ?? PhoneMicHostApi(),
+       _now = now {
     if (registerFlutterApi) {
       PhoneMicFlutterApi.setUp(this);
     }

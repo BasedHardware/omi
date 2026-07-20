@@ -180,7 +180,7 @@ final class AgentPill: ObservableObject, Identifiable {
   func applyCanonicalProviderIdentity(_ rawValue: String?) {
     guard let rawValue,
       let provider = AgentRuntimeRouting.harnessMode(from: rawValue),
-      provider == .hermes || provider == .openclaw,
+      provider == .hermes || provider == .openclaw || provider == .codex,
       providerIdentity != provider
     else { return }
     providerIdentity = provider
@@ -476,14 +476,16 @@ final class AgentPillsManager: ObservableObject {
       ?? producingJournalSurfaceByPill[pillID]
   }
 
-  enum DirectedProvider: String, Equatable {
+  enum DirectedProvider: String, Equatable, CaseIterable {
     case hermes
     case openclaw
+    case codex
 
     var displayName: String {
       switch self {
       case .hermes: return "Hermes"
       case .openclaw: return "OpenClaw"
+      case .codex: return "Codex"
       }
     }
 
@@ -491,107 +493,27 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return .hermes
       case .openclaw: return .openclaw
+      case .codex: return .codex
       }
     }
 
-    private struct PendingAgentFollowUp {
-        let text: String
-        let attachments: [ChatAttachment]
+    /// The executable the detector probes for. Codex is bridged over ACP by
+    /// the standalone `codex-acp` binary (the `codex` CLI itself does not
+    /// speak ACP on stdio).
+    var executableName: String {
+      switch self {
+      case .hermes: return "hermes"
+      case .openclaw: return "openclaw"
+      case .codex: return "codex-acp"
+      }
     }
 
-    /// Combined router result. Title/ack are pre-computed alongside the route
-    /// so we don't need a second Haiku call when the answer is "agent".
-    struct RouterDecision {
-        let route: Route
-        let title: String?
-        let ack: String?
-        /// Best-suited connected external providers for this task, ranked by the
-        /// router. Empty means run Omi's built-in agent. The first entry is
-        /// spawned; the rest become the pill's startup-failure fallback chain.
-        var rankedProviders: [DirectedProvider] = []
-    }
-
-    enum DirectedProvider: String, Equatable {
-        case hermes
-        case openclaw
-        case codex
-
-        var displayName: String {
-            switch self {
-            case .hermes: return "Hermes"
-            case .openclaw: return "OpenClaw"
-            case .codex: return "Codex"
-            }
-        }
-
-        var harnessMode: AgentHarnessMode {
-            switch self {
-            case .hermes: return .hermes
-            case .openclaw: return .openclaw
-            case .codex: return .codex
-            }
-        }
-
-        var executableName: String {
-            switch self {
-            case .hermes: return "hermes"
-            case .openclaw: return "openclaw"
-            case .codex: return "codex-acp"
-            }
-        }
-
-        var commandEnvironmentName: String {
-            switch self {
-            case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
-            case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
-            case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
-            }
-        }
-
-        var setupNeededStatus: String {
-            "\(displayName) needs setup"
-        }
-
-        /// One-line capability description fed to the routing model so it can
-        /// pick the best-suited connected agent for a task.
-        var routerBlurb: String {
-            switch self {
-            case .codex:
-                return "OpenAI Codex — strongest for software engineering: writing/refactoring code, working in repos, builds, tests, scripts, technical files."
-            case .openclaw:
-                return "OpenClaw — general autonomous computer agent with its own gateway/tool config; good for messaging and automation flows the user has wired into OpenClaw."
-            case .hermes:
-                return "Hermes — general autonomous agent; good for research and long-form independent work."
-            }
-        }
-    }
-
-    /// External providers that are installed AND ready to run right now.
-    /// (needsAuth/missing are excluded — offering them to the router would
-    /// just route tasks into a guaranteed startup failure.)
-    nonisolated static func connectedDirectedProviders() -> [DirectedProvider] {
-        [.codex, .openclaw, .hermes].filter { LocalAgentProviderDetector.isAvailable($0) }
-    }
-
-    /// Canonical directed-provider order — used for prompt listings and as
-    /// the fixed preference order of the startup fallback chain.
-    nonisolated static let orderedDirectedProviders: [DirectedProvider] = [.openclaw, .hermes, .codex]
-
-    /// Providers to try after the given startup failures: the remaining
-    /// AVAILABLE directed providers in fixed order, then the Omi default
-    /// agent (`nil`) as the final link. Caps total attempts at the requested
-    /// provider + at most 2 directed fallbacks + the default agent.
-    nonisolated static func fallbackChain(
-        afterFailed failed: [DirectedProvider],
-        available: [DirectedProvider]
-    ) -> [DirectedProvider?] {
-        let remainingDirectedSlots = max(0, orderedDirectedProviders.count - failed.count)
-        var chain: [DirectedProvider?] = orderedDirectedProviders
-            .filter { available.contains($0) && !failed.contains($0) }
-            .prefix(remainingDirectedSlots)
-            .map { Optional($0) }
-        chain.append(nil)
-        return chain
+    var commandEnvironmentName: String {
+      switch self {
+      case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
+      case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+      case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
+      }
     }
 
     var setupNeededStatus: String {

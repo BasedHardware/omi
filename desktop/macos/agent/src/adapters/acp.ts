@@ -69,8 +69,8 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   // the Node bridge; forwarding it lets the spawned `hermes acp` subprocess
   // locate its config/state instead of falling back to defaults.
   "HERMES_HOME",
-  // codex-acp reads Codex config/auth from CODEX_HOME (default ~/.codex via
-  // HOME); forward it so users with a custom Codex home keep their auth.
+  // Codex resolves auth/config from CODEX_HOME (default ~/.codex); forward an
+  // explicit override so a spawned Codex ACP bridge sees the same account.
   "CODEX_HOME",
 ] as const;
 
@@ -191,11 +191,11 @@ function externalTerminalHttpFailure(
   adapterId: ProductionAdapterId,
   text: string,
 ): RuntimeFailure | undefined {
-  if (adapterId !== "hermes" && adapterId !== "openclaw") return undefined;
+  if (adapterId !== "hermes" && adapterId !== "openclaw" && adapterId !== "codex") return undefined;
   const match = EXTERNAL_TERMINAL_HTTP_FAILURE.exec(text);
   if (!match) return undefined;
   const statusCode = Number(match[1]);
-  const label = adapterId === "hermes" ? "Hermes" : "OpenClaw";
+  const label = adapterId === "hermes" ? "Hermes" : adapterId === "codex" ? "Codex" : "OpenClaw";
   return normalizeRuntimeFailure({
     code: "adapter_terminal_http_failure",
     source: "adapter_execution",
@@ -277,11 +277,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     // a progress watchdog by default; the bundled Claude adapter does not.
     this.noProgressTimeoutMs = options.noProgressTimeoutMs
       ?? parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS)
-      ?? (this.adapterId === "codex"
-        ? DEFAULT_CODEX_NO_PROGRESS_TIMEOUT_MS
-        : this.adapterId === "hermes" || this.adapterId === "openclaw"
-          ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS
-          : 0);
+      ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" || this.adapterId === "codex" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
   }
 
   async start(): Promise<void> {

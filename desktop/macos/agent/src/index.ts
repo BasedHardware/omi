@@ -943,7 +943,7 @@ async function main(): Promise<void> {
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   const codexAvailable = await ensureCodexAdapter();
-  if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+  if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
@@ -1056,6 +1056,10 @@ async function main(): Promise<void> {
           } finally {
             if (queryOwnerKey && insertedOwner) {
               activeControlToolOwnersByRequest.delete(queryOwnerKey);
+            }
+          } else if (adapterId === "codex") {
+            if (!(await ensureCodexAdapter())) {
+              throw new Error(adapterActivationError("codex"));
             }
           }
         })().catch((err) => {
