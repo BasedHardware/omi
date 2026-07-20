@@ -418,6 +418,58 @@ final class HomeStatusStoreTests: XCTestCase {
     XCTAssertEqual(connectorStore.snapshot(for: email).primaryText, "12 emails")
   }
 
+  func testTodayCountsLoadAndSurviveNilRefresh() async {
+    let testDefaults = makeDefaults()
+    let defaults = testDefaults.defaults
+    defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+
+    var knowledgeLoads = 0
+    var screenshotTodayLoads = 0
+    let connectorStore = ImportConnectorStatusStore(defaults: defaults)
+    let store = HomeStatusStore(
+      connectorStatusStore: connectorStore,
+      defaults: defaults,
+      loader: HomeStatusLoader(
+        refreshConnectorStatuses: {},
+        loadScreenshotCount: { 1000 },
+        loadScreenshotCountToday: {
+          screenshotTodayLoads += 1
+          return screenshotTodayLoads == 1 ? 214 : nil
+        },
+        loadKnowledgeCounts: { _ in
+          knowledgeLoads += 1
+          let firstLoad = knowledgeLoads == 1
+          return HomeKnowledgeCounts(
+            conversations: 2401,
+            memories: 9000,
+            tasks: 40,
+            hasOmiDeviceConversations: false,
+            conversationsToday: firstLoad ? 3 : nil,
+            memoriesToday: firstLoad ? 12 : nil,
+            tasksToday: firstLoad ? 5 : nil
+          )
+        },
+        loadMemoryExportStatuses: { [:] }
+      ),
+      localDatabaseReady: true
+    )
+
+    await store.refreshIfNeeded(now: Date(timeIntervalSince1970: 10_000))
+    XCTAssertEqual(store.conversationCountToday, 3)
+    XCTAssertEqual(store.memoryCountToday, 12)
+    XCTAssertEqual(store.taskCountToday, 5)
+    XCTAssertEqual(store.screenshotCountToday, 214)
+    XCTAssertTrue(store.knowledgeCountsKnown)
+
+    // A failed source (nil) must not clobber the last good today values.
+    await store.refreshIfNeeded(
+      now: Date(timeIntervalSince1970: 10_000 + PollingConfig.activationCooldown))
+    XCTAssertEqual(store.conversationCountToday, 3)
+    XCTAssertEqual(store.memoryCountToday, 12)
+    XCTAssertEqual(store.taskCountToday, 5)
+    XCTAssertEqual(store.screenshotCountToday, 214)
+  }
+
   private func makeDefaults() -> (defaults: UserDefaults, suiteName: String) {
     let suiteName = "HomeStatusStoreTests.\(UUID().uuidString)"
     return (UserDefaults(suiteName: suiteName)!, suiteName)

@@ -6,14 +6,36 @@ struct HomeKnowledgeCounts: Equatable, Sendable {
   let memories: Int?
   let tasks: Int?
   let hasOmiDeviceConversations: Bool?
+  var conversationsToday: Int?
+  var memoriesToday: Int?
+  var tasksToday: Int?
 }
 
 @MainActor
 struct HomeStatusLoader {
   let refreshConnectorStatuses: @MainActor @Sendable () async -> Void
   let loadScreenshotCount: @MainActor @Sendable () async -> Int?
+  let loadScreenshotCountToday: @MainActor @Sendable () async -> Int?
   let loadKnowledgeCounts: @MainActor @Sendable (_ includeOmiDeviceHistory: Bool) async -> HomeKnowledgeCounts
   let loadMemoryExportStatuses: @MainActor @Sendable () async -> [MemoryExportDestination: MemoryExportStatus]
+
+  init(
+    refreshConnectorStatuses: @escaping @MainActor @Sendable () async -> Void,
+    loadScreenshotCount: @escaping @MainActor @Sendable () async -> Int?,
+    loadScreenshotCountToday: @escaping @MainActor @Sendable () async -> Int? = { nil },
+    loadKnowledgeCounts:
+      @escaping @MainActor @Sendable (_ includeOmiDeviceHistory: Bool) async ->
+      HomeKnowledgeCounts,
+    loadMemoryExportStatuses:
+      @escaping @MainActor @Sendable () async -> [MemoryExportDestination:
+      MemoryExportStatus]
+  ) {
+    self.refreshConnectorStatuses = refreshConnectorStatuses
+    self.loadScreenshotCount = loadScreenshotCount
+    self.loadScreenshotCountToday = loadScreenshotCountToday
+    self.loadKnowledgeCounts = loadKnowledgeCounts
+    self.loadMemoryExportStatuses = loadMemoryExportStatuses
+  }
 
   static func live(connectorStatusStore: ImportConnectorStatusStore) -> HomeStatusLoader {
     HomeStatusLoader(
@@ -28,10 +50,26 @@ struct HomeStatusLoader {
           return nil
         }
       },
+      loadScreenshotCountToday: {
+        do {
+          let startOfDay = Calendar.current.startOfDay(for: Date())
+          return try await RewindDatabase.shared.getScreenshotCount(since: startOfDay)
+        } catch {
+          logError("HomeStatusLoader: Failed to load today's screenshot count", error: error)
+          return nil
+        }
+      },
       loadKnowledgeCounts: { includeOmiDeviceHistory in
+        let startOfDay = Calendar.current.startOfDay(for: Date())
         async let conversations = try? APIClient.shared.getConversationsCount(includeDiscarded: false)
         async let memories = try? MemoryStorage.shared.getLocalMemoriesCount()
         async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
+        async let conversationsToday = try? APIClient.shared.getConversationsCount(
+          includeDiscarded: false, startDate: startOfDay)
+        async let memoriesToday = try? MemoryStorage.shared.getLocalMemoriesCount(
+          createdAfter: startOfDay)
+        async let tasksToday = try? ActionItemStorage.shared.getLocalActionItemsCount(
+          startDate: startOfDay)
         async let deviceHistory =
           includeOmiDeviceHistory
           ? (try? APIClient.shared.hasOmiDeviceConversations())
@@ -41,7 +79,10 @@ struct HomeStatusLoader {
           conversations: conversations,
           memories: memories,
           tasks: tasks,
-          hasOmiDeviceConversations: deviceHistory
+          hasOmiDeviceConversations: deviceHistory,
+          conversationsToday: conversationsToday,
+          memoriesToday: memoriesToday,
+          tasksToday: tasksToday
         )
       },
       loadMemoryExportStatuses: {
@@ -64,8 +105,19 @@ final class HomeStatusStore: ObservableObject {
   @Published private(set) var conversationCount: Int?
   @Published private(set) var memoryCount: Int?
   @Published private(set) var taskCount: Int?
+  @Published private(set) var screenshotCountToday: Int?
+  @Published private(set) var conversationCountToday: Int?
+  @Published private(set) var memoryCountToday: Int?
+  @Published private(set) var taskCountToday: Int?
   @Published private(set) var accountHasOmiDeviceConversations: Bool
   @Published var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
+
+  /// Lifetime counts have loaded — the first-win gate must never fire on
+  /// still-unknown (nil) counts or a veteran on a fresh machine would flash
+  /// the new-user surface.
+  var knowledgeCountsKnown: Bool {
+    conversationCount != nil && memoryCount != nil
+  }
 
   private let defaults: UserDefaults
   private let loader: HomeStatusLoader
@@ -163,11 +215,13 @@ final class HomeStatusStore: ObservableObject {
 
     let generation = refreshGeneration
     let loadedScreenshotCount = await loader.loadScreenshotCount()
+    let loadedScreenshotCountToday = await loader.loadScreenshotCountToday()
     guard !Task.isCancelled,
       generation == refreshGeneration,
       localDatabaseReady
     else { return }
     apply(screenshotCount: loadedScreenshotCount)
+    apply(screenshotCountToday: loadedScreenshotCountToday)
   }
 
   private func resetTransientState() {
@@ -182,6 +236,10 @@ final class HomeStatusStore: ObservableObject {
     conversationCount = nil
     memoryCount = nil
     taskCount = nil
+    screenshotCountToday = nil
+    conversationCountToday = nil
+    memoryCountToday = nil
+    taskCountToday = nil
     memoryExportStatuses = [:]
   }
 
@@ -204,17 +262,22 @@ final class HomeStatusStore: ObservableObject {
     let knowledgeRefreshID = beginKnowledgeRefresh()
     async let connectorStatuses: Void = loader.refreshConnectorStatuses()
     async let screenshots: Int? = shouldLoadScreenshotCount ? loader.loadScreenshotCount() : nil
+    async let screenshotsToday: Int? =
+      shouldLoadScreenshotCount ? loader.loadScreenshotCountToday() : nil
     async let knowledgeCounts = loader.loadKnowledgeCounts(includeDeviceHistory)
     async let exportStatuses = loader.loadMemoryExportStatuses()
-    let (_, loadedScreenshots, loadedKnowledgeCounts, loadedExportStatuses) = await (
-      connectorStatuses,
-      screenshots,
-      knowledgeCounts,
-      exportStatuses
-    )
+    let (_, loadedScreenshots, loadedScreenshotsToday, loadedKnowledgeCounts, loadedExportStatuses) =
+      await (
+        connectorStatuses,
+        screenshots,
+        screenshotsToday,
+        knowledgeCounts,
+        exportStatuses
+      )
 
     guard !Task.isCancelled, generation == refreshGeneration else { return }
     apply(screenshotCount: loadedScreenshots)
+    apply(screenshotCountToday: loadedScreenshotsToday)
     if knowledgeRefreshID == latestKnowledgeRefreshID {
       apply(knowledgeCounts: loadedKnowledgeCounts)
     }
@@ -247,6 +310,12 @@ final class HomeStatusStore: ObservableObject {
     }
   }
 
+  private func apply(screenshotCountToday: Int?) {
+    if let screenshotCountToday {
+      self.screenshotCountToday = screenshotCountToday
+    }
+  }
+
   private func apply(knowledgeCounts: HomeKnowledgeCounts) {
     if let conversations = knowledgeCounts.conversations {
       conversationCount = conversations
@@ -256,6 +325,15 @@ final class HomeStatusStore: ObservableObject {
     }
     if let tasks = knowledgeCounts.tasks {
       taskCount = tasks
+    }
+    if let conversationsToday = knowledgeCounts.conversationsToday {
+      conversationCountToday = conversationsToday
+    }
+    if let memoriesToday = knowledgeCounts.memoriesToday {
+      memoryCountToday = memoriesToday
+    }
+    if let tasksToday = knowledgeCounts.tasksToday {
+      taskCountToday = tasksToday
     }
     if knowledgeCounts.hasOmiDeviceConversations == true {
       accountHasOmiDeviceConversations = true

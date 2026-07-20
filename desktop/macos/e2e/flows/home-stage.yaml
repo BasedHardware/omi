@@ -1,11 +1,20 @@
 version: 2
 name: home-stage
 tier: 2
-description: Redesigned Home stage transitions (hub/chat/connect) via automation bridge
+description: Redesigned Home stage transitions (hub/chat/connect) plus the Today/first-win surfaces via automation bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeSuggestionsStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ActivationProgressStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeFirstWinSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeGreetingView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeNoticedSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeRewindFilmstrip.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeStagePalette.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeTodayModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeTodayStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/RewindSeekRequestStore.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
   - automation_bridge_ready
@@ -57,6 +66,31 @@ steps:
       state.homeMode: hub
 
   - id: S7
+    name: Force the first-win surface (new-user Home)
+    bridge.action:
+      name: activation_force_first_win
+      params:
+        enabled: "true"
+    expect:
+      result.detail.forced: "true"
+
+  - id: S8
+    name: Activation state reflects the forced surface
+    bridge.action:
+      name: activation_state
+    expect:
+      result.detail.forced_first_win: "true"
+
+  - id: S9
+    name: Release the first-win override
+    bridge.action:
+      name: activation_force_first_win
+      params:
+        enabled: "false"
+    expect:
+      result.detail.forced: "false"
+
+  - id: S10
     name: Logs clean
     log.expect:
       absent:

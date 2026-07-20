@@ -1,13 +1,13 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1621,
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3510,
-    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1856
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3522,
+    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1882
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "Surfaced task ids (backend id or local_<rowid>) resolve through one shared identity helper, so mutating an unsynced task no longer no-ops or throws recordNotFound.",
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Nullable screenshot capture provenance preserves the canonical-memory device identity and prevents multi-Mac screen activity from overwriting local row IDs.",
-    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": "Search-result rows load a downsampled ImageIO thumbnail instead of the full-resolution screenshot, so a long results list no longer retains full-size images behind a 120x80 view."
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Adds the today-scoped screenshot count used by the Home proof line.",
+    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": "Consumes the one-shot Home filmstrip seek handoff (nearest-frame jump on load and on appear)."
   },
   "threshold": 1500
 }

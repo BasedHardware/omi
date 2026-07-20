@@ -4360,6 +4360,7 @@ class FloatingControlBarManager {
     }
     barWindow.orderFrontRegardless()
 
+    ActivationProgressStore.shared.markAskedOmi()
     AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
     let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
@@ -4598,6 +4599,7 @@ class FloatingControlBarManager {
       currentTracer?.mark("screenshot_capture")
     }
 
+    ActivationProgressStore.shared.markAskedOmi()
     AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
     let clientTurnId = UUID().uuidString

@@ -329,6 +329,7 @@ extension AppState {
       // Track conversation creation — use captured start time for accurate duration after session rotation
       if didBindLocalSession, let startTime = targetStartTime {
         let durationSeconds = Int(Date().timeIntervalSince(startTime))
+        ActivationProgressStore.shared.markConversationCaptured(title: nil)
         AnalyticsManager.shared.conversationCreated(
           conversationId: memoryId,
           source: currentConversationSource.rawValue,

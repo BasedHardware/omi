@@ -163,7 +163,8 @@ actor MemoryStorage {
     tags: [String]? = nil,
     tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
     scope: MemoryRecordReadScope = .all,
-    includeDismissed: Bool = false
+    includeDismissed: Bool = false,
+    createdAfter: Date? = nil
   ) async throws -> Int {
     let db = try await ensureInitialized()
 
@@ -179,6 +180,10 @@ actor MemoryStorage {
 
       if let category = category {
         query = query.filter(Column("category") == category)
+      }
+
+      if let createdAfter = createdAfter {
+        query = query.filter(Column("createdAt") >= createdAfter)
       }
 
       query = Self.applyTierFilter(query, tiers: tiers)
