@@ -24,6 +24,40 @@ private struct AgentSyncRowsPayload: @unchecked Sendable {
 actor AgentSyncService {
   static let shared = AgentSyncService()
 
+  enum DatabaseReadiness: Equatable {
+    case ready
+    case missingDatabase
+    case missingRequiredSchema
+  }
+
+  private static let requiredRemoteTables: Set<String> = [
+    "transcription_sessions",
+    "action_items",
+    "memories",
+    "staged_tasks",
+    "live_notes",
+    "screenshots",
+    "transcription_segments",
+    "focus_sessions",
+    "observations",
+  ]
+
+  /// A successful `/health` response is not enough to admit incremental sync:
+  /// an interrupted database upload can leave SQLite open but without the
+  /// tables that this service owns. The sync endpoint's SQLite error is the
+  /// authoritative signal for that partial-schema state.
+  static func databaseReadiness(
+    healthPayload: [String: Any],
+    syncFailureBody: String? = nil
+  ) -> DatabaseReadiness {
+    guard healthPayload["databaseReady"] as? Bool == true else { return .missingDatabase }
+    guard let syncFailureBody else { return .ready }
+    let normalizedFailure = syncFailureBody.lowercased()
+    return requiredRemoteTables.contains(where: {
+      normalizedFailure.contains("no such table: \($0)")
+    }) ? .missingRequiredSchema : .ready
+  }
+
   struct NetworkHooks: Sendable {
     let fetchIDToken: @Sendable () async throws -> String
     let dataForRequest: @Sendable (URLRequest) async throws -> (Data, URLResponse)
@@ -65,6 +99,7 @@ actor AgentSyncService {
   private var cursorOwnerID: String?
   private var latencyBackoffMultiplier: UInt64 = 1
   private var lastReuploadAt: Date = .distantPast
+  private var lastRequiredSchemaFailureBody: String?
   private let reuploadCooldown: TimeInterval = 30 * 60  // don't re-upload more than once per 30 min
   private let networkHooks: NetworkHooks
 
@@ -128,6 +163,7 @@ actor AgentSyncService {
     isPaused = false
     latencyBackoffMultiplier = 1
     lastReuploadAt = .distantPast
+    lastRequiredSchemaFailureBody = nil
     loadCursors(ownerID: cursorOwnerID)
     log("AgentSync: starting (vm=\(vmIP), tables=\(tables.count))")
     syncLoop(generation: generation)
@@ -275,8 +311,9 @@ actor AgentSyncService {
 
   // MARK: - Re-upload trigger
 
-  /// Called after 3 consecutive sync failures. Hits /health — if the VM has no
-  /// database (e.g. it restarted and lost its data), triggers a full re-upload.
+  /// Called after 3 consecutive sync failures. `/health` normally catches a
+  /// missing database, while a recorded SQLite missing-table response catches
+  /// a partially initialized upload that still reports `databaseReady: true`.
   private func checkAndTriggerReupload(generation: UInt64) async {
     guard syncGeneration == generation else { return }
     guard let vmIP = vmIP, let authToken = authToken else { return }
@@ -289,14 +326,19 @@ actor AgentSyncService {
     do {
       let (data, _) = try await URLSession.shared.data(from: url)
       guard syncGeneration == generation else { return }
-      guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let dbReady = json["databaseReady"] as? Bool,
-        !dbReady
-      else { return }
+      guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+      let readiness = Self.databaseReadiness(
+        healthPayload: json,
+        syncFailureBody: lastRequiredSchemaFailureBody
+      )
+      guard readiness != .ready else { return }
 
-      log("AgentSync: VM has no database — triggering re-upload")
+      log(
+        "AgentSync: VM database is \(readiness == .missingRequiredSchema ? "missing required schema" : "not ready") — triggering re-upload"
+      )
       lastReuploadAt = Date()
       await AgentVMService.shared.reuploadDatabase(vmIP: vmIP, authToken: authToken)
+      lastRequiredSchemaFailureBody = nil
       guard syncGeneration == generation else { return }
     } catch {
       log("AgentSync: re-upload health check failed — \(error.localizedDescription)")
@@ -517,6 +559,12 @@ actor AgentSyncService {
         return .success
       } else if httpResponse.statusCode >= 500 {
         let body = String(data: data, encoding: .utf8) ?? ""
+        if Self.databaseReadiness(
+          healthPayload: ["databaseReady": true],
+          syncFailureBody: body
+        ) == .missingRequiredSchema {
+          lastRequiredSchemaFailureBody = body
+        }
         log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
         return .networkError  // 5xx = server not ready, trigger backoff
       } else {

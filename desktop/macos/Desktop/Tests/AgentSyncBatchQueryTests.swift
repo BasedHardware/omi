@@ -69,6 +69,32 @@ private actor AgentSyncDelayedTokenGate {
 /// on a compound `(updatedAt, id)` cursor.
 final class AgentSyncBatchQueryTests: XCTestCase {
 
+  func testPartialSchemaIsNotReadyEvenWhenDatabaseReadyIsTrue() {
+    let readiness = AgentSyncService.databaseReadiness(
+      healthPayload: ["databaseReady": true],
+      syncFailureBody: "SQLite error: no such table: transcription_sessions"
+    )
+
+    XCTAssertEqual(
+      readiness,
+      .missingRequiredSchema,
+      "A VM that reports databaseReady while rejecting a required sync table must be re-provisioned by the existing upload owner"
+    )
+  }
+
+  func testUnrelatedSQLiteTableFailureDoesNotTriggerDatabaseReupload() {
+    let readiness = AgentSyncService.databaseReadiness(
+      healthPayload: ["databaseReady": true],
+      syncFailureBody: "SQLite error: no such table: scratch_cache"
+    )
+
+    XCTAssertEqual(
+      readiness,
+      .ready,
+      "Only tables owned by AgentSync prove its uploaded schema is partial; unrelated server faults must keep bounded retry behavior"
+    )
+  }
+
   func testMutableTableUsesCompoundCursor() {
     let (sql, args) = AgentSyncService.buildBatchQuery(
       tableName: "action_items",
