@@ -10,6 +10,7 @@ class ViewModelContainer: ObservableObject {
   // ViewModels for each page
   let dashboardViewModel = DashboardViewModel()
   let homeStatusStore = HomeStatusStore()
+  let homeTodayStore = HomeTodayStore()
   let tasksViewModel = TasksViewModel()
   let appProvider = AppProvider()
   let memoriesViewModel = MemoriesViewModel()
@@ -141,6 +142,7 @@ class ViewModelContainer: ObservableObject {
     tasksStore.resetSessionState()
     dashboardViewModel.resetSessionState()
     homeStatusStore.resetSessionState()
+    homeTodayStore.resetSessionState()
     memoriesViewModel.resetSessionState()
     appProvider.resetSessionState()
     memoryGraphViewModel.resetSessionState()

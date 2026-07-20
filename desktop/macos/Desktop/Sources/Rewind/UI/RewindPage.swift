@@ -141,6 +141,14 @@ struct RewindPage: View {
       isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
       isPageFocused = true
+      // Home filmstrip handoff: when screenshots are already loaded, honor a
+      // pending seek immediately (the fresh-load path is handled in
+      // onChange(of: viewModel.screenshots)).
+      if !viewModel.screenshots.isEmpty, let target = RewindSeekRequestStore.shared.consume() {
+        currentIndex = Self.nearestScreenshotIndex(to: target, in: viewModel.screenshots)
+        selectedGroupIndex = 0
+        scheduleLoadCurrentFrame()
+      }
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
       let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
@@ -166,8 +174,12 @@ struct RewindPage: View {
       viewModel.isTranscriptExpanded = expanded
     }
     .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
-      // Try to preserve position on the same screenshot the user was viewing
-      if !oldScreenshots.isEmpty,
+      // Home filmstrip handoff: a pending seek wins over position restore.
+      if !newScreenshots.isEmpty, let target = RewindSeekRequestStore.shared.consume() {
+        currentIndex = Self.nearestScreenshotIndex(to: target, in: newScreenshots)
+        selectedGroupIndex = 0
+        scheduleLoadCurrentFrame()
+      } else if !oldScreenshots.isEmpty,
         currentIndex < oldScreenshots.count,
         let currentId = oldScreenshots[currentIndex].id,
         let newIndex = newScreenshots.firstIndex(where: { $0.id == currentId })
@@ -897,6 +909,20 @@ struct RewindPage: View {
 
     currentIndex = newIndex
     scheduleLoadCurrentFrame()
+  }
+
+  /// Nearest frame to a target moment (screenshots are timestamp-ascending).
+  static func nearestScreenshotIndex(to target: Date, in screenshots: [Screenshot]) -> Int {
+    guard !screenshots.isEmpty else { return 0 }
+    if let firstAtOrAfter = screenshots.firstIndex(where: { $0.timestamp >= target }) {
+      guard firstAtOrAfter > 0 else { return 0 }
+      let before = screenshots[firstAtOrAfter - 1]
+      let after = screenshots[firstAtOrAfter]
+      let beforeGap = target.timeIntervalSince(before.timestamp)
+      let afterGap = after.timestamp.timeIntervalSince(target)
+      return beforeGap <= afterGap ? firstAtOrAfter - 1 : firstAtOrAfter
+    }
+    return screenshots.count - 1
   }
 
   private func nextFrame() {
