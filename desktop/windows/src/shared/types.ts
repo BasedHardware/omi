@@ -1,3 +1,34 @@
+<<<<<<< Updated upstream
+=======
+export type SignGloss = {
+  gloss: string
+  duration: number
+  timestamp: number
+  swr?: string
+}
+
+export type TranslationResult = {
+  originalText: string
+  poseUrl?: string
+  assetType?: 'video' | 'pose'
+  glosses: SignGloss[]
+  swrFull?: string
+}
+
+export type DeepgramTtsOptions = {
+  text: string
+  voice?: string
+  encoding?: 'mp3' | 'wav' | 'pcm' | 'opus' | 'flac'
+}
+
+export type DeepgramTtsResult = {
+  ok: boolean
+  audio?: number[]
+  contentType?: string
+  error?: string
+}
+
+>>>>>>> Stashed changes
 export type CaptureSource = {
   id: string
   name: string
@@ -41,6 +72,9 @@ export type TranscriptLine = {
   speaker?: string
   text: string
   interim?: boolean
+  /** True when the enrolled voiceprint identifies this line as the user ("You"),
+   *  rather than someone else in the room. Undefined when not yet resolved. */
+  isUser?: boolean
 }
 
 export type ConversationPayload = {
@@ -291,6 +325,11 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
+<<<<<<< Updated upstream
+=======
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => () => void
+  deepgramTtsSynthesize: (options: DeepgramTtsOptions) => Promise<DeepgramTtsResult>
+>>>>>>> Stashed changes
   screenSynthFramesSince: () => Promise<ScreenFrameLite[]>
   screenSynthGetState: () => Promise<ScreenSynthState>
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>

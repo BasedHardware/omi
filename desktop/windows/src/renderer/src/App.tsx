@@ -24,6 +24,7 @@ import { ContinuousRecordingHost } from './components/recording/ContinuousRecord
 import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
+import { MonologurHost } from './components/monologur/MonologurHost'
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -85,6 +86,8 @@ function AppShellInner(): React.JSX.Element {
       <RewindCaptureHost />
       {/* Always-on mic capture for continuous recording mode. */}
       <ContinuousRecordingHost />
+      {/* Monologur: always-listening background agent (proactive TTS interruptions). */}
+      <MonologurHost />
     </div>
   )
 }
