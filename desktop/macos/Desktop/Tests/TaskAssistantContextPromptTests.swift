@@ -13,7 +13,7 @@ import XCTest
 final class TaskAssistantContextPromptTests: XCTestCase {
   func testStagedTasksRenderWithoutAnUpdatableId() {
     let context = TaskExtractionContext(
-      activeTasks: [(id: Int64(42), description: "Review the PR", priority: "high", relevanceScore: 10)],
+      activeTasks: [(id: "action-item-42", description: "Review the PR", priority: "high", relevanceScore: 10)],
       completedTasks: [],
       deletedTasks: [],
       stagedTaskDescriptions: ["Draft the Q3 report"],
@@ -23,7 +23,7 @@ final class TaskAssistantContextPromptTests: XCTestCase {
     let prompt = TaskAssistant.contextEvidencePrompt(context)
 
     // Real backend tasks keep their updatable id.
-    XCTAssertTrue(prompt.contains("[id:42] Review the PR"))
+    XCTAssertTrue(prompt.contains("[id:action-item-42] Review the PR"))
     // Staged tasks appear as id-less evidence.
     XCTAssertTrue(prompt.contains("ALREADY CAPTURED — STAGED"))
     let stagedLine = prompt.split(separator: "\n").first { $0.contains("Draft the Q3 report") }
@@ -33,6 +33,36 @@ final class TaskAssistantContextPromptTests: XCTestCase {
       "A staged task must never be rendered with an updatable id")
     // The specific bug signature must be gone entirely.
     XCTAssertFalse(prompt.contains("[id:0]"), "No task may be rendered with the sentinel id 0")
+  }
+
+  func testSearchResultSerializesOnlyBackendTaskIDs() throws {
+    let localResult = TaskSearchResult(
+      taskID: nil,
+      description: "Unsynced local task",
+      status: "active",
+      similarity: 0.9,
+      matchType: "vector",
+      relevanceScore: 1
+    )
+    let backendResult = TaskSearchResult(
+      taskID: "backend-task-42",
+      description: "Synced task",
+      status: "active",
+      similarity: 0.9,
+      matchType: "vector",
+      relevanceScore: 1
+    )
+
+    let localPayload = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(localResult)) as? [String: Any]
+    )
+    let backendPayload = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(backendResult)) as? [String: Any]
+    )
+
+    XCTAssertNil(localPayload["id"])
+    XCTAssertNil(localPayload["task_id"])
+    XCTAssertEqual(backendPayload["task_id"] as? String, "backend-task-42")
   }
 
   func testEmptyContextRendersNothing() {

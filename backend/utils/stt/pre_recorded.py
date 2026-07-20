@@ -24,6 +24,8 @@ from config.stt_provider_policy import (
     PARAKEET_PROVIDER,
     STTServingSurface,
     default_models_for_surface,
+    normalized_stt_language,
+    parakeet_supports_language,
     provider_is_enabled,
 )
 from models.transcript_segment import TranscriptSegment
@@ -38,36 +40,6 @@ logger = logging.getLogger(__name__)
 
 # Public compatibility export used by chat/router boundaries.
 PrerecordedSTTConfigurationError = _PrerecordedSTTConfigurationError
-
-_parakeet_languages = {
-    'multi',
-    'bg',
-    'hr',
-    'cs',
-    'da',
-    'nl',
-    'en',
-    'et',
-    'fi',
-    'fr',
-    'de',
-    'el',
-    'hu',
-    'it',
-    'lt',
-    'lv',
-    'mt',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sl',
-    'es',
-    'sv',
-    'uk',
-}
-
 
 # ---------------------------------------------------------------------------
 # Provider-agnostic ABC — mirrors STTSocket for streaming
@@ -110,7 +82,7 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     wins. Disabled-provider tokens are ignored, then policy-owned defaults provide
     the serving fallback.
     """
-    base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
+    base_lang = normalized_stt_language(language) or 'en'
 
     def select(models: Sequence[str]) -> Optional[Tuple[str, Optional[str], str]]:
         for m in models:
@@ -120,7 +92,7 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
                     return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
                 continue
             if m == 'parakeet' and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.PRERECORDED):
-                if base_lang in _parakeet_languages:
+                if parakeet_supports_language(STTServingSurface.PRERECORDED, base_lang):
                     return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
         return None
 

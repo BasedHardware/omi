@@ -3058,7 +3058,7 @@ final class DesktopAutomationActionRegistry {
         "storage_bytes": "\(stats?.storageSize ?? 0)",
       ]
     }
-
+    registerRewindArtifactRecoveryGauntlet()
     register(
       name: "navigate_via_shortcut",
       summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",

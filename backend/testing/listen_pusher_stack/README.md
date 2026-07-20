@@ -69,19 +69,27 @@ Scenarios:
 3. a stale empty desktop recording is removed by the next-session lifecycle path and creates no job;
 4. a pusher process loses the first 104 before claim, is restarted, and the
    live backend session replays the same job ID and dispatch generation exactly once.
-5. a session closes during the deferred pending-finalization window; the real
+5. source close immediately after the inline opcode-104 handoff waits until the
+   pusher connection cleanup has run, then proves the already-claimed durable
+   finalizer still completes without a later listen session;
+6. concurrent public `POST /v1/conversations/{id}/finalize` retries produce one
+   opaque named task and one outbox job, prove the `AlreadyExists` boundary,
+   then survive listener restart before the detached worker completes and safely
+   ACKs a duplicate delivery. A bounded test-entrypoint read barrier makes the
+   intended stale-read race deterministic without replacing the route,
+   lifecycle transaction, or task construction;
+7. a session closes during the deferred pending-finalization window; the real
    recovery path from #9960 enqueues one opaque Cloud Tasks task, then a real
    worker retry preserves `processing` until it completes the same job;
-6. a worker exhausting its two-attempt test budget atomically dead-letters the
+8. a worker exhausting its two-attempt test budget atomically dead-letters the
    job and marks the still-current conversation `failed`/`discarded`, while a
    later duplicate delivery is fenced;
-7. an integration failure after processing retries only durable fanout, never
+9. an integration failure after processing retries only durable fanout, never
    re-runs completed conversation processing.
 
-The inline compatibility coverage deliberately triggers stale live-session
-finalization before closing. A source close immediately after opcode 104 takes
-a different inline/BYOK cancellation path, tracked in #9995; only the detached
-Cloud Tasks scenarios assert clean-close durability.
+Inline source-close coverage uses a file-gated local provider leaf only to make
+the post-claim timing deterministic. It retains the real listener, pusher
+router, Firestore claim/completion, and connection cleanup paths.
 
 This complements, rather than replaces, the storage race test:
 

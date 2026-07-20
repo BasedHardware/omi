@@ -42,6 +42,10 @@ The automatic path calls the same script with `--automatic`, adding signed-artif
 
 Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environment or GitHub's `prod` environment to pause automatic beta. Failures leave the candidate non-live. Stable nomination and `desktop_promote_prod.yml` remain manual-only.
 
+### Emergency macOS beta rollback
+
+`POST /v2/desktop/channels/rollback` is the only non-monotonic pointer operation. It is authenticated with `ADMIN_KEY` and accepts literal `platform: macos` and `channel: beta` values only. The request must include the target `release_id` plus the exact `expected_current_release_id` and `expected_generation`; all three are compared inside the Firestore transaction before either write occurs. The target must already be a registered macOS manifest with passed T2 qualification and an earlier build than the current beta pointer. The transaction creates an append-only immutable audit record and then advances only `desktop_update_channels/macos-beta`; it cannot write Stable, production, another channel, or another platform. The response returns that immutable audit payload and the new beta pointer. Normal `/v2/desktop/channels/promote` remains roll-forward only.
+
 After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
 
 ## Advisory release doctor
@@ -93,17 +97,24 @@ The following sources of truth remain transitional until their named deletion ga
 
 Python `backend*` deployment identity is independent. V1 neither reads nor mutates Python backend release state; only the existing desktop manifest/pointer API is involved in the later control-plane migration.
 
-## Developer head-of-main
+## Named developer bundles
 
-Developers can use a local named bundle without creating a release:
+Use `omi-dev` to build and update a local named bundle without creating a release:
 
 ```bash
-desktop/macos/scripts/omi-main install
-desktop/macos/scripts/omi-main update
-desktop/macos/scripts/omi-main status
+desktop/macos/scripts/omi-dev update --name omi-alice --ref origin/main
+desktop/macos/scripts/omi-dev update --name omi-beta-local --ref v0.12.84+12084-macos
+desktop/macos/scripts/omi-dev status --name omi-alice
 ```
 
-This uses a dedicated detached worktree and `/Applications/omi-main.app`. It never replaces or launches the production Omi or Omi Beta bundles.
+Every `omi-<name>` gets its own detached worktree, state directory, bundle ID, ports, and
+`/Applications/omi-<name>.app` target. The command rejects standard application names, so it
+never replaces or launches Omi, Omi Beta, Stable, or their user data. Updates are explicit:
+named developer bundles do not use the shared production/beta Sparkle archive.
+
+`desktop/macos/scripts/omi-main` remains available as a compatibility wrapper for the
+`omi-main` bundle; it forwards to `omi-dev --name omi-main` and honors the legacy
+`OMI_MAIN_REPOSITORY`, `OMI_MAIN_WORKTREE`, and `OMI_MAIN_STATE_DIR` overrides.
 
 ## Update transaction truth
 

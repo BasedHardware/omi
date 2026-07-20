@@ -24,6 +24,76 @@ DEEPGRAM_SELF_HOSTED_PROVIDER: Final = 'deepgram_self_hosted'
 MODULATE_PROVIDER: Final = 'modulate'
 PARAKEET_PROVIDER: Final = 'parakeet'
 
+# Velma-2 is the live fallback for every language we can safely send to its
+# automatic-detection mode. Keep this capability at the policy boundary rather
+# than beside one caller: a user may choose multi-language mode independently
+# of their primary language.
+MODULATE_SUPPORTED_LANGUAGES: Final[frozenset[str]] = frozenset(
+    {
+        'multi',
+        'en',
+        'af',
+        'sq',
+        'ar',
+        'az',
+        'eu',
+        'be',
+        'bn',
+        'bs',
+        'bg',
+        'ca',
+        'zh',
+        'hr',
+        'cs',
+        'da',
+        'nl',
+        'et',
+        'fi',
+        'fr',
+        'gl',
+        'de',
+        'el',
+        'gu',
+        'he',
+        'hi',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'kn',
+        'kk',
+        'ko',
+        'lv',
+        'lt',
+        'mk',
+        'ms',
+        'ml',
+        'mr',
+        'no',
+        'fa',
+        'pl',
+        'pt',
+        'pa',
+        'ro',
+        'ru',
+        'sr',
+        'sk',
+        'sl',
+        'es',
+        'sw',
+        'sv',
+        'tl',
+        'ta',
+        'te',
+        'th',
+        'tr',
+        'uk',
+        'ur',
+        'vi',
+        'cy',
+    }
+)
+
 # This is the single source of truth for provider enablement. Cloud Deepgram is
 # intentionally absent from every serving surface. Self-hosted Deepgram is a
 # distinct product and remains available only to the streaming runtime that has
@@ -56,6 +126,73 @@ DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = 
     STTServingSurface.PRERECORDED: ('parakeet', 'modulate-velma-2'),
     STTServingSurface.PTT: ('parakeet', 'modulate-velma-2'),
 }
+
+# The Parakeet deployment has distinct batch and real-time models. The batch
+# `parakeet-tdt-0.6b-v3` model can detect 25 languages, while streaming and
+# PTT both use the English-only `parakeet-rnnt-1.1b` model. Keep capabilities
+# tied to the deployed model rather than to the provider token, so a model
+# change must update this policy and its regression coverage together.
+PARAKEET_MODEL_BY_SURFACE: Final[Mapping[STTServingSurface, str]] = {
+    STTServingSurface.STREAMING: 'nvidia/parakeet-rnnt-1.1b',
+    STTServingSurface.PTT: 'nvidia/parakeet-rnnt-1.1b',
+    STTServingSurface.PRERECORDED: 'nvidia/parakeet-tdt-0.6b-v3',
+}
+PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL: Final[Mapping[str, frozenset[str]]] = {
+    'nvidia/parakeet-rnnt-1.1b': frozenset({'en'}),
+    'nvidia/parakeet-tdt-0.6b-v3': frozenset(
+        {
+            'multi',
+            'bg',
+            'hr',
+            'cs',
+            'da',
+            'nl',
+            'en',
+            'et',
+            'fi',
+            'fr',
+            'de',
+            'el',
+            'hu',
+            'it',
+            'lt',
+            'lv',
+            'mt',
+            'pl',
+            'pt',
+            'ro',
+            'ru',
+            'sk',
+            'sl',
+            'es',
+            'sv',
+            'uk',
+        }
+    ),
+}
+
+
+def parakeet_supports_language(surface: STTServingSurface, language: str) -> bool:
+    """Return whether the deployed Parakeet model supports a normalized language."""
+    model = PARAKEET_MODEL_BY_SURFACE[surface]
+    return language.strip().lower() in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[model]
+
+
+def normalized_stt_language(language: str | None) -> str:
+    """Return the base language code accepted by provider capability maps."""
+    if not language:
+        return ''
+    return language.split('-')[0].split('_')[0].lower()
+
+
+def modulate_supports_language(language: str | None) -> bool:
+    """Return whether Velma-2 accepts a language code on a serving surface."""
+    return normalized_stt_language(language) in MODULATE_SUPPORTED_LANGUAGES
+
+
+def supports_live_multilingual_mode(language: str | None) -> bool:
+    """Return whether a live user language can enter Modulate auto-detection."""
+    return modulate_supports_language(language)
 
 
 def provider_for_model_token(model: str) -> str | None:

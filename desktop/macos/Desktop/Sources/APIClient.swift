@@ -636,7 +636,8 @@ extension APIClient {
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
-    starred: Bool? = nil
+    starred: Bool? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [ServerConversation] {
     var queryItems: [String] = [
       "limit=\(limit)",
@@ -652,7 +653,7 @@ extension APIClient {
     )
 
     let endpoint = "v1/conversations?\(queryItems.joined(separator: "&"))"
-    return try await get(endpoint)
+    return try await get(endpoint, authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Fetches a single conversation by ID
@@ -902,13 +903,22 @@ extension APIClient {
 extension APIClient {
 
   /// Fetches all active goals (up to 4). Uses 5-second cache to deduplicate parallel calls.
-  func getGoals() async throws -> [Goal] {
-    if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
+  func getGoals(authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil) async throws
+    -> [Goal]
+  {
+    // The short-lived shared cache is not owner-validated; owner-bound callers
+    // must always hit the network under their snapshot.
+    if authorizationSnapshot == nil, let cache = goalsCache, let time = goalsCacheTime,
+      Date().timeIntervalSince(time) < 5
+    {
       return cache
     }
-    let goals: [Goal] = try await get("v1/goals/all")
-    goalsCache = goals
-    goalsCacheTime = Date()
+    let goals: [Goal] = try await get(
+      "v1/goals/all", authorizationSnapshot: authorizationSnapshot)
+    if authorizationSnapshot == nil {
+      goalsCache = goals
+      goalsCacheTime = Date()
+    }
     return goals
   }
 

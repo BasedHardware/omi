@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the chat fault suite so injected backend errors surface the real HTTP 500 instead of a generic bridge failure"
+}

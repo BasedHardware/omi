@@ -54,7 +54,7 @@ def _consume_failure(stage: str, conversation_id: str, **metadata: Any) -> bool:
     return True
 
 
-def _offline_process_conversation(uid: str, _language: str, conversation: Any, **_kwargs: Any) -> Any:
+def _offline_process_conversation(uid: str, _language: str, conversation: Any, **kwargs: Any) -> Any:
     conversation_id = str(conversation.id)
     if _consume_failure('process', conversation_id):
         raise RuntimeError('controlled finalization processing failure')
@@ -67,6 +67,8 @@ def _offline_process_conversation(uid: str, _language: str, conversation: Any, *
             'outcome': 'completed',
             'conversation_id': conversation_id,
             'persisted': bool(persisted),
+            'force_process': bool(kwargs.get('force_process')),
+            'defer_memory_extraction': bool(kwargs.get('defer_memory_extraction')),
         }
     )
     return conversation

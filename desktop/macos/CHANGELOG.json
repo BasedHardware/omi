@@ -1,6 +1,65 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed a launch crash caused by macOS notification-permission callbacks."
+  ],
   "releases": [
+    {
+      "version": "0.12.87",
+      "date": "2026-07-20",
+      "changes": [
+        "Fixed a failed app update being able to delete your existing installed copy of Omi",
+        "Fixed audio from Bee devices gradually drifting out of sync during longer recordings",
+        "Fixed starring or renaming a conversation briefly reverting when you switch filters on a slow connection",
+        "Fixed the movable floating bar drifting out of position after repeated Ask Omi queries",
+        "Personalized home suggestions now retry after a network outage instead of staying empty for the rest of the day",
+        "Fixed personalized home suggestions so switching accounts mid-refresh can never show or store another account's questions",
+        "Fixed a startup crash that could occur while checking notification permissions",
+        "Home suggestions now open with \"What should I do today?\" followed by two questions personalized from your memories, tasks, and goals",
+        "Fixed already-synced device recordings never being cleaned up, which grew disk usage over time",
+        "Fixed device recordings occasionally getting stuck and never finishing sync after an authentication hiccup",
+        "Improved reliability of macOS beta qualification retries by starting each run with a clean synthetic profile"
+      ]
+    },
+    {
+      "version": "0.12.85",
+      "date": "2026-07-19",
+      "changes": [
+        "Improved Rewind reliability so a newly started recording is not lost during cleanup",
+        "Fixed BLE audio recording not recovering after the device audio stream dropped mid-session",
+        "Fixed the Full Disk Access onboarding step asking to reopen Omi again after every restart",
+        "Improved reliability of restoring offline completed tasks",
+        "Added isolated local updates for named developer bundles without using the production or beta updater",
+        "Fixed a crash that could occur while checking notification permission at startup",
+        "Fixed queued Rewind OCR embeddings from the previous account being written into the next account's database after switching accounts",
+        "Fixed onboarding sometimes creating a duplicate goal when finishing setup after a transient error",
+        "Fixed chat screen-capture screenshots accumulating in your Documents folder without ever being cleaned up",
+        "Fixed the task list failing to refresh for users with more than 500 tasks",
+        "Fixed undoing the deletion of a task created offline creating a duplicate copy of the task",
+        "Fixed undoing a task deletion losing the task's category, tags, recurrence, and completion state",
+        "Fixed deleting, completing, or editing a just-created task while offline silently not sticking (the task reappeared on next launch)",
+        "Fixed quitting during onboarding's voice demo permanently switching your push-to-talk transcription to Live mode",
+        "Fixed WiFi sync hanging on \"Connecting…\" forever when the device could not be reached",
+        "Fixed WiFi audio sync silently dropping audio after the first partial packet by tracking block boundaries across the whole stream",
+        "Fixed a failed WiFi sync leaving a phantom entry in the pending-sync count that never cleared",
+        "Fixed pressing Stop during a WiFi sync briefly showing an error message even though you cancelled it on purpose",
+        "Fixed the Stop button during WiFi sync not actually cancelling the in-progress transfer"
+      ]
+    },
+    {
+      "version": "0.12.84",
+      "date": "2026-07-19",
+      "changes": [
+        "Fixed a desktop memory search edge case so newly added memories remain searchable and their visibility can be updated.",
+        "Fixed AI-extracted task updates targeting the wrong task"
+      ]
+    },
+    {
+      "version": "0.12.83",
+      "date": "2026-07-19",
+      "changes": [
+        "Improved beta chat recovery when authentication fault checks run"
+      ]
+    },
     {
       "version": "0.12.82",
       "date": "2026-07-19",

@@ -8,6 +8,7 @@ call LLMs, vector stores, or user integrations.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -49,6 +50,13 @@ def _offline_extract_memories(_uid: str, _conversation: Any) -> None:
 
 
 async def _offline_trigger_integrations(_uid: str, conversation: Any, *, idempotency_key: str, **_kwargs: Any) -> None:
+    release_file = os.getenv('OMI_STACK_INLINE_FINALIZATION_RELEASE_FILE')
+    if release_file:
+        release_path = Path(release_file)
+        _record({'event': 'inline_finalization_hold_entered', 'conversation_id': str(conversation.id)})
+        while not release_path.exists():
+            await asyncio.sleep(0.01)
+        _record({'event': 'inline_finalization_hold_released', 'conversation_id': str(conversation.id)})
     _record(
         {
             'event': 'integration_fanout_skipped',
@@ -68,6 +76,7 @@ from routers import pusher as pusher_router  # noqa: E402  (patch finalizer firs
 
 _receive_bytes = pusher_router.WebSocket.receive_bytes
 _send_bytes = pusher_router.WebSocket.send_bytes
+_drain_tasks = pusher_router.drain_tasks
 
 
 def _offline_store_audio_chunks(chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str) -> None:
@@ -135,5 +144,15 @@ async def _observed_send_bytes(websocket: Any, data: bytes) -> None:
 
 pusher_router.WebSocket.receive_bytes = _observed_receive_bytes
 pusher_router.WebSocket.send_bytes = _observed_send_bytes
+
+
+async def _observed_drain_tasks(*args: Any, **kwargs: Any) -> int:
+    result = await _drain_tasks(*args, **kwargs)
+    if kwargs.get('label') == 'pusher_cleanup':
+        _record({'event': 'pusher_cleanup_completed'})
+    return result
+
+
+pusher_router.drain_tasks = _observed_drain_tasks
 
 from pusher.main import app  # noqa: E402

@@ -7,6 +7,29 @@ schema_version: 1
 service: backend-main
 routes:
   - route_type: http
+    method: POST
+    path: /v1/conversations/shared/chat
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - service_oidc
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: public_shared_conversation_chat
+        key_subject: custom
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: default_method
+      surface: shared_public
+      visibility: public_undocumented
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
     method: GET
     path: /v2/desktop/previews/{slug}
     policy:
@@ -97,6 +120,28 @@ routes:
   - route_type: http
     method: POST
     path: /v2/desktop/releases
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - admin_key
+        placement: inline
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: desktop_update
+      visibility: admin
+      data_domain: desktop_updates
+      deprecation:
+        state: active
+  - route_type: http
+    method: POST
+    path: /v2/desktop/channels/rollback
     policy:
       review_status: reviewed
       auth:

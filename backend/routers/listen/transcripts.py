@@ -311,7 +311,10 @@ class TranscriptProcessor:
                 self.host.send_event(SegmentsDeletedEvent(segment_ids=removed))
             if not transcript_segments:
                 continue
-            await self.host.request.websocket.send_json([segment.model_dump() for segment in updated])
+            client_segments = [segment.model_dump() for segment in updated]
+            await self.host.request.websocket.send_json(client_segments)
+            if client_segments:
+                self.host.complete_live_transcription()
             if self.host.transcript_send is not None and self.host.user_has_credits:
                 self.host.transcript_send([segment.model_dump() for segment in transcript_segments])
             elif not self.host.pusher_enabled and self.host.user_has_credits:

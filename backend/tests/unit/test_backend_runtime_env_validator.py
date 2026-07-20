@@ -40,6 +40,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
+        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
@@ -75,6 +76,18 @@ def with_backend_pusher_env(payload: str) -> str:
     )
 
 
+def with_backend_public_shared_chat_auth_env(payload: str) -> str:
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n'
+        r'        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE", "value": "https://backend.example/chat"},\n'
+        r'        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA", "value": "frontend@example.iam.gserviceaccount.com"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
@@ -90,7 +103,9 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
-    payload = with_backend_pusher_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+    payload = with_backend_public_shared_chat_auth_env(
+        with_backend_pusher_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
+    )
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),

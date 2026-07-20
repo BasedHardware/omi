@@ -195,6 +195,26 @@ class TasksStore: ObservableObject {
   private var completedOffset = 0
   private var deletedOffset = 0
   private let pageSize = 100  // Reduced from 1000 for better performance
+
+  /// Backend cap on `limit` for `GET /v1/action-items` (`le=500`). A request
+  /// above this returns HTTP 422 and the whole refresh fails, so any computed
+  /// reload limit must be clamped to it.
+  static let apiPageLimitCap = 500
+
+  /// Clamp a computed page limit to the range the backend accepts (1...500).
+  static func clampedApiPageLimit(_ requested: Int) -> Int {
+    min(max(requested, 1), apiPageLimitCap)
+  }
+
+  /// The two limits an auto-refresh needs. `api` is clamped to the backend cap
+  /// (an unclamped >500 request 422s). `local` is the full loaded count and
+  /// drives the local-cache reload + hasMore: it must NOT be clamped, or a user
+  /// who has paginated past 500 tasks would have every row beyond 500 dropped by
+  /// `mergeWithoutAdding` on every refresh, collapsing the list back to 500.
+  static func refreshLimits(pageSize: Int, loadedCount: Int) -> (api: Int, local: Int) {
+    let local = max(pageSize, loadedCount)
+    return (api: clampedApiPageLimit(local), local: local)
+  }
   private var hasLoadedIncomplete = false
   private var hasLoadedCompleted = false
   private var hasLoadedDeleted = false
@@ -439,11 +459,19 @@ class TasksStore: ObservableObject {
 
     // Silently sync and reload incomplete tasks (local-first, like Memories)
     do {
-      let reloadLimit = max(pageSize, incompleteTasks.count)
+      // The backend caps `limit` at 500, so the API page must be clamped (an
+      // unclamped >500 request 422s). But the LOCAL cache load below and the
+      // hasMore signal must use the full loaded count: reusing the clamped API
+      // limit for the local reload would drop every task past row 500 from a
+      // user who has paginated beyond it (mergeWithoutAdding removes current
+      // rows absent from its source), collapsing a 600+ list back to 500.
+      let limits = Self.refreshLimits(pageSize: pageSize, loadedCount: incompleteTasks.count)
+      let apiLimit = limits.api
+      let localReloadLimit = limits.local
       let response = try await fetchPage(
         completed: false,
         offset: 0,
-        limit: reloadLimit,
+        limit: apiLimit,
         lease: lease,
         operations: operations
       )
@@ -461,7 +489,7 @@ class TasksStore: ObservableObject {
       // (completed/deleted on mobile). Safe: only deletes synced records.
       // An empty page is reconciled only after the IDs endpoint confirms the
       // account truly has zero incomplete tasks (degraded-backend guard).
-      if response.items.count < reloadLimit {
+      if response.items.count < apiLimit {
         if response.items.isEmpty {
           if !incompleteTasks.isEmpty {
             _ = await reconcileConfirmedEmptyCloud(lease: lease, operations: operations)
@@ -481,10 +509,12 @@ class TasksStore: ObservableObject {
         }
       }
 
-      // Reload from local cache (respects local changes like completions/deletions)
+      // Reload from local cache (respects local changes like completions/deletions).
+      // Uses the unclamped local limit so a user paginated past 500 keeps every
+      // loaded row instead of being truncated by the backend's API cap.
       let mergedTasks = try await loadCachedTasks(
         scope: .incomplete,
-        limit: reloadLimit,
+        limit: localReloadLimit,
         offset: 0,
         lease: lease,
         operations: operations
@@ -517,7 +547,7 @@ class TasksStore: ObservableObject {
       } else {
         log("RENDER: Auto-refresh: no changes detected, skipping update")
       }
-      let newHasMore = mergedTasks.count >= reloadLimit
+      let newHasMore = mergedTasks.count >= localReloadLimit
       if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
       await refreshDashboardCache(lease: lease, operations: operations)
     } catch {
@@ -1962,6 +1992,19 @@ class TasksStore: ObservableObject {
           authorizationSnapshot: lease.authorizationSnapshot
         )
         guard isCurrent(lease) else { return }
+        // createActionItem always posts completed:nil, so a task the user
+        // completed while it was still unsynced (offline / failed create) would
+        // be recreated on the backend as incomplete and resurrected on the next
+        // refresh. Push the completed state with a follow-up update.
+        if item.completed {
+          _ = try? await APIClient.shared.updateActionItem(
+            id: response.id,
+            completed: true,
+            expectedOwnerId: ownerID,
+            authorizationSnapshot: lease.authorizationSnapshot
+          )
+          guard isCurrent(lease) else { return }
+        }
         try await ActionItemStorage.shared.markSynced(
           id: localId,
           backendId: response.id,
@@ -2322,7 +2365,13 @@ class TasksStore: ObservableObject {
     }
     guard isCurrent(lease) else { return }
 
-    // 6. Call API in background, revert on failure
+    // 6. Call API in background, revert on failure. An unsynced local-only
+    // task has no backend row — the call would 404 and wrongly revert the
+    // local toggle; the pending create-sync will push current row state.
+    if operationOverrides == nil, ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      log("TasksStore: Skipped backend toggle for unsynced local task \(task.id)")
+      return
+    }
     do {
       let apiResult: TaskActionItem
       if let operationOverrides {
@@ -2649,7 +2698,12 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // Hard-delete on backend in background
+    // Hard-delete on backend in background. Unsynced local-only tasks have
+    // no backend row to delete.
+    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      log("TasksStore: Skipped backend delete for unsynced local task \(task.id)")
+      return
+    }
     do {
       try await APIClient.shared.deleteActionItem(
         id: task.id,
@@ -2669,6 +2723,19 @@ class TasksStore: ObservableObject {
     expectedOwnerID: String? = nil
   ) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
+
+    // A local-only task never had a backend row (deleteTask skipped the backend
+    // delete). Restoring it through the backend-recreate path below is wrong on
+    // two counts: syncTaskActionItems([task]) would persist the "local_<rowid>"
+    // placeholder as a *synced* backendId, and createActionItem would mint a
+    // SECOND real backend task — leaving a duplicate/phantom row. Instead
+    // re-insert it as an UNSYNCED local row so the pending create-sync pushes it
+    // exactly once (carrying completion via retryUnsyncedItems).
+    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      await restoreLocalOnlyTask(task, lease: lease)
+      return
+    }
+
     // 1. Re-insert into SQLite from the in-memory task object
     do {
       try await ActionItemStorage.shared.syncTaskActionItems(
@@ -2690,28 +2757,107 @@ class TasksStore: ObservableObject {
       incompleteTasks.insert(task, at: 0)
     }
 
-    // 3. Re-create on backend (hard-delete already removed it)
+    // 3. Re-create on backend (hard-delete already removed it). Pass the full
+    // field set — restore used to send only description/dueAt/priority, so undo
+    // silently dropped source, category, tags, recurrence, goal/workstream, and
+    // completion state.
     do {
+      var restoreMetadata: [String: Any] = [:]
+      if let existing = task.metadata,
+        let data = existing.data(using: .utf8),
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      {
+        restoreMetadata = json
+      }
+      if !task.tags.isEmpty {
+        restoreMetadata["tags"] = task.tags
+      }
       let created = try await APIClient.shared.createActionItem(
         description: task.description,
         dueAt: task.dueAt,
+        source: task.source,
         priority: task.priority,
+        category: task.category,
+        metadataBox: restoreMetadata.isEmpty ? nil : ActionItemMetadataBox(restoreMetadata),
+        relevanceScore: task.relevanceScore,
+        recurrenceRule: task.recurrenceRule,
+        recurrenceParentId: task.recurrenceParentId,
+        goalId: task.goalId,
+        workstreamId: task.workstreamId,
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
       guard isCurrent(lease) else { return }
+      // createActionItem cannot set completion; restore the completed state of
+      // a task that was done when it was deleted via a follow-up update.
+      var resolved = created
+      if task.completed, !created.completed {
+        resolved =
+          (try? await APIClient.shared.updateActionItem(
+            id: created.id,
+            completed: true,
+            expectedOwnerId: lease.ownerID,
+            authorizationSnapshot: lease.authorizationSnapshot
+          )) ?? created
+        guard isCurrent(lease) else { return }
+      }
       // Update local record with new backend ID
       try await ActionItemStorage.shared.syncTaskActionItems(
-        [created],
+        [resolved],
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
       guard isCurrent(lease) else { return }
-      log("TasksStore: Restored task via undo (new backend ID: \(created.id))")
+      log("TasksStore: Restored task via undo (new backend ID: \(resolved.id))")
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-create task on backend (local restore preserved)", error: error)
       }
     }
+  }
+
+  /// Build the SQLite record for restoring a local-only task: an UNSYNCED row
+  /// (never carry the "local_<rowid>" placeholder as a backendId, or it becomes
+  /// a fabricated synced id) with the original rowid preserved so the surfaced
+  /// id is stable, and the delete flags cleared.
+  static func localOnlyRestoreRecord(from task: TaskActionItem) -> ActionItemRecord {
+    var record = ActionItemRecord.from(task)
+    record.backendId = nil
+    record.backendSynced = false
+    record.deleted = false
+    record.deletedBy = nil
+    if case .localRow(let rowId) = ActionItemTaskIdentity(surfacedId: task.id) {
+      record.id = rowId
+    } else {
+      record.id = nil
+    }
+    return record
+  }
+
+  /// Restore a hard-deleted local-only task as an unsynced local row, preserving
+  /// its original rowid so the surfaced "local_<rowid>" id is stable. No backend
+  /// recreate: the task never had a backend row, and the pending create-sync
+  /// (retryUnsyncedItems) is the single writer that pushes it to the backend.
+  private func restoreLocalOnlyTask(_ task: TaskActionItem, lease: OwnerOperationLease) async {
+    let record = Self.localOnlyRestoreRecord(from: task)
+    do {
+      try await ActionItemStorage.shared.insertLocalActionItem(
+        record,
+        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+      )
+    } catch {
+      if isCurrent(lease) {
+        logError("TasksStore: Failed to re-insert local-only task for undo", error: error)
+      }
+      return
+    }
+    guard isCurrent(lease) else { return }
+
+    if task.completed {
+      completedTasks.insert(task, at: 0)
+    } else {
+      incompleteTasks.insert(task, at: 0)
+    }
+    log("TasksStore: Restored local-only task via undo (unsynced, id: \(task.id))")
   }
 
   func updateTask(
@@ -2770,7 +2916,12 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // 3. Call API in background
+    // 3. Call API in background. Unsynced local-only tasks have no backend
+    // row; the pending create-sync pushes current row state instead.
+    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      log("TasksStore: Skipped backend update for unsynced local task \(task.id)")
+      return
+    }
     do {
       let apiResult = try await APIClient.shared.updateActionItem(
         id: task.id,
@@ -2851,7 +3002,12 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // 3. Call API in background
+    // 3. Call API in background. Unsynced local-only tasks have no backend
+    // row; the pending create-sync pushes current row state instead.
+    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+      log("TasksStore: Skipped backend tag update for unsynced local task \(task.id)")
+      return
+    }
     do {
       let apiResult = try await APIClient.shared.updateActionItem(
         id: task.id,
@@ -2914,8 +3070,8 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // Hard-delete on backend in background
-    for id in ids {
+    // Hard-delete on backend in background (skip unsynced local-only ids)
+    for id in ids where !ActionItemTaskIdentity(surfacedId: id).isLocalOnly {
       do {
         try await APIClient.shared.deleteActionItem(
           id: id,

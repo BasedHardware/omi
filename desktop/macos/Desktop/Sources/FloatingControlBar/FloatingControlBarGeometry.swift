@@ -26,6 +26,20 @@ enum FloatingControlBarGeometry {
     case preservingCurrentCenter
   }
 
+  /// Bottom-left origin that centers a window of `size` on `center`.
+  static func restoreOrigin(center: NSPoint, size: NSSize) -> NSPoint {
+    NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
+  }
+
+  /// The center a window ends up reporting (`frame.midX/midY`) after it is
+  /// snapped to `origin` with `size`. Round-trips with `restoreOrigin` ONLY when
+  /// the same `size` is used for both: computing the origin with a glow-inflated
+  /// size but snapping with the bare pill size shifts the recorded center by half
+  /// the size difference — the pill-drift bug.
+  static func recordedCenter(afterSnapOrigin origin: NSPoint, size: NSSize) -> NSPoint {
+    NSPoint(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
+  }
+
   static func centerAnchoredFrame(currentFrame: NSRect, targetSize: NSSize) -> NSRect {
     NSRect(
       x: currentFrame.midX - targetSize.width / 2,

@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6191,
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2850
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2849
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Threads the Codex bridge mode through native-model-choice and provider-identity paths so Codex runs like the other local agents.",

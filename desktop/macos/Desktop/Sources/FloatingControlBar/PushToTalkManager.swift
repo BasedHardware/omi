@@ -1182,7 +1182,7 @@ class PushToTalkManager: ObservableObject {
     // phrase from it. Applies to the omni and batch paths, which retain the
     // raw turn audio; live-Deepgram streams without buffering and already
     // returns empty on silence.
-    let isBatch = ShortcutSettings.shared.pttTranscriptionMode == .batch
+    let isBatch = ShortcutSettings.shared.effectivePTTTranscriptionMode == .batch
     if isOmniSTT || isBatch {
       batchAudioLock.lock()
       let turnAudio = batchAudioBuffer
@@ -1253,7 +1253,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
-    let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
+    let isBatchMode = ShortcutSettings.shared.effectivePTTTranscriptionMode == .batch
 
     if isBatchMode {
       // Batch mode: send accumulated audio to pre-recorded API

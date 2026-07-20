@@ -1537,20 +1537,26 @@ actor TaskAssistant: ProactiveAssistant {
 
   /// Refresh context from local SQLite + cached goals
   private func refreshContext() async -> TaskExtractionContext {
-    var topRelevanceTasks: [(id: Int64, description: String, priority: String?, relevanceScore: Int?)] = []
-    var recentTasks: [(id: Int64, description: String, priority: String?, relevanceScore: Int?)] = []
+    var topRelevanceTasks: [(id: String, description: String, priority: String?, relevanceScore: Int?)] = []
+    var recentTasks: [(id: String, description: String, priority: String?, relevanceScore: Int?)] = []
     var completedTasks: [(id: Int64, description: String)] = []
     var deletedTasks: [(id: Int64, description: String)] = []
 
     // Query both action_items (promoted + manual) and staged_tasks for full context
     do {
-      topRelevanceTasks = try await ActionItemStorage.shared.getTopRelevanceTasks(limit: 30)
+      topRelevanceTasks = try await ActionItemStorage.shared.getTopRelevanceTasks(limit: 30).compactMap {
+        guard let backendId = $0.backendId, !backendId.isEmpty else { return nil }
+        return (id: backendId, description: $0.description, priority: $0.priority, relevanceScore: $0.relevanceScore)
+      }
     } catch {
       logError("Task: Failed to load top relevance tasks", error: error)
     }
 
     do {
-      recentTasks = try await ActionItemStorage.shared.getRecentActiveTasks(limit: 30)
+      recentTasks = try await ActionItemStorage.shared.getRecentActiveTasks(limit: 30).compactMap {
+        guard let backendId = $0.backendId, !backendId.isEmpty else { return nil }
+        return (id: backendId, description: $0.description, priority: $0.priority, relevanceScore: $0.relevanceScore)
+      }
     } catch {
       logError("Task: Failed to load recent tasks", error: error)
     }
@@ -1632,7 +1638,7 @@ actor TaskAssistant: ProactiveAssistant {
 
             results.append(
               TaskSearchResult(
-                id: result.id,
+                taskID: record.backendId,
                 description: record.description,
                 status: status,
                 similarity: Double(result.similarity),
@@ -1653,7 +1659,7 @@ actor TaskAssistant: ProactiveAssistant {
 
             results.append(
               TaskSearchResult(
-                id: result.id,
+                taskID: nil,
                 description: staged.description,
                 status: status,
                 similarity: Double(result.similarity),
@@ -1701,7 +1707,7 @@ actor TaskAssistant: ProactiveAssistant {
 
           results.append(
             TaskSearchResult(
-              id: result.id,
+              taskID: result.backendId,
               description: result.description,
               status: status,
               similarity: nil,
@@ -1718,7 +1724,7 @@ actor TaskAssistant: ProactiveAssistant {
         for result in stagedResults {
           results.append(
             TaskSearchResult(
-              id: result.id,
+              taskID: nil,
               description: result.description,
               status: "active",
               similarity: nil,

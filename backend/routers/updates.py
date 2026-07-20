@@ -4,7 +4,7 @@ import logging
 import os
 import random
 import re
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, Literal
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse, Response, HTMLResponse
 from pydantic import BaseModel, Field
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
-from database.desktop_update_channels import promote_channel, register_release_manifest
+from database.desktop_update_channels import promote_channel, register_release_manifest, rollback_macos_beta_channel
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
 from utils.desktop_update_resolver import live_cache_key, resolve_pointer_release
@@ -76,6 +76,16 @@ class DesktopChannelPromotionRequest(BaseModel):
     channel: str = Field(pattern="^(beta|stable)$")
     release_id: str
     expected_generation: Optional[int] = Field(default=None, ge=0)
+
+
+class DesktopBetaRollbackRequest(BaseModel):
+    """Emergency-only rollback request; the literal fields prevent cross-channel reuse."""
+
+    platform: Literal["macos"]
+    channel: Literal["beta"]
+    release_id: str = Field(min_length=1)
+    expected_current_release_id: str = Field(min_length=1)
+    expected_generation: int = Field(ge=0)
 
 
 class DesktopPreviewPublishRequest(BaseModel):
@@ -886,3 +896,22 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
         live_cache_key(request.platform, request.channel),
     )
     return {"success": True, "pointer": pointer}
+
+
+@router.post("/v2/desktop/channels/rollback")
+async def rollback_macos_beta_channel_endpoint(request: DesktopBetaRollbackRequest, secret_key: str = Header(...)):
+    """Emergency-only, compare-and-swap rollback for the macOS beta pointer."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    try:
+        result = await run_blocking(
+            db_executor,
+            rollback_macos_beta_channel,
+            request.release_id,
+            expected_current_release_id=request.expected_current_release_id,
+            expected_generation=request.expected_generation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    return {"success": True, **result}

@@ -4,6 +4,8 @@ import pytest
 
 from database.desktop_update_channels import (
     _build_channel_pointer,
+    _build_beta_rollback_pointer,
+    _rollback_macos_beta_transaction,
     get_channel_release,
     normalize_release_manifest,
     register_release_manifest,
@@ -158,4 +160,125 @@ class TestChannelPromotionRules:
                 channel="beta",
                 release_id=manifest["release_id"],
                 expected_generation=None,
+            )
+
+
+class TestMacosBetaRollbackRules:
+    def test_rolls_back_qualified_release_and_creates_immutable_audit(self):
+        current = {
+            "platform": "macos",
+            "channel": "beta",
+            "release_id": "v0.12.84+12084-macos",
+            "version": "0.12.84+12084",
+            "build_number": 12084,
+            "generation": 7,
+        }
+        target = normalize_release_manifest(
+            _manifest(release_id="v0.12.73+12073-macos", version="0.12.73+12073", build_number=12073)
+        )
+        pointer = _build_beta_rollback_pointer(
+            current,
+            target,
+            release_id=target["release_id"],
+            expected_current_release_id=current["release_id"],
+            expected_generation=7,
+        )
+
+        pointer_snapshot = MagicMock(exists=True)
+        pointer_snapshot.to_dict.return_value = current
+        manifest_snapshot = MagicMock(exists=True)
+        manifest_snapshot.to_dict.return_value = target
+        pointer_ref = MagicMock()
+        pointer_ref.get.return_value = pointer_snapshot
+        manifest_ref = MagicMock()
+        manifest_ref.get.return_value = manifest_snapshot
+        audit_ref = MagicMock()
+        transaction = MagicMock()
+
+        result = _rollback_macos_beta_transaction.to_wrap(
+            transaction,
+            pointer_ref,
+            manifest_ref,
+            audit_ref,
+            release_id=target["release_id"],
+            expected_current_release_id=current["release_id"],
+            expected_generation=7,
+            audit_id="audit-123",
+            occurred_at=pointer["updated_at"],
+        )
+
+        assert result["pointer"]["release_id"] == target["release_id"]
+        assert result["pointer"]["generation"] == 8
+        assert result["audit"] == {
+            "audit_id": "audit-123",
+            "operation": "macos_beta_rollback",
+            "platform": "macos",
+            "channel": "beta",
+            "previous_release_id": current["release_id"],
+            "previous_generation": 7,
+            "target_release_id": target["release_id"],
+            "generation": 8,
+            "occurred_at": pointer["updated_at"],
+        }
+        transaction.create.assert_called_once_with(audit_ref, result["audit"])
+        transaction.set.assert_called_once_with(pointer_ref, result["pointer"])
+
+    def test_rejects_stale_current_release_or_generation(self):
+        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
+        target = normalize_release_manifest(
+            _manifest(release_id="v0.12.73+12073-macos", version="0.12.73+12073", build_number=12073)
+        )
+
+        with pytest.raises(ValueError, match="current release mismatch"):
+            _build_beta_rollback_pointer(
+                current,
+                target,
+                release_id=target["release_id"],
+                expected_current_release_id="v0.12.83+12083-macos",
+                expected_generation=7,
+            )
+        with pytest.raises(ValueError, match="generation mismatch"):
+            _build_beta_rollback_pointer(
+                current,
+                target,
+                release_id=target["release_id"],
+                expected_current_release_id=current["release_id"],
+                expected_generation=6,
+            )
+
+    def test_rejects_unqualified_or_non_macos_target(self):
+        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
+        unqualified = normalize_release_manifest(
+            _manifest(
+                release_id="v0.12.73+12073-macos",
+                version="0.12.73+12073",
+                build_number=12073,
+                qualification={"tier": "T2", "passed": False},
+            )
+        )
+        with pytest.raises(ValueError, match="qualification"):
+            _build_beta_rollback_pointer(
+                current,
+                unqualified,
+                release_id=unqualified["release_id"],
+                expected_current_release_id=current["release_id"],
+                expected_generation=7,
+            )
+
+        windows = normalize_release_manifest(
+            _manifest(
+                release_id="v0.12.73+12073-windows",
+                platform="windows",
+                version="0.12.73+12073",
+                build_number=12073,
+                dmg_url=None,
+            )
+        )
+        with pytest.raises(ValueError, match="macos"):
+            _build_beta_rollback_pointer(
+                current,
+                windows,
+                release_id=windows["release_id"],
+                expected_current_release_id=current["release_id"],
+                expected_generation=7,
             )

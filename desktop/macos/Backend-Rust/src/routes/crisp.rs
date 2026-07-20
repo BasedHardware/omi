@@ -11,7 +11,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 use crate::auth::AuthUser;
@@ -24,8 +24,36 @@ pub type SessionCache = Arc<RwLock<HashMap<String, (String, Instant)>>>;
 
 const SESSION_CACHE_TTL_SECS: u64 = 3600; // 1 hour
 
+/// Hard cap on distinct cached emails. Without eviction the map grew by one
+/// entry per distinct authenticated email forever (unbounded memory). This is
+/// a safety backstop above the expiry sweep, not a working-set limit.
+const SESSION_CACHE_MAX_ENTRIES: usize = 50_000;
+
 pub fn new_session_cache() -> SessionCache {
     Arc::new(RwLock::new(HashMap::new()))
+}
+
+/// Remove entries older than `ttl` relative to `now`, then, if still above
+/// `max_entries`, drop the oldest until at the cap. Pure over the map with an
+/// injected `now` so the bound is testable without wall-clock.
+fn prune_sessions(
+    map: &mut HashMap<String, (String, Instant)>,
+    now: Instant,
+    ttl: Duration,
+    max_entries: usize,
+) {
+    map.retain(|_, (_, cached_at)| now.saturating_duration_since(*cached_at) < ttl);
+    if map.len() <= max_entries {
+        return;
+    }
+    let mut by_age: Vec<(String, Instant)> =
+        map.iter().map(|(k, (_, at))| (k.clone(), *at)).collect();
+    // Oldest first.
+    by_age.sort_by_key(|(_, at)| *at);
+    let excess = map.len() - max_entries;
+    for (key, _) in by_age.into_iter().take(excess) {
+        map.remove(&key);
+    }
 }
 
 /// Query parameters for unread check
@@ -96,10 +124,18 @@ async fn get_cached_session(cache: &SessionCache, email: &str) -> Option<String>
     None
 }
 
-/// Store a session_id in the cache.
+/// Store a session_id in the cache, pruning expired and over-cap entries so
+/// the map cannot grow without bound across distinct authenticated emails.
 async fn set_cached_session(cache: &SessionCache, email: String, session_id: String) {
+    let now = Instant::now();
     let mut map = cache.write().await;
-    map.insert(email, (session_id, Instant::now()));
+    map.insert(email, (session_id, now));
+    prune_sessions(
+        &mut map,
+        now,
+        Duration::from_secs(SESSION_CACHE_TTL_SECS),
+        SESSION_CACHE_MAX_ENTRIES,
+    );
 }
 
 /// Find session_id by searching conversation pages (expensive — up to 5 API calls).
@@ -301,4 +337,53 @@ async fn get_unread_messages(
 
 pub fn crisp_routes() -> Router<AppState> {
     Router::new().route("/v1/crisp/unread", get(get_unread_messages))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prune_removes_expired_entries() {
+        let ttl = Duration::from_secs(SESSION_CACHE_TTL_SECS);
+        let base = Instant::now();
+        let mut map = HashMap::new();
+        map.insert("fresh@x.com".to_string(), ("s1".to_string(), base));
+        map.insert(
+            "stale@x.com".to_string(),
+            (
+                "s2".to_string(),
+                base - Duration::from_secs(SESSION_CACHE_TTL_SECS + 1),
+            ),
+        );
+
+        prune_sessions(&mut map, base, ttl, SESSION_CACHE_MAX_ENTRIES);
+
+        assert!(map.contains_key("fresh@x.com"));
+        assert!(
+            !map.contains_key("stale@x.com"),
+            "expired entry must be evicted"
+        );
+    }
+
+    #[test]
+    fn prune_caps_map_size_dropping_oldest() {
+        let ttl = Duration::from_secs(SESSION_CACHE_TTL_SECS);
+        let base = Instant::now();
+        let mut map = HashMap::new();
+        // All within TTL, but more than the cap; oldest must go first.
+        for i in 0..10u64 {
+            map.insert(
+                format!("user{i}@x.com"),
+                (format!("s{i}"), base + Duration::from_millis(i)),
+            );
+        }
+
+        prune_sessions(&mut map, base + Duration::from_secs(1), ttl, 4);
+
+        assert_eq!(map.len(), 4, "map must be capped at max_entries");
+        // The 4 newest (i = 6..=9) survive; the 6 oldest are dropped.
+        assert!(map.contains_key("user9@x.com"));
+        assert!(!map.contains_key("user0@x.com"));
+    }
 }
