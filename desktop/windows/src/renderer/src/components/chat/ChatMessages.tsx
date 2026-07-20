@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import type { ChatMsg } from '../../hooks/useChat'
 import { RevealMarkdown } from './RevealMarkdown'
@@ -79,6 +79,92 @@ function CopyMessageButton({
 }
 
 /**
+ * One rendered message. Extracted and `memo`'d so a re-render of the transcript's
+ * parent (the composer draft lives in a common ancestor — HomeHub's `input`,
+ * BarApp's `draft`) does NOT re-render, and re-parse the markdown of, every
+ * settled bubble on each keystroke. Props are the message object (stable
+ * reference for a settled turn; the streaming reply is replaced with a fresh
+ * object each tick in useChat, so it still updates) plus stable primitives, so
+ * the default shallow compare bails for every message except the one changing.
+ */
+const MessageRow = memo(function MessageRow({
+  m,
+  isLast,
+  sending,
+  variant
+}: {
+  m: ChatMsg
+  isLast: boolean
+  sending: boolean
+  variant: 'main' | 'overlay'
+}): React.JSX.Element | null {
+  const cls = BUBBLE[variant]
+  const compact = variant === 'overlay'
+  // Shared-thread agent cards (B4, INV-CHAT-1): an assistant message that
+  // carries spawn/completion blocks renders as card(s), not a text bubble.
+  // Handled before the spinner/copy logic so a card that lands as the last
+  // message mid-turn never shows the streaming placeholder or a copy button.
+  if (m.blocks?.length) {
+    const cards = m.blocks.filter(
+      (b): b is AgentThreadCardBlock => b.type === 'agentSpawn' || b.type === 'agentCompletion'
+    )
+    if (cards.length) {
+      return (
+        <div className="flex flex-col gap-1.5">
+          {cards.map((block) => (
+            <AgentThreadCard key={block.id} block={block} compact={compact} />
+          ))}
+        </div>
+      )
+    }
+  }
+  // Bar chat (overlay): while Omi's reply is still pending — the last
+  // assistant turn exists as an empty placeholder — show a standalone
+  // spinning Omi mark instead of a bubble of dots. A distinct element type means
+  // the real bubble mounts fresh (bubble-in pop-in) the moment content lands and
+  // this loader is unmounted. The main window keeps its own indicators.
+  if (variant === 'overlay' && isLast && sending && m.role === 'assistant' && !m.content) {
+    return <OmiThinkingSpinner />
+  }
+  // Never offer copy on the reply that is still streaming in (or on an
+  // empty placeholder) — only once there is settled text to copy.
+  const streaming = isLast && sending && m.role === 'assistant'
+  const canCopy = !streaming && m.content.trim().length > 0
+  const bubbleClass = `group/msg relative ${m.role === 'user' ? cls.user : cls.assistant}`
+  const bubbleChildren = (
+    <>
+      {m.role === 'assistant' ? (
+        m.content ? (
+          <RevealMarkdown text={m.content} startRevealed={!(isLast && sending)} />
+        ) : sending ? (
+          '…'
+        ) : (
+          ''
+        )
+      ) : (
+        <div className="whitespace-pre-wrap">{m.content}</div>
+      )}
+      {canCopy ? <CopyMessageButton text={m.content} role={m.role} compact={compact} /> : null}
+    </>
+  )
+
+  // User attachments render as a card strip ABOVE the bubble, trailing-
+  // aligned (Mac's ChatBubble). A files-only message (attachments but no
+  // text) shows just the strip — no empty bubble. Messages with no
+  // attachments emit exactly the single bubble div as before.
+  if (m.role === 'user' && m.attachments?.length) {
+    const filesOnly = !m.content.trim()
+    return (
+      <div className="flex flex-col items-end gap-1.5">
+        <ChatAttachmentStrip attachments={m.attachments} compact={compact} align="end" />
+        {filesOnly ? null : <div className={bubbleClass}>{bubbleChildren}</div>}
+      </div>
+    )
+  }
+  return <div className={bubbleClass}>{bubbleChildren}</div>
+})
+
+/**
  * Shared chat message list used by both the main window (Home) and the overlay.
  * Owns bubble styling (per `variant`), markdown rendering, and the smooth reveal
  * of the live assistant message. Callers provide their own scroll container.
@@ -92,82 +178,17 @@ export function ChatMessages({
   sending: boolean
   variant: 'main' | 'overlay'
 }): React.JSX.Element {
-  const cls = BUBBLE[variant]
-  const compact = variant === 'overlay'
   return (
     <>
-      {messages.map((m, i) => {
-        const isLast = i === messages.length - 1
-        // Shared-thread agent cards (B4, INV-CHAT-1): an assistant message that
-        // carries spawn/completion blocks renders as card(s), not a text bubble.
-        // Handled before the spinner/copy logic so a card that lands as the last
-        // message mid-turn never shows the streaming placeholder or a copy button.
-        if (m.blocks?.length) {
-          const cards = m.blocks.filter(
-            (b): b is AgentThreadCardBlock =>
-              b.type === 'agentSpawn' || b.type === 'agentCompletion'
-          )
-          if (cards.length) {
-            return (
-              <div key={m.id ?? i} className="flex flex-col gap-1.5">
-                {cards.map((block) => (
-                  <AgentThreadCard key={block.id} block={block} compact={compact} />
-                ))}
-              </div>
-            )
-          }
-        }
-        // Bar chat (overlay): while Omi's reply is still pending — the last
-        // assistant turn exists as an empty placeholder — show a standalone
-        // spinning Omi mark instead of a bubble of dots. A distinct key means the
-        // real bubble mounts fresh (bubble-in pop-in) the moment content lands and
-        // this loader is unmounted. The main window keeps its own indicators.
-        if (variant === 'overlay' && isLast && sending && m.role === 'assistant' && !m.content) {
-          return <OmiThinkingSpinner key={`omi-thinking-${m.id ?? i}`} />
-        }
-        // Never offer copy on the reply that is still streaming in (or on an
-        // empty placeholder) — only once there is settled text to copy.
-        const streaming = isLast && sending && m.role === 'assistant'
-        const canCopy = !streaming && m.content.trim().length > 0
-        const bubbleClass = `group/msg relative ${m.role === 'user' ? cls.user : cls.assistant}`
-        const bubbleChildren = (
-          <>
-            {m.role === 'assistant' ? (
-              m.content ? (
-                <RevealMarkdown text={m.content} startRevealed={!(isLast && sending)} />
-              ) : sending ? (
-                '…'
-              ) : (
-                ''
-              )
-            ) : (
-              <div className="whitespace-pre-wrap">{m.content}</div>
-            )}
-            {canCopy ? (
-              <CopyMessageButton text={m.content} role={m.role} compact={compact} />
-            ) : null}
-          </>
-        )
-
-        // User attachments render as a card strip ABOVE the bubble, trailing-
-        // aligned (Mac's ChatBubble). A files-only message (attachments but no
-        // text) shows just the strip — no empty bubble. Messages with no
-        // attachments emit exactly the single bubble div as before.
-        if (m.role === 'user' && m.attachments?.length) {
-          const filesOnly = !m.content.trim()
-          return (
-            <div key={m.id ?? i} className="flex flex-col items-end gap-1.5">
-              <ChatAttachmentStrip attachments={m.attachments} compact={compact} align="end" />
-              {filesOnly ? null : <div className={bubbleClass}>{bubbleChildren}</div>}
-            </div>
-          )
-        }
-        return (
-          <div key={m.id ?? i} className={bubbleClass}>
-            {bubbleChildren}
-          </div>
-        )
-      })}
+      {messages.map((m, i) => (
+        <MessageRow
+          key={m.id ?? i}
+          m={m}
+          isLast={i === messages.length - 1}
+          sending={sending}
+          variant={variant}
+        />
+      ))}
     </>
   )
 }
