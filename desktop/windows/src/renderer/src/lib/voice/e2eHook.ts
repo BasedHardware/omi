@@ -13,10 +13,14 @@ import {
   setVoiceOutputDevice,
   speakText
 } from './voiceController'
+import { beginRealtimeAudible, endRealtimeAudible, isRealtimeAudible } from './audibleOutputArbiter'
 import { auth } from '../firebase'
 import { liveConversation } from '../liveConversation'
 import { setPreferences, type Preferences } from '../preferences'
 import type { VoiceProvider } from './sessionMachine'
+
+/** Harness-held realtime-audible token (never serialized across CDP). */
+let e2eRealtimeAudibleToken: symbol | null = null
 
 export function attachVoiceE2eHook(): void {
   if (window.omi?.e2e !== true) return
@@ -31,6 +35,19 @@ export function attachVoiceE2eHook(): void {
     stop: stopVoiceSession,
     say: sendVoiceText,
     speakTts: (text: string) => speakText(text),
+    // Single-audible-owner arbiter probes (harness-only). Simulate a realtime lane
+    // becoming/ending audible without a live provider, so a state-level test can
+    // prove `speakTts` is denied while a realtime lane owns the speaker (the
+    // "two voices at once" regression). The Symbol token is held here, never
+    // crossing the CDP boundary.
+    beginRealtimeAudible: () => {
+      e2eRealtimeAudibleToken = beginRealtimeAudible()
+    },
+    endRealtimeAudible: () => {
+      endRealtimeAudible(e2eRealtimeAudibleToken)
+      e2eRealtimeAudibleToken = null
+    },
+    isRealtimeAudible: () => isRealtimeAudible(),
     setOutputDevice: (deviceId: string) => setVoiceOutputDevice(deviceId),
     listOutputs: async () => {
       const devices = await navigator.mediaDevices.enumerateDevices()
