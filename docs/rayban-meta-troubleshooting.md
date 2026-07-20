@@ -138,7 +138,7 @@ and each must be validated on-device.
    `pre_install`/`post_install`, so SwiftProtobuf never enters the `Runner`
    static image alongside `MWDATCore`.
 2. **Stop the generated registrant from importing it (the easy-to-miss step).**
-   `ios/Runner/GeneratedPluginRegistrant.swift` is regenerated on every
+   `app/ios/Runner/GeneratedPluginRegistrant.swift` is regenerated on every
    `flutter pub get`/build from pub resolution, and it will `import
    mcumgr_flutter` + call `McumgrFlutterPlugin.register(...)`. With the pod
    removed that is a compile/link error, so a Podfile change **alone produces a
