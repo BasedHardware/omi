@@ -26,6 +26,14 @@ import 'package:omi/utils/wal_file_manager.dart';
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _freshSyncCutoffSeconds = 6 * 60 * 60;
 
+/// How long a WAL may sit in [WalStatus.uploaded] under one job before the
+/// reconciler abandons that job and re-uploads. A job the backend keeps
+/// reporting non-terminal — notably one wedged `queued`, which the backend
+/// stale guard never fails — would otherwise be polled forever, leaving the
+/// recording stuck on "Uploaded · processing on Omi" and never becoming a
+/// conversation. See issue #10033.
+const _uploadedStaleTimeoutSeconds = 6 * 60 * 60;
+
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
 /// The shared WAL acknowledgement boundary for async sync jobs.
@@ -39,6 +47,20 @@ SyncJobTerminalPolicy syncJobTerminalPolicy({required String status, required bo
   return status == 'completed' ? SyncJobTerminalPolicy.acknowledge : SyncJobTerminalPolicy.retry;
 }
 
+/// Whether an uploaded WAL has waited on its job past the stale cutoff. Used to
+/// break out of an otherwise unbounded poll on a job the backend never resolves.
+/// A WAL uploaded before this field existed carries `uploadedAt == 0`; those
+/// keep polling as before rather than being force-reverted.
+@visibleForTesting
+bool syncJobUploadIsStale({
+  required int uploadedAt,
+  required int nowSecs,
+  int timeoutSeconds = _uploadedStaleTimeoutSeconds,
+}) {
+  if (uploadedAt <= 0) return false;
+  return nowSecs - uploadedAt >= timeoutSeconds;
+}
+
 @visibleForTesting
 bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
   if ((status.error ?? '').contains(_kBackendBusyErrorHint)) return true;
@@ -50,8 +72,8 @@ bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
 
 SyncUploadLane syncUploadLaneForTimestamp(int captureSeconds, int nowSeconds, {required bool hasServerCaptureProof}) =>
     hasServerCaptureProof && nowSeconds - captureSeconds <= _freshSyncCutoffSeconds
-        ? SyncUploadLane.fresh
-        : SyncUploadLane.backfill;
+    ? SyncUploadLane.fresh
+    : SyncUploadLane.backfill;
 
 SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) =>
     syncUploadLaneForTimestamp(wal.timerStart, nowSeconds, hasServerCaptureProof: wal.conversationId != null);
@@ -75,8 +97,8 @@ List<Wal> nextSyncUploadBatch(
 }) {
   SyncUploadLane effectiveLane(Wal wal) =>
       wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
-          ? SyncUploadLane.backfill
-          : _syncLaneForWal(wal, nowSeconds);
+      ? SyncUploadLane.backfill
+      : _syncLaneForWal(wal, nowSeconds);
 
   final ordered = List<Wal>.from(pending)
     ..sort((a, b) {
@@ -662,8 +684,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       forcedBackfillConversationIds.addAll(oversizedFreshConversationIds(candidates, batchNowSeconds));
       SyncUploadLane effectiveLane(Wal wal) =>
           wal.conversationId != null && forcedBackfillConversationIds.contains(wal.conversationId)
-              ? SyncUploadLane.backfill
-              : _syncLaneForWal(wal, batchNowSeconds);
+          ? SyncUploadLane.backfill
+          : _syncLaneForWal(wal, batchNowSeconds);
       final pending = candidates
           .where(
             (wal) =>
@@ -681,8 +703,8 @@ class LocalWalSyncImpl implements LocalWalSync {
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchLane =
           batch.first.conversationId != null && forcedBackfillConversationIds.contains(batch.first.conversationId)
-              ? SyncUploadLane.backfill
-              : _syncLaneForWal(batch.first, batchNowSeconds);
+          ? SyncUploadLane.backfill
+          : _syncLaneForWal(batch.first, batchNowSeconds);
       if (_isCancelled) {
         Logger.debug("LocalWalSync: Upload cancelled");
         DebugLogManager.logWarning('Local upload cancelled', {
@@ -1062,7 +1084,36 @@ class LocalWalSyncImpl implements LocalWalSync {
                 'processedSegments': s.processedSegments,
                 'totalSegments': s.totalSegments,
               });
-              break; // still queued/processing — check later
+              // Escape hatch for a job the backend never resolves (e.g. wedged
+              // `queued`): past the stale cutoff, abandon it and recover from the
+              // retained local file so the recording isn't stuck forever. Mirrors
+              // the `notFound` recovery below. See issue #10033.
+              for (final w in members) {
+                if (!syncJobUploadIsStale(uploadedAt: w.uploadedAt, nowSecs: nowSecs)) continue;
+                changed = true;
+                final hadJob = w.jobId;
+                final ageSeconds = nowSecs - w.uploadedAt;
+                w.jobId = null;
+                final fileExists = await _localFileExists(w);
+                if (fileExists) {
+                  w.status = WalStatus.miss; // re-upload under a fresh job (dedup-safe)
+                  w.retryCount += 1;
+                  w.lastRetryAt = nowSecs;
+                } else {
+                  w.markCorrupted(); // nothing left to recover
+                }
+                DebugLogManager.logEvent('reconcile_revert', {
+                  'walId': w.id,
+                  'jobId': hadJob,
+                  'outcome': 'stale_timeout',
+                  'serverStatus': s.status,
+                  'ageSeconds': ageSeconds,
+                  'fileExists': fileExists,
+                  'newStatus': w.status.name,
+                  'retryCount': w.retryCount,
+                });
+              }
+              break; // remaining members still queued/processing — check later
             }
             if (s.result != null) {
               resp.newConversationIds.addAll(

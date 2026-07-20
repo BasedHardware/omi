@@ -6,10 +6,7 @@ import 'package:omi/services/wals/local_wal_sync.dart';
 void main() {
   group('syncJobTerminalPolicy', () {
     test('acknowledges only a truthful completed terminal job', () {
-      expect(
-        syncJobTerminalPolicy(status: 'completed', isTerminal: true),
-        SyncJobTerminalPolicy.acknowledge,
-      );
+      expect(syncJobTerminalPolicy(status: 'completed', isTerminal: true), SyncJobTerminalPolicy.acknowledge);
     });
 
     test('retains retry material for partial and full failures', () {
@@ -23,14 +20,27 @@ void main() {
     });
 
     test('waits for nonterminal jobs regardless of their status text', () {
-      expect(
-        syncJobTerminalPolicy(status: 'processing', isTerminal: false),
-        SyncJobTerminalPolicy.wait,
-      );
-      expect(
-        syncJobTerminalPolicy(status: 'completed', isTerminal: false),
-        SyncJobTerminalPolicy.wait,
-      );
+      expect(syncJobTerminalPolicy(status: 'processing', isTerminal: false), SyncJobTerminalPolicy.wait);
+      expect(syncJobTerminalPolicy(status: 'completed', isTerminal: false), SyncJobTerminalPolicy.wait);
+    });
+  });
+
+  group('syncJobUploadIsStale', () {
+    const timeout = 6 * 60 * 60;
+
+    test('flags a WAL wedged past the cutoff so it stops polling forever', () {
+      // A job the backend keeps reporting non-terminal (e.g. stuck `queued`)
+      // must eventually be abandoned and re-uploaded. Regression for #10033.
+      expect(syncJobUploadIsStale(uploadedAt: 1000, nowSecs: 1000 + timeout, timeoutSeconds: timeout), isTrue);
+      expect(syncJobUploadIsStale(uploadedAt: 1000, nowSecs: 1000 + timeout + 1, timeoutSeconds: timeout), isTrue);
+    });
+
+    test('keeps polling a job still within the cutoff', () {
+      expect(syncJobUploadIsStale(uploadedAt: 1000, nowSecs: 1000 + timeout - 1, timeoutSeconds: timeout), isFalse);
+    });
+
+    test('never force-reverts a legacy WAL with no recorded upload time', () {
+      expect(syncJobUploadIsStale(uploadedAt: 0, nowSecs: 9999999, timeoutSeconds: timeout), isFalse);
     });
   });
 
@@ -45,13 +55,7 @@ void main() {
 
       expect(
         () => requireCompleteSyncUpload(response),
-        throwsA(
-          isA<SyncUploadIncompleteException>().having(
-            (error) => error.failedSegments,
-            'failedSegments',
-            1,
-          ),
-        ),
+        throwsA(isA<SyncUploadIncompleteException>().having((error) => error.failedSegments, 'failedSegments', 1)),
       );
     });
   });
@@ -72,10 +76,7 @@ void main() {
 
     test('recognizes the legacy stale-worker shape', () {
       expect(syncJobIsBackendBusy(status()), isTrue);
-      expect(
-        syncJobIsBackendBusy(status(error: 'Job timed out (background worker likely died)')),
-        isTrue,
-      );
+      expect(syncJobIsBackendBusy(status(error: 'Job timed out (background worker likely died)')), isTrue);
     });
 
     test('does not hide typed zero-segment failures from retry accounting', () {
