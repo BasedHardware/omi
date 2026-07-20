@@ -1,9 +1,10 @@
 # Omi on Linux
 
-Status: **MVP + screen-reading working** — builds, the full test suite passes
-(reproduce with `cd desktop/windows && npm test`), launches and renders on X11,
-app-usage tracking works, and **screen OCR ("what's on my screen") works** via a
-Tesseract-backed helper.
+Status: **MVP + screen-reading working** — builds, the focused Linux unit tests
+pass (`linuxForeground` / `nativeForeground` / `foregroundMonitor` / Wayland
+Rewind defaults), launches and renders on X11, **app-usage tracking runs on
+Linux via 15s poll** (no WinEvent), and **screen OCR ("what's on my screen")
+works** via a Tesseract-backed helper.
 
 Architecture choice: Linux is a **platform seam on `desktop/windows`**, not a
 forked `desktop/linux` / `desktop/Linux` tree. Shared renderer/main stay one
@@ -49,18 +50,30 @@ continuous capture explicitly. X11 sessions keep continuous Rewind on by default
 
 ## What works / what's next
 - ✅ Sign-in, mic → cloud transcription, chat, memory (inherited, cross-platform)
-- ✅ App-usage tracking (X11 active-window via `linuxForeground.ts`; poll-driven, 15s)
+- ✅ App-usage tracking (X11 active-window via `linuxForeground.ts`;
+  `foregroundMonitor` starts on `linux` with 15s poll — WinEvent subscribe stays
+  win32-only / no-op on Linux)
 - ✅ Screen OCR / "what's on my screen" (Rewind capture → `omi-ocr-helper` → Tesseract)
 - ✅ Wayland sessions via XWayland (shortcuts + active-window work; continuous Rewind
   off by default — see the Wayland section)
+- ⏳ Tray / Quit (reuse Windows tray module when it lands — Linux needs
+  context-menu-first tray, not double-click).
+- ⏳ Auto-update (AppImage-only: gate on `process.env.APPIMAGE`, not just
+  `isPackaged`; `.deb` stays package-manager).
+- ⏳ XDG autostart (`.desktop` under `~/.config/autostart`) when launch-at-login
+  Settings exists on this tree.
 - ⏳ Pendant BLE, Glass video, native-Wayland capture (portal restore-token),
-  tray/Quit polish, full Windows-parity feature wave (lands with the Windows
-  desktop umbrella, then reuses these Linux seams).
+  full Windows-parity feature wave (lands with the Windows desktop umbrella,
+  then reuses these Linux seams).
 
 ## Implementation notes
 - `src/main/usage/linuxForeground.ts` — X11 active-window (xprop + /proc/<pid>/exe).
 - `src/main/usage/nativeForeground.ts` — Linux branch delegates to the above; the
-  Windows (koffi) path is unchanged.
+  Windows (koffi) path is unchanged. koffi is lazy-`require`d so Linux import of
+  this module (and of `userAssistRegistry.ts`) never loads the Win32 native at
+  eval time.
+- `src/main/usage/foregroundMonitor.ts` — starts on `win32` **and** `linux`.
+  Linux is poll-only; event subscribe is a no-op off-win32.
 - `src/main/automation/foregroundTargetLogic.ts` — uses `path.win32.basename` so
   exe-path comparison is correct on both Windows and Linux.
 - `resources/linux-ocr-helper/omi-ocr-helper` — a Node-script helper that speaks
