@@ -474,5 +474,39 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("traffic-only repair must not require a release-source admission", CHECKER.validate(root))
 
 
+class BreakGlassContractTests(unittest.TestCase):
+    """Static contract for the eligibility-proof break-glass hatch.
+
+    These read the workflow source rather than executing it -- GitHub Actions
+    cannot be driven from a unit test -- so they are tripwires, not behavioral
+    coverage. They pin the properties the hatch must never lose.
+    """
+
+    def workflow(self) -> str:
+        return (ROOT / CHECKER.MANUAL_WORKFLOW_PATH).read_text(encoding="utf-8")
+
+    def test_break_glass_requires_an_explicit_confirm_string_and_reason(self) -> None:
+        text = self.workflow()
+        self.assertIn('!= "deploy-without-proof"', text)
+        self.assertIn("requires a non-empty break_glass_reason", text)
+
+    def test_merged_main_ancestry_is_enforced_outside_the_break_glass_branch(self) -> None:
+        # The hatch may skip the eligibility proof, never the ancestry check:
+        # unreviewed code must not reach production by any path.
+        text = self.workflow()
+        ancestor = text.index("git merge-base --is-ancestor")
+        skip_branch = text.index('if [[ "${SKIP_PROOF:-false}" == "true" ]]')
+        self.assertLess(
+            ancestor,
+            skip_branch,
+            "ancestry check must run before (and outside) the break-glass branch",
+        )
+
+    def test_break_glass_use_is_recorded_as_an_issue(self) -> None:
+        text = self.workflow()
+        self.assertIn("release-gate-failure", text)
+        self.assertIn("Record that the eligibility proof was bypassed", text)
+
+
 if __name__ == "__main__":
     unittest.main()
