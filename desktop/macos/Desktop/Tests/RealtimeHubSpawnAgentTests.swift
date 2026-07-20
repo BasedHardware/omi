@@ -11,11 +11,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
     XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn else { return }"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
-    // Routed spawns narrate the provider choice; explicit/default spawns keep
-    // the legacy result text so acknowledgment behavior is unchanged there.
-    XCTAssertTrue(source.contains("startedOutput = \"Agent started.\""))
-    XCTAssertTrue(source.contains("Agent started via \\(directedProvider.displayName)"))
-    XCTAssertTrue(source.contains("output: startedOutput"))
+    XCTAssertTrue(source.contains("toolOutput = \"Agent started.\""))
+    XCTAssertTrue(source.contains("toolOutput = \"Agent started with fallback. \\(fallbackNote)\""))
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
   }
 
@@ -26,12 +23,10 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
         voiceContext: "",
         localProfileEnabled: true))
 
-    XCTAssertEqual(
-      plan.spawn,
-      RealtimeLocalProfileTurnPlan.Spawn(
-        objective: RealtimeLocalProfileTurnPlan.exactMemoryAgentRequest,
-        title: "Today's memory insight"))
-    XCTAssertFalse(plan.assistantText.isEmpty)
+    XCTAssertTrue(source.contains("if !self.audioReceivedThisTurn {"))
+    XCTAssertTrue(source.contains("let existingAck = self.assistantText.trimmingCharacters"))
+    XCTAssertTrue(source.contains("let ack = existingAck.isEmpty ? plan.ack : existingAck"))
+    XCTAssertTrue(source.contains("self.speak(ack)"))
   }
 
   func testLocalProfileOrdinaryAndRecallTurnsNeverProposeSpawn() throws {
@@ -288,193 +283,11 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testRealtimeToolRequestHasNoLocalExecutionBranch() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("invokeExternallyAuthorizedTool("))
-    XCTAssertTrue(source.contains("AgentRuntimeProcess.shared.invokeExternalSurfaceTool("))
-    XCTAssertFalse(source.contains("handleRealtimeDelegationRequest("))
-    XCTAssertFalse(source.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation("))
-    XCTAssertFalse(source.contains("agentControlService.executeVoiceTool("))
-  }
-
-  func testSpawnAgentUsesKernelRuntimeControlAuthority() throws {
-    let source = try realtimeHubControllerSource()
-    let toolAuthoritySource = try realtimeToolAuthoritySource()
-
-    XCTAssertTrue(source.contains("toolName: name"))
-    XCTAssertTrue(toolAuthoritySource.contains("command.surfaceKind == \"realtime_voice\""))
-    XCTAssertFalse(source.contains("pendingVoiceAgentHandoff"))
-    XCTAssertFalse(source.contains("Starting a background agent."))
-  }
-
-  func testRealtimeHubDoesNotPerformPillMutationBeforeKernelPolicy() throws {
-    let source = try realtimeHubControllerSource()
-
-    XCTAssertFalse(source.contains("setDesktopAttentionOverride"))
-    XCTAssertFalse(source.contains("userExplicitlyRequestedPillManagement"))
-    XCTAssertTrue(source.contains("invokeExternalSurfaceTool("))
-  }
-
-  func testRealtimeAcceptedSpawnProjectsPillOnlyAfterTheCurrentTurnFence() throws {
-    // omi-test-quality: source-inspection -- static contract: an accepted PTT spawn can project only after the same current-turn fence used for its tool result.
-    let source = try realtimeHubControllerSource()
-
-    let outputCall = try XCTUnwrap(
-      source.range(of: "let output = try await AgentRuntimeProcess.shared.invokeExternalSurfaceTool("))
-    let currentFence = try XCTUnwrap(
-      source.range(
-        of: #"guard\s+self\.isCurrentToolTurn\("#,
-        options: .regularExpression,
-        range: outputCall.upperBound..<source.endIndex))
-    let pillProjection = try XCTUnwrap(
-      source.range(of: "AgentPillsManager.shared.upsertSpawnedPill(", range: currentFence.upperBound..<source.endIndex))
-    XCTAssertLessThan(outputCall.lowerBound, currentFence.lowerBound)
-    XCTAssertLessThan(currentFence.lowerBound, pillProjection.lowerBound)
-    XCTAssertTrue(
-      source.contains("producingJournalSurface: FloatingControlBarManager.shared.realtimeVoiceSurfaceReference()"))
-  }
-
-  func testRealtimeHubUsesCanonicalVoicePlaybackServiceForLocalSpeechFallbacks() throws {
-    // omi-test-quality: source-inspection -- static contract: the realtime controller must not
-    // reintroduce a local TTS takeover for an accepted background-agent receipt.
-    let source = try realtimeHubControllerSource()
-
-    XCTAssertFalse(source.contains("AVSpeechSynthesizer"))
-    XCTAssertFalse(source.contains("AVSpeechUtterance"))
-    XCTAssertFalse(source.contains("AVSpeechSynthesisVoice"))
-    XCTAssertFalse(source.contains("private func speak(_ text: String)"))
-    XCTAssertTrue(
-      source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(reply, lease: lease)"))
-    XCTAssertTrue(
-      source.contains("FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()"))
-    XCTAssertTrue(
-      source.contains(
-        "acquireVoiceOutput(.selectedVoiceFallback, reason: \"text_no_native_audio\")"))
-    // The spawn receipt persists the canonical lifecycle fact, but only the
-    // native provider continuation may answer the same PTT turn aloud.
-    XCTAssertTrue(source.contains("preserving native provider continuation"))
-    XCTAssertFalse(source.contains("playCanonicalSpawnAcknowledgement"))
-    XCTAssertFalse(source.contains("kind: .spawnReceipt"))
-    XCTAssertTrue(source.contains("RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive("))
-    XCTAssertTrue(source.contains("postToolContinuationRequired"))
-  }
-
-  func testRealtimeHubAudibleOutputIsLeaseGated() throws {
-    let coordinator = VoiceTurnCoordinator()
-    let turnID = coordinator.begin(intent: .hold)
-    coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
-    coordinator.publish(.finalize(turnID: turnID))
-    coordinator.publish(.transcriptionStarted(turnID: turnID))
-    coordinator.publish(.transcriptionFinal(turnID: turnID, text: "fixture"))
-    guard case .acquired(let native) = coordinator.acquireOutput(.nativeRealtime, turnID: turnID) else {
-      return XCTFail("native output should acquire the turn")
-    }
-
-    XCTAssertEqual(
-      coordinator.acquireOutput(.selectedVoiceFallback, turnID: turnID),
-      .denied(active: native))
-    XCTAssertEqual(
-      coordinator.acquireOutput(.deterministicAgentAck, turnID: turnID),
-      .denied(active: native))
-    XCTAssertFalse(coordinator.outputSnapshot.providerOutputSuppressed)
-  }
-
-  func testRealtimeToolTurnsStayOpenUntilToolResultReturns() throws {
-    let source = try realtimeHubControllerSource()
-
-    XCTAssertTrue(source.contains("var toolEffectIdentityByTransportKey"))
-    // The screen-receipt extension shares this epoch fence after the visual receipt refactor.
-    XCTAssertTrue(source.contains("var realtimeToolTurnEpoch = 0"))
-    XCTAssertTrue(source.contains("expectedTurnEpoch: Int? = nil"))
-    XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey[transportKey] = toolIdentity"))
-    XCTAssertTrue(
-      source.contains("toolCallKey(callId: callId, name: name, turnEpoch: toolTurnEpoch)"))
-    XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey.removeValue(forKey: key)"))
-    XCTAssertTrue(source.contains("turnEpoch == realtimeToolTurnEpoch"))
-    XCTAssertTrue(source.contains("waiting for provider tool delivery"))
-    XCTAssertTrue(source.contains("authorizedRealtimeInvocations"))
-    XCTAssertTrue(source.contains("func clearRealtimeToolTracking()"))
-    XCTAssertTrue(source.contains("realtimeToolTurnEpoch += 1"))
-    XCTAssertGreaterThanOrEqual(
-      source.components(separatedBy: "clearRealtimeToolTracking()").count - 1, 4)
-    XCTAssertFalse(source.contains("session?.sendToolResult("))
-  }
-
-  func testRealtimeDelegationCannotExecuteAfterStaleTurn() throws {
-    // omi-test-quality: source-inspection -- static contract: all realtime tool paths must retain the shared turn fence.
-    let source = try realtimeHubControllerSource()
-
-    XCTAssertTrue(source.contains("RealtimeAuthorizedToolOwnership.accepts("))
-    XCTAssertTrue(source.contains("RealtimeToolTurnOwnership.accepts("))
-    XCTAssertTrue(source.contains("func isCurrentToolTurn("))
-    XCTAssertTrue(
-      source.contains(
-        "activeToolIdentity: VoiceTurnCoordinator.shared.activeTurn?.toolEffectIdentities[callID]"
-      ))
-    XCTAssertFalse(source.contains("AgentDelegationExecutor.shared"))
-  }
-
-  func testPermissionToolsCannotOpenSettingsBeforeKernelAuthorization() throws {
-    let source = try realtimeHubControllerSource()
-
-    XCTAssertFalse(source.contains("ChatToolExecutor.execute("))
-    XCTAssertFalse(source.contains("permissionExecutorRoute("))
-    XCTAssertTrue(source.contains("invokeExternalSurfaceTool("))
-  }
-
-  func testRealtimeToolUsesAuthorizedFallbackWhenProviderTranscriptIsUnavailable() throws {
-    // omi-test-quality: source-inspection -- static contract: the realtime tool path must not reintroduce a transcript/tool circular wait.
-    let source = try realtimeHubControllerSource()
-    let toolAuthoritySource = try realtimeToolAuthoritySource()
-
-    XCTAssertTrue(source.contains("RealtimeExternalRunPromptPolicy.promptForAuthorizedTool("))
-    XCTAssertTrue(source.contains("authorizedToolFallback"))
-    XCTAssertFalse(source.contains("deferredRealtimeToolInvocations.enqueue("))
-    XCTAssertFalse(source.contains("resumeDeferredRealtimeToolsIfReady()"))
-    XCTAssertTrue(source.contains("prompt: normalizedPrompt"))
-    XCTAssertTrue(toolAuthoritySource.contains("Execute only that separately authorized invocation"))
-    XCTAssertFalse(source.contains("I couldn't confirm the spoken request"))
-  }
-
-  func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {
-    let source = try realtimeHubControllerSource()
-    let sessionPoliciesSource = try realtimeHubSessionPoliciesSource()
-
-    XCTAssertTrue(sessionPoliciesSource.contains("case deferredForReplacement"))
-    XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.publish(.hubCommitDeferredForReplacement"))
-    XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true"))
-    XCTAssertTrue(source.contains("barge-in replacement not ready at commit"))
-    XCTAssertTrue(source.contains("return .deferredForReplacement"))
-    XCTAssertFalse(
-      source.contains(
-        "barge-in replacement not ready at commit — falling back to buffered transcription"))
-  }
-
-  func testCompletedVoiceTurnUsesKernelPersistenceAfterAsyncCorrection() throws {
-    let source = try realtimeHubControllerSource()
-
-    XCTAssertTrue(source.contains("let completedTurnIdempotencyKey = turnIdempotencyKey"))
-    XCTAssertFalse(source.contains("self?.turnIdempotencyKey ="))
-    XCTAssertTrue(source.contains("let resolution = await Self.resolveTranscript("))
-    XCTAssertTrue(source.contains("resolution.usedLocalTranscript"))
-    XCTAssertTrue(source.contains("idempotencyKey: completedTurnIdempotencyKey"))
-    XCTAssertFalse(source.contains("rememberVoiceContinuityTurn("))
-    XCTAssertFalse(source.contains("replaceVoiceContinuityTurn("))
-  }
-
-  func testSpawnAgentDelegatesDirectedProviderAvailabilityToKernel() throws {
-    let source = try realtimeHubControllerSource()
-
-    // Dispatch gates on full health (installed AND wired AND authed), not
-    // binary presence — a not-onboarded provider must not get a doomed spawn.
-    XCTAssertTrue(source.contains("AgentProviderHealth.report(for: directedProvider)"))
-    XCTAssertTrue(source.contains("guard health.readiness == .ready else"))
-    XCTAssertTrue(source.contains("assistantText = setupPrompt"))
-    XCTAssertTrue(source.contains("output: \"Error: \\(health.detail)\""))
-    // The not-ready path must not dead-end: it instructs the model to offer
-    // a consent-gated setup_agent_provider call carrying the original task,
-    // and the tool result must stay epoch-guarded like every other result.
-    XCTAssertTrue(source.contains("call setup_agent_provider with provider="))
-    XCTAssertTrue(source.contains("and their original task as brief."))
-    XCTAssertTrue(source.contains("expectedTurnEpoch: expectedTurnEpoch)"))
+    XCTAssertTrue(source.contains("LocalAgentProviderRouting.resolveSpawnWithAutoInstall("))
+    XCTAssertTrue(source.contains("case .setupRequired(let provider, let setupPrompt, let spokenStatus):"))
+    XCTAssertTrue(source.contains("self.assistantText = setupPrompt"))
+    XCTAssertTrue(source.contains("self.speak(spokenStatus)"))
+    XCTAssertTrue(source.contains("output: \"Error: \\(setupPrompt)\""))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {

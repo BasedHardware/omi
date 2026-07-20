@@ -2749,30 +2749,14 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
-    let adapterPathDirs = [
-      "\(home)/.hermes/hermes-agent/venv/bin",
-      "\(home)/.hermes/node/bin",
-      "\(home)/.hermes/hermes-agent",
-    ]
-    // Also honor the user's PATH so binaries installed via nvm/asdf/custom npm
-    // prefixes are auto-wired too (PATH is minimal when launched from Finder,
-    // so the hardcoded well-known locations remain the reliable base).
-    let envPathDirs = (env["PATH"] ?? "")
-      .split(separator: ":")
-      .map(String.init)
-      .filter { !$0.isEmpty }
-    let adapterSearchDirs = adapterPathDirs + [
-      "\(home)/.local/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ] + envPathDirs
+    let adapterSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
     let trustedPathDirs = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
     ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     var pathElements: [String] = []
-    for path in existingPath.split(separator: ":").map(String.init) + adapterPathDirs {
+    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterSearchDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }
@@ -2802,12 +2786,10 @@ actor AgentRuntimeProcess {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
 
-    // Codex is an exec-style one-shot adapter: seed just the binary path; the
-    // Node CodexRuntimeAdapter appends `exec --full-auto <prompt>` itself.
     if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
       let codex = firstExecutable(named: "codex", in: adapterSearchDirs)
     {
-      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.shellQuote(codex)
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexPath: codex)
     }
   }
 
@@ -2819,16 +2801,8 @@ actor AgentRuntimeProcess {
     return "\(shellQuote(openClawPath)) acp"
   }
 
-  /// The codex-acp bridge is a stdio ACP server itself, so no subcommand is
-  /// appended. Prefer a sibling node binary (npm global installs place one
-  /// next to the script) so the `#!/usr/bin/env node` shebang never depends
-  /// on the minimal adapter PATH.
-  static func codexAdapterCommand(codexAcpPath: String, fileManager: FileManager = .default) -> String {
-    let nodePath = ((codexAcpPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("node")
-    if fileManager.isExecutableFile(atPath: nodePath) {
-      return "\(shellQuote(nodePath)) \(shellQuote(codexAcpPath))"
-    }
-    return shellQuote(codexAcpPath)
+  static func codexAdapterCommand(codexPath: String) -> String {
+    "CODEX_PATH=\(shellQuote(codexPath)) npx -y @agentclientprotocol/codex-acp"
   }
 
   private static func shellQuote(_ value: String) -> String {

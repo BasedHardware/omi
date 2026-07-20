@@ -197,45 +197,10 @@ derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
 
-# A named QA bundle should exercise the shared development service unless its
-# launcher deliberately selects another profile.  Check variable *presence*,
-# not values: `OMI_SKIP_BACKEND=0` is an explicit local-launch request and
-# must never be overwritten by the remote-dev defaults.
-should_default_named_bundle_to_dev_backend() {
-    [ "${IS_NAMED_BUNDLE:-false}" = true ] \
-        && [ "${LOCAL_PROFILE:-false}" = false ] \
-        && [ "${YOLO_MODE:-0}" != "1" ] \
-        && [ -z "${OMI_SKIP_BACKEND+x}" ] \
-        && [ -z "${OMI_SKIP_TUNNEL+x}" ] \
-        && [ -z "${OMI_DESKTOP_API_URL+x}" ] \
-        && [ -z "${OMI_PYTHON_API_URL+x}" ]
-}
-
-NAMED_BUNDLE_DEFAULT_DEV_BACKEND=false
-if should_default_named_bundle_to_dev_backend; then
-    NAMED_BUNDLE_DEFAULT_DEV_BACKEND=true
-fi
-
-# Named QA bundles are remote-dev by default. Apply this before any launch
-# preparation so they do not start a local backend or tunnel, and reapply it
-# after sourcing Backend-Rust/.env below so repository-local defaults cannot
-# silently retarget a QA bundle. Explicit launch environment values above opt
-# out and remain authoritative.
-if [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
-    substep "Named bundle default: using development backend"
-    apply_yolo_env
-fi
-
-# A detached launch is safe only when another service owns the backend. It is
-# intended for the remote-dev and local-harness fast lanes; a run.sh-owned
-# backend must remain attached so its lifecycle and logs stay scoped here.
-if [ "$NO_WAIT" = "1" ] \
-    && { [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; }; then
-    echo "ERROR: --no-wait requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1 (use --yolo or the local harness)." >&2
-    exit 2
-fi
-
-BUILD_DIR="build"
+# Allow overriding the build staging dir. Useful when the workspace lives in an
+# iCloud-synced folder (~/Documents/Desktop), where the file provider re-adds
+# com.apple.FinderInfo xattrs after `xattr -cr` and races `codesign`.
+BUILD_DIR="${BUILD_DIR:-build}"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
 # Agent runtime source (staged into the app bundle at Resources/agent below).
@@ -1157,7 +1122,98 @@ chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
 
 step "Signing app with hardened runtime..."
-sign_app_bundle "$APP_BUNDLE" true
+# Auto-detect a stable signing identity so TCC permissions persist across rebuilds.
+# Ad-hoc signing (--sign -) generates a new CDHash each build, causing macOS to
+# reset Screen Recording, Accessibility, and Notification permissions every time.
+if [ -z "$SIGN_IDENTITY" ]; then
+    # For dev builds: prefer Apple Development (matches Mac Development provisioning profile,
+    # required for native Sign In with Apple). Fall back to Developer ID if unavailable.
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    if [ -z "$SIGN_IDENTITY" ]; then
+        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    fi
+fi
+
+if [ -n "$SIGN_IDENTITY" ]; then
+    substep "Using identity: $SIGN_IDENTITY"
+    if [ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]; then
+        substep "Signing Sparkle framework"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+    fi
+    if [ -d "$APP_BUNDLE/Contents/Frameworks/Sentry.framework" ]; then
+        substep "Signing Sentry framework"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sentry.framework"
+    fi
+    if [ -d "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework" ]; then
+        substep "Signing onnxruntime framework"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework"
+    fi
+    if [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
+        substep "Signing libsharpyuv"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+    fi
+    if [ -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" ]; then
+        substep "Signing libwebp"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+    fi
+    # Sign the bundled node binary with developer identity + Node.entitlements
+    # (macOS requires executables inside app bundles to be properly signed)
+    NODE_BIN="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+    if [ -f "$NODE_BIN" ]; then
+        substep "Signing bundled node binary"
+        codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
+    fi
+
+    # If local signing identity doesn't match embedded profile team, macOS rejects
+    # restricted entitlements (notably com.apple.developer.applesignin) and launch
+    # fails with RBS/launchd spawn errors. Fallback to a local dev entitlements set.
+    #
+    # Named bundles always use fallback — they have no provisioning profile, so
+    # com.apple.developer.applesignin would cause launchd to reject the launch.
+    EFFECTIVE_ENTITLEMENTS="Desktop/Omi.entitlements"
+    PROFILE_PATH="$APP_BUNDLE/Contents/embedded.provisionprofile"
+    USE_FALLBACK_ENTITLEMENTS=false
+
+    if [ "$IS_NAMED_BUNDLE" = true ]; then
+        substep "Named bundle — stripping applesignin entitlement"
+        USE_FALLBACK_ENTITLEMENTS=true
+    elif [ -f "$PROFILE_PATH" ]; then
+        IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
+        PROFILE_TEAM_ID=""
+        PROFILE_TEAM_ID=$(security cms -D -i "$PROFILE_PATH" > /tmp/omi-dev-profile.plist 2>/dev/null && \
+            /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/omi-dev-profile.plist 2>/dev/null || true)
+        if [ -z "$PROFILE_TEAM_ID" ]; then
+            substep "Could not extract profile team ID (security cms failed); using local entitlements fallback"
+            USE_FALLBACK_ENTITLEMENTS=true
+        elif [ "$PROFILE_TEAM_ID" != "$IDENTITY_TEAM_ID" ]; then
+            substep "Profile team ($PROFILE_TEAM_ID) != identity team ($IDENTITY_TEAM_ID); using local entitlements fallback"
+            USE_FALLBACK_ENTITLEMENTS=true
+        fi
+    fi
+
+    if [ "$USE_FALLBACK_ENTITLEMENTS" = true ]; then
+        cp Desktop/Omi.entitlements /tmp/omi-local-dev.entitlements
+        /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" /tmp/omi-local-dev.entitlements 2>/dev/null || true
+        rm -f "$PROFILE_PATH"
+        EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
+    fi
+    # Per-component signing can re-add com.apple.provenance xattrs on newer macOS;
+    # strip them again before sealing the top-level bundle.
+    chmod -R u+w "$APP_BUNDLE"
+    xattr -cr "$APP_BUNDLE"
+    substep "Signing app bundle"
+    codesign --force --options runtime --entitlements "$EFFECTIVE_ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+else
+    echo ""
+    echo "ERROR: No signing identity found. Ad-hoc signing causes macOS to reset"
+    echo "       Screen Recording permissions for ALL Omi apps (including prod/beta)."
+    echo ""
+    echo "  Fix: Install an Apple Development certificate in Keychain Access,"
+    echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
+    echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
+    echo ""
+    exit 1
+fi
 
 step "Removing quarantine attributes..."
 chmod -R u+w "$APP_BUNDLE"

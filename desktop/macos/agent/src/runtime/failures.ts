@@ -200,6 +200,8 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
       return "Codex";
     case "pi-mono":
       return "pi-mono";
+    case "codex":
+      return "Codex";
     case "acp":
       if (provider === "openai") {
         return "OpenAI";

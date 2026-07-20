@@ -777,10 +777,8 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptSnippet: "spawn_agent - Start a canonical background agent with pill UI",
     promptGuidelines: [
       "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
-      "Use delegate_agent instead when the new work must be linked to a known parent run.",
-      "If the user asks to use OpenClaw, Hermes, or Codex, pass provider='openclaw', 'hermes', or 'codex' instead of treating that name as a session to inspect.",
-      "When the user does not name an agent, pick the connected provider whose strengths clearly match the task — OpenClaw: messaging/channels (WhatsApp, Telegram, Discord) and the user's OpenClaw automations; Hermes: long-running or recurring automations, learned skills, and broad research; Codex: coding, repositories, and terminal/software-engineering work — otherwise omit provider to use Omi's default agent.",
-      "When the user names an agent, always use exactly that one; if it is not installed yet, do not pass it to spawn_agent — offer to install it via setup_agent_provider instead.",
+      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
+      "If the user asks to use OpenClaw, Hermes, or Codex, pass provider='openclaw', provider='hermes', or provider='codex' instead of treating that name as a session to inspect.",
       "Return immediately after spawning; the pill keeps working in the background.",
     ],
     latency: "async background",

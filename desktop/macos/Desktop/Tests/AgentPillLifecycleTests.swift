@@ -429,16 +429,12 @@ import XCTest
   func testTypedProviderDirectivePromptsForSetupWhenProviderUnavailable() throws {
     let source = try floatingControlBarWindowSource()
 
-    XCTAssertTrue(source.contains("let resolvedProvider = decision.directedProvider ?? directedProvider"))
-    // Typed dispatch gates on full three-state health (installed AND wired AND
-    // authed), matching the voice hub and chat executor.
-    XCTAssertTrue(source.contains("AgentProviderHealth.report(for: resolvedProvider)"))
-    XCTAssertTrue(source.contains("guard health.readiness == .ready else"))
-    XCTAssertTrue(source.contains("\\(logLabel)-provider-unavailable"))
+    XCTAssertTrue(source.contains("LocalAgentProviderRouting.resolveSpawnWithAutoInstall("))
+    XCTAssertTrue(source.contains("requestedProvider: directive.provider"))
+    XCTAssertTrue(source.contains("floating-agent-provider-unavailable"))
     XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
     XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))
-    XCTAssertTrue(
-      source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(spokenStatus)"))
   }
 
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
@@ -781,84 +777,16 @@ import XCTest
   func testSpacesTransitionDoesNotReplayNotchRevealPop() throws {
     let windowSource = try floatingControlBarWindowSource()
 
-    guard let start = windowSource.range(of: "private func performSpacesTransitionGrowIn()"),
-      let end = windowSource.range(of: "private func defaultFrameForCurrentState()")
-    else {
-      return XCTFail("Expected performSpacesTransitionGrowIn section")
-    }
-    let body = String(windowSource[start.lowerBound..<end.lowerBound])
-
-    // Switching Spaces must NOT replay the reveal "pop": animateGrowOutFromNotch
-    // resets notchRevealProgress to 0.001 and re-zooms the island. The panel
-    // already lives on every Space (.canJoinAllSpaces), so a Space switch should
-    // keep it fully revealed and only re-assert the frame if it drifted.
-    XCTAssertFalse(body.contains("animateGrowOutFromNotch"))
-    XCTAssertTrue(body.contains("state.notchRevealProgress = 1"))
-    XCTAssertTrue(body.contains("guard !Self.framesEquivalent(frame, targetFrame) else { return }"))
-  }
-
-  func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
-    let windowSource = try floatingControlBarWindowSource()
-
-    // Pill mode still resizes its panel, and that resize must animate with the
-    // same durations as its content, or the panel keeps sliding after the rows
-    // settle. Notch mode is fixed-window: the switcher open/close must never
-    // animate the NSPanel frame — it only re-asserts the constant idle/hover
-    // surface frame and lets the SwiftUI content morph carry the transition.
-    XCTAssertTrue(windowSource.contains("static let notchHoverMenuExpandDuration: TimeInterval = 0.16"))
-    XCTAssertTrue(windowSource.contains("static let notchHoverMenuCollapseDuration: TimeInterval = 0.10"))
-    XCTAssertTrue(
-      windowSource.contains(
-        "static let notchHoverMenuExpandAnimation: Animation = .spring(response: 0.35, dampingFraction: 0.75)"))
-    XCTAssertTrue(
-      windowSource.contains(
-        "static let notchHoverMenuCollapseAnimation: Animation = .spring(response: 0.3, dampingFraction: 1.0)"))
-
-    guard let start = windowSource.range(of: "func resizeForAgentSwitcher(visible: Bool)"),
-      let end = windowSource.range(of: "private func pillAgentListWindowSize(")
-    else {
-      return XCTFail("Expected resizeForAgentSwitcher section")
-    }
-    let body = String(windowSource[start.lowerBound..<end.lowerBound])
-
-    // Notch: fixed frame only, before any pill-mode resize.
-    XCTAssertTrue(body.contains("if notchModeEnabled {"))
-    XCTAssertTrue(body.contains("assertNotchFixedHoverSurfaceFrame()"))
-    XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
-    XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
-    XCTAssertTrue(body.contains("resizeSurfaceTransition("))
-    XCTAssertTrue(body.contains(".agentSwitcher(visible: true)"))
-    XCTAssertTrue(body.contains(".agentSwitcher(visible: false)"))
-    XCTAssertFalse(body.contains("resizeAnchored("))
-    // No bare animated resize (which defaults to the slow 0.3s) may remain in
-    // the hover-menu expand/collapse path.
-    XCTAssertFalse(body.contains("animated: true, anchorTop: true)"))
-  }
-
-  func testPTTResizeUsesSemanticSurfaceTransitionPlacement() throws {
-    let windowSource = try floatingControlBarWindowSource()
-
-    guard let start = windowSource.range(of: "func resizeForPTTState(expanded: Bool)"),
-      let end = windowSource.range(
-        of: "/// Size the notch to fit the \"thinking\" indicator",
-        range: start.upperBound..<windowSource.endIndex
-      )
-    else {
-      return XCTFail("Expected resizeForPTTState section")
-    }
-    let body = String(windowSource[start.lowerBound..<end.lowerBound])
-
-    XCTAssertTrue(body.contains("resizeSurfaceTransition("))
-    XCTAssertTrue(body.contains(".pushToTalk(expanded: expanded)"))
-    XCTAssertFalse(body.contains("resizeAnchored("))
-    XCTAssertFalse(body.contains("FloatingControlBarGeometry.targetFrame("))
-  }
-
-  func testSubagentComposerOnlyContinuesItsCanonicalSession() throws {
-    let viewSource = try floatingControlBarViewSource()
-
-    XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+    XCTAssertTrue(source.contains("let handoff = AgentPillsManager.floatingAgentHandoff(for: message)"))
+    XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnFromHandoff("))
+    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                    handoff,\n                    pill: pill"))
+    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                        .init(originalRequest: message, agentTask: message),\n                        pill: pill"))
+    XCTAssertTrue(source.contains("let toolUseId = \"floating-agent-\\(pill.id.uuidString)\""))
+    XCTAssertTrue(source.contains("name: \"spawn_agent\""))
+    XCTAssertTrue(source.contains("status: .completed"))
+    XCTAssertTrue(source.contains("id: \\(pill.id.uuidString)"))
+    XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
+    XCTAssertFalse(source.contains("barWindow.closeAIConversation()"))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {

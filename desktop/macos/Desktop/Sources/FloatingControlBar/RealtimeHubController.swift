@@ -2281,38 +2281,79 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
-      // Resolve a (possibly STT-mangled) spoken agent name to a harness across ALL agents
-      // (Claude Code, Codex, Hermes, OpenClaw, Omi AI). Empty provider = the user didn't name
-      // one -> best-fit selection below.
-      let requestedHarness: AgentHarnessMode?
-      if providerName.isEmpty {
-        requestedHarness = nil
-      } else if let match = AgentSpeechMatcher.resolve(providerName) {
-        requestedHarness = match.harness
-      } else {
+      let requestedProvider: AgentPillsManager.DirectedProvider?
+      switch providerName {
+      case "openclaw": requestedProvider = .openclaw
+      case "hermes": requestedProvider = .hermes
+      case "codex": requestedProvider = .codex
+      case "": requestedProvider = nil
+      default:
         session?.sendToolResult(
           callId: callId, name: name,
-          output:
-            "I couldn't tell which agent you meant by '\(providerName)'. Try Claude Code, Codex, Hermes, OpenClaw, or Omi.")
+          output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', or 'codex'.")
         return
       }
-      // If the requested agent is an installable local provider that isn't connected, help install it.
-      let requestedProvider = requestedHarness.flatMap { AgentPillsManager.DirectedProvider(harness: $0) }
-      if let requestedProvider {
-        let availability = LocalAgentProviderDetector.availability(for: requestedProvider)
-        guard availability.isAvailable else {
-          let setupPrompt = availability.setupPrompt
-          assistantText = setupPrompt
-          barState?.isVoiceResponseActive = true
-          if !audioReceivedThisTurn {
-            speak(requestedProvider.setupNeededStatus)
+      let userRequestText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        let resolution = await LocalAgentProviderRouting.resolveSpawnWithAutoInstall(
+          brief: brief,
+          requestedProvider: requestedProvider,
+          userRequestText: userRequestText.isEmpty ? nil : userRequestText,
+          title: title,
+          onInstallStart: { [weak self] provider in
+            guard let self else { return }
+            let status = LocalAgentProviderInstaller.installingStatus(for: provider)
+            log("RealtimeHub[\(self.providerTag)]: auto-installing \(provider.rawValue)")
+            if !self.audioReceivedThisTurn {
+              self.barState?.isVoiceResponseActive = true
+              self.speak(status)
+            }
           }
-          suppressAssistantOutputForCurrentTurn = true
-          log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(requestedProvider.rawValue) unavailable")
-          sendToolResultIfCurrent(
+        )
+        // The install await can take many seconds; bail if the session/turn moved on
+        // so we don't speak or mutate state for a turn that's no longer active.
+        guard self.isCurrentSession(source) else { return }
+        switch resolution {
+        case .setupRequired(let provider, let setupPrompt, let spokenStatus):
+          self.assistantText = setupPrompt
+          self.barState?.isVoiceResponseActive = true
+          if !self.audioReceivedThisTurn {
+            self.speak(spokenStatus)
+          }
+          self.suppressAssistantOutputForCurrentTurn = true
+          log("RealtimeHub[\(self.providerTag)]: tool spawn_agent provider=\(provider.rawValue) unavailable")
+          self.sendToolResultIfCurrent(
             source: source, callId: callId, name: name,
-            output: availability.toolError)
+            output: "Error: \(setupPrompt)")
           return
+        case .spawn(let plan):
+          let model = ShortcutSettings.shared.selectedModel.isEmpty
+            ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
+          let pill = AgentPillsManager.shared.spawnFromUserQuery(
+            brief, model: model, fromVoice: false,
+            preFetchedTitle: plan.title,
+            preFetchedAck: plan.ack,
+            bridgeHarnessOverride: plan.harnessOverride,
+            spawnContext: plan.context)
+          log("RealtimeHub[\(self.providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(plan.selectedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false) fallback=\(plan.usedFallback)")
+          if !self.audioReceivedThisTurn {
+            let existingAck = self.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let ack = existingAck.isEmpty ? plan.ack : existingAck
+            self.assistantText = ack
+            self.barState?.isVoiceResponseActive = true
+            self.speak(ack)
+          }
+          self.suppressAssistantOutputForCurrentTurn = true
+          let toolOutput: String
+          if let fallbackNote = plan.fallbackNote {
+            toolOutput = "Agent started with fallback. \(fallbackNote)"
+          } else {
+            toolOutput = "Agent started."
+          }
+          self.sendToolResultIfCurrent(
+            source: source, callId: callId, name: name,
+            output: toolOutput)
         }
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,
@@ -2320,45 +2361,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           expectedTurnEpoch: toolTurnEpoch)
         return
       }
-      let model = ShortcutSettings.shared.selectedModel.isEmpty
-        ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
-      // Non-blocking: spawn renders its own pill and runs on its own ChatProvider/AgentBridge.
-      // fromVoice:false — the hub model speaks its own natural acknowledgment.
-      // Harness: a named agent wins; otherwise pick the best CONNECTED agent for the task and
-      // fall back through the ranked chain. nil keeps the Omi AI default.
-      let selectedHarness: AgentHarnessMode?
-      if let requestedHarness {
-        selectedHarness = (requestedHarness == .piMono) ? nil : requestedHarness
-      } else {
-        let chain = AgentSelector.rank(brief: brief, available: AgentRuntimeRouting.connectedHarnesses())
-        selectedHarness = chain.first.flatMap { $0 == .piMono ? nil : $0 }
-      }
-      let pill = AgentPillsManager.shared.spawnFromUserQuery(
-        brief, model: model, fromVoice: false,
-        preFetchedTitle: (title?.isEmpty == false) ? title : requestedProvider?.displayName,
-        bridgeHarnessOverride: selectedHarness)
-      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(requestedHarness?.rawValue ?? selectedHarness?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
-      if !audioReceivedThisTurn {
-        let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Name the chosen agent out loud so the routing decision is transparent
-        // ("Starting Codex.") when the hub model did not speak its own ack.
-        let agentName: String? = {
-          guard let harness = selectedHarness else { return nil }
-          if let provider = AgentPillsManager.DirectedProvider(harness: harness) { return provider.displayName }
-          return harness == .acp ? "Claude Code" : nil
-        }()
-        let ack =
-          !existingAck.isEmpty
-          ? existingAck : (agentName.map { "Starting \($0)." } ?? "Starting a background agent.")
-        assistantText = ack
-        barState?.isVoiceResponseActive = true
-        FloatingBarVoicePlaybackService.shared.speakOneShot(ack)
-      }
-      suppressAssistantOutputForCurrentTurn = true
-      sendToolResultIfCurrent(
-        source: source, callId: callId, name: name,
-        output: "Setup started for \(setupProvider.displayName) (\(health.detail)) — progress shows as a pill. The original task will run automatically once setup succeeds.",
-        expectedTurnEpoch: toolTurnEpoch)
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the
       // tool is just an ack — pushing another image here is the broken path (mid-tool-call

@@ -611,13 +611,13 @@ describe("adapter capability matrix", () => {
       restartOrphanSemantics: { status: "required" },
     });
     expect(ADAPTER_CAPABILITY_MATRIX.codex.expectations).toMatchObject({
-      nativeResume: { status: "unsupported" },
+      nativeResume: { status: "required" },
       cancellationDispatch: { status: "required" },
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
-      pinnedWorker: { status: "required" },
+      pinnedWorker: { status: "unsupported" },
       modelSwitching: { status: "unsupported" },
       artifactEmission: { status: "unsupported" },
-      toolSupport: { status: "required" },
+      toolSupport: { status: "unsupported" },
       restartOrphanSemantics: { status: "required" },
     });
 
@@ -704,6 +704,17 @@ describe("adapter capability matrix", () => {
       restartBehavior: "process_local_bindings_stale",
     });
     expect(adapterCapabilitiesFor("openclaw")).toEqual({
+      resumeFidelity: "native",
+      supportsNativeResume: true,
+      supportsCancellation: true,
+      acknowledgesCancellation: false,
+      requiresPinnedWorker: false,
+      supportsModelSwitching: false,
+      supportsArtifactEmission: false,
+      supportsTools: false,
+      restartBehavior: "native_bindings_survive",
+    });
+    expect(adapterCapabilitiesFor("codex")).toEqual({
       resumeFidelity: "native",
       supportsNativeResume: true,
       supportsCancellation: true,

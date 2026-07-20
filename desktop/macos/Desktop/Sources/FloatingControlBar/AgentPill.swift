@@ -308,13 +308,20 @@ final class AgentPillsManager: ObservableObject {
   /// Configurable soft cap so the row never grows past a reasonable width.
   private let maxPills: Int = 8
 
-  /// INV-8: ephemeral UI only — tracks in-flight projection poll/send tasks per pill;
-  /// canonical run truth lives in the kernel (`canonicalSessionId` / `canonicalRunId`).
-  private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
-  private var runAttemptGenerationByPill: [UUID: Int] = [:]
-  private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
-  private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
-  private var producingJournalSurfaceByPill: [UUID: AgentSurfaceReference] = [:]
+    /// One ChatProvider (and therefore one ACP node subprocess) per pill so
+    /// pills can truly run in parallel — each provider has its own bridge,
+    /// `isSending` flag, and interrupt scope. Bridges are heavy to boot, so we
+    /// stagger their startup via `bootChain` to avoid the race we saw the first
+    /// time around. After boot completes, every pill's `sendMessage` runs in
+    /// parallel with the others.
+    private var providersByPill: [UUID: ChatProvider] = [:]
+    private var streamsByPill: [UUID: AnyCancellable] = [:]
+    private var projectionStreamsByPill: [UUID: AnyCancellable] = [:]
+    private var messageCountByPill: [UUID: Int] = [:]
+    private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
+    private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
+    private var spawnContextByPill: [UUID: AgentSpawnContext] = [:]
+    private var bootChain: Task<Void, Never> = Task {}
 
   private let viewedFinishedTTL: TimeInterval = 10 * 60
 
@@ -482,13 +489,6 @@ final class AgentPillsManager: ObservableObject {
       }
     }
 
-    var executableName: String {
-      switch self {
-      case .hermes: return "hermes"
-      case .openclaw: return "openclaw"
-      }
-    }
-
     enum DirectedProvider: String, Equatable, CaseIterable {
         case hermes
         case openclaw
@@ -523,43 +523,6 @@ final class AgentPillsManager: ObservableObject {
             case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
             case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
             case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
-            }
-        }
-
-        /// Shell command that installs this agent's CLI on macOS. Surfaced by the
-        /// install helper so a user can connect a named-but-missing agent in one tap.
-        var installCommand: String {
-            switch self {
-            case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
-            case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash"
-            case .codex: return "npm install -g @openai/codex"
-            }
-        }
-
-        var docsURL: String {
-            switch self {
-            case .hermes: return "https://hermes-agent.nousresearch.com"
-            case .openclaw: return "https://docs.openclaw.ai/install"
-            case .codex: return "https://developers.openai.com/codex/cli"
-            }
-        }
-
-        /// Spoken/typed forms that select this agent by name in a voice/chat request.
-        var aliases: [String] {
-            switch self {
-            case .hermes: return ["hermes", "nous"]
-            case .openclaw: return ["openclaw", "open claw"]
-            case .codex: return ["codex"]
-            }
-        }
-
-        /// The installable local provider matching a harness, if any (Claude Code / Omi AI have none).
-        init?(harness: AgentHarnessMode) {
-            switch harness {
-            case .hermes: self = .hermes
-            case .openclaw: self = .openclaw
-            case .codex: self = .codex
-            case .acp, .piMono: return nil
             }
         }
 
@@ -1075,7 +1038,8 @@ final class AgentPillsManager: ObservableObject {
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
-        bridgeHarnessOverride: AgentHarnessMode? = nil
+        bridgeHarnessOverride: AgentHarnessMode? = nil,
+        spawnContext: AgentSpawnContext? = nil
     ) -> AgentPill {
         let count = AgentPillsManager.parseAgentCount(from: query)
         if count <= 1 {
@@ -1085,7 +1049,8 @@ final class AgentPillsManager: ObservableObject {
                 fromVoice: fromVoice,
                 preFetchedTitle: preFetchedTitle,
                 preFetchedAck: preFetchedAck,
-                bridgeHarnessOverride: bridgeHarnessOverride
+                bridgeHarnessOverride: bridgeHarnessOverride,
+                spawnContext: spawnContext
             )
         }
         var first: AgentPill?
@@ -1102,7 +1067,8 @@ final class AgentPillsManager: ObservableObject {
                 fromVoice: fromVoice && first == nil,
                 preFetchedTitle: first == nil ? preFetchedTitle : nil,
                 preFetchedAck: first == nil ? preFetchedAck : nil,
-                bridgeHarnessOverride: bridgeHarnessOverride
+                bridgeHarnessOverride: bridgeHarnessOverride,
+                spawnContext: spawnContext
             )
             if first == nil { first = pill }
         }
@@ -1160,11 +1126,15 @@ final class AgentPillsManager: ObservableObject {
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
         systemPromptSuffix: String? = nil,
-        bridgeHarnessOverride: AgentHarnessMode? = nil
+        bridgeHarnessOverride: AgentHarnessMode? = nil,
+        spawnContext: AgentSpawnContext? = nil
     ) -> AgentPill {
         let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
             pill.title = preFetchedTitle
+        }
+        if let spawnContext {
+            spawnContextByPill[pill.id] = spawnContext
         }
 
         trimForNewPillIfNeeded()
@@ -1524,7 +1494,14 @@ final class AgentPillsManager: ObservableObject {
         runTasksByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
-        pendingFollowUpsByPill[pillID] = nil
+        providersByPill[pillID]?.stopAgent()
+        streamsByPill[pillID]?.cancel()
+        streamsByPill[pillID] = nil
+        projectionStreamsByPill[pillID]?.cancel()
+        projectionStreamsByPill[pillID] = nil
+        providersByPill[pillID] = nil
+        messageCountByPill[pillID] = nil
+        spawnContextByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
         if shouldCancelRun, let runId, !runId.isEmpty {
             Task {
@@ -2262,6 +2239,89 @@ final class AgentPillsManager: ObservableObject {
             attemptProviderStartupFallback(for: pill, errorText: startupFailure.displayMessage) {
             return
         }
+
+        if pill.status == .starting {
+            pill.status = .running
+        }
+
+        let activity = Self.describeActivity(for: aiMessage)
+        if !activity.isEmpty && activity != pill.latestActivity {
+            pill.latestActivity = activity
+            pill.transcript.append(activity)
+            pill.markContentChanged()
+        }
+    }
+
+    /// Pill-bar activity string for an AI message. While a message is still
+    /// streaming, skip partial text chunks so the pill does not flicker through
+    /// mid-token labels like "O..." or "Open..." before the final response lands.
+    /// Tool calls still show immediately because they are atomic activity.
+    private static func describeActivity(for message: ChatMessage) -> String {
+        for block in message.contentBlocks.reversed() {
+            switch block {
+            case .toolCall(_, let name, _, _, let input, _):
+                let display = ChatContentBlock.displayName(for: name)
+                if let input, !input.summary.isEmpty {
+                    return "\(display) — \(input.summary)"
+                }
+                return display
+            case .text(_, let text):
+                guard !message.isStreaming else { continue }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return String(trimmed.prefix(110))
+                }
+            case .thinking, .discoveryCard:
+                continue
+            }
+        }
+        let trimmedFallback = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !message.isStreaming, !trimmedFallback.isEmpty {
+            return String(trimmedFallback.prefix(110))
+        }
+        return "Working…"
+    }
+
+    private func maybeRetryWithFallback(
+        failedPill: AgentPill,
+        model: String,
+        errorText: String
+    ) -> Bool {
+        guard LocalAgentProviderRouting.isRetriableSpawnFailure(errorText) else { return false }
+        guard var context = spawnContextByPill[failedPill.id] else { return false }
+        guard context.explicitProvider == nil else { return false }
+        guard let nextWrapped = context.nextFallback(after: failedPill.bridgeHarnessOverride) else { return false }
+
+        let query = failedPill.query
+        let failedName = failedPill.bridgeHarnessOverride.flatMap { harness in
+            AgentPillsManager.DirectedProvider.allCases.first { $0.harnessMode == harness }?.displayName
+        } ?? "That agent"
+        let nextProvider = nextWrapped.flatMap { harness in
+            AgentPillsManager.DirectedProvider.allCases.first { $0.harnessMode == harness }
+        }
+        let ack: String
+        if let nextProvider {
+            ack = "\(failedName) failed; trying \(nextProvider.displayName) instead."
+        } else {
+            ack = "\(failedName) failed; trying the default agent instead."
+        }
+
+        context.recordAttempt(failedPill.bridgeHarnessOverride)
+        context.recordAttempt(nextWrapped)
+        cleanup(pillID: failedPill.id)
+        _ = spawn(
+            query: query,
+            model: model,
+            preFetchedTitle: nextProvider?.displayName ?? failedPill.title,
+            preFetchedAck: ack,
+            bridgeHarnessOverride: nextWrapped,
+            spawnContext: context
+        )
+        return true
+    }
+
+    private func complete(pill: AgentPill, provider: ChatProvider, finalText: String?) {
+        let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
             if pill.aiMessage?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
                 var finalMessage = pill.aiMessage ?? ChatMessage(text: trimmedFinalText, sender: .ai)
@@ -2295,6 +2355,13 @@ final class AgentPillsManager: ObservableObject {
           }
         }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
+            if maybeRetryWithFallback(
+                failedPill: pill,
+                model: pill.model,
+                errorText: errorText
+            ) {
+                return
+            }
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()
@@ -3087,15 +3154,53 @@ final class AgentPillsManager: ObservableObject {
       return nil
     }
 
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 8
-    do {
-      let headers = try await APIClient.shared.buildHeaders(requireAuth: true)
-      for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-    } catch {
-      log("AgentPill: title gen skipped — auth header unavailable (\(error.localizedDescription))")
-      return nil
+    private static func apply(projection: AgentRunProjection, to pill: AgentPill) {
+        switch projection.status {
+        case .queued:
+            pill.status = .queued
+        case .starting, .running, .waitingInput, .waitingApproval, .cancelling:
+            pill.status = .running
+            pill.completedAt = nil
+        case .succeeded:
+            pill.status = .done
+            pill.completedAt = projection.completedAt ?? Date()
+            if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !statusText.isEmpty {
+                pill.latestActivity = String(statusText.prefix(140))
+                pill.markContentChanged()
+            } else if let last = pill.aiMessage {
+                let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    pill.latestActivity = String(trimmed.prefix(140))
+                    pill.markContentChanged()
+                }
+            }
+        case .failed, .timedOut, .orphaned:
+            let message = projection.failure?.displayMessage ?? projection.errorMessage ?? "Agent failed"
+            if AgentPillsManager.shared.maybeRetryWithFallback(
+                failedPill: pill,
+                model: pill.model,
+                errorText: message
+            ) {
+                return
+            }
+            pill.status = .failed(message)
+            pill.latestActivity = message
+            pill.completedAt = projection.completedAt ?? Date()
+            ensureFailureMessage(message, for: pill)
+            pill.markContentChanged()
+        case .cancelled:
+            pill.status = .failed("Stopped by user")
+            pill.latestActivity = "Stopped by user"
+            pill.completedAt = projection.completedAt ?? Date()
+            pill.markContentChanged()
+        case .idle:
+            break
+        }
+        if !projection.status.isTerminal, let statusText = projection.statusText, !statusText.isEmpty {
+            pill.latestActivity = statusText
+            pill.markContentChanged()
+        }
     }
 
     let prompt = """

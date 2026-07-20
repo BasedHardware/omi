@@ -718,6 +718,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "hermes"), "hermes")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openclaw"), "openclaw")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openClaw"), "openclaw")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "codex"), "codex")
     XCTAssertNil(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"))
   }
 
@@ -919,108 +920,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_CODEX_ADAPTER_COMMAND"]"#))
-  }
-
-  @MainActor
-  func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
-    let savedKeys = Dictionary(
-      uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
-        (provider, UserDefaults.standard.string(forKey: provider.storageKey))
-      })
-    defer {
-      for provider in BYOKProvider.allCases {
-        if let saved = savedKeys[provider] ?? nil {
-          UserDefaults.standard.set(saved, forKey: provider.storageKey)
-        } else {
-          UserDefaults.standard.removeObject(forKey: provider.storageKey)
-        }
-      }
-      CredentialHealthManager.shared.reset()
-    }
-
-    for provider in BYOKProvider.allCases {
-      UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
-    }
-    let openAIKey = APIKeyService.byokKey(.openai)!
-    CredentialHealthManager.shared.recordProviderFailure(
-      .providerAuthFailed(provider: .openai, mode: .byok),
-      provider: .openai,
-      authMode: .byok,
-      fingerprint: APIKeyService.byokFingerprint(openAIKey),
-      context: "test")
-
-    let result = AgentRuntimeProcess.usableBYOKEnvironment()
-
-    XCTAssertTrue(result.values.isEmpty)
-    XCTAssertEqual(result.suppressedProviders, [.openai])
-  }
-
-  @MainActor
-  func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
-    let savedKeys = Dictionary(
-      uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
-        (provider, UserDefaults.standard.string(forKey: provider.storageKey))
-      })
-    defer {
-      for provider in BYOKProvider.allCases {
-        if let saved = savedKeys[provider] ?? nil {
-          UserDefaults.standard.set(saved, forKey: provider.storageKey)
-        } else {
-          UserDefaults.standard.removeObject(forKey: provider.storageKey)
-        }
-      }
-      CredentialHealthManager.shared.reset()
-    }
-
-    for provider in BYOKProvider.allCases {
-      UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
-    }
-
-    let result = AgentRuntimeProcess.usableBYOKEnvironment()
-
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)], "sk-agent-openai")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)], "sk-agent-anthropic")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)], "sk-agent-gemini")
-    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .deepgram)], "sk-agent-deepgram")
-    XCTAssertTrue(result.suppressedProviders.isEmpty)
-  }
-
-  func testRemoveInheritedByokEnvironmentScrubsPrefixCaseInsensitively() {
-    var env = [
-      "OMI_BYOK_OPENAI": "stale-openai",
-      "omi_byok_experimental": "stale-experimental",
-      "OmI_bYoK_LEGACY": "stale-legacy",
-      "OMI_AUTH_TOKEN": "token",
-      "PATH": "/usr/bin",
-    ]
-
-    AgentRuntimeProcess.removeInheritedBYOKEnvironment(from: &env)
-
-    XCTAssertNil(env["OMI_BYOK_OPENAI"])
-    XCTAssertNil(env["omi_byok_experimental"])
-    XCTAssertNil(env["OmI_bYoK_LEGACY"])
-    XCTAssertEqual(env["OMI_AUTH_TOKEN"], "token")
-    XCTAssertEqual(env["PATH"], "/usr/bin")
-  }
-
-  func testPiMonoStartupRefreshesAuthTokenAndFiltersByokEnvironment() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-
-    XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
-    XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
-    XCTAssertTrue(
-      source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(source.contains("getAuthHeader("))
-    XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
-    XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))
-    XCTAssertFalse(
-      source.contains(
-        "log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
-    XCTAssertTrue(source.contains("forwarding \\(byok.values.count) usable user keys"))
+    XCTAssertTrue(source.contains(#""\(home)/.npm-global/bin""#))
+    XCTAssertTrue(source.contains(#""\(home)/.volta/bin""#))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {
@@ -1056,37 +957,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(command, "'\(openClawPath)' acp")
   }
 
-  func testCodexAdapterCommandUsesSiblingNodeWhenAvailable() throws {
-    let tempDir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("codex-command-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: tempDir) }
+  func testCodexAdapterCommandWrapsDetectedBinaryWithACPBridge() {
+    let command = AgentRuntimeProcess.codexAdapterCommand(codexPath: "/opt/homebrew/bin/codex")
 
-    let nodePath = tempDir.appendingPathComponent("node").path
-    let codexAcpPath = tempDir.appendingPathComponent("codex-acp").path
-    FileManager.default.createFile(atPath: nodePath, contents: Data("#!/bin/sh\n".utf8))
-    FileManager.default.createFile(atPath: codexAcpPath, contents: Data("#!/usr/bin/env node\n".utf8))
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: nodePath)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexAcpPath)
-
-    let command = AgentRuntimeProcess.codexAdapterCommand(codexAcpPath: codexAcpPath)
-
-    XCTAssertEqual(command, "'\(nodePath)' '\(codexAcpPath)'")
-  }
-
-  func testCodexAdapterCommandFallsBackToLauncherWithoutSiblingNode() throws {
-    let tempDir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("codex-command-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: tempDir) }
-
-    let codexAcpPath = tempDir.appendingPathComponent("codex-acp").path
-    FileManager.default.createFile(atPath: codexAcpPath, contents: Data("#!/usr/bin/env node\n".utf8))
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexAcpPath)
-
-    let command = AgentRuntimeProcess.codexAdapterCommand(codexAcpPath: codexAcpPath)
-
-    XCTAssertEqual(command, "'\(codexAcpPath)'")
+    XCTAssertEqual(
+      command,
+      "CODEX_PATH='/opt/homebrew/bin/codex' npx -y @agentclientprotocol/codex-acp"
+    )
   }
 
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {

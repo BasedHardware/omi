@@ -272,17 +272,15 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   codex: {
     adapterId: "codex",
     productionAdapter: true,
-    // Codex runs one-shot `codex exec` invocations: stateless per attempt, no
-    // resumable native session, model chosen per invocation.
     expectations: {
-      nativeResume: unsupported("Codex runs one-shot `codex exec` invocations with no resumable native session id."),
-      cancellationDispatch: required("Codex attempts are cancellable by terminating the active `codex exec` subprocess."),
-      cancellationAck: knownLimitation("Codex cancellation terminates the subprocess without an independent terminal ack.", "TICKET-03-follow-up-cancel-ack"),
-      pinnedWorker: unsupported("Codex exec is stateless per attempt and keeps no process-local session state between attempts."),
-      modelSwitching: unsupported("Codex model is selected per invocation via --model; there is no in-session set_model."),
-      artifactEmission: unsupported("Codex adapter does not emit artifact references yet."),
-      toolSupport: unsupported("Codex exec does not consume the per-session Omi MCP tool relay; tools are configured in the Codex environment."),
-      restartOrphanSemantics: required("Startup reconciliation orphans active Codex attempts; one-shot bindings carry no resumable state."),
+      nativeResume: required("Codex ACP exposes native sessions through the Gateway-backed ACP bridge."),
+      cancellationDispatch: required("Codex ACP accepts cancellation through the shared ACP interrupt path."),
+      cancellationAck: knownLimitation("Codex cancellation resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: unsupported("Codex ACP sessions are native and do not require process-local pinned workers."),
+      modelSwitching: unsupported("Codex ACP does not currently expose session/set_model; model selection is configured in the Codex gateway/agent."),
+      artifactEmission: unsupported("Codex ACP adapter does not emit artifact references yet."),
+      toolSupport: unsupported("Codex ACP rejects per-session MCP servers; Omi tools are unavailable until configured through the Codex gateway/agent."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable Codex bindings."),
     },
   },
   a2a: {

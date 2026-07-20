@@ -2862,28 +2862,28 @@ class FloatingControlBarManager {
 
     self.window = barWindow
 
-    // Re-apply any in-flight snooze that survived app relaunch.
-    if isSnoozed {
-      scheduleSnoozeTimer()
-    } else if snoozedUntil != nil {
-      snoozedUntil = nil
-    }
-
-  }
-
-  /// Whether the floating bar window is currently visible.
-  var isVisible: Bool {
-    window?.isVisible ?? false
-  }
-
-        let resolvedProvider = decision.directedProvider ?? directedProvider
-        if let resolvedProvider {
-            // Dispatch gates on full health (installed AND wired AND authed),
-            // matching the voice hub / chat executor — a needs-setup provider
-            // must get the setup prompt, not a doomed spawn.
-            let health = AgentProviderHealth.report(for: resolvedProvider)
-            guard health.readiness == .ready else {
-                let assistantText = "\(health.detail) I can set it up for you."
+        let routerTracer = QueryTracerContext.current
+        if let directive {
+            if provider.isSending {
+                pendingFollowUpQuery = nil
+                provider.stopAgent()
+            }
+            routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
+            let resolution = await LocalAgentProviderRouting.resolveSpawnWithAutoInstall(
+                brief: directive.rewrittenQuery,
+                requestedProvider: directive.provider,
+                userRequestText: message,
+                title: directive.title,
+                onInstallStart: { installProvider in
+                    let status = LocalAgentProviderInstaller.installingStatus(for: installProvider)
+                    if case .voiceOnly = presentation {
+                        FloatingBarVoicePlaybackService.shared.speakOneShot(status)
+                    }
+                }
+            )
+            switch resolution {
+            case .setupRequired(_, let setupPrompt, let spokenStatus):
+                let assistantText = setupPrompt
                 let recordedTurn = provider.recordCompletedTurn(
                     userText: originalRequest,
                     assistantText: assistantText,
@@ -2898,8 +2898,44 @@ class FloatingControlBarManager {
                     )
                 case .voiceOnly:
                     barWindow.state.currentQueryFromVoice = false
-                    barWindow.state.clearVoiceResponseState()
-                    FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)
+                    barWindow.state.isVoiceResponseActive = false
+                    FloatingBarVoicePlaybackService.shared.speakOneShot(spokenStatus)
+                }
+                return
+            case .spawn(let plan):
+                let pill = AgentPillsManager.shared.spawnFromUserQuery(
+                    directive.rewrittenQuery,
+                    model: selectedFloatingModel,
+                    fromVoice: presentation.fromVoice,
+                    preFetchedTitle: plan.title,
+                    preFetchedAck: plan.ack,
+                    bridgeHarnessOverride: plan.harnessOverride,
+                    spawnContext: plan.context
+                )
+                let providerName = plan.selectedProvider?.displayName ?? directive.provider.displayName
+                let assistantText: String
+                if let fallbackNote = plan.fallbackNote {
+                    assistantText = "\(fallbackNote) I started \(providerName) in a background agent titled \"\(pill.title)\"."
+                } else {
+                    assistantText = "I started \(providerName) in a background agent titled \"\(pill.title)\"."
+                }
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: message,
+                    assistantText: assistantText,
+                    logLabel: "floating-agent-provider"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentHandoff(
+                        .init(originalRequest: message, agentTask: directive.rewrittenQuery),
+                        pill: pill,
+                        assistantMessage: recordedTurn.assistant,
+                        assistantText: assistantText,
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
                 }
                 return
             }
@@ -2938,11 +2974,90 @@ class FloatingControlBarManager {
         if let error = await provider.automationResetMainChatForHarness() {
           return ["error": error]
         }
-      }
-      if window.state.showingAIConversation {
-        window.closeAIConversation()
-        _ = await waitForAskOmiClosed(in: window)
-      }
+
+        // QueryTracer: the Haiku router call (inline-chat vs background-agent), shown
+        // as its own span instead of an anonymous gap before pre_llm.
+        routerTracer?.begin("router_classify")
+        let decision = await AgentPillsManager.classify(message)
+        routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
+        if decision.route == .agent {
+            let resolution = await LocalAgentProviderRouting.resolveSpawnWithAutoInstall(
+                brief: message,
+                requestedProvider: nil,
+                userRequestText: message,
+                title: decision.title,
+                onInstallStart: { installProvider in
+                    let status = LocalAgentProviderInstaller.installingStatus(for: installProvider)
+                    if case .voiceOnly = presentation {
+                        FloatingBarVoicePlaybackService.shared.speakOneShot(status)
+                    }
+                }
+            )
+            switch resolution {
+            case .setupRequired(_, let setupPrompt, let spokenStatus):
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: message,
+                    assistantText: setupPrompt,
+                    logLabel: "floating-agent-provider-unavailable"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentResponse(
+                        userText: message,
+                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: setupPrompt, sender: .ai),
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
+                    FloatingBarVoicePlaybackService.shared.speakOneShot(spokenStatus)
+                }
+                return
+            case .spawn(let plan):
+                let pill = AgentPillsManager.shared.spawnFromUserQuery(
+                    message,
+                    model: selectedFloatingModel,
+                    fromVoice: presentation.fromVoice,
+                    preFetchedTitle: plan.title,
+                    preFetchedAck: plan.ack,
+                    bridgeHarnessOverride: plan.harnessOverride,
+                    spawnContext: plan.context
+                )
+                let title = plan.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let titleSuffix = title.isEmpty ? "" : " titled \"\(title)\""
+                let ack = plan.ack.trimmingCharacters(in: .whitespacesAndNewlines)
+                let assistantText: String
+                if let fallbackNote = plan.fallbackNote {
+                    assistantText = "\(fallbackNote) I started a background agent\(titleSuffix) for that."
+                } else if ack.isEmpty {
+                    assistantText = "I started a background agent\(titleSuffix) for that."
+                } else {
+                    assistantText = "\(ack) I started a background agent\(titleSuffix) for that."
+                }
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: message,
+                    assistantText: assistantText,
+                    logLabel: "floating-agent"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentHandoff(
+                        .init(originalRequest: message, agentTask: message),
+                        pill: pill,
+                        assistantMessage: recordedTurn.assistant,
+                        assistantText: assistantText,
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
+                }
+                return
+            }
+        }
+
+        // Chat route: continue with the requested delivery surface.
+        await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
     }
 
     let start = ContinuousClock.now

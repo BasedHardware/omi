@@ -1048,69 +1048,45 @@ class ChatToolExecutor {
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
       .replacingOccurrences(of: " ", with: "")
-    guard let decision = AgentProviderRouter.dispatchDecision(providerName: providerName, brief: brief) else {
-      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex, auto."
+    let requestedProvider: AgentPillsManager.DirectedProvider?
+    switch providerName {
+    case "openclaw": requestedProvider = .openclaw
+    case "hermes": requestedProvider = .hermes
+    case "codex": requestedProvider = .codex
+    case "": requestedProvider = nil
+    default:
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
     }
-    let directedProvider = decision.primary
-    let routedFallbacks = decision.fallbacks
-    if let directedProvider {
-      let health = AgentProviderHealth.report(for: directedProvider)
-      guard health.readiness == .ready else {
-        return "Error: \(health.detail)"
-      }
-    }
-    let model =
-      ShortcutSettings.shared.selectedModel.isEmpty
-      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    guard
-      let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
-        .init(
-          originalUserText: brief,
-          brief: brief,
-          title: (title?.isEmpty == false) ? title : directedProvider?.displayName,
-          spokenAck: nil,
-          directedProvider: directedProvider,
-          validateAgainstOriginalUserText: false
-        ),
+    let resolution = await LocalAgentProviderRouting.resolveSpawnWithAutoInstall(
+      brief: brief,
+      requestedProvider: requestedProvider,
+      userRequestText: nil,
+      title: title,
+      treatRequestedAsExplicit: true
+    )
+    switch resolution {
+    case .setupRequired(_, let setupPrompt, _):
+      return "Error: \(setupPrompt)"
+    case .spawn(let plan):
+      let model = ShortcutSettings.shared.selectedModel.isEmpty
+        ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+      let pill = AgentPillsManager.shared.spawnFromUserQuery(
+        brief,
         model: model,
-        fromVoice: false
+        fromVoice: false,
+        preFetchedTitle: plan.title,
+        preFetchedAck: plan.ack,
+        bridgeHarnessOverride: plan.harnessOverride,
+        spawnContext: plan.context
       )
-    else {
-      return
-        "Error: Missing self-contained brief. Pass a clear task with enough context for a background agent to execute independently."
-    }
-    pill.fallbackProviders = routedFallbacks
-    return """
+      let fallbackLine = plan.fallbackNote.map { "\nfallback: \($0)" } ?? ""
+      return """
       Agent started as a floating agent pill.
       id: \(pill.id.uuidString)
       title: \(pill.title)
-      status: \(pill.status.displayLabel)
+      status: \(pill.status.displayLabel)\(fallbackLine)
       """
-  }
-
-  /// Install a missing local agent provider through the deterministic
-  /// LocalAgentProviderInstaller: a native confirmation dialog showing the
-  /// exact command is the REAL consent gate, then code runs the official
-  /// install command via Process and verifies with the shared detector — no
-  /// installer agent, so a prompt-injected call can never execute anything
-  /// by itself. Idempotent for already-installed providers.
-  private static func executeSetupAgentProvider(
-    _ args: [String: Any],
-    originatingChatMode: ChatMode?,
-    originatingClientScope: String?
-  ) async -> String {
-    if originatingChatMode == .ask {
-      return
-        "Error: setup_agent_provider is unavailable in Ask mode. Switch to Act mode before installing an agent provider."
     }
-    if originatingClientScope == AgentLegacyClientScope.floatingPill {
-      return "Error: setup_agent_provider is unavailable from an existing floating background agent."
-    }
-    let providerName = AgentPillsManager.DirectedProvider.normalizedRawValue(args["provider"] as? String)
-    guard let provider = AgentPillsManager.DirectedProvider(rawValue: providerName) else {
-      return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
-    }
-    return LocalAgentProviderInstaller.shared.beginInstall(for: provider)
   }
 
   private static func executeManageAgentPills(_ args: [String: Any]) async -> String {

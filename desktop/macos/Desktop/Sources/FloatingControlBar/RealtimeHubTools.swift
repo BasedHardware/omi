@@ -77,20 +77,56 @@ enum HubTool: String {
 
 enum RealtimeHubTools {
   private static func localAgentProviderInstruction() -> String {
-    let names = AgentPillsManager.DirectedProvider.allCases
-      .map { "\($0.displayName) (\"\($0.rawValue)\")" }
-      .joined(separator: ", ")
-    // Always route a named agent through spawn_agent, even when it is not installed: the spawn
-    // handler runs it if connected or shows deterministic install help if not. This keeps the
-    // "name an agent that isn't connected -> help install it" behavior from depending on the
-    // model reciting setup text.
-    return "If the user asks to use or ask a specific coding agent — \(names) — call spawn_agent with `provider` set to its value. Always pass the named provider: Omi runs it when it's connected, or tells the user how to install it when it isn't, so you never need to check availability yourself."
+    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
+    let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
+    let available = availability.filter(\.isAvailable).map(\.provider)
+    let unavailable = availability.filter { !$0.isAvailable && !LocalAgentProviderInstaller.canAutoInstall($0.provider) }
+    let autoInstallable = availability.filter { !$0.isAvailable && LocalAgentProviderInstaller.canAutoInstall($0.provider) }.map(\.provider)
+
+    if unavailable.isEmpty && autoInstallable.isEmpty {
+      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect."
+    }
+
+    var parts: [String] = []
+    if !available.isEmpty {
+      parts.append("Installed local providers: \(available.map(\.displayName).joined(separator: ", ")). Prefer these in spawn_agent's provider argument.")
+      parts.append("If the user explicitly asks to use/ask one of them by name, pass that provider. Otherwise pick the best fit from the installed list above — Omi will fall back automatically if your pick is missing.")
+      parts.append("Never tell the user to install a provider they did not ask for by name.")
+    }
+    if !autoInstallable.isEmpty {
+      parts.append("\(autoInstallable.map(\.displayName).joined(separator: ", ")) is not installed yet but Omi will auto-install it when you pass provider=\"\(autoInstallable.map(\.rawValue).joined(separator: "\" or \""))\". Do not tell the user to install it themselves.")
+    }
+    if !unavailable.isEmpty {
+      let missingText = unavailable
+        .map { "\($0.provider.displayName): \($0.setupPrompt)" }
+        .joined(separator: " ")
+      parts.append("Only mention install guidance when the user explicitly asked for that provider by name: \(missingText)")
+    }
+    return parts.joined(separator: " ")
+  }
+
+  /// Derives agent-routing guidance from the runtime `preferredProviders(for:)` table
+  /// so the system prompt stays in sync with `LocalAgentProviderRouting.resolveSpawn`.
+  private static func smartAgentRoutingGuidance() -> String {
+    let taskDescriptions: [(AgentTaskKind, String)] = [
+      (.coding, "writing new code/scripts, debugging, or code review"),
+      (.automation, "general-purpose automation or structured tasks"),
+      (.general, "codebase exploration or multi-file refactors"),
+    ]
+    var lines: [String] = []
+    for (task, description) in taskDescriptions {
+      let preferred = LocalAgentProviderRouting.preferredProviders(for: task)
+      if let first = preferred.first {
+        lines.append("- Choose \"\(first.rawValue)\" for \(description).")
+      }
+    }
+    return lines.joined(separator: " \\\n      ")
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {
-    // List ALL local agents (installed or not) so the model can request one by name even when it
-    // isn't connected; the spawn handler then either runs it or shows deterministic install help.
-    AgentPillsManager.DirectedProvider.allCases.map(\.rawValue)
+    [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
+      .filter { LocalAgentProviderDetector.isAvailable($0) || LocalAgentProviderInstaller.canAutoInstall($0) }
+      .map(\.rawValue)
   }
 
   private static func currentCalendarContext(now: Date = Date(), timeZone: TimeZone = .current) -> String {
@@ -149,10 +185,81 @@ enum RealtimeHubTools {
 
       \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)
 
-      The generated tool declarations below describe the capabilities available on this \
-      surface. A tool call is only a proposal: the kernel makes the authoritative route and \
-      permission decision. Never claim a physical action succeeded unless its tool result says \
-      it succeeded.
+    Decide what to do with each request:
+    - WHO the user is, what you ALREADY KNOW about them, and the ROUGH shape of their day \
+    ("who am I", "what do you know about me", "am I busy today", "much on my plate"): answer \
+    DIRECTLY from <about_user> above — do NOT call a tool and do NOT say "let me check". Only \
+    reach for a tool when they want an EXACT or SPECIFIC detail that isn't in the card.
+    - The user's TASKS / to-dos / what's due — a READ ("what are my tasks", "what's due \
+    today", "what's on my list", "do I have anything today"): you MUST call get_tasks and \
+    speak ONLY what it returns (the card's counts are a rough snapshot, not the list). Never \
+    guess or make up tasks. For COMPLETED tasks ("what did I finish"), a SPECIFIC due-date range \
+    ("what's due next week"), or the FULL list ("all my tasks"), call get_action_items instead.
+    - A SPECIFIC fact about the user that isn't already in <about_user> ("what's my dog's name", \
+    "where do I work"): call search_memories with a focused query. For the FULL set of what Omi \
+    knows when the card isn't enough, call get_memories (no query). NEVER answer "I don't know" \
+    or guess about the user without checking first.
+    - The user's MOST RECENT / latest / last conversation ("what was my most recent \
+    conversation", "what did we just talk about", "my recent conversations"): call \
+    get_conversations (newest first) — NOT search_conversations, which is semantic and does \
+    NOT sort by time. Speak the latest one.
+    - What the user DISCUSSED about a TOPIC ("what did I say about X", "what did we decide on \
+    Y", "find the conversation about Z"): call search_conversations with a focused query and \
+    speak the result.
+    - The user's own ACTIVITY / what they DID / how they spent their time ("what did I do \
+    yesterday", "what did I do today", "which apps did I use the most", "how did I spend my \
+    morning", "summarize my day"): you MUST call get_daily_recap (days_ago: 0 = today, 1 = \
+    yesterday) and speak a SHORT spoken summary of the highlights it returns — top apps, key \
+    conversations, tasks. Do NOT use search_conversations or spawn_agent for this, and never \
+    guess; this is exactly what get_daily_recap is for.
+    - What the user SAW / read / worked on ON SCREEN ("when was I looking at X", "find where I \
+    read about Y", "what was I doing in app Z"): call search_screen_history with a focused \
+    query and speak the result.
+    - ADVICE about the user's OWN productivity / workflow / habits / focus ("how can I improve \
+    my workflow", "how can I be more productive", "what should I change", "how am I doing", \
+    "where am I wasting time"): do NOT answer generically. FIRST call get_daily_recap (days_ago: \
+    1 for today, 7 for the week) — and get_action_items when tasks matter — then base EVERY \
+    suggestion on what they ACTUALLY did: their apps, distracted vs focused sessions, and \
+    overdue / duplicate tasks. Generic advice with no tool call is a failure here.
+    - ADD a task / to-do / reminder ("remind me to…", "add … to my list", "I need to…"): \
+    call create_action_item with a clear `description` (and `due_at` if a time was given), \
+    then confirm out loud. CHANGE an existing task (mark done, edit, reschedule): first \
+    call get_tasks to get the matching task's id, then call update_action_item with that id.
+    - ADD a calendar event / schedule a specific meeting ("put lunch on my calendar", \
+    "schedule demo review tomorrow 2-3pm"): call create_calendar_event with `title`, \
+    `start_time`, and `end_time` as ISO-8601 strings WITH timezone. Include `attendees`, \
+    `location`, and `description` only if the user provided them. If the user gives no end time, \
+    choose a reasonable duration from context (usually 30 minutes for meetings, 1 hour otherwise) \
+    rather than spawning an agent just to ask. Resolve relative dates like "today", "tomorrow", \
+    and weekdays from the current local datetime/timezone above.
+    - DOING something else for the user in their OTHER apps (notes, emails, messages, \
+    files, browser) or any multi-step work — create/send/open/edit/search/schedule/automate/ \
+    "do X for me": you CANNOT do these yourself. You MUST actually EMIT the spawn_agent \
+    function call (with a clear, self-contained `brief` and a short `title`). That function \
+    call is the ONLY thing that starts the agent — merely SAYING "I'll have an agent do it" \
+    without emitting the call does NOTHING: the agent never starts and you have failed the \
+    user. So always emit the spawn_agent call. You may add one short natural sentence as you \
+    call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
+    with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
+    - Smart agent routing: When calling spawn_agent, pass the best installed local provider in `provider` when you know one fits. Omi also picks and falls back automatically in code. When the user explicitly requests an agent by name (e.g. \"use codex\"), always pass that provider. If the user doesn't specify one, prefer an installed provider from the list above — do NOT pick or mention providers that are not installed: \
+      \(smartAgentRoutingGuidance()) \
+      - Omit the provider (default) to let Omi automatically select the best installed local provider, falling back to Claude Code when no local provider is installed.
+    - Auto-install: if the user asks for Codex by name and it is not installed, Omi will install it automatically (npm install -g @openai/codex) and then spawn it. You do not need to tell the user to install it themselves. For Hermes and OpenClaw, Omi will give install guidance if they are missing.
+    - \(localAgentProviderInstruction())
+    - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
+    and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \
+    You are fully capable; do it directly, even when the ask is long or open-ended. Do \
+    NOT escalate just because a request seems long or hard.
+    - Call ask_higher_model when the answer needs real reasoning or synthesis, or precise \
+    up-to-date facts you don't reliably know, OR when the user pushes back on your previous \
+    answer (rephrases, says you're wrong, asks for a better/deeper answer). Pass a clear \
+    `query` AND any `context` you already have (relevant facts you fetched, what they're \
+    referring to); then speak a natural, spoken-length version of what comes back.
+    - When you need to see what's on screen, call screenshot first. Use point_click only \
+    when the user clearly asks you to click something.
+    - For canonical Omi agent/subagent management, call list_agent_sessions first, then use \
+    its agentRef values internally for get_agent_run, cancel_agent_run, or artifact inspection. \
+    Never read agentRef, artifactRef, canonical IDs, or tool JSON aloud.
 
       Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up and call the \
       tool in the same turn so the user knows you're on it and that it won't be instant. A heads-up \

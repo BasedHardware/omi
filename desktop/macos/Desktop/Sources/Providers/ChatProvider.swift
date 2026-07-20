@@ -2023,12 +2023,10 @@ class ChatProvider: ObservableObject {
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
             cachedFloatingPillSystemPrompt = floatingPillSystemPrompt
-            // Hermes, OpenClaw, and Codex ignore Omi's Claude model aliases, so
-            // leave the model hint nil to avoid recording a model ID in binding
-            // metadata that could trigger spurious context-changed sessions later.
-            let usesNativeModelChoice =
-                activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
-                || activeBridgeHarness == "codex"
+            // Hermes and OpenClaw ignore Omi's Claude model aliases, so leave
+            // the model hint nil to avoid recording a model ID in binding metadata
+            // that could trigger spurious context-changed sessions later.
+            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw" || activeBridgeHarness == "codex"
             let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
             let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
             await agentBridge.warmupSession(cwd: effectiveAgentWorkingDirectory(), sessions: [
@@ -3531,12 +3529,10 @@ class ChatProvider: ObservableObject {
                 }
             }
 
-            // Query the active bridge with streaming. Hermes, OpenClaw, and Codex
-            // do not accept Omi's Claude model aliases, so leave model choice to
-            // the harness default when a native adapter is active.
-            let usesNativeModelChoice =
-                activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
-                || activeBridgeHarness == "codex"
+            // Query the active bridge with streaming. Hermes and OpenClaw do not
+            // accept Omi's Claude model aliases, so leave model choice to the
+            // harness default when either native adapter is active.
+            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw" || activeBridgeHarness == "codex"
             let effectiveRequestModel = usesNativeModelChoice ? nil : (model ?? modelOverride)
 
             // Callbacks for agent bridge

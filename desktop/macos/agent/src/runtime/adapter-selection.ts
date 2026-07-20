@@ -103,17 +103,17 @@ export function adapterProfile(adapterId: ProductionAdapterId): AdapterProfile {
 export function adapterActivationError(adapterId: ProductionAdapterId): string | undefined {
   const envName = adapterActivationEnv(adapterId);
   if (!envName) return undefined;
-  const label =
-    adapterId === "pi-mono"
-      ? "pi-mono"
-      : adapterId === "openclaw"
-        ? "OpenClaw"
-        : adapterId === "codex"
-          ? "Codex"
-          : "Hermes";
   if (adapterId === "hermes" || adapterId === "openclaw" || adapterId === "codex") {
-    return `${label} is not available. Make sure ${label} is installed first, then try again.`;
+    if (adapterId === "codex") {
+      return "Codex is not available. Run `npm install -g @openai/codex` in your terminal, then run `codex` to sign in, and try again.";
+    }
+    if (adapterId === "hermes") {
+      return "Hermes is not available. Install it from github.com/NousResearch/hermes-agent with `pip install -e '.[acp]'` (or `uvx --from 'hermes-agent[acp]'`), then run `hermes model` to configure a provider, and try again.";
+    }
+    return "OpenClaw is not available. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again.";
   }
+  const label = adapterId === "pi-mono" ? "pi-mono" : adapterId;
+  return `${label} adapter is unavailable.`;
 }
 
 export function ensureRegisteredAdapter(

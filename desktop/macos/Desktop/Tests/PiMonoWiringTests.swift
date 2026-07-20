@@ -75,7 +75,26 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
-  func testLocalAgentProviderDetectorHonorsInjectedPathEntries() throws {
+  func testLocalAgentProviderDetectorFindsCodexInNvmBin() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".nvm/versions/node/v24.13.0/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("codex")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: [:],
+      homeDirectory: home.path)
+
+    XCTAssertEqual(availability.status, .available(command: executable.path))
+  }
+
+  func testLocalAgentProviderDetectorIgnoresArbitraryPathEntries() throws {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-provider-path-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -102,121 +121,10 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see OpenClaw installed. Run `curl -fsSL https://openclaw.ai/install.sh | bash`, "
-        + "then run `openclaw onboard --install-daemon` to finish onboarding. "
-        + "Or just ask me to install it for you. Install guide: https://docs.openclaw.ai/install")
-    XCTAssertEqual(availability.toolError, "Error: \(availability.setupPrompt)")
-  }
-
-  func testLocalAgentProviderDetectorFindsCodexAcpBridge() throws {
-    let home = FileManager.default.temporaryDirectory
-      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
-    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
-    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: home) }
-
-    // Detection keys off the codex-acp bridge (the binary we spawn), not the
-    // codex CLI itself, which has no ACP mode.
-    let executable = bin.appendingPathComponent("codex-acp")
-    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-
-    let availability = LocalAgentProviderDetector.availability(
-      for: .codex,
-      environment: [:],
-      homeDirectory: home.path)
-
-    XCTAssertEqual(availability.status, .available(command: executable.path))
-  }
-
-  func testLocalAgentProviderDetectorFindsNpmGlobalInstallsUnderNvm() throws {
-    let home = FileManager.default.temporaryDirectory
-      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
-    let bin = home.appendingPathComponent(".nvm/versions/node/v22.1.0/bin", isDirectory: true)
-    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: home) }
-
-    let executable = bin.appendingPathComponent("codex-acp")
-    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-
-    let availability = LocalAgentProviderDetector.availability(
-      for: .codex,
-      environment: [:],
-      homeDirectory: home.path)
-
-    XCTAssertEqual(availability.status, .available(command: executable.path))
-  }
-
-  func testLocalAgentProviderDetectorPrefersNvmDefaultAliasVersion() throws {
-    let home = FileManager.default.temporaryDirectory
-      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
-    defer { try? FileManager.default.removeItem(at: home) }
-
-    // The binary exists in BOTH versions; nvm's default alias points at the
-    // older one, which is where `npm install -g` actually lands.
-    var expected: URL?
-    for version in ["v20.11.0", "v22.1.0"] {
-      let bin = home.appendingPathComponent(".nvm/versions/node/\(version)/bin", isDirectory: true)
-      try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-      let executable = bin.appendingPathComponent("codex-acp")
-      try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
-      try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-      if version == "v20.11.0" { expected = executable }
-    }
-    let aliasDir = home.appendingPathComponent(".nvm/alias", isDirectory: true)
-    try FileManager.default.createDirectory(at: aliasDir, withIntermediateDirectories: true)
-    try "v20.11.0\n".write(to: aliasDir.appendingPathComponent("default"), atomically: true, encoding: .utf8)
-
-    let availability = LocalAgentProviderDetector.availability(
-      for: .codex,
-      environment: [:],
-      homeDirectory: home.path)
-
-    XCTAssertEqual(availability.status, .available(command: try XCTUnwrap(expected).path))
-  }
-
-  func testLocalAgentProviderDetectorResolvesNvmLtsAliasIndirection() throws {
-    let home = FileManager.default.temporaryDirectory
-      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
-    defer { try? FileManager.default.removeItem(at: home) }
-
-    var expected: URL?
-    for version in ["v20.11.0", "v22.1.0"] {
-      let bin = home.appendingPathComponent(".nvm/versions/node/\(version)/bin", isDirectory: true)
-      try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-      let executable = bin.appendingPathComponent("codex-acp")
-      try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
-      try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-      if version == "v20.11.0" { expected = executable }
-    }
-    // Real nvm chains aliases: default → lts/* → lts/jod → vX.Y.Z.
-    let ltsDir = home.appendingPathComponent(".nvm/alias/lts", isDirectory: true)
-    try FileManager.default.createDirectory(at: ltsDir, withIntermediateDirectories: true)
-    let aliasDir = home.appendingPathComponent(".nvm/alias", isDirectory: true)
-    try "lts/*\n".write(to: aliasDir.appendingPathComponent("default"), atomically: true, encoding: .utf8)
-    try "lts/jod\n".write(to: ltsDir.appendingPathComponent("*"), atomically: true, encoding: .utf8)
-    try "v20.11.0\n".write(to: ltsDir.appendingPathComponent("jod"), atomically: true, encoding: .utf8)
-
-    let availability = LocalAgentProviderDetector.availability(
-      for: .codex,
-      environment: [:],
-      homeDirectory: home.path)
-
-    XCTAssertEqual(availability.status, .available(command: try XCTUnwrap(expected).path))
-  }
-
-  func testLocalAgentProviderDetectorCodexMissingPromptExplainsBridgeInstall() {
-    let availability = LocalAgentProviderDetector.availability(
-      for: .codex,
-      environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
-      homeDirectory: "/tmp/missing-home")
-
-    XCTAssertFalse(availability.isAvailable)
-    XCTAssertTrue(availability.setupPrompt.contains("npm install -g @openai/codex @agentclientprotocol/codex-acp"))
-    XCTAssertTrue(availability.setupPrompt.contains("run `codex login` if you haven't signed in"))
-    XCTAssertTrue(availability.setupPrompt.contains("Install guide: https://github.com/openai/codex"))
-    XCTAssertTrue(availability.setupPrompt.contains("ask me to install it for you"))
+      "I don't see OpenClaw installed. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again.")
+    XCTAssertEqual(
+      availability.toolError,
+      "Error: I don't see OpenClaw installed. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again.")
   }
 
   // MARK: - ApiKeysResponse shape assertion

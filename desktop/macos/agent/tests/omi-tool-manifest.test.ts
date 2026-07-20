@@ -103,8 +103,8 @@ describe("omi tool manifest", () => {
       enum: ["openclaw", "hermes", "codex"],
     });
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='openclaw'");
-    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("'hermes'");
-    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("'codex'");
+    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
+    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='codex'");
   });
 
   it("gates provider install assist on explicit user consent", () => {
