@@ -112,6 +112,9 @@ describe.skipIf(!RUN_E2E)('real subprocess speaks MCP end to end', () => {
     expect(names).toContain('list_agent_sessions')
     expect(names).not.toContain('spawn_background_agent')
     expect(names).not.toContain('resolve_desktop_dispatch')
+    // Product tools travel the same omi-tools-stdio surface as control tools.
+    expect(names).toContain('get_goals')
+    expect(names).toContain('get_memories')
 
     const happy = await client.request('tools/call', {
       name: 'list_agent_sessions',
@@ -119,6 +122,14 @@ describe.skipIf(!RUN_E2E)('real subprocess speaks MCP end to end', () => {
     })
     const happyText = (happy.result as { content: Array<{ text: string }> }).content[0].text
     expect(JSON.parse(happyText).ok).toBe(true)
+
+    // A product tool dispatches to its executor end-to-end through the real
+    // subprocess. No backend session in this fixture → the not-signed-in string,
+    // which still proves the chain (before the fix this was "unknown_control_tool").
+    const goals = await client.request('tools/call', { name: 'get_goals', arguments: {} })
+    const goalsText = (goals.result as { content: Array<{ text: string }> }).content[0].text
+    expect(goalsText).not.toContain('unknown_control_tool')
+    expect(goalsText).toMatch(/not signed in to Omi/)
 
     const denied = await client.request('tools/call', {
       name: 'spawn_background_agent',
