@@ -95,6 +95,11 @@ final class AgentSyncBatchQueryTests: XCTestCase {
     )
   }
 
+  func testMalformedOrMissingHealthReadinessIsNotMissingDatabase() {
+    XCTAssertEqual(AgentSyncService.databaseReadiness(healthPayload: [:]), .unknown)
+    XCTAssertEqual(AgentSyncService.databaseReadiness(healthPayload: ["databaseReady": "false"]), .unknown)
+  }
+
   func testMutableTableUsesCompoundCursor() {
     let (sql, args) = AgentSyncService.buildBatchQuery(
       tableName: "action_items",
@@ -140,6 +145,8 @@ final class AgentSyncBatchQueryTests: XCTestCase {
       networkHooks: AgentSyncService.NetworkHooks(
         fetchIDToken: { await gate.fetchToken() },
         dataForRequest: { request in await gate.respond(to: request) },
+        reuploadDatabase: { _, _ in true },
+        now: Date.init,
         tableSyncEnabled: false))
 
     await service.start(vmIP: "owner-a-vm", authToken: "owner-a-auth")

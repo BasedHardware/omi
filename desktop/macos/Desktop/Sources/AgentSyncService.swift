@@ -28,19 +28,8 @@ actor AgentSyncService {
     case ready
     case missingDatabase
     case missingRequiredSchema
+    case unknown
   }
-
-  private static let requiredRemoteTables: Set<String> = [
-    "transcription_sessions",
-    "action_items",
-    "memories",
-    "staged_tasks",
-    "live_notes",
-    "screenshots",
-    "transcription_segments",
-    "focus_sessions",
-    "observations",
-  ]
 
   /// A successful `/health` response is not enough to admit incremental sync:
   /// an interrupted database upload can leave SQLite open but without the
@@ -50,7 +39,8 @@ actor AgentSyncService {
     healthPayload: [String: Any],
     syncFailureBody: String? = nil
   ) -> DatabaseReadiness {
-    guard healthPayload["databaseReady"] as? Bool == true else { return .missingDatabase }
+    guard let databaseReady = healthPayload["databaseReady"] as? Bool else { return .unknown }
+    guard databaseReady else { return .missingDatabase }
     guard let syncFailureBody else { return .ready }
     let normalizedFailure = syncFailureBody.lowercased()
     return requiredRemoteTables.contains(where: {
@@ -61,11 +51,17 @@ actor AgentSyncService {
   struct NetworkHooks: Sendable {
     let fetchIDToken: @Sendable () async throws -> String
     let dataForRequest: @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    let reuploadDatabase: @Sendable (_ vmIP: String, _ authToken: String) async -> Bool
+    let now: @Sendable () -> Date
     let tableSyncEnabled: Bool
 
     static let live = NetworkHooks(
       fetchIDToken: { try await AuthService.shared.getIdToken() },
       dataForRequest: { try await URLSession.shared.data(for: $0) },
+      reuploadDatabase: { vmIP, authToken in
+        await AgentVMService.shared.reuploadDatabase(vmIP: vmIP, authToken: authToken)
+      },
+      now: Date.init,
       tableSyncEnabled: true)
   }
 
@@ -80,6 +76,21 @@ actor AgentSyncService {
     let name: String
     let appendOnly: Bool  // true = cursor by id, false = cursor by updatedAt
     let excludedColumns: Set<String>
+  }
+
+  private struct SchemaFailureEvidence {
+    let table: String
+    let generation: UInt64
+    let ownerID: String?
+    let failureOrdinal: Int
+  }
+
+  /// Recovery state belongs to the effective owner, not to a particular loop
+  /// task. Repeated lifecycle starts must not mint a new cooldown allowance.
+  private struct RecoveryState {
+    var ownerID: String?
+    var lastAttemptAt: Date = .distantPast
+    var attemptsInFailureStreak = 0
   }
 
   // MARK: - State
@@ -98,8 +109,8 @@ actor AgentSyncService {
   private var syncGeneration: UInt64 = 0
   private var cursorOwnerID: String?
   private var latencyBackoffMultiplier: UInt64 = 1
-  private var lastReuploadAt: Date = .distantPast
-  private var lastRequiredSchemaFailureBody: String?
+  private var schemaFailureEvidence: SchemaFailureEvidence?
+  private var recoveryState = RecoveryState()
   private let reuploadCooldown: TimeInterval = 30 * 60  // don't re-upload more than once per 30 min
   private let networkHooks: NetworkHooks
 
@@ -118,7 +129,7 @@ actor AgentSyncService {
 
   // MARK: - Table definitions
 
-  private let tables: [TableSpec] = [
+  private static let tableSpecs: [TableSpec] = [
     // Mutable (cursor by updatedAt) — sessions before segments (FK dependency)
     TableSpec(name: "transcription_sessions", appendOnly: false, excludedColumns: []),
     TableSpec(
@@ -142,6 +153,9 @@ actor AgentSyncService {
     TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
   ]
 
+  private let tables = AgentSyncService.tableSpecs
+  private static let requiredRemoteTables = Set(tableSpecs.map(\.name))
+
   // Tables with only a createdAt (no updatedAt) that are append-only but not tracked
   // by id — handled via appendOnly=true above.
 
@@ -162,8 +176,12 @@ actor AgentSyncService {
     lastTokenRefresh = .distantPast
     isPaused = false
     latencyBackoffMultiplier = 1
-    lastReuploadAt = .distantPast
-    lastRequiredSchemaFailureBody = nil
+    schemaFailureEvidence = nil
+    if recoveryState.ownerID != cursorOwnerID {
+      recoveryState = RecoveryState(ownerID: cursorOwnerID)
+    } else {
+      recoveryState.attemptsInFailureStreak = 0
+    }
     loadCursors(ownerID: cursorOwnerID)
     log("AgentSync: starting (vm=\(vmIP), tables=\(tables.count))")
     syncLoop(generation: generation)
@@ -243,6 +261,7 @@ actor AgentSyncService {
 
   private func syncTick(generation: UInt64) async {
     guard syncGeneration == generation else { return }
+    clearSchemaFailureEvidence(generation: generation, ownerID: cursorOwnerID)
     // Skip if user is signed out (tokens are cleared)
     guard await AuthState.shared.isSignedIn else { return }
     guard syncGeneration == generation else { return }
@@ -274,7 +293,7 @@ actor AgentSyncService {
         )
       }
       // After 3 consecutive failures, check if the VM lost its database
-      if consecutiveFailures == 3 {
+      if consecutiveFailures >= 3 {
         await checkAndTriggerReupload(generation: generation)
         guard syncGeneration == generation else { return }
       }
@@ -283,6 +302,7 @@ actor AgentSyncService {
         log("AgentSync: backend reconnected after \(consecutiveFailures) failures")
       }
       consecutiveFailures = 0
+      recoveryState.attemptsInFailureStreak = 0
       log("AgentSync: pushed \(totalSynced) rows")
       saveCursors(generation: generation)
     }
@@ -317,29 +337,54 @@ actor AgentSyncService {
   private func checkAndTriggerReupload(generation: UInt64) async {
     guard syncGeneration == generation else { return }
     guard let vmIP = vmIP, let authToken = authToken else { return }
-    guard Date().timeIntervalSince(lastReuploadAt) >= reuploadCooldown else {
+    let ownerID = cursorOwnerID
+    guard recoveryState.ownerID == ownerID else { return }
+    guard networkHooks.now().timeIntervalSince(recoveryState.lastAttemptAt) >= reuploadCooldown else {
       log("AgentSync: skipping re-upload check (cooldown active)")
+      return
+    }
+    guard recoveryState.attemptsInFailureStreak < 2 else {
+      log("AgentSync: skipping re-upload check (bounded recovery exhausted)")
       return
     }
 
     guard let url = URL(string: "http://\(vmIP):8080/health") else { return }
     do {
-      let (data, _) = try await URLSession.shared.data(from: url)
-      guard syncGeneration == generation else { return }
+      var request = URLRequest(url: url)
+      request.timeoutInterval = 15
+      let (data, response) = try await networkHooks.dataForRequest(request)
+      guard isCurrent(generation: generation, ownerID: ownerID) else { return }
+      guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+        log("AgentSync: re-upload health check returned a non-success response")
+        return
+      }
       guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+      let evidence = schemaFailureEvidence
+      let evidenceBody = evidence.flatMap { evidence in
+        evidence.generation == generation && evidence.ownerID == ownerID
+          && evidence.failureOrdinal == consecutiveFailures
+          ? "no such table: \(evidence.table)"
+          : nil
+      }
       let readiness = Self.databaseReadiness(
         healthPayload: json,
-        syncFailureBody: lastRequiredSchemaFailureBody
+        syncFailureBody: evidenceBody
       )
-      guard readiness != .ready else { return }
+      guard readiness != .ready, readiness != .unknown else { return }
 
       log(
         "AgentSync: VM database is \(readiness == .missingRequiredSchema ? "missing required schema" : "not ready") — triggering re-upload"
       )
-      lastReuploadAt = Date()
-      await AgentVMService.shared.reuploadDatabase(vmIP: vmIP, authToken: authToken)
-      lastRequiredSchemaFailureBody = nil
-      guard syncGeneration == generation else { return }
+      recoveryState.lastAttemptAt = networkHooks.now()
+      recoveryState.attemptsInFailureStreak += 1
+      let uploaded = await networkHooks.reuploadDatabase(vmIP, authToken)
+      guard isCurrent(generation: generation, ownerID: ownerID) else { return }
+      if uploaded {
+        clearSchemaFailureEvidence(generation: generation, ownerID: ownerID)
+        recoveryState.attemptsInFailureStreak = 0
+      } else {
+        log("AgentSync: database re-upload failed; retaining recovery evidence for its bounded retry")
+      }
     } catch {
       log("AgentSync: re-upload health check failed — \(error.localizedDescription)")
     }
@@ -486,9 +531,11 @@ actor AgentSyncService {
       guard !rows.isEmpty else { return 0 }
 
       // Push to VM
-      let result = await pushRows(spec.name, rows)
+      let ownerID = cursorOwnerID
+      let result = await pushRows(spec.name, rows, generation: generation, ownerID: ownerID)
       guard syncGeneration == generation else { return 0 }
       if result == .success {
+        clearSchemaFailureEvidence(for: spec.name, generation: generation, ownerID: ownerID)
         // Update cursor
         if spec.appendOnly {
           if let lastId = rows.last?["id"] as? Int64 {
@@ -528,8 +575,36 @@ actor AgentSyncService {
     case networkError
   }
 
-  private func pushRows(_ table: String, _ rows: [[String: Any]]) async -> PushResult {
-    guard let vmIP = vmIP, let authToken = authToken else { return .networkError }
+  private func isCurrent(generation: UInt64, ownerID: String?) -> Bool {
+    syncGeneration == generation
+      && cursorOwnerID == ownerID
+      && RuntimeOwnerIdentity.currentOwnerId() == ownerID
+  }
+
+  private func clearSchemaFailureEvidence(generation: UInt64, ownerID: String?) {
+    guard let evidence = schemaFailureEvidence,
+      evidence.generation == generation,
+      evidence.ownerID == ownerID
+    else { return }
+    schemaFailureEvidence = nil
+  }
+
+  private func clearSchemaFailureEvidence(for table: String, generation: UInt64, ownerID: String?) {
+    guard let evidence = schemaFailureEvidence,
+      evidence.table == table,
+      evidence.generation == generation,
+      evidence.ownerID == ownerID
+    else { return }
+    schemaFailureEvidence = nil
+  }
+
+  private func pushRows(
+    _ table: String,
+    _ rows: [[String: Any]],
+    generation: UInt64,
+    ownerID: String?
+  ) async -> PushResult {
+    guard isCurrent(generation: generation, ownerID: ownerID), let vmIP, let authToken else { return .networkError }
 
     // Send token both as query param (backward compat) and header (preferred)
     guard let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)") else {
@@ -553,6 +628,7 @@ actor AgentSyncService {
 
     do {
       let (data, response) = try await networkHooks.dataForRequest(request)
+      guard isCurrent(generation: generation, ownerID: ownerID) else { return .networkError }
       guard let httpResponse = response as? HTTPURLResponse else { return .httpError }
 
       if httpResponse.statusCode == 200 {
@@ -563,7 +639,12 @@ actor AgentSyncService {
           healthPayload: ["databaseReady": true],
           syncFailureBody: body
         ) == .missingRequiredSchema {
-          lastRequiredSchemaFailureBody = body
+          schemaFailureEvidence = SchemaFailureEvidence(
+            table: table,
+            generation: generation,
+            ownerID: ownerID,
+            failureOrdinal: consecutiveFailures + 1
+          )
         }
         log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
         return .networkError  // 5xx = server not ready, trigger backoff
