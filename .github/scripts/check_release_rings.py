@@ -6,12 +6,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def require(text: str, path: Path, fragments: tuple[str, ...]) -> list[str]:
-    return [f"{path}: missing required release-ring guard {fragment!r}" for fragment in fragments if fragment not in text]
+    return [
+        f"{path}: missing required release-ring guard {fragment!r}" for fragment in fragments if fragment not in text
+    ]
 
 
 def check() -> list[str]:
@@ -56,19 +57,32 @@ def check() -> list[str]:
                 "group: deploy-release-ring-${{ inputs.ring }}",
                 "environment: ${{ inputs.ring }}",
                 "github.ref == 'refs/heads/main'",
-                "test \"${{ inputs.confirm }}\" = \"deploy-prod\"",
+                "RELEASE_ID: ${{ inputs.release_id }}",
+                "PROD_CONFIRM: ${{ inputs.confirm }}",
+                'test "$PROD_CONFIRM" = "deploy-prod"',
+                "ref: ${{ github.sha }}",
                 "backend/scripts/release_rings.py validate-record",
                 "Require a non-held beta-soaked record before prod promotion",
-                "Checkout the immutable record source for deployment rendering",
+                "Checkout immutable release source inputs",
                 "ref: ${{ steps.record.outputs.git_sha }}",
+                "path: artifacts/release-ring/source",
                 "render_backend_runtime_env.py",
+                "Preflight all recorded GKE configuration before mutation",
+                "--dry-run=server",
+                "DRY_RUN=true",
                 "--update-secrets",
                 "backend/scripts/deploy-backend-secrets.sh",
                 "Verify beta endpoint prerequisites before mutation",
                 "cloud_run_traffic_snapshot.py capture",
+                "release_ring_gke_snapshot.py capture",
                 "--no-traffic",
                 "cloud_run_traffic_snapshot.py restore",
-                "gcloud run services delete",
+                "--remove-tag \"ring-${GITHUB_RUN_ID}\"",
+                "--delete-missing",
+                "release_ring_gke_snapshot.py restore",
+                "wait_external_secret_refresh.py",
+                "active-before.json",
+                "steps.snapshot.outputs.active_generation",
                 "state=partial_mutation",
                 "--hold",
                 "--if-generation-match=\"$generation\"",
@@ -85,6 +99,9 @@ def check() -> list[str]:
             errors.append(f"{path}: release-ring workflows must use ring-bound OIDC, not JSON credentials")
     if "release_sha:" in deploy or "branch:" in deploy or "image:" in deploy:
         errors.append(f"{deploy_path}: deploy accepts free-form source or image input")
+    for expression in ("${{ inputs.release_id }}", "${{ inputs.confirm }}"):
+        if deploy.count(expression) != 1:
+            errors.append(f"{deploy_path}: dispatch input {expression} must enter shell only through the job env")
     topology_path = ROOT / "backend/deploy/release_rings.yaml"
     if not topology_path.exists() or "backend: backend-beta" not in topology_path.read_text(encoding="utf-8"):
         errors.append("backend/deploy/release_rings.yaml: beta must use distinct Cloud Run service identities")

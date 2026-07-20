@@ -132,17 +132,25 @@ which is the explicit #10057 boundary.
 - `deploy-release-ring.yml` accepts only `ring` and `release_id`. It uses the
   selected GitHub environment and that environment's OIDC identity; it has no
   SHA, tag, branch, Helm-revision, or image input. `prod` additionally requires
-  the literal `confirm=deploy-prod` after the GitHub environment approval.
-- A ring deploy captures Cloud Run traffic and Helm revisions before mutation,
-  writes a `started` receipt, creates no-traffic Cloud Run revisions using the
+  the literal `confirm=deploy-prod` after the GitHub environment approval. The
+  workflow controller stays pinned to the dispatch commit; only immutable chart
+  source inputs are checked out from the record's full Git SHA.
+- Before mutation, a ring deploy server-dry-runs the recorded ConfigMap and all
+  rendered Helm resources. It then captures Cloud Run traffic, the public
+  ConfigMap, deployed Helm revisions plus manifest digests, and the active
+  pointer generation. It writes a `started` receipt, creates no-traffic Cloud Run revisions using the
   recorded public config and numeric secret versions, performs an authenticated
   health smoke, and for beta proves an authenticated known-audio transcription
   through the tagged candidate before applying the recorded
   ConfigMap/ExternalSecret/Helm values by digest and switching traffic. Prod
   depends on that verified beta evidence plus the soak, because prod has no
-  public candidate URL. A deterministic failure restores the snapshot once;
-  any failure to restore writes `partial_mutation`, holds the record, and
-  invokes the configured pager webhook.
+  public candidate URL. A deterministic failure restores the snapshot once,
+  removes the failed candidate's tagged route, deletes resources that did not
+  exist before a bootstrap attempt, refreshes restored ExternalSecrets, and
+  verifies observed Cloud Run traffic, ConfigMap content, and Helm manifests.
+  It also restores the pre-mutation active pointer if a later evidence write
+  failed after pointer advancement. Any failure to converge writes
+  `partial_mutation`, holds the record, and invokes the configured pager webhook.
 - `prod` additionally requires a verified beta receipt older than the configured
   soak window (12 hours by default) and refuses a beta-held record. The prod
   environment approval is where the operator records the initial Sentry,
@@ -176,15 +184,17 @@ this repository.
 `deploy <ring> <release_id>`:
 
 1. Resolve the record from the bucket; refuse anything else.
-2. Snapshot the ring's active serving state (a receipt) before any mutation.
+2. Dry-run every recorded GKE render, then snapshot the ring's active serving
+   state and active-pointer generation before any mutation.
 3. Cloud Run: create no-traffic revisions from recorded digests → smoke check
    the revision URL → shift traffic.
-4. GKE: apply charts with recorded digests and values, wait for rollout,
-   verify with `backend/scripts/deploy_status_report.py`.
+4. GKE: apply charts with recorded digests and values and wait for rollout.
 5. On deterministic failure before or immediately after the traffic switch:
    restore the pre-mutation snapshot automatically (Cloud Run: shift traffic
-   back; a first-time beta service is deleted because it had no prior serving
-   state; GKE: one `helm rollback` attempt). If restoration also fails, write
+   back, remove the candidate tag, and delete a first-time service; GKE:
+   restore the ConfigMap and backend-secrets, roll back existing Helm releases,
+   and uninstall first-time releases). Every restore target is read back and
+   compared with the snapshot before recovery is accepted. If restoration also fails, write
    `partial_mutation` with the exact component diff, leave state visible, and
    page — no recursive recovery attempts.
 6. A failed record is marked held in `rings/<ring>/active.json` so auto-deploy
