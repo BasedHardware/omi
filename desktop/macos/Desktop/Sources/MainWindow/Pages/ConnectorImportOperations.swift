@@ -231,19 +231,15 @@ enum ConnectorImportOperations {
   @MainActor
   static func importAppleReminders(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
     do {
-      let reminders = try await AppleEventKitReaderService.shared.readReminders()
       progress.update(
-        title: "Importing Apple Reminders",
-        detail: "Saving local reminders as memories."
+        title: "Syncing Apple Reminders",
+        detail: "Keeping Omi tasks and Apple Reminders up to date."
       )
-      let result = await AppleEventKitReaderService.shared.saveRemindersAsMemories(reminders: reminders)
-      guard result.failed == 0 else {
-        return .failure(message: "Apple Reminders was read, but its reminders couldn't be saved. Try again.")
-      }
+      let result = try await AppleEventKitReaderService.shared.syncReminders()
+      let changed = result.exported + result.updated + result.deleted
       return .success(
-        SyncResult(sourceCount: reminders.count, memoryCount: result.saved, newItems: nil),
-        message:
-          "Imported \(reminders.count.formatted()) Apple Reminders and saved \(result.saved.formatted()) memories."
+        SyncResult(sourceCount: changed, memoryCount: nil, newItems: result.exported),
+        message: "Synced \(changed.formatted()) Omi tasks with Apple Reminders."
       )
     } catch {
       return .failure(message: error.localizedDescription)
