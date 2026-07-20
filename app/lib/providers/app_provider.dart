@@ -17,6 +17,9 @@ class AppProvider extends BaseProvider {
   /// Test seam — overrides [enableAppServer] in [toggleApp].
   Future<bool> Function(String appId)? enableAppOverride;
 
+  /// Test seam — overrides [disableAppServer] in [toggleApp].
+  Future<void> Function(String appId)? disableAppOverride;
+
   List<App> apps = [];
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
@@ -815,7 +818,7 @@ class AppProvider extends BaseProvider {
           PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
-        await disableAppServer(appId);
+        await (disableAppOverride ?? disableAppServer)(appId);
         success = true;
         PlatformManager.instance.analytics.appDisabled(appId);
       }
