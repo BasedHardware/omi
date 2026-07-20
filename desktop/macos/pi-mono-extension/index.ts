@@ -32,7 +32,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
-import { isSafeSkillName, loadSkillInstructions } from "../agent/src/runtime/node-tools.ts";
+import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/src/runtime/node-tools.ts";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
@@ -664,10 +664,10 @@ function loadSkillTool() {
   return defineTool({
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a named skill listed in available_skills.",
-    promptSnippet: "load_skill - Load the full SKILL.md instructions for an available skill",
+    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     parameters: Type.Object({
-      name: Type.String({ description: "Skill name exactly as listed in available_skills" }),
+      name: Type.String({ description: "Skill name returned by the compact catalog or search_skills" }),
     }, { additionalProperties: false }),
     async execute(_toolCallId, params) {
       const name = String((params as { name?: unknown }).name ?? "").trim();
@@ -675,7 +675,7 @@ function loadSkillTool() {
         return {
           content: [{
             type: "text" as const,
-            text: "Invalid skill name. Use the exact skill name listed in available_skills.",
+            text: "Invalid skill name. Use a skill returned by the catalog or search_skills.",
           }],
           details: undefined,
         };
@@ -691,13 +691,41 @@ function loadSkillTool() {
   });
 }
 
+function searchSkillsTool() {
+  return defineTool({
+    name: "search_skills",
+    label: "Search Skills",
+    description: "Search installed skill names and compact descriptions for a workflow relevant to the user's request.",
+    promptSnippet: "search_skills - Find a relevant specialized workflow before loading it",
+    promptGuidelines: [
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context.",
+    ],
+    parameters: Type.Object({
+      query: Type.String({ description: "Short description of the user's request" }),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const query = String((params as { query?: unknown }).query ?? "").trim();
+      return {
+        content: [{
+          type: "text" as const,
+          text: await searchSkills(query),
+        }],
+        details: undefined,
+      };
+    },
+  });
+}
+
 const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
 const projectionContext = { executionRole } as const;
 
 export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
-  return toolsForAdapter("pi-mono", { executionRole: role }).map((tool) => (
-    tool.executor.kind === "nodeTool" ? loadSkillTool() : omiManifestTool(tool)
-  ));
+  return toolsForAdapter("pi-mono", { executionRole: role }).map((tool) => {
+    if (tool.name === "load_skill") return loadSkillTool();
+    if (tool.name === "search_skills") return searchSkillsTool();
+    return omiManifestTool(tool);
+  });
 }
 
 export const OMI_TOOLS = omiToolsForExecutionRole(executionRole);

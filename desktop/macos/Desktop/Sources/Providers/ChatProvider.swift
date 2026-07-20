@@ -1330,11 +1330,10 @@ class ChatProvider: ObservableObject {
   private var cachedDatabaseSchema: String = ""
   private var schemaLoaded = false
 
-  // MARK: - CLAUDE.md & Skills (Global)
+  // MARK: - CLAUDE.md (reference only) & Skills (Global)
   @Published var claudeMdContent: String?
   @Published var claudeMdPath: String?
   @Published var discoveredSkills: [(name: String, description: String, path: String)] = []
-  @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
   @AppStorage("disabledSkillsJSON") private var disabledSkillsJSON: String = ""
 
   // MARK: - Project-level CLAUDE.md & Skills
@@ -1369,7 +1368,6 @@ class ChatProvider: ObservableObject {
   @Published var projectClaudeMdContent: String?
   @Published var projectClaudeMdPath: String?
   @Published var projectDiscoveredSkills: [(name: String, description: String, path: String)] = []
-  @AppStorage("projectClaudeMdEnabled") var projectClaudeMdEnabled = true
 
   // MARK: - Dev Mode
   @AppStorage("devModeEnabled") var devModeEnabled = false
@@ -1844,7 +1842,7 @@ class ChatProvider: ObservableObject {
         [
           "workingDirectory": workspacePath,
           "databaseSchema": cachedDatabaseSchema,
-          "enabledSkills": getEnabledSkillNames().sorted(),
+          "skillCatalog": skillContextProjection(),
         ],
         nil
       ),
@@ -2899,7 +2897,7 @@ class ChatProvider: ObservableObject {
     )
   }
 
-  /// Discover ~/.claude/CLAUDE.md, skills from ~/.claude/skills/, and project-level equivalents
+  /// Discover CLAUDE.md for Settings reference only, plus skills for the compact agent catalog.
   func discoverClaudeConfig() async {
     let workspace = aiChatWorkingDirectory
     let result = await Task.detached(priority: .utility) {
@@ -2942,13 +2940,6 @@ class ChatProvider: ObservableObject {
       }
     }
     return ""
-  }
-
-  /// Get the set of enabled skill names (all skills minus explicitly disabled ones)
-  func getEnabledSkillNames() -> Set<String> {
-    let allSkillNames = Set(discoveredSkills.map { $0.name } + projectDiscoveredSkills.map { $0.name })
-    let disabled = getDisabledSkillNames()
-    return allSkillNames.subtracting(disabled)
   }
 
   /// Get the set of explicitly disabled skill names from UserDefaults

@@ -5,12 +5,23 @@ import SwiftUI
 struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
+  let onHome: () -> Void
   @State private var showAppPicker = false
   @State private var showHistoryPopover = false
   @State private var selectedCitation: Citation?
   @State private var citedConversation: ServerConversation?
   @State private var isLoadingCitation = false
   @State private var copied = false
+
+  init(
+    appProvider: AppProvider,
+    chatProvider: ChatProvider,
+    onHome: @escaping () -> Void = {}
+  ) {
+    self.appProvider = appProvider
+    self.chatProvider = chatProvider
+    self.onHome = onHome
+  }
 
   var selectedApp: OmiApp? {
     guard let appId = chatProvider.selectedAppId else { return nil }
@@ -160,6 +171,21 @@ struct ChatPage: View {
 
   private var chatHeader: some View {
     HStack {
+      Button(action: onHome) {
+        HStack(spacing: OmiSpacing.xs) {
+          Image(systemName: "house.fill")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+          Text("Home")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+        }
+        .foregroundColor(OmiColors.textSecondary)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xxs)
+        .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.9), radius: OmiChrome.badgeRadius)
+      }
+      .buttonStyle(.plain)
+      .help("Return to Home")
+
       // Multi-chat mode controls
       if chatProvider.multiChatEnabled {
         // Default Chat indicator or button

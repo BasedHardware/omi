@@ -1591,9 +1591,9 @@ import XCTest
     let providerSource = try chatProviderSource()
 
     XCTAssertTrue(chatBubbleSource.contains("var compact: Bool = false"))
-    XCTAssertTrue(chatBubbleSource.contains("var expandRunning: Bool = true"))
-    XCTAssertTrue(chatBubbleSource.contains("State(initialValue: expandRunning && Self.hasRunningTool(in: calls))"))
-    XCTAssertTrue(chatBubbleSource.contains(".onChange(of: hasRunningTool)"))
+    XCTAssertTrue(chatBubbleSource.contains("enum ToolCallsGroupExpansionPolicy"))
+    XCTAssertTrue(chatBubbleSource.contains("static func initiallyExpanded() -> Bool {\n    false"))
+    XCTAssertTrue(chatBubbleSource.contains("State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())"))
     XCTAssertTrue(chatBubbleSource.contains("private var header: some View"))
     XCTAssertTrue(chatBubbleSource.contains("private var expandedToolCalls: some View"))
     XCTAssertTrue(chatBubbleSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
