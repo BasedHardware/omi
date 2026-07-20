@@ -107,8 +107,6 @@ private final class AppleEventKitStoreStub: AppleEventKitStore {
 
   func calendarEvents(start: Date, end: Date) -> [EKEvent] { events }
 
-  func reminders() async -> [EKReminder] { [] }
-
   func newReminder() -> EKReminder { EKReminder(eventStore: EKEventStore()) }
 
   func calendarItem(withIdentifier identifier: String) -> EKCalendarItem? { nil }

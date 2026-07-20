@@ -108,7 +108,7 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
 
     store.markSynced(connectorID: connector.id, sourceCount: 500, memoryCount: 500)
-    store.applyAppleEventKitStatus(.connected(itemCount: 1), connectorID: connector.id)
+    store.applyAppleEventKitStatus(.connected, connectorID: connector.id)
 
     let snapshot = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user").snapshot(for: connector)
     XCTAssertEqual(snapshot.primaryText, "500 events • 500 memories")
