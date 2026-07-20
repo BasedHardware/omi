@@ -311,8 +311,8 @@ PY
 fi
 
 STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-ASSET="qualification-evidence-${VERSION}-$(date -u +%Y%m%dT%H%M%SZ).json"
-cp "$EVIDENCE/manifest.json" "/tmp/$ASSET"
+EVIDENCE_FILE="/tmp/qualification-evidence-${VERSION}-$$.json"
+cp "$EVIDENCE/manifest.json" "$EVIDENCE_FILE"
 
 if [[ "$AUTOMATIC" -eq 1 ]]; then
   git -C "$REPO_ROOT" fetch origin --tags --force
@@ -321,7 +321,7 @@ if [[ "$AUTOMATIC" -eq 1 ]]; then
     echo "automatic qualification stopped: newer candidate exists ($LATEST_TAG)" >&2
     exit 1
   fi
-  python3 - "/tmp/$ASSET" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
+  python3 - "$EVIDENCE_FILE" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -337,12 +337,18 @@ evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", 
 PY
 fi
 
+# Qualification evidence is factual, immutable history. Its content digest is
+# part of the asset identity and uploads never clobber an earlier observation.
+EVIDENCE_SHA=$(shasum -a 256 "$EVIDENCE_FILE" | awk '{print $1}')
+ASSET="qualification-evidence-${VERSION}-${EVIDENCE_SHA}.json"
+mv "$EVIDENCE_FILE" "/tmp/$ASSET"
+
 BODY_FILE=/tmp/desktop-qualification-release-body.md
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json body --jq .body > "$BODY_FILE"
 
 python3 "$KEYVALUE_PY" update-qualified-beta "$BODY_FILE" "$STAMP" "$SHA" "$ASSET"
 
-gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi --clobber
+gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
 
 if [[ "$PROMOTE" -eq 1 ]]; then

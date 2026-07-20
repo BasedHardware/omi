@@ -159,19 +159,14 @@ Future _init() async {
   // TestFlight environment detection — must be after SharedPreferencesUtil.init()
   if (F.env == Environment.prod) {
     final isTestFlight = await EnvironmentDetector.isTestFlight();
-    if (isTestFlight) {
-      Env.isTestFlight = true;
-      if (SharedPreferencesUtil().testFlightUseStagingApi) {
-        final staging = Env.stagingApiUrl;
-        if (staging != null) {
-          Env.overrideApiBaseUrl(staging);
-          debugPrint('TestFlight detected: using staging backend ($staging)');
-        } else {
-          debugPrint('TestFlight detected: staging preferred but STAGING_API_URL not configured, using production');
-        }
-      } else {
-        debugPrint('TestFlight detected: user chose production backend');
+    if (EnvironmentDetector.shouldUseBetaReleaseRing(isTestFlight)) {
+      Env.isTestFlight = isTestFlight;
+      final beta = Env.stagingApiUrl;
+      if (beta == null) {
+        throw StateError('Beta release build requires STAGING_API_URL to point at the beta release ring');
       }
+      Env.overrideApiBaseUrl(beta);
+      debugPrint('Beta release build detected: using beta release ring ($beta)');
     }
   }
 

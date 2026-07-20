@@ -1,0 +1,33 @@
+# Stateless release-ring topology. This is intentionally not a second runtime
+# manifest: release records render immutable copies of the referenced values
+# and runtime config before beta/prod deployment.
+schema_version: 1
+rings:
+  beta:
+    environment: beta
+    namespace: beta-omi-backend
+    shared_data_stores: true
+    shared_gpu_endpoints: true
+    endpoints:
+      api: https://api-beta.omi.me
+      pusher: http://pusher-beta.omi.me
+      agent: wss://agent-beta.omi.me
+    cloud_run_services:
+      backend: backend-beta
+      backend-sync: backend-sync-beta
+      backend-sync-backfill: backend-sync-backfill-beta
+      backend-integration: backend-integration-beta
+  prod:
+    environment: prod
+    namespace: prod-omi-backend
+    shared_data_stores: true
+    shared_gpu_endpoints: true
+    endpoints:
+      api: https://api.omi.me
+      pusher: http://pusher.omi.me
+      agent: wss://agent.omi.me
+    cloud_run_services:
+      backend: backend
+      backend-sync: backend-sync
+      backend-sync-backfill: backend-sync-backfill
+      backend-integration: backend-integration
