@@ -336,6 +336,18 @@ def _ensure_aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+# Firestore 'in' filters accept at most 30 values (see database/apps.py, database/chat.py). Reject
+# an oversized status/source filter before it reaches the query so a caller cannot turn a
+# comma-separated filter into an unhandled 500. ConversationStatus and the source set are both
+# tiny, so a cap of 20 can never reject a request a real client would send.
+MAX_IN_FILTER_VALUES = 20
+
+
+def _reject_oversized_filter(values: List[str], field_name: str) -> None:
+    if len(values) > MAX_IN_FILTER_VALUES:
+        raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
+
+
 @router.get(
     '/v1/conversations',
     response_model=List[Conversation],
@@ -363,12 +375,15 @@ def get_conversations(
     if len(statuses) == 0:
         statuses = "processing,completed"
 
+    status_filter = statuses.split(",") if len(statuses) > 0 else []
+    _reject_oversized_filter(status_filter, "statuses")
+
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
         offset,
         include_discarded=include_discarded,
-        statuses=statuses.split(",") if len(statuses) > 0 else [],
+        statuses=status_filter,
         start_date=start_date,
         end_date=end_date,
         folder_id=folder_id,
@@ -394,6 +409,8 @@ def get_conversations_count(
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
     source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
+    _reject_oversized_filter(status_list, "statuses")
+    _reject_oversized_filter(source_list, "sources")
     if status_list and source_list:
         # Combining status+source `in` filters would need a composite index; keep them exclusive.
         raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
