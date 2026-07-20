@@ -140,237 +140,241 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertEqual(VoiceTurnCoordinator.shared.model.invalidTransitionCount, 0)
   }
 
-  @MainActor
-  func testOwnerTransitionTerminatesActiveNonHubCaptureBeforeOwnerBBecomesVisible() async {
-    let manager = PushToTalkManager.shared
-    let defaults = ownerBoundaryDefaults("non-hub")
-    manager.cleanup()
-    await transitionOwner(defaults: defaults, to: "owner-a")
+  // The owner-boundary suite drives DEBUG-only seams (ownerBoundarySnapshot,
+  // RealtimeHubOwnerBoundarySnapshot); the release-mode CI test compile must skip it.
+  #if DEBUG
+    @MainActor
+    func testOwnerTransitionTerminatesActiveNonHubCaptureBeforeOwnerBBecomesVisible() async {
+      let manager = PushToTalkManager.shared
+      let defaults = ownerBoundaryDefaults("non-hub")
+      manager.cleanup()
+      await transitionOwner(defaults: defaults, to: "owner-a")
 
-    // Install the production physical-effect handler without touching a real
-    // microphone, then admit an exact non-hub capture through the reducer.
-    _ = manager.beginPushToTalkForAutomation()
-    manager.cleanup()
-    let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
-    VoiceTurnCoordinator.shared.publish(
-      .selectRoute(turnID: turnID, route: .deepgramLive))
-    let captureID = VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)
-    VoiceTurnCoordinator.shared.publish(
-      .captureStarted(turnID: turnID, captureID: captureID))
-    let generationBeforeTransition = manager.ownerBoundarySnapshot.captureGeneration
+      // Install the production physical-effect handler without touching a real
+      // microphone, then admit an exact non-hub capture through the reducer.
+      _ = manager.beginPushToTalkForAutomation()
+      manager.cleanup()
+      let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
+      VoiceTurnCoordinator.shared.publish(
+        .selectRoute(turnID: turnID, route: .deepgramLive))
+      let captureID = VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)
+      VoiceTurnCoordinator.shared.publish(
+        .captureStarted(turnID: turnID, captureID: captureID))
+      let generationBeforeTransition = manager.ownerBoundarySnapshot.captureGeneration
 
-    await transitionOwner(defaults: defaults, to: "owner-b")
+      await transitionOwner(defaults: defaults, to: "owner-b")
 
-    XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
-    XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.turnID, turnID)
-    XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.reason, .ownerChanged)
-    let snapshot = manager.ownerBoundarySnapshot
-    XCTAssertNil(snapshot.activeTurnID)
-    XCTAssertFalse(snapshot.hasCaptureDriver)
-    XCTAssertFalse(snapshot.captureStartInFlight)
-    XCTAssertFalse(snapshot.hasTranscriptionDriver)
-    XCTAssertFalse(snapshot.hasOmniDriver)
-    XCTAssertGreaterThan(snapshot.captureGeneration, generationBeforeTransition)
+      XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
+      XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.turnID, turnID)
+      XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.reason, .ownerChanged)
+      let snapshot = manager.ownerBoundarySnapshot
+      XCTAssertNil(snapshot.activeTurnID)
+      XCTAssertFalse(snapshot.hasCaptureDriver)
+      XCTAssertFalse(snapshot.captureStartInFlight)
+      XCTAssertFalse(snapshot.hasTranscriptionDriver)
+      XCTAssertFalse(snapshot.hasOmniDriver)
+      XCTAssertGreaterThan(snapshot.captureGeneration, generationBeforeTransition)
 
-    manager.cleanup()
-    defaults.removePersistentDomain(forName: ownerBoundarySuiteName("non-hub"))
-  }
-
-  @MainActor
-  func testOwnerTransitionClosesWarmHubAndPurgesOwnerAContext() async {
-    let manager = PushToTalkManager.shared
-    let hub = RealtimeHubController.shared
-    let defaults = ownerBoundaryDefaults("warm-hub")
-    manager.cleanup()
-    await transitionOwner(defaults: defaults, to: "owner-a")
-    hub.installOwnerBoundaryFixture(ownerID: "owner-a")
-
-    XCTAssertEqual(
-      hub.ownerBoundarySnapshot,
-      RealtimeHubOwnerBoundarySnapshot(
-        hasPhysicalSession: true,
-        physicalOwnerID: "owner-a",
-        prefetchedOwnerID: "owner-a",
-        prefetchedContextIsEmpty: false,
-        hasPendingOwnerWork: true,
-        hubConnected: true,
-        turnAudioByteCount: 16))
-
-    await transitionOwner(defaults: defaults, to: "owner-b")
-
-    XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
-    assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)
-    defaults.removePersistentDomain(forName: ownerBoundarySuiteName("warm-hub"))
-  }
-
-  @MainActor
-  func testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession() async {
-    let manager = PushToTalkManager.shared
-    let hub = RealtimeHubController.shared
-    let defaults = ownerBoundaryDefaults("active-hub")
-    manager.cleanup()
-    await transitionOwner(defaults: defaults, to: "owner-a")
-
-    _ = manager.beginPushToTalkForAutomation()
-    manager.cleanup()
-    hub.installOwnerBoundaryFixture(ownerID: "owner-a")
-    let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
-    VoiceTurnCoordinator.shared.publish(
-      .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
-    let captureID = VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)
-    VoiceTurnCoordinator.shared.publish(
-      .captureStarted(turnID: turnID, captureID: captureID))
-
-    await transitionOwner(defaults: defaults, to: "owner-b")
-
-    XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
-    XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.turnID, turnID)
-    XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.reason, .ownerChanged)
-    assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)
-
-    manager.cleanup()
-    defaults.removePersistentDomain(forName: ownerBoundarySuiteName("active-hub"))
-  }
-
-  @MainActor
-  func testOwnerTransitionAwaitsExternalVoiceRunTerminalizationBeforeOwnerBAdmission() async {
-    let manager = PushToTalkManager.shared
-    let hub = RealtimeHubController.shared
-    let defaults = ownerBoundaryDefaults("active-external-run")
-    let probe = OwnerBoundaryExternalRunProbe()
-    manager.cleanup()
-    await transitionOwner(defaults: defaults, to: "owner-a")
-
-    _ = manager.beginPushToTalkForAutomation()
-    manager.cleanup()
-    hub.installOwnerBoundaryFixture(ownerID: "owner-a")
-    let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
-    VoiceTurnCoordinator.shared.publish(
-      .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
-    VoiceTurnCoordinator.shared.publish(
-      .captureStarted(
-        turnID: turnID,
-        captureID: VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)))
-    hub.installOwnerBoundaryExternalRunFixture(
-      ownerID: "owner-a",
-      turnID: turnID
-    ) { binding, status, _, capability in
-      try await probe.terminalize(
-        binding: binding,
-        status: status,
-        capability: capability)
+      manager.cleanup()
+      defaults.removePersistentDomain(forName: ownerBoundarySuiteName("non-hub"))
     }
 
-    let transition = Task { @MainActor in
-      await self.transitionOwner(defaults: defaults, to: "owner-b")
+    @MainActor
+    func testOwnerTransitionClosesWarmHubAndPurgesOwnerAContext() async {
+      let manager = PushToTalkManager.shared
+      let hub = RealtimeHubController.shared
+      let defaults = ownerBoundaryDefaults("warm-hub")
+      manager.cleanup()
+      await transitionOwner(defaults: defaults, to: "owner-a")
+      hub.installOwnerBoundaryFixture(ownerID: "owner-a")
+
+      XCTAssertEqual(
+        hub.ownerBoundarySnapshot,
+        RealtimeHubOwnerBoundarySnapshot(
+          hasPhysicalSession: true,
+          physicalOwnerID: "owner-a",
+          prefetchedOwnerID: "owner-a",
+          prefetchedContextIsEmpty: false,
+          hasPendingOwnerWork: true,
+          hubConnected: true,
+          turnAudioByteCount: 16))
+
+      await transitionOwner(defaults: defaults, to: "owner-b")
+
+      XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
+      assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)
+      defaults.removePersistentDomain(forName: ownerBoundarySuiteName("warm-hub"))
     }
-    await probe.waitUntilEntered()
 
-    XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-a")
-    XCTAssertNil(
-      RuntimeOwnerIdentity.currentOwnerId(
-        defaults: defaults,
-        allowAutomationOverride: false))
-    let suspendedTerminal = await probe.snapshot()
-    XCTAssertFalse(suspendedTerminal.closed)
+    @MainActor
+    func testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession() async {
+      let manager = PushToTalkManager.shared
+      let hub = RealtimeHubController.shared
+      let defaults = ownerBoundaryDefaults("active-hub")
+      manager.cleanup()
+      await transitionOwner(defaults: defaults, to: "owner-a")
 
-    await probe.release()
-    await transition.value
+      _ = manager.beginPushToTalkForAutomation()
+      manager.cleanup()
+      hub.installOwnerBoundaryFixture(ownerID: "owner-a")
+      let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
+      VoiceTurnCoordinator.shared.publish(
+        .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+      let captureID = VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)
+      VoiceTurnCoordinator.shared.publish(
+        .captureStarted(turnID: turnID, captureID: captureID))
 
-    let terminal = await probe.snapshot()
-    XCTAssertTrue(terminal.closed)
-    XCTAssertEqual(terminal.ownerID, "owner-a")
-    XCTAssertEqual(terminal.status, .cancelled)
-    XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
-    XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.reason, .ownerChanged)
-    assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)
+      await transitionOwner(defaults: defaults, to: "owner-b")
 
-    manager.cleanup()
-    defaults.removePersistentDomain(forName: ownerBoundarySuiteName("active-external-run"))
-  }
+      XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
+      XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.turnID, turnID)
+      XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.reason, .ownerChanged)
+      assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)
 
-  @MainActor
-  func testUnresolvedExternalVoiceRunStaysTrackedUntilOwnerWideRevocation() async {
-    let manager = PushToTalkManager.shared
-    let hub = RealtimeHubController.shared
-    let defaults = ownerBoundaryDefaults("unresolved-external-run")
-    manager.cleanup()
-    await transitionOwner(defaults: defaults, to: "owner-a")
-
-    // Install the production terminal-effect handler without starting a real
-    // microphone capture, then model a begin whose receipt was lost to Swift.
-    _ = manager.beginPushToTalkForAutomation()
-    manager.cleanup()
-    let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
-    hub.installOwnerBoundaryUnresolvedExternalRunFixture(
-      ownerID: "owner-a",
-      turnID: turnID)
-
-    VoiceTurnCoordinator.shared.publish(.cancel(turnID: turnID, reason: .cancelled))
-    await hub.settleOwnerBoundaryExternalRunTerminalizations()
-
-    XCTAssertTrue(
-      hub.ownerBoundarySnapshot.hasPendingOwnerWork,
-      "an unknown binding must remain tracked until owner-wide runtime revocation")
-
-    await transitionOwner(defaults: defaults, to: "owner-b")
-
-    XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
-    assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)
-
-    manager.cleanup()
-    defaults.removePersistentDomain(forName: ownerBoundarySuiteName("unresolved-external-run"))
-  }
-
-  @MainActor
-  private func transitionOwner(defaults: UserDefaults, to ownerID: String) async {
-    // `UserDefaults` is non-Sendable and cannot cross from the main actor into
-    // the nonisolated `performEffectiveOwnerTransition` boundary under Swift 6.
-    // Box it (mirroring the production `RuntimeOwnerDefaultsReference`) and run
-    // the transition from a nonisolated static helper so neither `defaults` nor
-    // `self` crosses an isolation boundary.
-    let boxed = OwnerDefaultsBox(value: defaults)
-    await Self.runOwnerTransition(boxed: boxed, ownerID: ownerID)
-  }
-
-  private static nonisolated func runOwnerTransition(
-    boxed: OwnerDefaultsBox, ownerID: String
-  ) async {
-    await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: boxed.value,
-      allowAutomationOverride: false,
-      plannedNextOwner: { _, _ in ownerID },
-      retargetLocalStorage: { _, _ in },
-      ownerDidChange: {}
-    ) { defaults in
-      defaults.set(ownerID, forKey: .authUserId)
+      manager.cleanup()
+      defaults.removePersistentDomain(forName: ownerBoundarySuiteName("active-hub"))
     }
-  }
 
-  private func ownerBoundaryDefaults(_ suffix: String) -> UserDefaults {
-    let name = ownerBoundarySuiteName(suffix)
-    let defaults = UserDefaults(suiteName: name)!
-    defaults.removePersistentDomain(forName: name)
-    return defaults
-  }
+    @MainActor
+    func testOwnerTransitionAwaitsExternalVoiceRunTerminalizationBeforeOwnerBAdmission() async {
+      let manager = PushToTalkManager.shared
+      let hub = RealtimeHubController.shared
+      let defaults = ownerBoundaryDefaults("active-external-run")
+      let probe = OwnerBoundaryExternalRunProbe()
+      manager.cleanup()
+      await transitionOwner(defaults: defaults, to: "owner-a")
 
-  private func ownerBoundarySuiteName(_ suffix: String) -> String {
-    "PushToTalkStateMachineTests.owner-boundary.\(suffix)"
-  }
+      _ = manager.beginPushToTalkForAutomation()
+      manager.cleanup()
+      hub.installOwnerBoundaryFixture(ownerID: "owner-a")
+      let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
+      VoiceTurnCoordinator.shared.publish(
+        .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+      VoiceTurnCoordinator.shared.publish(
+        .captureStarted(
+          turnID: turnID,
+          captureID: VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)))
+      hub.installOwnerBoundaryExternalRunFixture(
+        ownerID: "owner-a",
+        turnID: turnID
+      ) { binding, status, _, capability in
+        try await probe.terminalize(
+          binding: binding,
+          status: status,
+          capability: capability)
+      }
 
-  private func assertHubOwnerBoundaryIsEmpty(
-    _ snapshot: RealtimeHubOwnerBoundarySnapshot,
-    file: StaticString = #filePath,
-    line: UInt = #line
-  ) {
-    XCTAssertFalse(snapshot.hasPhysicalSession, file: file, line: line)
-    XCTAssertNil(snapshot.physicalOwnerID, file: file, line: line)
-    XCTAssertNil(snapshot.prefetchedOwnerID, file: file, line: line)
-    XCTAssertTrue(snapshot.prefetchedContextIsEmpty, file: file, line: line)
-    XCTAssertFalse(snapshot.hasPendingOwnerWork, file: file, line: line)
-    XCTAssertFalse(snapshot.hubConnected, file: file, line: line)
-    XCTAssertEqual(snapshot.turnAudioByteCount, 0, file: file, line: line)
-  }
+      let transition = Task { @MainActor in
+        await self.transitionOwner(defaults: defaults, to: "owner-b")
+      }
+      await probe.waitUntilEntered()
+
+      XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-a")
+      XCTAssertNil(
+        RuntimeOwnerIdentity.currentOwnerId(
+          defaults: defaults,
+          allowAutomationOverride: false))
+      let suspendedTerminal = await probe.snapshot()
+      XCTAssertFalse(suspendedTerminal.closed)
+
+      await probe.release()
+      await transition.value
+
+      let terminal = await probe.snapshot()
+      XCTAssertTrue(terminal.closed)
+      XCTAssertEqual(terminal.ownerID, "owner-a")
+      XCTAssertEqual(terminal.status, .cancelled)
+      XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
+      XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.reason, .ownerChanged)
+      assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)
+
+      manager.cleanup()
+      defaults.removePersistentDomain(forName: ownerBoundarySuiteName("active-external-run"))
+    }
+
+    @MainActor
+    func testUnresolvedExternalVoiceRunStaysTrackedUntilOwnerWideRevocation() async {
+      let manager = PushToTalkManager.shared
+      let hub = RealtimeHubController.shared
+      let defaults = ownerBoundaryDefaults("unresolved-external-run")
+      manager.cleanup()
+      await transitionOwner(defaults: defaults, to: "owner-a")
+
+      // Install the production terminal-effect handler without starting a real
+      // microphone capture, then model a begin whose receipt was lost to Swift.
+      _ = manager.beginPushToTalkForAutomation()
+      manager.cleanup()
+      let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
+      hub.installOwnerBoundaryUnresolvedExternalRunFixture(
+        ownerID: "owner-a",
+        turnID: turnID)
+
+      VoiceTurnCoordinator.shared.publish(.cancel(turnID: turnID, reason: .cancelled))
+      await hub.settleOwnerBoundaryExternalRunTerminalizations()
+
+      XCTAssertTrue(
+        hub.ownerBoundarySnapshot.hasPendingOwnerWork,
+        "an unknown binding must remain tracked until owner-wide runtime revocation")
+
+      await transitionOwner(defaults: defaults, to: "owner-b")
+
+      XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
+      assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)
+
+      manager.cleanup()
+      defaults.removePersistentDomain(forName: ownerBoundarySuiteName("unresolved-external-run"))
+    }
+
+    @MainActor
+    private func transitionOwner(defaults: UserDefaults, to ownerID: String) async {
+      // `UserDefaults` is non-Sendable and cannot cross from the main actor into
+      // the nonisolated `performEffectiveOwnerTransition` boundary under Swift 6.
+      // Box it (mirroring the production `RuntimeOwnerDefaultsReference`) and run
+      // the transition from a nonisolated static helper so neither `defaults` nor
+      // `self` crosses an isolation boundary.
+      let boxed = OwnerDefaultsBox(value: defaults)
+      await Self.runOwnerTransition(boxed: boxed, ownerID: ownerID)
+    }
+
+    private static nonisolated func runOwnerTransition(
+      boxed: OwnerDefaultsBox, ownerID: String
+    ) async {
+      await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
+        defaults: boxed.value,
+        allowAutomationOverride: false,
+        plannedNextOwner: { _, _ in ownerID },
+        retargetLocalStorage: { _, _ in },
+        ownerDidChange: {}
+      ) { defaults in
+        defaults.set(ownerID, forKey: .authUserId)
+      }
+    }
+
+    private func ownerBoundaryDefaults(_ suffix: String) -> UserDefaults {
+      let name = ownerBoundarySuiteName(suffix)
+      let defaults = UserDefaults(suiteName: name)!
+      defaults.removePersistentDomain(forName: name)
+      return defaults
+    }
+
+    private func ownerBoundarySuiteName(_ suffix: String) -> String {
+      "PushToTalkStateMachineTests.owner-boundary.\(suffix)"
+    }
+
+    private func assertHubOwnerBoundaryIsEmpty(
+      _ snapshot: RealtimeHubOwnerBoundarySnapshot,
+      file: StaticString = #filePath,
+      line: UInt = #line
+    ) {
+      XCTAssertFalse(snapshot.hasPhysicalSession, file: file, line: line)
+      XCTAssertNil(snapshot.physicalOwnerID, file: file, line: line)
+      XCTAssertNil(snapshot.prefetchedOwnerID, file: file, line: line)
+      XCTAssertTrue(snapshot.prefetchedContextIsEmpty, file: file, line: line)
+      XCTAssertFalse(snapshot.hasPendingOwnerWork, file: file, line: line)
+      XCTAssertFalse(snapshot.hubConnected, file: file, line: line)
+      XCTAssertEqual(snapshot.turnAudioByteCount, 0, file: file, line: line)
+    }
+  #endif
 }
 
 /// Sendable carrier for a non-Sendable `UserDefaults` so it can cross the
