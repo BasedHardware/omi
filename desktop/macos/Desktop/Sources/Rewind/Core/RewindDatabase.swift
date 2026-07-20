@@ -3460,6 +3460,18 @@ actor RewindDatabase {
     }
   }
 
+  /// Get screenshot count captured at or after a date (e.g. start of today)
+  func getScreenshotCount(since date: Date) throws -> Int {
+    guard let dbQueue = dbQueue else {
+      throw RewindError.databaseNotInitialized
+    }
+
+    return try dbQueue.read { db in
+      try Int.fetchOne(
+        db, sql: "SELECT COUNT(*) FROM screenshots WHERE timestamp >= ?", arguments: [date]) ?? 0
+    }
+  }
+
   /// Get database statistics
   func getStats() throws -> (total: Int, indexed: Int, oldestDate: Date?, newestDate: Date?) {
     guard let dbQueue = dbQueue else {
