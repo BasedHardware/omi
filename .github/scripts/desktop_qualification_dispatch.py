@@ -84,7 +84,7 @@ def claim(
     run_id: str,
     run_url: str,
     allow_retry: bool,
-) -> tuple[str, bool, str]:
+) -> tuple[str, bool, bool, str]:
     """Claim one qualification run inside the authoritative workflow serialiser."""
     metadata = _metadata(body)
     current_state = metadata.get("qualificationDispatchState", "")
@@ -100,18 +100,20 @@ def claim(
         # stopped, so its lingering running record is orphaned and may be
         # reclaimed immediately without introducing a second active runner.
         reclaimed_orphaned_claim = True
-    elif current_key == key and current_state in {"failed", "qualified"}:
-        return body, False, f"dispatch key already {current_state}"
+    elif current_key == key and current_state == "qualified":
+        return body, False, True, "dispatch key already qualified"
+    elif current_key == key and current_state == "failed":
+        return body, False, False, "dispatch key already failed"
     elif current_key == key and current_state in {"pending", "queued", "dispatch_failed"}:
         # Older candidates may retain this observational state. The runner's
         # concurrency gate is authoritative, so it can claim them once.
         pass
     elif current_state in {"pending", "queued"}:
-        return body, False, f"candidate already {current_state} under another dispatch key"
+        return body, False, False, f"candidate already {current_state} under another dispatch key"
     elif current_state == "qualified":
-        return body, False, "candidate already has completed qualification"
+        return body, False, True, "candidate already has completed qualification"
     elif current_state in {"failed", "dispatch_failed"} and not allow_retry:
-        return body, False, "candidate has a terminal dispatch result; supply an explicit retry nonce"
+        return body, False, False, "candidate has a terminal dispatch result; supply an explicit retry nonce"
     attempt = _current_attempt(metadata) + 1
     values = _values(
         state="running",
@@ -126,7 +128,7 @@ def claim(
         run_id=run_id,
         run_url=run_url,
     )
-    return update_metadata(body, values), True, "reclaimed orphaned claim" if reclaimed_orphaned_claim else "claimed"
+    return update_metadata(body, values), True, False, "reclaimed orphaned claim" if reclaimed_orphaned_claim else "claimed"
 
 
 def complete(body: str, *, key: str, updated_at: str, passed: bool) -> str:
@@ -178,7 +180,7 @@ def main() -> int:
     args = parser.parse_args()
     body = args.input.read_text(encoding="utf-8")
     if args.command == "claim":
-        result, should_run, reason = claim(
+        result, should_run, should_promote, reason = claim(
             body,
             key=args.key,
             updated_at=args.updated_at,
@@ -186,7 +188,7 @@ def main() -> int:
             run_url=args.run_url,
             allow_retry=args.allow_retry,
         )
-        _write(args.output, result, {"reason": reason, "should_run": should_run})
+        _write(args.output, result, {"reason": reason, "should_promote": should_promote, "should_run": should_run})
     else:
         result = complete(body, key=args.key, updated_at=args.updated_at, passed=args.passed == "true")
         _write(args.output, result, {"changed": True})
