@@ -109,3 +109,27 @@ class TestNoCandidateIsDropped:
 
         assert len(_all_ids(work_items)) == 13
         assert all(len(w.l1_item_ids) <= 5 for w in work_items)
+
+
+class TestConservationInvariant:
+    """Across the batching space, the selector must partition its input — never lose it."""
+
+    def test_all_candidates_are_partitioned_for_every_shape(self):
+        shapes = [
+            (sessions, per_session, item_cap, session_cap)
+            for sessions in (1, 2, 5)
+            for per_session in (1, 4, 13, 50)
+            for item_cap in (1, 3, 50)
+            for session_cap in (1, 3)
+        ]
+        for sessions, per_session, item_cap, session_cap in shapes:
+            cfg = PromotionSelectorConfig(max_l1_items_per_batch=item_cap, max_sessions_per_batch=session_cap)
+            candidates = [_candidate('u1', f's{s}', i) for s in range(sessions) for i in range(per_session)]
+            work_items = select_promotion_work_items(candidates, now=NOW, config=cfg)
+
+            emitted = _all_ids(work_items)
+            expected = {c.l1_item_id for c in candidates}
+            shape = f'sessions={sessions} per_session={per_session} item_cap={item_cap} session_cap={session_cap}'
+            assert set(emitted) == expected, f'ids lost for {shape}'
+            assert len(emitted) == len(expected), f'ids duplicated for {shape}'
+            assert all(len(w.l1_item_ids) <= item_cap for w in work_items), f'item cap exceeded for {shape}'
