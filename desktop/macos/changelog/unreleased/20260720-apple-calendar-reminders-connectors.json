@@ -1,0 +1,3 @@
+{
+  "change": "Added local Apple Calendar and Reminders imports to Connections using native macOS permissions"
+}

@@ -43,6 +43,10 @@
     <string>Omi needs permission to capture system audio for transcription of calls and meetings.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Omi needs Bluetooth access to connect to your Omi wearable device for audio capture and transcription.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Omi reads your Apple Calendar events to add relevant context to your memories.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Omi reads your Apple Reminders to add relevant context to your memories.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>

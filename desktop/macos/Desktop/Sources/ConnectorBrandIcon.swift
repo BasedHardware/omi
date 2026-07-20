@@ -4,6 +4,8 @@ import SwiftUI
 
 enum ConnectorBrand: String, Sendable {
   case calendar
+  case appleCalendar
+  case appleReminders
   case gmail
   case localFiles
   case appleNotes
@@ -21,6 +23,10 @@ enum ConnectorBrand: String, Sendable {
 
   fileprivate var appPath: String? {
     switch self {
+    case .appleCalendar:
+      return "/System/Applications/Calendar.app"
+    case .appleReminders:
+      return "/System/Applications/Reminders.app"
     case .appleNotes:
       return "/System/Applications/Notes.app"
     case .notion:
@@ -100,6 +106,10 @@ enum ConnectorBrand: String, Sendable {
     switch self {
     case .calendar:
       return "calendar"
+    case .appleCalendar:
+      return "calendar"
+    case .appleReminders:
+      return "checklist"
     case .gmail:
       return "envelope.fill"
     case .localFiles:

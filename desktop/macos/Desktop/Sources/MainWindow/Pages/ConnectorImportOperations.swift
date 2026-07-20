@@ -207,6 +207,50 @@ enum ConnectorImportOperations {
   }
 
   @MainActor
+  static func importAppleCalendar(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
+    do {
+      let events = try await AppleEventKitReaderService.shared.readCalendarEvents()
+      progress.update(
+        title: "Importing Apple Calendar",
+        detail: "Saving local calendar events as memories."
+      )
+      let result = await AppleEventKitReaderService.shared.saveCalendarAsMemories(events: events)
+      guard result.failed == 0 else {
+        return .failure(message: "Apple Calendar was read, but its events couldn't be saved. Try again.")
+      }
+      return .success(
+        SyncResult(sourceCount: events.count, memoryCount: result.saved, newItems: nil),
+        message:
+          "Imported \(events.count.formatted()) Apple Calendar events and saved \(result.saved.formatted()) memories."
+      )
+    } catch {
+      return .failure(message: error.localizedDescription)
+    }
+  }
+
+  @MainActor
+  static func importAppleReminders(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
+    do {
+      let reminders = try await AppleEventKitReaderService.shared.readReminders()
+      progress.update(
+        title: "Importing Apple Reminders",
+        detail: "Saving local reminders as memories."
+      )
+      let result = await AppleEventKitReaderService.shared.saveRemindersAsMemories(reminders: reminders)
+      guard result.failed == 0 else {
+        return .failure(message: "Apple Reminders was read, but its reminders couldn't be saved. Try again.")
+      }
+      return .success(
+        SyncResult(sourceCount: reminders.count, memoryCount: result.saved, newItems: nil),
+        message:
+          "Imported \(reminders.count.formatted()) Apple Reminders and saved \(result.saved.formatted()) memories."
+      )
+    } catch {
+      return .failure(message: error.localizedDescription)
+    }
+  }
+
+  @MainActor
   static func importAppleNotes(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
     do {
       return try await runAppleNotesImport(progress: progress)
