@@ -7,9 +7,11 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 MACOS_RELEASE_TAG_RE = re.compile(r"^v\d+\.\d+(?:\.\d+)?\+\d+-macos$")
+SHA256_DIGEST_RE = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
 QUALIFICATION_KEYS = (
     "qualifiedBeta",
     "qualifiedBetaAt",
@@ -45,10 +47,38 @@ def format_keyvalue_lines(metadata: dict[str, str]) -> list[str]:
 
 def preflight_release(release_json_path: Path, tag: str) -> None:
     release = json.loads(release_json_path.read_text(encoding="utf-8"))
+    if not isinstance(release, dict):
+        raise SystemExit("release JSON must be an object")
     if release.get("tagName") != tag:
         raise SystemExit(f"tag mismatch: {release.get('tagName')}")
     if release.get("isDraft") or release.get("isPrerelease"):
         raise SystemExit("release must be published and not a GitHub prerelease")
+    published_at = release.get("publishedAt")
+    if not isinstance(published_at, str) or not published_at.strip():
+        raise SystemExit("release must include a publication timestamp")
+    try:
+        datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise SystemExit(f"release publication timestamp is malformed: {published_at!r}") from exc
+
+    assets = release.get("assets")
+    if not isinstance(assets, list):
+        raise SystemExit("release assets must be a list")
+
+    def required_asset(names: set[str]) -> dict[str, object]:
+        for asset in assets:
+            if isinstance(asset, dict) and asset.get("name") in names:
+                digest = asset.get("digest")
+                if not isinstance(digest, str) or not SHA256_DIGEST_RE.fullmatch(digest):
+                    raise SystemExit(f"release asset {asset.get('name')!r} is missing a SHA-256 digest")
+                return asset
+        raise SystemExit(f"release is missing required asset: {', '.join(sorted(names))}")
+
+    # These are the immutable artifact/evidence inputs consumed by the automatic
+    # candidate contract: signed Sparkle ZIP, DMG, and its signed-smoke evidence.
+    required_asset({"Omi.zip"})
+    required_asset({"Omi.dmg", "omi.dmg"})
+    required_asset({"desktop-smoke-result.json"})
 
     metadata = parse_keyvalue_block(release.get("body") or "")
     if metadata.get("channel") not in {"candidate", "beta"}:
@@ -238,22 +268,43 @@ qualifiedBeta: false
             fail("update-qualified-beta unclosed KEY_VALUE block", f"unexpected exit: {exc}")
 
     release_json = Path("/tmp/release-keyvalue-release.json")
-    release_json.write_text(
-        json.dumps(
-            {
-                "tagName": "v11.0.0+11000-macos",
-                "isDraft": False,
-                "isPrerelease": False,
-                "body": sample_body,
-            }
-        ),
-        encoding="utf-8",
-    )
+    valid_digest = "sha256:" + ("a" * 64)
+    valid_release = {
+        "tagName": "v11.0.0+11000-macos",
+        "isDraft": False,
+        "isPrerelease": False,
+        "publishedAt": "2026-07-20T12:00:00Z",
+        "assets": [
+            {"name": "Omi.zip", "digest": valid_digest},
+            {"name": "Omi.dmg", "digest": valid_digest},
+            {"name": "desktop-smoke-result.json", "digest": valid_digest},
+        ],
+        "body": sample_body,
+    }
+    release_json.write_text(json.dumps(valid_release), encoding="utf-8")
     try:
         preflight_release(release_json, "v11.0.0+11000-macos")
         ok("preflight-release valid candidate release")
     except SystemExit as exc:
         fail("preflight-release valid candidate release", f"unexpected exit {exc.code}")
+
+    for name, mutate, expected in [
+        ("missing publication timestamp", lambda release: release.pop("publishedAt"), "publication timestamp"),
+        ("malformed publication timestamp", lambda release: release.update(publishedAt="not-a-date"), "malformed"),
+        ("missing signed smoke asset", lambda release: release.update(assets=release["assets"][:-1]), "desktop-smoke-result"),
+        ("missing artifact digest", lambda release: release["assets"][0].pop("digest"), "SHA-256"),
+    ]:
+        candidate = json.loads(json.dumps(valid_release))
+        mutate(candidate)
+        release_json.write_text(json.dumps(candidate), encoding="utf-8")
+        try:
+            preflight_release(release_json, "v11.0.0+11000-macos")
+            fail(f"preflight-release {name}", "expected SystemExit")
+        except SystemExit as exc:
+            if expected in str(exc):
+                ok(f"preflight-release rejects {name}")
+            else:
+                fail(f"preflight-release {name}", f"unexpected exit: {exc}")
 
     if failures:
         print(f"\n{len(failures)} self-test failure(s)", file=sys.stderr)
