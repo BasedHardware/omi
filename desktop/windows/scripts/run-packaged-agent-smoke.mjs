@@ -200,6 +200,18 @@ async function findMainPage(browser, timeoutMs) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Ctrl-C / kill must still tear down: the throwaway profile holds a COPY of
+// real Claude credentials, and an orphaned app process would keep running.
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    try {
+      cleanup()
+    } finally {
+      process.exit(130)
+    }
+  })
+}
+
 main()
   .catch((e) => fail(e && e.stack ? e.stack : String(e)))
   .finally(cleanup)

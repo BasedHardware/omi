@@ -27,8 +27,8 @@ describe('isRecoverableAcpAuthError', () => {
 
   it('accepts expired / rejected OAuth credentials so they reopen the reconnect flow', () => {
     // A failed refresh returns the standard OAuth2 invalid_grant; access-token
-    // expiry surfaces as "token expired"/"token has expired". All must reconnect,
-    // never terminate as a "Failed" pill.
+    // expiry surfaces as "access/oauth token expired"/"token has expired". All
+    // must reconnect, never terminate as a "Failed" pill.
     expect(
       isRecoverableAcpAuthError(new AcpError('Internal error: OAuth error: invalid_grant', -32603))
     ).toBe(true)
@@ -37,9 +37,28 @@ describe('isRecoverableAcpAuthError', () => {
     ).toBe(true)
     expect(
       isRecoverableAcpAuthError(
-        new AcpError('Internal error', -32603, { details: 'token expired' })
+        new AcpError('Internal error', -32603, { details: 'access token expired' })
       )
     ).toBe(true)
+    expect(
+      isRecoverableAcpAuthError(
+        new AcpError('Internal error', -32603, { details: 'OAuth token expired' })
+      )
+    ).toBe(true)
+  })
+
+  it('does NOT treat a coincidental bare "token expired" in a non-auth error as auth', () => {
+    // The markers are anchored ("access/oauth token expired") on purpose: an
+    // unrelated internal error whose body happens to contain the words "token
+    // expired" (e.g. a cache/session token) must stay terminal, not open a
+    // surprise login flow.
+    expect(
+      isRecoverableAcpAuthError(
+        new AcpError('Internal error', -32603, {
+          details: 'render cache token expired, rebuilding'
+        })
+      )
+    ).toBe(false)
   })
 
   it('leaves the packaged claude.exe launch failure TERMINAL (not auth), with detail intact', () => {

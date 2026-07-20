@@ -152,7 +152,8 @@ const RECOVERABLE_AUTH_ERROR_MARKERS = [
   // error — or the bridge's non-auth "session has ended" — never opens a surprise
   // login.
   'invalid_grant',
-  'token expired',
+  'access token expired',
+  'oauth token expired',
   'token has expired'
 ] as const
 

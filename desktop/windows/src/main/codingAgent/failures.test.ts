@@ -43,6 +43,30 @@ describe('messageFrom / jsonRpcErrorDetail — never a bare "Internal error"', (
     expect(msg.endsWith('…')).toBe(true)
   })
 
+  it('redacts token shapes in bridge-controlled detail before it reaches pill or logs', () => {
+    // data is provider/bridge-controlled: a raw response body echoed into
+    // details must never leak credentials through the folded message.
+    const err = new AcpError('Internal error', -32603, {
+      details:
+        'request failed: Authorization: Bearer sk-ant-abc123def456ghi789 api_key=sk-live-000111222333 body={"token":"ghp_abcdefghijklmnop1234"}'
+    })
+    const msg = messageFrom(err)
+    expect(msg).toContain('request failed')
+    expect(msg).not.toContain('sk-ant-abc123def456ghi789')
+    expect(msg).not.toContain('sk-live-000111222333')
+    expect(msg).not.toContain('ghp_abcdefghijklmnop1234')
+    expect(msg).toContain('[redacted]')
+  })
+
+  it('falls back to stringified data and still redacts it', () => {
+    const err = new AcpError('Internal error', -32603, {
+      status: 500,
+      authorization: 'Bearer sk-proj-zzz999yyy888xxx777'
+    })
+    const msg = messageFrom(err)
+    expect(msg).not.toContain('sk-proj-zzz999yyy888xxx777')
+  })
+
   it('leaves plain Errors and non-numeric-code errors untouched', () => {
     expect(messageFrom(new Error('boom'))).toBe('boom')
     // Node system errors carry a STRING code — must not be treated as JSON-RPC.

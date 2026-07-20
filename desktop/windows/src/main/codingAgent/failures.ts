@@ -55,7 +55,10 @@ export function jsonRpcErrorDetail(error: unknown): string | undefined {
   const candidate = error as Error & { code?: unknown; data?: unknown }
   if (typeof candidate.code !== 'number') return undefined
   const base = compactWhitespace(candidate.message ?? '')
-  const detail = extractStructuredDetail(candidate.data)
+  // The bridge's `data` is provider-controlled and can embed a raw response
+  // body — redact token shapes before it reaches the pill or the logs.
+  const rawDetail = extractStructuredDetail(candidate.data)
+  const detail = rawDetail ? sanitizeProcessDiagnostic(rawDetail) : undefined
   if (!detail) return base || undefined
   // Cap so a huge provider body can't flood a pill; keep the informative head.
   const cappedDetail = detail.length > 300 ? `${detail.slice(0, 300)}…` : detail
