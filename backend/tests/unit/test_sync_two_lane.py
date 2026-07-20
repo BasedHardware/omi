@@ -159,7 +159,7 @@ def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_
                             'env': [
                                 {
                                     'name': 'STT_PRERECORDED_MODEL',
-                                    'value': r'parakeet,modulate-velma-2\primary',
+                                    'value': r'modulate-velma-2,parakeet\primary',
                                 }
                             ]
                         }
@@ -171,13 +171,13 @@ def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_
 
     env_vars, _ = clone_environment(
         service,
-        r'RENDERED_STT=parakeet\,modulate-velma-2',
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
         '',
     )
 
     assert env_vars.splitlines() == [
-        r'RENDERED_STT=parakeet\,modulate-velma-2',
-        r'STT_PRERECORDED_MODEL=parakeet\,modulate-velma-2\\primary',
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        r'STT_PRERECORDED_MODEL=modulate-velma-2\,parakeet\\primary',
     ]
 
 

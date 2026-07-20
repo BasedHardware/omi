@@ -47,6 +47,7 @@ from utils.stt.live_failure import (
 )
 from utils.stt.streaming import (
     STTService,
+    connect_stt_socket_with_fallback,
     make_stream_callback,
     process_audio_dg,
     process_audio_modulate,
@@ -117,20 +118,32 @@ class ListenReceiver:
         elif request.codec == 'lc3':
             self.lc3_decoder = _get_lc3().Decoder(self.host.lc3_frame_duration_us, request.sample_rate)
 
-    async def _create_stt_socket(self, callback: Any, sample_rate: int) -> Any:
+    async def _create_stt_socket(self, callback: Any, sample_rate: int, modulate_callback: Any = None) -> Any:
         keywords = self.host.vocabulary[:100] if self.host.vocabulary else []
         if self.host.stt_service == STTService.parakeet:
-            return await process_audio_parakeet(
-                callback,
-                self.host.stt_language,
-                sample_rate,
-                1,
-                model=self.host.stt_model,
-                keywords=keywords,
-                is_active=lambda: self.host.state.active,
+            socket, actual_service = await connect_stt_socket_with_fallback(
+                primary_service=STTService.parakeet,
+                connect_primary=lambda: process_audio_parakeet(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=self.host.stt_model,
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                ),
+                connect_modulate=lambda: process_audio_modulate(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                ),
             )
+            self.host.stt_service = actual_service
+            if actual_service == STTService.modulate:
+                self.host.stt_model = 'velma-2'
+            return socket
         if self.host.stt_service == STTService.modulate:
-            return await process_audio_modulate(callback, sample_rate, self.host.stt_language)
+            return await process_audio_modulate(modulate_callback or callback, sample_rate, self.host.stt_language)
         if self.host.stt_service == STTService.deepgram:
             return await process_audio_dg(
                 callback,
@@ -142,6 +155,27 @@ class ListenReceiver:
                 is_active=lambda: self.host.state.active,
             )
         raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
+
+    async def _drain_stt_sockets(self) -> None:
+        sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
+        for socket in sockets:
+            target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
+            if target is None:
+                continue
+            try:
+                drain = getattr(target, 'drain_and_close', None)
+                if callable(drain):
+                    await cast(Any, drain)()
+                else:
+                    target.finish()
+            except Exception as error:
+                logger.error('Listen STT drain failure type=%s', type(error).__name__)
+                try:
+                    target.finish()
+                except Exception:
+                    pass
+        self.stt_socket = None
+        self.stt_sockets_multi = [None] * len(self.channel_configs)
 
     async def initialize_stt(self) -> bool:
         request = self.host.request
@@ -160,6 +194,7 @@ class ListenReceiver:
 
                     socket = await self._create_stt_socket(callback, TARGET_SAMPLE_RATE)
                     if socket is None:
+                        await self._drain_stt_sockets()
                         await terminate_live_stt_session(
                             request.websocket,
                             self.host.state,
@@ -181,11 +216,15 @@ class ListenReceiver:
                     )
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
-            passthrough = self.host.stt_service == STTService.modulate
+            parakeet_callback = make_stream_callback(self.host.transcripts.enqueue, self.vad_gate, False)
+            modulate_callback = make_stream_callback(self.host.transcripts.enqueue, self.vad_gate, True)
             raw = await self._create_stt_socket(
-                make_stream_callback(self.host.transcripts.enqueue, self.vad_gate, passthrough), request.sample_rate
+                parakeet_callback,
+                request.sample_rate,
+                modulate_callback=modulate_callback,
             )
             if raw is None:
+                await self._drain_stt_sockets()
                 await terminate_live_stt_session(
                     request.websocket,
                     self.host.state,
@@ -194,11 +233,13 @@ class ListenReceiver:
                     platform=self.host.client_device_context.platform,
                 )
                 return False
+            passthrough = self.host.stt_service == STTService.modulate
             self.stt_socket = (
                 GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
             )
             return True
         except Exception as error:
+            await self._drain_stt_sockets()
             await terminate_live_stt_session(
                 request.websocket,
                 self.host.state,
@@ -457,14 +498,7 @@ class ListenReceiver:
                 logger.info(json.dumps(self.vad_gate.to_json_log()))
             if not self.host.use_custom_stt:
                 await self._flush_stt_buffer(buffer, force=True)
-            try:
-                sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
-                for socket in sockets:
-                    target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
-                    if target and hasattr(target, 'drain_and_close'):
-                        await cast(Any, target).drain_and_close()
-            except Exception as error:
-                logger.error('Listen STT drain failure type=%s', type(error).__name__)
+            await self._drain_stt_sockets()
             self.host.state.active = False
 
     async def flush_multi_channel_tail(self) -> None:

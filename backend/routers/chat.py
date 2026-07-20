@@ -1,6 +1,5 @@
 import asyncio
 import binascii
-import inspect
 import json
 import tempfile
 import uuid
@@ -56,7 +55,8 @@ from utils.chat import (
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
-from utils.stt.streaming import STTService, get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
+from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
+from utils.stt.streaming import get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
 from config.stt_provider_policy import STTServingSurface
@@ -1146,18 +1146,7 @@ async def transcribe_voice_message_stream(
             if dg_socket is None:
                 raise RuntimeError('missing STT socket')
             dg_socket.finalize()
-            drain_and_close = getattr(dg_socket, 'drain_and_close', None)
-            if callable(drain_and_close):
-                drain_result = drain_and_close()
-                if inspect.isawaitable(drain_result):
-                    await drain_result
-                else:
-                    # Every serving provider exposes an async drain. Keep older
-                    # test doubles and non-serving sockets safely closed instead.
-                    logger.warning('transcribe-stream: provider lacks async tail drain')
-                    dg_socket.finish()
-            else:
-                dg_socket.finish()
+            await drain_stt_socket(dg_socket)
         except Exception:
             await close_stt_failure()
             return False
@@ -1166,14 +1155,18 @@ async def transcribe_voice_message_stream(
 
     try:
         if stt_service == STTService.parakeet:
-            dg_socket = await process_audio_parakeet(
-                stream_transcript,
-                language=stt_language,
-                sample_rate=sample_rate,
-                channels=channels,
-                model=stt_model,
-                keywords=context_keywords,
-                is_active=lambda: websocket_active,
+            dg_socket, stt_service = await connect_stt_socket_with_fallback(
+                primary_service=STTService.parakeet,
+                connect_primary=lambda: process_audio_parakeet(
+                    stream_transcript,
+                    language=stt_language,
+                    sample_rate=sample_rate,
+                    channels=channels,
+                    model=stt_model,
+                    keywords=context_keywords,
+                    is_active=lambda: websocket_active,
+                ),
+                connect_modulate=lambda: process_audio_modulate(stream_transcript, sample_rate, stt_language),
             )
         elif stt_service == STTService.modulate:
             dg_socket = await process_audio_modulate(stream_transcript, sample_rate, stt_language)
@@ -1273,6 +1266,7 @@ async def transcribe_voice_message_stream(
         pass
     except Exception as e:
         logger.error(f'transcribe-stream: error uid={uid}: {e}')
+        await close_stt_failure()
     finally:
         websocket_active = False
 
@@ -1289,9 +1283,12 @@ async def transcribe_voice_message_stream(
 
         if dg_socket and not stt_drained:
             try:
-                dg_socket.finish()
+                await drain_stt_socket(dg_socket)
             except Exception:
-                pass
+                try:
+                    dg_socket.finish()
+                except Exception:
+                    pass
 
         # Signal sender task to drain and stop, then wait for it
         loop.call_soon_threadsafe(segment_queue.put_nowait, _SENTINEL)

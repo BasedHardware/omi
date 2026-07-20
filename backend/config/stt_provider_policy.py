@@ -121,10 +121,16 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
 # Defaults are also policy-owned so a deployment fallback cannot drift from the
 # providers approved above. A deployment's literal ordering is checked against
 # these values by validate-backend-runtime-env.py.
+#
+# Modulate Velma-2 is the safe primary for all surfaces: it is a managed SaaS
+# with effectively unlimited concurrency and broad language support.  Parakeet
+# is the bounded-capacity secondary. The Parakeet service owns the hard stream
+# gate (see parakeet/admission.py), so every listener converges on one cap per
+# serving pod instead of maintaining independent listener-local counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
-    STTServingSurface.STREAMING: ('parakeet', 'modulate-velma-2'),
-    STTServingSurface.PRERECORDED: ('parakeet', 'modulate-velma-2'),
-    STTServingSurface.PTT: ('parakeet', 'modulate-velma-2'),
+    STTServingSurface.STREAMING: ('modulate-velma-2', 'parakeet'),
+    STTServingSurface.PRERECORDED: ('modulate-velma-2', 'parakeet'),
+    STTServingSurface.PTT: ('modulate-velma-2', 'parakeet'),
 }
 
 # The Parakeet deployment has distinct batch and real-time models. The batch

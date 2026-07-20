@@ -880,6 +880,30 @@ def _make_chat_client():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
+    async def connect_stt_socket_with_fallback(*, primary_service, connect_primary, connect_modulate):
+        primary_socket = await connect_primary()
+        if primary_socket is not None:
+            return primary_socket, primary_service
+        fallback_socket = await connect_modulate()
+        if fallback_socket is None:
+            raise RuntimeError('all STT connections failed')
+        return fallback_socket, module.STTService.modulate
+
+    async def drain_stt_socket(socket):
+        drain = getattr(socket, 'drain_and_close', None)
+        if callable(drain):
+            result = drain()
+            if hasattr(result, '__await__'):
+                await result
+                return
+        socket.finish()
+
+    # utils.stt.streaming is intentionally stubbed for these broad router tests.
+    # Preserve the production helper's construction-time contract explicitly;
+    # its circuit and telemetry behavior have focused tests of their own.
+    module.connect_stt_socket_with_fallback = connect_stt_socket_with_fallback
+    module.drain_stt_socket = drain_stt_socket
+
     # These router tests exercise request validation and error handling, not
     # Firestore preference lookup or provider selection. Keep both boundaries
     # deterministic and aligned with the non-Deepgram serving policy.
@@ -1194,20 +1218,56 @@ class TestTranscribeStreamWebSocket:
             _cleanup_chat_client(saved)
 
     def test_ws_provider_connection_failure_closes_1011(self):
-        """If the selected provider connection fails, WebSocket should close with 1011."""
+        """If both serving provider connections fail, WebSocket should close with 1011."""
         client, module, saved = _make_chat_client()
         try:
 
             async def mock_process_audio_parakeet_fail(stream_transcript, **kwargs):
                 return None
 
+            async def mock_process_audio_modulate_fail(stream_transcript, sample_rate, language):
+                return None
+
             with patch.object(
                 module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
             ):
                 with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet_fail):
-                    with pytest.raises(Exception):
-                        with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
-                            ws.receive_json()  # Should not get here
+                    with patch.object(module, 'process_audio_modulate', side_effect=mock_process_audio_modulate_fail):
+                        with pytest.raises(Exception):
+                            with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                ws.receive_json()  # Should not get here
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_ws_parakeet_connection_failure_falls_back_before_audio(self):
+        """A failed Parakeet handshake must switch to Modulate before accepting audio."""
+        client, module, saved = _make_chat_client()
+        try:
+            fallback_socket = MagicMock()
+            fallback_socket.is_connection_dead = False
+            fallback_socket.send.return_value = True
+            fallback_socket.drain_and_close = AsyncMock()
+
+            async def mock_process_audio_parakeet_fail(stream_transcript, **kwargs):
+                return None
+
+            async def mock_process_audio_modulate(stream_transcript, sample_rate, language):
+                return fallback_socket
+
+            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(
+                    module,
+                    'get_stt_service_for_language',
+                    return_value=(module.STTService.parakeet, 'en', 'parakeet'),
+                ):
+                    with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet_fail):
+                        with patch.object(module, 'process_audio_modulate', side_effect=mock_process_audio_modulate):
+                            with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
+                                ws.send_bytes(b'\x00' * 960)
+                                ws.send_text('finalize')
+
+            fallback_socket.send.assert_called_once_with(b'\x00' * 960)
+            fallback_socket.drain_and_close.assert_awaited_once_with()
         finally:
             _cleanup_chat_client(saved)
 

@@ -32,6 +32,10 @@ def _record(event: dict[str, Any]) -> None:
 @app.websocket('/v3/stream')
 async def stream(websocket: WebSocket) -> None:
     await websocket.accept()
+    # The production Parakeet service confirms stream admission by sending a
+    # readiness frame before accepting audio. The real ParakeetWebSocketSocket
+    # waits for this frame during its startup handshake.
+    await websocket.send_json({'type': 'ready'})
     _record({'event': 'connected', 'sample_rate': websocket.query_params.get('sample_rate')})
     sent_segment = False
     try:

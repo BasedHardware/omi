@@ -27,6 +27,8 @@ ENV_IDENTITY_DEFAULTS = {
     },
 }
 
+SAFE_STT_ROUTE = 'modulate-velma-2,parakeet'
+
 
 def _load_values(path: Path) -> dict:
     loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -98,3 +100,35 @@ def test_backend_listen_helm_template_requires_image_tag():
 
     assert result.returncode != 0
     assert "image.tag is required" in result.stderr
+
+
+def test_prod_values_make_modulate_the_explicit_live_stt_primary():
+    values = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
+
+    assert _env_value(values, 'STT_SERVICE_MODELS') == SAFE_STT_ROUTE
+    assert _env_value(values, 'STT_PRERECORDED_MODEL') == SAFE_STT_ROUTE
+
+
+def test_rendered_prod_deployment_cannot_restore_parakeet_first_routing():
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm is not installed')
+
+    rendered = subprocess.run(
+        [
+            helm,
+            'template',
+            'backend-listen',
+            str(CHART_DIR),
+            '-f',
+            str(ENV_IDENTITY_DEFAULTS['prod']['values_file']),
+            '--set-string',
+            'image.tag=abc1234',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+    assert f'name: STT_SERVICE_MODELS\n              value: "{SAFE_STT_ROUTE}"' in rendered
+    assert 'value: "parakeet,modulate-velma-2"' not in rendered
