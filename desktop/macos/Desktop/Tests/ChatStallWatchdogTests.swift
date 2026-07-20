@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// CHAT-02: a stalled agent must surface "Response took too long" within the 180s
+/// CHAT-02: a stalled agent must surface "Response took too long" within the 60s
 /// send watchdog, not vanish silently.
 ///
 /// The bug: the watchdog's own `interrupt()` resumes the in-flight request with
@@ -11,7 +11,7 @@ import XCTest
 /// fix marks the watchdog-fired generation so the catch surfaces the timeout for
 /// it while a genuine user Stop stays silent.
 ///
-/// The full 180s race is a runtime path (Codex owns that proof). These lock in the
+/// The full 60s race is a runtime path (Codex owns that proof). These lock in the
 /// load-bearing decision and its wiring hermetically.
 final class ChatStallWatchdogTests: XCTestCase {
 

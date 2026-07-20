@@ -1109,7 +1109,7 @@ class ChatProvider: ObservableObject {
   private var activeChatClientTurnId: (generation: Int, id: String)?
   private var activeStopReason: (generation: Int, reason: ChatTurnStopReason)?
 
-  /// Set to a send's generation when the 180s watchdog fires for it, *before*
+  /// Set to a send's generation when the 60s watchdog fires for it, *before*
   /// the watchdog interrupts the bridge. `interrupt()` resumes the in-flight
   /// request with `BridgeError.stopped`, which the send-loop catch would
   /// otherwise treat as a silent user stop — so the catch checks this marker to
@@ -3836,7 +3836,7 @@ class ChatProvider: ObservableObject {
     }
 
     // Safety-net watchdog: if this specific send is still "in flight"
-    // 3 minutes from now, something in the bridge / stream pipeline has
+    // 60 seconds from now, something in the bridge / stream pipeline has
     // hung (commonly: stale ACP subprocess after laptop sleep emits a
     // "stray turn_end" that Swift's waitForMessage never sees). Force-
     // release isSending so the user's next query isn't silently dropped
@@ -3845,14 +3845,14 @@ class ChatProvider: ObservableObject {
     let watchdogAIMessageId = Self.messageIds(forAttemptId: turnAttemptId).assistant
     Task { [weak self] in
       do {
-        try await Task.sleep(nanoseconds: 180_000_000_000)
+        try await Task.sleep(nanoseconds: 60_000_000_000)
       } catch {
         return
       }
       guard let self else { return }
       let stillStuck = await MainActor.run { () -> Bool in
         guard self.isSending, self.sendGeneration == sendGen else { return false }
-        log("ChatProvider: send watchdog fired at 180s — bridge is stuck; force-resetting")
+        log("ChatProvider: send watchdog fired at 60s — bridge is stuck; force-resetting")
         // Mark this generation before interrupting: interrupt() resumes the
         // in-flight request with `.stopped`, and the catch below uses this
         // marker to surface the timeout instead of silently dropping the turn.
@@ -5623,7 +5623,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// The banner text to show when a turn ends with `BridgeError.stopped`.
-  /// A user-initiated Stop is silent (`nil`). But when the 180s send watchdog
+  /// A user-initiated Stop is silent (`nil`). But when the 60s send watchdog
   /// fired for the turn, the `.stopped` came from the watchdog's own interrupt —
   /// the turn timed out, so surface "Response took too long" rather than letting
   /// it vanish. Extracted so the watchdog-vs-user-stop distinction is unit-tested.

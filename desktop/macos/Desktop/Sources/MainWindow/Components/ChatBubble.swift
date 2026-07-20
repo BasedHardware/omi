@@ -958,14 +958,8 @@ enum ContentBlockGroup: Identifiable {
     return groups
   }
 
-  /// Main chat renders the agent's final answer and sub-agent entrypoints, not
-  /// the implementation log of every completed tool. An in-flight tool remains
-  /// visible as progress feedback even if its surrounding text segment already
-  /// reached a terminal streaming state; the tool's own lifecycle is the
-  /// authority. Once that tool completes or fails, only spawned-agent links
-  /// survive. When a structured `.agentSpawn` exists
-  /// for the same pill/run, hide the spawn tool call so the card is the single
-  /// entrypoint (INV-6 structured identity).
+  /// Main chat keeps a durable tool trace, so streamed answers do not appear to lose completed work.
+  /// A structured `.agentSpawn` replaces only its duplicate raw spawn call (INV-6 structured identity).
   static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
@@ -1009,16 +1003,21 @@ enum ContentBlockGroup: Identifiable {
           }
           return true
         }
-        // Keep unresolved agent links and live work together. A raw spawn can
-        // briefly precede its structured receipt while another tool (for
-        // example a web lookup) is still executing; returning early for the
-        // spawn would hide that truthful active-tool indication.
+        // Keep the complete tool trace together. A raw spawn can briefly
+        // precede its structured receipt; once that receipt arrives, hide only
+        // the duplicate raw spawn and retain every other completed, failed, or
+        // in-flight tool row as visible progress evidence.
         let unresolvedSpawnIDs = Set(spawnedAgentCalls.map(\.id))
         let visibleCalls = calls.filter { block in
           if unresolvedSpawnIDs.contains(block.id) { return true }
-          if case .toolCall(_, _, let status, _, _, _) = block {
-            return status.isInFlight
+          if let ref = block.agentOpenRef {
+            let hasStructuredSpawn =
+              ref.pillId.map { structuredSpawnKeys.contains("pill:\($0.uuidString)") }
+              ?? ref.runId.map { structuredSpawnKeys.contains("run:\($0)") }
+              ?? false
+            if hasStructuredSpawn { return false }
           }
+          if case .toolCall = block { return true }
           return false
         }
         return visibleCalls.isEmpty ? nil : .toolCalls(id: id, calls: visibleCalls)

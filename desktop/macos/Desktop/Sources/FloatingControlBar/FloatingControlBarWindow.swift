@@ -784,13 +784,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   func performSpacesTransitionGrowIn() {
     updateNotchIslandState()
     guard notchModeEnabled, isVisible else { return }
-    // The panel already lives on every Space (.canJoinAllSpaces), so switching
-    // Spaces must NOT replay the reveal "pop" — doing so re-zoomed the island on
-    // every desktop/app switch, which felt excessive. A Space switch is not a
-    // display change either: preserving the existing frame keeps a user-resized
-    // chat width and height intact. Screen-parameter and window-screen callbacks
-    // remain responsible for the rare case that display geometry really changed.
+    // Do not replay the reveal "pop" on Space changes; preserve chat size while
+    // non-chat surfaces recover their canonical frame from this callback.
     state.notchRevealProgress = 1
+    guard !state.showingAIConversation else { return }
+    let targetFrame = defaultFrameForCurrentState()
+    guard !Self.framesEquivalent(frame, targetFrame) else { return }
+    resizeToFrame(targetFrame, makeResizable: styleMask.contains(.resizable), animated: false)
   }
 
   private func defaultFrameForCurrentState() -> NSRect {

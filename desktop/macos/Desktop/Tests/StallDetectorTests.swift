@@ -32,7 +32,7 @@ final class StallDetectorTests: XCTestCase {
   }
 
   func testGapWellBeyondStalledStaysStalled() async {
-    // A persistent stall (e.g. the full 180s until ChatProvider's send watchdog
+    // A persistent stall (e.g. the full 60s until ChatProvider's send watchdog
     // fires, CHAT-02) must remain .stalled, not decay back to running.
     let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
     _ = await detector.tick(atMs: thresholds.stalledGapMs)

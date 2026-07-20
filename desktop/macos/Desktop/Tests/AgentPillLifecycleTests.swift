@@ -738,6 +738,43 @@ import XCTest
     XCTAssertEqual(window.frame, userResizedFrame)
   }
 
+  func testSpacesTransitionRestoresIdleNotchFrameAfterDrift() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    window.makeKeyAndOrderFront(nil)
+    window.performSpacesTransitionGrowIn()
+    let expectedFrame = window.frame
+    let driftedFrame = expectedFrame.offsetBy(dx: 37, dy: -29)
+    window.setFrame(driftedFrame, display: false)
+
+    window.performSpacesTransitionGrowIn()
+
+    XCTAssertEqual(window.frame, expectedFrame)
+  }
+
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
     let windowSource = try floatingControlBarWindowSource()
 
