@@ -12,17 +12,14 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from desktop_release_metadata import fail, parse_metadata, update_metadata  # noqa: E402
 
-
 KEY_RE = re.compile(r"^[A-Za-z0-9._:+-]{1,160}$")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 STATES = frozenset({"pending", "queued", "running", "failed", "qualified", "dispatch_failed"})
-RUNNING_CLAIM_LEASE = timedelta(hours=2)
 
 
 def _string(value: str, label: str, *, pattern: re.Pattern[str] | None = None, limit: int = 0) -> str:
@@ -79,26 +76,6 @@ def _current_attempt(metadata: dict[str, str]) -> int:
     return int(value)
 
 
-def _claim_is_stale(metadata: dict[str, str], *, now: str) -> bool:
-    """Return whether a persisted running claim can safely be recovered.
-
-    The trusted workflow's per-release GitHub Actions concurrency group is the
-    authoritative mutual-exclusion boundary. A later workflow can therefore
-    reclaim a lease only after the earlier workflow is no longer running and
-    this bounded timeout has elapsed.
-    """
-    updated_at = _string(
-        metadata.get("qualificationDispatchUpdatedAt", ""), "existing updated_at", pattern=TIMESTAMP_RE
-    )
-    try:
-        claimed_at = datetime.strptime(updated_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        now_value = _string(now, "updated_at", pattern=TIMESTAMP_RE)
-        current_time = datetime.strptime(now_value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except ValueError as exc:
-        fail(f"existing qualification dispatch timestamp is invalid: {exc}")
-    return current_time - claimed_at >= RUNNING_CLAIM_LEASE
-
-
 def claim(
     body: str,
     *,
@@ -116,13 +93,13 @@ def claim(
         fail(f"unknown existing qualification dispatch state: {current_state}")
     if bool(current_state) != bool(current_key):
         fail("existing qualification dispatch claim is incomplete")
-    reclaimed_stale_claim = False
+    reclaimed_orphaned_claim = False
     if current_state == "running":
-        if not _claim_is_stale(metadata, now=updated_at):
-            if current_key == key:
-                return body, False, "dispatch key already running"
-            return body, False, "candidate already running under another dispatch key"
-        reclaimed_stale_claim = True
+        # Every caller is inside the workflow's non-cancelling, per-release
+        # concurrency group. Reaching this claim means the previous runner has
+        # stopped, so its lingering running record is orphaned and may be
+        # reclaimed immediately without introducing a second active runner.
+        reclaimed_orphaned_claim = True
     elif current_key == key and current_state in {"failed", "qualified"}:
         return body, False, f"dispatch key already {current_state}"
     elif current_key == key and current_state in {"pending", "queued", "dispatch_failed"}:
@@ -142,14 +119,14 @@ def claim(
         attempt=attempt,
         updated_at=updated_at,
         diagnostic=(
-            "trusted qualification runner reclaimed an expired dispatch claim"
-            if reclaimed_stale_claim
+            "trusted qualification runner reclaimed an orphaned dispatch claim"
+            if reclaimed_orphaned_claim
             else "trusted qualification runner claimed this dispatch key"
         ),
         run_id=run_id,
         run_url=run_url,
     )
-    return update_metadata(body, values), True, "reclaimed stale claim" if reclaimed_stale_claim else "claimed"
+    return update_metadata(body, values), True, "reclaimed orphaned claim" if reclaimed_orphaned_claim else "claimed"
 
 
 def complete(body: str, *, key: str, updated_at: str, passed: bool) -> str:

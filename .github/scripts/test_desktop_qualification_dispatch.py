@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).with_name("desktop_qualification_dispatch.py")
 SPEC = importlib.util.spec_from_file_location("desktop_qualification_dispatch", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
@@ -31,7 +30,7 @@ def candidate_body(extra: str = "") -> str:
     )
 
 
-def test_serialized_runner_claims_can_only_start_one_qualification_run() -> None:
+def test_serialized_successor_reclaims_an_orphaned_running_claim_immediately() -> None:
     running, should_run, reason = dispatch.claim(
         candidate_body(),
         key=KEY,
@@ -42,17 +41,18 @@ def test_serialized_runner_claims_can_only_start_one_qualification_run() -> None
     )
     assert should_run and reason == "claimed"
 
-    duplicate, should_run, reason = dispatch.claim(
+    reclaimed, should_run, reason = dispatch.claim(
         running,
         key=KEY,
-        updated_at=NOW,
+        updated_at="2026-07-20T10:00:01Z",
         run_id="43",
         run_url="https://github.com/BasedHardware/omi/actions/runs/43",
         allow_retry=False,
     )
-    assert duplicate == running
-    assert not should_run
-    assert reason == "dispatch key already running"
+    assert should_run
+    assert reason == "reclaimed orphaned claim"
+    assert "qualificationDispatchAttempt: 2" in reclaimed
+    assert "qualificationDispatchRunId: 43" in reclaimed
 
 
 def test_terminal_failure_requires_an_explicit_new_retry_nonce() -> None:
@@ -108,53 +108,6 @@ def test_legacy_dispatch_failure_still_allows_its_same_key_to_claim_once() -> No
         allow_retry=False,
     )
     assert should_run and reason == "claimed"
-    duplicate, should_run, _ = dispatch.claim(
-        running,
-        key=KEY,
-        updated_at=NOW,
-        run_id="45",
-        run_url="https://github.com/BasedHardware/omi/actions/runs/45",
-        allow_retry=False,
-    )
-    assert duplicate == running
-    assert not should_run
-
-
-def test_expired_running_claim_can_be_recovered_only_after_the_bounded_lease() -> None:
-    running, should_run, _ = dispatch.claim(
-        candidate_body(),
-        key=KEY,
-        updated_at=NOW,
-        run_id="42",
-        run_url="https://github.com/BasedHardware/omi/actions/runs/42",
-        allow_retry=False,
-    )
-    assert should_run
-
-    unchanged, should_run, reason = dispatch.claim(
-        running,
-        key=KEY,
-        updated_at="2026-07-20T11:59:59Z",
-        run_id="43",
-        run_url="https://github.com/BasedHardware/omi/actions/runs/43",
-        allow_retry=False,
-    )
-    assert unchanged == running
-    assert not should_run
-    assert reason == "dispatch key already running"
-
-    recovered, should_run, reason = dispatch.claim(
-        running,
-        key=KEY,
-        updated_at="2026-07-20T12:00:00Z",
-        run_id="44",
-        run_url="https://github.com/BasedHardware/omi/actions/runs/44",
-        allow_retry=False,
-    )
-    assert should_run
-    assert reason == "reclaimed stale claim"
-    assert "qualificationDispatchAttempt: 2" in recovered
-    assert "qualificationDispatchRunId: 44" in recovered
 
 
 def test_unknown_existing_dispatch_state_is_rejected() -> None:
@@ -174,11 +127,11 @@ def test_unknown_existing_dispatch_state_is_rejected() -> None:
         raise AssertionError("unknown existing dispatch state should fail closed")
 
 
-def test_expired_claim_from_another_dispatch_key_does_not_block_recovery() -> None:
+def test_orphaned_claim_from_another_dispatch_key_does_not_block_recovery() -> None:
     running, should_run, _ = dispatch.claim(
         candidate_body(),
         key="manual:v0.12.64+12064-macos:retry-1",
-        updated_at="2026-07-20T08:00:00Z",
+        updated_at=NOW,
         run_id="42",
         run_url="https://github.com/BasedHardware/omi/actions/runs/42",
         allow_retry=True,
@@ -188,13 +141,13 @@ def test_expired_claim_from_another_dispatch_key_does_not_block_recovery() -> No
     recovered, should_run, reason = dispatch.claim(
         running,
         key=KEY,
-        updated_at="2026-07-20T10:00:00Z",
+        updated_at="2026-07-20T10:00:01Z",
         run_id="43",
         run_url="https://github.com/BasedHardware/omi/actions/runs/43",
         allow_retry=False,
     )
     assert should_run
-    assert reason == "reclaimed stale claim"
+    assert reason == "reclaimed orphaned claim"
     assert f"qualificationDispatchKey: {KEY}" in recovered
 
 
@@ -215,7 +168,7 @@ def test_dispatch_status_cannot_modify_factual_qualification_evidence() -> None:
     assert "qualificationDispatchState: qualified" in qualified
 
 
-def test_invalid_existing_running_claim_timestamp_is_rejected() -> None:
+def test_orphaned_claim_recovery_does_not_depend_on_the_predecessor_timestamp() -> None:
     body = candidate_body(
         "qualificationDispatchState: running\n"
         f"qualificationDispatchKey: {KEY}\n"
@@ -223,28 +176,25 @@ def test_invalid_existing_running_claim_timestamp_is_rejected() -> None:
         "qualificationDispatchUpdatedAt: not-a-timestamp\n"
         "qualificationDispatchDiagnostic: runner claimed this key"
     )
-    try:
-        dispatch.claim(
-            body,
-            key=KEY,
-            updated_at="2026-07-20T12:00:00Z",
-            run_id="43",
-            run_url="https://github.com/BasedHardware/omi/actions/runs/43",
-            allow_retry=False,
-        )
-    except SystemExit as exc:
-        assert "existing updated_at" in str(exc)
-    else:
-        raise AssertionError("invalid running claim timestamp should fail closed")
+    reclaimed, should_run, reason = dispatch.claim(
+        body,
+        key=KEY,
+        updated_at="2026-07-20T10:00:01Z",
+        run_id="43",
+        run_url="https://github.com/BasedHardware/omi/actions/runs/43",
+        allow_retry=False,
+    )
+    assert should_run
+    assert reason == "reclaimed orphaned claim"
+    assert "qualificationDispatchUpdatedAt: 2026-07-20T10:00:01Z" in reclaimed
 
 
 if __name__ == "__main__":
-    test_serialized_runner_claims_can_only_start_one_qualification_run()
+    test_serialized_successor_reclaims_an_orphaned_running_claim_immediately()
     test_terminal_failure_requires_an_explicit_new_retry_nonce()
     test_legacy_dispatch_failure_still_allows_its_same_key_to_claim_once()
-    test_expired_running_claim_can_be_recovered_only_after_the_bounded_lease()
     test_unknown_existing_dispatch_state_is_rejected()
-    test_expired_claim_from_another_dispatch_key_does_not_block_recovery()
+    test_orphaned_claim_from_another_dispatch_key_does_not_block_recovery()
     test_dispatch_status_cannot_modify_factual_qualification_evidence()
-    test_invalid_existing_running_claim_timestamp_is_rejected()
+    test_orphaned_claim_recovery_does_not_depend_on_the_predecessor_timestamp()
     print("desktop qualification dispatch tests OK")
