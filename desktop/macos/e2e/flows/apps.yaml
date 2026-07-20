@@ -4,6 +4,8 @@ tier: manual
 description: Apps/Integrations marketplace flow — browse apps, filter by category, search, view app details
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Connections/AppleEventKitReaderService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Connections/ImportConnector.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
   # S5b is the only place either of these is exercised where it can actually fail. `AppsPage`
   # presents its connector sheet with `.dismissableSheet`, which mounts a `ShellModalScrim`; Apps
@@ -22,7 +24,7 @@ preconditions:
 steps:
   - id: S1
     name: Navigate to Apps page
-    do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8; the sidebar this step used to name no longer exists). Verify the marketplace loads with app cards, search bar, category filter, and Installed/Create App buttons."
+do: "Click the Apps pill in the top bar (accessibility identifier top-navigation-8; the sidebar this step used to name no longer exists). Verify the marketplace loads with app cards, search bar, category filter, and Installed/Create App buttons, including the Apple Calendar, Apple Reminders, and Apple Notes Connections."
     expect:
       interactive_count: { min: 10 }
       text_visible:
