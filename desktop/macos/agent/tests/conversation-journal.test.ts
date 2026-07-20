@@ -405,6 +405,107 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
+  it("keeps one logical exchange durable across a lost terminal acknowledgement and relaunch", () => {
+    const stateDir = newStateDir();
+    const store = new SqliteAgentStore({ stateDir, reconcileOnOpen: false });
+    const fixture = insertSurface(store, "main_chat", "chat", "lost-terminal-ack");
+    const continuityKey = "logical-turn:lost-terminal-ack";
+    const userTurnId = `turn:${continuityKey}:user`;
+    const assistantTurnId = `turn:${continuityKey}:assistant`;
+    const run = store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_lost_terminal_ack",
+      clientId: "main-chat",
+      requestId: continuityKey,
+      status: "succeeded",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      attemptId: "att_lost_terminal_ack",
+      runId: run.runId,
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "fake",
+      adapterInstanceId: "fake:lost-terminal-ack",
+    });
+    const exchange = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turns: [
+        {
+          turnId: userTurnId,
+          role: "user" as const,
+          surfaceKind: "main_chat",
+          origin: "typed_chat" as const,
+          status: "completed" as const,
+          content: "What survived the retry?",
+          contentBlocks: [{ type: "text" as const, id: "lost-ack:user", text: "What survived the retry?" }],
+          createdAtMs: 10,
+        },
+        {
+          turnId: assistantTurnId,
+          role: "assistant" as const,
+          surfaceKind: "main_chat",
+          origin: "typed_chat" as const,
+          status: "streaming" as const,
+          content: "",
+          contentBlocks: [],
+          producingRunId: run.runId,
+          producingAttemptId: attempt.attemptId,
+          createdAtMs: 11,
+        },
+      ],
+    };
+
+    expect(recordJournalExchange(store, exchange).createdTurns).toHaveLength(2);
+    // The kernel committed before the caller lost its terminal RPC response.
+    // Replaying the same stable logical IDs is the bounded retry, not another write.
+    expect(recordJournalExchange(store, exchange).createdTurns).toHaveLength(0);
+    const terminalization = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: assistantTurnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept" as const,
+      content: "The canonical user and assistant turns.",
+      replaceContentBlocks: [{
+        type: "text" as const,
+        id: "lost-ack:assistant",
+        text: "The canonical user and assistant turns.",
+      }],
+      nowMs: 12,
+    };
+    void terminalizeJournalTurn(store, terminalization); // terminal response lost after durable commit
+    expect(terminalizeJournalTurn(store, { ...terminalization, nowMs: 13 })).toMatchObject({
+      turnId: assistantTurnId,
+      status: "completed",
+    });
+    store.close();
+
+    const relaunched = new SqliteAgentStore({ stateDir, reconcileOnOpen: false });
+    // `listJournalTurns` is an append-only revision replay (the streaming
+    // assistant revision is intentionally followed by its terminal revision).
+    // Durable logical rows live in `conversation_turns`; replay consumers
+    // upsert by turnId and therefore must still observe exactly one pair.
+    expect(relaunched.allRows(
+      "SELECT turn_id, role, status FROM conversation_turns WHERE conversation_id = ? ORDER BY turn_id",
+      [fixture.conversationId],
+    )).toEqual([
+      { turn_id: assistantTurnId, role: "assistant", status: "completed" },
+      { turn_id: userTurnId, role: "user", status: "completed" },
+    ]);
+    const replay = listJournalTurns(relaunched, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).turns;
+    const canonicalReplay = new Map(replay.map((turn) => [turn.turnId, turn]));
+    expect(canonicalReplay.size).toBe(2);
+    expect(canonicalReplay.get(userTurnId)).toMatchObject({ role: "user", status: "completed" });
+    expect(canonicalReplay.get(assistantTurnId)).toMatchObject({ role: "assistant", status: "completed" });
+    relaunched.close();
+  });
+
   it("rejects stale, unknown, and nonterminal attempt proofs without mutating the turn", () => {
     const fixture = newSurface("task_chat", "task", "terminal-authority");
     const run = fixture.store.insertRun({
