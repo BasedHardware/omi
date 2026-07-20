@@ -12,6 +12,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -21,15 +22,7 @@ from desktop_release_metadata import fail, parse_metadata, update_metadata  # no
 KEY_RE = re.compile(r"^[A-Za-z0-9._:+-]{1,160}$")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 STATES = frozenset({"pending", "queued", "running", "failed", "qualified", "dispatch_failed"})
-STATE_KEYS = {
-    "qualificationDispatchState",
-    "qualificationDispatchKey",
-    "qualificationDispatchAttempt",
-    "qualificationDispatchUpdatedAt",
-    "qualificationDispatchDiagnostic",
-    "qualificationDispatchRunId",
-    "qualificationDispatchRunUrl",
-}
+RUNNING_CLAIM_LEASE = timedelta(hours=2)
 
 
 def _string(value: str, label: str, *, pattern: re.Pattern[str] | None = None, limit: int = 0) -> str:
@@ -86,49 +79,24 @@ def _current_attempt(metadata: dict[str, str]) -> int:
     return int(value)
 
 
-def initialize(body: str, *, key: str, updated_at: str, diagnostic: str) -> tuple[str, bool]:
-    """Record a retryable dispatch intent without resetting an existing claim."""
-    metadata = _metadata(body)
-    state = metadata.get("qualificationDispatchState", "")
-    current_key = metadata.get("qualificationDispatchKey", "")
-    if state and current_key != key:
-        return body, False
-    if state in {"queued", "running", "failed", "qualified"}:
-        return body, False
-    attempt = _current_attempt(metadata) if state else 0
-    return body if state == "pending" else update_metadata(
-        body,
-        _values(state="pending", key=key, attempt=attempt, updated_at=updated_at, diagnostic=diagnostic),
-    ), state != "pending"
+def _claim_is_stale(metadata: dict[str, str], *, now: str) -> bool:
+    """Return whether a persisted running claim can safely be recovered.
 
-
-def mark(
-    body: str,
-    *,
-    state: str,
-    key: str,
-    attempt: int,
-    updated_at: str,
-    diagnostic: str,
-) -> tuple[str, bool]:
-    """Update a Codemagic-owned pending/queued/dispatch-failure status safely."""
-    metadata = _metadata(body)
-    current_state = metadata.get("qualificationDispatchState", "")
-    if metadata.get("qualificationDispatchKey", "") != key:
-        return body, False
-    if state not in {"pending", "queued", "dispatch_failed"}:
-        fail("Codemagic may only write pending, queued, or dispatch_failed")
-    if state == "pending":
-        if current_state != "dispatch_failed":
-            return body, False
-    elif current_state != "pending":
-        # A concurrently observed queued/running/terminal workflow is more
-        # authoritative than a delayed Codemagic delivery result.
-        return body, False
-    return update_metadata(
-        body,
-        _values(state=state, key=key, attempt=attempt, updated_at=updated_at, diagnostic=diagnostic),
-    ), True
+    The trusted workflow's per-release GitHub Actions concurrency group is the
+    authoritative mutual-exclusion boundary. A later workflow can therefore
+    reclaim a lease only after the earlier workflow is no longer running and
+    this bounded timeout has elapsed.
+    """
+    updated_at = _string(
+        metadata.get("qualificationDispatchUpdatedAt", ""), "existing updated_at", pattern=TIMESTAMP_RE
+    )
+    try:
+        claimed_at = datetime.strptime(updated_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        now_value = _string(now, "updated_at", pattern=TIMESTAMP_RE)
+        current_time = datetime.strptime(now_value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        fail(f"existing qualification dispatch timestamp is invalid: {exc}")
+    return current_time - claimed_at >= RUNNING_CLAIM_LEASE
 
 
 def claim(
@@ -140,17 +108,28 @@ def claim(
     run_url: str,
     allow_retry: bool,
 ) -> tuple[str, bool, str]:
-    """Atomically-at-workflow-boundary claim one candidate qualification run."""
+    """Claim one qualification run inside the authoritative workflow serialiser."""
     metadata = _metadata(body)
     current_state = metadata.get("qualificationDispatchState", "")
     current_key = metadata.get("qualificationDispatchKey", "")
-    if current_key == key and current_state in {"running", "failed", "qualified"}:
+    if current_state and current_state not in STATES:
+        fail(f"unknown existing qualification dispatch state: {current_state}")
+    if bool(current_state) != bool(current_key):
+        fail("existing qualification dispatch claim is incomplete")
+    reclaimed_stale_claim = False
+    if current_state == "running":
+        if not _claim_is_stale(metadata, now=updated_at):
+            if current_key == key:
+                return body, False, "dispatch key already running"
+            return body, False, "candidate already running under another dispatch key"
+        reclaimed_stale_claim = True
+    elif current_key == key and current_state in {"failed", "qualified"}:
         return body, False, f"dispatch key already {current_state}"
-    if current_key == key and current_state in {"pending", "queued", "dispatch_failed"}:
-        # A timeout can be ambiguous: the GitHub dispatch may exist even when
-        # Codemagic did not receive confirmation. Claim it once it arrives.
+    elif current_key == key and current_state in {"pending", "queued", "dispatch_failed"}:
+        # Older candidates may retain this observational state. The runner's
+        # concurrency gate is authoritative, so it can claim them once.
         pass
-    elif current_state in {"pending", "queued", "running"}:
+    elif current_state in {"pending", "queued"}:
         return body, False, f"candidate already {current_state} under another dispatch key"
     elif current_state == "qualified":
         return body, False, "candidate already has completed qualification"
@@ -162,17 +141,24 @@ def claim(
         key=key,
         attempt=attempt,
         updated_at=updated_at,
-        diagnostic="trusted qualification runner claimed this dispatch key",
+        diagnostic=(
+            "trusted qualification runner reclaimed an expired dispatch claim"
+            if reclaimed_stale_claim
+            else "trusted qualification runner claimed this dispatch key"
+        ),
         run_id=run_id,
         run_url=run_url,
     )
-    return update_metadata(body, values), True, "claimed"
+    return update_metadata(body, values), True, "reclaimed stale claim" if reclaimed_stale_claim else "claimed"
 
 
 def complete(body: str, *, key: str, updated_at: str, passed: bool) -> str:
     """Write the terminal runner state without editing factual qualification keys."""
     metadata = _metadata(body)
-    if metadata.get("qualificationDispatchKey", "") != key or metadata.get("qualificationDispatchState", "") != "running":
+    if (
+        metadata.get("qualificationDispatchKey", "") != key
+        or metadata.get("qualificationDispatchState", "") != "running"
+    ):
         fail("only the active trusted dispatch key may complete qualification")
     return update_metadata(
         body,
@@ -200,18 +186,12 @@ def _write(path: Path, body: str, payload: dict[str, object]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("initialize", "mark", "claim", "complete"):
+    for command in ("claim", "complete"):
         sub = subparsers.add_parser(command)
         sub.add_argument("--input", required=True, type=Path)
         sub.add_argument("--output", required=True, type=Path)
         sub.add_argument("--key", required=True)
         sub.add_argument("--updated-at", required=True)
-    initialize_parser = subparsers.choices["initialize"]
-    initialize_parser.add_argument("--diagnostic", required=True)
-    mark_parser = subparsers.choices["mark"]
-    mark_parser.add_argument("--state", required=True)
-    mark_parser.add_argument("--attempt", required=True, type=int)
-    mark_parser.add_argument("--diagnostic", required=True)
     claim_parser = subparsers.choices["claim"]
     claim_parser.add_argument("--run-id", required=True)
     claim_parser.add_argument("--run-url", required=True)
@@ -220,20 +200,7 @@ def main() -> int:
     complete_parser.add_argument("--passed", required=True, choices=("true", "false"))
     args = parser.parse_args()
     body = args.input.read_text(encoding="utf-8")
-    if args.command == "initialize":
-        result, changed = initialize(body, key=args.key, updated_at=args.updated_at, diagnostic=args.diagnostic)
-        _write(args.output, result, {"changed": changed})
-    elif args.command == "mark":
-        result, changed = mark(
-            body,
-            state=args.state,
-            key=args.key,
-            attempt=args.attempt,
-            updated_at=args.updated_at,
-            diagnostic=args.diagnostic,
-        )
-        _write(args.output, result, {"changed": changed})
-    elif args.command == "claim":
+    if args.command == "claim":
         result, should_run, reason = claim(
             body,
             key=args.key,

@@ -98,6 +98,14 @@ def approval_identities(comments: list[dict], tag: str, source_sha: str, expires
     return approvers
 
 
+def incident_is_open(incident: dict, incident_id: str) -> bool:
+    """Accept GitHub's documented state spelling regardless of casing."""
+    return (
+        str(incident.get("state") or "").strip().lower() == "open"
+        and str(incident.get("number")) == str(incident_id)
+    )
+
+
 def validate(args: argparse.Namespace) -> dict:
     if args.confirm != "emergency-promote-beta":
         fail("confirm must equal emergency-promote-beta")
@@ -156,7 +164,7 @@ def validate(args: argparse.Namespace) -> dict:
     )
     if source_gate is None:
         fail("normal Desktop Swift Build & Tests source gate did not pass for the immutable source SHA")
-    if incident.get("state") != "open" or str(incident.get("number")) != str(args.incident_id):
+    if not incident_is_open(incident, args.incident_id):
         fail("incident must exist and remain open")
     approvers = approval_identities(comments, args.release_tag, args.source_sha.lower(), args.expires_at)
     signed_smoke_asset = release_asset(release, {"desktop-smoke-result.json"})
