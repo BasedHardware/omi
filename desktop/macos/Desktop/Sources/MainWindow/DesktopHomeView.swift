@@ -440,6 +440,8 @@ struct DesktopHomeView: View {
       // Register bundled Geist / Geist Mono fonts (idempotent; kept out of the
       // frozen OmiApp.swift per the product-file line-count ratchet).
       OmiFontRegistration.registerAll()
+      // Drive the notch "moments" (live receipts + conversation-end) off real state.
+      NotchMomentsCoordinator.shared.start(appState: appState)
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )
