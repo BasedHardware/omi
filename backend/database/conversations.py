@@ -905,6 +905,69 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
     return _update_segment_text(transaction)
 
 
+def bulk_assign_segment_speakers(
+    uid: str,
+    conversation_id: str,
+    segment_ids: List[str],
+    assign_type: str,
+    value: Optional[str],
+    *,
+    firestore_client: Any = None,
+) -> str:
+    """
+    Assign is_user / person_id to multiple segments by id in a single transaction.
+
+    Mirrors update_conversation_segment_text: the read-modify-write runs inside a Firestore
+    transaction and applies each change by segment id. The bulk-assign endpoint previously read the
+    whole transcript_segments array outside any transaction, mutated it in memory, and overwrote the
+    array wholesale via update_conversation_segments — so a concurrent segment edit that committed in
+    between was silently dropped (the lose-update hazard update_conversation_segment_text's docstring
+    describes). Lock enforcement stays with the caller (_get_valid_conversation_by_id), so it is not
+    re-checked here.
+
+    Returns 'ok' on success, 'not_found' if the conversation is missing, or 'segment_not_found' if
+    none of segment_ids were present.
+    """
+    target_ids = set(segment_ids)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _assign(transaction) -> str:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
+            return 'not_found'
+
+        conversation_data = _prepare_conversation_for_read(doc_snapshot.to_dict(), uid)
+        if not conversation_data:
+            return 'not_found'
+
+        segments = conversation_data.get('transcript_segments', [])
+        found = False
+        for segment in segments:
+            if not isinstance(segment, dict) or segment.get('id') not in target_ids:
+                continue
+            if assign_type == 'is_user':
+                segment['is_user'] = bool(value) if value is not None else False
+                segment['person_id'] = None
+                found = True
+            elif assign_type == 'person_id':
+                segment['is_user'] = False
+                segment['person_id'] = value
+                found = True
+
+        if not found:
+            return 'segment_not_found'
+
+        doc_level = conversation_data.get('data_protection_level', 'standard')
+        prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return 'ok'
+
+    return _assign(transaction)
+
+
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     """
     Delete all photos in a conversation's photos subcollection.
