@@ -1,3 +1,4 @@
+import GRDB
 import XCTest
 
 @testable import Omi_Computer
@@ -36,6 +37,68 @@ final class BrowserGoogleSessionTests: XCTestCase {
         networkDir.appendingPathComponent("Cookies").path,
         profile2.appendingPathComponent("Cookies").path,
       ])
+  }
+
+  func testConfigsOnlyReadKeychainForRecentMainProfilesWithGoogleSessions() throws {
+    let now = Date(timeIntervalSince1970: 1_784_563_200)
+    let chrome = try target("com.google.Chrome")
+    let chromeRoot = chrome.profileRoot(homeDirectory: tempRoot)
+    let chromeDefault = try makeCookieDatabase(
+      in: chromeRoot, profile: "Default", host: ".google.com", name: "SID")
+    let chromeMain = try makeCookieDatabase(
+      in: chromeRoot, profile: "Profile 2", host: ".google.com", name: "SID")
+    try writeLocalState(
+      to: chromeRoot,
+      profile: [
+        "last_used": "Profile 2",
+        "info_cache": [
+          "Default": ["active_time": now.timeIntervalSince1970, "gaia_id": "default-account"],
+          "Profile 2": [
+            "active_time": (now.timeIntervalSince1970 + 11_644_473_600) * 1_000_000,
+            "gaia_id": "main-account",
+          ],
+        ],
+      ])
+
+    let brave = try target("com.brave.Browser")
+    let braveRoot = brave.profileRoot(homeDirectory: tempRoot)
+    _ = try makeCookieDatabase(in: braveRoot, profile: "Default", host: ".example.com", name: "SID")
+    try writeLocalState(
+      to: braveRoot,
+      profile: [
+        "last_active_profiles": ["Default"],
+        "info_cache": ["Default": ["active_time": now.timeIntervalSince1970]],
+      ])
+
+    let arc = try target("company.thebrowser.Browser")
+    let arcRoot = arc.profileRoot(homeDirectory: tempRoot)
+    _ = try makeCookieDatabase(in: arcRoot, profile: "Default", host: ".google.com", name: "SID")
+    try writeLocalState(
+      to: arcRoot,
+      profile: [
+        "info_cache": ["Default": ["active_time": now.addingTimeInterval(-31 * 86_400).timeIntervalSince1970]]
+      ])
+
+    let vivaldi = try target("com.vivaldi.Vivaldi")
+    let vivaldiRoot = vivaldi.profileRoot(homeDirectory: tempRoot)
+    let vivaldiCookie = try makeCookieDatabase(
+      in: vivaldiRoot, profile: "Default", host: "mail.gmail.com", name: "__Secure-1PSID")
+    try FileManager.default.setAttributes([.modificationDate: now], ofItemAtPath: vivaldiCookie.path)
+
+    var keychainReads: [String] = []
+    let configs = BrowserGoogleSession.configsForPython(
+      logPrefix: "test",
+      targets: [chrome, brave, arc, vivaldi],
+      homeDirectory: tempRoot,
+      now: now
+    ) { service, _ in
+      keychainReads.append(service)
+      return "password"
+    }
+
+    XCTAssertEqual(keychainReads, ["Chrome Safe Storage", "Vivaldi Safe Storage"])
+    XCTAssertEqual(configs.map { $0["db_path"] }, [chromeMain.path, vivaldiCookie.path])
+    XCTAssertFalse(configs.contains { $0["db_path"] == chromeDefault.path })
   }
 
   func testSafeStorageIdentitiesMatchBrowserItems() throws {
@@ -112,5 +175,36 @@ final class BrowserGoogleSessionTests: XCTestCase {
       0,
       String(data: result.stderr, encoding: .utf8) ?? "Python cookie check failed"
     )
+  }
+
+  private func target(_ bundleIdentifier: String) throws -> BrowserAutomationTarget {
+    try XCTUnwrap(
+      BrowserAutomationTargetResolver.knownTargets.first { $0.bundleIdentifier == bundleIdentifier })
+  }
+
+  private func writeLocalState(to root: URL, profile: [String: Any]) throws {
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let data = try JSONSerialization.data(withJSONObject: ["profile": profile])
+    try data.write(to: root.appendingPathComponent("Local State"))
+  }
+
+  private func makeCookieDatabase(
+    in root: URL,
+    profile: String,
+    host: String,
+    name: String
+  ) throws -> URL {
+    let network = root.appendingPathComponent(profile).appendingPathComponent("Network")
+    try FileManager.default.createDirectory(at: network, withIntermediateDirectories: true)
+    let url = network.appendingPathComponent("Cookies")
+    let database = try DatabaseQueue(path: url.path)
+    try database.write { db in
+      try db.create(table: "cookies") { table in
+        table.column("host_key", .text).notNull()
+        table.column("name", .text).notNull()
+      }
+      try db.execute(sql: "INSERT INTO cookies (host_key, name) VALUES (?, ?)", arguments: [host, name])
+    }
+    return url
   }
 }
