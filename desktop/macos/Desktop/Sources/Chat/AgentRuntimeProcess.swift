@@ -2612,6 +2612,15 @@ actor AgentRuntimeProcess {
         }
       }
       log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
+      // Seed OPENAI_API_KEY from the user's BYOK key so Codex can run without
+      // a separate `codex login`; the bridge's per-adapter allowlist forwards
+      // it to the Codex subprocess only.
+      if (env["OPENAI_API_KEY"]?.isEmpty ?? true),
+        !byok.suppressedProviders.contains(.openai),
+        let openAIKey = APIKeyService.byokKey(.openai)
+      {
+        env["OPENAI_API_KEY"] = openAIKey
+      }
     }
 
     let requiresPiMonoCredentials =
@@ -2749,14 +2758,15 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
+    // Curated dirs shared with LocalAgentProviderDetector so the bridge and
+    // the detector never disagree about whether an agent is available. Binary
+    // discovery is whitelist-only — never the inherited PATH, since whatever
+    // is found here gets launched as a child process.
     let adapterSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
-    let trustedPathDirs = [
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+    let pathDirs = existingPath.split(separator: ":").map(String.init)
     var pathElements: [String] = []
-    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterSearchDirs {
+    for path in pathDirs + adapterSearchDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }
@@ -2785,6 +2795,24 @@ actor AgentRuntimeProcess {
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
+
+    // Codex runs through the codex-acp stdio bridge. It is a plain stdio ACP
+    // server (no `acp` subcommand). When present, launch it non-interactively:
+    // NO_BROWSER stops it from trying to open a ChatGPT login in a headless run,
+    // and agent-full-access sets approvalPolicy=never so codex-acp never emits
+    // the permission requests that the constrained external policy would reject.
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let codexAcp = firstExecutable(named: "codex-acp", in: adapterSearchDirs)
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.shellQuote(codexAcp)
+      if env["NO_BROWSER"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+        env["NO_BROWSER"] = "1"
+      }
+      if env["INITIAL_AGENT_MODE"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+        env["INITIAL_AGENT_MODE"] = "agent-full-access"
+      }
+    }
+  }
 
     if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
       let codex = firstExecutable(named: "codex", in: adapterSearchDirs)

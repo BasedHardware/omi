@@ -33,7 +33,9 @@ describe("adapter selection and activation", () => {
     expect(adapterIsActivated("hermes", { OMI_HERMES_ADAPTER_COMMAND: "  " })).toBe(false);
     expect(adapterIsActivated("hermes", { OMI_HERMES_ADAPTER_COMMAND: "hermes-adapter" })).toBe(true);
     expect(adapterIsActivated("openclaw", { OMI_OPENCLAW_ADAPTER_COMMAND: "openclaw-adapter" })).toBe(true);
-    expect(adapterIsActivated("codex", { OMI_CODEX_ADAPTER_COMMAND: "codex-adapter" })).toBe(true);
+    expect(adapterIsActivated("codex", {})).toBe(false);
+    expect(adapterIsActivated("codex", { OMI_CODEX_ADAPTER_COMMAND: "  " })).toBe(false);
+    expect(adapterIsActivated("codex", { OMI_CODEX_ADAPTER_COMMAND: "codex-acp" })).toBe(true);
   });
 
   it("centralizes production adapter profiles and capabilities", () => {
@@ -57,6 +59,10 @@ describe("adapter selection and activation", () => {
       activationEnv: "OMI_CODEX_ADAPTER_COMMAND",
       capabilities: { supportsTools: false, supportsModelSwitching: false },
     });
+    expect(adapterActivationError("codex")).toBe(
+      "Codex is not available. Make sure Codex is installed first, then try again."
+    );
+    expect(adapterActivationError("codex")).not.toContain("OMI_CODEX_ADAPTER_COMMAND");
     expect(adapterActivationError("hermes")).toBe(
       "Hermes is not available. Install it from github.com/NousResearch/hermes-agent with `pip install -e '.[acp]'` (or `uvx --from 'hermes-agent[acp]'`), then run `hermes model` to configure a provider, and try again."
     );

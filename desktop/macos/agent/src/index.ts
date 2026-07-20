@@ -943,34 +943,6 @@ async function main(): Promise<void> {
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   const codexAvailable = await ensureCodexAdapter();
-
-  // Availability snapshot for the router. `acp` (Claude Code) is always present.
-  const availabilitySnapshot = () =>
-    buildAvailabilitySnapshot({
-      piMono: piMonoAuthToken !== undefined && piMonoAuthToken !== "",
-      hermes: hermesAvailable,
-      openclaw: openClawAvailable,
-      codex: codexAvailable,
-    });
-
-  // Activate a single adapter for one dispatch attempt. Throws (retryably) when
-  // the adapter can't be brought up, which the fallback executor uses to advance.
-  const activateAdapter = async (adapterId: RoutableAgentId): Promise<void> => {
-    if (adapterId === "acp") {
-      await startAcpProcess();
-      await initializeAcp();
-    } else if (adapterId === "pi-mono") {
-      if (!(await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN))) {
-        throw new Error("pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token).");
-      }
-    } else if (adapterId === "hermes") {
-      if (!(await ensureHermesAdapter())) throw new Error(adapterActivationError("hermes"));
-    } else if (adapterId === "openclaw") {
-      if (!(await ensureOpenClawAdapter())) throw new Error(adapterActivationError("openclaw"));
-    } else if (adapterId === "codex") {
-      if (!(await ensureCodexAdapter())) throw new Error(adapterActivationError("codex"));
-    }
-  };
   if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
@@ -1063,35 +1035,23 @@ async function main(): Promise<void> {
           const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
           currentOwnerId = queryOwnerId;
           try {
-            // Route: honor an explicit adapterId, else pick via the router
-            // (explicit mention > capability match > default Claude Code).
-            const plan = planQueryDispatch(query, availabilitySnapshot());
-            if (plan.needsSetup) {
-              // Named an agent that isn't connected — guide setup, don't silently fall back.
-              throw new Error(adapterActivationError(plan.needsSetup) ?? plan.explanation);
-            }
-            logErr(`Router: ${plan.reason} — plan=[${plan.order.join(", ")}] (${plan.explanation})`);
-
-            // Execute with fallback: advance to the next agent both when one
-            // can't be brought up (activation/spawn throw) and when its run
-            // fails retryably. We suppress the facade's own error emit so a
-            // non-final failure never sends a terminal error before the retry;
-            // the final failure is emitted by the outer catch below.
-            const outcome = await executeWithFallback(plan.order as RoutableAgentId[], {
-              runOne: async (agent) => {
-                query.adapterId = agent;
-                await activateAdapter(agent);
-                const queryOutcome = await facade.handleQuery(query, { suppressFailureEmit: true });
-                if (!queryOutcome.ok) {
-                  throw new DispatchAttemptError(queryOutcome.message, queryOutcome.retryable, queryOutcome.failure);
-                }
-              },
-              isRetryable: (error) =>
-                error instanceof DispatchAttemptError ? error.retryable : isDispatchRetryable(error),
-              log: logErr,
-            });
-            if (!outcome.ok) {
-              throw outcome.error ?? new Error("No agent could handle the task.");
+            if (adapterId === "acp") {
+              await startAcpProcess();
+              await initializeAcp();
+            } else if (adapterId === "pi-mono") {
+              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+            } else if (adapterId === "hermes") {
+              if (!(await ensureHermesAdapter())) {
+                throw new Error(adapterActivationError("hermes"));
+              }
+            } else if (adapterId === "openclaw") {
+              if (!(await ensureOpenClawAdapter())) {
+                throw new Error(adapterActivationError("openclaw"));
+              }
+            } else if (adapterId === "codex") {
+              if (!(await ensureCodexAdapter())) {
+                throw new Error(adapterActivationError("codex"));
+              }
             }
           } finally {
             if (queryOwnerKey && insertedOwner) {

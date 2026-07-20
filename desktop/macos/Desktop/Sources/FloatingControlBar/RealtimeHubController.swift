@@ -2281,16 +2281,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
-      let requestedProvider: AgentPillsManager.DirectedProvider?
-      switch providerName {
-      case "openclaw": requestedProvider = .openclaw
-      case "hermes": requestedProvider = .hermes
-      case "codex": requestedProvider = .codex
-      case "": requestedProvider = nil
-      default:
-        session?.sendToolResult(
-          callId: callId, name: name,
-          output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', or 'codex'.")
+      if !providerName.isEmpty && providerName != "openclaw" && providerName != "hermes"
+        && providerName != "codex"
+      {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', or 'codex'.",
+          expectedTurnEpoch: toolTurnEpoch)
         return
       }
       let userRequestText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)

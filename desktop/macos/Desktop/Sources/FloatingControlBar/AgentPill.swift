@@ -37,11 +37,16 @@ final class AgentPill: ObservableObject, Identifiable {
     var canonicalRunId: String?
     var canonicalAttemptId: String?
 
-    /// Remaining auto-route fallback chain (a `nil` entry is the default Omi
-    /// orchestrator). When this pill fails, the manager consumes the chain and
-    /// respawns the task on the next provider. Empty for explicitly directed
-    /// pills — a user who names an agent should not be silently rerouted.
-    var fallbackProviders: [AgentPillsManager.DirectedProvider?] = []
+    /// Remaining auto-selected providers to try if this pill fails before doing
+    /// any work (startup-class failures only: not installed / not signed in /
+    /// adapter unavailable). Set by the router spawn path; empty for pills the
+    /// user directed at a specific provider.
+    var autoFallbackCandidates: [AgentPillsManager.DirectedProvider] = []
+
+    /// True when the provider was chosen by the router (not the user). Only
+    /// router-selected pills may terminally fall back to Omi's built-in agent
+    /// after every external candidate fails at startup.
+    var wasRouterSelected = false
 
     @Published var title: String
     @Published var status: Status = .queued
@@ -489,7 +494,24 @@ final class AgentPillsManager: ObservableObject {
       }
     }
 
-    enum DirectedProvider: String, Equatable, CaseIterable {
+    private struct PendingAgentFollowUp {
+        let text: String
+        let attachments: [ChatAttachment]
+    }
+
+    /// Combined router result. Title/ack are pre-computed alongside the route
+    /// so we don't need a second Haiku call when the answer is "agent".
+    struct RouterDecision {
+        let route: Route
+        let title: String?
+        let ack: String?
+        /// Best-suited connected external providers for this task, ranked by the
+        /// router. Empty means run Omi's built-in agent. The first entry is
+        /// spawned; the rest become the pill's startup-failure fallback chain.
+        var rankedProviders: [DirectedProvider] = []
+    }
+
+    enum DirectedProvider: String, Equatable {
         case hermes
         case openclaw
         case codex
@@ -514,7 +536,7 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return "hermes"
             case .openclaw: return "openclaw"
-            case .codex: return "codex"
+            case .codex: return "codex-acp"
             }
         }
 
@@ -530,76 +552,25 @@ final class AgentPillsManager: ObservableObject {
             "\(displayName) needs setup"
         }
 
-        /// Canonical install one-liner from the provider's official docs —
-        /// what we show the user (and the model) when the provider is missing.
-        var installCommand: String {
+        /// One-line capability description fed to the routing model so it can
+        /// pick the best-suited connected agent for a task.
+        var routerBlurb: String {
             switch self {
-            case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
-            case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash"
-            // The Codex CLI has no ACP mode, so the codex-acp bridge is
-            // required alongside it for task execution.
-            case .codex: return "npm install -g @openai/codex @agentclientprotocol/codex-acp"
+            case .codex:
+                return "OpenAI Codex — strongest for software engineering: writing/refactoring code, working in repos, builds, tests, scripts, technical files."
+            case .openclaw:
+                return "OpenClaw — general autonomous computer agent with its own gateway/tool config; good for messaging and automation flows the user has wired into OpenClaw."
+            case .hermes:
+                return "Hermes — general autonomous agent; good for research and long-form independent work."
             }
         }
+    }
 
-        /// Install command safe for the UNATTENDED install run by
-        /// `LocalAgentProviderInstaller` (pipe stdio, no TTY): the canonical
-        /// curl installers launch interactive onboarding/setup stages that
-        /// would hang a non-interactive shell, so these variants skip them
-        /// (flags documented by each provider's installer).
-        var unattendedInstallCommand: String {
-            switch self {
-            case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive"
-            case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard"
-            case .codex: return "npm install -g @openai/codex @agentclientprotocol/codex-acp"
-            }
-        }
-
-        /// Where `unattendedInstallCommand` downloads from — shown verbatim
-        /// in the native install confirmation dialog.
-        var installSourceDomain: String {
-            switch self {
-            case .hermes: return "hermes-agent.nousresearch.com"
-            case .openclaw: return "openclaw.ai"
-            case .codex: return "registry.npmjs.org"
-            }
-        }
-
-        /// Official install documentation page.
-        var installDocsURL: String {
-            switch self {
-            case .hermes: return "https://hermes-agent.nousresearch.com/docs/getting-started/installation"
-            case .openclaw: return "https://docs.openclaw.ai/install"
-            case .codex: return "https://github.com/openai/codex"
-            }
-        }
-
-        /// Interactive step the user must run themselves after the install
-        /// command (the unattended install never attempts interactive logins).
-        var postInstallNote: String? {
-            switch self {
-            case .hermes: return "run `hermes setup` to finish configuring it"
-            case .openclaw: return "run `openclaw onboard --install-daemon` to finish onboarding"
-            case .codex: return "run `codex login` if you haven't signed in"
-            }
-        }
-
-        /// Canonical normalization for provider names arriving in model tool
-        /// arguments ("Open Claw" → "openclaw"): trim whitespace, lowercase,
-        /// drop internal spaces. Shared by every spawn_agent /
-        /// setup_agent_provider surface so parsing can never drift.
-        static func normalizedRawValue(_ raw: String?) -> String {
-            (raw ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased()
-                .replacingOccurrences(of: " ", with: "")
-        }
-
-        /// Shared unsupported-provider tool error — identical wording across
-        /// spawn_agent and setup_agent_provider on every surface.
-        static func unsupportedProviderMessage(_ name: String) -> String {
-            "Unsupported agent provider '\(name)'. Supported providers: openclaw, hermes, codex."
-        }
+    /// External providers that are installed AND ready to run right now.
+    /// (needsAuth/missing are excluded — offering them to the router would
+    /// just route tasks into a guaranteed startup failure.)
+    nonisolated static func connectedDirectedProviders() -> [DirectedProvider] {
+        [.codex, .openclaw, .hermes].filter { LocalAgentProviderDetector.isAvailable($0) }
     }
 
     /// Canonical directed-provider order — used for prompt listings and as
@@ -680,10 +651,108 @@ final class AgentPillsManager: ObservableObject {
         let completedAt: String?
     }
 
-    let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
-    pills.append(pill)
-    if let producerJournalIntent {
-      bindProducingJournalSurface(pillID: pill.id, surface: producerJournalIntent.surface)
+    /// Error markers that indicate the chosen agent never started working
+    /// (not installed / not signed in / adapter unavailable). Only these are
+    /// safe to auto-retry on another agent — a mid-task failure may already
+    /// have side effects (sent messages, edited files) and must NOT be
+    /// silently re-run elsewhere.
+    nonisolated static let startupFailureMarkers: [String] = [
+        "not available",
+        // Negated/qualified phrases only — bare "installed"/"signed in" would
+        // misclassify mid-task text like "successfully installed".
+        "don't see",
+        "not installed",
+        "not signed in",
+        "isn't signed in",
+        "not authenticated",
+        "needs setup",
+        "adapter is unavailable",
+        "requires omi_",
+        // The adapter subprocess could not reach its backend at startup
+        // (e.g. OpenClaw's `acp` bridge with the gateway daemon not running:
+        // "ACP bridge failed: connect ECONNREFUSED 127.0.0.1:18789").
+        // Connection-refused means no work was performed, so retrying on
+        // another agent is safe.
+        "econnrefused",
+        "acp bridge failed",
+    ]
+
+    nonisolated static func isStartupClassFailure(
+        _ errorText: String,
+        failure: AgentRuntimeFailure? = nil
+    ) -> Bool {
+        // Prefer the runtime's own taxonomy when a structured failure exists:
+        // process-level and pre-execution codes mean no prompt work happened;
+        // adapter_execution_failed may have side effects and must not re-run.
+        if let failure {
+            if failure.source == "adapter_process" { return true }
+            switch failure.code {
+            case "binding_failed", "adapter_not_registered", "adapter_config_invalid", "stale_binding":
+                return true
+            case "adapter_execution_failed":
+                return false
+            default:
+                break
+            }
+        }
+        // Unstructured errors fall back to marker matching on the display text.
+        let lower = errorText.lowercased()
+        return startupFailureMarkers.contains { lower.contains($0) }
+    }
+
+    /// If a router-selected pill failed before doing any work, retry the same
+    /// task on the next ranked candidate (terminal fallback: Omi's built-in
+    /// agent via nil override). User-directed pills never auto-fallback.
+    private func maybeAutoFallback(
+        for pill: AgentPill,
+        errorText: String,
+        failure: AgentRuntimeFailure? = nil,
+        hadProgress: Bool = false
+    ) {
+        guard Self.isStartupClassFailure(errorText, failure: failure) else { return }
+        // Extra safety: if the pill already streamed content or produced a
+        // response, work happened — never silently re-run it elsewhere.
+        guard !hadProgress else { return }
+
+        if !pill.autoFallbackCandidates.isEmpty {
+            var candidates = pill.autoFallbackCandidates
+            pill.autoFallbackCandidates = []
+            let next = candidates.removeFirst()
+            log("AgentPill: auto-fallback after startup failure — retrying on \(next.displayName)")
+            pill.latestActivity = "\(errorText) — trying \(next.displayName) instead"
+            let replacement = spawnFromUserQuery(
+                pill.query,
+                model: pill.model,
+                preFetchedTitle: pill.title,
+                bridgeHarnessOverride: next.harnessMode
+            )
+            replacement.wasRouterSelected = true
+            replacement.autoFallbackCandidates = candidates
+            return
+        }
+
+        // Terminal fallback: every router-ranked external candidate failed at
+        // startup — run the task on Omi's built-in agent (nil override).
+        if pill.wasRouterSelected, pill.bridgeHarnessOverride != nil {
+            log("AgentPill: auto-fallback exhausted external candidates — retrying on Omi built-in agent")
+            pill.latestActivity = "\(errorText) — trying Omi's built-in agent instead"
+            _ = spawnFromUserQuery(
+                pill.query,
+                model: pill.model,
+                preFetchedTitle: pill.title
+            )
+        }
+    }
+
+    /// Ask Claude Haiku whether the message is a quick info question (→ chat)
+    /// or a background task (→ agent). Falls back to `.chat` on error/timeout
+    /// so we never accidentally hijack a question into a long-running pill.
+    /// ~300-500ms via the desktop-backend's OpenAI-compatible proxy.
+    static func classify(_ query: String) async -> RouterDecision {
+        guard let result = await runRouterCall(for: query) else {
+            return RouterDecision(route: .chat, title: nil, ack: nil)
+        }
+        return result
     }
 
     pill.status = .starting
@@ -694,19 +763,125 @@ final class AgentPillsManager: ObservableObject {
     }
     AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef, statusText: pill.latestActivity)
 
-    // If the router already returned a title we don't need a second
-    // Haiku call for title generation. Otherwise kick one off in the
-    // background to upgrade the heuristic title.
-    if preFetchedTitle == nil {
-      Task { [weak pill] in
-        guard let pill else { return }
-        guard let result = await AgentPillsManager.generateTitleAndAck(for: pill.query) else { return }
-        await MainActor.run {
-          guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
-          pill.title = result.title
-          if pill.latestActivity == "Warming up…" || pill.latestActivity == "Starting…" {
-            pill.latestActivity = result.ack
-          }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 4
+        do {
+            let headers = try await APIClient.shared.buildHeaders(requireAuth: true)
+            for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+        } catch {
+            log("AgentPill: router skipped — auth header unavailable (\(error.localizedDescription))")
+            return nil
+        }
+
+        let connectedProviders = connectedDirectedProviders()
+        let agentsField: String
+        let agentsSection: String
+        if connectedProviders.isEmpty {
+            agentsField = ""
+            agentsSection = ""
+        } else {
+            agentsField = #","agents":["<provider id>",...]"#
+            let providerLines = connectedProviders
+                .map { "- \($0.rawValue): \($0.routerBlurb)" }
+                .joined(separator: "\n")
+            agentsSection = """
+
+            The user also has these external local agents connected (beyond Omi's built-in agent):
+            \(providerLines)
+
+            When route is "agent", set "agents" to the connected external agents genuinely better suited to this task than Omi's built-in agent, best first. Omi's built-in agent is the safe default with full access to the user's apps, browser, calendar, and memory — use "agents":[] for general computer/app/browser tasks or whenever unsure. Only pick an external agent when the task clearly matches its strength. Examples: background coding / build a script / fix a repo -> ["codex"]; open-ended autonomous research -> ["hermes"]; a flow the user automated in OpenClaw -> ["openclaw"]; send a message / calendar / browse / summarize screen -> []. When route is "chat", use "agents":[].
+            """
+        }
+
+        let prompt = """
+        The user just sent this message in the Omi floating bar:
+
+        "\(query)"
+
+        Decide whether to (a) answer it inline in the chat bar, or (b) spawn a background agent that will do work on the user's computer/apps/browser.
+
+        Reply with ONLY a single-line JSON object, no prose, no markdown:
+        {"route":"chat"|"agent","title":"<3-5 word imperative title in Title Case, no trailing punctuation>","ack":"<one short spoken acknowledgement, max 7 words, friendly tone>"\(agentsField)}
+
+        Use "agent" ONLY when the request requires the assistant to take real actions on the user's computer/browser/apps that will plausibly take more than ~10 seconds — building/coding something, sending/posting a message, editing or creating files, multi-step browser navigation, generating a long document.
+        Use "chat" for everything else: questions, lookups (even if the user uses words like "search"/"find"/"look up"), definitions, single facts, explanations, short summaries, opinions, conversation. When in doubt, choose "chat".\(agentsSection)
+        """
+
+        let body: [String: Any] = [
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 120,
+            "messages": [["role": "user", "content": prompt]],
+            "stream": false,
+        ]
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                log("AgentPill: router failed — no HTTP response, defaulting to chat")
+                return nil
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                let bodyText = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
+                log("AgentPill: router HTTP \(http.statusCode) — \(bodyText), defaulting to chat")
+                return nil
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let choices = json["choices"] as? [[String: Any]],
+                let message = choices.first?["message"] as? [String: Any],
+                let text = message["content"] as? String
+            else {
+                log("AgentPill: router response shape unexpected, defaulting to chat")
+                return nil
+            }
+            // Haiku occasionally ignores the "no markdown" instruction and
+            // wraps the JSON in ```json ... ``` fences, or emits leading
+            // prose. Extract the first balanced {...} object instead of
+            // trusting the whole response to be raw JSON.
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let jsonBody: String
+            if let firstBrace = trimmed.firstIndex(of: "{"),
+                let lastBrace = trimmed.lastIndex(of: "}"),
+                firstBrace < lastBrace
+            {
+                jsonBody = String(trimmed[firstBrace...lastBrace])
+            } else {
+                jsonBody = trimmed
+            }
+            guard let payloadData = jsonBody.data(using: .utf8),
+                let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+                let routeStr = (payload["route"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            else {
+                log("AgentPill: router JSON parse failed — raw: \(String(trimmed.prefix(200))), defaulting to chat")
+                return nil
+            }
+            let route = Route(rawValue: routeStr) ?? .chat
+            let title = (payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let ack = (payload["ack"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Provider ranking: keep only ids that map to a provider we offered
+            // as connected — the model must not route to something we didn't.
+            var rankedProviders: [DirectedProvider] = []
+            if route == .agent, let agentIds = payload["agents"] as? [String] {
+                var seen = Set<DirectedProvider>()
+                for id in agentIds {
+                    let normalized = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    guard let provider = DirectedProvider(rawValue: normalized),
+                        connectedProviders.contains(provider),
+                        seen.insert(provider).inserted
+                    else { continue }
+                    rankedProviders.append(provider)
+                }
+            }
+            log("AgentPill: router decided route=\(route.rawValue) title=\"\(title ?? "")\" agents=\(rankedProviders.map(\.rawValue))")
+            return RouterDecision(
+                route: route,
+                title: (title?.isEmpty == false) ? String(title!.prefix(40)) : nil,
+                ack: (ack?.isEmpty == false) ? String(ack!.prefix(120)) : nil,
+                rankedProviders: rankedProviders
+            )
+        } catch {
+            log("AgentPill: router threw — \(error.localizedDescription), defaulting to chat")
+            return nil
         }
       }
     }
@@ -2355,19 +2530,19 @@ final class AgentPillsManager: ObservableObject {
           }
         }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
-            if maybeRetryWithFallback(
-                failedPill: pill,
-                model: pill.model,
-                errorText: errorText
-            ) {
-                return
-            }
+            // Captured before ensureFailureMessage, which itself sets aiMessage.
+            let hadProgress = !pill.transcript.isEmpty || pill.aiMessage != nil
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()
             Self.ensureFailureMessage(errorText, for: pill)
             pill.markContentChanged()
-            attemptProviderFallback(for: pill)
+            maybeAutoFallback(
+                for: pill,
+                errorText: errorText,
+                failure: provider.lastAgentRuntimeFailure,
+                hadProgress: hadProgress
+            )
         } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
             pill.status = .done
             pill.completedAt = Date()

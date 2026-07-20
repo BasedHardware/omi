@@ -1,0 +1,3 @@
+{
+  "change": "Added OpenAI Codex as a local agent — say \"use Codex\" and Omi runs the task through the codex-acp bridge"
+}

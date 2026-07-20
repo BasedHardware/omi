@@ -715,15 +715,15 @@ describe("adapter capability matrix", () => {
       restartBehavior: "native_bindings_survive",
     });
     expect(adapterCapabilitiesFor("codex")).toEqual({
-      resumeFidelity: "native",
-      supportsNativeResume: true,
+      resumeFidelity: "none",
+      supportsNativeResume: false,
       supportsCancellation: true,
       acknowledgesCancellation: false,
-      requiresPinnedWorker: false,
+      requiresPinnedWorker: true,
       supportsModelSwitching: false,
       supportsArtifactEmission: false,
       supportsTools: false,
-      restartBehavior: "native_bindings_survive",
+      restartBehavior: "process_local_bindings_stale",
     });
   });
 });

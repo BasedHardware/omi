@@ -1079,12 +1079,31 @@ class ChatToolExecutor {
         bridgeHarnessOverride: plan.harnessOverride,
         spawnContext: plan.context
       )
-      let fallbackLine = plan.fallbackNote.map { "\nfallback: \($0)" } ?? ""
+      await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+      // Startup-class failures (provider not running / not signed in) surface
+      // within ~1.5s — wait briefly so the model reports the truth instead of
+      // claiming a dead agent is running.
+      try? await Task.sleep(nanoseconds: 1_800_000_000)
+      await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+      let startupFailure = await MainActor.run { () -> String? in
+        guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillId }),
+          case .failed(let errorText) = pill.status
+        else { return nil }
+        return errorText
+      }
+      if let startupFailure {
+        return """
+        Error: agent FAILED to start: \(startupFailure)
+        Relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead.
+        """
+      }
       return """
       Agent started as a floating agent pill.
-      id: \(pill.id.uuidString)
-      title: \(pill.title)
-      status: \(pill.status.displayLabel)\(fallbackLine)
+      id: \(pillId.uuidString)
+      runId: \(accepted.runId)
+      title: \(accepted.title)
+      status: running
+      If the user later asks about this agent's status or results, check get_task_agent_status first — never answer from memory.
       """
     }
   }

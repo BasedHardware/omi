@@ -272,15 +272,20 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   codex: {
     adapterId: "codex",
     productionAdapter: true,
-    // Codex drives a local ACP agent; session state is process-local like Hermes.
     expectations: {
-      nativeResume: unsupported("Codex ACP session ids are process-local and are stale after adapter process restart."),
-      cancellationDispatch: required("Codex supports cancellation dispatch for active attempts."),
-      cancellationAck: knownLimitation("Codex cancellation is dispatchable but no terminal adapter ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
+      // codex-acp (@agentclientprotocol/codex-acp) exposes session/resume via
+      // loadSession, but Omi treats Codex sessions as process-local for now and
+      // reopens per attempt; revisit to enable native resume.
+      nativeResume: unsupported("Codex bindings are treated as process-local; native session/resume is not wired yet."),
+      cancellationDispatch: required("codex-acp accepts session/cancel through the shared ACP interrupt path."),
+      cancellationAck: knownLimitation("Codex cancellation is fire-and-forget; no terminal adapter ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
       pinnedWorker: required("Codex keeps session state in the adapter process and must stay worker-pinned while active."),
-      modelSwitching: unsupported("Codex model selection is configured in the Codex agent, not via session/set_model."),
+      // codex-acp implements unstable_setSessionModel / setSessionConfigOption,
+      // not the standard session/set_model; model is configured via Codex, so
+      // Omi must not send session/set_model.
+      modelSwitching: unsupported("codex-acp does not expose session/set_model; model is selected via Codex config."),
       artifactEmission: unsupported("Codex ACP adapter does not emit artifact references yet."),
-      toolSupport: required("Codex projects tool calls through canonical adapter tool events."),
+      toolSupport: unsupported("Codex ACP runs with empty per-session MCP servers; Omi tools are configured through Codex, not per-session MCP."),
       restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks process-local Codex bindings stale."),
     },
   },

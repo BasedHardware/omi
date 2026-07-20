@@ -1025,21 +1025,31 @@ class ChatProvider: ObservableObject {
   /// input, so it never touches the user's actual cursor.
   static weak var mainInstance: ChatProvider?
 
-  // MARK: - Floating Bar System Prompt Prefix
-  /// Static prefix injected at the top of the system prompt for floating bar sessions.
-  /// Defined here so it can be referenced both at warmup time and at query time.
-  static let floatingBarSystemPromptPrefix = """
-    ================================================================================
-    🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
-    ================================================================================
-    Tool calls are untrusted capability proposals. The kernel owns the authoritative route, clarification decision, authorization, execution profile, and background-agent identity for this surface. Use returned Omi data rather than inventing personal facts, and never claim a proposed action or agent start succeeded before its canonical tool result.
-    If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
-    If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
-    Respond concisely in 1-2 sentences. No lists. No headers.
-    A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
-    BROWSER TABS: when you use the browser (Playwright), on your FIRST browser action open ONE dedicated tab with the browser_tabs tool (action: "new"), then do ALL browser work in that single tab and reuse it for every step. NEVER navigate, reload, switch, or close the user's other tabs, and never hijack their active tab — work only in the tab you opened so you don't interfere with what the user is doing.
-    ================================================================================
-    """
+    // MARK: - Published State
+    @Published var chatMode: ChatMode = .act
+    @Published var draftText = ""
+    /// Files staged for attachment to the next message. Cleared when the message is sent.
+    @Published var pendingAttachments: [ChatAttachment] = []
+    @Published var messages: [ChatMessage] = []
+    @Published var sessions: [ChatSession] = []
+    @Published var currentSession: ChatSession?
+    @Published var isLoading = false
+    @Published var isLoadingSessions = true  // Start true since we load sessions on init
+    @Published var isSending = false
+    @Published var isStopping = false
+    @Published private(set) var activeTurnOwner: ChatTurnOwner?
+    @Published var isClearing = false
+    @Published var errorMessage: String?
+    /// Structured failure from the last failed agent run, when the bridge
+    /// provided one. Lets consumers (e.g. pill auto-fallback) classify by the
+    /// runtime's own taxonomy (code/source/retryable) instead of string
+    /// matching on the display message.
+    private(set) var lastAgentRuntimeFailure: AgentRuntimeFailure?
+    /// Monotonic token that increments each time the local user sends a message.
+    /// ChatMessagesView observes this to anchor the viewport on send, rather than
+    /// inferring solely from messages.count changes (which can also come from
+    /// polling/sync).
+    @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
 
   // MARK: - Published State
   @Published var chatMode: ChatMode = .act
@@ -4062,6 +4072,14 @@ class ChatProvider: ObservableObject {
             }
 
             logError("Failed to get AI response", error: error)
+            // Keep the structured runtime failure (when present) alongside the
+            // display string so pill auto-fallback can classify by the
+            // runtime's own code/source taxonomy.
+            if let bridgeError = error as? BridgeError, case .agentRuntimeFailure(let failure) = bridgeError {
+                lastAgentRuntimeFailure = failure
+            } else {
+                lastAgentRuntimeFailure = nil
+            }
             // Send both user-friendly and raw error to analytics for remote debugging
             let rawError: String
             if let bridgeError = error as? BridgeError {

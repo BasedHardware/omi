@@ -11,17 +11,22 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
     XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn else { return }"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
-    XCTAssertTrue(source.contains("toolOutput = \"Agent started.\""))
-    XCTAssertTrue(source.contains("toolOutput = \"Agent started with fallback. \\(fallbackNote)\""))
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
   }
 
-  func testLocalProfileExactMemoryRequestProducesOneCanonicalSpawnProposal() throws {
-    let plan = try XCTUnwrap(
-      RealtimeLocalProfileTurnPlan.make(
-        transcript: RealtimeLocalProfileTurnPlan.exactMemoryAgentRequest,
-        voiceContext: "",
-        localProfileEnabled: true))
+  func testSpawnAgentToolResultReportsStartupTruth() throws {
+    // The spawn tool result must not blindly claim the agent started: it waits
+    // out the startup window and reports failure (with relay instructions) or
+    // success (with a no-guessing status rule).
+    let source = try chatToolExecutorSource()
+
+    XCTAssertTrue(source.contains("agent FAILED to start:"))
+    XCTAssertTrue(source.contains("check get_task_agent_status first"))
+    XCTAssertTrue(source.contains("case .failed(let errorText) = pill.status"))
+  }
+
+  func testSpawnAgentDoesNotSwitchVoicesWhenModelDidNotSpeakBeforeToolCall() throws {
+    let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("if !self.audioReceivedThisTurn {"))
     XCTAssertTrue(source.contains("let existingAck = self.assistantText.trimmingCharacters"))
@@ -328,6 +333,14 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift")
     // omi-test-quality: source-inspection -- static contract: extracted policy ownership helper
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func chatToolExecutorSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatToolExecutor.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

@@ -2881,10 +2881,146 @@ class FloatingControlBarManager {
                     }
                 }
             )
-            switch resolution {
-            case .setupRequired(_, let setupPrompt, let spokenStatus):
-                let assistantText = setupPrompt
-                let recordedTurn = provider.recordCompletedTurn(
+            return
+        }
+
+        // Skip the Haiku router for obviously-conversational queries (short, no
+        // task/agent signal): they're the common case, almost always route to "chat"
+        // anyway, and skipping removes a ~1.1s round-trip from the critical path.
+        // Ambiguous / task-like queries still go through the router so genuine
+        // background-agent work isn't misrouted. Inline chat is the safe fallback —
+        // it's also what the router defaults to on timeout.
+        if Self.routerCanSkipToChat(message) {
+            routerTracer?.mark("router_classify", metadata: ["route": "chat"])
+            await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+            return
+        }
+
+        // QueryTracer: the Haiku router call (inline-chat vs background-agent), shown
+        // as its own span instead of an anonymous gap before pre_llm.
+        routerTracer?.begin("router_classify")
+        let decision = await AgentPillsManager.classify(message)
+        routerTracer?.end(
+            "router_classify",
+            metadata: [
+                "route": decision.route == .agent ? "agent" : "chat",
+                "provider": decision.rankedProviders.first?.rawValue ?? "omi",
+            ])
+        if decision.route == .agent {
+            // Router-ranked best agent runs the task; the rest of the ranking
+            // becomes the startup-failure fallback chain.
+            await resolveDelegationAndDispatch(
+                originalRequest: message,
+                proposedBrief: message,
+                proposedTitle: decision.title,
+                proposedAck: decision.ack,
+                directedProvider: decision.rankedProviders.first,
+                routerFallbackCandidates: Array(decision.rankedProviders.dropFirst()),
+                explicitDelegationRequested: false,
+                barWindow: barWindow,
+                provider: provider,
+                presentation: presentation,
+                logLabel: "floating-agent"
+            )
+            return
+        }
+
+        // Chat route: continue with the requested delivery surface.
+        await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+    }
+
+    private func recordDelegationExchange(
+        provider: ChatProvider,
+        userText: String,
+        assistantText: String,
+        origin: String,
+        idempotencyKey: String
+    ) async -> (user: ChatMessage?, assistant: ChatMessage?) {
+        let turn = provider.recordCompletedTurn(
+            userText: userText,
+            assistantText: assistantText,
+            logLabel: origin
+        )
+        await recordSurfaceTurn(
+            surface: provider.mainChatSurfaceReference(),
+            userText: userText,
+            assistantText: assistantText,
+            origin: origin,
+            idempotencyKey: idempotencyKey
+        )
+        return turn
+    }
+
+    private func resolveDelegationAndDispatch(
+        originalRequest: String,
+        proposedBrief: String,
+        proposedTitle: String?,
+        proposedAck: String?,
+        directedProvider: AgentPillsManager.DirectedProvider?,
+        routerFallbackCandidates: [AgentPillsManager.DirectedProvider] = [],
+        explicitDelegationRequested: Bool,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        presentation: QueryPresentation,
+        logLabel: String
+    ) async {
+        let exchangeId = UUID().uuidString
+        var topLevelSections: [String] = []
+        let kernelSeed = await kernelVoiceSeedContext()
+        if !kernelSeed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            topLevelSections.append(kernelSeed)
+        }
+        let floatingAgents = await floatingAgentStatusContext()
+        if !floatingAgents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            topLevelSections.append(floatingAgents)
+        }
+        let decision = await AgentDelegationResolver.shared.resolve(
+            .init(
+                surface: .floatingText,
+                userText: originalRequest,
+                proposedBrief: proposedBrief,
+                proposedTitle: proposedTitle,
+                proposedAck: proposedAck,
+                directedProvider: directedProvider,
+                topLevelContext: topLevelSections.joined(separator: "\n\n"),
+                agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
+                explicitDelegationRequested: explicitDelegationRequested
+            )
+        )
+
+        guard decision.action == .spawn, let brief = decision.brief?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !brief.isEmpty
+        else {
+            let assistantText = decision.userFacingText
+            let recordedTurn = await recordDelegationExchange(
+                provider: provider,
+                userText: originalRequest,
+                assistantText: assistantText,
+                origin: "floating_resolver",
+                idempotencyKey: "floating_resolver:\(exchangeId):\(decision.action.rawValue)"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentResponse(
+                    userText: originalRequest,
+                    assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.clearVoiceResponseState()
+                FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
+            }
+            return
+        }
+
+        let resolvedProvider = decision.directedProvider ?? directedProvider
+        if let resolvedProvider {
+            let availability = LocalAgentProviderDetector.availability(for: resolvedProvider)
+            guard availability.isAvailable else {
+                let assistantText = availability.setupPrompt
+                let recordedTurn = await recordDelegationExchange(
+                    provider: provider,
                     userText: originalRequest,
                     assistantText: assistantText,
                     logLabel: "\(logLabel)-provider-unavailable"
@@ -2912,10 +3048,820 @@ class FloatingControlBarManager {
                     bridgeHarnessOverride: plan.harnessOverride,
                     spawnContext: plan.context
                 )
-                let providerName = plan.selectedProvider?.displayName ?? directive.provider.displayName
-                let assistantText: String
-                if let fallbackNote = plan.fallbackNote {
-                    assistantText = "\(fallbackNote) I started \(providerName) in a background agent titled \"\(pill.title)\"."
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.clearVoiceResponseState()
+                FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
+            }
+            return
+        }
+        // Only router-selected providers arm the startup-failure fallback chain;
+        // an explicitly directed provider must never be silently substituted.
+        if decision.directedProvider == nil, directedProvider != nil {
+            pill.wasRouterSelected = true
+            pill.autoFallbackCandidates = routerFallbackCandidates
+        }
+        let title = (decision.title ?? proposedTitle)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
+        let providerPrefix = resolvedProvider.map { "\($0.displayName) in " } ?? ""
+        let ack = decision.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistantText = ack?.isEmpty == false
+            ? "\(ack!) I started \(providerPrefix)a background agent\(titleSuffix) for that."
+            : "I started \(providerPrefix)a background agent\(titleSuffix) for that."
+        let recordedTurn = await recordDelegationExchange(
+            provider: provider,
+            userText: originalRequest,
+            assistantText: assistantText,
+            origin: "floating_spawn",
+            idempotencyKey: "floating_spawn:\(pill.id)"
+        )
+        switch presentation {
+        case .visible:
+            completeVisibleAgentHandoff(
+                .init(originalRequest: originalRequest, agentTask: brief),
+                pill: pill,
+                assistantMessage: recordedTurn.assistant,
+                assistantText: assistantText,
+                barWindow: barWindow
+            )
+        case .voiceOnly:
+            barWindow.state.currentQueryFromVoice = false
+            barWindow.state.clearVoiceResponseState()
+        }
+    }
+
+    private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String? {
+        let displayed = barWindow.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !displayed.isEmpty {
+            return displayed
+        }
+        return barWindow.state.chatHistory.reversed().compactMap { exchange in
+            exchange.question?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first { !$0.isEmpty }
+    }
+
+    private func dispatchChatQuery(
+        _ message: String,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        presentation: QueryPresentation
+    ) async {
+        switch presentation {
+        case .visible:
+            await sendAIQuery(message, barWindow: barWindow, provider: provider)
+        case .voiceOnly:
+            await sendVoiceOnlyQuery(message, barWindow: barWindow, provider: provider)
+        }
+    }
+
+    private func chatTurnOwner(for presentation: QueryPresentation) -> ChatTurnOwner {
+        switch presentation {
+        case .visible(let fromVoice):
+            return fromVoice ? .floatingVoice : .floatingDefault
+        case .voiceOnly:
+            return .floatingVoice
+        }
+    }
+
+    private func showSharedProviderBusy(in barWindow: FloatingControlBarWindow, presentation: QueryPresentation) {
+        let message = ChatMessage(text: "Omi is already responding in the app.", sender: .ai)
+        switch presentation {
+        case .visible:
+            chatCancellable?.cancel()
+            chatCancellable = nil
+            barWindow.state.aiInputText = ""
+            barWindow.state.displayedQuery = ""
+            barWindow.state.currentQuestionMessageId = nil
+            barWindow.state.currentAIMessage = message
+            barWindow.state.isAILoading = false
+            barWindow.state.currentQueryFromVoice = false
+            barWindow.state.clearVoiceResponseState()
+            barWindow.state.present(.mainResponse)
+            barWindow.state.markConversationActivity()
+            barWindow.resizeToResponseHeightPublic(animated: true)
+        case .voiceOnly:
+            FloatingBarVoicePlaybackService.shared.speakOneShot(message.text)
+        }
+    }
+
+    private func completeVisibleAgentHandoff(
+        _ handoff: AgentPillsManager.FloatingAgentHandoff,
+        pill: AgentPill,
+        assistantMessage: ChatMessage?,
+        assistantText: String,
+        barWindow: FloatingControlBarWindow
+    ) {
+        var message = assistantMessage ?? ChatMessage(text: assistantText, sender: .ai)
+        message.isStreaming = false
+        let toolUseId = "floating-agent-\(pill.id.uuidString)"
+        if !message.contentBlocks.contains(where: { block in
+            if case .toolCall(_, let name, _, let existingToolUseId, _, _) = block {
+                return name == "spawn_agent" && existingToolUseId == toolUseId
+            }
+            return false
+        }) {
+            let details = Self.agentHandoffToolDetails(task: handoff.agentTask, title: pill.title)
+            let input = ToolCallInput(
+                summary: pill.title,
+                details: details
+            )
+            let output = """
+            Agent started as a floating agent pill.
+            id: \(pill.id.uuidString)
+            title: \(pill.title)
+            status: \(pill.status.displayLabel)
+            """
+            message.contentBlocks.append(
+                .toolCall(
+                    id: UUID().uuidString,
+                    name: "spawn_agent",
+                    status: .completed,
+                    toolUseId: toolUseId,
+                    input: input,
+                    output: output
+                )
+            )
+        }
+        completeVisibleAgentResponse(
+            userText: handoff.originalRequest,
+            assistantMessage: message,
+            barWindow: barWindow
+        )
+    }
+
+    private static func agentHandoffToolDetails(task: String, title: String) -> String {
+        let payload: [String: String] = [
+            "brief": task,
+            "title": title,
+        ]
+        guard
+            let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+            let json = String(data: data, encoding: .utf8)
+        else {
+            return "brief: \(task)\ntitle: \(title)"
+        }
+        return json
+    }
+
+    private func completeVisibleAgentResponse(
+        userText: String,
+        assistantMessage: ChatMessage,
+        barWindow: FloatingControlBarWindow
+    ) {
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        barWindow.state.aiInputText = ""
+        barWindow.state.displayedQuery = userText
+        barWindow.state.currentAIMessage = assistantMessage
+        barWindow.state.isAILoading = false
+        barWindow.state.present(.mainResponse)
+        barWindow.state.currentQueryFromVoice = false
+        barWindow.state.clearVoiceResponseState()
+        barWindow.state.markConversationActivity()
+        barWindow.resizeToResponseHeightPublic(animated: true)
+    }
+
+    private func dispatchPendingQueryIfNeeded(
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider
+    ) async -> Bool {
+        guard let pending = pendingFollowUpQuery else { return false }
+        pendingFollowUpQuery = nil
+        barWindow.state.currentQueryFromVoice = pending.presentation.fromVoice
+        await routeQuery(pending.text, barWindow: barWindow, provider: provider, presentation: pending.presentation)
+        return true
+    }
+
+    /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
+    func sendFollowUpQuery(_ query: String, fromVoice: Bool = false) {
+        guard let window = window, window.state.showingAIResponse else {
+            // No active conversation — fall back to new conversation
+            openAIInputWithQuery(query, fromVoice: fromVoice)
+            return
+        }
+        guard let provider = activeFloatingProvider() else { return }
+
+        // Archive current exchange
+        if let currentMessage = window.state.currentAIMessage,
+           !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty {
+            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            window.state.chatHistory.append(
+                FloatingChatExchange(
+                    question: currentQuery.isEmpty ? nil : currentQuery,
+                    questionMessageId: window.state.currentQuestionMessageId,
+                    aiMessage: currentMessage
+                )
+            )
+        }
+
+        if provider.isSending {
+            let turnOwner = chatTurnOwner(for: .visible(fromVoice: fromVoice))
+            guard provider.canInterruptActiveTurn(owner: turnOwner) else {
+                showSharedProviderBusy(in: window, presentation: .visible(fromVoice: fromVoice))
+                return
+            }
+            pendingFollowUpQuery = PendingFollowUpQuery(text: query, presentation: .visible(fromVoice: fromVoice))
+            prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
+            provider.stopAgent(owner: turnOwner)
+            return
+        }
+
+        window.state.currentQueryFromVoice = fromVoice
+        Task { @MainActor in
+            await self.withQueryTracer(query: query, fromVoice: fromVoice) {
+                await self.sendAIQuery(query, barWindow: window, provider: provider)
+            }
+        }
+    }
+
+    func openNotificationAsChat(_ notification: FloatingBarNotification) {
+        guard let window else { return }
+
+        AnalyticsManager.shared.notificationClicked(
+            notificationId: notification.id.uuidString,
+            title: notification.title,
+            assistantId: notification.assistantId,
+            surface: "floating_bar"
+        )
+
+        notificationDismissWorkItem?.cancel()
+        notificationDismissWorkItem = nil
+        dismissNotificationAndAdvanceQueue(trackDismissal: false)
+        _ = openNotificationConversation(notificationID: notification.id, in: window)
+    }
+
+    private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
+        persistNotificationMessageIfNeeded(notification)
+
+        // The flag must survive the whole notification chain: when a queued
+        // notification is presented the window is already visible from the
+        // temp-show, so resetting it here would skip the re-hide in
+        // dismissNotificationAndAdvanceQueue and leave the bar on screen
+        // forever with "Show floating bar" off (#6972). The bar can also be
+        // visible while disabled (e.g. a notification flushed right as an AI
+        // conversation closes), so any presentation with the bar disabled
+        // must arm the re-hide; dismissNotificationAndAdvanceQueue owns the reset.
+        if !window.isVisible || !isEnabled {
+            notificationWasTemporarilyShown = true
+            if !window.isVisible {
+                window.orderFrontRegardless()
+            }
+        }
+
+        window.showNotification(notification)
+        AnalyticsManager.shared.notificationSent(
+            notificationId: notification.id.uuidString,
+            title: notification.title,
+            assistantId: notification.assistantId,
+            surface: "floating_bar"
+        )
+
+        let dismissWorkItem = DispatchWorkItem { [weak self] in
+            self?.dismissNotificationAndAdvanceQueue(trackDismissal: true)
+        }
+        notificationDismissWorkItem = dismissWorkItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
+    }
+
+    private func dismissNotificationAndAdvanceQueue(trackDismissal: Bool) {
+        guard let window else { return }
+
+        let dismissedNotification = window.state.currentNotification
+        window.dismissNotification()
+
+        if trackDismissal, let dismissedNotification {
+            AnalyticsManager.shared.notificationDismissed(
+                notificationId: dismissedNotification.id.uuidString,
+                title: dismissedNotification.title,
+                assistantId: dismissedNotification.assistantId,
+                surface: "floating_bar"
+            )
+        }
+
+        if !pendingNotifications.isEmpty, !window.state.showingAIConversation {
+            let nextNotification = pendingNotifications.removeFirst()
+            presentNotification(nextNotification, in: window)
+            return
+        }
+
+        if notificationWasTemporarilyShown && !isEnabled && !window.state.showingAIConversation {
+            window.orderOut(nil)
+        }
+        notificationWasTemporarilyShown = false
+    }
+
+    private func persistNotificationMessageIfNeeded(_ notification: FloatingBarNotification) {
+        guard storedNotificationMessages[notification.id] == nil else { return }
+
+        // Also append the notification as an assistant message in the shared
+        // main chat provider so it is visible on both the home-page chat and the
+        // floating/notch chat without waiting for backend polling.
+        let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageText = bodyText.isEmpty ? notification.title : bodyText
+        let messageClientTurnId = "notification:\(notification.id.uuidString)"
+        let storedMessage = historyChatProvider?.appendAssistantMessage(
+            messageText,
+            clientTurnId: messageClientTurnId
+        )
+            ?? ChatMessage(text: messageText, sender: .ai)
+
+        storedNotificationMessages[notification.id] = StoredNotificationMessage(
+            notification: notification,
+            context: notification.context,
+            messageClientTurnId: messageClientTurnId,
+            message: storedMessage,
+            createdAt: Date()
+        )
+        mostRecentNotificationID = notification.id
+    }
+
+    func mainChatSurfaceReference() -> AgentSurfaceReference {
+        historyChatProvider?.mainChatSurfaceReference()
+            ?? .mainChat(chatId: "default")
+    }
+
+    func kernelVoiceSeedContext() async -> String {
+        guard let provider = historyChatProvider else { return "" }
+        return await provider.kernelTurnProjection.fetchVoiceSeedContext(
+            surface: provider.mainChatSurfaceReference()
+        )
+    }
+
+    func recordSurfaceTurn(
+        surface: AgentSurfaceReference,
+        userText: String,
+        assistantText: String,
+        origin: String = "realtime_voice",
+        interrupted: Bool = false,
+        idempotencyKey: String? = nil
+    ) async {
+        await historyChatProvider?.kernelTurnProjection.recordSurfaceTurn(
+            surface: surface,
+            userText: userText,
+            assistantText: assistantText,
+            origin: origin,
+            interrupted: interrupted,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    func floatingAgentStatusContext() async -> String {
+        let floatingStatus = await DesktopCoordinatorService.shared.floatingAgentStatusSummary(limit: 8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !floatingStatus.isEmpty,
+              floatingStatus != "No floating agent pills are running or recently finished." else {
+            return ""
+        }
+        return """
+        Recent floating background agents:
+        \(floatingStatus)
+        """
+    }
+
+    func recordAgentArtifactCompletion(
+        pillID: UUID,
+        runId: String?,
+        userText: String,
+        title: String,
+        finalText: String?,
+        resources: [ChatResource]
+    ) {
+        guard !resources.isEmpty else { return }
+
+        let deliveryKey = [
+            runId,
+            Optional(pillID.uuidString),
+            Optional(resources.map(\.id).joined(separator: "|")),
+        ]
+        .compactMap { $0 }
+        .joined(separator: "::")
+        guard !deliveredAgentArtifactKeys.contains(deliveryKey) else { return }
+        deliveredAgentArtifactKeys.insert(deliveryKey)
+
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let messageText: String
+        if !trimmedFinalText.isEmpty {
+            messageText = trimmedFinalText
+        } else if !trimmedTitle.isEmpty {
+            messageText = "Done. \(trimmedTitle) produced \(resources.count == 1 ? "an artifact" : "\(resources.count) artifacts")."
+        } else {
+            messageText = "Done. The background agent produced \(resources.count == 1 ? "an artifact" : "\(resources.count) artifacts")."
+        }
+
+        let historyMessage = historyChatProvider?.appendAssistantMessage(
+            messageText,
+            resources: resources
+        )
+        let visibleMessage = historyMessage ?? ChatMessage(text: messageText, sender: .ai, resources: resources)
+        deliverAgentArtifactCompletionToFloatingSurface(visibleMessage)
+        Task {
+            await recordPillTerminalCompletion(
+                pillID: pillID,
+                runId: runId,
+                userText: userText,
+                assistantText: messageText
+            )
+        }
+    }
+
+    /// Project one terminal pill summary into kernel `main_chat` for cross-surface continuity.
+    func recordPillTerminalCompletion(
+        pillID: UUID,
+        runId: String?,
+        userText: String,
+        assistantText: String
+    ) async {
+        let trimmedUser = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAssistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAssistant.isEmpty else { return }
+
+        let idempotencyKey: String
+        if let runId, !runId.isEmpty {
+            idempotencyKey = "pill_completion:\(runId)"
+        } else {
+            idempotencyKey = "pill_completion:\(pillID.uuidString)"
+        }
+        guard !projectedPillCompletionKeys.contains(idempotencyKey) else { return }
+        projectedPillCompletionKeys.insert(idempotencyKey)
+
+        // Assistant-only projection: the spawn handoff (Fix A) already recorded the user's
+        // request on main_chat; repeating it here would double-spend the voice seed budget.
+        let requestSnippet = trimmedUser.count > 120
+            ? String(trimmedUser.prefix(120)) + "…"
+            : trimmedUser
+        let summary = requestSnippet.isEmpty
+            ? trimmedAssistant
+            : "[Background agent — \(requestSnippet)] \(trimmedAssistant)"
+
+        guard let provider = historyChatProvider else { return }
+        await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+            surface: provider.mainChatSurfaceReference(),
+            userText: "",
+            assistantText: summary,
+            origin: "pill_completion",
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
+        guard let mostRecentNotificationID else { return false }
+        return openNotificationConversation(notificationID: mostRecentNotificationID, in: window)
+    }
+
+    @discardableResult
+    private func openNotificationConversation(notificationID: UUID, in window: FloatingControlBarWindow) -> Bool {
+        purgeExpiredNotificationMessages()
+
+        guard let stored = storedNotificationMessages[notificationID],
+              Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval else {
+            return false
+        }
+        let notificationMessage = historyChatProvider?.messages.last(where: {
+            $0.clientTurnId == stored.messageClientTurnId
+        }) ?? stored.message
+        notificationDismissWorkItem?.cancel()
+        notificationDismissWorkItem = nil
+        pendingNotifications.removeAll { $0.id == notificationID }
+        if window.state.currentNotification != nil {
+            window.dismissNotification()
+        }
+
+        window.cancelPendingDismiss()
+        window.savePreChatCenterIfNeeded()
+        window.cancelInputHeightObserver()
+        let shouldRestoreVisibleConversation = window.state.canRestoreVisibleConversation
+        if shouldRestoreVisibleConversation {
+            archiveVisibleConversationIfNeeded(in: window)
+        } else if window.state.hasVisibleConversation {
+            window.state.clearVisibleConversation()
+        }
+
+        window.state.present(.mainResponse)
+        window.state.isAILoading = false
+        window.state.aiInputText = ""
+        if !shouldRestoreVisibleConversation {
+            window.state.chatHistory = []
+            window.state.displayedQuery = ""
+            window.state.currentQuestionMessageId = nil
+        }
+        window.state.currentAIMessage = notificationMessage
+        window.state.markConversationActivity()
+        window.resizeToResponseHeightPublic(animated: true)
+        window.orderFrontRegardless()
+        window.focusInputField()
+
+        pendingNotificationContext = PendingNotificationContext(
+            message: notificationMessage,
+            context: stored.context
+        )
+        Task {
+            if let provider = activeFloatingProvider() {
+                await provider.invalidateAgentSurface(surface: provider.mainChatSurfaceReference())
+            }
+        }
+        storedNotificationMessages.removeValue(forKey: notificationID)
+        if mostRecentNotificationID == notificationID {
+            mostRecentNotificationID = nil
+        }
+        return true
+    }
+
+    private func archiveVisibleConversationIfNeeded(in window: FloatingControlBarWindow) {
+        guard let currentMessage = window.state.currentAIMessage else { return }
+        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
+
+        let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        window.state.chatHistory.append(
+            FloatingChatExchange(
+                question: currentQuery.isEmpty ? nil : currentQuery,
+                questionMessageId: window.state.currentQuestionMessageId,
+                aiMessage: currentMessage
+            )
+        )
+        window.state.displayedQuery = ""
+        window.state.currentQuestionMessageId = nil
+    }
+
+    private func purgeExpiredNotificationMessages() {
+        let now = Date()
+        storedNotificationMessages = storedNotificationMessages.filter { _, stored in
+            now.timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval
+        }
+
+        if let mostRecentNotificationID, storedNotificationMessages[mostRecentNotificationID] == nil {
+            self.mostRecentNotificationID = nil
+        }
+    }
+
+    private func activeFloatingProvider() -> ChatProvider? {
+        historyChatProvider
+    }
+
+    private func deliverAgentArtifactCompletionToFloatingSurface(_ message: ChatMessage) {
+        guard let window else { return }
+        chatCancellable?.cancel()
+        chatCancellable = nil
+
+        var completedMessage = message
+        completedMessage.isStreaming = false
+
+        if let current = window.state.currentAIMessage {
+            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            window.state.chatHistory.append(
+                FloatingChatExchange(
+                    question: currentQuery.isEmpty ? nil : currentQuery,
+                    questionMessageId: window.state.currentQuestionMessageId,
+                    aiMessage: current
+                )
+            )
+        }
+
+        window.state.currentAIMessage = completedMessage
+        window.state.displayedQuery = ""
+        window.state.currentQuestionMessageId = nil
+        window.state.isAILoading = false
+        if window.state.conversationSurface == .mainInput || window.state.conversationSurface == .mainResponse {
+            window.state.present(.mainResponse)
+            window.resizeToResponseHeightPublic(animated: true)
+        } else {
+            window.state.markConversationActivity()
+        }
+    }
+
+    /// Access the bar state for PTT updates.
+    var barState: FloatingControlBarState? {
+        return window?.state
+    }
+
+    /// Resize the floating bar for PTT state changes.
+    func resizeForPTT(expanded: Bool) {
+        window?.resizeForPTTState(expanded: expanded)
+    }
+
+    // MARK: - AI Query
+
+    private func prepareVisibleQueryState(_ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool) {
+        activeQueryGeneration += 1
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+        barWindow.beginVisibleMainQuery(message, fromVoice: fromVoice, animated: true)
+    }
+
+    private func isActiveQueryGeneration(_ generation: Int) -> Bool {
+        generation == activeQueryGeneration
+    }
+
+    /// Screen / visual cues that, when present in a query, trigger a screenshot capture.
+    nonisolated private static let screenshotCues = [
+        // explicit screen references
+        "screen", "on my display", "what's on", "whats on", "on display",
+        "look at", "looking at", "do you see", "can you see", "what do you see",
+        "what am i looking at", "screenshot", "visible", "in front of me",
+        "this page", "this window", "this app", "this tab", "this site",
+        // visual verb + deictic (this/that/it)
+        "read this", "read that", "read it", "summarize this", "summarize that",
+        "explain this", "explain that", "what is this", "what's this", "whats this",
+        "what does this", "what is that", "what's that", "translate this", "translate that",
+        "fix this", "fix that", "what's this error", "this error", "this code",
+        "this image", "this picture", "this photo", "this diagram", "this chart",
+        "highlighted", "selected", "this selection",
+    ]
+
+    /// Heuristic: does this query plausibly need a screenshot of the user's screen?
+    /// Defaults to NO — captures only when the text references the screen, something
+    /// visual, or a visual verb paired with a deictic ("read this", "what's that").
+    /// Keeps screenshots off the ~70% of queries that never look at the screen.
+    nonisolated static func queryNeedsScreenshot(_ message: String) -> Bool {
+        let m = message.lowercased()
+        return screenshotCues.contains(where: { m.contains($0) })
+    }
+
+    /// Action/command cues that force the Haiku router to run (never skip to chat).
+    /// Missing one wrongly forces an agent task into inline chat, so this errs broad.
+    nonisolated private static let routerActionCues = [
+        "open ", "close ", "send", "post ", "reply", "email", "e-mail", "message",
+        "text ", " dm ", "write", "draft", "build", "create", "make ", "generate",
+        "compile", "go to", "go through", "navigate", "browse", "browser", "tab ",
+        "click", "scroll", "fill", "submit", "buy", "order", "add to", "cart",
+        "checkout", "book ", "download", "install", "uninstall", "delete", "remove",
+        "move ", "rename", "copy ", "paste", "schedule", "set up", "set a",
+        "organize", "plan ", "research", "find all", "look through", "summarize all",
+        "gather", "monitor", "automate", "and then", "report", "all my ", "every ",
+    ]
+
+    /// Leading words that mark an obviously-conversational query safe to skip the router.
+    nonisolated private static let routerChatStarters: Set<String> = [
+        "what", "what's", "whats", "who", "who's", "whos", "when", "where", "why",
+        "how", "how's", "hows", "which", "whose", "is", "are", "am", "was", "were",
+        "do", "does", "did", "can", "could", "should", "would", "will", "hey", "hi",
+        "hello", "yo", "sup", "thanks", "thank", "tell", "explain", "define", "describe",
+    ]
+
+    /// True when a query is obviously conversational (short, no multi-step/task
+    /// signal) — safe to route straight to inline chat and skip the Haiku router.
+    /// Errs toward running the router when in doubt (returns false); inline chat is
+    /// the safe fallback, so only genuine task queries need the background-agent path.
+    nonisolated static func routerCanSkipToChat(_ message: String) -> Bool {
+        let m = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if m.isEmpty { return true }
+        let words = m.split(whereSeparator: { $0 == " " || $0 == "\n" })
+
+        // Checked FIRST: anything that smells like an action/command the router might
+        // route to a background agent (open/send/browse/buy/build/…). We err hard toward
+        // the router even when the query is phrased as a question ("can you open my browser…").
+        if routerActionCues.contains(where: { m.contains($0) }) { return false }
+
+        // Otherwise skip only clearly-conversational queries: a question (question
+        // word or trailing "?") or a greeting, and reasonably short. Everything else
+        // (statements, imperatives we didn't enumerate) goes to the router.
+        if words.count > 10 { return false }
+        if m.hasSuffix("?") { return true }
+        let firstWord = words.first.map(String.init) ?? ""
+        return routerChatStarters.contains(firstWord)
+    }
+
+    private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // Defensive cancellation guard. `sendAIQuery` is a long async function
+        // (screenshot capture, limiter check, provider.sendMessage). If a parent
+        // task cancels us (e.g. closeAIConversation racing, the user firing a
+        // second query, a future refactor that runs the router in parallel),
+        // we should bail before doing setup work — especially before
+        // `limiter.recordQuery()` (which would consume a local quota slot)
+        // and before the screenshot capture. This matches the pattern used
+        // elsewhere in the codebase (OnboardingChatView, FileIndexingView,
+        // DesktopHomeView) and is cheap insurance against future refactors.
+        guard !Task.isCancelled else { return }
+
+        // QueryTracer: `pre_llm` brackets everything between query submission and
+        // the ChatProvider call (screenshot capture, usage checks, filler audio).
+        let currentTracer = QueryTracerContext.current
+        currentTracer?.begin("pre_llm")
+        let queryFromVoice = barWindow.state.currentQueryFromVoice
+        prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
+        let generation = activeQueryGeneration
+
+        // Re-check after the await-free setup work above.
+        guard !Task.isCancelled else { return }
+
+        // Check monthly usage limit for free users (shared with main chat page).
+        //
+        // `FloatingBarUsageLimiter.isLimitReached` returns `false` (fail-open)
+        // when `serverQuota == nil`. The optimistic check is fast and doesn't
+        // need a network round trip, but it relies on having a snapshot to
+        // check against. If app-launch `fetchPlan()` failed (network blip,
+        // first-run offline, etc.) and the user has been signing queries
+        // without ever refreshing the quota, a free user past their limit
+        // can keep chatting — the local limiter has no data to enforce.
+        //
+        // Fix: at the start of every floating-bar query, if `serverQuota`
+        // is nil, force a fresh `syncQuota()` before the limit check. This
+        // is one network round trip on cold start, zero on every subsequent
+        // query (serverQuota is populated for the session lifetime).
+        let limiter = FloatingBarUsageLimiter.shared
+        if provider.isUsingOmiAccountProvider, limiter.serverQuota == nil {
+            await limiter.syncQuota()
+            // (cubic P2 on PR #8141, fixed)
+        // Race: the user may have cancelled or fired a new query while
+            // we were awaiting the network call. Re-check the query
+            // generation; if this query was superseded, bail before
+            // doing any more work (limiter.recordQuery() below would
+            // consume a local quota slot for a cancelled query; the
+            // screenshot + provider.sendMessage would spend CPU/tokens
+            // on a response the user no longer wants). Bug identified
+            // by cubic-dev-ai on PR #8141 — P2.
+            guard isActiveQueryGeneration(generation) else { return }
+        }
+        if provider.isUsingOmiAccountProvider {
+            if limiter.isLimitReached {
+                guard isActiveQueryGeneration(generation) else { return }
+                barWindow.state.isAILoading = false
+                barWindow.state.present(.mainResponse)
+                barWindow.state.currentAIMessage = ChatMessage(
+                    text: "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
+                    sender: .ai
+                )
+                barWindow.resizeToResponseHeightPublic(animated: true)
+                NotificationCenter.default.post(
+                    name: .showUsageLimitPopup,
+                    object: nil,
+                    userInfo: ["reason": "floating_bar"]
+                )
+                return
+            }
+
+            limiter.recordQuery()
+        }
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+
+        // Only capture a screenshot when the query is actually about what's on
+        // screen. Capturing on every query cost ~225ms + a large image in the
+        // prompt for questions that never look at the screen ("what's my goal").
+        let needsScreenshot = Self.queryNeedsScreenshot(message)
+        let screenshotData: Data?
+        if needsScreenshot {
+            currentTracer?.begin("screenshot_capture")
+            screenshotData = await Task.detached { () -> Data? in
+                return ScreenCaptureManager.captureScreenData()
+            }.value
+            currentTracer?.end("screenshot_capture")
+        } else {
+            screenshotData = nil
+            currentTracer?.mark("screenshot_capture")
+        }
+        barWindow.orderFrontRegardless()
+
+        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+
+        let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
+            forVoiceQuery: barWindow.state.currentQueryFromVoice
+        )
+        if shouldPlayVoice {
+            // QueryTracer: hand the tracer to the playback service so it can close
+            // the `tts_start` span when the first real audio reaches the speaker.
+            FloatingBarVoicePlaybackService.shared.tracer = currentTracer
+            FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+        }
+
+        // Provider is already initialized by ViewModelContainer at app launch
+
+        let clientTurnId = UUID().uuidString
+
+        // Observe messages for streaming response
+        chatCancellable?.cancel()
+        barWindow.state.currentAIMessage = nil
+        barWindow.state.currentQuestionMessageId = nil
+        barWindow.state.isAILoading = true
+        var hasSetUpResponseHeight = false
+        chatCancellable = provider.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak barWindow] messages in
+                guard let self, self.isActiveQueryGeneration(generation) else { return }
+                guard let aiMessage = messages.last(where: {
+                    $0.clientTurnId == clientTurnId && $0.sender == .ai
+                }) else { return }
+
+                // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
+                barWindow?.state.currentAIMessage = aiMessage
+                if shouldPlayVoice {
+                    FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                        aiMessage,
+                        isFinal: !aiMessage.isStreaming
+                    )
+                }
+
+                if aiMessage.isStreaming {
+                    barWindow?.state.isAILoading = false
+                    if let barWindow = barWindow, !hasSetUpResponseHeight {
+                        hasSetUpResponseHeight = true
+                        if !barWindow.state.showingAIResponse {
+                            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                                barWindow.state.present(.mainResponse)
+                            }
+                        }
+                        barWindow.resizeToResponseHeightPublic(animated: true)
+                    }
                 } else {
                     assistantText = "I started \(providerName) in a background agent titled \"\(pill.title)\"."
                 }

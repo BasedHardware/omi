@@ -76,6 +76,13 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
+  // KNOWN LIMITATION: this provider availability snapshot (and the tool enums
+  // derived from it) is built once when the realtime session's system
+  // instruction / tools are assembled at session start. If an agent is
+  // installed mid-session (via install-assist), the model keeps seeing the old
+  // "not connected" guidance until the session reconnects and these are
+  // rebuilt. The spawn-time availability check is always live, so a directed
+  // spawn still works; only the model's guidance lags until reconnect.
   private static func localAgentProviderInstruction() -> String {
     let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
     let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
@@ -83,49 +90,52 @@ enum RealtimeHubTools {
     let unavailable = availability.filter { !$0.isAvailable && !LocalAgentProviderInstaller.canAutoInstall($0.provider) }
     let autoInstallable = availability.filter { !$0.isAvailable && LocalAgentProviderInstaller.canAutoInstall($0.provider) }.map(\.provider)
 
-    if unavailable.isEmpty && autoInstallable.isEmpty {
-      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect."
+    if unavailable.isEmpty {
+      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect. \(bestProviderSelectionInstruction(for: providers))"
     }
 
     var parts: [String] = []
     if !available.isEmpty {
-      parts.append("Installed local providers: \(available.map(\.displayName).joined(separator: ", ")). Prefer these in spawn_agent's provider argument.")
-      parts.append("If the user explicitly asks to use/ask one of them by name, pass that provider. Otherwise pick the best fit from the installed list above — Omi will fall back automatically if your pick is missing.")
-      parts.append("Never tell the user to install a provider they did not ask for by name.")
+      let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
+      parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
+      parts.append(bestProviderSelectionInstruction(for: available))
     }
-    if !autoInstallable.isEmpty {
-      parts.append("\(autoInstallable.map(\.displayName).joined(separator: ", ")) is not installed yet but Omi will auto-install it when you pass provider=\"\(autoInstallable.map(\.rawValue).joined(separator: "\" or \""))\". Do not tell the user to install it themselves.")
-    }
-    if !unavailable.isEmpty {
-      let missingText = unavailable
-        .map { "\($0.provider.displayName): \($0.setupPrompt)" }
-        .joined(separator: " ")
-      parts.append("Only mention install guidance when the user explicitly asked for that provider by name: \(missingText)")
-    }
+    let missingText = unavailable
+      .map { "\($0.provider.displayName): \"\($0.setupPrompt)\"" }
+      .joined(separator: " ")
+    parts.append(
+      "IMPORTANT — not-connected agents: \(unavailable.map(\.provider.displayName).joined(separator: ", ")) \(unavailable.count == 1 ? "is" : "are") NOT connected right now. If the user names one of them: (1) do NOT call spawn_agent for it and do NOT silently substitute another agent; (2) tell the user it isn't connected and read them the exact setup instructions below, including any command verbatim; (3) offer two choices — Omi can install/set it up for them, or run the task with the built-in Omi agent instead; (4) if they choose install, call spawn_agent with NO provider and a brief of exactly: 'Run this install command in the terminal and report the result: <the command from the setup instructions>'; (5) only proceed with either choice after they agree. Setup instructions — \(missingText)")
     return parts.joined(separator: " ")
   }
 
-  /// Derives agent-routing guidance from the runtime `preferredProviders(for:)` table
-  /// so the system prompt stays in sync with `LocalAgentProviderRouting.resolveSpawn`.
-  private static func smartAgentRoutingGuidance() -> String {
-    let taskDescriptions: [(AgentTaskKind, String)] = [
-      (.coding, "writing new code/scripts, debugging, or code review"),
-      (.automation, "general-purpose automation or structured tasks"),
-      (.general, "codebase exploration or multi-file refactors"),
-    ]
-    var lines: [String] = []
-    for (task, description) in taskDescriptions {
-      let preferred = LocalAgentProviderRouting.preferredProviders(for: task)
-      if let first = preferred.first {
-        lines.append("- Choose \"\(first.rawValue)\" for \(description).")
-      }
+  /// Task→provider selection guidance for connected external agents: even when
+  /// the user does NOT name an agent, spawn_agent should run through the one
+  /// whose strengths clearly match the task. Mirrors the Haiku router's
+  /// selection rules so voice-hub tasks get the same best-agent behavior.
+  private static func bestProviderSelectionInstruction(
+    for providers: [AgentPillsManager.DirectedProvider]
+  ) -> String {
+    guard !providers.isEmpty else { return "" }
+    var rules: [String] = []
+    if providers.contains(.codex) {
+      rules.append(
+        "coding — writing, creating, editing, refactoring, debugging, or running ANY code, script, or program (any language, however small) — MUST use provider \"codex\".")
     }
-    return lines.joined(separator: " \\\n      ")
+    if providers.contains(.hermes) {
+      rules.append("open-ended autonomous research or long-form independent work fits provider \"hermes\".")
+    }
+    if providers.contains(.openclaw) {
+      rules.append("automation flows the user has set up in OpenClaw fit provider \"openclaw\".")
+    }
+    let strengths = providers
+      .map { "\($0.rawValue): \($0.routerBlurb)" }
+      .joined(separator: " ")
+    return "Provider selection when the user does NOT name an agent — match the task to a connected agent's strength: \(rules.joined(separator: " ")) For general computer/app/browser/data tasks (summaries, questions, lookups, messages, email, calendar, notes, browsing, acting in the user's apps) OMIT provider — the built-in Omi agent is the default. Connected agent strengths: \(strengths)"
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {
     [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
-      .filter { LocalAgentProviderDetector.isAvailable($0) || LocalAgentProviderInstaller.canAutoInstall($0) }
+      .filter { LocalAgentProviderDetector.isAvailable($0) }
       .map(\.rawValue)
   }
 

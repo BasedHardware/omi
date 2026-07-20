@@ -93,10 +93,14 @@ enum AgentRuntimeRouting {
 }
 
 struct LocalAgentProviderAvailability: Equatable {
-  enum Status: Equatable {
-    case available(command: String)
-    case missing
-  }
+    enum Status: Equatable {
+        case available(command: String)
+        /// The binary is installed but no credential was found (Codex only).
+        /// Spawning would fail after the fact, so callers should surface
+        /// `setupPrompt` instead of starting the agent.
+        case needsAuth(command: String)
+        case missing
+    }
 
   let provider: AgentPillsManager.DirectedProvider
   let status: Status
@@ -120,13 +124,21 @@ struct LocalAgentProviderAvailability: Equatable {
     }
 
     var setupPrompt: String {
+        if case .needsAuth = status {
+            switch provider {
+            case .codex:
+                return "Codex is installed but not signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again."
+            case .hermes, .openclaw:
+                return "\(provider.displayName) needs setup before it can run. Check its sign-in, then try again."
+            }
+        }
         switch provider {
         case .hermes:
-            return "I don't see Hermes installed. Install it from github.com/NousResearch/hermes-agent with `pip install -e '.[acp]'` (or `uvx --from 'hermes-agent[acp]'`), then run `hermes model` to configure a provider, and try again."
+            return "I don't see Hermes installed. Install the Hermes agent from Nous Research (hermes-agent.nousresearch.com), then try again."
         case .openclaw:
-            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+            return "I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again."
         case .codex:
-            return "I don't see Codex CLI installed. Run 'npm install -g @openai/codex' and set your OPENAI_API_KEY, then try again."
+            return "I don't see Codex installed. Install it with `npm i -g @openai/codex @agentclientprotocol/codex-acp`, then try again."
         }
     }
   }
@@ -140,14 +152,78 @@ struct LocalAgentProviderAvailability: Equatable {
 }
 
 enum LocalAgentProviderDetector {
-  static func availability(
-    for provider: AgentPillsManager.DirectedProvider,
-    environment: [String: String] = ProcessInfo.processInfo.environment,
-    fileManager: FileManager = .default,
-    homeDirectory: String = NSHomeDirectory()
-  ) -> LocalAgentProviderAvailability {
-    if let command = configuredCommand(for: provider, environment: environment) {
-      return LocalAgentProviderAvailability(provider: provider, status: .available(command: command))
+    static func availability(
+        for provider: AgentPillsManager.DirectedProvider,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default,
+        homeDirectory: String = NSHomeDirectory(),
+        byokOpenAIKeyPresent: Bool? = nil
+    ) -> LocalAgentProviderAvailability {
+        let command: String? =
+            configuredCommand(for: provider, environment: environment)
+            ?? firstExecutable(
+                named: provider.executableName,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory
+            )
+
+        guard let command else {
+            return LocalAgentProviderAvailability(provider: provider, status: .missing)
+        }
+
+        // Codex pre-flight: the binary alone isn't enough — codex-acp fails
+        // post-spawn without a credential (NO_BROWSER blocks interactive
+        // login). Detect that up front so callers show sign-in guidance
+        // instead of spawning into a guaranteed failure.
+        if provider == .codex,
+            !codexCredentialPresent(
+                environment: environment,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory,
+                byokOpenAIKeyPresent: byokOpenAIKeyPresent ?? (APIKeyService.byokKey(.openai) != nil)
+            )
+        {
+            return LocalAgentProviderAvailability(provider: provider, status: .needsAuth(command: command))
+        }
+
+        return LocalAgentProviderAvailability(provider: provider, status: .available(command: command))
+    }
+
+    /// Whether any Codex credential source is present: an API key in the
+    /// environment, a `codex login` session (~/.codex/auth.json), or an
+    /// in-app BYOK OpenAI key (seeded as OPENAI_API_KEY at bridge spawn).
+    static func codexCredentialPresent(
+        environment: [String: String],
+        fileManager: FileManager,
+        homeDirectory: String,
+        byokOpenAIKeyPresent: Bool
+    ) -> Bool {
+        for key in ["OPENAI_API_KEY", "CODEX_API_KEY"] {
+            if !(environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+                return true
+            }
+        }
+        if codexAuthFileHasCredential(path: "\(homeDirectory)/.codex/auth.json") {
+            return true
+        }
+        return byokOpenAIKeyPresent
+    }
+
+    /// A `codex login` session is only valid if auth.json actually carries a
+    /// token — an empty/stale/corrupt `{}` file would otherwise pass the
+    /// pre-flight and spawn Codex into a post-hoc auth failure.
+    private static func codexAuthFileHasCredential(path: String) -> Bool {
+        guard let data = FileManager.default.contents(atPath: path),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return false
+        }
+        // codex-acp / Codex store either an API key or an OAuth/ChatGPT token.
+        let credentialKeys = ["OPENAI_API_KEY", "openai_api_key", "tokens", "access_token", "id_token"]
+        return credentialKeys.contains { key in
+            if let str = json[key] as? String { return !str.trimmingCharacters(in: .whitespaces).isEmpty }
+            return json[key] != nil
+        }
     }
 
     if let path = firstExecutable(
@@ -177,35 +253,66 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
+    /// Curated directories both the detector (here) and the runtime bridge
+    /// (AgentRuntimeProcess) search for external agent binaries. Shared so the
+    /// two never disagree about whether an agent is available. Deliberately a
+    /// whitelist of well-known install locations (package managers + version
+    /// managers) rather than the inherited PATH: discovered binaries are
+    /// launched as child processes, so arbitrary user-controlled PATH entries
+    /// must not participate in discovery.
     static func adapterActivationSearchDirectories(
         homeDirectory: String,
         fileManager: FileManager = .default
     ) -> [String] {
-        var directories = [
+        var dirs = [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
             "\(homeDirectory)/.hermes/hermes-agent",
+            "\(homeDirectory)/.codex/bin",
             "\(homeDirectory)/.local/bin",
-            "\(homeDirectory)/.npm-global/bin",
             "\(homeDirectory)/.volta/bin",
+            "\(homeDirectory)/.asdf/shims",
+            "\(homeDirectory)/.npm-global/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",
         ]
-        directories.append(contentsOf: nvmBinDirectories(homeDirectory: homeDirectory, fileManager: fileManager))
-        return directories
+        dirs.append(contentsOf: nvmVersionBinDirectories(homeDirectory: homeDirectory, fileManager: fileManager))
+        return dirs
     }
 
-    private static func nvmBinDirectories(
-        homeDirectory: String,
-        fileManager: FileManager
-    ) -> [String] {
-        let nvmRoot = (homeDirectory as NSString).appendingPathComponent(".nvm/versions/node")
-        guard let versions = try? fileManager.contentsOfDirectory(atPath: nvmRoot) else {
-            return []
+    /// nvm installs global binaries under versioned dirs; include each
+    /// installed version's bin (newest first). This is the only entry that
+    /// needs filesystem I/O, and availability checks run on hot paths (router
+    /// prompt builds, spawn pre-flights), so the scan is cached per home
+    /// directory for the process lifetime — like the rest of the whitelist, a
+    /// mid-session install is picked up after reconnect/restart. Tests that
+    /// inject a custom FileManager bypass the cache to stay deterministic.
+    private static let nvmBinDirsCache = ProcessLifetimeCache()
+
+    private static func nvmVersionBinDirectories(homeDirectory: String, fileManager: FileManager) -> [String] {
+        let compute: () -> [String] = {
+            let nvmVersions = "\(homeDirectory)/.nvm/versions/node"
+            guard let versions = try? fileManager.contentsOfDirectory(atPath: nvmVersions) else { return [] }
+            return versions
+                .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+                .map { "\(nvmVersions)/\($0)/bin" }
         }
-        return versions
-            .sorted { lhs, rhs in lhs.compare(rhs, options: .numeric) == .orderedDescending }
-            .map { (nvmRoot as NSString).appendingPathComponent("\($0)/bin") }
+        guard fileManager === FileManager.default else { return compute() }
+        return nvmBinDirsCache.value(forKey: homeDirectory, compute: compute)
+    }
+
+    private final class ProcessLifetimeCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [String: [String]] = [:]
+
+        func value(forKey key: String, compute: () -> [String]) -> [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            if let cached = storage[key] { return cached }
+            let value = compute()
+            storage[key] = value
+            return value
+        }
     }
 }
 

@@ -32,6 +32,10 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(ChatProvider.harnessMode(for: .openClaw), "openclaw")
   }
 
+  func testTaskChatModeMappingCodex() {
+    XCTAssertEqual(ChatProvider.harnessMode(for: .codex), "codex")
+  }
+
   func testTaskChatModeMappingAgentSDK() {
     XCTAssertEqual(ChatProvider.harnessMode(for: .omiAI), "piMono")
   }
@@ -112,7 +116,171 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
-  func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {
+  // MARK: - Best-agent selection + startup-failure fallback
+
+  func testStartupClassFailuresAreRetryableOnAnotherAgent() {
+    // Real strings produced by the pre-flight / activation / auth paths —
+    // all occur BEFORE the agent does any work, so auto-fallback is safe.
+    let startupFailures = [
+      "Codex is not available. Make sure Codex is installed first, then try again.",
+      "I don't see Hermes installed. Make sure Hermes is installed first, then try again.",
+      "Codex is installed but not signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again.",
+      "Codex isn't signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again.",
+      "Not authenticated. Run `codex login` or set OPENAI_API_KEY.",
+      "codex adapter requires OMI_CODEX_ADAPTER_COMMAND",
+      "OpenClaw needs setup",
+      // Found live in dogfooding: openclaw binary present but gateway daemon
+      // not running — subprocess dies before any work happens.
+      "OpenClaw failed: ACP bridge failed: connect ECONNREFUSED 127.0.0.1:18789",
+    ]
+    for message in startupFailures {
+      XCTAssertTrue(AgentPillsManager.isStartupClassFailure(message), "should be startup-class: \(message)")
+    }
+  }
+
+  func testMidTaskFailuresNeverAutoFallback() {
+    // Mid-task/side-effect-capable failures must NOT be re-run on another
+    // agent — the task may already be partially executed.
+    let midTaskFailures = [
+      "Something went wrong. Please try again.",
+      "AI took too long to respond. Try again.",
+      "AI stopped unexpectedly. Try sending your message again.",
+      "Agent ended before reporting a final result",
+      "AI service is busy. Please try again in a moment.",
+      "tool execution failed: browser tab crashed",
+      // Bare-substring false positives the tightened markers must NOT catch.
+      "Package successfully installed to /usr/local.",
+      "database must be installed and running",
+      "You are now signed in to the service.",
+    ]
+    for message in midTaskFailures {
+      XCTAssertFalse(AgentPillsManager.isStartupClassFailure(message), "must not be startup-class: \(message)")
+    }
+  }
+
+  func testStructuredFailureTaxonomyDrivesFallbackClassification() {
+    func failure(code: String, source: String? = nil) -> AgentRuntimeFailure {
+      AgentRuntimeFailure(
+        code: code, userMessage: "x", technicalMessage: nil,
+        source: source, adapterId: "codex", provider: nil, retryable: nil)
+    }
+    // Runtime's own taxonomy wins over the display text:
+    // process-level + pre-execution codes → safe to retry on another agent…
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_process_error", source: "adapter_process")))
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_process_exited", source: "adapter_process")))
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "binding_failed")))
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_not_registered", source: "runtime")))
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_config_invalid", source: "adapter_process")))
+    // …but a failure during execution must never re-run, even if the display
+    // text happens to contain a startup marker.
+    XCTAssertFalse(
+      AgentPillsManager.isStartupClassFailure(
+        "OpenClaw is not available. Make sure OpenClaw is installed first, then try again.",
+        failure: failure(code: "adapter_execution_failed", source: "adapter_execution")))
+  }
+
+  func testRouterDecisionDefaultsToNoExternalProviders() {
+    let decision = AgentPillsManager.RouterDecision(route: .agent, title: "T", ack: "A")
+    XCTAssertTrue(decision.rankedProviders.isEmpty)
+  }
+
+  // MARK: - Codex auth pre-flight
+
+  func testCodexInstalledWithoutAnyCredentialNeedsAuth() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-codex-noauth-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("codex-acp")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: [:],
+      homeDirectory: home.path,
+      byokOpenAIKeyPresent: false)
+
+    XCTAssertFalse(availability.isAvailable)
+    XCTAssertEqual(availability.status, .needsAuth(command: executable.path))
+    XCTAssertTrue(availability.setupPrompt.contains("codex login"))
+    XCTAssertTrue(availability.setupPrompt.contains("OpenAI API key"))
+  }
+
+  func testCodexCredentialSourcesUnlockAvailability() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-codex-auth-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("codex-acp")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    // 1. API key in environment
+    XCTAssertTrue(
+      LocalAgentProviderDetector.availability(
+        for: .codex, environment: ["OPENAI_API_KEY": "sk-test"],
+        homeDirectory: home.path, byokOpenAIKeyPresent: false
+      ).isAvailable)
+
+    // 2. codex login session (~/.codex/auth.json) with a real credential
+    let codexDir = home.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
+    let authFile = codexDir.appendingPathComponent("auth.json")
+    try #"{"OPENAI_API_KEY":"sk-live","tokens":{"access_token":"t"}}"#
+      .write(to: authFile, atomically: true, encoding: .utf8)
+    XCTAssertTrue(
+      LocalAgentProviderDetector.availability(
+        for: .codex, environment: [:],
+        homeDirectory: home.path, byokOpenAIKeyPresent: false
+      ).isAvailable)
+
+    // 2b. an empty/stale auth.json ({}) must NOT count as authenticated
+    try "{}".write(to: authFile, atomically: true, encoding: .utf8)
+    XCTAssertEqual(
+      LocalAgentProviderDetector.availability(
+        for: .codex, environment: [:],
+        homeDirectory: home.path, byokOpenAIKeyPresent: false
+      ).status, .needsAuth(command: executable.path))
+    try FileManager.default.removeItem(at: codexDir)
+
+    // 3. in-app BYOK OpenAI key
+    XCTAssertTrue(
+      LocalAgentProviderDetector.availability(
+        for: .codex, environment: [:],
+        homeDirectory: home.path, byokOpenAIKeyPresent: true
+      ).isAvailable)
+  }
+
+  func testCodexMissingBinaryIsMissingNotNeedsAuth() throws {
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+      try XCTSkipIf(
+        FileManager.default.isExecutableFile(atPath: "\(dir)/codex-acp"),
+        "codex-acp is actually installed in \(dir); missing-state is unobservable here")
+    }
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
+      homeDirectory: "/tmp/missing-home",
+      byokOpenAIKeyPresent: true)
+
+    XCTAssertEqual(availability.status, .missing)
+    XCTAssertTrue(availability.setupPrompt.contains("npm i -g"))
+  }
+
+  func testLocalAgentProviderDetectorMissingPromptIsUserFacing() throws {
+    // The detector unconditionally searches /opt/homebrew/bin and
+    // /usr/local/bin; on machines with a real openclaw install this test
+    // cannot observe the "missing" state.
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+      try XCTSkipIf(
+        FileManager.default.isExecutableFile(atPath: "\(dir)/openclaw"),
+        "openclaw is actually installed in \(dir); missing-state is unobservable here")
+    }
     let availability = LocalAgentProviderDetector.availability(
       for: .openclaw,
       environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
@@ -121,10 +289,10 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see OpenClaw installed. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again.")
+      "I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again.")
     XCTAssertEqual(
       availability.toolError,
-      "Error: I don't see OpenClaw installed. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again.")
+      "Error: I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again.")
   }
 
   // MARK: - ApiKeysResponse shape assertion
@@ -258,7 +426,7 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testAIProviderAllContainsSupportedProviders() {
-    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw"])
+    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw", "codex"])
   }
 
   func testAIProviderFromBridgeModeReturnsCorrectProvider() {
@@ -266,6 +434,7 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AIProvider.from(bridgeMode: "claudeCode")?.id, "claude")
     XCTAssertEqual(AIProvider.from(bridgeMode: "hermes")?.id, "hermes")
     XCTAssertEqual(AIProvider.from(bridgeMode: "openclaw")?.id, "openclaw")
+    XCTAssertEqual(AIProvider.from(bridgeMode: "codex")?.id, "codex")
     XCTAssertNil(AIProvider.from(bridgeMode: "unknown"))
     XCTAssertNil(AIProvider.from(bridgeMode: "agentSDK"))
   }
@@ -289,11 +458,11 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testProviderDirectiveRoutesCodexToCodexHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "codex: run the failing test suite")
+    let directive = AgentPillsManager.providerDirective(from: "use codex to refactor the parser")
 
     XCTAssertEqual(directive?.provider, .codex)
     XCTAssertEqual(directive?.provider.harnessMode, .codex)
-    XCTAssertEqual(directive?.rewrittenQuery, "run the failing test suite")
+    XCTAssertEqual(directive?.rewrittenQuery, "to refactor the parser")
     XCTAssertEqual(directive?.title, "Codex")
   }
 
