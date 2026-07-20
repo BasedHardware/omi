@@ -1229,3 +1229,173 @@ class TestDesktopPreviewEndpoints:
         assert accepted.status_code == 200
         assert accepted.json() == {"success": True, **delisted}
         delist.assert_called_once_with(PREVIEW_SLUG, expected_generation=2)
+
+
+# --- Beta identity (side-by-side "Omi Beta" app) ---
+
+
+def _beta_zip_asset(url="https://example.com/Omi.Beta.zip"):
+    return {"name": "Omi.Beta.zip", "browser_download_url": url}
+
+
+def _beta_dmg_asset(url="https://example.com/omi-beta.dmg"):
+    return {"name": "omi-beta.dmg", "browser_download_url": url}
+
+
+def _live_entry(channel="beta", assets=None, metadata=None, tag="v1.0.0+100-macos"):
+    return {
+        "channel": channel,
+        "release": {"tag_name": tag, "published_at": "2026-03-01T00:00:00Z", "body": "", "assets": assets or []},
+        "version_info": {"version": "1.0.0", "build": "100", "tag_name": tag},
+        "metadata": metadata or {},
+    }
+
+
+class TestBetaIdentityServing:
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_serves_beta_enclosure_and_drops_stable_items(self):
+        entries = [
+            _live_entry(channel="stable", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "stable-sig"}),
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset(), _beta_dmg_asset()],
+                metadata={"edSignature": "stable-sig", "betaEdSignature": "beta-sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        xml = resp.text
+        assert xml.count("<item>") == 1
+        assert "Omi.Beta.zip" in xml
+        assert 'edSignature="beta-sig"' in xml
+        assert "stable-sig" not in xml
+
+    @pytest.mark.asyncio
+    async def test_appcast_default_identity_is_unchanged_by_beta_assets(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset()],
+                metadata={"edSignature": "stable-sig", "betaEdSignature": "beta-sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml")
+
+        assert resp.status_code == 200
+        xml = resp.text
+        assert "Omi.Beta.zip" not in xml
+        assert "https://example.com/Omi.zip" in xml
+        assert 'edSignature="stable-sig"' in xml
+
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_omits_releases_without_beta_artifacts(self):
+        entries = [_live_entry(channel="beta", assets=[_zip_asset()], metadata={"edSignature": "sig"})]
+        gh_release_without_beta = _make_github_release(
+            "v1.0.0+100-macos", body_kv={"isLive": "true"}, assets=[_zip_asset()]
+        )
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch(
+                "routers.updates.get_omi_github_releases",
+                new_callable=AsyncMock,
+                return_value=[gh_release_without_beta],
+            ),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        assert resp.text.count("<item>") == 0
+
+    @pytest.mark.asyncio
+    async def test_appcast_identity_beta_resolves_pointer_entries_from_release_by_tag(self):
+        # Pointer entries fabricate their asset list from the manifest; the beta
+        # enclosure must come from the underlying GitHub release looked up by tag.
+        entries = [_live_entry(channel="beta", assets=[_zip_asset()], metadata={"edSignature": "sig"})]
+        gh_release = _make_github_release(
+            "v1.0.0+100-macos",
+            body_kv={"isLive": "false", "betaEdSignature": "beta-sig-from-body"},
+            assets=[_zip_asset(), _beta_zip_asset("https://example.com/by-tag/Omi.Beta.zip")],
+        )
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[gh_release]),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        xml = resp.text
+        assert "https://example.com/by-tag/Omi.Beta.zip" in xml
+        assert 'edSignature="beta-sig-from-body"' in xml
+
+    def test_stable_dmg_picker_never_returns_the_beta_dmg(self):
+        release = {
+            "assets": [_beta_dmg_asset(), {"name": "omi.dmg", "browser_download_url": "https://example.com/omi.dmg"}]
+        }
+        assert _get_dmg_download_url(release) == "https://example.com/omi.dmg"
+        assert _get_dmg_download_url({"assets": [_beta_dmg_asset()]}) is None
+
+    @pytest.mark.asyncio
+    async def test_download_latest_identity_beta_serves_beta_dmg(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _dmg_asset(), _beta_dmg_asset("https://example.com/dl/omi-beta.dmg")],
+                metadata={"edSignature": "sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/latest", params={"identity": "beta"})
+
+        assert resp.status_code == 200
+        assert "https://example.com/dl/omi-beta.dmg" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_download_beta_endpoint_serves_the_beta_identity_dmg(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _dmg_asset(), _beta_dmg_asset("https://example.com/dl/omi-beta.dmg")],
+                metadata={"edSignature": "sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/beta")
+
+        assert resp.status_code == 200
+        assert "https://example.com/dl/omi-beta.dmg" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_download_beta_endpoint_falls_back_to_stable_identity_before_rollout(self):
+        # Until the first dual-identity release is live, the public beta link keeps
+        # serving the stable-identity DMG instead of breaking.
+        entries = [
+            _live_entry(channel="beta", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "sig"}),
+        ]
+        gh_release_without_beta = _make_github_release(
+            "v1.0.0+100-macos", body_kv={"isLive": "true"}, assets=[_zip_asset(), _dmg_asset()]
+        )
+        with (
+            patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
+            patch(
+                "routers.updates.get_omi_github_releases",
+                new_callable=AsyncMock,
+                return_value=[gh_release_without_beta],
+            ),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/beta")
+
+        assert resp.status_code == 200
+        assert "https://example.com/Omi.dmg" in resp.text
+        fallback.assert_called_once()
+        assert fallback.call_args.kwargs["from_mode"] == "desktop_download_beta_identity"

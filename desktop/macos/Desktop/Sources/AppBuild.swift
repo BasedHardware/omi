@@ -2,6 +2,14 @@ import Foundation
 
 enum AppBuild {
   static let productionBundleIdentifier = "com.omi.computer-macos"
+  /// The separately-installable beta app ("Omi Beta.app"). A distinct bundle id gives it
+  /// its own UserDefaults domain, TCC grants, Keychain ACL, and single-instance lock, so
+  /// it runs side-by-side with stable. Must stay in sync with
+  /// `DesktopStorageIdentity.betaProductionBundleIdentifier` (asserted by a unit test).
+  static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"
+  static let productionFamilyBundleIdentifiers: Set<String> = [
+    productionBundleIdentifier, betaProductionBundleIdentifier,
+  ]
   static let desktopDevBundleIdentifier = "com.omi.desktop-dev"
   static let externalPreviewBundleIdentifierPrefix = "com.omi.preview."
   static let externalPreviewMarkerInfoKey = "OMIExternalPreview"
@@ -37,7 +45,7 @@ enum AppBuild {
 
     var isNonProduction: Bool {
       bundleIdentifier.hasPrefix("com.omi.")
-        && bundleIdentifier != AppBuild.productionBundleIdentifier
+        && !AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier)
     }
 
     var allowsLocalAutomation: Bool {
@@ -94,12 +102,32 @@ enum AppBuild {
     buildConfiguration.isNonProduction
   }
 
+  /// True for every shipped production-family artifact (stable *and* the beta app).
+  /// Use `isBetaProductionBundle` when behavior differs between the two.
   static var isProductionBundle: Bool {
-    bundleIdentifier == productionBundleIdentifier
+    productionFamilyBundleIdentifiers.contains(bundleIdentifier)
+  }
+
+  /// The separately-installable "Omi Beta" app. Its update channel is pinned to beta
+  /// and it keeps its own isolated on-disk state, so it can run beside stable.
+  static var isBetaProductionBundle: Bool {
+    bundleIdentifier == betaProductionBundleIdentifier
   }
 
   static var isExternalPreview: Bool {
     buildConfiguration.isExternalPreview
+  }
+
+  /// Legacy "Omi Computer.app" cleanup force-terminates running
+  /// `com.omi.computer-macos` processes and deletes the old bundle — strictly
+  /// stable-lineage housekeeping. Only the stable identity may run it: Omi Beta
+  /// or a dev bundle doing so would kill the user's running stable app.
+  static var mayRunLegacyStableAppCleanup: Bool {
+    mayRunLegacyStableAppCleanup(bundleIdentifier: bundleIdentifier)
+  }
+
+  static func mayRunLegacyStableAppCleanup(bundleIdentifier: String) -> Bool {
+    bundleIdentifier == productionBundleIdentifier
   }
 
   /// Only local development bundles expose the loopback automation/debug bridge. Published
@@ -179,12 +207,30 @@ enum AppBuild {
   }
 
   static var currentUpdateChannel: String {
+    // The Omi Beta app is permanently a beta-channel client; a stray defaults value
+    // (imported settings, sync) must never flip it to stable-identity updates.
+    if isBetaProductionBundle { return "beta" }
     let raw = UserDefaults.standard.string(forKey: updateChannelDefaultsKey) ?? "stable"
     return raw == "staging" ? "beta" : raw
   }
 
   static var manualDownloadURL: URL {
-    URL(string: "https://api.omi.me/v2/desktop/download/latest?channel=\(currentUpdateChannel)")!
+    manualDownloadURL(channel: currentUpdateChannel, isBetaIdentity: isBetaProductionBundle)
+  }
+
+  static func manualDownloadURL(channel: String, isBetaIdentity: Bool) -> URL {
+    var components = URLComponents()
+    components.scheme = "https"
+    components.host = "api.omi.me"
+    components.path = "/v2/desktop/download/latest"
+    var queryItems = [URLQueryItem(name: "channel", value: channel)]
+    if isBetaIdentity {
+      // The Omi Beta app must re-download its own identity, never the stable app.
+      queryItems.append(URLQueryItem(name: "identity", value: "beta"))
+    }
+    components.queryItems = queryItems
+    // Fixed scheme/host/path always produce a URL; the fallback is unreachable.
+    return components.url ?? URL(fileURLWithPath: "/")
   }
 
   static var inferredUpdateChannel: String {
@@ -238,6 +284,9 @@ enum AppBuild {
 
   static func prepareUpdateChannelForBackendRouting() {
     guard isProductionBundle else { return }
+    // Beta identity: channel is pinned, so the launch-blocking appcast probes and the
+    // stable-overwrite migration have nothing to decide.
+    guard !isBetaProductionBundle else { return }
 
     migrateBetaChannelOverwrite()
     if UserDefaults.standard.string(forKey: updateChannelDefaultsKey) == nil {

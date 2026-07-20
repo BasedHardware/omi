@@ -23,7 +23,10 @@ enum DesktopBackendEnvironment {
   ) -> Bool {
     guard !AppBuild.isExternalPreviewBundleIdentifier(bundleIdentifier) else { return false }
     guard !isAffirmative(forceOverride) else { return false }
-    return bundleIdentifier == AppBuild.productionBundleIdentifier && normalizedChannel(updateChannel) == "beta"
+    // Both production-family identities ride the beta ring on the beta channel;
+    // the separately-installable Omi Beta app pins its channel to beta.
+    return AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier)
+      && normalizedChannel(updateChannel) == "beta"
   }
 
   static var shouldUseDevelopmentBackends: Bool {
@@ -50,8 +53,9 @@ enum DesktopBackendEnvironment {
 
     // Named/dev bundles route to the dev backend by default. Explicit launch
     // URLs still win below so local harnesses and intentionally-targeted tests
-    // remain possible.
-    if bundleIdentifier != AppBuild.productionBundleIdentifier {
+    // remain possible. The Omi Beta app is a production-family artifact, not a
+    // dev bundle: it falls through to channel-based routing like stable.
+    if !AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier) {
       return true
     }
 
