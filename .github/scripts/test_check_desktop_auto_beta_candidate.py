@@ -47,6 +47,14 @@ def fixtures(root: Path) -> argparse.Namespace:
         "build": "12099",
         "team_id": "9536L8KLMP",
         "checks": sorted(REQUIRED_SMOKE_CHECKS),
+        "notification_callback_canary": {
+            "schema": 1,
+            "event": "user-notifications-settings-callback-completed",
+            "bundle_id": "com.omi.computer-macos",
+            "main_actor": True,
+            "authorization_status": 2,
+            "validated": True,
+        },
         "artifacts": [
             {"label": "sparkle_zip", "sha256": ZIP_SHA},
             {"label": "dmg", "sha256": DMG_SHA},
@@ -88,14 +96,26 @@ def main() -> int:
         assert result["passed"] is True
         assert result["artifact_digests"]["Omi.zip"] == ZIP_SHA
 
+        smoke_path = Path(args.smoke_result)
+        smoke = json.loads(smoke_path.read_text())
+        callback_canary = smoke.pop("notification_callback_canary")
+        smoke_path.write_text(json.dumps(smoke))
+        expect_failure(args, "missing UserNotifications callback canary evidence")
+        smoke["notification_callback_canary"] = callback_canary
+        smoke_path.write_text(json.dumps(smoke))
+
         stale = argparse.Namespace(**{**vars(args), "latest_tag": "v0.13.0+13000-macos"})
         expect_failure(stale, "newest tag")
 
-        smoke_path = Path(args.smoke_result)
         smoke = json.loads(smoke_path.read_text())
         smoke["artifacts"][0]["sha256"] = "d" * 64
         smoke_path.write_text(json.dumps(smoke))
         expect_failure(args, "Omi.zip digest")
+
+        smoke["artifacts"][0]["sha256"] = ZIP_SHA
+        smoke["notification_callback_canary"]["validated"] = False
+        smoke_path.write_text(json.dumps(smoke))
+        expect_failure(args, "callback canary validated mismatch")
 
     print("automatic desktop beta candidate tests OK")
     return 0
