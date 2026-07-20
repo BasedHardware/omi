@@ -27,6 +27,7 @@
     "verify:bytecode": "node scripts/verify-bytecode.mjs",
     "verify:pimono-unpack": "node scripts/verify-pimono-unpack.mjs",
     "verify:pimono-spawn": "node scripts/verify-pimono-packaged-spawn.mjs",
+    "verify:kgworker": "node scripts/verify-kgworker-packaged.mjs",
     "postinstall": "electron-builder install-app-deps && electron-rebuild -f -w better-sqlite3 && node scripts/ensure-ocr-helper.mjs && node scripts/ensure-audio-helper.mjs && node scripts/ensure-automation-helper.mjs && node scripts/copy-vad-assets.mjs && node scripts/check-agent-deps.mjs && node scripts/verify-pimono-unpack.mjs",
     "vad:assets": "node scripts/copy-vad-assets.mjs",
     "build:unpack": "npm run build && electron-builder --dir --config electron-builder.config.mjs",

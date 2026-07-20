@@ -19,6 +19,7 @@
 // Removing that flag silently drops this whole config (and the pi-mono closure).
 
 import { computeUnpackGlobs } from './scripts/gen-pimono-unpack.mjs'
+import { KGWORKER_NATIVE_UNPACK_GLOBS } from './scripts/kgworker-native-closure.mjs'
 
 // Fresh at every pack: the closure is recomputed from the installed node_modules,
 // so it can never be stale relative to what is actually on disk.
@@ -52,6 +53,12 @@ export default {
     // kgWorker.js is loaded via new Worker(path) which bypasses Electron's asar
     // virtual-fs patch — it must be a real file on disk.
     'out/main/kgWorker.js',
+    // ...and so must its native-module runtime closure: the worker's module
+    // resolution is plain real-fs anchored at app.asar.unpacked and never crosses
+    // back into app.asar, so better-sqlite3 + its pure-JS deps (bindings,
+    // file-uri-to-path) must all be unpacked or the worker dies with
+    // "Cannot find module 'bindings'". See scripts/kgworker-native-closure.mjs.
+    ...KGWORKER_NATIVE_UNPACK_GLOBS,
     // The coding-agent ACP entry is spawned as a plain Node child process
     // (ELECTRON_RUN_AS_NODE), which cannot read scripts out of the asar archive —
     // both the entry (emitted under out/main/chunks by the ?asset import) and the
