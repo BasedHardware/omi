@@ -5,7 +5,7 @@ struct ActionItemIdsResponse: Decodable {
   let ids: [String]
 }
 
-struct AppleRemindersPendingSync: Decodable {
+struct AppleRemindersPendingSync: Decodable, @unchecked Sendable {
   let pendingExport: [OmiAPI.ActionItemResponse]
   let syncedItems: [OmiAPI.ActionItemResponse]
 
@@ -15,7 +15,7 @@ struct AppleRemindersPendingSync: Decodable {
   }
 }
 
-struct AppleRemindersSyncUpdate: Encodable {
+struct AppleRemindersSyncUpdate: Encodable, Sendable {
   let id: String
   var description: String?
   var completed: Bool?
