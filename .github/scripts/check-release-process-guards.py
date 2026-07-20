@@ -75,6 +75,7 @@ def check_desktop_codemagic_release() -> list[str]:
         "desktop/macos/dmg-assets/dmgbuild_settings.py",
         "scripts/scan-public-artifact-secrets.py",
         ".github/scripts/desktop-changelog.py",
+        ".github/scripts/desktop_qualification_dispatch.py",
     ]
     for required_file in required_files:
         if not (ROOT / required_file).exists():
@@ -102,10 +103,40 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
     if "desktop_qualify_beta.yml" not in desktop_workflow_body:
         errors.append("desktop release must dispatch the trusted macOS qualification workflow")
-    if "if ! gh workflow run desktop_qualify_beta.yml" not in desktop_workflow_body:
-        errors.append("desktop qualification handoff must not fail a published candidate on a transient dispatch error")
+    for required_fragment in (
+        "desktop_qualification_dispatch.py",
+        "dispatch_key=\"codemagic:${CM_TAG}\"",
+        "for attempt in 1 2 3",
+        "--state dispatch_failed",
+        "preserving immutable evidence",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop qualification handoff is missing reliable dispatch fragment: {required_fragment}")
+    if "working_directory: desktop/macos" in desktop_workflow_body:
+        for required_fragment in (
+            'repo_root="$(git rev-parse --show-toplevel)"',
+            'dispatch_helper="$repo_root/.github/scripts/desktop_qualification_dispatch.py"',
+            'REPO_ROOT="$repo_root" python3',
+            'os.path.join(os.environ["REPO_ROOT"], ".github/scripts")',
+        ):
+            if required_fragment not in desktop_workflow_body:
+                errors.append(
+                    "desktop qualification handoff must resolve repository-root helpers from its Codemagic working directory"
+                )
+                break
+        for forbidden_fragment in (
+            "python3 .github/scripts/desktop_qualification_dispatch.py",
+            "sys.path.insert(0, '.github/scripts')",
+        ):
+            if forbidden_fragment in desktop_workflow_body:
+                errors.append(
+                    "desktop qualification handoff must not resolve .github/scripts relative to desktop/macos"
+                )
+                break
     if "candidate remains non-live" not in desktop_workflow_body:
         errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
+    if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
+        errors.append("desktop candidate retries must not delete immutable qualification evidence")
     if "docker info" in desktop_workflow_body:
         errors.append("Codemagic desktop release must not run Docker-backed beta qualification")
     if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
@@ -285,6 +316,11 @@ def check_desktop_qualification_runner() -> list[str]:
         "--no-promote",
         "desktop_promote_beta.yml",
         "actions/create-github-app-token@v3",
+        "dispatch_key:",
+        "retry_nonce:",
+        "desktop_qualification_dispatch.py claim",
+        "desktop_qualification_dispatch.py complete",
+        "desktop-beta-qualification-${{ inputs.release_tag }}",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
