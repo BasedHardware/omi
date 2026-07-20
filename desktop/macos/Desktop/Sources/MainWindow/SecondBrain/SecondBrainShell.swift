@@ -75,6 +75,12 @@ struct SecondBrainShell<Content: View>: View {
         Circle().fill(sb.ink(.w14)).frame(width: 11, height: 11)
       }
       Spacer()
+      Button { SBThemeManager.shared.toggle() } label: {
+        Text("◐").font(.system(size: 14)).foregroundStyle(sb.ink(.w4))
+      }
+      .buttonStyle(.plain)
+      .help("Light / dark")
+      .padding(.trailing, 10)
       SBLogo(size: 15, spinning: isWorking, opacity: isWorking ? 1 : 0.85)
     }
     .padding(.horizontal, 22)

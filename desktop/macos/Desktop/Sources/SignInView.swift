@@ -1,145 +1,132 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
 struct SignInView: View {
   @ObservedObject var authState: AuthState
+  @Environment(\.sbTheme) private var sb
+  @State private var breathe = false
+
+  private static let logoImage: NSImage? = {
+    guard let url = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+      let data = try? Data(contentsOf: url)
+    else { return nil }
+    let img = NSImage(data: data)
+    img?.isTemplate = true
+    return img
+  }()
 
   var body: some View {
     ZStack {
-      // Full background
-      OmiColors.backgroundPrimary
-        .ignoresSafeArea()
+      SBWallpaper()
 
-      // Centered sign in card
-      VStack(spacing: OmiSpacing.section) {
-        Spacer()
-
-        // Logo/Title
-        VStack(spacing: OmiSpacing.lg) {
-          // Omi logo
-          if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-            let logoImage = NSImage(contentsOf: logoURL)
-          {
-            Image(nsImage: logoImage)
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 64, height: 64)
+      VStack(spacing: 0) {
+        // Breathing logo.
+        Group {
+          if let logo = Self.logoImage {
+            Image(nsImage: logo).resizable().renderingMode(.template).scaledToFit()
+          } else {
+            Circle().strokeBorder(lineWidth: 5)
           }
-
-          Text("omi")
-            .scaledFont(size: 48, weight: .bold)
-            .foregroundColor(OmiColors.textPrimary)
-
-          Text("Sign in to continue")
-            .font(.title3)
-            .foregroundColor(OmiColors.textTertiary)
         }
+        .foregroundStyle(sb.ink)
+        .frame(width: 44, height: 44)
+        .scaleEffect(breathe ? 1.08 : 1.0)
+        .opacity(breathe ? 1.0 : 0.85)
+        .animation(SBMotion.breathe, value: breathe)
 
-        Spacer()
+        Text("A second brain you trust\nmore than your first")
+          .geist(size: 36, weight: .semibold, tracking: 36 * -0.03)
+          .foregroundStyle(sb.ink)
+          .multilineTextAlignment(.center)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.top, 26)
 
-        // Sign in buttons
-        VStack(spacing: OmiSpacing.md) {
-          // Sign in with Apple
-          Button(action: {
-            Task {
-              do {
-                try await AuthService.shared.signInWithApple()
-              } catch is CancellationError {
-                // swallow — user initiated
-              } catch AuthError.cancelled {
-                // swallow — user initiated
-              } catch {
-                let errorMsg = UserFacingErrorPresentation.message(for: error, while: .signIn)
-                authState.error = errorMsg
-                NSLog("OMI Sign in error: %@", errorMsg)
-              }
-            }
-          }) {
-            HStack(spacing: OmiSpacing.sm) {
-              Image(systemName: "applelogo")
-                .scaledFont(size: OmiType.heading)
-              Text("Sign in with Apple")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-            }
-            .foregroundColor(.black)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(Color.white)
-            .cornerRadius(OmiChrome.smallControlRadius)
-          }
-          .buttonStyle(.plain)
-          .disabled(authState.isLoading)
+        Text("It remembers every conversation — and does the follow-ups.")
+          .geist(size: 15.5)
+          .foregroundStyle(sb.ink(.w45))
+          .multilineTextAlignment(.center)
+          .padding(.top, 8)
 
-          // Sign in with Google
-          Button(action: {
-            Task {
-              do {
-                try await AuthService.shared.signInWithGoogle()
-              } catch is CancellationError {
-                // swallow — user initiated
-              } catch AuthError.cancelled {
-                // swallow — user initiated
-              } catch {
-                let errorMsg = UserFacingErrorPresentation.message(for: error, while: .signIn)
-                authState.error = errorMsg
-                NSLog("OMI Sign in error: %@", errorMsg)
-              }
-            }
-          }) {
-            HStack(spacing: OmiSpacing.sm) {
-              GoogleLogo()
-                .frame(width: 18, height: 18)
-              Text("Sign in with Google")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-            }
-            .foregroundColor(.black)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(Color.white)
-            .cornerRadius(OmiChrome.smallControlRadius)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-            )
-          }
-          .buttonStyle(.plain)
-          .disabled(authState.isLoading)
+        VStack(spacing: 10) {
+          signInButton(
+            title: "Continue with Apple",
+            filled: true,
+            leading: {
+              Image(systemName: "applelogo").font(.system(size: 13)).foregroundStyle(sb.inkInverted)
+            },
+            action: { signIn(apple: true) })
+          signInButton(
+            title: "Continue with Google",
+            filled: false,
+            leading: { GoogleLogo().frame(width: 14, height: 14) },
+            action: { signIn(apple: false) })
 
-          // Loading overlay for both buttons
           if authState.isLoading {
-            ProgressView()
-              .progressViewStyle(CircularProgressViewStyle(tint: OmiColors.textPrimary))
-              .padding(.top, OmiSpacing.sm)
-
-            // Minimal escape hatch so a failed web sign-in (closed tab,
-            // denied on Apple/Google, etc.) doesn't trap the user with
-            // permanently disabled buttons waiting for a callback that
-            // will never arrive.
-            Button(action: {
-              AuthService.shared.cancelSignIn()
-            }) {
-              Text("Cancel")
-                .font(.caption)
-                .foregroundColor(OmiColors.textTertiary)
+            ProgressView().scaleEffect(0.7).tint(sb.ink(.w6)).padding(.top, 6)
+            Button { AuthService.shared.cancelSignIn() } label: {
+              Text("Cancel").geist(size: 12).foregroundStyle(sb.ink(.w4))
             }
             .buttonStyle(.plain)
-            .padding(.top, OmiSpacing.xxs)
           }
-
           if let error = authState.error {
             Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
-              .font(.caption)
-              .foregroundColor(OmiColors.error)
-              .multilineTextAlignment(.center)
-              .padding(.top, OmiSpacing.xxs)
+              .geist(size: 12).foregroundStyle(sb.ink(.w5))
+              .multilineTextAlignment(.center).padding(.top, 4)
           }
         }
-        .frame(width: 320)
+        .frame(width: 300)
+        .padding(.top, 34)
 
-        Spacer()
-          .frame(height: 60)
+        Text("open source · runs on your mac · pause anytime")
+          .geistMono(size: 12)
+          .foregroundStyle(sb.ink(.w28))
+          .padding(.top, 30)
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onAppear { breathe = true }
+  }
+
+  @ViewBuilder private func signInButton<Leading: View>(
+    title: String, filled: Bool, @ViewBuilder leading: () -> Leading, action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      HStack(spacing: 8) {
+        leading()
+        Text(title).geist(size: 15, weight: filled ? .semibold : .medium)
+      }
+      .foregroundStyle(filled ? sb.inkInverted : sb.ink(.w85))
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 11)
+      .background(
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+          .fill(filled ? sb.ink : sb.ink(.w04))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 11, style: .continuous)
+          .stroke(filled ? .clear : sb.ink(.w18), lineWidth: 1)
+      )
+    }
+    .buttonStyle(.plain)
+    .disabled(authState.isLoading)
+  }
+
+  private func signIn(apple: Bool) {
+    Task {
+      do {
+        if apple {
+          try await AuthService.shared.signInWithApple()
+        } else {
+          try await AuthService.shared.signInWithGoogle()
+        }
+      } catch is CancellationError {
+      } catch AuthError.cancelled {
+      } catch {
+        let errorMsg = UserFacingErrorPresentation.message(for: error, while: .signIn)
+        authState.error = errorMsg
+        NSLog("OMI Sign in error: %@", errorMsg)
+      }
     }
   }
 }
@@ -158,9 +145,3 @@ struct GoogleLogo: View {
     }
   }
 }
-
-#if canImport(PreviewsMacros)
-  #Preview {
-    SignInView(authState: AuthState.shared)
-  }
-#endif
