@@ -643,7 +643,6 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Start a canonical Omi background agent with floating-bar pill UI.",
       ["Requires Swift AgentBridge/floating pill support."],
     ),
-    guidance: { allowedOnSurfaces: ["desktop_chat"], requiresHumanConfirmation: false },
     executor: { kind: "swiftTool" },
   },
   manage_agent_pills: {
@@ -653,7 +652,6 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "List, dismiss, or clear completed floating agent pills.",
       ["Requires Swift floating agent pill registry."],
     ),
-    guidance: { allowedOnSurfaces: ["desktop_chat"], requiresHumanConfirmation: false },
     executor: { kind: "swiftTool" },
   },
   setup_agent_provider: {
@@ -663,7 +661,6 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Install a missing local agent provider (OpenClaw, Hermes, or Codex) with native consent dialog.",
       ["Requires Swift LocalAgentProviderInstaller."],
     ),
-    guidance: { allowedOnSurfaces: ["desktop_chat"], requiresHumanConfirmation: true },
     executor: { kind: "swiftTool" },
   },
 };
