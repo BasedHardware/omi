@@ -66,7 +66,7 @@ The DAT integration was written against the DAT 0.8 API reference without SDK
 access (the package is public but the API may drift between preview releases).
 All DAT symbols live in `app/ios/Runner/RayBanMeta/RayBanMetaHostApiImpl.swift`
 inside `#if canImport(MWDATCore)` — reconcile symbol names against
-<https://wearables.developer.meta.com/docs/reference/ios_swift/dat/> for your
+https://wearables.developer.meta.com/docs/reference/ios_swift/dat/ for your
 package version. `RayBanMetaAudioCapture.swift` has no DAT dependency and
 should never break.
 
@@ -108,7 +108,7 @@ Fix directions (pick one before enabling the DAT build in production):
 1. **Ask Meta to stop exporting SwiftProtobuf** from `MWDATCore` (build it with
    hidden symbol visibility / a private module, or vendor it under a renamed
    namespace). This is the clean fix and the right upstream ask — file it on
-   <https://github.com/facebook/meta-wearables-dat-ios/issues>.
+   https://github.com/facebook/meta-wearables-dat-ios/issues.
 2. **Remove the app's second SwiftProtobuf copy.** Replace `mcumgr_flutter`'s
    SwiftProtobuf dependency, or isolate MCU-DFU (the only consumer) behind a
    boundary that doesn't co-link with `MWDATCore` — e.g. load `MWDATCore` only
@@ -163,6 +163,6 @@ during plugin registration, then run the founder-acceptance checklist
 
 ## Reference
 
-- Meta toolkit docs: <https://wearables.developer.meta.com/docs/develop/>
-- Mic/speaker guidance (HFP): <https://wearables.developer.meta.com/docs/develop/dat/microphones-and-speakers/>
-- iOS integration: <https://wearables.developer.meta.com/docs/build-integration-ios/>
+- Meta toolkit docs: https://wearables.developer.meta.com/docs/develop/
+- Mic/speaker guidance (HFP): https://wearables.developer.meta.com/docs/develop/dat/microphones-and-speakers/
+- iOS integration: https://wearables.developer.meta.com/docs/build-integration-ios/
