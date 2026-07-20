@@ -59,3 +59,39 @@ def test_valid_price_creates_the_recurring_price(stripe_mock):
     stripe_mock.create_app_monthly_recurring_price.assert_called_once()
     # int(5.0 * 100) == 500 cents, the exact value that used to crash on a bad price.
     assert stripe_mock.create_app_monthly_recurring_price.call_args[0][1] == 500
+
+
+@pytest.mark.parametrize(
+    'price, expected_cents',
+    [(5.0, 500), (10.0, 1000), (0.99, 99), (9.99, 999), (29.99, 2999), (1.5, 150), (100.0, 10000)],
+)
+def test_price_is_billed_in_whole_cents(stripe_mock, price, expected_cents):
+    """The amount handed to Stripe is the price in cents."""
+    upsert_app_payment_link('app1', True, price, 'monthly_recurring', 'u1')
+    assert stripe_mock.create_app_monthly_recurring_price.call_args[0][1] == expected_cents
+
+
+@pytest.mark.parametrize(
+    'price, expected_cents',
+    [(19.99, 1999), (8.29, 829), (0.29, 29), (1.13, 113), (2.01, 201), (43.15, 4315)],
+)
+def test_binary_float_prices_are_not_underbilled_by_a_cent(stripe_mock, price, expected_cents):
+    """Prices whose cent value is not exactly representable must round, not truncate.
+
+    int(19.99 * 100) is 1998, so an app listed at $19.99 had a Stripe price created at
+    $19.98 while App.price kept saying 19.99 — the database and Stripe disagreed
+    permanently and every buyer was undercharged a cent.
+    """
+    upsert_app_payment_link('app1', True, price, 'monthly_recurring', 'u1')
+    assert stripe_mock.create_app_monthly_recurring_price.call_args[0][1] == expected_cents
+
+
+def test_no_price_in_the_common_range_is_underbilled(stripe_mock):
+    """No price in $0.01..$100.00 may be billed fewer cents than it is worth."""
+    wrong = []
+    for cents in range(1, 10001):
+        price = cents / 100
+        upsert_app_payment_link('app1', True, price, 'monthly_recurring', 'u1')
+        if stripe_mock.create_app_monthly_recurring_price.call_args[0][1] != cents:
+            wrong.append(price)
+    assert wrong == []
