@@ -10,7 +10,7 @@ APP_CONFIG="$SCRIPT_DIR/../scripts/app-config.sh"
 require_text() {
   local pattern="$1"
   local file="${2:-$QUALIFIER}"
-  grep -Fq "$pattern" "$file" || {
+  grep -Fq -- "$pattern" "$file" || {
     echo "FAIL: qualification bootstrap missing: $pattern" >&2
     exit 1
   }
@@ -26,6 +26,17 @@ require_text 'defaults write "$BUNDLE_ID" transcriptionEnabled -bool false' "$PR
 require_text '"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"' "$QUALIFIER"
 require_text 'OMI_SKIP_SETTINGS_SEED=1 make desktop-run-local'
 require_text 'terminate_qualification_desktop "$BUNDLE"'
+require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
+require_text 'worktree list --porcelain | grep -Fxq "worktree $WORKTREE"'
+require_text 'worktree remove --force "$WORKTREE"'
+require_text 'worktree prune'
+require_text 'unregistered worktree path exists: $WORKTREE'
+require_text "for-each-ref --count=1 --sort=-v:refname"
+require_text "--format='%(refname:strip=2)' 'refs/tags/v*-macos'"
+if grep -Fq 'rm -rf "$WORKTREE"' "$QUALIFIER"; then
+  echo "FAIL: qualification worktree cleanup must use registered worktree removal" >&2
+  exit 1
+fi
 require_text 'derive_omi_app_config "$BUNDLE"' "$CORE_HARNESS"
 require_text 'wrong bundle on port' "$CORE_HARNESS"
 
