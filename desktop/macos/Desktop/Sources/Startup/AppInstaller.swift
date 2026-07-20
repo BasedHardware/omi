@@ -84,19 +84,12 @@ enum AppInstaller {
         removeQuarantine(at: destination)
         return relaunch(destination)
       }
-      do {
-        try fileManager.removeItem(at: destination)
-      } catch {
-        logError("AppInstaller: could not remove existing installed copy", error: error)
-        showManualInstallHint()
-        return false
-      }
     }
 
     do {
-      try fileManager.copyItem(at: bundleURL, to: destination)
+      try replaceInstalledApp(source: bundleURL, destination: destination, fileManager: fileManager)
     } catch {
-      logError("AppInstaller: copy to /Applications failed", error: error)
+      logError("AppInstaller: install to /Applications failed (existing copy preserved)", error: error)
       showManualInstallHint()
       return false
     }
@@ -108,6 +101,36 @@ enum AppInstaller {
     removeQuarantine(at: destination)
 
     return relaunch(destination)
+  }
+
+  /// Atomically install `source` at `destination`, replacing any existing bundle.
+  ///
+  /// The old code did `removeItem(destination)` then `copyItem(source →
+  /// destination)`: a copy failure after the remove (e.g. ENOSPC copying off a
+  /// nearly-full DMG) destroyed the user's working `/Applications` copy. Here the
+  /// fresh bundle is copied to a staging path FIRST and only swapped in via
+  /// `replaceItemAt` after the copy succeeds, so the existing install survives any
+  /// copy failure untouched. Staging lives beside `destination` (same volume) so
+  /// the swap is a rename, not a second cross-volume copy.
+  static func replaceInstalledApp(
+    source: URL,
+    destination: URL,
+    fileManager: FileManager = .default
+  ) throws {
+    let staging = destination.deletingLastPathComponent()
+      .appendingPathComponent(".\(destination.lastPathComponent).staging-\(getpid())")
+    do {
+      try? fileManager.removeItem(at: staging)  // clear any stale staging from a prior crash
+      try fileManager.copyItem(at: source, to: staging)
+      if fileManager.fileExists(atPath: destination.path) {
+        _ = try fileManager.replaceItemAt(destination, withItemAt: staging)
+      } else {
+        try fileManager.moveItem(at: staging, to: destination)
+      }
+    } catch {
+      try? fileManager.removeItem(at: staging)
+      throw error
+    }
   }
 
   private static func build(atBundleURL url: URL) -> String? {

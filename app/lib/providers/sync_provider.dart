@@ -15,7 +15,7 @@ import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
 import 'package:omi/utils/waveform_utils.dart';
 
-enum WalStatusFilter { pending, synced }
+enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
 
@@ -58,9 +58,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   // `uploaded` is not yet backed up (the server job is still processing), so
   // it counts as pending — keeps it visible in the legacy SyncPage and in
-  // pending counts until the reconciler confirms it `synced`.
+  // pending counts until the reconciler confirms it `synced`. `corrupted` is
+  // terminal: retain it in All and Needs Attention, never present it as work
+  // that sync can still complete.
   bool _isPending(Wal w) =>
-      w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.status == WalStatus.corrupted || w.isSyncing;
+      w.status != WalStatus.corrupted && (w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.isSyncing);
 
   // Memoized status-filtered partitions of _allWals. Returning a stable
   // List<Wal> reference between rebuilds is load-bearing — downstream the
@@ -78,10 +80,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // — but there are none today; if any are added, route them through
   // refreshWals or bump a version counter here.
   //
-  // Both partitions are computed in a single pass to avoid two iterations
-  // over a potentially 50k-item list. Both caches share the same stamp.
+  // All three partitions are computed in a single pass to avoid three iterations
+  // over a potentially 50k-item list. All caches share the same stamp.
   List<Wal>? _pendingWalsCache;
   List<Wal>? _syncedWalsCache;
+  List<Wal>? _corruptedWalsCache;
   int _filteredWalsCacheStamp = 0;
 
   void _ensureFilteredCaches() {
@@ -89,15 +92,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (_pendingWalsCache != null && _filteredWalsCacheStamp == stamp) return;
     final pending = <Wal>[];
     final synced = <Wal>[];
+    final corrupted = <Wal>[];
     for (final w in _allWals) {
       if (w.status == WalStatus.synced) {
         synced.add(w);
+      } else if (w.status == WalStatus.corrupted) {
+        corrupted.add(w);
       } else if (_isPending(w)) {
         pending.add(w);
       }
     }
     _pendingWalsCache = pending;
     _syncedWalsCache = synced;
+    _corruptedWalsCache = corrupted;
     _filteredWalsCacheStamp = stamp;
   }
 
@@ -111,10 +118,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return _syncedWalsCache!;
   }
 
+  /// Terminally unavailable recordings. They remain reachable for review or
+  /// deletion, but never count as retryable pending work.
+  List<Wal> get corruptedWals {
+    _ensureFilteredCaches();
+    return _corruptedWalsCache!;
+  }
+
   List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
 
-  List<Wal> get pendingDeletableWals =>
-      _allWals.where((w) => !w.isSyncing && (w.status == WalStatus.miss || w.status == WalStatus.corrupted)).toList();
+  List<Wal> get pendingDeletableWals => _allWals.where((w) => !w.isSyncing && w.status == WalStatus.miss).toList();
 
   // Count-only accessors for status-chip badges. Read length from the
   // shared cached partitions so the chips don't trigger an extra iteration
@@ -131,16 +144,28 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return _syncedWalsCache!.length;
   }
 
+  int get corruptedStatusCount {
+    _ensureFilteredCaches();
+    return _corruptedWalsCache!.length;
+  }
+
+  /// Recordings that the storage sheet's Clear All action can remove.
+  int get clearableWalsCount => syncedWals.length + pendingDeletableWals.length + corruptedWals.length;
+
   /// True while a fair-use (429) cooldown is active — uploads are paused.
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
   DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
   RateLimitReason? get rateLimitReason => SyncRateLimiter.instance.reason;
 
   List<Wal> get filteredByStatusWals {
-    if (_statusFilter == WalStatusFilter.pending) {
-      return pendingWals;
+    switch (_statusFilter) {
+      case WalStatusFilter.pending:
+        return pendingWals;
+      case WalStatusFilter.synced:
+        return syncedWals;
+      case WalStatusFilter.corrupted:
+        return corruptedWals;
     }
-    return syncedWals;
   }
 
   // ─────────────────────────────────────────
@@ -189,7 +214,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         case WalDisplayFilter.all:
           return true;
         case WalDisplayFilter.pending:
-          return w.syncDisplayState != WalSyncDisplayState.synced;
+          return w.status != WalStatus.corrupted && w.syncDisplayState != WalSyncDisplayState.synced;
         case WalDisplayFilter.synced:
           return w.syncDisplayState == WalSyncDisplayState.synced;
       }
@@ -299,12 +324,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
-  })  : _walServiceOverride = walService,
-        _uploadGate = uploadGate ?? SyncUploadGate.instance,
-        _startBackgroundSync = startBackgroundSync,
-        _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
-        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+  }) : _walServiceOverride = walService,
+       _uploadGate = uploadGate ?? SyncUploadGate.instance,
+       _startBackgroundSync = startBackgroundSync,
+       _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
+       _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
+       _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
@@ -461,6 +486,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> deleteAllPendingWals() async {
     await _walService.getSyncs().deleteAllPendingWals();
+    await refreshWals();
+  }
+
+  /// Clears every local recording category. Unlike the retryable Pending
+  /// action, this deliberately includes terminally corrupted phone WALs.
+  Future<void> deleteAllClearableWals() async {
+    final syncs = _walService.getSyncs();
+    await syncs.deleteAllSyncedWals();
+    await syncs.deleteAllPendingWals();
+    await syncs.deleteAllCorruptedWals();
     await refreshWals();
   }
 

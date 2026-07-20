@@ -1,0 +1,3 @@
+{
+  "change": "Fixed starring or renaming a conversation briefly reverting when you switch filters on a slow connection"
+}

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed already-synced device recordings never being cleaned up, which grew disk usage over time"
+}

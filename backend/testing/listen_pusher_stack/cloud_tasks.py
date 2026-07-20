@@ -138,6 +138,13 @@ class StrictLoopbackTasksClient:
             raise RuntimeError('finalization task name does not match its opaque durable identity')
         with _task_event_lock():
             if task_name in _read_task_names():
+                _append_event(
+                    {
+                        'event': 'task_already_exists',
+                        'task_name': task_name,
+                        'payload': payload,
+                    }
+                )
                 raise AlreadyExists(f'loopback task already exists: {task_name}')
             _append_event(
                 {

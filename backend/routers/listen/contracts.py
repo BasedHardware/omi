@@ -53,6 +53,8 @@ class ListenSessionState:
     speaker_id_done: asyncio.Event = field(default_factory=asyncio.Event)
     speaker_map_dirty: bool = False
     first_audio_byte_timestamp: Optional[float] = None
+    live_transcription_attempt: Any = None
+    live_transcription_failed: bool = False
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
     last_transcript_time: Optional[float] = None

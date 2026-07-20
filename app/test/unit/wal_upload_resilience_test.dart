@@ -4,10 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart' show SyncUploadLane;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -25,8 +28,9 @@ import 'package:omi/utils/wal_file_manager.dart';
 ///      backoff. These tests document that retry cap is NOT enforced by
 ///      syncAll(), so the team knows it must be added separately.
 ///
-/// Tests avoid real HTTP by using WAL configurations where files.isEmpty is
-/// always true (null/missing paths), so syncLocalFilesV2 is never reached.
+/// Every upload attempt uses a deterministic local failure gate. The tests
+/// exercise the production state machine without live HTTP or wall-clock
+/// timeouts.
 
 class _MockListener implements IWalSyncListener {
   int walUpdatedCount = 0;
@@ -77,10 +81,25 @@ void main() {
 
     await WalFileManager.init();
     listener = _MockListener();
-    sync = LocalWalSyncImpl(listener);
+    SyncRateLimiter.instance.clear();
+    sync = LocalWalSyncImpl(
+      listener,
+      uploadGate: SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async {
+          throw StateError('deterministic test upload failure');
+        },
+        fairUseStatusLoader: () async => {'stage': 'none'},
+      ),
+    );
   });
 
   tearDown(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
+    SyncRateLimiter.instance.clear();
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
@@ -116,24 +135,21 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // deleteAllPendingWals — miss + corrupted are both "pending"
+  // deleteAllPendingWals — terminal corruption stays visible for individual
+  // review/delete instead of being silently grouped with retryable work.
   // -------------------------------------------------------------------------
 
   group('deleteAllPendingWals', () {
-    test('removes miss and corrupted WALs but preserves synced', () async {
+    test('removes miss but preserves terminal corrupted and synced WALs', () async {
       final syncedWal = _makeWal(timerStart: 9000, status: WalStatus.synced, filePath: null);
-      sync.testWals = [
-        _makeWal(timerStart: 1000, status: WalStatus.miss, filePath: null),
-        _makeWal(timerStart: 2000, status: WalStatus.corrupted, filePath: null),
-        syncedWal,
-      ];
+      final corruptedWal = _makeWal(timerStart: 2000, status: WalStatus.corrupted, filePath: null);
+      sync.testWals = [_makeWal(timerStart: 1000, status: WalStatus.miss, filePath: null), corruptedWal, syncedWal];
 
       await sync.deleteAllPendingWals();
 
       final remaining = await sync.getAllWals();
-      expect(remaining.length, 1);
-      expect(remaining.first.status, WalStatus.synced);
-      expect(remaining.first.timerStart, 9000);
+      expect(remaining, containsAll([corruptedWal, syncedWal]));
+      expect(remaining, hasLength(2));
     });
 
     test('no-op when no pending WALs exist', () async {
@@ -143,14 +159,25 @@ void main() {
 
       expect((await sync.getAllWals()).length, 1);
     });
+
+    test('terminal clear removes only corrupted WALs', () async {
+      final missingWal = _makeWal(timerStart: 1000, status: WalStatus.miss, filePath: null);
+      final corruptedWal = _makeWal(timerStart: 2000, status: WalStatus.corrupted, filePath: null);
+      final syncedWal = _makeWal(timerStart: 3000, status: WalStatus.synced, filePath: null);
+      sync.testWals = [missingWal, corruptedWal, syncedWal];
+
+      await sync.deleteAllCorruptedWals();
+
+      expect(await sync.getAllWals(), containsAll([missingWal, syncedWal]));
+      expect(await sync.getAllWals(), hasLength(2));
+    });
   });
 
   // -------------------------------------------------------------------------
   // syncAll pre-upload file checks
   //
-  // Both cases below are "zombie miss" sub-types: the WAL passes the
-  // syncAll() miss filter but fails the file-existence check, so it is
-  // marked corrupted and no HTTP upload is attempted.
+  // Both cases below pass the syncAll() miss filter but fail local file
+  // validation, so they become terminal corruption before any upload.
   // -------------------------------------------------------------------------
 
   group('syncAll: pre-upload file validation', () {
@@ -174,6 +201,11 @@ void main() {
       // (OS cleanup, user cleared app storage, etc.).
       // The file does NOT exist in tempDir, so existsSync() returns false.
       final wal = _makeWal(timerStart: 2000, filePath: 'ghost_audio_2000.bin');
+      wal
+        ..isSyncing = true
+        ..syncStartedAt = DateTime.now()
+        ..syncEtaSeconds = 10
+        ..syncSpeedKBps = 12;
       sync.testWals = [wal];
 
       await sync.syncAll();
@@ -183,6 +215,12 @@ void main() {
         WalStatus.corrupted,
         reason: 'missing file must be marked corrupted, not silently re-queued',
       );
+      expect(await sync.getMissingWals(), isEmpty, reason: 'terminal corruption must leave the retry queue');
+      expect(await sync.syncAll(), isNull, reason: 'a second sync must not retry terminal corruption');
+      expect(wal.isSyncing, isFalse);
+      expect(wal.syncStartedAt, isNull);
+      expect(wal.syncEtaSeconds, isNull);
+      expect(wal.syncSpeedKBps, isNull);
     });
 
     test('corrupted WAL is excluded from syncAll retry pool', () async {
@@ -216,12 +254,8 @@ void main() {
 
     test('valid file on disk is NOT marked corrupted', () async {
       // Write an actual file so existsSync() returns true.
-      // syncAll() will then try to upload, but files.isNotEmpty means
-      // it would call syncLocalFilesV2 — we stop here and just verify
-      // the pre-check does not corrupt a valid WAL.
-      //
-      // NOTE: The actual upload is NOT tested here (requires HTTP mock).
-      // This test only exercises the file-existence guard path.
+      // syncAll() reaches the injected deterministic upload failure only after
+      // production file validation accepts the file.
       const filename = 'valid_audio_5000.bin';
       final file = File('${tempDir.path}/$filename');
       await file.writeAsBytes([0xAA, 0xBB]); // Any content — just needs to exist
@@ -229,20 +263,15 @@ void main() {
       final wal = _makeWal(timerStart: 5000, filePath: filename);
       sync.testWals = [wal];
 
-      // Attempt syncAll; it will try to upload but fail with a network error.
-      // We catch the error and only check that the WAL was NOT pre-marked corrupted.
-      try {
-        await sync.syncAll().timeout(const Duration(seconds: 3));
-      } catch (_) {
-        // Expected: network call fails in test environment
-      }
+      final result = await sync.syncAll();
 
-      // No server in test environment — upload fails, WAL stays miss.
+      expect(result?.localUploadFailures, 1);
       expect(
         sync.testWals.first.status,
         WalStatus.miss,
-        reason: 'a WAL whose file exists must not be corrupted by pre-upload checks; '
-            'upload failure in this environment leaves it as miss',
+        reason:
+            'a WAL whose file exists must not be corrupted by pre-upload checks; '
+            'a failed upload leaves it retryable as miss',
       );
     });
   });
@@ -273,16 +302,15 @@ void main() {
       expect(wal.retryCount, 0);
       sync.testWals = [wal];
 
-      // syncAll() will reach syncLocalFilesV2, which fails (no server in test env).
+      // syncAll() reaches the deterministic local upload failure.
       // The catch block at local_wal_sync.dart:661 resets isSyncing but does NOT:
       //   - increment retryCount
       //   - change status
       //   - apply any backoff
-      try {
-        await sync.syncAll().timeout(const Duration(seconds: 5));
-      } catch (_) {}
+      final result = await sync.syncAll();
 
       final stuck = sync.testWals.first;
+      expect(result?.localUploadFailures, 1);
       expect(
         stuck.status,
         WalStatus.miss,
@@ -291,7 +319,8 @@ void main() {
       expect(
         stuck.retryCount,
         0,
-        reason: 'syncAll() never increments retryCount, so the WAL looks brand-new '
+        reason:
+            'syncAll() never increments retryCount, so the WAL looks brand-new '
             'on every app open and is unconditionally re-queued',
       );
       expect(stuck.isSyncing, false, reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
@@ -316,14 +345,14 @@ void main() {
       // syncAll will still attempt the upload — retryCount is never consulted.
       // We verify by observing that isSyncing is cleared after the attempt,
       // meaning syncAll processed the WAL (not skipped it).
-      try {
-        await sync.syncAll().timeout(const Duration(seconds: 5));
-      } catch (_) {}
+      final result = await sync.syncAll();
 
+      expect(result?.localUploadFailures, 1);
       expect(
         sync.testWals.first.isSyncing,
         false,
-        reason: 'isSyncing cleared confirms syncAll processed this WAL, '
+        reason:
+            'isSyncing cleared confirms syncAll processed this WAL, '
             'despite retryCount=50 — no cap is enforced',
       );
     });

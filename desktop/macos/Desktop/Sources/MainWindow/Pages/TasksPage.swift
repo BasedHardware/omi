@@ -1785,6 +1785,14 @@ class TasksViewModel: ObservableObject {
     await loadMoreIfNeeded(currentTask: currentTask)
   }
 
+  /// Load-more button action. Reads `displayTasks.last` at execution time
+  /// inside the guard, so an empty list (the store can be reset between the
+  /// click and this Task running) is a no-op instead of a force-unwrap crash.
+  func loadMoreTapped() async {
+    guard let last = displayTasks.last else { return }
+    await loadMoreIfNeeded(currentTask: last)
+  }
+
   func loadMoreIfNeeded(currentTask: TaskActionItem) async {
     guard !isLoadingMoreGuard else { return }
     isLoadingMoreGuard = true
@@ -3367,7 +3375,7 @@ struct TasksPage: View {
               .padding(.vertical, OmiSpacing.sm)
             } else if !viewModel.isInFilteredMode && viewModel.hasMoreTasks {
               Button {
-                Task { await viewModel.loadMoreIfNeeded(currentTask: viewModel.displayTasks.last!) }
+                Task { await viewModel.loadMoreTapped() }
               } label: {
                 HStack(spacing: OmiSpacing.xs) {
                   Image(systemName: "arrow.down.circle")

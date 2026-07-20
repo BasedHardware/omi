@@ -88,6 +88,30 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     }
   }
 
+  func testSyncJobFetchOutcomeStatusMapping() {
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(200), .ok)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(401), .unauthorized)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(403), .forbidden)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(404), .notFound)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(500), .transient)
+    XCTAssertEqual(SyncJobFetchOutcome.forStatusCode(418), .transient)
+  }
+
+  func testFetchSyncJobStatus401IsDurableUnauthorizedNotTransient() async {
+    // A 401 on the status poll used to fall through to `.transient`, parking the
+    // WAL in a forever-retry. It must now be `.unauthorized` so the reconciler
+    // reverts the WAL for re-upload through the authenticated path.
+    SyncUploadURLProtocol.setResponse(
+      statusCode: 401, body: Data("{\"detail\":\"token expired\"}".utf8))
+    let client = APIClient(session: makeSession())
+    await client.setTestAuthHeader("Bearer test-token")
+
+    let fetch = await client.fetchSyncJobStatus(jobId: "job-401")
+
+    XCTAssertEqual(fetch.outcome, .unauthorized)
+    XCTAssertNil(fetch.status)
+  }
+
   private func makeSession() -> URLSession {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [SyncUploadURLProtocol.self]

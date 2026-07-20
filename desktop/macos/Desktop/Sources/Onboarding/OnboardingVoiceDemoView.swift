@@ -18,7 +18,6 @@ struct OnboardingVoiceDemoView: View {
   @State private var observedShortcutPress = false
   @State private var waitingForResponse = false
   @State private var showContinue = false
-  @State private var previousTranscriptionMode: ShortcutSettings.PTTTranscriptionMode?
   @State private var outputReadiness: SystemAudioMuteController.OutputReadiness = .unavailable
 
   var body: some View {
@@ -122,14 +121,15 @@ struct OnboardingVoiceDemoView: View {
       if let barState = FloatingControlBarManager.shared.barState {
         PushToTalkManager.shared.setup(barState: barState)
       }
-      previousTranscriptionMode = shortcutSettings.pttTranscriptionMode
-      shortcutSettings.pttTranscriptionMode = .live
+      // Force live transcription for the demo via a transient, never-persisted
+      // override so a quit/crash mid-step can't corrupt the saved PTT mode.
+      shortcutSettings.pttTranscriptionModeDemoOverride = .live
       Task {
         await chatProvider.warmupBridge()
       }
     }
     .onDisappear {
-      shortcutSettings.pttTranscriptionMode = previousTranscriptionMode ?? .batch
+      shortcutSettings.pttTranscriptionModeDemoOverride = nil
       resetFloatingBarConversation()
       PushToTalkManager.shared.cleanup()
     }

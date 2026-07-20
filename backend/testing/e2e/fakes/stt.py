@@ -74,6 +74,7 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
     """
     from routers.listen import receiver as listen_receiver
     from routers.listen import runtime as listen_runtime
+    from utils.stt.streaming import STTService
 
     sockets = []
 
@@ -94,7 +95,7 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
     monkeypatch.setattr(
         listen_runtime,
         "get_stt_service_for_language",
-        lambda *_args, **_kwargs: (listen_runtime.STTService.parakeet, "en", "parakeet"),
+        lambda *_args, **_kwargs: (STTService.parakeet, "en", "parakeet"),
     )
     monkeypatch.setattr(listen_receiver, "is_gate_enabled", lambda: False)
     monkeypatch.setattr(listen_runtime, "record_usage", lambda *args, **kwargs: None)

@@ -121,7 +121,10 @@ struct OnboardingGoalStepView: View {
     guard shouldShowContinue, !coordinator.isSavingGoal else { return }
     saveTask?.cancel()
     saveTask = Task {
-      coordinator.goalSaved = false
+      // Do not reset goalSaved here: saveGoalIfNeeded's `guard !goalSaved`
+      // is the only dedup protection, and createGoal has no idempotency key.
+      // Resetting it meant a retry after a completeIntro failure created a
+      // second backend goal.
       // Run the save in an unstructured child task so navigating away (which
       // cancels saveTask in .onDisappear) never aborts the in-flight write —
       // only the navigation side effects below are dropped.

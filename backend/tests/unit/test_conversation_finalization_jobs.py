@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from google.api_core.exceptions import Aborted
+
 from database import conversation_finalization_jobs as jobs
+from database import firestore_transaction_retry
 
 
 class _PhotoCollection:
@@ -159,6 +162,63 @@ def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
             },
         )
     ]
+
+
+def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(monkeypatch):
+    """Concurrent REST finalizers must recover a read-time Firestore abort."""
+
+    conversation_ref = _conversation()
+    jobs_collection = _Collection({})
+    transactions: list[_Transaction] = []
+
+    class _Client:
+        def transaction(self):
+            transaction = _Transaction()
+            transactions.append(transaction)
+            return transaction
+
+        def collection(self, name: str):
+            assert name == jobs.FINALIZATION_JOBS_COLLECTION
+            return jobs_collection
+
+    transactional_calls = 0
+
+    def transaction_wrapper(function):
+        def invoke(transaction, *args, **kwargs):
+            nonlocal transactional_calls
+            transactional_calls += 1
+            if transactional_calls == 1:
+                raise Aborted('read contention')
+            return function(transaction, *args, **kwargs)
+
+        return invoke
+
+    def fast_contention_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(jobs, '_conversation_ref', lambda *_args: conversation_ref)
+    monkeypatch.setattr(jobs.firestore, 'transactional', transaction_wrapper)
+    monkeypatch.setattr(jobs, 'run_with_transaction_contention_retry', fast_contention_retry)
+
+    intent = jobs.create_or_get_finalization_intent(
+        'uid-1',
+        'conversation-1',
+        requires_byok=False,
+        finalization_admission=_admit_finalization,
+        firestore_client=_Client(),
+    )
+
+    assert transactional_calls == 2
+    assert len(transactions) == 2
+    assert transactions[0] is not transactions[1]
+    assert intent['status'] == 'queued'
+    assert len(transactions[1].sets) == 1
 
 
 def test_photo_only_conversation_with_durable_content_marker_is_admitted():

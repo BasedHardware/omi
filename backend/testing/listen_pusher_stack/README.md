@@ -69,13 +69,19 @@ Scenarios:
 3. a stale empty desktop recording is removed by the next-session lifecycle path and creates no job;
 4. a pusher process loses the first 104 before claim, is restarted, and the
    live backend session replays the same job ID and dispatch generation exactly once.
-5. a session closes during the deferred pending-finalization window; the real
+5. concurrent public `POST /v1/conversations/{id}/finalize` retries produce one
+   opaque named task and one outbox job, prove the `AlreadyExists` boundary,
+   then survive listener restart before the detached worker completes and safely
+   ACKs a duplicate delivery. A bounded test-entrypoint read barrier makes the
+   intended stale-read race deterministic without replacing the route,
+   lifecycle transaction, or task construction;
+6. a session closes during the deferred pending-finalization window; the real
    recovery path from #9960 enqueues one opaque Cloud Tasks task, then a real
    worker retry preserves `processing` until it completes the same job;
-6. a worker exhausting its two-attempt test budget atomically dead-letters the
+7. a worker exhausting its two-attempt test budget atomically dead-letters the
    job and marks the still-current conversation `failed`/`discarded`, while a
    later duplicate delivery is fenced;
-7. an integration failure after processing retries only durable fanout, never
+8. an integration failure after processing retries only durable fanout, never
    re-runs completed conversation processing.
 
 The inline compatibility coverage deliberately triggers stale live-session

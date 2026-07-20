@@ -72,6 +72,7 @@ def hydrate_and_filter_vector_hits(
     mode: SearchMode,
     required_projection_commit_id: str,
     required_account_generation: int,
+    now: Optional[datetime] = None,
 ) -> SearchGatewayResult:
     """Fail-closed vector gateway.
 
@@ -231,9 +232,9 @@ def hydrate_and_filter_vector_hits(
             )
             continue
         access = (
-            is_archive_access_eligible(item, policy)
+            is_archive_access_eligible(item, policy, now=now)
             if mode == SearchMode.archive_explicit
-            else is_default_access_eligible(item, policy)
+            else is_default_access_eligible(item, policy, now=now)
         )
         if not access.allowed:
             decisions[hit.memory_id] = SearchDecision.access_denied
