@@ -84,6 +84,7 @@ actor AgentSyncService {
   /// suppress its schema repair.
   private struct RequiredSchemaRecoveryState {
     var ownerID: String?
+    var vmIP: String
     var generation: UInt64
     var table: String
     var causalFailures: Int
@@ -178,7 +179,7 @@ actor AgentSyncService {
     lastTokenRefresh = .distantPast
     isPaused = false
     latencyBackoffMultiplier = 1
-    if requiredSchemaRecovery?.ownerID != cursorOwnerID {
+    if requiredSchemaRecovery?.ownerID != cursorOwnerID || requiredSchemaRecovery?.vmIP != vmIP {
       requiredSchemaRecovery = nil
     } else if var recovery = requiredSchemaRecovery {
       // A same-owner restart must keep its cooldown and bounded retry budget.
@@ -355,6 +356,7 @@ actor AgentSyncService {
     guard var recovery = requiredSchemaRecovery,
       recovery.generation == generation,
       recovery.ownerID == ownerID,
+      recovery.vmIP == vmIP,
       recovery.causalFailures >= 3
     else { return }
     guard networkHooks.now().timeIntervalSince(recovery.lastAttemptAt) >= reuploadCooldown else {
@@ -371,7 +373,7 @@ actor AgentSyncService {
       var request = URLRequest(url: url)
       request.timeoutInterval = 15
       let (data, response) = try await networkHooks.dataForRequest(request)
-      guard isCurrent(generation: generation, ownerID: ownerID) else { return }
+      guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
       guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
         log("AgentSync: re-upload health check returned a non-success response")
         return
@@ -390,9 +392,9 @@ actor AgentSyncService {
       recovery.attemptsInFailureStreak += 1
       requiredSchemaRecovery = recovery
       let uploaded = await networkHooks.reuploadDatabase(vmIP, authToken)
-      guard isCurrent(generation: generation, ownerID: ownerID) else { return }
+      guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
       if uploaded {
-        clearRequiredSchemaRecovery(for: recovery.table, generation: generation, ownerID: ownerID)
+        clearRequiredSchemaRecovery(for: recovery.table, generation: generation, ownerID: ownerID, vmIP: vmIP)
       } else {
         log("AgentSync: database re-upload failed; retaining recovery evidence for its bounded retry")
       }
@@ -406,10 +408,11 @@ actor AgentSyncService {
   private func refreshFirebaseToken(generation: UInt64) async {
     guard syncGeneration == generation else { return }
     guard let vmIP = vmIP, let authToken = authToken else { return }
+    let ownerID = cursorOwnerID
 
     do {
       let idToken = try await networkHooks.fetchIDToken()
-      guard syncGeneration == generation else { return }
+      guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
       // Send token both as query param (backward compat) and header (preferred)
       guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
       var request = URLRequest(url: url)
@@ -422,7 +425,7 @@ actor AgentSyncService {
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
       let (_, response) = try await networkHooks.dataForRequest(request)
-      guard syncGeneration == generation else { return }
+      guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
       if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
         lastTokenRefresh = Date()
         log("AgentSync: Firebase token refreshed on VM")
@@ -543,10 +546,11 @@ actor AgentSyncService {
 
       // Push to VM
       let ownerID = cursorOwnerID
-      let result = await pushRows(spec.name, rows, generation: generation, ownerID: ownerID)
-      guard syncGeneration == generation else { return 0 }
+      guard let vmIP else { return 0 }
+      let result = await pushRows(spec.name, rows, generation: generation, ownerID: ownerID, vmIP: vmIP)
+      guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return 0 }
       if result == .success {
-        clearRequiredSchemaRecovery(for: spec.name, generation: generation, ownerID: ownerID)
+        clearRequiredSchemaRecovery(for: spec.name, generation: generation, ownerID: ownerID, vmIP: vmIP)
         // Update cursor
         if spec.appendOnly {
           if let lastId = rows.last?["id"] as? Int64 {
@@ -586,33 +590,37 @@ actor AgentSyncService {
     case networkError
   }
 
-  private func isCurrent(generation: UInt64, ownerID: String?) -> Bool {
+  private func isCurrent(generation: UInt64, ownerID: String?, vmIP: String) -> Bool {
     syncGeneration == generation
       && cursorOwnerID == ownerID
+      && self.vmIP == vmIP
       && RuntimeOwnerIdentity.currentOwnerId() == ownerID
   }
 
-  private func clearRequiredSchemaRecovery(for table: String, generation: UInt64, ownerID: String?) {
+  private func clearRequiredSchemaRecovery(for table: String, generation: UInt64, ownerID: String?, vmIP: String) {
     guard let recovery = requiredSchemaRecovery,
       recovery.table == table,
       recovery.generation == generation,
-      recovery.ownerID == ownerID
+      recovery.ownerID == ownerID,
+      recovery.vmIP == vmIP
     else { return }
     requiredSchemaRecovery = nil
   }
 
-  private func recordRequiredSchemaFailure(for table: String, generation: UInt64, ownerID: String?) {
-    guard isCurrent(generation: generation, ownerID: ownerID) else { return }
+  private func recordRequiredSchemaFailure(for table: String, generation: UInt64, ownerID: String?, vmIP: String) {
+    guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return }
     if var recovery = requiredSchemaRecovery,
       recovery.table == table,
       recovery.generation == generation,
-      recovery.ownerID == ownerID
+      recovery.ownerID == ownerID,
+      recovery.vmIP == vmIP
     {
       recovery.causalFailures += 1
       requiredSchemaRecovery = recovery
-    } else {
+    } else if requiredSchemaRecovery == nil {
       requiredSchemaRecovery = RequiredSchemaRecoveryState(
         ownerID: ownerID,
+        vmIP: vmIP,
         generation: generation,
         table: table,
         causalFailures: 1)
@@ -623,9 +631,10 @@ actor AgentSyncService {
     _ table: String,
     _ rows: [[String: Any]],
     generation: UInt64,
-    ownerID: String?
+    ownerID: String?,
+    vmIP: String
   ) async -> PushResult {
-    guard isCurrent(generation: generation, ownerID: ownerID), let vmIP, let authToken else { return .networkError }
+    guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP), let authToken else { return .networkError }
 
     // Send token both as query param (backward compat) and header (preferred)
     guard let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)") else {
@@ -649,7 +658,7 @@ actor AgentSyncService {
 
     do {
       let (data, response) = try await networkHooks.dataForRequest(request)
-      guard isCurrent(generation: generation, ownerID: ownerID) else { return .networkError }
+      guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return .networkError }
       guard let httpResponse = response as? HTTPURLResponse else { return .httpError }
 
       if httpResponse.statusCode == 200 {
@@ -660,7 +669,7 @@ actor AgentSyncService {
           healthPayload: ["databaseReady": true],
           syncFailureBody: body
         ) == .missingRequiredSchema {
-          recordRequiredSchemaFailure(for: table, generation: generation, ownerID: ownerID)
+          recordRequiredSchemaFailure(for: table, generation: generation, ownerID: ownerID, vmIP: vmIP)
         }
         log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
         return .networkError  // 5xx = server not ready, trigger backoff
