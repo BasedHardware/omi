@@ -1,3 +1,5 @@
+import Foundation
+import GRDB
 import XCTest
 
 @testable import Omi_Computer
@@ -62,12 +64,134 @@ private actor AgentSyncDelayedTokenGate {
   }
 }
 
+private final class AgentSyncManualClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value: Date
+
+  init(_ value: Date = Date(timeIntervalSince1970: 1_700_000_000)) {
+    self.value = value
+  }
+
+  func now() -> Date {
+    lock.withLock { value }
+  }
+
+  func advance(_ interval: TimeInterval) {
+    lock.withLock { value.addTimeInterval(interval) }
+  }
+}
+
+private actor AgentSyncRecoveryProbe {
+  enum HealthResponse {
+    case ready
+    case malformed
+    case status(Int)
+  }
+
+  private var missingTable: String?
+  private var healthResponse: HealthResponse = .ready
+  private var uploadResults: [Bool] = [true]
+  private var healthChecks = 0
+  private var uploads = 0
+  private var syncedTables: [String] = []
+
+  init(missingTable: String? = "transcription_sessions") {
+    self.missingTable = missingTable
+  }
+
+  func respond(to request: URLRequest) throws -> (Data, URLResponse) {
+    let url = try XCTUnwrap(request.url)
+    switch url.path {
+    case "/auth":
+      return (Data(), response(url, status: 200))
+    case "/sync":
+      let payload = try XCTUnwrap(request.httpBody)
+      let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: payload) as? [String: Any])
+      let table = try XCTUnwrap(json["table"] as? String)
+      syncedTables.append(table)
+      if table == missingTable {
+        return (Data("SQLite error: no such table: \(table)".utf8), response(url, status: 500))
+      }
+      return (Data(), response(url, status: 200))
+    case "/health":
+      healthChecks += 1
+      switch healthResponse {
+      case .ready:
+        return (try JSONSerialization.data(withJSONObject: ["databaseReady": true]), response(url, status: 200))
+      case .malformed:
+        return (Data("not-json".utf8), response(url, status: 200))
+      case .status(let status):
+        return (Data(), response(url, status: status))
+      }
+    default:
+      return (Data(), response(url, status: 404))
+    }
+  }
+
+  func reupload() -> Bool {
+    uploads += 1
+    return uploadResults.isEmpty ? false : uploadResults.removeFirst()
+  }
+
+  func setMissingTable(_ table: String?) {
+    missingTable = table
+  }
+
+  func setHealthResponse(_ response: HealthResponse) {
+    healthResponse = response
+  }
+
+  func setUploadResults(_ results: [Bool]) {
+    uploadResults = results
+  }
+
+  func counts() -> (healthChecks: Int, uploads: Int, syncedTables: [String]) {
+    (healthChecks, uploads, syncedTables)
+  }
+
+  private func response(_ url: URL, status: Int) -> URLResponse {
+    HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
+      ?? URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)
+  }
+}
+
 /// Regression test for the AgentSync mutable-table pagination skip: paging with a
 /// strict `updatedAt > ?` cursor drops every row past the first batch when more
 /// than `batchSize` rows share the same `updatedAt` (a bulk update touching >100
 /// rows in one second), silently diverging the VM's copy. Mutable tables must page
 /// on a compound `(updatedAt, id)` cursor.
 final class AgentSyncBatchQueryTests: XCTestCase {
+
+  func testPartialSchemaIsNotReadyEvenWhenDatabaseReadyIsTrue() {
+    let readiness = AgentSyncService.databaseReadiness(
+      healthPayload: ["databaseReady": true],
+      syncFailureBody: "SQLite error: no such table: transcription_sessions"
+    )
+
+    XCTAssertEqual(
+      readiness,
+      .missingRequiredSchema,
+      "A VM that reports databaseReady while rejecting a required sync table must be re-provisioned by the existing upload owner"
+    )
+  }
+
+  func testUnrelatedSQLiteTableFailureDoesNotTriggerDatabaseReupload() {
+    let readiness = AgentSyncService.databaseReadiness(
+      healthPayload: ["databaseReady": true],
+      syncFailureBody: "SQLite error: no such table: scratch_cache"
+    )
+
+    XCTAssertEqual(
+      readiness,
+      .ready,
+      "Only tables owned by AgentSync prove its uploaded schema is partial; unrelated server faults must keep bounded retry behavior"
+    )
+  }
+
+  func testMalformedOrMissingHealthReadinessIsNotMissingDatabase() {
+    XCTAssertEqual(AgentSyncService.databaseReadiness(healthPayload: [:]), .unknown)
+    XCTAssertEqual(AgentSyncService.databaseReadiness(healthPayload: ["databaseReady": "false"]), .unknown)
+  }
 
   func testMutableTableUsesCompoundCursor() {
     let (sql, args) = AgentSyncService.buildBatchQuery(
@@ -114,6 +238,8 @@ final class AgentSyncBatchQueryTests: XCTestCase {
       networkHooks: AgentSyncService.NetworkHooks(
         fetchIDToken: { await gate.fetchToken() },
         dataForRequest: { request in await gate.respond(to: request) },
+        reuploadDatabase: { _, _ in true },
+        now: Date.init,
         tableSyncEnabled: false))
 
     await service.start(vmIP: "owner-a-vm", authToken: "owner-a-auth")
@@ -130,5 +256,157 @@ final class AgentSyncBatchQueryTests: XCTestCase {
     XCTAssertEqual(requestURLs.count, 1)
     XCTAssertEqual(requestURLs.first?.host, "owner-b-vm")
     XCTAssertEqual(requestURLs.first?.path, "/auth")
+  }
+}
+
+/// These tests drive `syncTick` through the same table reads and HTTP paths as
+/// the loop. The DEBUG-only clock/hook seam avoids a scheduler or bridge fault
+/// protocol while preserving production ownership and recovery behavior.
+final class AgentSyncRecoveryTests: XCTestCase {
+  private var storageFixture: RewindStorageTestIsolation.Fixture?
+  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
+
+  override func setUp() async throws {
+    try await super.setUp()
+    let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "agent-sync-recovery")
+    storageFixture = fixture
+    authSnapshot = await MainActor.run { RewindStorageTestIsolation.captureAuthSnapshot() }
+    await MainActor.run { RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId) }
+    try await insertSyncRows()
+  }
+
+  override func tearDown() async throws {
+    if let authSnapshot {
+      await MainActor.run { RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot) }
+    }
+    await RewindStorageTestIsolation.tearDown(userDir: storageFixture?.userDir)
+    try await super.tearDown()
+  }
+
+  func testMixedSuccessStillRecoversTheRepeatedRequiredTableFailure() async {
+    let probe = AgentSyncRecoveryProbe()
+    let service = makeService(probe: probe)
+    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+    await service.syncOnceForTesting()
+    await service.syncOnceForTesting()
+    await service.syncOnceForTesting()
+
+    let counts = await probe.counts()
+    XCTAssertTrue(
+      counts.syncedTables.contains("action_items"), "The control table must take the real /sync success path")
+    XCTAssertEqual(counts.syncedTables.filter { $0 == "transcription_sessions" }.count, 3)
+    XCTAssertEqual(counts.healthChecks, 1, "Three causal failures trigger one fail-closed /health check")
+    XCTAssertEqual(counts.uploads, 1, "The existing database-upload owner repairs the missing table exactly once")
+  }
+
+  func testMatchingTableSuccessClearsRecoveryButUnrelatedSuccessDoesNot() async throws {
+    let probe = AgentSyncRecoveryProbe()
+    let service = makeService(probe: probe)
+    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+    await service.syncOnceForTesting()
+    await service.syncOnceForTesting()
+    await probe.setMissingTable(nil)  // The previously failing table now succeeds.
+    await service.syncOnceForTesting()
+    await probe.setMissingTable("transcription_sessions")
+    try await touchTranscriptionSession()
+    await service.syncOnceForTesting()
+    await service.syncOnceForTesting()
+
+    var counts = await probe.counts()
+    XCTAssertEqual(counts.uploads, 0, "A matching success clears the earlier table's causal evidence")
+    await service.syncOnceForTesting()
+    counts = await probe.counts()
+    XCTAssertEqual(counts.uploads, 1, "Only three new failures of the same required table recover it")
+  }
+
+  func testMalformedAndNonSuccessHealthNeverUpload() async {
+    let probe = AgentSyncRecoveryProbe()
+    await probe.setHealthResponse(.malformed)
+    let service = makeService(probe: probe)
+    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+    for _ in 0..<3 { await service.syncOnceForTesting() }
+    var counts = await probe.counts()
+    XCTAssertEqual(counts.healthChecks, 1)
+    XCTAssertEqual(counts.uploads, 0)
+
+    await probe.setHealthResponse(.status(503))
+    await service.syncOnceForTesting()
+    counts = await probe.counts()
+    XCTAssertEqual(counts.uploads, 0, "Non-2xx health responses fail closed before upload")
+  }
+
+  func testSameOwnerRestartPreservesCooldownAndFailedUploadsStayBounded() async {
+    let probe = AgentSyncRecoveryProbe()
+    await probe.setUploadResults([false, false, false])
+    let clock = AgentSyncManualClock()
+    let service = makeService(probe: probe, clock: clock)
+    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+
+    for _ in 0..<3 { await service.syncOnceForTesting() }
+    var counts = await probe.counts()
+    XCTAssertEqual(counts.uploads, 1)
+
+    await service.startForTesting(vmIP: "127.0.0.1", authToken: "test-token")
+    await service.syncOnceForTesting()
+    counts = await probe.counts()
+    XCTAssertEqual(counts.uploads, 1, "Same-owner restart cannot mint a new cooldown allowance")
+
+    clock.advance(30 * 60 + 1)
+    await service.syncOnceForTesting()
+    counts = await probe.counts()
+    XCTAssertEqual(counts.uploads, 2)
+
+    clock.advance(30 * 60 + 1)
+    await service.syncOnceForTesting()
+    counts = await probe.counts()
+    XCTAssertEqual(counts.uploads, 2, "Failed recovery uploads stop at the existing bounded policy")
+  }
+
+  private func makeService(
+    probe: AgentSyncRecoveryProbe,
+    clock: AgentSyncManualClock = AgentSyncManualClock()
+  ) -> AgentSyncService {
+    AgentSyncService(
+      networkHooks: AgentSyncService.NetworkHooks(
+        fetchIDToken: { "test-firebase-token" },
+        dataForRequest: { request in try await probe.respond(to: request) },
+        reuploadDatabase: { _, _ in await probe.reupload() },
+        now: { clock.now() },
+        tableSyncEnabled: true))
+  }
+
+  private func insertSyncRows() async throws {
+    guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+      return XCTFail("Rewind database should be initialized")
+    }
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    try await dbQueue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO transcription_sessions (startedAt, source, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?)
+          """,
+        arguments: [now, "desktop", now, now])
+      try db.execute(
+        sql: """
+          INSERT INTO action_items (description, createdAt, updatedAt)
+          VALUES (?, ?, ?)
+          """,
+        arguments: ["mixed-success control", now, now])
+    }
+  }
+
+  private func touchTranscriptionSession() async throws {
+    guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+      return XCTFail("Rewind database should be initialized")
+    }
+    try await dbQueue.write { db in
+      try db.execute(
+        sql: "UPDATE transcription_sessions SET updatedAt = ? WHERE id = 1",
+        arguments: [Date(timeIntervalSince1970: 1_700_000_001)])
+    }
   }
 }
