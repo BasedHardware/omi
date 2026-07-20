@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1736,
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1645
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1742,
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1655
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Staged tasks now render as id-less 'already captured' evidence via a pure, unit-tested contextEvidencePrompt helper, so they can no longer be echoed back as duplicate_of:0 to update a non-existent backend task.",
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "stopMonitoring now clears capture-recovery/background-polling state and timers, plus a pure ProactiveCapturePolicy gate, so a stop mid-recovery cannot silently disable capture on the next start."
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Task candidate context now carries only backend action-item IDs, while local SQLite/staged evidence remains id-less so the model cannot target it for a backend mutation.",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "A nonisolated UserNotifications callback bridge now performs an explicit MainActor hop so macOS callback queues cannot trap the public app at launch."
   },
   "threshold": 1500
 }
