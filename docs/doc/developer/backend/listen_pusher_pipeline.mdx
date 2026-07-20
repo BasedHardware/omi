@@ -15,7 +15,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 ## 1. Connection + Streaming + Transcription
 
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
-(e.g., `parakeet,modulate-velma-2`). The first provider whose deployed model
+(e.g., `modulate-velma-2,parakeet`). The first provider whose deployed model
 supports the requested mode wins: Parakeet's live RNNT model is English-only,
 so multilingual sessions and non-English single-language sessions use Modulate.
 Listen startup loads transcription preferences once and uses its

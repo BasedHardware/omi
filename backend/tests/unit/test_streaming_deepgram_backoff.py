@@ -1018,14 +1018,6 @@ def test_gated_socket_death_reason_delegates_none_when_alive():
 class TestGetSttServiceForLanguage:
     """Verify serving selection cannot reactivate retired Deepgram models."""
 
-    @pytest.fixture(autouse=True)
-    def _reset_parakeet_admission(self):
-        from config.parakeet_admission import reset_state_for_testing
-
-        reset_state_for_testing()
-        yield
-        reset_state_for_testing()
-
     def test_english_prefers_parakeet(self):
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
             'os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.test'}
@@ -1062,16 +1054,6 @@ class TestGetSttServiceForLanguage:
             service, lang, model = get_stt_service_for_language(None)
 
         assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
-
-
-@pytest.fixture(autouse=True)
-def _reset_parakeet_admission():
-    """Reset Parakeet admission state so selection tests are isolated."""
-    from config.parakeet_admission import reset_state_for_testing
-
-    reset_state_for_testing()
-    yield
-    reset_state_for_testing()
 
 
 @pytest.mark.parametrize(

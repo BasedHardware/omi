@@ -180,8 +180,8 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
-          STT_SERVICE_MODELS: parakeet,modulate-velma-2
+          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_SERVICE_MODELS: modulate-velma-2,parakeet
           SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}

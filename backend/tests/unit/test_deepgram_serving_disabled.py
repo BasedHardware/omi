@@ -12,16 +12,6 @@ from config.stt_provider_policy import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _reset_parakeet_admission():
-    """Isolate Parakeet admission state between tests."""
-    from config.parakeet_admission import reset_state_for_testing
-
-    reset_state_for_testing()
-    yield
-    reset_state_for_testing()
-
-
 def test_streaming_ignores_a_stale_deepgram_model_configuration(monkeypatch):
     monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)

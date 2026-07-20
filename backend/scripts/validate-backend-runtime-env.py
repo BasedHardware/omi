@@ -27,6 +27,7 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
+from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
@@ -67,9 +68,7 @@ def _as_config_list(value: object) -> list[Any] | None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description='Validate backend runtime env manifests against checked-in GKE config and Cloud Run state.'
-    )
+    parser = argparse.ArgumentParser(description='Validate backend runtime env manifests against GKE and Cloud Run.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument(
@@ -134,6 +133,7 @@ def validate_runtime_env(
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
+    errors.extend(validate_parakeet_admission_contract(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     errors.extend(_validate_account_deletion_dispatch_contract(env, env_config))

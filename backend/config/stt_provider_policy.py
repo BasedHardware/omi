@@ -124,8 +124,9 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
 #
 # Modulate Velma-2 is the safe primary for all surfaces: it is a managed SaaS
 # with effectively unlimited concurrency and broad language support.  Parakeet
-# is the bounded-capacity secondary — it requires admission control (see
-# config/parakeet_admission.py) and is only admitted when capacity allows.
+# is the bounded-capacity secondary. The Parakeet service owns the hard stream
+# gate (see parakeet/admission.py), so every listener converges on one cap per
+# serving pod instead of maintaining independent listener-local counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
     STTServingSurface.STREAMING: ('modulate-velma-2', 'parakeet'),
     STTServingSurface.PRERECORDED: ('modulate-velma-2', 'parakeet'),

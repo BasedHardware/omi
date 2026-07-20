@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import io
 import json
 import os
@@ -6,17 +7,13 @@ import threading
 import urllib.parse
 import wave as _wave
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
-from config.parakeet_admission import (
-    release,
-    try_admit,
-)
 from config.stt_provider_policy import (
     DEEPGRAM_SELF_HOSTED_PROVIDER,
     MODULATE_PROVIDER,
@@ -34,6 +31,7 @@ from utils.executors import sync_executor, run_blocking
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
+from utils.stt.provider_resilience import EXPECTED_REJECTIONS, ProviderCircuitBreaker
 from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
     async_extract_embedding_from_bytes,
@@ -59,6 +57,92 @@ class STTService(str, Enum):
             return 'modulate_streaming'
         if value == STTService.parakeet:
             return 'parakeet_streaming'
+
+
+class ParakeetConnectionError(RuntimeError):
+    def __init__(self, reason: str, detail: str = '') -> None:
+        self.reason = reason
+        super().__init__(detail or reason)
+
+
+_parakeet_circuit = ProviderCircuitBreaker(
+    failure_threshold=int(os.getenv('PARAKEET_CIRCUIT_FAILURE_THRESHOLD', '3')),
+    cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
+)
+
+
+async def connect_stt_socket_with_fallback(
+    *,
+    primary_service: STTService,
+    connect_primary: Callable[[], Awaitable[Optional[STTSocket]]],
+    connect_modulate: Callable[[], Awaitable[Optional[STTSocket]]],
+) -> Tuple[STTSocket, STTService]:
+    """Connect Parakeet before audio starts, falling back once to Modulate.
+
+    The circuit is deliberately process-local and never owns capacity. The
+    Parakeet service rejects excess streams at its GPU boundary; this helper
+    only avoids repeated connection latency while that provider is unhealthy.
+    """
+    if primary_service != STTService.parakeet:
+        raise ValueError('connection fallback is defined only for a Parakeet primary')
+
+    reason = 'circuit_open'
+    if _parakeet_circuit.allow_request():
+        try:
+            socket = await connect_primary()
+            if socket is None:
+                raise ParakeetConnectionError('config_incomplete', 'Parakeet returned no socket')
+            _parakeet_circuit.record_success()
+            return socket, STTService.parakeet
+        except ParakeetConnectionError as error:
+            reason = error.reason
+            if reason in EXPECTED_REJECTIONS:
+                _parakeet_circuit.record_rejection(reason)
+            else:
+                _parakeet_circuit.record_failure()
+        except (asyncio.TimeoutError, TimeoutError):
+            reason = 'timeout'
+            _parakeet_circuit.record_failure()
+        except Exception:
+            reason = 'provider_5xx'
+            _parakeet_circuit.record_failure()
+
+    try:
+        fallback_socket = await connect_modulate()
+        if fallback_socket is None:
+            raise RuntimeError('Modulate returned no socket')
+    except Exception:
+        record_fallback(
+            component='stt_selection',
+            from_mode=STTService.parakeet.value,
+            to_mode=STTService.modulate.value,
+            reason=reason,
+            outcome='exhausted',
+        )
+        raise
+
+    record_fallback(
+        component='stt_selection',
+        from_mode=STTService.parakeet.value,
+        to_mode=STTService.modulate.value,
+        reason=reason,
+        outcome='recovered',
+    )
+    return fallback_socket, STTService.modulate
+
+
+async def drain_stt_socket(socket: STTSocket) -> None:
+    """Await a serving socket's tail drain, with a synchronous close fallback."""
+    drain_and_close = getattr(socket, 'drain_and_close', None)
+    if not callable(drain_and_close):
+        socket.finish()
+        return
+    drain_result = drain_and_close()
+    if inspect.isawaitable(drain_result):
+        await drain_result
+        return
+    logger.warning('STT provider lacks async tail drain')
+    socket.finish()
 
 
 deepgram_nova3_multi_languages = {
@@ -259,10 +343,7 @@ def get_stt_service_for_language(
             if model == 'parakeet':
                 if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
                     if parakeet_supports_language(surface, requested_language):
-                        admitted, admit_reason = try_admit()
-                        if admitted:
-                            return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
-                        parakeet_fallback_reason = admit_reason
+                        return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
                     else:
                         parakeet_fallback_reason = 'capability_mismatch'
                 else:
@@ -986,7 +1067,6 @@ class ParakeetStreamingSocket(STTSocket):
         # Backstop: if the pump died early (and left audio buffered), drain it here so the
         # tail is never silently lost. No-op when the pump already emptied the buffer.
         await self._flush(force=True)
-        release()
 
     # --- internals ---
     async def _pump(self) -> None:
@@ -1141,6 +1221,7 @@ class ParakeetWebSocketSocket(STTSocket):
         self._receiver_task: Optional[asyncio.Task[None]] = None
         self._connected_event = asyncio.Event()
         self._startup_event = asyncio.Event()
+        self._startup_failure_reason = 'provider_5xx'
 
     async def start(self) -> None:
         self._sender_task = create_named_task(self._run(), name="parakeet_ws_stream")
@@ -1149,12 +1230,16 @@ class ParakeetWebSocketSocket(STTSocket):
         except asyncio.TimeoutError:
             logger.error(f'Parakeet WS connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
             self._mark_dead(f'parakeet ws connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
+            self._startup_failure_reason = 'timeout'
             self._closed = True
             self._cancel_task(self._sender_task)
-            raise
+            raise ParakeetConnectionError('timeout', self._dead_reason or 'Parakeet connect timeout')
         if not self._connected_event.is_set():
             logger.error(f'Parakeet WS failed before connection: {self._dead_reason}')
-            raise RuntimeError(self._dead_reason or 'parakeet ws failed before connection')
+            raise ParakeetConnectionError(
+                self._startup_failure_reason,
+                self._dead_reason or 'parakeet ws failed before connection',
+            )
         logger.info('Parakeet WS connected successfully')
 
     def send(self, data: bytes) -> bool:
@@ -1199,7 +1284,6 @@ class ParakeetWebSocketSocket(STTSocket):
                 await asyncio.wait_for(self._receiver_task, timeout=10)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 self._cancel_task(self._receiver_task)
-        release()
 
     def _mark_dead(self, reason: str) -> None:
         self._dead = True
@@ -1223,6 +1307,13 @@ class ParakeetWebSocketSocket(STTSocket):
         try:
             async with websockets.connect(url, max_size=10 * 1024 * 1024) as ws:
                 self._ws = ws
+                ready_raw = await asyncio.wait_for(ws.recv(), timeout=PARAKEET_WS_CONNECT_TIMEOUT)
+                try:
+                    ready = json.loads(ready_raw) if isinstance(ready_raw, str) else None
+                except json.JSONDecodeError as error:
+                    raise RuntimeError('Parakeet returned an invalid readiness frame') from error
+                if not isinstance(ready, dict) or ready.get('type') != 'ready':
+                    raise RuntimeError('Parakeet did not confirm stream admission')
                 self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
                 self._connected_event.set()
                 self._startup_event.set()
@@ -1251,6 +1342,11 @@ class ParakeetWebSocketSocket(STTSocket):
 
         except Exception as e:
             logger.error(f"Parakeet WS connection error: {e}")
+            close_reason = str(getattr(e, 'reason', '') or '')
+            if close_reason in EXPECTED_REJECTIONS:
+                self._startup_failure_reason = close_reason
+            elif isinstance(e, (asyncio.TimeoutError, TimeoutError)):
+                self._startup_failure_reason = 'timeout'
             self._mark_dead(f"parakeet ws failed: {e}")
         finally:
             self._startup_event.set()
