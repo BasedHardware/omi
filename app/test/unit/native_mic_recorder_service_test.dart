@@ -87,6 +87,7 @@ void main() {
 
   test('interruption sequencing: began once, ended then recording', () async {
     await startService();
+    service.onStateChanged(PhoneMicCaptureState.starting);
     service.onStateChanged(PhoneMicCaptureState.running);
 
     service.onStateChanged(PhoneMicCaptureState.interrupted);
@@ -115,6 +116,7 @@ void main() {
 
   test('stop fires onStop exactly once and drops later events', () async {
     await startService();
+    service.onStateChanged(PhoneMicCaptureState.starting);
     service.onStateChanged(PhoneMicCaptureState.running);
 
     service.stop();
@@ -130,6 +132,7 @@ void main() {
 
   test('native terminal stop (idle while active) fires onStop once', () async {
     await startService();
+    service.onStateChanged(PhoneMicCaptureState.starting);
     service.onStateChanged(PhoneMicCaptureState.running);
 
     service.onStateChanged(PhoneMicCaptureState.idle);
@@ -151,6 +154,7 @@ void main() {
 
       startService();
       async.flushMicrotasks();
+      service.onStateChanged(PhoneMicCaptureState.starting);
       service.onStateChanged(PhoneMicCaptureState.running);
 
       // Frames keep the watchdog quiet.
@@ -192,6 +196,7 @@ void main() {
       startService();
       async.flushMicrotasks();
       // No running event yet — e.g. the permission dialog is up.
+      service.onStateChanged(PhoneMicCaptureState.starting);
       elapse(const Duration(seconds: 30));
       expect(cb.stalls, 0);
 
@@ -210,6 +215,7 @@ void main() {
 
     // No onRecording/onByteReceived wiring in batch: running just arms the
     // watchdog, and frames never arrive.
+    service.onStateChanged(PhoneMicCaptureState.starting);
     service.onStateChanged(PhoneMicCaptureState.running);
     expect(cb.recording, 0);
 
@@ -225,6 +231,7 @@ void main() {
 
   test('batch capture error is forwarded to the session onError', () async {
     await startBatchService();
+    service.onStateChanged(PhoneMicCaptureState.starting);
     service.onStateChanged(PhoneMicCaptureState.running);
     service.onCaptureError('batch_storage_full', 'disk full');
     expect(cb.errors, ['batch_storage_full']);
@@ -254,6 +261,7 @@ void main() {
 
       startBatchService();
       async.flushMicrotasks();
+      service.onStateChanged(PhoneMicCaptureState.starting);
       service.onStateChanged(PhoneMicCaptureState.running);
 
       // Progress arrivals keep it quiet.
@@ -288,6 +296,7 @@ void main() {
 
       startBatchService();
       async.flushMicrotasks();
+      service.onStateChanged(PhoneMicCaptureState.starting);
       service.onStateChanged(PhoneMicCaptureState.running);
 
       // Progress keeps arriving (frozen value) through an interruption — no stall.
@@ -317,12 +326,125 @@ void main() {
 
       startBatchService();
       async.flushMicrotasks();
+      service.onStateChanged(PhoneMicCaptureState.starting);
       service.onStateChanged(PhoneMicCaptureState.running);
 
       service.stop();
       elapse(const Duration(seconds: 30));
       expect(cb.batchStalls, 0);
       expect(cb.stops, 1);
+    });
+  });
+
+  // A restart (stop() then start()) can leave the previous session's terminal
+  // `idle` in flight on the FIFO channel. It must not be applied to the new
+  // session, which has not yet seen its own `starting`.
+  group('stale event from a previous session is dropped', () {
+    test('stream: late idle after restart does not clobber the new session', () async {
+      // Session A: live, then stopped from Dart.
+      await startService();
+      service.onStateChanged(PhoneMicCaptureState.starting);
+      service.onStateChanged(PhoneMicCaptureState.running);
+      service.stop();
+      expect(cb.stops, 1);
+
+      // Session B: fresh callbacks armed by a new start().
+      final b = Callbacks();
+      await service.start(
+        onByteReceived: b.bytes.add,
+        onRecording: () => b.recording++,
+        onStop: () => b.stops++,
+        onInitializing: () => b.initializing++,
+        onStalled: () => b.stalls++,
+        onInterruption: b.interruptions.add,
+      );
+
+      // A's terminal idle arrives before B's `starting` — must be dropped.
+      service.onStateChanged(PhoneMicCaptureState.idle);
+      expect(b.stops, 0, reason: 'stale idle must not fire the new session onStop');
+
+      // B proceeds normally: callbacks were never cleared.
+      service.onStateChanged(PhoneMicCaptureState.starting);
+      service.onStateChanged(PhoneMicCaptureState.running);
+      expect(b.recording, 1);
+      service.onAudioFrame(Uint8List.fromList([1, 2, 3]));
+      expect(b.bytes, hasLength(1));
+
+      service.stop();
+    });
+
+    test('batch: late idle after restart does not clobber the new batch session', () async {
+      await startBatchService();
+      service.onStateChanged(PhoneMicCaptureState.starting);
+      service.onStateChanged(PhoneMicCaptureState.running);
+      service.stop();
+      expect(cb.stops, 1);
+
+      final b = Callbacks();
+      await service.startBatch(
+        onStop: () => b.stops++,
+        onInterruption: b.interruptions.add,
+        onBatchStalled: () => b.batchStalls++,
+        onError: (code, message) => b.errors.add(code),
+      );
+
+      // A's terminal idle arrives before B's `starting` — must be dropped.
+      service.onStateChanged(PhoneMicCaptureState.idle);
+      expect(b.stops, 0, reason: 'stale idle must not fire the new batch session onStop');
+
+      // B proceeds normally; progress keeps arriving without a stall report.
+      service.onStateChanged(PhoneMicCaptureState.starting);
+      service.onStateChanged(PhoneMicCaptureState.running);
+      expect(() => service.onBatchProgress(1), returnsNormally);
+      expect(b.stops, 0);
+
+      service.stop();
+    });
+
+    test('genuine terminal idle still fires onStop and later frames are ignored', () async {
+      await startService();
+      service.onStateChanged(PhoneMicCaptureState.starting);
+      service.onStateChanged(PhoneMicCaptureState.running);
+
+      service.onStateChanged(PhoneMicCaptureState.idle);
+      expect(cb.stops, 1);
+
+      // Frame after the terminal idle is a no-op.
+      service.onAudioFrame(Uint8List.fromList([1]));
+      expect(cb.bytes, isEmpty);
+
+      // A repeated idle does not fire again.
+      service.onStateChanged(PhoneMicCaptureState.idle);
+      expect(cb.stops, 1);
+    });
+
+    test('stale non-idle events are dropped until the new session starts', () async {
+      await startService();
+      service.onStateChanged(PhoneMicCaptureState.starting);
+      service.onStateChanged(PhoneMicCaptureState.running);
+      service.stop();
+
+      final b = Callbacks();
+      await service.start(
+        onByteReceived: b.bytes.add,
+        onRecording: () => b.recording++,
+        onStop: () => b.stops++,
+        onInitializing: () => b.initializing++,
+        onStalled: () => b.stalls++,
+        onInterruption: b.interruptions.add,
+      );
+
+      // A stale `interrupted` before B's `starting` must not flap B's UI.
+      service.onStateChanged(PhoneMicCaptureState.interrupted);
+      expect(b.interruptions, isEmpty);
+
+      // Once B has started, its own interruption is honored.
+      service.onStateChanged(PhoneMicCaptureState.starting);
+      service.onStateChanged(PhoneMicCaptureState.running);
+      service.onStateChanged(PhoneMicCaptureState.interrupted);
+      expect(b.interruptions, [true]);
+
+      service.stop();
     });
   });
 }

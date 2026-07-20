@@ -5,7 +5,7 @@ import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/logger.dart';
 
-/// iOS-only [IMicRecorderService] backed by the native PhoneMic module — an
+/// iOS/Android [IMicRecorderService] backed by the native PhoneMic module — an
 /// AVAudioEngine capture layer with self-healing interruption and route-change
 /// recovery.
 ///
@@ -35,6 +35,7 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
   Function(String code, String message)? _onError;
 
   bool _sessionActive = false;
+  bool _sessionStarted = false;
   bool _batchMode = false;
   bool _interrupted = false;
   DateTime? _lastByteAt;
@@ -73,6 +74,7 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     _interrupted = false;
     _batchMode = false;
     _sessionActive = true;
+    _sessionStarted = false;
     try {
       // Throws a PlatformException (permission_denied, session_config_failed,
       // format_invalid, converter_init_failed, engine_start_failed) instead of
@@ -100,6 +102,7 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     _interrupted = false;
     _batchMode = true;
     _sessionActive = true;
+    _sessionStarted = false;
     try {
       // Batch adds opus_init_failed / batch_dir_unavailable to the stream error
       // codes; the native writer stores .bin files instead of streaming frames.
@@ -145,6 +148,19 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
   @override
   void onStateChanged(PhoneMicCaptureState state) {
     if (!_sessionActive) return;
+    // Stale-session gate. The native controller emits `starting` exactly once
+    // per session, synchronously in handleStart, before any other event of that
+    // session (failStart/finishStop `idle` always come after it), and channel
+    // delivery is FIFO. So any event that arrives after start()/startBatch() has
+    // armed a new session but before that session's own `starting` provably
+    // belongs to a previous (dead) session — most dangerously a late `idle` that
+    // would clobber the new session's callbacks. Drop them all uniformly.
+    if (state == PhoneMicCaptureState.starting) {
+      _sessionStarted = true;
+    } else if (!_sessionStarted) {
+      Logger.debug('[NativeMic] dropping stale $state from a previous session');
+      return;
+    }
     switch (state) {
       case PhoneMicCaptureState.starting:
         _onInitializing?.call();
