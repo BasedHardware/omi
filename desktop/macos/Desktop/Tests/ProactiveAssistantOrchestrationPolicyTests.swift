@@ -499,8 +499,8 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
       trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now),
       .capture)
 
-    // First captured frame seeds the preview history.
-    trigger.recordPreviewHash(0x1234)
+    // First captured frame seeds the preview history and records the last capture time.
+    trigger.recordPreviewHash(0x1234, at: now)
     XCTAssertEqual(
       trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(3)),
       .preview)
@@ -514,7 +514,42 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
     XCTAssertFalse(trigger.shouldSkipPreview(0xFFFF, similarityThreshold: 0.92))
 
     // A cycling frame that matches any recent preview is skipped.
-    trigger.recordPreviewHash(0xABCD)
+    trigger.recordPreviewHash(0xABCD, at: now.addingTimeInterval(3))
     XCTAssertTrue(trigger.shouldSkipPreview(0x1234, similarityThreshold: 0.92))
+  }
+
+  func testCaptureTriggerStretchesHeartbeatForStaticScreens() {
+    let now = Date(timeIntervalSinceReferenceDate: 9_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, maxHeartbeatMultiplier: 2.0,
+      heartbeatGrowthPerSimilarPreview: 0.5)
+
+    // First capture establishes the context and last capture time.
+    _ = trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now)
+    trigger.markCaptured(app: "Safari", windowTitle: "Docs", at: now, frameHash: 0xAAAA)
+
+    // After the base heartbeat we should preview.
+    let firstHeartbeat = now.addingTimeInterval(3)
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat),
+      .preview)
+
+    // Skip a similar preview; this stretches the next heartbeat to 1.5x.
+    trigger.markPreviewSkipped(at: firstHeartbeat, similarity: 0.99, threshold: 0.92)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat.addingTimeInterval(3)),
+      .skip)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat.addingTimeInterval(4.5)),
+      .preview)
+
+    // A changed preview resets the multiplier back to the base interval.
+    trigger.recordPreviewHash(0xBBBB, at: firstHeartbeat.addingTimeInterval(4.5))
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: firstHeartbeat.addingTimeInterval(7.5)),
+      .preview)
   }
 }
