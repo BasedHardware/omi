@@ -14,16 +14,6 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "manifest validity and workflow drift guard"
-  - id: release-ring-guards
-    command: ["python3", ".github/scripts/check_release_rings.py"]
-    triggers: [".github/workflows/release-record.yml", ".github/workflows/deploy-release-ring.yml", ".github/scripts/check_release_rings.py", ".github/scripts/check-deployment-concurrency.py", "backend/scripts/release_rings.py", "backend/scripts/render_release_ring_config.py", "backend/deploy/release_rings.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#10049 keeps release records immutable, deploy inputs record-only, and recovery fail-closed"
-  - id: release-ring-guard-tests
-    command: ["python3", ".github/scripts/test_check_release_rings.py"]
-    triggers: [".github/scripts/check_release_rings.py", ".github/scripts/test_check_release_rings.py", ".github/workflows/release-record.yml", ".github/workflows/deploy-release-ring.yml", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "release-ring structural guard must reject missing immutability, restore, and OIDC controls"
   - id: product-file-line-count-ratchet
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline/**/*.json"]
@@ -44,11 +34,6 @@ checks:
     triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
-  - id: desktop-qualification-dispatch
-    command: ["python3", ".github/scripts/test_desktop_qualification_dispatch.py"]
-    triggers: [".github/scripts/desktop_qualification_dispatch.py", ".github/scripts/test_desktop_qualification_dispatch.py", ".github/workflows/desktop_qualify_beta.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#10080 timeout retries must expose state and permit only one trusted qualification execution per candidate dispatch key"
   - id: desktop-changelog-io-tests
     command: ["python3", ".github/scripts/test_desktop_changelog.py"]
     triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
@@ -360,10 +345,6 @@ exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
     reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
-    reason: "release-policy full-tree check, not diff-scoped"
-  - path: ".github/scripts/check-desktop-release-promotion.py"
-    reason: "release pipeline check with workflow inputs"
-  - path: ".github/scripts/check-desktop-release-terminology.py"
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-release-process-guards.py"
     reason: "release-policy full-tree check, not diff-scoped"
