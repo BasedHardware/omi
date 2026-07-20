@@ -70,8 +70,14 @@ export default defineConfig({
           // plain→plain (and the bytecode entry importing a plain chunk is fine). The
           // set is session.ts plus exactly the telemetry leaves it pulls in
           // (backendDegraded → rateLimitDegraded, fallback), so the chunk is
-          // self-contained and never back-references the entry. `scripts/check-bytecode-entry-exports.mjs`
-          // guards it. See fix/win-packaged-tools.
+          // self-contained and never back-references the entry.
+          //
+          // BELT-AND-SUSPENDERS: the ROOT fix for this class is the bytecode entry
+          // stub FORWARDING its exports (scripts/patch-bytecode-entry-forward.mjs +
+          // the forward-assert in scripts/verify-bytecode.mjs), which makes every
+          // `require("../index.js").<name>` resolve. This split keeps the backend-
+          // session accessors resolving plain→plain even if that ever regressed.
+          // See fix/win-packaged-tools.
           manualChunks(id) {
             const p = id.replace(/\\/g, '/')
             if (

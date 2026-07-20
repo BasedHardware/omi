@@ -16,7 +16,7 @@
     "bootstrap": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-worktree.ps1",
     "dev:instance": "node scripts/print-instance.mjs --human",
     "seed:auth": "node scripts/seed-auth.mjs",
-    "build": "node scripts/ensure-env.mjs && npm run typecheck && electron-vite build && node scripts/check-bytecode-entry-exports.mjs && node scripts/verify-bytecode.mjs && node scripts/bundle-pimono-extension.mjs",
+    "build": "node scripts/ensure-env.mjs && npm run typecheck && electron-vite build && node scripts/patch-bytecode-entry-forward.mjs && node scripts/verify-bytecode.mjs && node scripts/bundle-pimono-extension.mjs",
     "rebuild:sqlite": "electron-rebuild -f -w better-sqlite3",
     "build:ocr-helper": "powershell -ExecutionPolicy Bypass -File scripts/build-ocr-helper.ps1",
     "build:audio-helper": "powershell -ExecutionPolicy Bypass -File scripts/build-audio-helper.ps1",
