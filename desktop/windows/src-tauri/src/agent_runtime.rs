@@ -37,6 +37,17 @@ impl AgentRuntimeState {
         let (output, mut output_receiver) = mpsc::unbounded_channel();
         let replies = Arc::new(Mutex::new(HashMap::<String, oneshot::Sender<Value>>::new()));
         let base_url = managed_api_base_url(env::var("OMI_API_BASE_URL").ok());
+
+        let bundle_id = app.config().identifier.clone();
+        if let Ok(data_root) = crate::native::data_root() {
+            let state_dir = data_root.join("AgentRuntime").join(&bundle_id);
+            let artifacts_dir = data_root.join("Artifacts").join(&bundle_id);
+            let _ = std::fs::create_dir_all(&state_dir);
+            let _ = std::fs::create_dir_all(&artifacts_dir);
+            env::set_var("OMI_AGENT_STATE_DIR", state_dir);
+            env::set_var("OMI_AGENT_ARTIFACTS_DIR", artifacts_dir);
+        }
+
         let startup_error = Arc::new(Mutex::new(None));
         let startup_error_for_runtime = Arc::clone(&startup_error);
         let startup_output = output.clone();

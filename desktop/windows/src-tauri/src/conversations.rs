@@ -74,6 +74,25 @@ impl ConversationStore {
         Ok(Self(Mutex::new(connection)))
     }
 
+    /// Release the database file handle so the underlying file can be migrated
+    /// to a new per-user root. In-memory state is used temporarily.
+    pub fn close(&self) -> Result<(), String> {
+        let mut guard = self.0.lock().map_err(|error| error.to_string())?;
+        *guard = Connection::open_in_memory().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn reroot(&self, database_file: &Path) -> Result<(), String> {
+        if let Some(parent) = database_file.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        let connection = Connection::open(database_file).map_err(|error| error.to_string())?;
+        Self::initialize(&connection)?;
+        let mut guard = self.0.lock().map_err(|error| error.to_string())?;
+        *guard = connection;
+        Ok(())
+    }
+
     fn initialize(connection: &Connection) -> Result<(), String> {
         connection
             .execute_batch(

@@ -188,8 +188,8 @@ impl Default for RewindSettings {
 
 pub struct RewindStore {
     connection: Mutex<Connection>,
-    root: PathBuf,
-    settings_file: PathBuf,
+    root: Mutex<PathBuf>,
+    settings_file: Mutex<PathBuf>,
 }
 
 impl RewindStore {
@@ -222,9 +222,51 @@ impl RewindStore {
             .map_err(|error| error.to_string())?;
         Ok(Self {
             connection: Mutex::new(connection),
-            root: root.join("rewind"),
-            settings_file: root.join("rewind-settings.json"),
+            root: Mutex::new(root.join("rewind")),
+            settings_file: Mutex::new(root.join("rewind-settings.json")),
         })
+    }
+
+    pub fn close(&self) -> Result<(), String> {
+        let mut guard = self.connection.lock().map_err(|error| error.to_string())?;
+        *guard = Connection::open_in_memory().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn reroot(&self, database_file: &Path, root: &Path) -> Result<(), String> {
+        let rewind_root = root.join("rewind");
+        let settings_file = root.join("rewind-settings.json");
+        fs::create_dir_all(&rewind_root).map_err(|error| error.to_string())?;
+        let connection = Connection::open(database_file).map_err(|error| error.to_string())?;
+        connection
+            .execute_batch(
+                "PRAGMA journal_mode = WAL;
+                 CREATE TABLE IF NOT EXISTS rewind_frames (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   ts INTEGER NOT NULL,
+                   app TEXT NOT NULL DEFAULT '',
+                   window_title TEXT NOT NULL DEFAULT '',
+                   process_name TEXT NOT NULL DEFAULT '',
+                   ocr_text TEXT NOT NULL DEFAULT '',
+                   image_path TEXT NOT NULL,
+                   width INTEGER NOT NULL DEFAULT 0,
+                   height INTEGER NOT NULL DEFAULT 0,
+                   indexed INTEGER NOT NULL DEFAULT 0
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_rewind_frames_ts ON rewind_frames(ts);
+                 CREATE INDEX IF NOT EXISTS idx_rewind_frames_indexed ON rewind_frames(indexed);",
+            )
+            .map_err(|error| error.to_string())?;
+        {
+            let mut guard = self.connection.lock().map_err(|error| error.to_string())?;
+            *guard = connection;
+        }
+        *self.root.lock().map_err(|error| error.to_string())? = rewind_root;
+        *self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())? = settings_file;
+        Ok(())
     }
 
     fn connection(&self) -> Result<MutexGuard<'_, Connection>, String> {
@@ -315,8 +357,8 @@ impl RewindStore {
     }
 
     fn read_frame(&self, image_path: &str) -> Result<String, String> {
-        let root = self
-            .root
+        let root = self.root.lock().map_err(|error| error.to_string())?;
+        let root = root
             .canonicalize()
             .map_err(|_| "Rewind frame root is unavailable")?;
         let candidate = Path::new(image_path);
@@ -342,7 +384,11 @@ impl RewindStore {
     }
 
     fn settings(&self) -> Result<RewindSettings, String> {
-        match fs::read(&self.settings_file) {
+        let settings_file = self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())?;
+        match fs::read(&*settings_file) {
             Ok(bytes) => serde_json::from_slice(&bytes)
                 .map(sanitize_settings)
                 .map_err(|error| format!("invalid Rewind settings: {error}")),
@@ -362,7 +408,11 @@ impl RewindStore {
             }
         }
         let bytes = serde_json::to_vec(&settings).map_err(|error| error.to_string())?;
-        fs::write(&self.settings_file, bytes).map_err(|error| error.to_string())?;
+        let settings_file = self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())?;
+        fs::write(&*settings_file, bytes).map_err(|error| error.to_string())?;
         Ok(settings)
     }
 
@@ -393,8 +443,8 @@ impl RewindStore {
     }
 
     fn remove_frame(&self, image_path: &str) -> Result<(), String> {
-        let root = self
-            .root
+        let root = self.root.lock().map_err(|error| error.to_string())?;
+        let root = root
             .canonicalize()
             .map_err(|_| "Rewind frame root is unavailable")?;
         let path = match Path::new(image_path).canonicalize() {
@@ -418,9 +468,11 @@ impl RewindStore {
         if !self.settings()?.capture_enabled {
             return Ok(None);
         }
-        fs::create_dir_all(&self.root).map_err(|error| error.to_string())?;
+        let root = self.root.lock().map_err(|error| error.to_string())?;
+        fs::create_dir_all(&*root).map_err(|error| error.to_string())?;
         let ts = now_ms();
-        let image_path = self.root.join(format!("{ts}.jpg"));
+        let image_path = root.join(format!("{ts}.jpg"));
+        drop(root);
         let status = Command::new("/usr/sbin/screencapture")
             .args(["-x", "-t", "jpg"])
             .arg(&image_path)
@@ -762,7 +814,7 @@ mod tests {
     #[test]
     fn rejects_corrupt_persisted_settings() {
         let store = store();
-        fs::write(&store.settings_file, b"not json").unwrap();
+        fs::write(&*store.settings_file.lock().unwrap(), b"not json").unwrap();
 
         assert!(store
             .settings()
@@ -805,8 +857,9 @@ mod tests {
     #[test]
     fn reads_only_bounded_jpegs_under_the_rewind_root() {
         let store = store();
-        fs::create_dir_all(&store.root).unwrap();
-        let frame = store.root.join("1.JPG");
+        let root = store.root.lock().unwrap().clone();
+        fs::create_dir_all(&root).unwrap();
+        let frame = root.join("1.JPG");
         fs::write(&frame, b"jpeg").unwrap();
         assert_eq!(
             store.read_frame(&frame.to_string_lossy()).unwrap(),
