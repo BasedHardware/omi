@@ -100,6 +100,14 @@ def beta_fixtures(root: Path) -> argparse.Namespace:
         "build": "12099",
         "team_id": "9536L8KLMP",
         "checks": sorted(REQUIRED_SMOKE_CHECKS),
+        "notification_callback_canary": {
+            "schema": 1,
+            "event": "user-notifications-settings-callback-completed",
+            "bundle_id": "com.omi.computer-macos.beta",
+            "main_actor": True,
+            "authorization_status": 2,
+            "validated": True,
+        },
         "artifacts": [
             {"label": "sparkle_zip", "sha256": BETA_ZIP_SHA},
             {"label": "dmg", "sha256": BETA_DMG_SHA},
@@ -188,7 +196,44 @@ def main() -> int:
         beta_smoke_path.write_text(json.dumps(beta_smoke))
         expect_failure(args, "Omi.Beta.zip digest")
 
+        # The canary must have run inside the beta artifact itself — evidence
+        # missing entirely, or recorded under the stable bundle id, both fail.
+        beta_smoke = json.loads(original)
+        del beta_smoke["notification_callback_canary"]
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke result is missing UserNotifications callback canary")
+
+        beta_smoke = json.loads(original)
+        beta_smoke["notification_callback_canary"]["bundle_id"] = "com.omi.computer-macos"
+        beta_smoke_path.write_text(json.dumps(beta_smoke))
+        expect_failure(args, "beta smoke UserNotifications callback canary bundle_id mismatch")
+
+    test_codemagic_beta_smoke_produces_gate_required_canaries()
+
     print("automatic desktop beta candidate tests OK")
+
+
+def test_codemagic_beta_smoke_produces_gate_required_canaries() -> None:
+    """The beta smoke invocation in codemagic.yaml must produce every piece of
+    evidence this gate requires of the beta smoke result. A stable-only flag
+    addition (e.g. the notification callback canary) that skips the beta
+    invocation would otherwise fail-close the first dual-identity release."""
+    codemagic = (Path(__file__).resolve().parents[2] / "codemagic.yaml").read_text(encoding="utf-8")
+    smoke_step = codemagic.split("- name: Smoke signed desktop artifact", 1)[1]
+    smoke_step = smoke_step.split("- name: ", 1)[0]
+    production_branch = smoke_step.split("else", 1)[1]
+    invocations = production_branch.split("scripts/smoke-signed-desktop-artifact.sh")
+    assert len(invocations) >= 3, "expected stable and beta smoke invocations in the production branch"
+    stable_invocation, beta_invocation = invocations[1], invocations[2]
+
+    evidence_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary", "--tag"]
+    for flag in evidence_flags:
+        assert flag in stable_invocation, f"stable smoke invocation lost {flag}; update this contract test"
+        assert flag in beta_invocation, (
+            f"beta smoke invocation is missing {flag}, but the candidate gate validates the "
+            "evidence it produces — the first dual-identity release would fail qualification"
+        )
+    assert "--expected-bundle-id" in beta_invocation, "beta smoke must assert the beta bundle id"
     return 0
 
 

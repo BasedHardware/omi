@@ -82,7 +82,32 @@ def _validate_smoke_contract(
     missing_checks = sorted(REQUIRED_SMOKE_CHECKS - checks)
     if missing_checks:
         fail(f"{label} smoke result is missing required checks: {', '.join(missing_checks)}")
+
+    _validate_callback_canary(smoke, bundle_id=bundle_id, label=label)
     return checks
+
+
+def _validate_callback_canary(smoke: dict, *, bundle_id: str, label: str) -> None:
+    """The UserNotifications callback canary must run inside the exact artifact
+    being qualified, so its recorded bundle id must match that artifact."""
+    callback_canary = smoke.get("notification_callback_canary")
+    if not isinstance(callback_canary, dict):
+        fail(f"{label} smoke result is missing UserNotifications callback canary evidence")
+    expected_callback_canary = {
+        "schema": 1,
+        "event": "user-notifications-settings-callback-completed",
+        "bundle_id": bundle_id,
+        "main_actor": True,
+        "validated": True,
+    }
+    for field, value in expected_callback_canary.items():
+        if callback_canary.get(field) != value:
+            fail(
+                f"{label} smoke UserNotifications callback canary "
+                f"{field} mismatch: expected {value!r}, got {callback_canary.get(field)!r}"
+            )
+    if not isinstance(callback_canary.get("authorization_status"), int):
+        fail(f"{label} smoke UserNotifications callback canary is missing authorization status")
 
 
 def validate(args: argparse.Namespace) -> dict:
@@ -121,23 +146,6 @@ def validate(args: argparse.Namespace) -> dict:
     )
 
     callback_canary = smoke.get("notification_callback_canary")
-    if not isinstance(callback_canary, dict):
-        fail("signed smoke result is missing UserNotifications callback canary evidence")
-    expected_callback_canary = {
-        "schema": 1,
-        "event": "user-notifications-settings-callback-completed",
-        "bundle_id": EXPECTED_BUNDLE_ID,
-        "main_actor": True,
-        "validated": True,
-    }
-    for field, value in expected_callback_canary.items():
-        if callback_canary.get(field) != value:
-            fail(
-                "signed smoke UserNotifications callback canary "
-                f"{field} mismatch: expected {value!r}, got {callback_canary.get(field)!r}"
-            )
-    if not isinstance(callback_canary.get("authorization_status"), int):
-        fail("signed smoke UserNotifications callback canary is missing authorization status")
 
     zip_release = asset_by_name(release, {"Omi.zip"})
     dmg_release = asset_by_name(release, {"Omi.dmg", "omi.dmg"})
