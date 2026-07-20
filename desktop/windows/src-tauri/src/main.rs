@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Manager;
+use tauri::{Manager, State};
 
 mod agent_runtime;
 mod automation;
@@ -16,7 +16,46 @@ mod rewind;
 mod screen_synth;
 mod usage;
 
+/// Called by the renderer when Firebase auth resolves (or by local dev harness
+/// flows that discover the user after launch). Closes open database handles,
+/// migrates anonymous/legacy state into the per-user root, then re-opens stores.
+#[tauri::command]
+fn set_auth_user(
+    uid: String,
+    conversation: State<'_, conversations::ConversationStore>,
+    rewind: State<'_, rewind::RewindStore>,
+    usage: State<'_, usage::UsageStore>,
+    insights: State<'_, insights::InsightStore>,
+    knowledge: State<'_, knowledge::KnowledgeStore>,
+    screen_synth: State<'_, screen_synth::ScreenSynthStore>,
+) -> Result<(), String> {
+    conversation.close()?;
+    rewind.close()?;
+    usage.close()?;
+    insights.close()?;
+    knowledge.close()?;
+
+    native::set_user_id(uid);
+    native::migrate_to_current_user().map_err(|error| error.to_string())?;
+
+    let database_file = native::database_file().map_err(|error| error.to_string())?;
+    let data_root = native::data_root().map_err(|error| error.to_string())?;
+
+    conversation.reroot(&database_file)?;
+    rewind.reroot(&database_file, &data_root)?;
+    usage.reroot(&database_file, &data_root)?;
+    insights.reroot(&database_file, &data_root)?;
+    knowledge.reroot(&database_file)?;
+    screen_synth.reroot(&data_root)?;
+    Ok(())
+}
+
 fn main() {
+    native::initialize_user_id();
+    if let Err(error) = native::migrate_to_current_user() {
+        eprintln!("Omi data migration warning: {error}");
+    }
+
     let store = conversations::ConversationStore::open(
         &native::database_file().expect("failed to resolve Omi database path"),
     )
@@ -64,6 +103,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            set_auth_user,
             automation::automation_capabilities,
             agent_runtime::agent_runtime_dispatch,
             agent_runtime::agent_runtime_request,

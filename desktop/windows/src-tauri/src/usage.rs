@@ -50,7 +50,7 @@ impl Default for UsageSettings {
 
 pub struct UsageStore {
     connection: Mutex<Connection>,
-    settings_file: std::path::PathBuf,
+    settings_file: Mutex<std::path::PathBuf>,
     #[cfg(target_os = "windows")]
     foreground: Mutex<Option<(String, i64)>>,
     #[cfg(target_os = "windows")]
@@ -65,12 +65,33 @@ impl UsageStore {
         Self::initialize(&connection)?;
         Ok(Self {
             connection: Mutex::new(connection),
-            settings_file: root.join("usage-settings.json"),
+            settings_file: Mutex::new(root.join("usage-settings.json")),
             #[cfg(target_os = "windows")]
             foreground: Mutex::new(None),
             #[cfg(target_os = "windows")]
             pending_seconds: Mutex::new(HashMap::new()),
         })
+    }
+
+    pub fn close(&self) -> Result<(), String> {
+        let mut guard = self.connection.lock().map_err(|error| error.to_string())?;
+        *guard = Connection::open_in_memory().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn reroot(&self, database_file: &Path, root: &Path) -> Result<(), String> {
+        fs::create_dir_all(root).map_err(|error| error.to_string())?;
+        let connection = Connection::open(database_file).map_err(|error| error.to_string())?;
+        Self::initialize(&connection)?;
+        {
+            let mut guard = self.connection.lock().map_err(|error| error.to_string())?;
+            *guard = connection;
+        }
+        *self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())? = root.join("usage-settings.json");
+        Ok(())
     }
 
     fn initialize(connection: &Connection) -> Result<(), String> {
@@ -117,7 +138,11 @@ impl UsageStore {
     }
 
     fn settings(&self) -> Result<UsageSettings, String> {
-        match fs::read(&self.settings_file) {
+        let settings_file = self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())?;
+        match fs::read(&*settings_file) {
             Ok(bytes) => serde_json::from_slice(&bytes)
                 .map(sanitize)
                 .map_err(|error| format!("invalid usage settings: {error}")),
@@ -130,8 +155,12 @@ impl UsageStore {
 
     fn update_settings(&self, settings: UsageSettings) -> Result<UsageSettings, String> {
         let settings = sanitize(settings);
+        let settings_file = self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())?;
         fs::write(
-            &self.settings_file,
+            &*settings_file,
             serde_json::to_vec(&settings).map_err(|error| error.to_string())?,
         )
         .map_err(|error| error.to_string())?;
@@ -212,7 +241,11 @@ impl UsageStore {
         if !self.settings()?.enabled {
             return Ok(());
         }
-        let marker = self.settings_file.with_file_name("userassist-seeded.json");
+        let settings_file = self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())?;
+        let marker = settings_file.with_file_name("userassist-seeded.json");
         if marker.exists() {
             return Ok(());
         }
@@ -418,7 +451,7 @@ mod tests {
             .unwrap();
         let store = UsageStore {
             connection: Mutex::new(connection),
-            settings_file: std::path::PathBuf::new(),
+            settings_file: Mutex::new(std::path::PathBuf::new()),
             #[cfg(target_os = "windows")]
             foreground: Mutex::new(None),
             #[cfg(target_os = "windows")]
@@ -434,13 +467,13 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         let store = UsageStore {
             connection: Mutex::new(Connection::open_in_memory().unwrap()),
-            settings_file: root.join("usage-settings.json"),
+            settings_file: Mutex::new(root.join("usage-settings.json")),
             #[cfg(target_os = "windows")]
             foreground: Mutex::new(None),
             #[cfg(target_os = "windows")]
             pending_seconds: Mutex::new(HashMap::new()),
         };
-        fs::write(&store.settings_file, b"not json").unwrap();
+        fs::write(&*store.settings_file.lock().unwrap(), b"not json").unwrap();
 
         assert!(store
             .settings()

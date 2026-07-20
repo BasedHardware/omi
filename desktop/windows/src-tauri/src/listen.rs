@@ -15,7 +15,34 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 const LISTEN_EVENT: &str = "omi://listen-message";
-const LISTEN_URL: &str = "wss://api.omi.me/v4/listen";
+const MANAGED_LISTEN_HOST: &str = "wss://api.omi.me/v4/listen";
+
+fn listen_url() -> String {
+    if let Ok(url) = std::env::var("OMI_LISTEN_URL") {
+        if !url.trim().is_empty() {
+            return url;
+        }
+    }
+    match std::env::var("OMI_API_BASE_URL") {
+        Ok(base) if !base.trim().is_empty() => {
+            let base = base.trim_end_matches('/');
+            match url::Url::parse(base) {
+                Ok(mut parsed) => {
+                    let scheme = parsed.scheme().to_owned();
+                    let _ = parsed.set_scheme(match scheme.as_str() {
+                        "https" => "wss",
+                        "http" => "ws",
+                        other => other,
+                    });
+                    parsed.set_path("/v4/listen");
+                    parsed.to_string()
+                }
+                Err(_) => MANAGED_LISTEN_HOST.to_owned(),
+            }
+        }
+        _ => MANAGED_LISTEN_HOST.to_owned(),
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -184,7 +211,7 @@ fn endpoint(language: &str, uid: Option<&str>) -> String {
     if let Some(uid) = uid.filter(|uid| !uid.is_empty()) {
         query.append_pair("uid", uid);
     }
-    format!("{LISTEN_URL}?{}", query.finish())
+    format!("{}?{}", listen_url(), query.finish())
 }
 
 fn token_uid(token: &str) -> Option<String> {

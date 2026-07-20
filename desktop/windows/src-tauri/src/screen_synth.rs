@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -42,7 +46,7 @@ pub struct ScreenFrameLite {
 
 pub struct ScreenSynthStore {
     state: Mutex<ScreenSynthState>,
-    path: PathBuf,
+    path: Mutex<PathBuf>,
 }
 impl ScreenSynthStore {
     pub fn open() -> Result<Self, String> {
@@ -55,9 +59,21 @@ impl ScreenSynthStore {
             .unwrap_or_default();
         Ok(Self {
             state: Mutex::new(state),
-            path,
+            path: Mutex::new(path),
         })
     }
+
+    pub fn reroot(&self, root: &Path) -> Result<(), String> {
+        let path = root.join("screen-synth.json");
+        let state = fs::read(&path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default();
+        *self.path.lock().map_err(|error| error.to_string())? = path;
+        *self.state.lock().map_err(|error| error.to_string())? = state;
+        Ok(())
+    }
+
     fn get(&self) -> Result<ScreenSynthState, String> {
         self.state
             .lock()
@@ -81,8 +97,9 @@ impl ScreenSynthStore {
         if let Some(value) = patch.denylist {
             state.denylist = value;
         }
+        let path = self.path.lock().map_err(|error| error.to_string())?;
         fs::write(
-            &self.path,
+            &*path,
             serde_json::to_vec(&*state).map_err(|error| error.to_string())?,
         )
         .map_err(|error| error.to_string())?;

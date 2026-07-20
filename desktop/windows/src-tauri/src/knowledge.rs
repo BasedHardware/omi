@@ -29,6 +29,23 @@ impl KnowledgeStore {
         })
     }
 
+    pub fn close(&self) -> Result<(), String> {
+        let mut guard = self.connection.lock().map_err(|error| error.to_string())?;
+        *guard = Connection::open_in_memory().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn reroot(&self, database_file: &Path) -> Result<(), String> {
+        if let Some(parent) = database_file.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        let connection = Connection::open(database_file).map_err(|error| error.to_string())?;
+        Self::initialize(&connection)?;
+        let mut guard = self.connection.lock().map_err(|error| error.to_string())?;
+        *guard = connection;
+        Ok(())
+    }
+
     fn initialize(connection: &Connection) -> Result<(), String> {
         connection
             .execute_batch("PRAGMA journal_mode = WAL;")

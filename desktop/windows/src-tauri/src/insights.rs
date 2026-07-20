@@ -69,7 +69,7 @@ pub struct InsightSettingsPatch {
 
 pub struct InsightStore {
     connection: Mutex<Connection>,
-    settings_file: std::path::PathBuf,
+    settings_file: Mutex<std::path::PathBuf>,
     settings: Mutex<InsightSettings>,
 }
 
@@ -105,9 +105,45 @@ impl InsightStore {
             .unwrap_or_default();
         Ok(Self {
             connection: Mutex::new(connection),
-            settings_file,
+            settings_file: Mutex::new(settings_file),
             settings: Mutex::new(settings),
         })
+    }
+
+    pub fn close(&self) -> Result<(), String> {
+        let mut guard = self.connection.lock().map_err(|error| error.to_string())?;
+        *guard = Connection::open_in_memory().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn reroot(&self, database_file: &Path, root: &Path) -> Result<(), String> {
+        fs::create_dir_all(root).map_err(|error| error.to_string())?;
+        let connection = Connection::open(database_file).map_err(|error| error.to_string())?;
+        connection
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS insights (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               ts INTEGER NOT NULL,
+               headline TEXT NOT NULL,
+               advice TEXT NOT NULL,
+               reasoning TEXT NOT NULL DEFAULT '',
+               category TEXT NOT NULL DEFAULT 'other',
+               source_app TEXT NOT NULL DEFAULT '',
+               confidence REAL NOT NULL DEFAULT 0,
+               dismissed INTEGER NOT NULL DEFAULT 0
+             );
+             CREATE INDEX IF NOT EXISTS idx_insights_ts ON insights(ts);",
+            )
+            .map_err(|error| error.to_string())?;
+        {
+            let mut guard = self.connection.lock().map_err(|error| error.to_string())?;
+            *guard = connection;
+        }
+        *self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())? = root.join("insights.json");
+        Ok(())
     }
 
     fn connection(&self) -> Result<MutexGuard<'_, Connection>, String> {
@@ -119,8 +155,12 @@ impl InsightStore {
     }
 
     fn save_settings(&self, settings: &InsightSettings) -> Result<(), String> {
+        let settings_file = self
+            .settings_file
+            .lock()
+            .map_err(|error| error.to_string())?;
         fs::write(
-            &self.settings_file,
+            &*settings_file,
             serde_json::to_vec_pretty(settings).map_err(|error| error.to_string())?,
         )
         .map_err(|error| error.to_string())
