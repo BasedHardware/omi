@@ -104,35 +104,17 @@ def check_desktop_codemagic_release() -> list[str]:
     if "desktop_qualify_beta.yml" not in desktop_workflow_body:
         errors.append("desktop release must dispatch the trusted macOS qualification workflow")
     for required_fragment in (
-        "desktop_qualification_dispatch.py",
         "dispatch_key=\"codemagic:${CM_TAG}\"",
         "for attempt in 1 2 3",
-        "--state dispatch_failed",
         "preserving immutable evidence",
+        "authoritative atomic",
     ):
         if required_fragment not in desktop_workflow_body:
             errors.append(f"desktop qualification handoff is missing reliable dispatch fragment: {required_fragment}")
-    if "working_directory: desktop/macos" in desktop_workflow_body:
-        for required_fragment in (
-            'repo_root="$(git rev-parse --show-toplevel)"',
-            'dispatch_helper="$repo_root/.github/scripts/desktop_qualification_dispatch.py"',
-            'REPO_ROOT="$repo_root" python3',
-            'os.path.join(os.environ["REPO_ROOT"], ".github/scripts")',
-        ):
-            if required_fragment not in desktop_workflow_body:
-                errors.append(
-                    "desktop qualification handoff must resolve repository-root helpers from its Codemagic working directory"
-                )
-                break
-        for forbidden_fragment in (
-            "python3 .github/scripts/desktop_qualification_dispatch.py",
-            "sys.path.insert(0, '.github/scripts')",
-        ):
-            if forbidden_fragment in desktop_workflow_body:
-                errors.append(
-                    "desktop qualification handoff must not resolve .github/scripts relative to desktop/macos"
-                )
-                break
+    dispatch_start = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
+    dispatch_body = desktop_workflow_body[dispatch_start:] if dispatch_start != -1 else ""
+    if "gh release edit \"$CM_TAG\"" in dispatch_body:
+        errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
     if "candidate remains non-live" not in desktop_workflow_body:
         errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
     if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
@@ -321,6 +303,7 @@ def check_desktop_qualification_runner() -> list[str]:
         "desktop_qualification_dispatch.py claim",
         "desktop_qualification_dispatch.py complete",
         "desktop-beta-qualification-${{ inputs.release_tag }}",
+        "authoritative atomic serialiser",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")

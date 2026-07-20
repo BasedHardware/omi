@@ -2888,49 +2888,14 @@ workflows:
             exit 0
           fi
           set -euo pipefail
-          dispatch_dir="/tmp/desktop-qualification-dispatch"
           dispatch_key="codemagic:${CM_TAG}"
-          repo_root="$(git rev-parse --show-toplevel)"
-          dispatch_helper="$repo_root/.github/scripts/desktop_qualification_dispatch.py"
-          [[ -f "$dispatch_helper" ]] || {
-            echo "ERROR: desktop qualification dispatch helper is missing from the checkout" >&2
-            exit 1
-          }
-          mkdir -p "$dispatch_dir"
-          gh release view "$CM_TAG" --repo "$GITHUB_REPO" --json body --jq .body > "$dispatch_dir/before.md"
-          python3 "$dispatch_helper" initialize \
-            --input "$dispatch_dir/before.md" --output "$dispatch_dir/pending.md" \
-            --key "$dispatch_key" --updated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --diagnostic "candidate published; Codemagic is requesting trusted qualification" \
-            > "$dispatch_dir/initialize.json"
-          if ! cmp -s "$dispatch_dir/before.md" "$dispatch_dir/pending.md"; then
-            gh release edit "$CM_TAG" --repo "$GITHUB_REPO" --notes-file "$dispatch_dir/pending.md"
-          fi
-          dispatch_state=$(REPO_ROOT="$repo_root" python3 - "$dispatch_dir/pending.md" <<'PY'
-          import os
-          import sys
-          sys.path.insert(0, os.path.join(os.environ["REPO_ROOT"], ".github/scripts"))
-          from desktop_release_metadata import parse_metadata
-          print(parse_metadata(open(sys.argv[1], encoding='utf-8').read()).get('qualificationDispatchState', ''))
-          PY
-          )
-          if [[ "$dispatch_state" != "pending" ]]; then
-            echo "Qualification dispatch already $dispatch_state for $CM_TAG; candidate remains non-live until trusted qualification succeeds."
-            exit 0
-          fi
+          # The GitHub Actions workflow owns every release-body transition.
+          # Its per-candidate concurrency group is the authoritative atomic
+          # serialiser for claim/running/complete state; Codemagic must never
+          # replay a stale queued body over a runner-owned transition.
           for attempt in 1 2 3; do
             if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
               -f release_tag="$CM_TAG" -f dispatch_key="$dispatch_key"; then
-              gh release view "$CM_TAG" --repo "$GITHUB_REPO" --json body --jq .body > "$dispatch_dir/current.md"
-              python3 "$dispatch_helper" mark \
-                --input "$dispatch_dir/current.md" --output "$dispatch_dir/queued.md" \
-                --state queued --key "$dispatch_key" --attempt "$attempt" \
-                --updated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                --diagnostic "GitHub Actions accepted trusted qualification dispatch" \
-                > "$dispatch_dir/queued.json"
-              if ! cmp -s "$dispatch_dir/current.md" "$dispatch_dir/queued.md"; then
-                gh release edit "$CM_TAG" --repo "$GITHUB_REPO" --notes-file "$dispatch_dir/queued.md"
-              fi
               echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
               exit 0
             fi
@@ -2938,16 +2903,6 @@ workflows:
               sleep "$((attempt * 2))"
             fi
           done
-          gh release view "$CM_TAG" --repo "$GITHUB_REPO" --json body --jq .body > "$dispatch_dir/current.md"
-          python3 "$dispatch_helper" mark \
-            --input "$dispatch_dir/current.md" --output "$dispatch_dir/failed.md" \
-            --state dispatch_failed --key "$dispatch_key" --attempt 3 \
-            --updated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --diagnostic "GitHub Actions dispatch was not confirmed after 3 attempts; candidate remains non-live" \
-            > "$dispatch_dir/failed.json"
-          if ! cmp -s "$dispatch_dir/current.md" "$dispatch_dir/failed.md"; then
-            gh release edit "$CM_TAG" --repo "$GITHUB_REPO" --notes-file "$dispatch_dir/failed.md"
-          fi
           echo "WARNING: qualification dispatch was not confirmed after bounded retry; candidate remains non-live."
 
     artifacts:

@@ -97,7 +97,8 @@ jobs:
             > /tmp/desktop-emergency-beta/source-check.json
           gh issue view "$INCIDENT_ID" --repo "$REPO" --json number,state,url \
             > /tmp/desktop-emergency-beta/incident.json
-          gh api "repos/${REPO}/issues/${INCIDENT_ID}/comments?per_page=100" \
+          gh api --paginate --slurp "repos/${REPO}/issues/${INCIDENT_ID}/comments?per_page=100" \
+            | python3 -c 'import json, sys; json.dump([comment for page in json.load(sys.stdin) for comment in page], sys.stdout)' \
             > /tmp/desktop-emergency-beta/incident-comments.json
           curl --fail --location --retry 2 --output /tmp/desktop-emergency-beta/behavioral-evidence \
             "$BEHAVIORAL_EVIDENCE_URL"
@@ -137,20 +138,6 @@ jobs:
             --output /tmp/desktop-emergency-beta/evidence.json
           python3 -c 'import json; print(",".join(json.load(open("/tmp/desktop-emergency-beta/evidence.json"))["approvers"]))' \
             | sed 's/^/approvers=/' >> "$GITHUB_OUTPUT"
-
-      - name: Record explicit emergency release metadata
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/desktop-emergency-beta/release-body.md
-          python3 .github/scripts/mark-desktop-release-emergency-beta.py \
-            --input /tmp/desktop-emergency-beta/release-body.md \
-            --evidence /tmp/desktop-emergency-beta/evidence.json \
-            --output /tmp/desktop-emergency-beta/release-body-emergency.md
-          gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/desktop-emergency-beta/release-body-emergency.md
 
       - name: Prepare immutable emergency manifest
         run: |
@@ -223,7 +210,24 @@ jobs:
             --data-binary @/tmp/desktop-emergency-beta/promote.json \
             https://api.omi.me/v2/desktop/channels/emergency-promote-beta \
             > /tmp/desktop-emergency-beta/promotion-response.json
-          python3 -m json.tool /tmp/desktop-emergency-beta/promotion-response.json
+          RELEASE_TAG="$RELEASE_TAG" EXPECTED_GENERATION="$EXPECTED_GENERATION" python3 - <<'PY'
+          import json
+          import os
+
+          response = json.load(open('/tmp/desktop-emergency-beta/promotion-response.json'))
+          pointer = response.get('pointer')
+          expected_generation = int(os.environ['EXPECTED_GENERATION']) + 1
+          if (
+              response.get('success') is not True
+              or not isinstance(pointer, dict)
+              or pointer.get('platform') != 'macos'
+              or pointer.get('channel') != 'beta'
+              or pointer.get('release_id') != os.environ['RELEASE_TAG']
+              or pointer.get('generation') != expected_generation
+          ):
+              raise SystemExit('authoritative macOS beta pointer compare-and-swap did not succeed')
+          print(json.dumps(response, indent=2))
+          PY
 
       - name: Prove Stable pointer, release metadata, and appcast are unchanged
         env:
@@ -252,6 +256,20 @@ jobs:
           PY
           cmp /tmp/desktop-emergency-beta/stable-appcast-before.xml /tmp/desktop-emergency-beta/stable-appcast-after.xml
 
+      - name: Record explicit emergency release metadata after beta pointer CAS
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/desktop-emergency-beta/release-body.md
+          python3 .github/scripts/mark-desktop-release-emergency-beta.py \
+            --input /tmp/desktop-emergency-beta/release-body.md \
+            --evidence /tmp/desktop-emergency-beta/evidence.json \
+            --output /tmp/desktop-emergency-beta/release-body-emergency.md
+          gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/desktop-emergency-beta/release-body-emergency.md
+
       - name: Notify incident responders immediately
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -262,7 +280,6 @@ jobs:
 
   monitor:
     needs: promote
-    environment: prod
     runs-on: ubuntu-latest
     steps:
       - name: Monitor beta-only feed for one hour

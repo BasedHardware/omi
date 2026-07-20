@@ -22,6 +22,8 @@ permissions:
   contents: read
 
 concurrency:
+  # This is the authoritative atomic serialiser for release-body claims. No
+  # outside dispatcher may edit qualificationDispatch* metadata.
   group: desktop-beta-qualification-${{ inputs.release_tag }}
   cancel-in-progress: false
 
