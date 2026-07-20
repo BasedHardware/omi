@@ -498,6 +498,44 @@ class Stack:
             jobs.append(job)
         return jobs
 
+    def seed_orphan_in_progress(self, uid: str, conversation_id: str, *, idle_seconds: int) -> None:
+        """Write an in_progress row no session owns (#9809's stuck shape).
+
+        Seeded directly because production orphans predate any single cause
+        (crashed sessions, pre-#9960 code); recovery must handle the row
+        regardless of how it was stranded. The recovery session itself runs
+        through the real listener.
+        """
+        now = datetime.now(timezone.utc)
+        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).set(
+            {
+                'id': conversation_id,
+                'created_at': now - timedelta(seconds=idle_seconds + 60),
+                'started_at': now - timedelta(seconds=idle_seconds + 60),
+                'finished_at': now - timedelta(seconds=idle_seconds),
+                'status': 'in_progress',
+                'discarded': False,
+                'deleted': False,
+                'has_content': True,
+                'language': 'en',
+                'source': 'desktop',
+                'structured': {'title': '', 'overview': '', 'emoji': '', 'category': 'other'},
+                'transcript_segments': [
+                    {
+                        'id': 'orphan-segment-1',
+                        'speaker': 'SPEAKER_00',
+                        'speaker_id': 0,
+                        'start': 0.0,
+                        'end': 0.1,
+                        'text': 'orphaned stack transcript',
+                        'is_user': False,
+                        'person_id': None,
+                    }
+                ],
+                'photos': [],
+            }
+        )
+
     def age_conversation(self, uid: str, conversation_id: str) -> None:
         self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).update(
             {'finished_at': datetime.now(timezone.utc) - timedelta(seconds=121)}
@@ -1110,6 +1148,41 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
         raise StackFailure('integration retry did not preserve one idempotency key across both delivery attempts')
 
 
+async def _orphaned_in_progress_recovers_at_session_boundary(stack: Stack) -> None:
+    """#9809: an aged in_progress row no session owns is recovered at the next
+    session boundary through the normal durable finalization path."""
+    if stack.finalization_mode != 'cloud_tasks':
+        raise StackFailure('orphan recovery scenario requires the Cloud Tasks stack')
+    uid = 'stack-cloud-orphan-recovery'
+    orphan_id = str(uuid.uuid4())
+    stack.seed_user(uid)
+    stack.seed_orphan_in_progress(uid, orphan_id, idle_seconds=7200)
+
+    # A real session opens; its process_pending pass (a finite task started at
+    # session begin, after its built-in 7s delay) must find the orphan. The
+    # session stays open while we wait — teardown cancels finite tasks.
+    websocket, _ = await _connect(stack, uid, None)
+
+    def orphan_job_enqueued() -> bool:
+        return bool(stack.jobs_for(uid, orphan_id))
+
+    _wait_until(orphan_job_enqueued, label='orphan durable finalization job admission', timeout=30.0)
+    await websocket.close(code=1000)
+    job = _one_job(stack, uid, orphan_id)
+    task = stack.wait_for_finalization_task(count=1, timeout=30.0)
+    _assert_opaque_task(task, job, stack)
+
+    delivery = await stack.deliver_finalization_task(task, retry_count=0)
+    if delivery != (200, {'status': 'done'}):
+        raise StackFailure(f'orphan finalization delivery did not complete: {delivery}')
+    recovered = stack.conversation(uid, orphan_id)
+    if not recovered or recovered.get('status') != 'completed' or not recovered.get('has_content'):
+        raise StackFailure('orphaned in_progress conversation was not recovered to completed with content')
+    completed_job = _one_job(stack, uid, orphan_id)
+    if completed_job.get('status') != 'completed':
+        raise StackFailure('orphan recovery did not complete its durable finalization job')
+
+
 async def run_inline_scenarios(stack: Stack) -> None:
     await _normal_and_terminal_reconnect(stack)
     await _empty_recording(stack)
@@ -1189,6 +1262,12 @@ def main() -> int:
             finalization_mode='cloud_tasks',
             finalizer_failures={'integration': 1},
             scenario=_integration_retry_preserves_processed_conversation,
+        )
+        _run_stack_scenario(
+            state_dir / 'cloud-orphan-recovery',
+            finalization_mode='cloud_tasks',
+            finalizer_failures=None,
+            scenario=_orphaned_in_progress_recovers_at_session_boundary,
         )
         print(f'listen-pusher stack gauntlet passed; evidence: {state_dir}')
         return 0
