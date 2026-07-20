@@ -73,3 +73,39 @@ class TestNoCandidateIsDropped:
         work_items = select_promotion_work_items(candidates, now=NOW, config=cfg)
         assert len(_all_ids(work_items)) == 6
         assert len(set(_all_ids(work_items))) == 6
+
+    def test_a_session_larger_than_one_batch_is_split_not_truncated(self):
+        """Overflow ids must move to a new work item, not disappear.
+
+        The selector consumed only `max_l1_items_per_batch - len(batch)` ids from a
+        session and dropped the rest on the floor, so a session with more candidates
+        than one batch holds silently lost the excess: those L1 items were never
+        promoted to L2. Session overflow was already carried forward correctly; item
+        overflow was not.
+        """
+        candidates = [_candidate('u1', 's1', i) for i in range(60)]
+        work_items = select_promotion_work_items(candidates, now=NOW)
+
+        emitted = _all_ids(work_items)
+        assert len(emitted) == 60, f'{60 - len(emitted)} candidates were dropped'
+        assert set(emitted) == {c.l1_item_id for c in candidates}
+        assert len(set(emitted)) == 60, 'a candidate was emitted more than once'
+        assert [len(w.l1_item_ids) for w in work_items] == [50, 10]
+        assert all(w.session_ids == ['s1'] for w in work_items)
+
+    def test_every_candidate_survives_an_awkward_split(self):
+        cfg = PromotionSelectorConfig(max_l1_items_per_batch=7, max_sessions_per_batch=10)
+        candidates = [_candidate('u1', 's1', i) for i in range(23)]
+        work_items = select_promotion_work_items(candidates, now=NOW, config=cfg)
+
+        emitted = _all_ids(work_items)
+        assert sorted(emitted) == sorted(c.l1_item_id for c in candidates)
+        assert all(len(w.l1_item_ids) <= 7 for w in work_items)
+
+    def test_batches_never_exceed_the_item_cap_when_a_session_spans_them(self):
+        cfg = PromotionSelectorConfig(max_l1_items_per_batch=5, max_sessions_per_batch=10)
+        candidates = [_candidate('u1', 's1', i) for i in range(4)] + [_candidate('u1', 's2', i) for i in range(9)]
+        work_items = select_promotion_work_items(candidates, now=NOW, config=cfg)
+
+        assert len(_all_ids(work_items)) == 13
+        assert all(len(w.l1_item_ids) <= 5 for w in work_items)

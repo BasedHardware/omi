@@ -173,10 +173,19 @@ def select_promotion_work_items(
         would_exceed_items = len(batch_l1_ids) + len(item_ids) > cfg.max_l1_items_per_batch
         if active_uid is not None and (uid != active_uid or would_exceed_sessions or would_exceed_items):
             flush()
-        active_uid = uid
-        batch_sessions.append(session_id)
-        remaining = cfg.max_l1_items_per_batch - len(batch_l1_ids)
-        batch_l1_ids.extend(item_ids[:remaining])
+        # A session holding more candidates than a single batch allows spans several work
+        # items. Keep consuming its ids, flushing a full batch and starting a fresh one,
+        # instead of truncating to the remaining space and discarding the rest.
+        pending_ids = list(item_ids)
+        while pending_ids:
+            if len(batch_l1_ids) >= cfg.max_l1_items_per_batch:
+                flush()
+            active_uid = uid
+            if session_id not in batch_sessions:
+                batch_sessions.append(session_id)
+            remaining = cfg.max_l1_items_per_batch - len(batch_l1_ids)
+            batch_l1_ids.extend(pending_ids[:remaining])
+            pending_ids = pending_ids[remaining:]
         if len(batch_l1_ids) >= cfg.max_l1_items_per_batch:
             flush()
     flush()
