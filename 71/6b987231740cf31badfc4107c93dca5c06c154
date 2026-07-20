@@ -1,0 +1,38 @@
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBWallpaper.swift
+  s_2204722b151ea4::t_9f0375ddde832b 1-73
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBComponents.swift
+  s_2204722b151ea4::t_3f94a7af7badb6 2-227
+  s_2204722b151ea4::t_c02dd5054d7fe9 1
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBTodayPage.swift
+  s_2204722b151ea4::t_1211e85b2abb95 1-272
+desktop/macos/Desktop/Sources/Startup/OmiFontRegistration.swift
+  s_2204722b151ea4::t_1a167a963a1eef 10-11
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_2204722b151ea4::t_f3fac06c61f242 1112-1162
+  s_2204722b151ea4::t_6e10edb8ec090a 433
+  s_2204722b151ea4::t_5a53f4da86856a 998-1000
+  s_2204722b151ea4::t_f585c4c8abf136 46-47
+  s_2204722b151ea4::t_4b1076743d5aa7 894
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SecondBrainShell.swift
+  s_2204722b151ea4::t_a58a5d1b313ab0 1-197
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBTodayContainer.swift
+  s_2204722b151ea4::t_69d7dacb1813a4 14
+  s_2204722b151ea4::t_608c0280b069e6 33
+  s_2204722b151ea4::t_c4b0043272f85f 1-13,15-32,34-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "716b987231740cf31badfc4107c93dca5c06c154",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
