@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2198,
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1704
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1714
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Added missing `import Combine` for `Timer.publish(...).autoconnect()` usage under Swift 6.4.",

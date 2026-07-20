@@ -1,0 +1,3 @@
+{
+  "change": "Fixed macOS desktop build compatibility with Xcode Beta / Swift 6.4"
+}
