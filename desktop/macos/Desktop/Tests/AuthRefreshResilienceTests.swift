@@ -42,12 +42,13 @@ import XCTest
       auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
         dataForRequest: { _ in
           let body = Data("{\"error\":\"backend unavailable\"}".utf8)
-          let response = HTTPURLResponse(
-            url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
-            statusCode: 400,
-            httpVersion: nil,
-            headerFields: nil
-          )!
+          let response = try XCTUnwrap(
+            HTTPURLResponse(
+              url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
+              statusCode: 400,
+              httpVersion: nil,
+              headerFields: nil
+            ))
           return (body, response)
         }
       )
@@ -130,12 +131,13 @@ import XCTest
       auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
         dataForRequest: { _ in
           let body = Data("{\"error\":{\"message\":\"INVALID_REFRESH_TOKEN\"}}".utf8)
-          let response = HTTPURLResponse(
-            url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
-            statusCode: 400,
-            httpVersion: nil,
-            headerFields: nil
-          )!
+          let response = try XCTUnwrap(
+            HTTPURLResponse(
+              url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
+              statusCode: 400,
+              httpVersion: nil,
+              headerFields: nil
+            ))
           return (body, response)
         }
       )

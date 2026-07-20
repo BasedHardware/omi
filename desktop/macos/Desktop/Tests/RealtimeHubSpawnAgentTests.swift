@@ -105,7 +105,7 @@ import XCTest
 
     func testSpawnJournalReceiptProjectsTheKernelAcceptedChildRun() throws {
       let continuityKey = "voice:00000000-0000-0000-0000-000000009516"
-      let pillID = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+      let pillID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000123"))
       let payload = canonicalSpawnPayload(
         continuityKey: continuityKey,
         pillID: pillID,

@@ -67,12 +67,14 @@ import XCTest
         : Self.forcedBody
       Self.lock.unlock()
 
-      let response = HTTPURLResponse(
-        url: request.url!,
-        statusCode: status,
-        httpVersion: nil,
-        headerFields: nil
-      )!
+      guard let url = request.url,
+        let response = HTTPURLResponse(
+          url: url,
+          statusCode: status,
+          httpVersion: nil,
+          headerFields: nil
+        )
+      else { return }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(self, didLoad: body)
       client?.urlProtocolDidFinishLoading(self)
@@ -120,12 +122,14 @@ import XCTest
     override func stopLoading() {}
 
     private func respond() {
-      let response = HTTPURLResponse(
-        url: request.url!,
-        statusCode: 200,
-        httpVersion: nil,
-        headerFields: nil
-      )!
+      guard let url = request.url,
+        let response = HTTPURLResponse(
+          url: url,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: nil
+        )
+      else { return }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(self, didLoad: Data(#"{"ok":true}"#.utf8))
       client?.urlProtocolDidFinishLoading(self)
@@ -422,12 +426,13 @@ import XCTest
           let body = Data(
             "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}"
               .utf8)
-          let response = HTTPURLResponse(
-            url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-          )!
+          let response = try XCTUnwrap(
+            HTTPURLResponse(
+              url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
+              statusCode: 200,
+              httpVersion: nil,
+              headerFields: nil
+            ))
           return (body, response)
         }
       )
@@ -489,12 +494,13 @@ import XCTest
           let body = Data(
             "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}"
               .utf8)
-          let response = HTTPURLResponse(
-            url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-          )!
+          let response = try XCTUnwrap(
+            HTTPURLResponse(
+              url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
+              statusCode: 200,
+              httpVersion: nil,
+              headerFields: nil
+            ))
           return (body, response)
         }
       )
@@ -588,12 +594,13 @@ import XCTest
           let body = Data(
             "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}"
               .utf8)
-          let response = HTTPURLResponse(
-            url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-          )!
+          let response = try XCTUnwrap(
+            HTTPURLResponse(
+              url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
+              statusCode: 200,
+              httpVersion: nil,
+              headerFields: nil
+            ))
           return (body, response)
         }
       )

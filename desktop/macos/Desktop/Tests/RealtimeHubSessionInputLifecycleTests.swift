@@ -145,10 +145,10 @@ import XCTest
       XCTAssertEqual(buffered.pendingVideoFrameCount, 0)
     }
 
-    func testGeminiScreenshotToolResultCarriesPixelsInsideTheMatchingFunctionResponse() {
+    func testGeminiScreenshotToolResultCarriesPixelsInsideTheMatchingFunctionResponse() throws {
       let descriptor = RealtimeScreenEvidenceDescriptor(
         evidenceID: "evidence-1",
-        turnID: VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!),
+        turnID: VoiceTurnID(try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))),
         capturedAt: Date(timeIntervalSince1970: 1),
         target: .frontmostDisplay,
         frontmostApp: "Codex",

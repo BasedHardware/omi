@@ -154,8 +154,8 @@ import XCTest
   @MainActor
   final class WALServiceUploadTests: XCTestCase {
 
-    private var walDir: URL!
-    private var service: WALService!
+    private var walDir: URL = FileManager.default.temporaryDirectory
+    private lazy var service: WALService = makeService()
 
     override func setUp() async throws {
       walDir = FileManager.default.temporaryDirectory

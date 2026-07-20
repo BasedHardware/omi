@@ -352,7 +352,9 @@ final class PushToTalkStateMachineTests: XCTestCase {
 
     private func ownerBoundaryDefaults(_ suffix: String) -> UserDefaults {
       let name = ownerBoundarySuiteName(suffix)
-      let defaults = UserDefaults(suiteName: name)!
+      guard let defaults = UserDefaults(suiteName: name) else {
+        preconditionFailure("UserDefaults suite unavailable: \(name)")
+      }
       defaults.removePersistentDomain(forName: name)
       return defaults
     }

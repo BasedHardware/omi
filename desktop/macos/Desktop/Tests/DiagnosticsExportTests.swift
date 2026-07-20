@@ -9,7 +9,7 @@ import XCTest
   /// BL-023 / SET-03: the local (offline) diagnostics export must produce a file
   /// with app/OS metadata and a *redacted* log tail — no raw tokens.
   final class DiagnosticsExportTests: XCTestCase {
-    private var tempDir: URL!
+    private var tempDir: URL = FileManager.default.temporaryDirectory
 
     override func setUpWithError() throws {
       try super.setUpWithError()
@@ -21,7 +21,7 @@ import XCTest
 
     override func tearDownWithError() throws {
       DesktopDiagnosticsManager.shared.resetForTests()
-      if let tempDir { try? FileManager.default.removeItem(at: tempDir) }
+      try? FileManager.default.removeItem(at: tempDir)
       try super.tearDownWithError()
     }
 
