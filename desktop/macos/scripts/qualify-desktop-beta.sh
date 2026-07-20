@@ -234,25 +234,6 @@ PY
   return 1
 }
 
-prepare_qualification_defaults() {
-  local bundle_id="$1" bundle_name="$2"
-  case "$bundle_name" in
-    omi-qualification-*) ;;
-    *) echo "refusing to reset non-qualification profile: $bundle_name" >&2; return 1 ;;
-  esac
-  # Qualification is a fresh, synthetic profile. Never inherit stale onboarding,
-  # capture, or shortcut state from this bundle's previous run or from Omi Dev.
-  rm -rf "$HOME/Library/Application Support/$bundle_name" "$HOME/Library/Caches/$bundle_name"
-  defaults delete "$bundle_id" >/dev/null 2>&1 || true
-  defaults write "$bundle_id" hasCompletedOnboarding -bool true
-  defaults write "$bundle_id" devLazyPermissionsEnabled -bool true
-  defaults write "$bundle_id" screenAnalysisEnabled -bool false
-  defaults write "$bundle_id" transcriptionEnabled -bool false
-  defaults write "$bundle_id" systemAudioCaptureMode -string never
-  defaults write "$bundle_id" screenAnalysisAutoStartFixed_v2 -bool true
-  defaults write "$bundle_id" shortcut_floatingBarTypedQuestionVoiceAnswersEnabled -bool false
-}
-
 cleanup() {
   local exit_code=$?
   if [[ -n "$BUNDLE" ]]; then
@@ -271,9 +252,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-QUALIFICATION_BUNDLE_ID="$(derive_bundle_id "$BUNDLE")"
 terminate_qualification_desktop "$BUNDLE"
-prepare_qualification_defaults "$QUALIFICATION_BUNDLE_ID" "$BUNDLE"
+"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"
 
 (
   cd "$WORKTREE"
@@ -331,8 +311,8 @@ PY
 fi
 
 STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-ASSET="qualification-evidence-${VERSION}-$(date -u +%Y%m%dT%H%M%SZ).json"
-cp "$EVIDENCE/manifest.json" "/tmp/$ASSET"
+EVIDENCE_FILE="/tmp/qualification-evidence-${VERSION}-$$.json"
+cp "$EVIDENCE/manifest.json" "$EVIDENCE_FILE"
 
 if [[ "$AUTOMATIC" -eq 1 ]]; then
   git -C "$REPO_ROOT" fetch origin --tags --force
@@ -341,7 +321,7 @@ if [[ "$AUTOMATIC" -eq 1 ]]; then
     echo "automatic qualification stopped: newer candidate exists ($LATEST_TAG)" >&2
     exit 1
   fi
-  python3 - "/tmp/$ASSET" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
+  python3 - "$EVIDENCE_FILE" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -357,12 +337,18 @@ evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", 
 PY
 fi
 
+# Qualification evidence is factual, immutable history. Its content digest is
+# part of the asset identity and uploads never clobber an earlier observation.
+EVIDENCE_SHA=$(shasum -a 256 "$EVIDENCE_FILE" | awk '{print $1}')
+ASSET="qualification-evidence-${VERSION}-${EVIDENCE_SHA}.json"
+mv "$EVIDENCE_FILE" "/tmp/$ASSET"
+
 BODY_FILE=/tmp/desktop-qualification-release-body.md
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json body --jq .body > "$BODY_FILE"
 
 python3 "$KEYVALUE_PY" update-qualified-beta "$BODY_FILE" "$STAMP" "$SHA" "$ASSET"
 
-gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi --clobber
+gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
 
 if [[ "$PROMOTE" -eq 1 ]]; then

@@ -795,7 +795,8 @@ actor MemoryExportService {
 
   func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
     let currentMCPKey = storedMCPKey()
-    let localConnections: Set<MemoryExportDestination> = destination.supportsMCP
+    let localConnections: Set<MemoryExportDestination> =
+      destination.supportsMCP
       ? MemoryExportConnectionDetector.scanLocalMCPConnections(for: destination, matchingKey: currentMCPKey)
       : []
     return status(for: destination, localMCPConnections: localConnections)

@@ -115,10 +115,32 @@ def test_lifecycle_service_allows_only_declared_transitions(lifecycle_store):
     )
 
     assert lifecycle_service.admit_processing('uid', 'conversation') is True
-    assert lifecycle_service.complete('uid', 'conversation') is True
-    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed
+    # processing -> merging stays undeclared: merge only ever admits completed conversations.
     with pytest.raises(lifecycle_service.LifecycleTransitionError, match='invalid lifecycle transition'):
         lifecycle_service.begin_merge('uid', 'conversation')
+    assert lifecycle_service.complete('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed
+
+
+def test_merge_admission_and_lifecycle_agree_on_completed(lifecycle_store):
+    """The two gates in POST /v1/conversations/merge must agree on the admitted status.
+
+    validate_merge_compatibility rejects every status except completed, so completed is the only
+    status that can reach begin_merge. If the transition table omits completed -> merging, every
+    accepted merge raises LifecycleTransitionError, which is an unhandled 500 and makes the merge
+    feature unusable. merge_conversations' failure rollback documents the same edge in reverse.
+    """
+    conversations = [
+        {'id': 'conversation', 'status': ConversationStatus.completed.value},
+        {'id': 'other', 'status': ConversationStatus.completed.value},
+    ]
+    is_valid, error_message, _ = validate_merge_compatibility(conversations)
+    assert (is_valid, error_message) == (True, None)
+
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
+
+    assert lifecycle_service.begin_merge('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.merging
 
 
 def test_generic_lifecycle_field_write_fails_closed(lifecycle_store):
@@ -167,6 +189,29 @@ def test_terminal_failed_finalization_closes_only_the_current_processing_generat
         'discarded': True,
     }
     assert lifecycle_service.fail_and_discard_processing('uid', 'conversation') is False
+
+
+def test_rollback_processing_admission_returns_a_failed_synchronous_finalization(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=False)
+
+    assert lifecycle_service.rollback_processing_admission('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.in_progress.value
+    # The generation stays finalizable — a retry can admit processing again.
+    assert lifecycle_service.admit_processing('uid', 'conversation') is True
+
+
+def test_rollback_processing_admission_never_reopens_a_terminal_generation(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
+
+    assert lifecycle_service.rollback_processing_admission('uid', 'conversation') is False
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed.value
+
+
+def test_rollback_processing_admission_respects_discard(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=True)
+
+    assert lifecycle_service.rollback_processing_admission('uid', 'conversation') is False
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.processing.value
 
 
 def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store):

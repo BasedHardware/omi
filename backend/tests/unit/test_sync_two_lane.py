@@ -119,6 +119,68 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
     assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in secrets
 
 
+def test_cloud_run_clone_removes_retired_source_env():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {'name': 'HOSTED_PUSHER_API_URL', 'value': 'http://retired-pusher.local'},
+                                {'name': 'REDIS_DB_HOST', 'value': '10.0.0.1'},
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, secrets = clone_environment(
+        service,
+        'HOSTED_PUSHER_API_URL=http://overlay-should-not-survive.local',
+        'HOSTED_PUSHER_API_URL=HOSTED_PUSHER_API_URL:latest',
+        remove_env_vars='HOSTED_PUSHER_API_URL',
+    )
+
+    assert 'HOSTED_PUSHER_API_URL' not in env_vars
+    assert 'HOSTED_PUSHER_API_URL' not in secrets
+    assert 'REDIS_DB_HOST=10.0.0.1' in env_vars
+
+
+def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_overlay():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'STT_PRERECORDED_MODEL',
+                                    'value': r'modulate-velma-2,parakeet\primary',
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, _ = clone_environment(
+        service,
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        '',
+    )
+
+    assert env_vars.splitlines() == [
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        r'STT_PRERECORDED_MODEL=modulate-velma-2\,parakeet\\primary',
+    ]
+
+
 def test_deploy_contract_routes_both_backfill_budget_alerts():
     action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
     manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
@@ -202,10 +264,50 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
     assert 'Remove passed transcription candidate tag' in manual
     assert 'Remove failed transcription candidate tag' in manual
-    assert 'if: ${{ failure() && steps.deploy-backend.outcome == \'success\' }}' in manual
+    assert (
+        'if: ${{ failure() && steps.deploy-backend.outcome == \'success\''
+        ' && github.event.inputs.environment == \'development\' }}' in manual
+    )
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
+
+
+def test_transcription_candidate_gate_is_development_only():
+    """The candidate probe must never gate a production deploy.
+
+    The probe reaches the candidate over a Cloud Run tag URL, which is a run.app
+    URL. Production disables run.app URLs and restricts ingress to internal and
+    load-balancer traffic, so a production tag resolves to no HTTPS endpoint and
+    every production deploy fails at the probe (2026-07-17, run 29574215693).
+    """
+    import yaml
+
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / '.github/workflows/gcp_backend.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    by_name = {step.get('name'): step for step in steps}
+
+    gate_steps = (
+        'Resolve transcription candidate URL',
+        'Gate backend candidate on known audio',
+        'Remove passed transcription candidate tag',
+        'Remove failed transcription candidate tag',
+    )
+    for name in gate_steps:
+        assert name in by_name, f'{name} step is missing'
+        condition = by_name[name].get('if') or ''
+        assert (
+            "github.event.inputs.environment == 'development'" in condition
+        ), f'{name} must be development-only; a production run cannot resolve a tag URL'
+
+    # The tag itself is only requested for development; production never creates one.
+    deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
+    assert "github.event.inputs.environment == 'development' && format('--tag={0}'" in deploy_flags
+
+    # Promotion must not depend on the skipped gate.
+    for name in ('Verify validated revisions are still current', 'Shift Cloud Run traffic to validated revisions'):
+        assert by_name[name].get('if') is None, f'{name} must still run when the gate is skipped'
 
 
 def test_static_processed_segment_marker_follows_partial_result_checkpoint():

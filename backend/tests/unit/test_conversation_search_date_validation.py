@@ -188,11 +188,13 @@ setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
 setattr(_apps_stub, 'get_is_user_paid_app', MagicMock(return_value=False))
 _register_module('utils.apps', _apps_stub)
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from models.conversation import Conversation  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
 from models.structured import Structured  # noqa: E402
+
+import pytest  # noqa: E402
 
 _remove_module_for_fresh_import('routers.conversations')
 _remove_module_for_fresh_import('routers')
@@ -313,58 +315,123 @@ def _process_result(result, *, persisted: bool):
     return process
 
 
-def test_finalize_conversation_processes_target_id_and_clears_matching_redis_pointer():
+def test_finalize_conversation_persists_durable_work_and_returns_without_processing():
     target = _conversation()
-    processed = _conversation(status=ConversationStatus.completed)
 
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
-        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True) as claim_status,
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
+        patch.object(
+            conv.lifecycle_service,
+            'request_finalization',
+            return_value={'route': 'cloud_tasks', 'job_id': 'job-1', 'status': 'queued'},
+        ) as request_finalization,
         patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
-        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
-        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=True)) as process,
-        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
+        patch.object(
+            conv,
+            'process_conversation',
+            side_effect=AssertionError('expensive processor must not run'),
+        ) as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock()) as integrations,
     ):
         response = conv.finalize_conversation('conv-1', uid='test-uid')
 
-    claim_status.assert_called_once_with('test-uid', 'conv-1', extra_updates=None)
+    request_finalization.assert_called_once_with(
+        'test-uid',
+        'conv-1',
+        has_byok_keys=False,
+        force_process=True,
+        extra_updates=None,
+        require_cloud_tasks=True,
+    )
     remove_pointer.assert_called_once_with('test-uid')
-    assert process.call_args.args == ('test-uid', 'en', target)
-    assert process.call_args.kwargs['force_process'] is True
-    assert callable(process.call_args.kwargs['persistence_observer'])
+    process.assert_not_called()
+    integrations.assert_not_called()
     assert response.conversation.id == 'conv-1'
-    assert response.conversation.status == ConversationStatus.completed
+    assert response.conversation.status == ConversationStatus.processing
+
+
+def test_finalize_conversation_passes_calendar_context_into_atomic_durable_admission():
+    target = _conversation()
+    request = conv.ProcessConversationRequest.model_validate(
+        {
+            'calendar_meeting_context': {
+                'calendar_event_id': 'event-1',
+                'title': 'Planning',
+                'start_time': '2026-07-17T10:00:00Z',
+                'duration_minutes': 30,
+            }
+        }
+    )
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
+        patch.object(
+            conv.lifecycle_service,
+            'request_finalization',
+            return_value={'route': 'cloud_tasks', 'job_id': 'job-1', 'status': 'queued'},
+        ) as request_finalization,
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value=None),
+    ):
+        conv.finalize_conversation('conv-1', request=request, uid='test-uid')
+
+    assert request_finalization.call_args.kwargs['extra_updates'] == {
+        'external_data': {
+            'calendar_meeting_context': {
+                'calendar_event_id': 'event-1',
+                'title': 'Planning',
+                'participants': [],
+                'platform': None,
+                'meeting_link': None,
+                'start_time': datetime(2026, 7, 17, 10, 0, tzinfo=timezone.utc),
+                'duration_minutes': 30,
+                'notes': None,
+                'calendar_source': 'system_calendar',
+            }
+        }
+    }
 
 
 def test_finalize_conversation_does_not_clear_different_redis_pointer():
     target = _conversation()
-    processed = _conversation(status=ConversationStatus.completed)
 
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
-        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
+        patch.object(
+            conv.lifecycle_service,
+            'request_finalization',
+            return_value={'route': 'cloud_tasks', 'job_id': 'job-1', 'status': 'queued'},
+        ),
         patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='newer-conv'),
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
-        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
-        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=True)),
-        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
+        patch.object(conv, 'process_conversation') as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock()) as integrations,
     ):
         conv.finalize_conversation('conv-1', uid='test-uid')
 
     remove_pointer.assert_not_called()
+    process.assert_not_called()
+    integrations.assert_not_called()
 
 
-def test_finalize_conversation_claim_loser_returns_latest_without_side_effects():
+def test_finalize_conversation_noop_returns_latest_without_side_effects():
     target = _conversation(status=ConversationStatus.in_progress)
     latest = _conversation(status=ConversationStatus.processing)
 
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
-        patch.object(conv.lifecycle_service, 'admit_processing', return_value=False) as claim_status,
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
+        patch.object(
+            conv.lifecycle_service,
+            'request_finalization',
+            return_value={'route': 'noop'},
+        ) as request_finalization,
         patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
         patch.object(conv, 'process_conversation') as process,
@@ -372,12 +439,36 @@ def test_finalize_conversation_claim_loser_returns_latest_without_side_effects()
     ):
         response = conv.finalize_conversation('conv-1', uid='test-uid')
 
-    claim_status.assert_called_once()
+    request_finalization.assert_called_once()
     get_pointer.assert_not_called()
     remove_pointer.assert_not_called()
     process.assert_not_called()
     integrations.assert_not_called()
     assert response.conversation.status == ConversationStatus.processing
+
+
+def test_finalize_conversation_rejects_byok_request_before_mutation():
+    """A BYOK request must not be admitted to the durable worker (which cannot
+    inherit request-scoped keys), so it fails fast instead of silently using
+    platform credentials."""
+    target = _conversation()
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=True) as has_byok,
+        patch.object(conv.lifecycle_service, 'request_finalization') as request_finalization,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv, 'process_conversation') as process,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            conv.finalize_conversation('conv-1', uid='test-uid')
+
+    assert exc_info.value.status_code == 409
+    has_byok.assert_called_once()
+    request_finalization.assert_not_called()
+    remove_pointer.assert_not_called()
+    process.assert_not_called()
 
 
 def test_legacy_finalize_claim_loser_returns_latest_without_processing_or_integrations():
@@ -405,25 +496,75 @@ def test_legacy_finalize_claim_loser_returns_latest_without_processing_or_integr
     assert response.conversation.status == ConversationStatus.failed
 
 
-def test_finalize_persistence_loser_returns_latest_without_integrations():
+def test_finalize_conversation_returns_queued_outbox_after_uncertain_task_acknowledgement():
     target = _conversation(status=ConversationStatus.in_progress)
-    processed = _conversation(status=ConversationStatus.completed)
-    latest = _conversation(status=ConversationStatus.failed)
 
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
-        patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
-        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
+        patch.object(
+            conv.lifecycle_service,
+            'request_finalization',
+            return_value={'route': 'queued', 'job_id': 'job-1', 'status': 'queued'},
+        ),
         patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
-        patch.object(conv.redis_db, 'remove_in_progress_conversation_id'),
-        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
-        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=False)),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv, 'process_conversation') as process,
         patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
     ):
         response = conv.finalize_conversation('conv-1', uid='test-uid')
 
+    remove_pointer.assert_called_once_with('test-uid')
+    process.assert_not_called()
     integrations.assert_not_called()
-    assert response.conversation.status == ConversationStatus.failed
+    assert response.conversation.status == ConversationStatus.processing
+
+
+def test_finalize_conversation_returns_503_without_mutating_when_durable_dispatch_is_unavailable():
+    target = _conversation(status=ConversationStatus.in_progress)
+
+    class DispatchUnavailable(RuntimeError):
+        pass
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
+        patch.object(conv.lifecycle_service, 'FinalizationDispatchUnavailable', DispatchUnavailable),
+        patch.object(
+            conv.lifecycle_service,
+            'request_finalization',
+            side_effect=DispatchUnavailable('missing durable worker'),
+        ),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+    ):
+        response = _client().post('/v1/conversations/conv-1/finalize', json={})
+
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'Conversation finalization is temporarily unavailable'
+    get_pointer.assert_not_called()
+    remove_pointer.assert_not_called()
+
+
+def test_finalization_status_endpoint_exposes_retryable_durable_state():
+    status = {
+        'job_id': 'job-1',
+        'status': 'queued',
+        'terminal': False,
+        'retryable': True,
+        'attempt_count': 2,
+        'task_retry_count': 1,
+    }
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv.lifecycle_service, 'get_finalization_status', return_value=status),
+    ):
+        response = _client().get('/v1/conversations/conv-1/finalization')
+
+    assert response.status_code == 200
+    assert response.json() == status
 
 
 def test_legacy_finalize_persistence_loser_returns_latest_without_integrations():

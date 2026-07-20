@@ -15,8 +15,8 @@ traffic it scrapes, with no cross-environment comparison or labels.
 | `omi_capture_finalization_reconciliations_total` | `outcome` | A stale durable capture job was requeued, or its requeue handoff failed. |
 | `listen_finalization_oldest_nonterminal_age_seconds` | none | Age of the oldest queued, leased, or BYOK-blocked capture finalization job. |
 
-`journey` is exactly `chat_response`, `pusher_session`, or
-`capture_finalization`. `outcome` is exactly `success`, `failure`,
+`journey` is exactly `chat_response`, `pusher_session`, `live_transcription`,
+or `capture_finalization`. `outcome` is exactly `success`, `failure`,
 `cancelled`, or `stale`; reconciliation `outcome` is exactly `requeued` or
 `enqueue_failed`. There are no user, conversation, request, error-text,
 provider, or content labels.
@@ -34,6 +34,12 @@ provider, or content labels.
   server has already identified an application failure. A `1011` or stronger
   application failure is `failure`; other transport/client endings are
   `cancelled`, not product failures.
+- `live_transcription` is accepted when `/v4/listen` receives its first
+  nontrivial audio frame. `success` is recorded only after the server has sent
+  the first nonempty transcript payload to that WebSocket. This cannot prove
+  the client rendered the payload. An upstream/live-session failure or an
+  unexpected listen worker failure is `failure`; all other endings before a
+  transcript send are `cancelled`.
 - `capture_finalization` is accepted only once, when the Firestore finalization
   outbox creates a new durable job. Successful completion is `success`, a
   dead-letter is `failure`, and a lifecycle-fenced durable job is `stale`.
@@ -43,7 +49,7 @@ provider, or content labels.
 
 ## Dashboard, alerts, and scrape health
 
-The **Resilience / Fallbacks** dashboard includes all three journey success
+The **Resilience / Fallbacks** dashboard includes all four journey success
 rates and p95 latencies. Success rate intentionally uses only terminal
 `success` and `failure` outcomes: cancelled client/transport endings and
 stale fenced capture jobs stay visible but do not masquerade as application
@@ -66,6 +72,9 @@ worker) and `pusher-metrics` (pusher sessions plus inline capture finalization).
 The metric children are initialized at process startup, so a scraped idle
 target exports zeros; an absent series should be investigated as scrape or
 deployment health, not read as zero traffic.
+
+The live-transcription failure alert uses Grafana `noDataState: OK`: an empty
+result is expected before that traffic exists and is not an outage.
 
 Known blind spots: a server can only observe the SSE/WS boundary it controls,
 not client rendering; process restarts may defer a terminal metric until the

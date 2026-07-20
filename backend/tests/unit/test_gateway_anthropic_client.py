@@ -9,6 +9,14 @@ import pytest
 
 from utils.llm import gateway_anthropic
 from utils.llm.gateway_client import CHAT_AGENT_AUTO_LANE_ID, LLM_GATEWAY_FEATURE_MODE_ENV_VAR
+from utils.llm.gateway_resilience import GatewayCircuitBreaker
+
+
+@pytest.fixture(autouse=True)
+def _reset_gateway_circuit_between_tests():
+    gateway_anthropic.gateway_circuit.reset()
+    yield
+    gateway_anthropic.gateway_circuit.reset()
 
 
 class _MessageStream:
@@ -254,6 +262,38 @@ async def test_gateway_anthropic_stream_fallback_records_recovered_after_legacy_
 
 
 @pytest.mark.asyncio
+async def test_gateway_anthropic_stream_transport_failure_before_first_event_uses_legacy_and_opens_circuit(monkeypatch):
+    recorded: list[dict] = []
+    fallbacks: list[dict] = []
+    circuit = GatewayCircuitBreaker(
+        failure_threshold=1,
+        cooldown_seconds=30,
+        monotonic=lambda: 0.0,
+    )
+    monkeypatch.setattr(gateway_anthropic, 'gateway_circuit', circuit)
+    gateway_messages = MagicMock()
+    gateway_messages.stream.return_value = _MessageStream([], error=httpx.ReadTimeout('first byte timed out'))
+    legacy_messages = MagicMock()
+    legacy_messages.stream.return_value = _message_stop_stream()
+    client = _gateway_client(
+        monkeypatch,
+        gateway_messages=gateway_messages,
+        legacy_messages=legacy_messages,
+        recorded=recorded,
+        fallbacks=fallbacks,
+    )
+
+    async with client.messages.stream(model='claude-sonnet-4-6', max_tokens=10) as stream:
+        events = [event async for event in stream]
+
+    assert [event.type for event in events] == ['content_block_delta', 'message_stop']
+    assert not circuit.allow_request()
+    assert fallbacks[0]['outcome'] == 'recovered'
+    assert fallbacks[0]['gateway_reason'] == 'timeout'
+    assert recorded == []
+
+
+@pytest.mark.asyncio
 async def test_gateway_anthropic_stream_fallback_records_exhausted_on_legacy_failure(monkeypatch):
     fallbacks: list[dict] = []
     gateway_messages = MagicMock()
@@ -348,6 +388,32 @@ async def test_gateway_anthropic_nonstream_fallback_waits_for_legacy_success(mon
 
     assert result.id == 'legacy-message'
     assert fallbacks[0]['outcome'] == 'recovered'
+
+
+@pytest.mark.asyncio
+async def test_gateway_anthropic_open_circuit_bypasses_a_second_transport_attempt(monkeypatch):
+    monkeypatch.setattr(
+        gateway_anthropic,
+        'gateway_circuit',
+        GatewayCircuitBreaker(failure_threshold=1, cooldown_seconds=30.0),
+    )
+    gateway_messages = MagicMock()
+    gateway_messages.create = AsyncMock(side_effect=httpx.ConnectError('connection refused'))
+    legacy_messages = MagicMock()
+    legacy_messages.create = AsyncMock(return_value=SimpleNamespace(id='legacy-message'))
+    client = _gateway_client(
+        monkeypatch,
+        gateway_messages=gateway_messages,
+        legacy_messages=legacy_messages,
+        recorded=[],
+        fallbacks=[],
+    )
+
+    assert (await client.messages.create(model='claude-sonnet-4-6', max_tokens=10)).id == 'legacy-message'
+    assert (await client.messages.create(model='claude-sonnet-4-6', max_tokens=10)).id == 'legacy-message'
+
+    assert gateway_messages.create.await_count == 1
+    assert legacy_messages.create.await_count == 2
 
 
 @pytest.mark.asyncio

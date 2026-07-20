@@ -16,7 +16,7 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-ENVIRONMENTS = {"dev", "prod"}
+ENVIRONMENTS = {"beta", "dev", "prod"}
 RUNTIME_ENV_MANIFEST = ROOT / "backend/deploy/runtime_env.yaml"
 Reference = tuple[str, str, str | None]
 Binding = tuple[str, str, str]
@@ -55,9 +55,13 @@ def references(value: Any) -> set[Reference]:
     return found
 
 
-def render(environment: str, image_tag: str = "contract-test") -> list[dict[str, Any]]:
+def render(
+    environment: str,
+    image_tag: str = "contract-test",
+    values_file: Path | None = None,
+) -> list[dict[str, Any]]:
     chart = ROOT / "backend/charts/pusher"
-    values = chart / f"{environment}_omi_pusher_values.yaml"
+    values = values_file or chart / f"{environment}_omi_pusher_values.yaml"
     result = subprocess.run(
         [
             "helm",
@@ -78,17 +82,22 @@ def render(environment: str, image_tag: str = "contract-test") -> list[dict[str,
     return [doc for doc in yaml.safe_load_all(result.stdout) if isinstance(doc, dict)]
 
 
-def rendered_pusher_deployment(environment: str) -> dict[str, Any]:
-    deployments = [doc for doc in render(environment) if doc.get("kind") == "Deployment"]
+def rendered_pusher_deployment(environment: str, values_file: Path | None = None) -> dict[str, Any]:
+    rendered = render(environment) if values_file is None else render(environment, values_file=values_file)
+    deployments = [doc for doc in rendered if doc.get("kind") == "Deployment"]
     if len(deployments) != 1:
         raise RuntimeError("pusher render did not contain exactly one Deployment")
     return deployments[0]
 
 
-def pusher_references(environment: str, deployment: dict[str, Any] | None = None) -> set[Reference]:
+def pusher_references(
+    environment: str,
+    deployment: dict[str, Any] | None = None,
+    values_file: Path | None = None,
+) -> set[Reference]:
     expected_configmap = f"{environment}-omi-backend-config"
     expected_secret = f"{environment}-omi-backend-secrets"
-    deployment = deployment or rendered_pusher_deployment(environment)
+    deployment = deployment or rendered_pusher_deployment(environment, values_file=values_file)
     refs = references(deployment.get("spec", {}).get("template", {}).get("spec", {}))
     object_refs = {(kind, name) for kind, name, _key in refs}
     missing = {("configmap", expected_configmap), ("secret", expected_secret)} - object_refs
@@ -118,8 +127,8 @@ def pusher_env_entries(deployment: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return entries
 
 
-def dev_pusher_binding_contract() -> tuple[dict[str, Binding], set[str]]:
-    """Load dev direct binding names and migration guards from the runtime contract."""
+def dev_pusher_binding_contract() -> tuple[dict[str, Binding], dict[str, str], set[str]]:
+    """Load dev direct bindings, literals, and migration guards from the runtime contract."""
     with RUNTIME_ENV_MANIFEST.open(encoding="utf-8") as handle:
         manifest = yaml.safe_load(handle)
     try:
@@ -130,14 +139,27 @@ def dev_pusher_binding_contract() -> tuple[dict[str, Binding], set[str]]:
         raise RuntimeError("dev pusher runtime env contract must be a mapping")
 
     bindings: dict[str, Binding] = {}
+    literals: dict[str, str] = {}
     clear_historical_secret: set[str] = set()
     for env_name, raw_entry in env.items():
         if not isinstance(env_name, str) or not isinstance(raw_entry, dict):
             raise RuntimeError("dev pusher runtime env contract entries must be named mappings")
         source_entries = [("configmap", raw_entry.get("config_map")), ("secret", raw_entry.get("secret"))]
         configured = [(kind, source) for kind, source in source_entries if source is not None]
+        value = raw_entry.get("value")
+        if value is not None:
+            if configured:
+                raise RuntimeError(f"dev pusher runtime env {env_name} cannot declare both a binding and literal value")
+            if not isinstance(value, str):
+                raise RuntimeError(f"dev pusher runtime env {env_name} literal value must be a string")
+            if raw_entry.get("clear_historical_secret"):
+                raise RuntimeError(f"dev pusher literal env {env_name} cannot clear a historical Secret source")
+            literals[env_name] = value
+            continue
         if len(configured) != 1:
-            raise RuntimeError(f"dev pusher runtime env {env_name} must declare exactly one binding source")
+            raise RuntimeError(
+                f"dev pusher runtime env {env_name} must declare exactly one binding source or literal value"
+            )
         kind, source = configured[0]
         if (
             not isinstance(source, dict)
@@ -150,7 +172,7 @@ def dev_pusher_binding_contract() -> tuple[dict[str, Binding], set[str]]:
             if kind != "configmap":
                 raise RuntimeError(f"dev pusher runtime env {env_name} can only clear a Secret when it uses ConfigMap")
             clear_historical_secret.add(env_name)
-    return bindings, clear_historical_secret
+    return bindings, literals, clear_historical_secret
 
 
 def direct_pusher_bindings(deployment: dict[str, Any]) -> dict[str, Binding]:
@@ -179,9 +201,22 @@ def direct_pusher_bindings(deployment: dict[str, Any]) -> dict[str, Binding]:
     return bindings
 
 
+def literal_pusher_values(deployment: dict[str, Any]) -> dict[str, str]:
+    """Return literal pusher environment values without treating them as secret/config bindings."""
+    values: dict[str, str] = {}
+    for env_name, entry in pusher_env_entries(deployment).items():
+        if "valueFrom" in entry or "value" not in entry:
+            continue
+        value = entry["value"]
+        if not isinstance(value, str):
+            raise RuntimeError(f"rendered pusher {env_name} has a non-string literal value")
+        values[env_name] = value
+    return values
+
+
 def validate_dev_pusher_binding_contract(deployment: dict[str, Any]) -> list[str]:
-    """Return dev source/Helm binding drift without contacting Kubernetes."""
-    expected, clear_historical_secret = dev_pusher_binding_contract()
+    """Return dev source/Helm binding or literal drift without contacting Kubernetes."""
+    expected, expected_literals, clear_historical_secret = dev_pusher_binding_contract()
     actual = direct_pusher_bindings(deployment)
     failures: list[str] = []
     for env_name in sorted(expected.keys() - actual.keys()):
@@ -195,6 +230,16 @@ def validate_dev_pusher_binding_contract(deployment: dict[str, Any]) -> list[str
             failures.append(
                 f"dev pusher binding contract mismatch for {env_name}: expected "
                 f"{expected_kind}/{expected_name}#{expected_key}, got {actual_kind}/{actual_name}#{actual_key}"
+            )
+    literal_values = literal_pusher_values(deployment)
+    for env_name in sorted(expected_literals.keys() - literal_values.keys()):
+        failures.append(f"dev pusher literal contract missing rendered value for {env_name}")
+    for env_name in sorted(expected_literals.keys() & literal_values.keys()):
+        expected_value = expected_literals[env_name]
+        actual_value = literal_values[env_name]
+        if actual_value != expected_value:
+            failures.append(
+                f"dev pusher literal contract mismatch for {env_name}: expected {expected_value!r}, got {actual_value!r}"
             )
     entries = pusher_env_entries(deployment)
     for env_name in sorted(clear_historical_secret):
@@ -254,10 +299,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", required=True, choices=sorted(ENVIRONMENTS))
     parser.add_argument("--namespace", required=True)
+    parser.add_argument("--values-file", type=Path)
     parser.add_argument("--render-only", action="store_true")
     args = parser.parse_args()
-    deployment = rendered_pusher_deployment(args.environment)
-    refs = pusher_references(args.environment, deployment)
+    deployment = rendered_pusher_deployment(args.environment, values_file=args.values_file)
+    refs = pusher_references(args.environment, deployment, values_file=args.values_file)
     failures = validate_dev_pusher_binding_contract(deployment) if args.environment == "dev" else []
     if not args.render_only and not failures:
         failures.extend(verify(args.namespace, refs))

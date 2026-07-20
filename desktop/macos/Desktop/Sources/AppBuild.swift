@@ -44,8 +44,12 @@ enum AppBuild {
       isNonProduction && !isExternalPreview
     }
 
+    var isNamedDevelopmentBundle: Bool {
+      isNonProduction && !isExternalPreview && bundleIdentifier != AppBuild.desktopDevBundleIdentifier
+    }
+
     var allowsSparkleUpdates: Bool {
-      !isExternalPreview
+      !isExternalPreview && !isNamedDevelopmentBundle
     }
 
     var hasValidExternalPreviewConfiguration: Bool {
@@ -104,8 +108,8 @@ enum AppBuild {
     buildConfiguration.allowsLocalAutomation
   }
 
-  /// Preview artifacts are delivered from their landing page, never from the shared Sparkle
-  /// feed. The updater additionally checks this at every call site.
+  /// Preview artifacts and local named developer bundles never consume the shared Sparkle feed.
+  /// The updater additionally checks this at every call site.
   static var allowsSparkleUpdates: Bool {
     buildConfiguration.allowsSparkleUpdates
   }
@@ -124,7 +128,7 @@ enum AppBuild {
   }
 
   static var isNamedDevelopmentBundle: Bool {
-    allowsLocalAutomation && bundleIdentifier != desktopDevBundleIdentifier
+    buildConfiguration.isNamedDevelopmentBundle
   }
 
   static var usesLazyDevPermissions: Bool {
@@ -319,7 +323,7 @@ enum AppBuild {
       currentBuild: currentBuildNumber,
       mainThreadBudget: channelProbeMainThreadBudget,
       fetchAppcast: fetchDesktopAppcast,
-      persistLateCorrection: storeLateChannelCorrection
+      persistLateCorrection: { storeLateChannelCorrection($0) }
     )
   }
 
@@ -336,8 +340,8 @@ enum AppBuild {
     fallback: String,
     currentBuild: Int?,
     mainThreadBudget: TimeInterval,
-    fetchAppcast: @escaping (@escaping (String?) -> Void) -> Void,
-    persistLateCorrection: @escaping (String) -> Void
+    fetchAppcast: @escaping (@escaping @Sendable (String?) -> Void) -> Void,
+    persistLateCorrection: @escaping @Sendable (String) -> Void
   ) -> String {
     if fallback == "beta" {
       return "beta"
@@ -382,7 +386,7 @@ enum AppBuild {
     return fallback
   }
 
-  private static func fetchDesktopAppcast(completion: @escaping (String?) -> Void) {
+  private static func fetchDesktopAppcast(completion: @escaping @Sendable (String?) -> Void) {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = channelProbeRequestTimeout
     configuration.timeoutIntervalForResource = channelProbeRequestTimeout

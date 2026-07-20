@@ -31,6 +31,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
+import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -262,29 +263,7 @@ class CaptureController extends ChangeNotifier
   BtDevice? _recordingDevice;
 
   String? _getConversationSourceFromDevice() {
-    if (_recordingDevice == null) {
-      return null;
-    }
-    switch (_recordingDevice!.type) {
-      case DeviceType.friendPendant:
-        return 'friend_com';
-      case DeviceType.omi:
-        return 'omi';
-      case DeviceType.openglass:
-        return 'openglass';
-      case DeviceType.fieldy:
-        return 'fieldy';
-      case DeviceType.bee:
-        return 'bee';
-      case DeviceType.plaud:
-        return 'plaud';
-      case DeviceType.appleWatch:
-        return 'apple_watch';
-      case DeviceType.limitless:
-        return 'limitless';
-      case DeviceType.raybanMeta:
-        return 'rayban_meta';
-    }
+    return conversationSourceForDeviceType(_recordingDevice?.type);
   }
 
   ServerConversation? _conversation;

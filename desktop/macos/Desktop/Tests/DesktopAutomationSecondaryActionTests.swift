@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -142,7 +143,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   func testVocabularyMutationFinishesWithCanonicalBackendValue() throws {
     let body = try actionBody(named: "vocabulary_set_terms", in: try bridgeSource())
     let update = try XCTUnwrap(body.range(of: "updateTranscriptionPreferences"))
-    let assignment = try XCTUnwrap(body.range(of: "AssistantSettings.shared.transcriptionVocabulary = saved.vocabulary"))
+    let assignment = try XCTUnwrap(
+      body.range(of: "AssistantSettings.shared.transcriptionVocabulary = saved.vocabulary"))
     XCTAssertLessThan(update.lowerBound, assignment.lowerBound)
   }
 
@@ -165,9 +167,25 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(source.contains("filteredFromDatabase.first(where:"))
   }
 
+  func testMemorySearchRefreshesTheVisibleMemoriesProjection() throws {
+    let pageURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/MemoriesPage.swift")
+    // omi-test-quality: source-inspection -- static contract: bridge search must refresh its projection before lifecycle-scoped SQLite search
+    let source = try String(contentsOf: pageURL, encoding: .utf8)
+    let body = try actionBody(named: "memories_search", in: source)
+    XCTAssertTrue(
+      body.contains("await self.refreshMemoriesIfNeeded()"),
+      "A bridge search must refresh the active MemoriesViewModel before it reads lifecycle-scoped local cache."
+    )
+  }
+
   func testMemoryCrudActionsUseNonProdGuard() throws {
     let source = try bridgeSource()
-    for action in ["create_test_memory", "edit_test_memory", "delete_test_memory", "create_test_goal", "create_test_folder"] {
+    for action in [
+      "create_test_memory", "edit_test_memory", "delete_test_memory", "create_test_goal", "create_test_folder",
+    ] {
       let body = try actionBody(named: action, in: source)
       XCTAssertTrue(body.contains("AppBuild.isNonProduction"))
     }
@@ -339,7 +357,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/Pages/TasksPage.swift")
     let source = try String(contentsOf: url, encoding: .utf8)
-    XCTAssertTrue(source.contains("marker_absent"), "dump_tasks should return marker_absent when marker param is provided")
+    XCTAssertTrue(
+      source.contains("marker_absent"), "dump_tasks should return marker_absent when marker param is provided")
   }
 
   func testMultiSpeakerInjectDerivesSpeakerIdFromLabel() throws {

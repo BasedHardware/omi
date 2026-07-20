@@ -3,492 +3,493 @@ import Foundation
 /// Manages shared settings for all Proactive Assistants stored in UserDefaults
 @MainActor
 class AssistantSettings {
-    static let shared = AssistantSettings()
+  static let shared = AssistantSettings()
 
-    /// Controls when system audio (audio from other apps — calls, videos, music) is captured
-    /// during a recording. `always` = capture for the whole recording; `onlyDuringMeetings` =
-    /// capture only while a conferencing call is detected (default); `never` = never.
-    enum SystemAudioCaptureMode: String {
-        case always
-        case onlyDuringMeetings
-        case never
+  /// Controls when system audio (audio from other apps — calls, videos, music) is captured
+  /// during a recording. `always` = capture for the whole recording; `onlyDuringMeetings` =
+  /// capture only while a conferencing call is detected (default); `never` = never.
+  enum SystemAudioCaptureMode: String {
+    case always
+    case onlyDuringMeetings
+    case never
+  }
+
+  // MARK: - UserDefaults Keys
+
+  private let cooldownIntervalKey = "assistantsCooldownInterval"
+  private let glowOverlayEnabledKey = "assistantsGlowOverlayEnabled"
+  private let analysisDelayKey = "assistantsAnalysisDelay"
+  private let screenAnalysisEnabledKey = "screenAnalysisEnabled"
+  private let transcriptionEnabledKey = "transcriptionEnabled"
+  private let transcriptionLanguageKey = "transcriptionLanguage"
+  private let transcriptionAutoDetectKey = "transcriptionAutoDetect"
+  private let voiceLanguagesKey = "voiceAssistantLanguages"
+  private let transcriptionVocabularyKey = "transcriptionVocabulary"
+  private let vadGateEnabledKey = "vadGateEnabled"
+  private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
+  private let systemAudioCaptureModeKey = "systemAudioCaptureMode"
+
+  // MARK: - Default Values
+
+  private let defaultCooldownInterval = 10  // minutes
+  private let defaultGlowOverlayEnabled = false
+  private let defaultAnalysisDelay = 60  // seconds (1 minute)
+  private let defaultScreenAnalysisEnabled = true
+  private let defaultTranscriptionEnabled = true
+  private let defaultTranscriptionLanguage = "en"
+  private let defaultTranscriptionAutoDetect = true
+  private let defaultTranscriptionVocabulary: [String] = []
+  private let defaultVadGateEnabled = false
+  private let defaultBatchTranscriptionEnabled = false
+  private let defaultSystemAudioCaptureMode: SystemAudioCaptureMode = .onlyDuringMeetings
+  private(set) var transcriptionVocabularyRevision: UInt64 = 0
+
+  private init() {
+    // Register defaults
+    UserDefaults.standard.register(defaults: [
+      cooldownIntervalKey: defaultCooldownInterval,
+      glowOverlayEnabledKey: defaultGlowOverlayEnabled,
+      analysisDelayKey: defaultAnalysisDelay,
+      screenAnalysisEnabledKey: defaultScreenAnalysisEnabled,
+      transcriptionEnabledKey: defaultTranscriptionEnabled,
+      transcriptionLanguageKey: defaultTranscriptionLanguage,
+      transcriptionAutoDetectKey: defaultTranscriptionAutoDetect,
+      transcriptionVocabularyKey: defaultTranscriptionVocabulary,
+      vadGateEnabledKey: defaultVadGateEnabled,
+      batchTranscriptionEnabledKey: defaultBatchTranscriptionEnabled,
+      systemAudioCaptureModeKey: defaultSystemAudioCaptureMode.rawValue,
+    ])
+  }
+
+  // MARK: - Properties
+
+  /// Cooldown interval between notifications in minutes
+  var cooldownInterval: Int {
+    get {
+      let value = UserDefaults.standard.integer(forKey: cooldownIntervalKey)
+      return value > 0 ? value : defaultCooldownInterval
+    }
+    set {
+      UserDefaults.standard.set(newValue, forKey: cooldownIntervalKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Cooldown interval in seconds (for NotificationService)
+  var cooldownIntervalSeconds: TimeInterval {
+    return TimeInterval(cooldownInterval * 60)
+  }
+
+  /// Whether the glow overlay effect is enabled
+  var glowOverlayEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: glowOverlayEnabledKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: glowOverlayEnabledKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Delay in seconds before analyzing after an app switch (0 = instant, 60 = 1 min, 300 = 5 min)
+  var analysisDelay: Int {
+    get {
+      let value = UserDefaults.standard.integer(forKey: analysisDelayKey)
+      return value >= 0 ? value : defaultAnalysisDelay
+    }
+    set {
+      UserDefaults.standard.set(newValue, forKey: analysisDelayKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Whether screen analysis (proactive monitoring) should be enabled
+  var screenAnalysisEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: screenAnalysisEnabledKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: screenAnalysisEnabledKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Whether transcription should be enabled
+  var transcriptionEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: transcriptionEnabledKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: transcriptionEnabledKey)
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  /// The language code for transcription (e.g., "en", "uk", "ru")
+  var transcriptionLanguage: String {
+    get {
+      let value = UserDefaults.standard.string(forKey: transcriptionLanguageKey) ?? defaultTranscriptionLanguage
+      let normalized = Self.normalizeTranscriptionLanguageCode(value)
+      if normalized != value {
+        UserDefaults.standard.set(normalized, forKey: transcriptionLanguageKey)
+      }
+      return normalized
+    }
+    set {
+      UserDefaults.standard.set(Self.normalizeTranscriptionLanguageCode(newValue), forKey: transcriptionLanguageKey)
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Ordered languages the user speaks to the VOICE ASSISTANT (push-to-talk), primary
+  /// first, as normalized codes (e.g. ["ru", "en"]). Drives per-turn language
+  /// identification for the realtime hub only — the ambient transcription pipeline
+  /// (transcriptionLanguage/transcriptionAutoDetect) is intentionally not coupled to it.
+  /// Empty storage falls back to [transcriptionLanguage] so existing users keep behavior.
+  var voiceLanguages: [String] {
+    get {
+      let stored = UserDefaults.standard.stringArray(forKey: voiceLanguagesKey) ?? []
+      let normalized = Self.dedupedNormalizedLanguageCodes(stored)
+      if !normalized.isEmpty { return normalized }
+      return [Self.normalizeTranscriptionLanguageCode(transcriptionLanguage)]
+    }
+    set {
+      let normalized = Self.dedupedNormalizedLanguageCodes(newValue)
+      UserDefaults.standard.set(normalized, forKey: voiceLanguagesKey)
+      // Dedicated notification: posting transcriptionSettingsDidChange here would
+      // restart the AMBIENT transcription pipeline, which this setting must never touch.
+      NotificationCenter.default.post(name: .voiceLanguagesDidChange, object: nil)
+    }
+  }
+
+  /// True only when the user has explicitly picked voice languages (onboarding or
+  /// Settings). Everything the feature does — system-instruction language pinning,
+  /// whisper hints, per-turn language ID — is gated on this, so default-config users
+  /// keep exactly today's provider auto-detect behavior (forcing "speaks ONLY English"
+  /// on someone who merely never opened the setting would be a regression).
+  var hasExplicitVoiceLanguages: Bool {
+    !Self.dedupedNormalizedLanguageCodes(
+      UserDefaults.standard.stringArray(forKey: voiceLanguagesKey) ?? []
+    ).isEmpty
+  }
+
+  /// Base ISO-639-1 codes of `voiceLanguages` (region stripped: "en-US" → "en"),
+  /// order-preserving and deduped. This is the candidate set for PTT language ID.
+  /// EMPTY unless the user explicitly configured voice languages.
+  var voiceBaseLanguages: [String] {
+    guard hasExplicitVoiceLanguages else { return [] }
+    var seen = Set<String>()
+    return voiceLanguages.map { Self.baseLanguageCode($0) }.filter { seen.insert($0).inserted }
+  }
+
+  nonisolated static func baseLanguageCode(_ code: String) -> String {
+    code.split(separator: "-").first.map(String.init)?.lowercased() ?? code.lowercased()
+  }
+
+  nonisolated static func dedupedNormalizedLanguageCodes(_ raw: [String]) -> [String] {
+    var seen = Set<String>()
+    return
+      raw
+      .map { normalizeTranscriptionLanguageCode($0) }
+      .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+  }
+
+  /// Whether auto-detect (multi-language) mode is enabled
+  /// When true, DeepGram will auto-detect the language
+  /// When false, uses the specific language set in transcriptionLanguage
+  var transcriptionAutoDetect: Bool {
+    get { UserDefaults.standard.bool(forKey: transcriptionAutoDetectKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: transcriptionAutoDetectKey)
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Returns the effective language to send to DeepGram
+  /// If auto-detect is enabled and the language supports multi-language mode, returns "multi"
+  /// Otherwise returns the specific language code
+  var effectiveTranscriptionLanguage: String {
+    if transcriptionAutoDetect && Self.supportsAutoDetect(transcriptionLanguage) {
+      return "multi"
+    }
+    return transcriptionLanguage
+  }
+
+  /// Custom vocabulary for improved transcription accuracy
+  /// Array of words/terms that DeepGram should recognize (Nova-3 limit: 500 tokens total)
+  var transcriptionVocabulary: [String] {
+    get {
+      let value = UserDefaults.standard.stringArray(forKey: transcriptionVocabularyKey)
+      return value ?? defaultTranscriptionVocabulary
+    }
+    set {
+      UserDefaults.standard.set(newValue, forKey: transcriptionVocabularyKey)
+      transcriptionVocabularyRevision &+= 1
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  func shouldApplyTranscriptionVocabularyHydration(startedAtRevision: UInt64) -> Bool {
+    transcriptionVocabularyRevision == startedAtRevision
+  }
+
+  /// Returns vocabulary as comma-separated string for display
+  var transcriptionVocabularyString: String {
+    get {
+      return transcriptionVocabulary.joined(separator: ", ")
+    }
+    set {
+      let terms =
+        newValue
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+      transcriptionVocabulary = terms
+    }
+  }
+
+  /// Whether batch transcription mode is enabled (transcribes audio in chunks at silence boundaries)
+  var batchTranscriptionEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: batchTranscriptionEnabledKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: batchTranscriptionEnabledKey)
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Whether local VAD gate is enabled to skip silence and reduce Deepgram usage
+  var vadGateEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: vadGateEnabledKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: vadGateEnabledKey)
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  /// When system audio (audio from other apps) is captured during a recording.
+  /// Default `.onlyDuringMeetings` limits system audio capture to detected conferencing calls.
+  /// The hidden `disableSystemAudioCapture` debug UserDefault still forces "never" — see `AppState.effectiveSystemAudioMode`.
+  /// Posts `.systemAudioCaptureModeDidChange` so an active recording can re-apply the gate live.
+  var systemAudioCaptureMode: SystemAudioCaptureMode {
+    get {
+      let raw =
+        UserDefaults.standard.string(forKey: systemAudioCaptureModeKey)
+        ?? defaultSystemAudioCaptureMode.rawValue
+      return SystemAudioCaptureMode(rawValue: raw) ?? defaultSystemAudioCaptureMode
+    }
+    set {
+      UserDefaults.standard.set(newValue.rawValue, forKey: systemAudioCaptureModeKey)
+      NotificationCenter.default.post(name: .systemAudioCaptureModeDidChange, object: nil)
+    }
+  }
+
+  /// Returns vocabulary with "Omi" always included (for DeepGram)
+  var effectiveVocabulary: [String] {
+    var vocab = Set(transcriptionVocabulary)
+    vocab.insert("Omi")
+    return Array(vocab)
+  }
+
+  /// Reset all settings to defaults
+  func resetToDefaults() {
+    cooldownInterval = defaultCooldownInterval
+    glowOverlayEnabled = defaultGlowOverlayEnabled
+    analysisDelay = defaultAnalysisDelay
+    screenAnalysisEnabled = defaultScreenAnalysisEnabled
+    transcriptionEnabled = defaultTranscriptionEnabled
+    transcriptionLanguage = defaultTranscriptionLanguage
+    transcriptionAutoDetect = defaultTranscriptionAutoDetect
+    transcriptionVocabulary = defaultTranscriptionVocabulary
+    vadGateEnabled = defaultVadGateEnabled
+    batchTranscriptionEnabled = defaultBatchTranscriptionEnabled
+    systemAudioCaptureMode = defaultSystemAudioCaptureMode
+  }
+
+  // MARK: - Supported Languages
+
+  /// Canonical backend-supported DeepGram Nova-3 language options for single-language transcription.
+  nonisolated static let supportedLanguages: [(code: String, name: String)] = [
+    ("ar", "Arabic"),
+    ("ar-AE", "Arabic (United Arab Emirates)"),
+    ("ar-SA", "Arabic (Saudi Arabia)"),
+    ("ar-QA", "Arabic (Qatar)"),
+    ("ar-KW", "Arabic (Kuwait)"),
+    ("ar-SY", "Arabic (Syria)"),
+    ("ar-LB", "Arabic (Lebanon)"),
+    ("ar-PS", "Arabic (Palestine)"),
+    ("ar-JO", "Arabic (Jordan)"),
+    ("ar-EG", "Arabic (Egypt)"),
+    ("ar-SD", "Arabic (Sudan)"),
+    ("ar-TD", "Arabic (Chad)"),
+    ("ar-MA", "Arabic (Morocco)"),
+    ("ar-DZ", "Arabic (Algeria)"),
+    ("ar-TN", "Arabic (Tunisia)"),
+    ("ar-IQ", "Arabic (Iraq)"),
+    ("ar-IR", "Arabic (Iran)"),
+    ("be", "Belarusian"),
+    ("bn", "Bengali"),
+    ("bs", "Bosnian"),
+    ("en", "English"),
+    ("en-US", "English (US)"),
+    ("en-GB", "English (UK)"),
+    ("en-AU", "English (Australia)"),
+    ("en-IN", "English (India)"),
+    ("en-NZ", "English (New Zealand)"),
+    ("bg", "Bulgarian"),
+    ("ca", "Catalan"),
+    ("zh-CN", "Chinese (Simplified)"),
+    ("zh-HK", "Chinese (Hong Kong)"),
+    ("zh-TW", "Chinese (Taiwan)"),
+    ("cs", "Czech"),
+    ("da", "Danish"),
+    ("da-DK", "Danish (Denmark)"),
+    ("nl", "Dutch"),
+    ("nl-BE", "Dutch (Belgium)"),
+    ("et", "Estonian"),
+    ("fa", "Persian"),
+    ("fi", "Finnish"),
+    ("fr", "French"),
+    ("fr-CA", "French (Canada)"),
+    ("de", "German"),
+    ("de-CH", "German (Switzerland)"),
+    ("el", "Greek"),
+    ("he", "Hebrew"),
+    ("hi", "Hindi"),
+    ("hr", "Croatian"),
+    ("hu", "Hungarian"),
+    ("id", "Indonesian"),
+    ("it", "Italian"),
+    ("ja", "Japanese"),
+    ("kn", "Kannada"),
+    ("ko", "Korean"),
+    ("ko-KR", "Korean (South Korea)"),
+    ("lv", "Latvian"),
+    ("lt", "Lithuanian"),
+    ("mk", "Macedonian"),
+    ("mr", "Marathi"),
+    ("ms", "Malay"),
+    ("no", "Norwegian"),
+    ("pl", "Polish"),
+    ("pt", "Portuguese"),
+    ("pt-BR", "Portuguese (Brazil)"),
+    ("pt-PT", "Portuguese (Portugal)"),
+    ("ro", "Romanian"),
+    ("ru", "Russian"),
+    ("sk", "Slovak"),
+    ("sl", "Slovenian"),
+    ("sr", "Serbian"),
+    ("es", "Spanish"),
+    ("es-419", "Spanish (Latin America)"),
+    ("sv", "Swedish"),
+    ("sv-SE", "Swedish (Sweden)"),
+    ("ta", "Tamil"),
+    ("te", "Telugu"),
+    ("th", "Thai"),
+    ("th-TH", "Thai (Thailand)"),
+    ("tl", "Tagalog"),
+    ("tr", "Turkish"),
+    ("uk", "Ukrainian"),
+    ("ur", "Urdu"),
+    ("vi", "Vietnamese"),
+  ]
+
+  /// Languages that support multi-language (auto-detect) mode in DeepGram Nova-3
+  nonisolated static let multiLanguageSupported: Set<String> = [
+    "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
+    "es", "es-419",
+    "fr", "fr-CA",
+    "de",
+    "hi",
+    "ru",
+    "pt", "pt-BR", "pt-PT",
+    "ja",
+    "it",
+    "nl",
+  ]
+
+  /// Check if a language supports auto-detect mode
+  nonisolated static func supportsAutoDetect(_ languageCode: String) -> Bool {
+    return multiLanguageSupported.contains(normalizeTranscriptionLanguageCode(languageCode))
+  }
+
+  nonisolated static func normalizeTranscriptionLanguageCode(_ rawValue: String) -> String {
+    let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "en" }
+
+    let normalizedSeparator = trimmed.replacingOccurrences(of: "_", with: "-")
+    let lookupKey = normalizedSeparator.lowercased()
+
+    if let alias = transcriptionLanguageAliases[lookupKey] {
+      return alias
     }
 
-    // MARK: - UserDefaults Keys
-
-    private let cooldownIntervalKey = "assistantsCooldownInterval"
-    private let glowOverlayEnabledKey = "assistantsGlowOverlayEnabled"
-    private let analysisDelayKey = "assistantsAnalysisDelay"
-    private let screenAnalysisEnabledKey = "screenAnalysisEnabled"
-    private let transcriptionEnabledKey = "transcriptionEnabled"
-    private let transcriptionLanguageKey = "transcriptionLanguage"
-    private let transcriptionAutoDetectKey = "transcriptionAutoDetect"
-    private let voiceLanguagesKey = "voiceAssistantLanguages"
-    private let transcriptionVocabularyKey = "transcriptionVocabulary"
-    private let vadGateEnabledKey = "vadGateEnabled"
-    private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
-    private let systemAudioCaptureModeKey = "systemAudioCaptureMode"
-
-    // MARK: - Default Values
-
-    private let defaultCooldownInterval = 10 // minutes
-    private let defaultGlowOverlayEnabled = false
-    private let defaultAnalysisDelay = 60 // seconds (1 minute)
-    private let defaultScreenAnalysisEnabled = true
-    private let defaultTranscriptionEnabled = true
-    private let defaultTranscriptionLanguage = "en"
-    private let defaultTranscriptionAutoDetect = true
-    private let defaultTranscriptionVocabulary: [String] = []
-    private let defaultVadGateEnabled = false
-    private let defaultBatchTranscriptionEnabled = false
-    private let defaultSystemAudioCaptureMode: SystemAudioCaptureMode = .onlyDuringMeetings
-    private(set) var transcriptionVocabularyRevision: UInt64 = 0
-
-    private init() {
-        // Register defaults
-        UserDefaults.standard.register(defaults: [
-            cooldownIntervalKey: defaultCooldownInterval,
-            glowOverlayEnabledKey: defaultGlowOverlayEnabled,
-            analysisDelayKey: defaultAnalysisDelay,
-            screenAnalysisEnabledKey: defaultScreenAnalysisEnabled,
-            transcriptionEnabledKey: defaultTranscriptionEnabled,
-            transcriptionLanguageKey: defaultTranscriptionLanguage,
-            transcriptionAutoDetectKey: defaultTranscriptionAutoDetect,
-            transcriptionVocabularyKey: defaultTranscriptionVocabulary,
-            vadGateEnabledKey: defaultVadGateEnabled,
-            batchTranscriptionEnabledKey: defaultBatchTranscriptionEnabled,
-            systemAudioCaptureModeKey: defaultSystemAudioCaptureMode.rawValue,
-        ])
+    if let supported = supportedLanguages.first(where: {
+      $0.code.compare(normalizedSeparator, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }) {
+      return supported.code
     }
 
-    // MARK: - Properties
-
-    /// Cooldown interval between notifications in minutes
-    var cooldownInterval: Int {
-        get {
-            let value = UserDefaults.standard.integer(forKey: cooldownIntervalKey)
-            return value > 0 ? value : defaultCooldownInterval
-        }
-        set {
-            UserDefaults.standard.set(newValue, forKey: cooldownIntervalKey)
-            NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
-        }
+    // A typed language NAME ("Russian", "portuguese", "español") — not a code. Without
+    // this, onboarding saved the literal word (e.g. language="russian"), which every
+    // ISO-code consumer (Deepgram, backend) rejects.
+    if let supported = supportedLanguages.first(where: {
+      $0.name.compare(trimmed, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }) {
+      return supported.code
+    }
+    if let code = localizedNameToCode[trimmed.lowercased()] {
+      return code
     }
 
-    /// Cooldown interval in seconds (for NotificationService)
-    var cooldownIntervalSeconds: TimeInterval {
-        return TimeInterval(cooldownInterval * 60)
+    return normalizedSeparator
+  }
+
+  /// Language names (in every locale the OS knows) → ISO 639-1 code, restricted to codes
+  /// we support. Lets "русский", "español", or "german" resolve to ru/es/de.
+  nonisolated private static let localizedNameToCode: [String: String] = {
+    var map: [String: String] = [:]
+    let baseCodes = Set(supportedLanguages.map { baseLanguageCode($0.code) })
+    for code in baseCodes {
+      for localeID in ["en", code] {
+        if let name = Locale(identifier: localeID)
+          .localizedString(forLanguageCode: code)?.lowercased()
+        {
+          map[name] = map[name] ?? code
+        }
+      }
     }
+    return map
+  }()
 
-    /// Whether the glow overlay effect is enabled
-    var glowOverlayEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: glowOverlayEnabledKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: glowOverlayEnabledKey)
-            NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
-        }
-    }
-
-    /// Delay in seconds before analyzing after an app switch (0 = instant, 60 = 1 min, 300 = 5 min)
-    var analysisDelay: Int {
-        get {
-            let value = UserDefaults.standard.integer(forKey: analysisDelayKey)
-            return value >= 0 ? value : defaultAnalysisDelay
-        }
-        set {
-            UserDefaults.standard.set(newValue, forKey: analysisDelayKey)
-            NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
-        }
-    }
-
-    /// Whether screen analysis (proactive monitoring) should be enabled
-    var screenAnalysisEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: screenAnalysisEnabledKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: screenAnalysisEnabledKey)
-            NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
-        }
-    }
-
-    /// Whether transcription should be enabled
-    var transcriptionEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: transcriptionEnabledKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: transcriptionEnabledKey)
-            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
-        }
-    }
-
-    /// The language code for transcription (e.g., "en", "uk", "ru")
-    var transcriptionLanguage: String {
-        get {
-            let value = UserDefaults.standard.string(forKey: transcriptionLanguageKey) ?? defaultTranscriptionLanguage
-            let normalized = Self.normalizeTranscriptionLanguageCode(value)
-            if normalized != value {
-                UserDefaults.standard.set(normalized, forKey: transcriptionLanguageKey)
-            }
-            return normalized
-        }
-        set {
-            UserDefaults.standard.set(Self.normalizeTranscriptionLanguageCode(newValue), forKey: transcriptionLanguageKey)
-            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
-        }
-    }
-
-    /// Ordered languages the user speaks to the VOICE ASSISTANT (push-to-talk), primary
-    /// first, as normalized codes (e.g. ["ru", "en"]). Drives per-turn language
-    /// identification for the realtime hub only — the ambient transcription pipeline
-    /// (transcriptionLanguage/transcriptionAutoDetect) is intentionally not coupled to it.
-    /// Empty storage falls back to [transcriptionLanguage] so existing users keep behavior.
-    var voiceLanguages: [String] {
-        get {
-            let stored = UserDefaults.standard.stringArray(forKey: voiceLanguagesKey) ?? []
-            let normalized = Self.dedupedNormalizedLanguageCodes(stored)
-            if !normalized.isEmpty { return normalized }
-            return [Self.normalizeTranscriptionLanguageCode(transcriptionLanguage)]
-        }
-        set {
-            let normalized = Self.dedupedNormalizedLanguageCodes(newValue)
-            UserDefaults.standard.set(normalized, forKey: voiceLanguagesKey)
-            // Dedicated notification: posting transcriptionSettingsDidChange here would
-            // restart the AMBIENT transcription pipeline, which this setting must never touch.
-            NotificationCenter.default.post(name: .voiceLanguagesDidChange, object: nil)
-        }
-    }
-
-    /// True only when the user has explicitly picked voice languages (onboarding or
-    /// Settings). Everything the feature does — system-instruction language pinning,
-    /// whisper hints, per-turn language ID — is gated on this, so default-config users
-    /// keep exactly today's provider auto-detect behavior (forcing "speaks ONLY English"
-    /// on someone who merely never opened the setting would be a regression).
-    var hasExplicitVoiceLanguages: Bool {
-        !Self.dedupedNormalizedLanguageCodes(
-            UserDefaults.standard.stringArray(forKey: voiceLanguagesKey) ?? []
-        ).isEmpty
-    }
-
-    /// Base ISO-639-1 codes of `voiceLanguages` (region stripped: "en-US" → "en"),
-    /// order-preserving and deduped. This is the candidate set for PTT language ID.
-    /// EMPTY unless the user explicitly configured voice languages.
-    var voiceBaseLanguages: [String] {
-        guard hasExplicitVoiceLanguages else { return [] }
-        var seen = Set<String>()
-        return voiceLanguages.map { Self.baseLanguageCode($0) }.filter { seen.insert($0).inserted }
-    }
-
-    nonisolated static func baseLanguageCode(_ code: String) -> String {
-        code.split(separator: "-").first.map(String.init)?.lowercased() ?? code.lowercased()
-    }
-
-    nonisolated static func dedupedNormalizedLanguageCodes(_ raw: [String]) -> [String] {
-        var seen = Set<String>()
-        return
-            raw
-            .map { normalizeTranscriptionLanguageCode($0) }
-            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
-    }
-
-    /// Whether auto-detect (multi-language) mode is enabled
-    /// When true, DeepGram will auto-detect the language
-    /// When false, uses the specific language set in transcriptionLanguage
-    var transcriptionAutoDetect: Bool {
-        get { UserDefaults.standard.bool(forKey: transcriptionAutoDetectKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: transcriptionAutoDetectKey)
-            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
-        }
-    }
-
-    /// Returns the effective language to send to DeepGram
-    /// If auto-detect is enabled and the language supports multi-language mode, returns "multi"
-    /// Otherwise returns the specific language code
-    var effectiveTranscriptionLanguage: String {
-        if transcriptionAutoDetect && Self.supportsAutoDetect(transcriptionLanguage) {
-            return "multi"
-        }
-        return transcriptionLanguage
-    }
-
-    /// Custom vocabulary for improved transcription accuracy
-    /// Array of words/terms that DeepGram should recognize (Nova-3 limit: 500 tokens total)
-    var transcriptionVocabulary: [String] {
-        get {
-            let value = UserDefaults.standard.stringArray(forKey: transcriptionVocabularyKey)
-            return value ?? defaultTranscriptionVocabulary
-        }
-        set {
-            UserDefaults.standard.set(newValue, forKey: transcriptionVocabularyKey)
-            transcriptionVocabularyRevision &+= 1
-            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
-        }
-    }
-
-    func shouldApplyTranscriptionVocabularyHydration(startedAtRevision: UInt64) -> Bool {
-        transcriptionVocabularyRevision == startedAtRevision
-    }
-
-    /// Returns vocabulary as comma-separated string for display
-    var transcriptionVocabularyString: String {
-        get {
-            return transcriptionVocabulary.joined(separator: ", ")
-        }
-        set {
-            let terms = newValue
-                .split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-            transcriptionVocabulary = terms
-        }
-    }
-
-    /// Whether batch transcription mode is enabled (transcribes audio in chunks at silence boundaries)
-    var batchTranscriptionEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: batchTranscriptionEnabledKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: batchTranscriptionEnabledKey)
-            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
-        }
-    }
-
-    /// Whether local VAD gate is enabled to skip silence and reduce Deepgram usage
-    var vadGateEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: vadGateEnabledKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: vadGateEnabledKey)
-            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
-        }
-    }
-
-    /// When system audio (audio from other apps) is captured during a recording.
-    /// Default `.onlyDuringMeetings` limits system audio capture to detected conferencing calls.
-    /// The hidden `disableSystemAudioCapture` debug UserDefault still forces "never" — see `AppState.effectiveSystemAudioMode`.
-    /// Posts `.systemAudioCaptureModeDidChange` so an active recording can re-apply the gate live.
-    var systemAudioCaptureMode: SystemAudioCaptureMode {
-        get {
-            let raw =
-                UserDefaults.standard.string(forKey: systemAudioCaptureModeKey)
-                ?? defaultSystemAudioCaptureMode.rawValue
-            return SystemAudioCaptureMode(rawValue: raw) ?? defaultSystemAudioCaptureMode
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: systemAudioCaptureModeKey)
-            NotificationCenter.default.post(name: .systemAudioCaptureModeDidChange, object: nil)
-        }
-    }
-
-    /// Returns vocabulary with "Omi" always included (for DeepGram)
-    var effectiveVocabulary: [String] {
-        var vocab = Set(transcriptionVocabulary)
-        vocab.insert("Omi")
-        return Array(vocab)
-    }
-
-    /// Reset all settings to defaults
-    func resetToDefaults() {
-        cooldownInterval = defaultCooldownInterval
-        glowOverlayEnabled = defaultGlowOverlayEnabled
-        analysisDelay = defaultAnalysisDelay
-        screenAnalysisEnabled = defaultScreenAnalysisEnabled
-        transcriptionEnabled = defaultTranscriptionEnabled
-        transcriptionLanguage = defaultTranscriptionLanguage
-        transcriptionAutoDetect = defaultTranscriptionAutoDetect
-        transcriptionVocabulary = defaultTranscriptionVocabulary
-        vadGateEnabled = defaultVadGateEnabled
-        batchTranscriptionEnabled = defaultBatchTranscriptionEnabled
-        systemAudioCaptureMode = defaultSystemAudioCaptureMode
-    }
-
-    // MARK: - Supported Languages
-
-    /// Canonical backend-supported DeepGram Nova-3 language options for single-language transcription.
-    nonisolated static let supportedLanguages: [(code: String, name: String)] = [
-        ("ar", "Arabic"),
-        ("ar-AE", "Arabic (United Arab Emirates)"),
-        ("ar-SA", "Arabic (Saudi Arabia)"),
-        ("ar-QA", "Arabic (Qatar)"),
-        ("ar-KW", "Arabic (Kuwait)"),
-        ("ar-SY", "Arabic (Syria)"),
-        ("ar-LB", "Arabic (Lebanon)"),
-        ("ar-PS", "Arabic (Palestine)"),
-        ("ar-JO", "Arabic (Jordan)"),
-        ("ar-EG", "Arabic (Egypt)"),
-        ("ar-SD", "Arabic (Sudan)"),
-        ("ar-TD", "Arabic (Chad)"),
-        ("ar-MA", "Arabic (Morocco)"),
-        ("ar-DZ", "Arabic (Algeria)"),
-        ("ar-TN", "Arabic (Tunisia)"),
-        ("ar-IQ", "Arabic (Iraq)"),
-        ("ar-IR", "Arabic (Iran)"),
-        ("be", "Belarusian"),
-        ("bn", "Bengali"),
-        ("bs", "Bosnian"),
-        ("en", "English"),
-        ("en-US", "English (US)"),
-        ("en-GB", "English (UK)"),
-        ("en-AU", "English (Australia)"),
-        ("en-IN", "English (India)"),
-        ("en-NZ", "English (New Zealand)"),
-        ("bg", "Bulgarian"),
-        ("ca", "Catalan"),
-        ("zh-CN", "Chinese (Simplified)"),
-        ("zh-HK", "Chinese (Hong Kong)"),
-        ("zh-TW", "Chinese (Taiwan)"),
-        ("cs", "Czech"),
-        ("da", "Danish"),
-        ("da-DK", "Danish (Denmark)"),
-        ("nl", "Dutch"),
-        ("nl-BE", "Dutch (Belgium)"),
-        ("et", "Estonian"),
-        ("fa", "Persian"),
-        ("fi", "Finnish"),
-        ("fr", "French"),
-        ("fr-CA", "French (Canada)"),
-        ("de", "German"),
-        ("de-CH", "German (Switzerland)"),
-        ("el", "Greek"),
-        ("he", "Hebrew"),
-        ("hi", "Hindi"),
-        ("hr", "Croatian"),
-        ("hu", "Hungarian"),
-        ("id", "Indonesian"),
-        ("it", "Italian"),
-        ("ja", "Japanese"),
-        ("kn", "Kannada"),
-        ("ko", "Korean"),
-        ("ko-KR", "Korean (South Korea)"),
-        ("lv", "Latvian"),
-        ("lt", "Lithuanian"),
-        ("mk", "Macedonian"),
-        ("mr", "Marathi"),
-        ("ms", "Malay"),
-        ("no", "Norwegian"),
-        ("pl", "Polish"),
-        ("pt", "Portuguese"),
-        ("pt-BR", "Portuguese (Brazil)"),
-        ("pt-PT", "Portuguese (Portugal)"),
-        ("ro", "Romanian"),
-        ("ru", "Russian"),
-        ("sk", "Slovak"),
-        ("sl", "Slovenian"),
-        ("sr", "Serbian"),
-        ("es", "Spanish"),
-        ("es-419", "Spanish (Latin America)"),
-        ("sv", "Swedish"),
-        ("sv-SE", "Swedish (Sweden)"),
-        ("ta", "Tamil"),
-        ("te", "Telugu"),
-        ("th", "Thai"),
-        ("th-TH", "Thai (Thailand)"),
-        ("tl", "Tagalog"),
-        ("tr", "Turkish"),
-        ("uk", "Ukrainian"),
-        ("ur", "Urdu"),
-        ("vi", "Vietnamese"),
-    ]
-
-    /// Languages that support multi-language (auto-detect) mode in DeepGram Nova-3
-    nonisolated static let multiLanguageSupported: Set<String> = [
-        "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
-        "es", "es-419",
-        "fr", "fr-CA",
-        "de",
-        "hi",
-        "ru",
-        "pt", "pt-BR", "pt-PT",
-        "ja",
-        "it",
-        "nl"
-    ]
-
-    /// Check if a language supports auto-detect mode
-    nonisolated static func supportsAutoDetect(_ languageCode: String) -> Bool {
-        return multiLanguageSupported.contains(normalizeTranscriptionLanguageCode(languageCode))
-    }
-
-    nonisolated static func normalizeTranscriptionLanguageCode(_ rawValue: String) -> String {
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "en" }
-
-        let normalizedSeparator = trimmed.replacingOccurrences(of: "_", with: "-")
-        let lookupKey = normalizedSeparator.lowercased()
-
-        if let alias = transcriptionLanguageAliases[lookupKey] {
-            return alias
-        }
-
-        if let supported = supportedLanguages.first(where: {
-            $0.code.compare(normalizedSeparator, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-        }) {
-            return supported.code
-        }
-
-        // A typed language NAME ("Russian", "portuguese", "español") — not a code. Without
-        // this, onboarding saved the literal word (e.g. language="russian"), which every
-        // ISO-code consumer (Deepgram, backend) rejects.
-        if let supported = supportedLanguages.first(where: {
-            $0.name.compare(trimmed, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-        }) {
-            return supported.code
-        }
-        if let code = localizedNameToCode[trimmed.lowercased()] {
-            return code
-        }
-
-        return normalizedSeparator
-    }
-
-    /// Language names (in every locale the OS knows) → ISO 639-1 code, restricted to codes
-    /// we support. Lets "русский", "español", or "german" resolve to ru/es/de.
-    nonisolated private static let localizedNameToCode: [String: String] = {
-        var map: [String: String] = [:]
-        let baseCodes = Set(supportedLanguages.map { baseLanguageCode($0.code) })
-        for code in baseCodes {
-            for localeID in ["en", code] {
-                if let name = Locale(identifier: localeID)
-                    .localizedString(forLanguageCode: code)?.lowercased()
-                {
-                    map[name] = map[name] ?? code
-                }
-            }
-        }
-        return map
-    }()
-
-    /// Normalizes legacy, backend, and user-entered aliases into codes accepted by `/v4/listen`.
-    nonisolated private static let transcriptionLanguageAliases: [String: String] = [
-        "br": "pt-BR",
-        "chinese": "zh-CN",
-        "chinese simplified": "zh-CN",
-        "chinese (simplified)": "zh-CN",
-        "mandarin": "zh-CN",
-        "mandarin chinese": "zh-CN",
-        "pt-br": "pt-BR",
-        "simplified chinese": "zh-CN",
-        "zh": "zh-CN",
-        "zh-cn": "zh-CN",
-        "zh-hans": "zh-CN",
-        "zh-tw": "zh-TW",
-        "zh-hant": "zh-TW",
-        "zh-hk": "zh-HK",
-        "中文": "zh-CN",
-        "普通话": "zh-CN",
-        "汉语": "zh-CN",
-        "国语": "zh-CN",
-        "简体中文": "zh-CN",
-        "繁体中文": "zh-TW",
-        "粤语": "zh-HK",
-    ]
+  /// Normalizes legacy, backend, and user-entered aliases into codes accepted by `/v4/listen`.
+  nonisolated private static let transcriptionLanguageAliases: [String: String] = [
+    "br": "pt-BR",
+    "chinese": "zh-CN",
+    "chinese simplified": "zh-CN",
+    "chinese (simplified)": "zh-CN",
+    "mandarin": "zh-CN",
+    "mandarin chinese": "zh-CN",
+    "pt-br": "pt-BR",
+    "simplified chinese": "zh-CN",
+    "zh": "zh-CN",
+    "zh-cn": "zh-CN",
+    "zh-hans": "zh-CN",
+    "zh-tw": "zh-TW",
+    "zh-hant": "zh-TW",
+    "zh-hk": "zh-HK",
+    "中文": "zh-CN",
+    "普通话": "zh-CN",
+    "汉语": "zh-CN",
+    "国语": "zh-CN",
+    "简体中文": "zh-CN",
+    "繁体中文": "zh-TW",
+    "粤语": "zh-HK",
+  ]
 }
 
 // MARK: - Notification Names
 
 extension Notification.Name {
-    static let assistantSettingsDidChange = Notification.Name("assistantSettingsDidChange")
-    static let assistantMonitoringStateDidChange = Notification.Name("assistantMonitoringStateDidChange")
-    static let assistantMonitoringToggleRequested = Notification.Name("assistantMonitoringToggleRequested")
-    static let transcriptionSettingsDidChange = Notification.Name("transcriptionSettingsDidChange")
-    static let systemAudioCaptureModeDidChange = Notification.Name("systemAudioCaptureModeDidChange")
-    static let voiceLanguagesDidChange = Notification.Name("voiceLanguagesDidChange")
+  static let assistantSettingsDidChange = Notification.Name("assistantSettingsDidChange")
+  static let assistantMonitoringStateDidChange = Notification.Name("assistantMonitoringStateDidChange")
+  static let assistantMonitoringToggleRequested = Notification.Name("assistantMonitoringToggleRequested")
+  static let transcriptionSettingsDidChange = Notification.Name("transcriptionSettingsDidChange")
+  static let systemAudioCaptureModeDidChange = Notification.Name("systemAudioCaptureModeDidChange")
+  static let voiceLanguagesDidChange = Notification.Name("voiceLanguagesDidChange")
 }
 
 // MARK: - Backward Compatibility
@@ -497,6 +498,6 @@ extension Notification.Name {
 typealias FocusSettings = AssistantSettings
 
 extension Notification.Name {
-    static let focusSettingsDidChange = Notification.Name.assistantSettingsDidChange
-    static let focusMonitoringStateDidChange = Notification.Name.assistantMonitoringStateDidChange
+  static let focusSettingsDidChange = Notification.Name.assistantSettingsDidChange
+  static let focusMonitoringStateDidChange = Notification.Name.assistantMonitoringStateDidChange
 }

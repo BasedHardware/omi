@@ -503,7 +503,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "**Real-traffic journeys:** chat, pusher, and capture-finalization measure accepted work through a server-observable terminal boundary. Product-failure alerts require real traffic; cancelled client/transport endings and fenced stale work remain visible without counting as product failures. An absent source is scrape health, not zero traffic. Semantics: `backend/docs/runbooks/real-traffic-journeys.md`.",
+        "content": "**Real-traffic journeys:** chat, pusher, live transcription, and capture-finalization measure accepted work through a server-observable terminal boundary. Product-failure alerts require real traffic; cancelled client/transport endings and fenced stale work remain visible without counting as product failures. An absent source is scrape health, not zero traffic. Semantics: `backend/docs/runbooks/real-traffic-journeys.md`.",
         "mode": "markdown"
       },
       "pluginVersion": "12.1.0",

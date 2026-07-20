@@ -2,8 +2,29 @@ import Foundation
 
 enum DesktopBackendEnvironment {
   static let productionPythonAPIURL = "https://api.omi.me/"
+  static let betaPythonAPIURL = "https://api-beta.omi.me/"
   static let developmentPythonAPIURL = "https://api.omiapi.com/"
   static let developmentRustBackendURL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
+
+  static var shouldUseBetaRingBackends: Bool {
+    shouldUseBetaRingBackends(
+      bundleIdentifier: AppBuild.bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel,
+      forceOverride: currentEnvironmentValue("OMI_FORCE_DEV_BACKENDS"),
+      externalPreviewBackend: AppBuild.externalPreviewBackend
+    )
+  }
+
+  static func shouldUseBetaRingBackends(
+    bundleIdentifier: String,
+    updateChannel: String,
+    forceOverride: String? = nil,
+    externalPreviewBackend: AppBuild.ExternalPreviewBackend? = nil
+  ) -> Bool {
+    guard !AppBuild.isExternalPreviewBundleIdentifier(bundleIdentifier) else { return false }
+    guard !isAffirmative(forceOverride) else { return false }
+    return bundleIdentifier == AppBuild.productionBundleIdentifier && normalizedChannel(updateChannel) == "beta"
+  }
 
   static var shouldUseDevelopmentBackends: Bool {
     shouldUseDevelopmentBackends(
@@ -34,24 +55,13 @@ enum DesktopBackendEnvironment {
       return true
     }
 
-    // Beta channel of the production bundle routes to the dev backend
-    // (api.omiapi.com + dev Cloud Run desktop-backend). The dev backend is
-    // configured to use prod Firebase (project_id=based-hardware, prod service
-    // account, prod FIREBASE_API_KEY), so custom tokens it mints resolve to the
-    // same UID a user has on prod — and reads/writes hit prod Firestore. Same
-    // pattern as mobile TestFlight → staging.
-    //
-    // PR #7014 (April 2026) was reverted because at that time the dev backend
-    // was wired to the based-hardware-dev Firebase project, so beta users
-    // ended up signed in as fresh empty UIDs. The infra has since been moved
-    // onto prod Firebase. Verify before any future revert: dev backend
-    // /v1/auth/token must mint custom tokens whose UID matches prod.
+    // Production beta now has a dedicated stateless release ring. It selects
+    // beta URLs below rather than inheriting the development backend.
     if isAffirmative(forceOverride) {
       return true
     }
 
-    return bundleIdentifier == AppBuild.productionBundleIdentifier
-      && normalizedChannel(updateChannel) == "beta"
+    return false
   }
 
   static func pythonBaseURL(
@@ -59,15 +69,23 @@ enum DesktopBackendEnvironment {
   ) -> String {
     pythonBaseURL(
       useDevelopmentBackends: shouldUseDevelopmentBackends,
+      useBetaRingBackends: shouldUseBetaRingBackends,
       environmentValue: environmentValue
     )
   }
 
-  static func pythonBaseURL(useDevelopmentBackends: Bool, environmentValue: String?) -> String {
+  static func pythonBaseURL(
+    useDevelopmentBackends: Bool,
+    useBetaRingBackends: Bool = false,
+    environmentValue: String?
+  ) -> String {
     if let url = normalizedURL(environmentValue) {
       return url
     }
 
+    if useBetaRingBackends {
+      return betaPythonAPIURL
+    }
     if useDevelopmentBackends {
       return developmentPythonAPIURL
     }
@@ -94,6 +112,7 @@ enum DesktopBackendEnvironment {
   ) -> String {
     rustBackendURL(
       useDevelopmentBackends: shouldUseDevelopmentBackends,
+      useBetaRingBackends: shouldUseBetaRingBackends,
       environmentValue: environmentValue,
       launchEnvironmentValue: launchEnvironmentValue
     )
@@ -101,6 +120,7 @@ enum DesktopBackendEnvironment {
 
   static func rustBackendURL(
     useDevelopmentBackends: Bool,
+    useBetaRingBackends: Bool = false,
     environmentValue: String?,
     launchEnvironmentValue: String?
   ) -> String {
@@ -112,6 +132,10 @@ enum DesktopBackendEnvironment {
       return url
     }
 
+    // The Rust desktop backend has its own, currently roll-forward-only
+    // release path. v1's stateless beta ring is the Python/GKE path; leave
+    // this unset so the signed production bundle's explicit Rust endpoint
+    // remains authoritative rather than inventing an unprovisioned beta host.
     if useDevelopmentBackends {
       return developmentRustBackendURL
     }
@@ -120,15 +144,18 @@ enum DesktopBackendEnvironment {
   }
 
   static func applyReleaseChannelDefaults() {
-    guard shouldUseDevelopmentBackends else { return }
-
-    if normalizedURL(currentEnvironmentValue("OMI_PYTHON_API_URL")) == nil {
-      setenv("OMI_PYTHON_API_URL", developmentPythonAPIURL, 1)
+    if shouldUseBetaRingBackends, normalizedURL(currentEnvironmentValue("OMI_PYTHON_API_URL")) == nil {
+      setenv("OMI_PYTHON_API_URL", betaPythonAPIURL, 1)
     }
-    if normalizedURL(currentEnvironmentValue("OMI_DESKTOP_API_URL")) == nil {
-      setenv("OMI_DESKTOP_API_URL", developmentRustBackendURL, 1)
+    if shouldUseDevelopmentBackends {
+      if normalizedURL(currentEnvironmentValue("OMI_PYTHON_API_URL")) == nil {
+        setenv("OMI_PYTHON_API_URL", developmentPythonAPIURL, 1)
+      }
+      if normalizedURL(currentEnvironmentValue("OMI_DESKTOP_API_URL")) == nil {
+        setenv("OMI_DESKTOP_API_URL", developmentRustBackendURL, 1)
+      }
     }
-    log("BackendEnvironment: development defaults applied only for missing backend URLs")
+    log("BackendEnvironment: release-channel defaults applied only for missing backend URLs")
   }
 
   private static func normalizedChannel(_ channel: String) -> String {
@@ -144,7 +171,7 @@ enum DesktopBackendEnvironment {
   }
 
   private static func currentEnvironmentValue(_ key: String) -> String? {
-    guard let value = getenv(key), let string = String(validatingUTF8: value) else {
+    guard let value = getenv(key), let string = String(validatingCString: value) else {
       return nil
     }
     return string

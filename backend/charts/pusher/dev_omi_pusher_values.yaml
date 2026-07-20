@@ -2,12 +2,19 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Keep every rollout availability delay explicit. CI derives the healthy
+# rollout budget from these values and the HPA ceiling, rather than inheriting
+# Kubernetes defaults that can make a healthy rollout look stalled.
+minReadySeconds: 0
+progressDeadlineSeconds: 9600
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: gcr.io/based-hardware-dev/pusher
+  digest: ""
   # This sets the pull policy for images.
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
@@ -135,11 +142,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
-  - name: DEEPGRAM_API_KEY
+  - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
+        key: MODULATE_API_KEY
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -238,10 +245,12 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: TYPESENSE_API_KEY
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omiapi.com"
+  - name: HOSTED_PARAKEET_API_URL
+    value: "http://parakeet.omiapi.com"
+  - name: STT_PRERECORDED_MODEL
+    value: "modulate-velma-2,parakeet"
+  - name: STT_SERVICE_MODELS
+    value: "modulate-velma-2,parakeet"
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
     value: "1000000"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -301,7 +310,9 @@ readinessProbe:
     path: /health
     port: 8080
   failureThreshold: 3
+  initialDelaySeconds: 0
   periodSeconds: 10
+  successThreshold: 1
   timeoutSeconds: 5
 
 startupProbe:
@@ -309,6 +320,7 @@ startupProbe:
     path: /health
     port: 8080
   failureThreshold: 60
+  initialDelaySeconds: 0
   periodSeconds: 10
   timeoutSeconds: 5
 

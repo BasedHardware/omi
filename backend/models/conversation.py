@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
@@ -27,6 +27,7 @@ __all__ = [
     'BulkAssignSegmentsRequest',
     'CalendarEventLink',
     'Conversation',
+    'ConversationFinalizationStatusResponse',
     'ConversationMutationResponse',
     'ConversationPostProcessing',
     'CreateConversation',
@@ -38,6 +39,9 @@ __all__ = [
     'MergeConversationsResponse',
     'PluginResult',
     'SearchRequest',
+    'SharedConversationChatHistoryMessage',
+    'SharedConversationChatRequest',
+    'SharedConversationChatResponse',
     'SetConversationActionItemsStateRequest',
     'SetConversationEventsStateRequest',
     'TestPromptRequest',
@@ -51,6 +55,43 @@ __all__ = [
 class UpdateConversation(BaseModel):
     title: Optional[str] = None
     overview: Optional[str] = None
+
+
+class SharedConversationChatHistoryMessage(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    role: Literal['user', 'assistant']
+    content: str = Field(min_length=1, max_length=2000, strict=True)
+
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError('content must not be blank')
+        return stripped
+
+
+class SharedConversationChatRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    conversation_id: str = Field(min_length=1, max_length=128, strict=True)
+    question: str = Field(min_length=1, max_length=2000, strict=True)
+    history: List[SharedConversationChatHistoryMessage] = Field(max_length=8)
+
+    @field_validator('conversation_id', 'question')
+    @classmethod
+    def validate_non_blank_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError('value must not be blank')
+        return stripped
+
+
+class SharedConversationChatResponse(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    message: str = Field(min_length=1, strict=True)
 
 
 # TODO: remove this class when the app is updated to use apps_results
@@ -271,6 +312,17 @@ class ExternalIntegrationCreateConversation(BaseModel):
 class CreateConversationResponse(BaseModel):
     conversation: Conversation
     messages: List[Message] = []
+
+
+class ConversationFinalizationStatusResponse(BaseModel):
+    """Customer-visible projection of one durable finalization job."""
+
+    job_id: str
+    status: str
+    terminal: bool
+    retryable: bool
+    attempt_count: int
+    task_retry_count: int
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app

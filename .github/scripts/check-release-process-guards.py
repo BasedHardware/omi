@@ -75,6 +75,7 @@ def check_desktop_codemagic_release() -> list[str]:
         "desktop/macos/dmg-assets/dmgbuild_settings.py",
         "scripts/scan-public-artifact-secrets.py",
         ".github/scripts/desktop-changelog.py",
+        ".github/scripts/desktop_qualification_dispatch.py",
     ]
     for required_file in required_files:
         if not (ROOT / required_file).exists():
@@ -102,10 +103,28 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
     if "desktop_qualify_beta.yml" not in desktop_workflow_body:
         errors.append("desktop release must dispatch the trusted macOS qualification workflow")
+    for required_fragment in (
+        "dispatch_key=\"codemagic:${CM_TAG}\"",
+        "for attempt in 1 2 3",
+        "preserving immutable evidence",
+        "authoritative atomic",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop qualification handoff is missing reliable dispatch fragment: {required_fragment}")
+    dispatch_start = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
+    dispatch_body = desktop_workflow_body[dispatch_start:] if dispatch_start != -1 else ""
+    if "gh release edit \"$CM_TAG\"" in dispatch_body:
+        errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
+    if "candidate remains non-live" not in desktop_workflow_body:
+        errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
+    if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
+        errors.append("desktop candidate retries must not delete immutable qualification evidence")
     if "docker info" in desktop_workflow_body:
         errors.append("Codemagic desktop release must not run Docker-backed beta qualification")
     if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
         errors.append("desktop release smoke step must invoke scripts/smoke-signed-desktop-artifact.sh")
+    if "--notification-callback-canary" not in desktop_workflow_body:
+        errors.append("desktop release smoke must prove the UserNotifications callback before publishing a candidate")
 
     smoke_script = ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
     if smoke_script.exists():
@@ -121,6 +140,9 @@ def check_desktop_codemagic_release() -> list[str]:
             "Runtime Version",
             "https://api.omi.me/v2/desktop/appcast.xml",
             "audit-desktop-bundle-deps.sh",
+            "notification-callback-canary",
+            "UserNotifications settings callback completion canary passed",
+            "OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH",
         ):
             if required_fragment not in smoke_text:
                 errors.append(f"signed artifact smoke is missing required guard fragment: {required_fragment}")
@@ -280,10 +302,26 @@ def check_desktop_qualification_runner() -> list[str]:
         "--automatic",
         "--no-promote",
         "desktop_promote_beta.yml",
-        "actions/create-github-app-token@v1",
+        "actions/create-github-app-token@v3",
+        "dispatch_key:",
+        "retry_nonce:",
+        "desktop_qualification_dispatch.py claim",
+        "desktop_qualification_dispatch.py complete",
+        "desktop-beta-qualification-${{ inputs.release_tag }}",
+        "authoritative atomic serialiser",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
+
+    candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
+    candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""
+    for required_fragment in (
+        "UserNotifications settings callback completion canary passed",
+        "notification_callback_canary",
+        "callback canary",
+    ):
+        if required_fragment not in candidate_gate_text:
+            errors.append(f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}")
     return errors
 
 

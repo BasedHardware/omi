@@ -5,8 +5,10 @@ from models.memory_search_gateway import SearchMode, SearchVectorHit
 from models.product_memory import MemoryTier, ProcessingState
 from tests.unit.fixtures.memory_adapter_fakes import (
     FirestoreFake as _FirestoreFake,
+    MEMORY_ADAPTER_FIXTURE_NOW as _FIXTURE_NOW,
     VectorCandidateResult as _VectorCandidateResult,
     enabled_rollout_doc,
+    freeze_default_vector_eligibility_clock,
     memory_item,
     stored_item as _stored_item,
 )
@@ -20,9 +22,36 @@ from utils.mcp_memories import (
     McpMemoryListResult,
     McpMemorySearchResult,
     list_default_mcp_memories,
+    mcp_legacy_read_authorized,
     search_default_mcp_memories,
     search_default_mcp_memories_vector,
 )
+
+
+def test_mcp_legacy_read_authorized_only_for_explicit_or_unenrolled():
+    """#9892: only an explicit legacy-safe decision or a never-enrolled account
+    (absent memory_control/state doc) may reach the legacy read; every other
+    deny reason stays fail-closed."""
+
+    def result(read_decision, fallback_reason=None):
+        return McpMemorySearchResult(memories=[], read_decision=read_decision, fallback_reason=fallback_reason)
+
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.USE_LEGACY_SAFE)) is True
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.DENY_MEMORY, 'missing_rollout_state')) is True
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.DENY_MEMORY, 'malformed_rollout_state')) is False
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.DENY_MEMORY, 'rollout_read_failed')) is False
+    assert (
+        mcp_legacy_read_authorized(result(MemoryReadDecision.DENY_MEMORY, 'missing_mcp_default_memory_grant')) is False
+    )
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.SHADOW_ONLY, 'shadow_only')) is False
+    assert (
+        mcp_legacy_read_authorized(
+            McpMemoryListResult(
+                memories=[], read_decision=MemoryReadDecision.DENY_MEMORY, fallback_reason='missing_rollout_state'
+            )
+        )
+        is True
+    )
 
 
 def _legacy_branch_after_canonical(route_contents: str, *, marker: str | None = None) -> str:
@@ -143,49 +172,49 @@ def test_mcp_sse_transport_authenticates_full_mcp_api_key_context_without_inferr
     )
 
 
-def test_mcp_rest_search_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
+def test_mcp_rest_search_route_only_reaches_legacy_through_authorized_decision():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
     search_route = contents[
         contents.index('@router.get("/v1/mcp/memories/search"') : contents.index('@router.get("/v1/mcp/memories"')
     ]
     assert 'MemoryReadDecision.USE_MEMORY' in search_route
-    assert 'MemoryReadDecision.USE_LEGACY_SAFE' in search_route
+    assert 'mcp_legacy_read_authorized' in search_route
     assert 'if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:' in search_route
-    assert 'if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:' in search_route
-    assert search_route.index(
-        'if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:'
-    ) < search_route.rindex('return memory_service.search_mcp(uid, query, limit=limit)')
+    assert 'if not mcp_legacy_read_authorized(vector_search_results):' in search_route
+    assert search_route.index('if not mcp_legacy_read_authorized(vector_search_results):') < search_route.rindex(
+        'return memory_service.search_mcp(uid, query, limit=limit)'
+    )
 
 
-def test_mcp_rest_get_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
+def test_mcp_rest_get_route_only_reaches_legacy_through_authorized_decision():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
     get_route = contents[contents.index('@router.get("/v1/mcp/memories"') : contents.index('class SimpleStructured')]
     assert 'list_default_mcp_memories(' in get_route
     assert 'if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:' in get_route
-    assert 'if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:' in get_route
+    assert 'if not mcp_legacy_read_authorized(memory_list_results):' in get_route
     assert get_route.index("read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')") < get_route.index(
         'list_default_mcp_memories('
     )
-    assert get_route.index(
-        'if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:'
-    ) < get_route.index('memories_db.get_memories(')
+    assert get_route.index('if not mcp_legacy_read_authorized(memory_list_results):') < get_route.index(
+        'memories_db.get_memories('
+    )
 
 
-def test_mcp_sse_search_tool_only_reaches_legacy_after_explicit_legacy_safe_decision():
+def test_mcp_sse_search_tool_only_reaches_legacy_through_authorized_decision():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
     assert 'MemoryReadDecision.USE_MEMORY' in contents
-    assert 'MemoryReadDecision.USE_LEGACY_SAFE' in contents
+    assert 'mcp_legacy_read_authorized' in contents
     assert 'if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:' in contents
-    assert 'if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:' in contents
-    assert contents.index(
-        'if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:'
-    ) < contents.index('vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)')
+    assert 'if not mcp_legacy_read_authorized(vector_search_results):' in contents
+    assert contents.index('if not mcp_legacy_read_authorized(vector_search_results):') < contents.index(
+        'vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)'
+    )
 
 
-def test_mcp_sse_get_tool_only_reaches_legacy_after_explicit_legacy_safe_decision():
+def test_mcp_sse_get_tool_only_reaches_legacy_through_authorized_decision():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
     get_tool = contents[
@@ -193,13 +222,13 @@ def test_mcp_sse_get_tool_only_reaches_legacy_after_explicit_legacy_safe_decisio
     ]
     assert 'list_default_mcp_memories(' in get_tool
     assert 'if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:' in get_tool
-    assert 'if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:' in get_tool
+    assert 'if not mcp_legacy_read_authorized(memory_list_results):' in get_tool
     assert get_tool.index("read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')") < get_tool.index(
         'list_default_mcp_memories('
     )
-    assert get_tool.index(
-        'if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:'
-    ) < get_tool.index('memories_db.get_memories(')
+    assert get_tool.index('if not mcp_legacy_read_authorized(memory_list_results):') < get_tool.index(
+        'memories_db.get_memories('
+    )
 
 
 def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
@@ -438,8 +467,9 @@ def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_
     assert db_client.collection_paths == []
 
 
-def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default(monkeypatch):
+    now = _FIXTURE_NOW
+    freeze_default_vector_eligibility_clock(monkeypatch, now=now)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -514,6 +544,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
         rollout_capabilities=_read_capabilities(),
         vector_query=vector_query,
         required_projection_commit_id='projection-1',
+        now=now,
     )
     assert isinstance(result, McpMemorySearchResult)
     assert result.read_decision == MemoryReadDecision.USE_MEMORY

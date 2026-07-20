@@ -1483,7 +1483,7 @@
     "exportConfiguration": "Экспартаваць канфігурацыю",
     "bringYourOwn": "Прынясіце ваше",
     "payYourSttProvider": "Свабодна выкарыстоўвайце omi. Вы плаціце толькі вашаму паставальніку STT прама.",
-    "freeMinutesMonth": "600 свабодных мінут/месяц уключана. Неабмежавана з ",
+    "freeMinutesMonth": "300 свабодных мінут/месяц уключана. Неабмежавана з ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Хост абавязаны",
     "validPortRequired": "Абавязаны сапраўдны порт",
@@ -7281,7 +7281,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.",
+    "premiumMinutesInfo": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7392,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ",
+    "premiumMinutesMonth": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10521,7 +10521,7 @@
     "upgradePlan": "Абнавіць план",
     "billingMonthly": "Штомесяц",
     "billingYearly": "Штогод",
-    "savePercent": "Зэканомце ~17%",
+    "savePercent": "Зэканомце ~{percent}%",
     "popular": "Папулярны",
     "currentPlan": "Бягучы",
     "neoSubtitle": "{count} пытанняў у месяц",
@@ -10727,5 +10727,6 @@
     "deviceStorageUsedOfTotal": "{used} з {total} выкарыстана",
     "deviceStorageFree": "{free} вольна",
     "deviceStorageNearlyFull": "Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца.",
-    "phoneMicOfflineFallbackMessage": "Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы."
+    "phoneMicOfflineFallbackMessage": "Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы.",
+    "dataEncryptedBanner": "Вашы даныя па змаўчанні абаронены моцным шыфраваннем, і вы кантралюеце, як яны захоўваюцца і выкарыстоўваюцца."
 }

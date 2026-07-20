@@ -74,7 +74,6 @@ import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'widgets/battery_info_widget.dart';
-import 'widgets/capture_mode_chip.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -1114,21 +1113,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
-              // Recording mode chip — home tab only. Shown when the capture source
-              // supports Transcribe Later — a supported device, or (with no device) the phone mic.
-              Consumer2<HomeProvider, DeviceProvider>(
-                builder: (context, homeProvider, deviceProvider, _) {
-                  if (homeProvider.selectedIndex != 0) return const SizedBox.shrink();
-                  final DeviceType? chipType = deviceProvider.connectedDevice?.type;
-                  if (!CaptureModeChip.supportsDevice(chipType)) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: CaptureModeChip(deviceType: chipType),
                   );
                 },
               ),

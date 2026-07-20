@@ -4,6 +4,11 @@ environments:
     gcp_project: based-hardware-dev
     runtime_gcp_project: based-hardware
     region: us-central1
+    llm_gateway:
+      namespace: dev-omi-backend
+      release_name: dev-omi-llm-gateway
+      ingress_name: dev-omi-llm-gateway
+      static_address_name: dev-llm-gateway-ilb-ip-address
     gke:
       backend-listen:
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
@@ -14,6 +19,12 @@ environments:
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
             value: '0.01'
             category: rollout
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware-dev
+          GCP_LOCATION:
+            value: us-central1
+          USE_VERTEX_AI:
+            value: 'true'
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -21,9 +32,8 @@ environments:
             value: dev
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            config_map:
-              name: dev-omi-backend-config
-              key: STT_PRERECORDED_MODEL
+            value: modulate-velma-2,parakeet
+            category: stt_policy
           GOOGLE_CLIENT_ID:
             config_map:
               name: dev-omi-backend-config
@@ -33,9 +43,8 @@ environments:
               name: dev-omi-backend-config
               key: REDIS_DB_HOST
           STT_SERVICE_MODELS:
-            config_map:
-              name: dev-omi-backend-config
-              key: STT_SERVICE_MODELS
+            value: modulate-velma-2,parakeet
+            category: stt_policy
           TYPESENSE_HOST:
             config_map:
               name: dev-omi-backend-config
@@ -92,10 +101,6 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-          DEEPGRAM_API_KEY:
-            secret:
-              name: dev-omi-backend-secrets
-              key: DEEPGRAM_API_KEY
           MODULATE_API_KEY:
             secret:
               name: dev-omi-backend-secrets
@@ -108,6 +113,9 @@ environments:
             category: service_discovery
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
+            category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'true'
@@ -153,6 +161,15 @@ environments:
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
+      parakeet:
+        values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
+        env:
+          PARAKEET_STREAM_CAPACITY:
+            value: '25'
+            category: reliability
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: rollout
       # Direct pusher bindings are kept here as the dev source contract. The
       # deploy preflight compares this inventory to the rendered chart and
       # queries only live object/key metadata before a Helm upgrade.
@@ -188,10 +205,10 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: ADMIN_KEY
-          DEEPGRAM_API_KEY:
+          MODULATE_API_KEY:
             secret:
               name: dev-omi-backend-secrets
-              key: DEEPGRAM_API_KEY
+              key: MODULATE_API_KEY
           GOOGLE_MAPS_API_KEY:
             secret:
               name: dev-omi-backend-secrets
@@ -201,6 +218,15 @@ environments:
               name: dev-omi-backend-config
               key: GOOGLE_CLIENT_ID
             clear_historical_secret: true
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omiapi.com
+            category: service_discovery
+          STT_PRERECORDED_MODEL:
+            value: modulate-velma-2,parakeet
+            category: stt_policy
+          STT_SERVICE_MODELS:
+            value: modulate-velma-2,parakeet
+            category: stt_policy
           GOOGLE_CLIENT_SECRET:
             secret:
               name: dev-omi-backend-secrets
@@ -277,6 +303,10 @@ environments:
               category: rollout
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            GCP_LOCATION:
+              value: us-central1
+            USE_VERTEX_AI:
+              value: 'true'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -284,19 +314,39 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              env_var: STT_PRERECORDED_MODEL
+              value: modulate-velma-2,parakeet
               category: stt_policy
             # Dev Cloud Run must stay within the dev Parakeet topology; never point this at
             # the production-only parakeet.omi.me endpoint.
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
               category: service_discovery
+            # Direct dev Cloud Run /v4/listen traffic remains public while the
+            # retired Cloud Run Pusher route drains. It must use the GKE Pusher.
+            HOSTED_PUSHER_API_URL:
+              value: http://pusher.omiapi.com
+              category: service_discovery
             OMI_LLM_GATEWAY_URL:
-              value: http://172.16.63.232
+              env_var: OMI_LLM_GATEWAY_URL
+              # The workflow replaces this with the ingress-derived address
+              # after the gateway serving gate passes. Direct mode never uses
+              # the sentinel, and it is deliberately not a routable contract.
+              default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+              provisional: true
+              category: service_auth
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+              provisional: true
+              category: service_auth
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'true'
               category: rollout
@@ -356,9 +406,6 @@ environments:
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
-            DEEPGRAM_API_KEY:
-              secret: DEEPGRAM_API_KEY
-              version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
@@ -390,6 +437,10 @@ environments:
               provisional: true
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            GCP_LOCATION:
+              value: us-central1
+            USE_VERTEX_AI:
+              value: 'true'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -397,16 +448,20 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              env_var: STT_PRERECORDED_MODEL
+              value: modulate-velma-2,parakeet
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
               category: service_discovery
             OMI_LLM_GATEWAY_URL:
-              value: http://172.16.63.232
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'true'
@@ -455,6 +510,8 @@ environments:
               value: 'true'
               category: rollout
               provisional: true
+          forbidden_env:
+            - HOSTED_PUSHER_API_URL
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -471,9 +528,6 @@ environments:
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
-            DEEPGRAM_API_KEY:
-              secret: DEEPGRAM_API_KEY
-              version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
@@ -484,6 +538,10 @@ environments:
           env:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            GCP_LOCATION:
+              value: us-central1
+            USE_VERTEX_AI:
+              value: 'true'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -491,16 +549,20 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              env_var: STT_PRERECORDED_MODEL
+              value: modulate-velma-2,parakeet
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
               category: service_discovery
             OMI_LLM_GATEWAY_URL:
-              value: http://172.16.63.232
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'true'
@@ -545,6 +607,8 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+          forbidden_env:
+            - HOSTED_PUSHER_API_URL
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -561,9 +625,6 @@ environments:
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
-            DEEPGRAM_API_KEY:
-              secret: DEEPGRAM_API_KEY
-              version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
@@ -579,6 +640,8 @@ environments:
             PINECONE_INDEX_NAME:
               value: memories-backend-dev
               category: integrations
+          forbidden_env:
+            - HOSTED_PUSHER_API_URL
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -656,6 +719,11 @@ environments:
     gcp_project: based-hardware
     runtime_gcp_project: based-hardware
     region: us-central1
+    llm_gateway:
+      namespace: prod-omi-backend
+      release_name: prod-omi-llm-gateway
+      ingress_name: prod-omi-llm-gateway
+      static_address_name: prod-omi-self-hosted-llm-ip-address
     gke:
       backend-listen:
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
@@ -690,13 +758,18 @@ environments:
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
             value: '0.01'
             category: rollout
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+          GCP_LOCATION:
+            value: us-central1
+          USE_VERTEX_AI:
+            value: 'true'
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
           STT_PRERECORDED_MODEL:
-            config_map:
-              name: prod-omi-backend-config
-              key: STT_PRERECORDED_MODEL
+            value: modulate-velma-2,parakeet
+            category: stt_policy
           GOOGLE_CLIENT_ID:
             config_map:
               name: prod-omi-backend-config
@@ -706,9 +779,8 @@ environments:
               name: prod-omi-backend-config
               key: REDIS_DB_HOST
           STT_SERVICE_MODELS:
-            config_map:
-              name: prod-omi-backend-config
-              key: STT_SERVICE_MODELS
+            value: modulate-velma-2,parakeet
+            category: stt_policy
           TYPESENSE_HOST:
             config_map:
               name: prod-omi-backend-config
@@ -777,10 +849,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-          DEEPGRAM_API_KEY:
-            secret:
-              name: prod-omi-backend-secrets
-              key: DEEPGRAM_API_KEY
           MODULATE_API_KEY:
             secret:
               name: prod-omi-backend-secrets
@@ -799,7 +867,10 @@ environments:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
+            value: 'off'
+            category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
@@ -833,6 +904,15 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
+      parakeet:
+        values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
+        env:
+          PARAKEET_STREAM_CAPACITY:
+            value: '25'
+            category: reliability
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: rollout
     cloud_run:
       workflow_files:
         - .github/workflows/gcp_backend.yml
@@ -848,6 +928,24 @@ environments:
       services:
         backend:
           env:
+            LISTEN_FINALIZATION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_QUEUE:
+              value: conversation-finalization
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_HANDLER_URL:
+              env_var: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_INVOKER_SA:
+              env_var: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT:
+              value: '1500'
+              category: reliability
             ACCOUNT_DELETION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -879,24 +977,52 @@ environments:
             DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE:
               value: '0.01'
               category: rollout
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            GCP_LOCATION:
+              value: us-central1
+            USE_VERTEX_AI:
+              value: 'true'
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
+            STRIPE_PLUS_MONTHLY_PRICE_ID:
+              value: price_1TuH6z1F8wnoWYvw7Siv61SX
+            STRIPE_PLUS_ANNUAL_PRICE_ID:
+              value: price_1TuHCw1F8wnoWYvwZvKu86sI
+            STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID:
+              value: price_1TuIa81F8wnoWYvw0iX0j5M8
+            STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
+              value: price_1TuIap1F8wnoWYvwHWq0EvNU
             STT_PRERECORDED_MODEL:
-              env_var: STT_PRERECORDED_MODEL
+              value: modulate-velma-2,parakeet
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
             OMI_LLM_GATEWAY_URL:
-              value: http://172.16.160.108
+              env_var: OMI_LLM_GATEWAY_URL
+              # Never make a reserved ILB IP independently valid runtime
+              # configuration. The deployment gate derives the live address.
+              default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
               category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+              provisional: true
+              category: service_auth
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+              provisional: true
+              category: service_auth
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
@@ -946,9 +1072,6 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
-            DEEPGRAM_API_KEY:
-              secret: DEEPGRAM_API_KEY
-              version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
@@ -957,6 +1080,24 @@ environments:
               version: latest
         backend-sync: &prod_backend_sync
           env:
+            LISTEN_FINALIZATION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_QUEUE:
+              value: conversation-finalization
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_HANDLER_URL:
+              env_var: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_INVOKER_SA:
+              env_var: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT:
+              value: '1500'
+              category: reliability
             ACCOUNT_DELETION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1002,6 +1143,12 @@ environments:
               value: '555'
               category: rollout
               provisional: true
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            GCP_LOCATION:
+              value: us-central1
+            USE_VERTEX_AI:
+              value: 'true'
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -1009,16 +1156,20 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              env_var: STT_PRERECORDED_MODEL
+              value: modulate-velma-2,parakeet
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
             OMI_LLM_GATEWAY_URL:
-              value: http://172.16.160.108
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
@@ -1058,9 +1209,6 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
-            DEEPGRAM_API_KEY:
-              secret: DEEPGRAM_API_KEY
-              version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY
               version: latest
@@ -1093,6 +1241,12 @@ environments:
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
               category: reliability
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            GCP_LOCATION:
+              value: us-central1
+            USE_VERTEX_AI:
+              value: 'true'
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -1100,16 +1254,20 @@ environments:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
             STT_PRERECORDED_MODEL:
-              env_var: STT_PRERECORDED_MODEL
+              value: modulate-velma-2,parakeet
               category: stt_policy
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omi.me
               category: service_discovery
             OMI_LLM_GATEWAY_URL:
-              value: http://172.16.160.108
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
@@ -1144,9 +1302,6 @@ environments:
               version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
-              version: latest
-            DEEPGRAM_API_KEY:
-              secret: DEEPGRAM_API_KEY
               version: latest
             MODULATE_API_KEY:
               secret: MODULATE_API_KEY

@@ -142,6 +142,17 @@ def test_first_page_surfaces_active_items(fake_db):
     assert page == ['active_late', 'active_none']
 
 
+def test_list_observes_every_scanned_document(fake_db, monkeypatch):
+    observed = []
+    monkeypatch.setattr(action_items, 'record_firestore_read', lambda *args: observed.append(args))
+
+    _ids(fake_db, limit=2)
+
+    assert [(family.value, mode.value, documents) for family, mode, documents in observed] == [
+        ('action_items_list', 'unbounded', 5)
+    ]
+
+
 @pytest.mark.parametrize(
     "raw,expected_completed,expected_status",
     [

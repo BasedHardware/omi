@@ -10,13 +10,19 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import contextmanager
 from typing import Any, Mapping
 
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
-from utils.cloud_tasks import enqueue_listen_finalization_job, is_listen_finalization_dispatch_enabled
+from utils.cloud_tasks import (
+    enqueue_listen_finalization_job,
+    is_listen_finalization_dispatch_configured,
+    is_listen_finalization_dispatch_enabled,
+)
 from utils.conversations.finalization_decision import (
     FinalizationDecisionState,
     FinalizationEvent,
@@ -39,11 +45,19 @@ _STATUS_TRANSITIONS = {
         ConversationStatus.failed.value,
     },
     ConversationStatus.merging.value: {ConversationStatus.completed.value, ConversationStatus.failed.value},
+    # Merge admission rejects every status except completed (validate_merge_compatibility), so
+    # completed is the only status that can reach begin_merge. Without this edge every accepted
+    # merge raises LifecycleTransitionError. The merging -> completed edge above is its rollback.
+    ConversationStatus.completed.value: {ConversationStatus.merging.value},
 }
 
 
 class LifecycleTransitionError(ValueError):
     """Raised when an intent would reopen or otherwise violate a terminal lifecycle."""
+
+
+class FinalizationDispatchUnavailable(RuntimeError):
+    """A caller cannot be admitted to the durable finalization path safely."""
 
 
 RECORDING_SESSION_MODES = frozenset({'shadow', 'dual_write', 'enforce'})
@@ -204,6 +218,51 @@ def complete(uid: str, conversation_id: str) -> bool:
         ConversationStatus.merging,
         ConversationStatus.completed,
     )
+
+
+def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
+    """Return a failed synchronous finalization's admission to in_progress.
+
+    The HTTP finalize endpoints admit processing and then run the processor
+    inside the request itself, with no durable job for the reconciler to
+    replay. If that processor raises, the admission must be undone — otherwise
+    the conversation is stranded on ``processing`` forever and every client
+    shows a stuck "Processing" card. The compare-and-swap only rolls back a
+    generation that is still processing, so a concurrent completion, discard,
+    or newer generation always wins.
+    """
+    return conversations_db.claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.in_progress,
+    )
+
+
+@contextmanager
+def processing_admission_guard(uid: str, conversation_id: str):
+    """Guard an inline (in-request) processing run against stranding its admission.
+
+    Wrap the synchronous ``process_conversation`` call with this; if it raises,
+    the lifecycle owner rolls the admission back to ``in_progress`` and re-raises.
+    A rollback error (e.g. the conversation was deleted mid-processing) is
+    logged instead of replacing the original processing exception.
+    """
+    try:
+        yield
+    except Exception:
+        try:
+            rolled_back = rollback_processing_admission(uid, conversation_id)
+        except Exception:
+            logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
+            rolled_back = False
+        logger.exception(
+            'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
+            uid,
+            conversation_id,
+            rolled_back,
+        )
+        raise
 
 
 def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
@@ -516,16 +575,32 @@ def request_finalization(
     conversation_id: str,
     *,
     has_byok_keys: bool,
+    force_process: bool = False,
+    extra_updates: Mapping[str, Any] | None = None,
+    require_cloud_tasks: bool = False,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
-    intent = jobs_db.create_or_get_finalization_intent(
-        uid,
-        conversation_id,
-        requires_byok=has_byok_keys,
-        finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
-        firestore_client=firestore_client,
-    )
+    if require_cloud_tasks and not is_listen_finalization_dispatch_configured():
+        # A REST request has no pusher session to execute an inline handoff.
+        # Reject before mutating the conversation instead of persisting work
+        # that this deployment cannot recover or dispatch.
+        raise FinalizationDispatchUnavailable('durable conversation finalization worker is not configured')
+
+    try:
+        intent = jobs_db.create_or_get_finalization_intent(
+            uid,
+            conversation_id,
+            requires_byok=has_byok_keys,
+            finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
+            force_process=force_process,
+            extra_updates=extra_updates,
+            firestore_client=firestore_client,
+        )
+    except FirestoreContentionExhausted as error:
+        # An exhausted contention budget is a clean retry boundary: no outbox
+        # mutation committed, so callers must not fall back to inline work.
+        raise FinalizationDispatchUnavailable('durable finalization admission is temporarily contended') from error
     # The outbox transaction is the authoritative acceptance boundary. Count
     # only newly-created jobs so an idempotent re-dispatch cannot inflate traffic.
     if intent.get('created'):
@@ -565,3 +640,28 @@ def request_finalization(
         logger.exception('listen finalization enqueue failed job=%s', intent['job_id'])
         return dict(intent) | {'route': 'queued'}
     return dict(intent) | {'route': 'cloud_tasks'}
+
+
+def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | None:
+    """Return the authoritative, privacy-safe state for this conversation's job."""
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        return None
+    job_id = conversation.get('finalization_job_id')
+    if not isinstance(job_id, str) or not job_id:
+        return None
+    job = jobs_db.get_finalization_job(job_id)
+    if not job or job.get('uid') != uid or job.get('conversation_id') != conversation_id:
+        return None
+
+    status = str(job.get('status') or 'unknown')
+    return {
+        'job_id': job_id,
+        'status': status,
+        'terminal': status in jobs_db.TERMINAL_JOB_STATUSES,
+        # A queued job may be safely replayed by the reconciler; a leased job
+        # is actively owned until its fenced lease expires.
+        'retryable': status == 'queued',
+        'attempt_count': int(job.get('attempt_count') or 0),
+        'task_retry_count': int(job.get('task_retry_count') or 0),
+    }

@@ -54,6 +54,7 @@ import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
     list_default_mcp_memories,
+    mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
@@ -298,7 +299,7 @@ def search_memories(
     )
     if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return vector_search_results.memories
-    if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not mcp_legacy_read_authorized(vector_search_results):
         return []
 
     return memory_service.search_mcp(uid, query, limit=limit)
@@ -394,7 +395,7 @@ def get_memories(
     )
     if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return memory_list_results.memories
-    if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not mcp_legacy_read_authorized(memory_list_results):
         return []
 
     result = collect_filtered_memories(
@@ -465,6 +466,12 @@ def get_conversations(
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
     logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
+    # Clamp pagination so a negative value cannot reach Firestore .limit()/.offset() (which
+    # raises -> HTTP 500) and an oversized value cannot stream/skip the whole collection.
+    # Mirrors the sibling MCP tool (routers/mcp_sse.py get_conversations) and every other
+    # paginated list endpoint in this file (get_action_items, get_chat_messages, etc.).
+    limit = max(1, min(limit, 1000))
+    offset = max(0, min(offset, 100000))
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:

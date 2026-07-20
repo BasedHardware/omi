@@ -121,8 +121,10 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
   void _calculateTotalDuration() {
     final stamp = widget.conversation.conversationAudio;
     if (stamp != null && stamp.spans.isNotEmpty) {
-      // Wall-clock timeline (collapsed gaps are shaded on the slider).
-      _totalDuration = Duration(milliseconds: (stamp.duration * 1000).toInt());
+      // Dense-artifact timeline: total is the actual captured audio length (the
+      // MP3 has inter-part gaps and lead-in silence collapsed out), so the
+      // slider matches what plays.
+      _totalDuration = Duration(milliseconds: (stamp.capturedDuration * 1000).toInt());
       return;
     }
     double totalSeconds = 0;
@@ -141,8 +143,9 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
   /// Get combined position across all tracks
   Duration _getCombinedPosition(int? currentIndex, Duration trackPosition) {
     if (_singleArtifact) {
-      final wall = _timelineMapper!.artifactToWall(trackPosition.inMilliseconds / 1000.0);
-      return Duration(milliseconds: (wall * 1000).toInt());
+      // Dense MP3 plays linearly; position is raw artifact time (matches the
+      // captured-duration total).
+      return trackPosition;
     }
     if (currentIndex == null || currentIndex >= _trackStartOffsets.length) {
       return trackPosition;
@@ -159,7 +162,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
     if (conversationAudio != null && conversationAudio.isCached && conversationAudio.spans.isNotEmpty) {
       _timelineMapper = AudioTimelineMapper(conversationAudio.spans);
       _singleArtifact = true;
-      _totalDuration = Duration(milliseconds: (_timelineMapper!.wallDuration * 1000).toInt());
+      _totalDuration = Duration(milliseconds: (_timelineMapper!.capturedDuration * 1000).toInt());
       return AudioSource.uri(Uri.parse(conversationAudio.signedUrl!));
     }
 
@@ -273,9 +276,8 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
   /// Seek to a combined position across all tracks
   Future<void> _seekToCombinedPosition(Duration targetPosition) async {
     if (_singleArtifact) {
-      // Wall timeline -> dense MP3 position; gap seeks snap to the next span.
-      final artifactSeconds = _timelineMapper!.wallToArtifact(targetPosition.inMilliseconds / 1000.0);
-      await _audioPlayer.seek(Duration(milliseconds: (artifactSeconds * 1000).toInt()));
+      // targetPosition is already artifact time (the slider runs on the dense MP3).
+      await _audioPlayer.seek(targetPosition);
       return;
     }
 
@@ -342,7 +344,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
           children: [
             const Icon(Icons.error_outline, color: Colors.red, size: 32),
             const SizedBox(height: 8),
-            const Text('Error loading audio', style: TextStyle(color: Colors.red)),
+            Text(context.l10n.errorLoadingAudio, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 4),
             Text(
               _errorMessage!,
@@ -393,16 +395,8 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                                 trackHeight: 4,
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                                trackShape: _GapAwareTrackShape(
-                                  _singleArtifact && _timelineMapper!.wallDuration > 0
-                                      ? _timelineMapper!.gapRangesWall
-                                          .map((gap) => (
-                                                gap.$1 / _timelineMapper!.wallDuration,
-                                                gap.$2 / _timelineMapper!.wallDuration,
-                                              ))
-                                          .toList()
-                                      : const [],
-                                ),
+                                // Dense MP3 has no gaps on its timeline — plain track.
+                                trackShape: const _GapAwareTrackShape([]),
                               ),
                               child: Slider(
                                 value: combinedPosition.inMilliseconds.toDouble().clamp(

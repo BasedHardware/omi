@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -388,7 +389,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let accepted = await RealtimeTurnJournalAuthority.persist(
       turnOwnerID: "owner-a",
       acceptedSpawnOwnerID: nil,
-      refreshAcceptedSpawn: { XCTFail("no spawn receipt exists"); return false },
+      refreshAcceptedSpawn: {
+        XCTFail("no spawn receipt exists")
+        return false
+      },
       recordProviderExchange: {
         mutationCount += 1
         return true
@@ -622,9 +626,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     var completed: Set<String> = []
     var physicalExecutionCount = 0
     for _ in 0..<2 {
-      guard RealtimeAuthorizedInvocationReplayGate.shouldExecute(
-        invocationID: invocationID,
-        completedInvocationIDs: completed)
+      guard
+        RealtimeAuthorizedInvocationReplayGate.shouldExecute(
+          invocationID: invocationID,
+          completedInvocationIDs: completed)
       else { continue }
       completed.insert(invocationID)
       physicalExecutionCount += 1
@@ -744,7 +749,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertEqual(pending.audioBuffer, [firstChunk, secondChunk])
 
     let source = try realtimeHubControllerSource()
-    XCTAssertTrue(source.contains("private var reconnectAudioBuffer: RealtimeReconnectAudioBuffer?"))
+    XCTAssertTrue(source.contains("var reconnectAudioBuffer: RealtimeReconnectAudioBuffer?"))
     XCTAssertTrue(source.contains("finishSessionReconnectAfterReady()"))
     XCTAssertTrue(source.contains("for pcm16k in pending.audioBuffer"))
     XCTAssertTrue(source.contains("return .deferredForReconnect"))
@@ -868,7 +873,8 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("await interruptedContinuityTask.value"))
     XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_context_changed\""))
     XCTAssertTrue(source.contains("reason: .cancelledTurnContinuity"))
-    XCTAssertTrue(source.contains("pendingSessionRefreshReason = RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue"))
+    XCTAssertTrue(
+      source.contains("pendingSessionRefreshReason = RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue"))
     XCTAssertTrue(source.contains("ensureWarm()"))
     XCTAssertFalse(source.contains("general warm deferred behind canceled-turn continuity fence"))
     XCTAssertFalse(source.contains("session start rejected behind canceled-turn continuity fence"))
@@ -888,19 +894,20 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertLessThan(preparationWait.lowerBound, continuityWait.lowerBound)
     XCTAssertLessThan(continuityWait.lowerBound, persistenceFence.lowerBound)
     XCTAssertLessThan(
-      try XCTUnwrap(cancelTail.range(of: "ensureWarm()", range: cancelTail.startIndex..<preparationWait.lowerBound)).lowerBound,
+      try XCTUnwrap(cancelTail.range(of: "ensureWarm()", range: cancelTail.startIndex..<preparationWait.lowerBound))
+        .lowerBound,
       persistenceFence.lowerBound)
 
     let helper = try XCTUnwrap(
       source.range(
-        of: "private func refreshVoiceContextAfterPersistenceFence(reason: String) async -> Bool"))
+        of: "func refreshVoiceContextAfterPersistenceFence(reason: String) async -> Bool"))
     let helperTail = source[helper.lowerBound...]
     let ordinaryPersistenceWait = try XCTUnwrap(
       helperTail.range(of: "await turnPersistenceLedger.awaitPendingObligations()"))
     let contextRefresh = try XCTUnwrap(helperTail.range(of: "await refreshVoiceContextSnapshot()"))
     XCTAssertLessThan(ordinaryPersistenceWait.lowerBound, contextRefresh.lowerBound)
 
-    XCTAssertTrue(source.contains("private var voiceContextRefreshGeneration: UInt64 = 0"))
+    XCTAssertTrue(source.contains("var voiceContextRefreshGeneration: UInt64 = 0"))
     XCTAssertTrue(source.contains("voiceContextRefreshGeneration == refreshGeneration"))
     XCTAssertTrue(
       source.contains(
@@ -943,7 +950,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
   func testCompletedGeminiTurnRequiresFreshSessionBeforeNextPTT() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("private var geminiSessionNeedsTurnBoundary = false"))
+    XCTAssertTrue(source.contains("var geminiSessionNeedsTurnBoundary = false"))
     XCTAssertTrue(source.contains("sessionProvider == .gemini && geminiSessionNeedsTurnBoundary"))
     XCTAssertTrue(source.contains("restartSessionForBargeIn(interruptedTurnTask: nil)"))
     XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_context_changed\""))
@@ -968,7 +975,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
     XCTAssertTrue(source.contains("pendingBargeInProvider = alternate"))
     XCTAssertTrue(source.contains("pendingBargeInAuth = .ephemeral(\"\")"))
-    XCTAssertTrue(source.contains("private var bargeInReplacementGeneration: UInt64 = 0"))
+    XCTAssertTrue(source.contains("var bargeInReplacementGeneration: UInt64 = 0"))
     XCTAssertTrue(source.contains("generation == self.bargeInReplacementGeneration"))
     XCTAssertTrue(source.contains("let currentProvider = pendingBargeInProvider"))
     XCTAssertGreaterThanOrEqual(
@@ -1006,7 +1013,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
   func testHeadlessPTTHarnessDrivesReducerRouteAndFinalizeBeforeCommit() throws {
     let source = try realtimeHubControllerSource()
     let harness = try XCTUnwrap(
-      source.range(of: "private func runHeadlessPTTTurn("))
+      source.range(of: "func runHeadlessPTTTurn("))
     let tail = source[harness.lowerBound...]
     // omi-test-quality: source-inspection -- static contract: the live probe must
     // freeze screen evidence at the physical PTT boundary, before warmup can let a
@@ -1020,7 +1027,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let warm = try XCTUnwrap(tail.range(of: "ensureWarm()"))
     let controllerBegin = try XCTUnwrap(tail.range(of: "beginTurn(turnID: turnID)"))
     let finalize = try XCTUnwrap(
-      tail.range(of: "VoiceTurnCoordinator.shared.send(.finalize(turnID: turnID))"))
+      tail.range(of: "VoiceTurnCoordinator.shared.publish(.finalize(turnID: turnID))"))
     let commit = try XCTUnwrap(tail.range(of: "_ = commitTurn()"))
 
     XCTAssertLessThan(begin.lowerBound, route.lowerBound)
@@ -1054,7 +1061,7 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
   func testRapidBurstHarnessCommitsEveryClipWithoutWaitingForReplies() throws {
     let source = try realtimeHubControllerSource()
     let harness = try XCTUnwrap(
-      source.range(of: "private func runHeadlessRapidPTTBurst("))
+      source.range(of: "func runHeadlessRapidPTTBurst("))
     let tail = source[harness.lowerBound...]
     let loop = try XCTUnwrap(tail.range(of: "for clip in clips"))
     let begin = try XCTUnwrap(
@@ -1368,10 +1375,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
     let coordinator = VoiceTurnCoordinator()
     let turnID = coordinator.begin(intent: .hold)
-    coordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
-    coordinator.send(.finalize(turnID: turnID))
-    coordinator.send(.transcriptionStarted(turnID: turnID))
-    coordinator.send(.transcriptionFinal(turnID: turnID, text: "fixture"))
+    coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.publish(.finalize(turnID: turnID))
+    coordinator.publish(.transcriptionStarted(turnID: turnID))
+    coordinator.publish(.transcriptionFinal(turnID: turnID, text: "fixture"))
     guard case .acquired(let native) = coordinator.acquireOutput(.nativeRealtime, turnID: turnID) else {
       return XCTFail("native lane should acquire")
     }
@@ -1415,25 +1422,28 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let baseline = "version-a:renderer-a:capability-1"
     // A monotonic snapshot generation is intentionally absent from this
     // identity: unchanged material must not churn a warm voice socket.
-    XCTAssertFalse(RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-      currentSnapshotIdentity: baseline,
-      sessionSnapshotIdentity: baseline
-    ))
-    XCTAssertTrue(RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-      currentSnapshotIdentity: "version-b:renderer-a:capability-1",
-      sessionSnapshotIdentity: baseline
-    ))
-    XCTAssertTrue(RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-      currentSnapshotIdentity: "version-a:renderer-a:capability-2",
-      sessionSnapshotIdentity: baseline
-    ))
+    XCTAssertFalse(
+      RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+        currentSnapshotIdentity: baseline,
+        sessionSnapshotIdentity: baseline
+      ))
+    XCTAssertTrue(
+      RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+        currentSnapshotIdentity: "version-b:renderer-a:capability-1",
+        sessionSnapshotIdentity: baseline
+      ))
+    XCTAssertTrue(
+      RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+        currentSnapshotIdentity: "version-a:renderer-a:capability-2",
+        sessionSnapshotIdentity: baseline
+      ))
   }
 
   func testBeginTurnBuffersThroughTypedHandoffInsteadOfWaitingOnThePressPath() throws {
-    let source = try realtimeHubControllerSource()
+    let source = try realtimeHubPushToTalkSource()
     let begin = try XCTUnwrap(source.range(of: "func beginTurn(turnID requestedTurnID:"))
     let nextMethod = try XCTUnwrap(
-      source.range(of: "private func captureInterruptedTurnPayloadIfNeeded()", range: begin.upperBound..<source.endIndex))
+      source.range(of: "func captureInterruptedTurnPayloadIfNeeded()", range: begin.upperBound..<source.endIndex))
     let beginBody = String(source[begin.lowerBound..<nextMethod.lowerBound])
 
     XCTAssertTrue(beginBody.contains("self.contextFreshInputPreparationIsCurrent("))
@@ -1478,12 +1488,13 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
   }
 
   private func realtimeHubControllerSource() throws -> String {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
-    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
-    return try String(contentsOf: sourceURL, encoding: .utf8)
+    try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
+  }
+
+  private func realtimeHubPushToTalkSource() throws -> String {
+    // omi-test-quality: source-inspection -- ownership-specific boundary for an extracted extension
+    try RealtimeHubControllerSourceTestSupport.source(
+      named: "RealtimeHubController+PushToTalk.swift", testFilePath: #filePath)
   }
 
   private func realtimeTurnPersistenceSource() throws -> String {

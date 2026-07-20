@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var focusAssistantSubsection: some View {
@@ -61,13 +61,11 @@ extension SettingsContentView {
               title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts",
               settingId: "advanced.focusassistant.cooldown"
             ) {
-              Picker("", selection: $cooldownInterval) {
+              SettingsMenuPicker(selection: $cooldownInterval) {
                 ForEach(cooldownOptions, id: \.self) { minutes in
                   Text(formatMinutes(minutes)).tag(minutes)
                 }
               }
-              .pickerStyle(.menu)
-              .frame(width: 200)
               .onChange(of: cooldownInterval) { _, newValue in
                 FocusAssistantSettings.shared.cooldownInterval = newValue
                 SettingsSyncManager.shared.pushPartialUpdate(

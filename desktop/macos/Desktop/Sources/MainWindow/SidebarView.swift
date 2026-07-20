@@ -1,5 +1,6 @@
-import SwiftUI
+@preconcurrency import AppKit
 import OmiTheme
+import SwiftUI
 
 // MARK: - Navigation Item Model
 enum SidebarNavItem: Int, CaseIterable {
@@ -379,8 +380,7 @@ struct SidebarView: View {
         }
       }
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh permissions when app becomes active (user may have changed them in System Settings)
       appState.checkAllPermissions()
     }
@@ -486,7 +486,6 @@ struct SidebarView: View {
           )
       )
   }
-
 
   // MARK: - Update Available Widget
   @State private var updateGlowAnimating = false
@@ -1517,7 +1516,6 @@ struct BottomNavItemView: View {
   }
 }
 
-
 // MARK: - Audio Level Nav Item Wrapper
 
 /// Isolates AudioLevelMonitor observation so audio level changes
@@ -1560,7 +1558,7 @@ private struct AudioLevelNavItem: View {
 /// Cache the Omi device WebP image so it's decoded once, not on every SwiftUI body evaluation.
 /// The original 1383x1383 WebP was being re-decoded by CoreAnimation every render frame.
 enum OmiDeviceImage {
-  static let shared: NSImage? = {
+  @MainActor static let shared: NSImage? = {
     guard
       let url = Bundle.resourceBundle.url(
         forResource: "omi-with-rope-no-padding", withExtension: "webp")

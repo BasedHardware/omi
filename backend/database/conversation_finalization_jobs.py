@@ -1,4 +1,4 @@
-"""Firestore outbox and lease state for durable listen finalization.
+"""Firestore outbox and lease state for durable conversation finalization.
 
 Cloud Tasks is deliberately only a wake-up mechanism.  The durable source of
 truth is one Firestore job per ``(uid, conversation_id, finalization_revision)``.
@@ -15,6 +15,7 @@ from google.cloud import firestore
 
 from database import conversations as conversations_db
 from database._client import document_id_from_seed, get_firestore_client
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
@@ -150,6 +151,9 @@ def _create_or_get_finalization_intent_txn(
     requires_byok: bool,
     finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
     now: datetime,
+    *,
+    force_process: bool = False,
+    extra_updates: Mapping[str, Any] | None = None,
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff."""
     conversation_snapshot = conversation_ref.get(transaction=transaction)
@@ -205,6 +209,10 @@ def _create_or_get_finalization_intent_txn(
         'finalization_revision': revision,
         'status': status,
         'requires_byok': requires_byok,
+        # REST finalization has historically forced enrichment while the listen
+        # pipeline retains its existing default. Persist the choice with the
+        # immutable finalization generation so a replay cannot change it.
+        'force_process': force_process,
         'fanout_key': admission['fanout_key'],
         'fanout_status': 'pending',
         'dispatch_generation': 1,
@@ -217,15 +225,19 @@ def _create_or_get_finalization_intent_txn(
     if not requires_byok:
         job['reconcile_after_at'] = now + get_finalization_reconcile_stale_after()
     transaction.set(job_ref, job)
-    transaction.update(
-        conversation_ref,
+    conversation_updates = dict(extra_updates or {})
+    # Lifecycle fields are authoritative to this outbox transaction. Callers
+    # may atomically persist request metadata (for example calendar context),
+    # but cannot override the accepted generation's identity or status.
+    conversation_updates.update(
         {
             'status': 'processing',
             'finalization_job_id': job_id,
             'finalization_revision': revision,
             'finalization_status': status,
-        },
+        }
     )
+    transaction.update(conversation_ref, conversation_updates)
     return _intent_from_job(job_id, job, created=True)
 
 
@@ -235,21 +247,36 @@ def create_or_get_finalization_intent(
     *,
     requires_byok: bool,
     finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
+    force_process: bool = False,
+    extra_updates: Mapping[str, Any] | None = None,
     firestore_client: Any = None,
 ) -> FinalizationIntent:
     client = _client(firestore_client)
     conversation_ref = _conversation_ref(client, uid, conversation_id)
-    transaction = client.transaction()
-    transactional = firestore.transactional(_create_or_get_finalization_intent_txn)
-    return transactional(
-        transaction,
-        conversation_ref,
-        client.collection(FINALIZATION_JOBS_COLLECTION),
-        uid,
-        conversation_id,
-        requires_byok,
-        finalization_admission,
-        _now(),
+    jobs_collection = client.collection(FINALIZATION_JOBS_COLLECTION)
+
+    def create_intent_in_transaction(transaction: Any) -> FinalizationIntent:
+        # The Firestore SDK's transactional wrapper retains retry state. Build
+        # it for this outer attempt so concurrent REST finalizers always get a
+        # fresh transaction and wrapper after read-time contention.
+        transactional = firestore.transactional(_create_or_get_finalization_intent_txn)
+        return transactional(
+            transaction,
+            conversation_ref,
+            jobs_collection,
+            uid,
+            conversation_id,
+            requires_byok,
+            finalization_admission,
+            _now(),
+            force_process=force_process,
+            extra_updates=extra_updates,
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        create_intent_in_transaction,
+        operation_name='conversation_finalization_intent',
     )
 
 
@@ -638,7 +665,13 @@ def mark_finalization_retryable(
 
 
 def _mark_finalization_dead_letter_txn(
-    transaction: Any, job_ref: Any, dispatch_generation: int, lease_epoch: int, retry_count: int, now: datetime
+    transaction: Any,
+    job_ref: Any,
+    dispatch_generation: int,
+    lease_epoch: int,
+    retry_count: int,
+    now: datetime,
+    conversation_ref_for_job: Callable[[str, str], Any] | None = None,
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -646,6 +679,24 @@ def _mark_finalization_dead_letter_txn(
     job = snapshot.to_dict() or {}
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return False
+    conversation_ref = None
+    conversation = None
+    uid = job.get('uid')
+    conversation_id = job.get('conversation_id')
+    if (
+        conversation_ref_for_job is not None
+        and isinstance(uid, str)
+        and uid
+        and isinstance(conversation_id, str)
+        and conversation_id
+    ):
+        # Read the bound conversation before the first transaction write. A
+        # final worker failure must close its still-current processing
+        # generation atomically with dead-lettering the job; otherwise a crash
+        # between independent writes strands the customer on processing.
+        conversation_ref = conversation_ref_for_job(uid, conversation_id)
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
     transaction.update(
         job_ref,
         {
@@ -658,6 +709,22 @@ def _mark_finalization_dead_letter_txn(
             'last_failure_code': 'final_attempt_failed',
         },
     )
+    if (
+        conversation_ref is not None
+        and isinstance(conversation, Mapping)
+        and conversation.get('status') == 'processing'
+        and not conversation.get('discarded')
+        and conversation.get('finalization_job_id') == job_ref.id
+        and conversation.get('finalization_revision') == job.get('finalization_revision')
+    ):
+        transaction.update(
+            conversation_ref,
+            {
+                'status': 'failed',
+                'discarded': True,
+                'finalization_status': 'dead_letter',
+            },
+        )
     return True
 
 
@@ -667,7 +734,15 @@ def mark_finalization_dead_letter(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_mark_finalization_dead_letter_txn)
-    return transactional(transaction, _job_ref(client, job_id), dispatch_generation, lease_epoch, retry_count, _now())
+    return transactional(
+        transaction,
+        _job_ref(client, job_id),
+        dispatch_generation,
+        lease_epoch,
+        retry_count,
+        _now(),
+        lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
+    )
 
 
 def get_finalization_job(job_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:

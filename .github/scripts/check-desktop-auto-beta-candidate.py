@@ -11,18 +11,18 @@ from pathlib import Path
 
 from desktop_release_metadata import fail, parse_metadata
 
-
 TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)\+(?P<build>\d+)-macos$")
 EXPECTED_BUNDLE_ID = "com.omi.computer-macos"
 EXPECTED_TEAM_ID = "9536L8KLMP"
 REQUIRED_SMOKE_CHECKS = {
     "Launch + identity metadata is aligned",
     "Auth persistence prerequisites: signing identity and Keychain-compatible entitlements are sane",
-    "Backend routing config has no local/dev leakage",
+    "Backend routing config matches the declared external backend",
     "Sparkle/update metadata and authoritative ZIP artifacts are present",
     "Native helper/runtime bundle integrity passed",
     "Local storage/database package surface is present",
-    "Signed desktop artifact Keychain write/read/delete canary passed",
+    "Signed artifact Keychain write/read/delete canary passed",
+    "UserNotifications settings callback completion canary passed",
     "Signed desktop artifact smoke completed",
 }
 
@@ -96,6 +96,25 @@ def validate(args: argparse.Namespace) -> dict:
     if missing_checks:
         fail(f"signed smoke result is missing required checks: {', '.join(missing_checks)}")
 
+    callback_canary = smoke.get("notification_callback_canary")
+    if not isinstance(callback_canary, dict):
+        fail("signed smoke result is missing UserNotifications callback canary evidence")
+    expected_callback_canary = {
+        "schema": 1,
+        "event": "user-notifications-settings-callback-completed",
+        "bundle_id": EXPECTED_BUNDLE_ID,
+        "main_actor": True,
+        "validated": True,
+    }
+    for field, value in expected_callback_canary.items():
+        if callback_canary.get(field) != value:
+            fail(
+                "signed smoke UserNotifications callback canary "
+                f"{field} mismatch: expected {value!r}, got {callback_canary.get(field)!r}"
+            )
+    if not isinstance(callback_canary.get("authorization_status"), int):
+        fail("signed smoke UserNotifications callback canary is missing authorization status")
+
     zip_release = asset_by_name(release, {"Omi.zip"})
     dmg_release = asset_by_name(release, {"Omi.dmg", "omi.dmg"})
     zip_smoke = smoke_artifact(smoke, "sparkle_zip")
@@ -117,6 +136,7 @@ def validate(args: argparse.Namespace) -> dict:
         "verified_at": datetime.now(timezone.utc).isoformat(),
         "artifact_digests": artifact_digests,
         "signed_smoke_checks": sorted(checks),
+        "notification_callback_canary": callback_canary,
     }
 
 

@@ -8,6 +8,10 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  # A 12-60 HPA replica rollout paced by node autoscaler routinely needs >600s
+  # (the k8s default); the deploy CLI already waits 1800s. Keep these aligned so
+  # a healthy-but-slow rollout finishes instead of failing at the k8s deadline.
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds | default 1800 }}
   selector:
     matchLabels:
       {{- include "backend-listen.selectorLabels" . | nindent 6 }}
@@ -49,7 +53,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          image: "{{ required "image.repository is required" .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ required "image.tag is required" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.envFrom }}
           envFrom:

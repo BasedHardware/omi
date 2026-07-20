@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingGoalStepView: View {
   @ObservedObject var appState: AppState
@@ -112,7 +112,10 @@ struct OnboardingGoalStepView: View {
   private func saveGoalAndContinue() {
     guard shouldShowContinue, !coordinator.isSavingGoal else { return }
     Task {
-      coordinator.goalSaved = false
+      // Do not reset goalSaved here: saveGoalIfNeeded's `guard !goalSaved`
+      // is the only dedup protection, and createGoal has no idempotency key.
+      // Resetting it meant a retry after a completeIntro failure created a
+      // second backend goal.
       await coordinator.saveGoalIfNeeded()
       guard coordinator.goalSaved else { return }
       let completed = await coordinator.completeIntro(appState: appState)

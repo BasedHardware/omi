@@ -55,9 +55,10 @@ actor EffectiveOwnerTransitionFence {
     plannedNextOwner: @Sendable (_ previousOwner: String?) -> String?,
     beginAuthorizationRevocation: @Sendable (_ previousOwner: String?) -> Void = { _ in },
     endAuthorizationRevocation: @Sendable () -> Void = {},
-    quiescePreviousOwner: @Sendable (
-      _ previousOwner: String?, _ plannedNextOwner: String?
-    ) async -> Void,
+    quiescePreviousOwner:
+      @Sendable (
+        _ previousOwner: String?, _ plannedNextOwner: String?
+      ) async -> Void,
     transition: @Sendable () async throws -> T,
     retargetLocalStorage: @Sendable (_ previousOwner: String?, _ nextOwner: String?) async -> Void,
     ownerDidChange: @Sendable () async -> Void

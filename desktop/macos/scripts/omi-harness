@@ -115,12 +115,19 @@ def automation_port_from_base_url(base_url: str) -> int:
     return int(base_url.rsplit(":", 1)[1])
 
 
-def request_json(base_url: str, method: str, route: str, body: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]:
+def request_json(
+    base_url: str,
+    method: str,
+    route: str,
+    body: dict[str, typing.Any] | None = None,
+    authenticate: bool = True,
+) -> dict[str, typing.Any]:
     data = None
     headers = {"Accept": "application/json"}
-    token = automation_token(automation_port_from_base_url(base_url))
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    if authenticate:
+        token = automation_token(automation_port_from_base_url(base_url))
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -155,7 +162,7 @@ def log_path_from_health(health: dict[str, typing.Any], explicit_log: str | None
 
 
 def resolve_log_path(base_url: str, explicit_log: str | None = None) -> Path:
-    health = request_json(base_url, "GET", "/health")
+    health = request_json(base_url, "GET", "/health", authenticate=False)
     if not health.get("ok"):
         raise RuntimeError(f"unable to resolve bundle log path: {health.get('error', health)}")
     return log_path_from_health(health, explicit_log)
@@ -215,7 +222,7 @@ def recent_traces(ctx: HarnessContext) -> list[dict[str, typing.Any]]:
     return result if isinstance(result, list) else []
 
 
-EXPECTATION_OPERATORS = {"min", "max", "exists"}
+EXPECTATION_OPERATORS = {"min", "max", "exists", "contains"}
 
 
 def _decimal(value: typing.Any) -> Decimal | None:
@@ -252,6 +259,16 @@ def expectation_mismatch(actual: typing.Any, expected: typing.Any) -> str | None
             return f"exists requires a boolean operand, got {operand!r}"
         exists = actual is not None
         return None if exists == operand else f"expected value existence to be {operand!r}, got {exists!r}"
+
+    if "contains" in expected:
+        if len(expected) != 1:
+            return "contains cannot be combined with other expectation operators"
+        operand = expected["contains"]
+        if not isinstance(operand, str):
+            return f"contains requires a string operand, got {operand!r}"
+        if not isinstance(actual, str):
+            return f"contains requires a string actual value, got {actual!r}"
+        return None if operand in actual else f"expected {actual!r} to contain {operand!r}"
 
     actual_number = _decimal(actual)
     if actual_number is None:

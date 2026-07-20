@@ -92,6 +92,7 @@ from utils.subscription import (
     has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
+    wire_plan_for_client,
     legacy_plan_features,
     clear_trial_paywall_cache,
     get_trial_metadata,
@@ -1040,7 +1041,7 @@ def get_user_usage_stats_endpoint(
     period: UsagePeriod = UsagePeriod.TODAY,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
-    stats = user_usage_db.get_current_user_usage(uid, period.value)
+    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=notification_db.get_user_time_zone(uid))
     return stats
 
 
@@ -1294,6 +1295,11 @@ def get_user_subscription_endpoint(
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
     chat_allowed = chat_snapshot['allowed']
 
+    # Grandfather is read from the true plan before the label is remapped for
+    # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
+    desktop_grandfather_until = neo_grandfather_until(subscription)
+    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
+
     return UserSubscriptionResponse(
         subscription=subscription,
         transcription_seconds_used=transcription_seconds_used,
@@ -1310,7 +1316,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
-        desktop_grandfather_until=neo_grandfather_until(subscription),
+        desktop_grandfather_until=desktop_grandfather_until,
     )
 
 

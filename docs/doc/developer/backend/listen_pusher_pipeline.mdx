@@ -15,10 +15,15 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 ## 1. Connection + Streaming + Transcription
 
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
-(e.g., `modulate-velma-2,dg-nova-3`). The first provider supporting the
-requested language wins. Listen startup loads transcription preferences once and
-reuses the embedded user language for translation targeting, avoiding a second
-user-preference read on WebSocket startup. All providers implement the
+(e.g., `modulate-velma-2,parakeet`). The first provider whose deployed model
+supports the requested mode wins: Parakeet's live RNNT model is English-only,
+so multilingual sessions and non-English single-language sessions use Modulate.
+Listen startup loads transcription preferences once and uses its
+multi-language setting to request Modulate auto-detection, avoiding a second
+user-preference read on WebSocket startup. The separately deployed Parakeet
+batch model retains its multilingual capability. A client Parakeet preference
+can prioritize Parakeet only when that live-model capability matches; it never
+overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
@@ -92,7 +97,7 @@ assigned to a different device.
 sequenceDiagram
     participant Client
     participant Backend as Backend (/v4/listen)
-    participant STT as STT Provider (Deepgram / Modulate)
+    participant STT as STT Provider (Parakeet / Modulate)
     participant Pusher
     participant Firestore
 
@@ -156,10 +161,12 @@ This is the normal path when the client stays connected but stops speaking.
 **Key design rule (#6061):** Listen NEVER processes conversations locally.
 All conversation processing routes through pusher or the dedicated durable
 finalizer worker. Before either handoff, listen persists a Firestore
-finalization job. The legacy live pusher path claims that same job; when the
-durable dispatch flag is enabled, Cloud Tasks wakes the worker using only the
-opaque job id and generation. `pending_conversation_requests` remains a
-low-latency reconnect aid, not the durable source of truth.
+finalization job. The legacy live pusher path claims that same job and
+transfers it to pusher process-scoped ownership, so closing the originating
+listener after the opcode-104 handoff cannot cancel it. When the durable
+dispatch flag is enabled, Cloud Tasks wakes the worker using only the opaque
+job id and generation. `pending_conversation_requests` remains a low-latency
+reconnect aid, not the durable source of truth.
 
 Before a job can become `completed`, the finalizer atomically claims a durable
 fanout boundary with a persistent idempotency key. It passes that key to the
@@ -380,7 +387,7 @@ sequenceDiagram
 
 ### Conversation playback artifact
 
-At conversation completion (`process_conversation`, and `_finalize_sync_audio_files` for offline sync), an `audio-merge` Cloud Task (schema_version 2, name `amc-{conversation_id}-{fingerprint}`) builds **one dense per-conversation MP3** — `playback/{uid}/{conversation_id}/conversation.mp3` — containing only captured audio: intra-part gaps (<90s) stay silence-filled, inter-part gaps (>90s) are collapsed. The handler stamps the conversation doc with `conversation_audio`: a spans manifest (`{file_id, wall_offset, artifact_offset, len}` per part, wall offsets relative to `started_at` — the `TranscriptSegment.start` basis), both durations (`duration` = wall clock, `captured_duration` = audio only), and the `audio_files_fingerprint` it was built from.
+At conversation completion (`process_conversation`, and `_finalize_sync_audio_files` for offline sync), an `audio-merge` Cloud Task (schema_version 2, name `amc-{conversation_id}-{fingerprint}`) builds **one dense per-conversation MP3** — `playback/{uid}/{conversation_id}/conversation.mp3` — containing only captured audio: intra-part gaps (&lt;90s) stay silence-filled, inter-part gaps (&gt;90s) are collapsed. The handler stamps the conversation doc with `conversation_audio`: a spans manifest (`{file_id, wall_offset, artifact_offset, len}` per part, wall offsets relative to `started_at` — the `TranscriptSegment.start` basis), both durations (`duration` = wall clock, `captured_duration` = audio only), and the `audio_files_fingerprint` it was built from.
 
 Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher batch flush after completion, offline sync, conversation merge), the stamped fingerprint no longer matches and both the call sites and the `/v1/sync/audio/{id}/urls` poll re-enqueue a rebuild under a new task name (defeating the named-task tombstone). `/urls` returns the artifact as a top-level `conversation_audio` object alongside the per-part `audio_files` list, which remains for older app versions.
 
@@ -415,23 +422,23 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 | Constant | Value | Location | Purpose |
 |----------|-------|----------|---------|
-| `conversation_timeout` | 120s (min) | transcribe.py | Silence before lifecycle triggers |
-| `last_activity_time` timeout | 90s | transcribe.py | WS inactivity disconnect |
+| `conversation_timeout` | 120s (min) | `routers/listen/runtime.py` | Silence before lifecycle triggers |
+| `last_activity_time` timeout | 90s | `routers/listen/runtime.py` | WS inactivity disconnect |
 | `SPEAKER_SAMPLE_MIN_AGE` | 120s | pusher.py | Wait before extracting embedding (skipped on shutdown) |
 | `SPEAKER_SAMPLE_PROCESS_INTERVAL` | 15s | pusher.py | Queue poll interval |
-| `WS_RECEIVE_TIMEOUT` | 300s | pusher.py, transcribe.py | No-data timeout on WebSocket receive; detects dead connections |
-| `BG_DRAIN_TIMEOUT` | 30s | pusher.py, transcribe.py | Grace period for background tasks to drain after disconnect before force-cancel |
-| `lifecycle_manager` poll | 5s | transcribe.py:1683 | Check `finished_at` interval |
+| `WS_RECEIVE_TIMEOUT` | 300s | `pusher.py`, `routers/listen/contracts.py` | No-data timeout on WebSocket receive; detects dead connections |
+| `BG_DRAIN_TIMEOUT` | 30s | `pusher.py`, `routers/listen/contracts.py` | Grace period for background tasks to drain after disconnect before force-cancel |
+| `lifecycle_manager` poll | 5s | `routers/listen/conversations.py` | Check `finished_at` interval |
 | Pusher audio batch | 60s | pusher | GCS upload batch size |
-| Speaker match threshold | 0.45 | transcribe.py | Cosine distance cutoff |
-| `PENDING_REQUEST_TIMEOUT` | 120s | transcribe.py | Timeout before retrying a pending request |
-| `MAX_RETRIES_PER_REQUEST` | 3 | transcribe.py | Max retries before keeping buffered |
-| `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | transcribe.py | Reconnect attempts before DEGRADED |
-| `MAX_PENDING_REQUESTS` | 100 | transcribe.py | Max buffered conversations per session |
+| Speaker match threshold | 0.45 | `routers/listen/speakers.py` | Cosine distance cutoff |
+| `PENDING_REQUEST_TIMEOUT` | 120s | `routers/listen/conversations.py` | Timeout before retrying a pending request |
+| `MAX_RETRIES_PER_REQUEST` | 3 | `routers/listen/conversations.py` | Max retries before keeping buffered |
+| `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | `utils/listen_pusher_session.py` | Reconnect attempts before DEGRADED |
+| `MAX_PENDING_REQUESTS` | 100 | `routers/listen/contracts.py` | Max buffered conversations per session |
 
 ## 8. WebSocket Task Supervision
 
-Both `transcribe.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supervisor loop instead of `asyncio.gather()` to manage background tasks. This prevents ghost connections where a hung background task blocks cleanup forever.
+`routers/listen/runtime.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supervisor loop instead of `asyncio.gather()` to manage background tasks. This prevents ghost connections where a hung background task blocks cleanup forever.
 
 **Supervisor exits on:**
 - Client disconnect (receive task completes)

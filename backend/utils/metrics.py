@@ -53,7 +53,7 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
-for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
+for _journey in ('chat_response', 'pusher_session', 'live_transcription', 'capture_finalization'):
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey)
     for _outcome in ('success', 'failure', 'cancelled', 'stale'):
         OMI_JOURNEY_TERMINAL_TOTAL.labels(journey=_journey, outcome=_outcome)
@@ -98,6 +98,18 @@ LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
     'llm_gateway_chat_extraction_comparisons_total',
     'Privacy-safe comparison buckets between shadow gateway output and legacy extraction output',
     ['feature', 'field', 'outcome'],
+)
+
+LLM_GATEWAY_CIRCUIT_OPEN = Gauge(
+    'llm_gateway_circuit_open',
+    'Whether this backend process is bypassing the LLM gateway after transport failures',
+)
+
+LLM_GATEWAY_CLIENT_FIRST_BYTE_SECONDS = Histogram(
+    'llm_gateway_client_first_byte_seconds',
+    'Client time until the gateway returns a non-streaming response, first stream event, or transport failure',
+    ['feature', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 30),
 )
 
 OMI_FALLBACK_TOTAL = Counter(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, AsyncIterator, Iterator, TypeVar
@@ -54,13 +55,15 @@ except ImportError:  # pragma: no cover - stubbed test environments
         return {}
 
 
-from utils.llm.gateway_client import feature_auto_lane_id
+from utils.llm.gateway_client import GATEWAY_TRANSPORT_STATUS_CODES, feature_auto_lane_id
 from utils.llm.gateway_observability import record_gateway_request_result
+from utils.llm.gateway_resilience import gateway_circuit, observe_gateway_first_byte
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
-_TRANSPORT_STATUS_CODES = frozenset({502, 503, 504})
+# A gateway configuration or credential failure is a controlled 503 and must
+# remain visible. Only hard proxy failures may use the temporary legacy path.
 _REQUEST_ID_HEADER = 'X-Omi-Request-ID'
 _T = TypeVar('_T')
 
@@ -86,15 +89,15 @@ def is_gateway_transport_failure(exc: BaseException) -> bool:
         if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)):
             return True
         if isinstance(exc, httpx.HTTPStatusError):
-            return exc.response is not None and exc.response.status_code in _TRANSPORT_STATUS_CODES
+            return exc.response is not None and exc.response.status_code in GATEWAY_TRANSPORT_STATUS_CODES
 
     status_code = getattr(exc, 'status_code', None)
-    if isinstance(status_code, int) and status_code in _TRANSPORT_STATUS_CODES:
+    if isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES:
         return True
 
     response = getattr(exc, 'response', None)
     response_status = getattr(response, 'status_code', None)
-    if isinstance(response_status, int) and response_status in _TRANSPORT_STATUS_CODES:
+    if isinstance(response_status, int) and response_status in GATEWAY_TRANSPORT_STATUS_CODES:
         return True
 
     message = str(exc).casefold()
@@ -106,10 +109,8 @@ def is_gateway_transport_failure(exc: BaseException) -> bool:
         'connecterror',
         'network error',
         'bad gateway',
-        'service unavailable',
         'gateway timeout',
         '502',
-        '503',
         '504',
     )
     return any(marker in message for marker in transport_markers)
@@ -126,7 +127,7 @@ def _fallback_reason(exc: BaseException) -> str:
     if not isinstance(status_code, int):
         response = getattr(exc, 'response', None)
         status_code = getattr(response, 'status_code', None)
-    if isinstance(status_code, int) and status_code in _TRANSPORT_STATUS_CODES:
+    if isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES:
         return 'request_error'
     return 'unexpected_error'
 
@@ -455,6 +456,15 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        if not gateway_circuit.allow_request():
+            return _run_legacy_fallback(
+                feature=self.feature,
+                gateway_reason='circuit_open',
+                call=lambda: self.legacy_model._generate(messages, stop=stop, run_manager=run_manager, **kwargs),
+                request_id=request_id,
+                credential_source=self.credential_source,
+            )
+        gateway_started_at = time.monotonic()
         try:
             result = self.gateway_model._generate(messages, stop=stop, run_manager=run_manager, **gateway_kwargs)
         except Exception as exc:
@@ -468,6 +478,8 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                     credential_source=self.credential_source,
                 )
                 raise
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(feature=self.feature, started_at=gateway_started_at, outcome='transport_failure')
             return _run_legacy_fallback(
                 feature=self.feature,
                 gateway_reason=_fallback_reason(exc),
@@ -476,6 +488,8 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                 credential_source=self.credential_source,
             )
 
+        gateway_circuit.record_transport_success()
+        observe_gateway_first_byte(feature=self.feature, started_at=gateway_started_at, outcome='success')
         _record_gateway_terminal(
             feature=self.feature,
             outcome='success',
@@ -494,6 +508,15 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        if not gateway_circuit.allow_request():
+            return await _run_legacy_fallback_async(
+                feature=self.feature,
+                gateway_reason='circuit_open',
+                call=lambda: self.legacy_model._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs),
+                request_id=request_id,
+                credential_source=self.credential_source,
+            )
+        gateway_started_at = time.monotonic()
         try:
             result = await self.gateway_model._agenerate(messages, stop=stop, run_manager=run_manager, **gateway_kwargs)
         except asyncio.CancelledError:
@@ -517,6 +540,8 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                     credential_source=self.credential_source,
                 )
                 raise
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(feature=self.feature, started_at=gateway_started_at, outcome='transport_failure')
             return await _run_legacy_fallback_async(
                 feature=self.feature,
                 gateway_reason=_fallback_reason(exc),
@@ -525,6 +550,8 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                 credential_source=self.credential_source,
             )
 
+        gateway_circuit.record_transport_success()
+        observe_gateway_first_byte(feature=self.feature, started_at=gateway_started_at, outcome='success')
         _record_gateway_terminal(
             feature=self.feature,
             outcome='success',
@@ -545,9 +572,22 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         yielded = False
         stream = None
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        if not gateway_circuit.allow_request():
+            yield from _iter_legacy_fallback(
+                feature=self.feature,
+                gateway_reason='circuit_open',
+                stream=self.legacy_model._stream(messages, stop=stop, run_manager=run_manager, **kwargs),
+                request_id=request_id,
+                credential_source=self.credential_source,
+            )
+            return
+        gateway_started_at = time.monotonic()
         try:
             stream = self.gateway_model._stream(messages, stop=stop, run_manager=run_manager, **gateway_kwargs)
             for chunk in stream:
+                if not yielded:
+                    gateway_circuit.record_transport_success()
+                    observe_gateway_first_byte(feature=self.feature, started_at=gateway_started_at, outcome='success')
                 yielded = True
                 yield chunk
         except GeneratorExit:
@@ -581,6 +621,8 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                     credential_source=self.credential_source,
                 )
                 raise
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(feature=self.feature, started_at=gateway_started_at, outcome='transport_failure')
             gateway_reason = _fallback_reason(exc)
         else:
             if yielded:
@@ -615,9 +657,27 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         yielded = False
         stream = None
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        if not gateway_circuit.allow_request():
+            legacy_stream = _aiter_legacy_fallback(
+                feature=self.feature,
+                gateway_reason='circuit_open',
+                stream=self.legacy_model._astream(messages, stop=stop, run_manager=run_manager, **kwargs),
+                request_id=request_id,
+                credential_source=self.credential_source,
+            )
+            try:
+                async for chunk in legacy_stream:
+                    yield chunk
+            finally:
+                await _close_async_iterator(legacy_stream)
+            return
+        gateway_started_at = time.monotonic()
         try:
             stream = self.gateway_model._astream(messages, stop=stop, run_manager=run_manager, **gateway_kwargs)
             async for chunk in stream:
+                if not yielded:
+                    gateway_circuit.record_transport_success()
+                    observe_gateway_first_byte(feature=self.feature, started_at=gateway_started_at, outcome='success')
                 yielded = True
                 yield chunk
         except (GeneratorExit, asyncio.CancelledError):
@@ -651,6 +711,8 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
                     credential_source=self.credential_source,
                 )
                 raise
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(feature=self.feature, started_at=gateway_started_at, outcome='transport_failure')
             gateway_reason = _fallback_reason(exc)
         else:
             if yielded:
@@ -700,6 +762,15 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
 
     def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        if not gateway_circuit.allow_request():
+            return _run_legacy_fallback(
+                feature=self._feature,
+                gateway_reason='circuit_open',
+                call=lambda: self._legacy.invoke(input, config=config, **kwargs),
+                request_id=request_id,
+                credential_source=self._credential_source,
+            )
+        gateway_started_at = time.monotonic()
         try:
             result = self._gateway.invoke(input, config=config, **gateway_kwargs)
         except Exception as exc:
@@ -713,6 +784,10 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
                     credential_source=self._credential_source,
                 )
                 raise
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(
+                feature=self._feature, started_at=gateway_started_at, outcome='transport_failure'
+            )
             return _run_legacy_fallback(
                 feature=self._feature,
                 gateway_reason=_fallback_reason(exc),
@@ -721,6 +796,8 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
                 credential_source=self._credential_source,
             )
 
+        gateway_circuit.record_transport_success()
+        observe_gateway_first_byte(feature=self._feature, started_at=gateway_started_at, outcome='success')
         _record_gateway_terminal(
             feature=self._feature,
             outcome='success',
@@ -733,6 +810,15 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
 
     async def ainvoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
         gateway_kwargs, request_id = _gateway_call_kwargs(kwargs)
+        if not gateway_circuit.allow_request():
+            return await _run_legacy_fallback_async(
+                feature=self._feature,
+                gateway_reason='circuit_open',
+                call=lambda: self._legacy.ainvoke(input, config=config, **kwargs),
+                request_id=request_id,
+                credential_source=self._credential_source,
+            )
+        gateway_started_at = time.monotonic()
         try:
             result = await self._gateway.ainvoke(input, config=config, **gateway_kwargs)
         except asyncio.CancelledError:
@@ -756,6 +842,10 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
                     credential_source=self._credential_source,
                 )
                 raise
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(
+                feature=self._feature, started_at=gateway_started_at, outcome='transport_failure'
+            )
             return await _run_legacy_fallback_async(
                 feature=self._feature,
                 gateway_reason=_fallback_reason(exc),
@@ -764,6 +854,8 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
                 credential_source=self._credential_source,
             )
 
+        gateway_circuit.record_transport_success()
+        observe_gateway_first_byte(feature=self._feature, started_at=gateway_started_at, outcome='success')
         _record_gateway_terminal(
             feature=self._feature,
             outcome='success',

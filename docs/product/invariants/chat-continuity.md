@@ -76,6 +76,11 @@ rollback window; this is migration input, not a second store.
   session/run/attempt lifecycle plus a matching semantic digest for the provider.
   A parent journal receipt without that child is failure; legacy raw
   session/run/attempt payload aliases are never provider-visible.
+- A local Hermes or OpenClaw override is selected only when the current user
+  explicitly names that exact provider. A provider value proposed by a model,
+  stale context, or a generic delegation request is not authority and is
+  stripped before child-session admission, leaving the child on regular Omi
+  managed routing.
 - Each terminal canonical child run converges into exactly one visible pill
   status and one `agentCompletion` block on its producing journal turn. A
   continuation reuses its child session but has a new run identity, so its own
@@ -116,6 +121,10 @@ rollback window; this is migration input, not a second store.
 - `desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift` and the named
   continuity gauntlet — terminal run, rendered pill, and producing
   `agentCompletion` converge for the same run identity
+- `desktop/macos/Desktop/Tests/ChatJournalWritePathTests.swift` — terminalization
+  supersedes only streaming coalesces (durable content writes stay journalable),
+  and journal replay preserves local-only row fields (`metadata`, `rating`,
+  `notificationScreenshot`) across a wholesale projection replace
 - Continuity gauntlet (manual / harness): typed → PTT → typed follow-up → spawn →
   status (`desktop/macos/scripts/agent-continuity-gauntlet.sh` when present)
 

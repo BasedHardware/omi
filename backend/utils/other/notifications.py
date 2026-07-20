@@ -182,7 +182,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
 
     # Create notification with deep link to summary page
     daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
-    summary_body = str(summary_data.get('overview', 'Tap to see your daily summary'))
+    summary_body = str(summary_data.get('overview') or 'Tap to see your daily summary')
 
     # Truncate body for notification if too long
     if len(summary_body) > 150:

@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var notificationsSection: some View {
@@ -129,22 +129,18 @@ extension SettingsContentView {
             ) {
               DatePicker(
                 "",
-                selection: Binding(
-                  get: {
-                    SettingsControlMetrics.dailySummaryDate(
-                      forHour: dailySummaryHour, referenceDate: Date())
-                  },
-                  set: { selectedTime in
-                    let hour = SettingsControlMetrics.dailySummaryHour(from: selectedTime)
-                    dailySummaryHour = hour
-                    updateDailySummarySettings(hour: hour)
-                  }
-                ),
+                selection: $dailySummaryTime,
                 displayedComponents: .hourAndMinute
               )
-              .datePickerStyle(.field)
+              .datePickerStyle(.stepperField)
               .labelsHidden()
               .fixedSize()
+              .onChange(of: dailySummaryTime) { _, selectedTime in
+                let hour = SettingsControlMetrics.dailySummaryHour(from: selectedTime)
+                guard hour != dailySummaryHour else { return }
+                dailySummaryHour = hour
+                updateDailySummarySettings(hour: hour)
+              }
             }
           }
         }

@@ -1,3 +1,4 @@
+progressDeadlineSeconds: 1800
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -8,6 +9,7 @@ replicaCount: 1
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: gcr.io/based-hardware/backend
+  digest: ""
   # This sets the pull policy for images.
   pullPolicy: Always
   # Build-specific; CI/manual deploy must pass --set-string image.tag=<short-sha>.
@@ -122,7 +124,9 @@ env:
   - name: OMI_ENV_STAGE
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
-    value: "gateway"
+    value: "off"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+    value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE
     value: "true"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
@@ -177,11 +181,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -271,10 +270,6 @@ env:
         key: TYPESENSE_API_KEY
   - name: MEMORY_TYPESENSE_COLLECTION
     value: "canonical_memory_atoms"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omi.me"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -287,8 +282,14 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
+  - name: STT_PRERECORDED_MODEL
+    value: "modulate-velma-2,parakeet"
+  - name: STT_SERVICE_MODELS
+    value: "modulate-velma-2,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS
@@ -299,7 +300,7 @@ env:
         name: prod-omi-backend-secrets
         key: ENCRYPTION_SECRET
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "600"
+    value: "300"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH

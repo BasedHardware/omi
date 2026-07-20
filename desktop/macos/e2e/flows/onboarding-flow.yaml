@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingPromptSuggestions.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingExportsStepView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingDataSourcesStepView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFileScanStepView.swift

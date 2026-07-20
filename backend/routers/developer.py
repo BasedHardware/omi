@@ -80,6 +80,7 @@ from utils.memory.default_read_rollout import (
     guard_legacy_memory_write,
     read_default_read_rollout,
 )
+from utils.observability import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,25 @@ _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6f
 
 class DeveloperSuccessResponse(BaseModel):
     success: bool
+
+
+DEVELOPER_MEMORY_ACCESS_NOT_READY = 'developer_memory_access_not_ready'
+
+
+def _developer_memory_access_not_ready_detail(reason: Optional[str]) -> dict:
+    return {
+        'enabled': False,
+        'code': DEVELOPER_MEMORY_ACCESS_NOT_READY,
+        'message': (
+            'Developer Memory API access is not enabled for this account. '
+            'Your API key can be valid and correctly scoped; this endpoint also requires server-side memory '
+            'readiness. Try again after access is enabled, or contact Omi support if it remains unavailable.'
+        ),
+        'reason': reason,
+        'consumer': 'developer_api',
+        'archive_default_visible': False,
+        'archive_capability': False,
+    }
 
 
 def _developer_request_ip(request: Request) -> Optional[str]:
@@ -374,18 +394,21 @@ def get_memories(
     if memory_result.read_decision == MemoryReadDecision.USE_MEMORY:
         return [CleanerMemory.model_validate(memory) for memory in memory_result.memories]
     if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+        if memory_result.fallback_reason != 'missing_rollout_state':
+            raise HTTPException(
+                status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
+            )
+        # pin_memory_system above already resolved this account to LEGACY, so an absent
+        # memory_control/state doc is the expected un-enrolled state and the legacy
+        # `memories` collection is the authoritative read surface — not a fail-closed
+        # migration condition (#9892).
+        record_fallback(
+            component='other',
+            from_mode='memory_default_read',
+            to_mode='legacy_memories',
+            reason='policy',
+            outcome='recovered',
         )
-    if memory_result.should_use_legacy_fallback:
-        pass
 
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
@@ -487,25 +510,11 @@ def search_memories_vector(
     )
     if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
         raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
     if memory_result.should_use_legacy_fallback:
         raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
     return {
         'items': memory_result.memories,

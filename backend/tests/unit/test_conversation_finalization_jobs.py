@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from google.api_core.exceptions import Aborted
+
 from database import conversation_finalization_jobs as jobs
+from database import firestore_transaction_retry
 
 
 class _PhotoCollection:
@@ -126,6 +129,96 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert forbidden.isdisjoint(job)
     assert transaction.updates[0][1]['status'] == 'processing'
     assert transaction.updates[0][1]['finalization_job_id'] == intent['job_id']
+
+
+def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
+    transaction = _Transaction()
+    conversation_ref = _conversation()
+    collection = _Collection({})
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
+        force_process=True,
+        extra_updates={'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}}},
+    )
+
+    assert transaction.sets[0][1]['force_process'] is True
+    assert transaction.updates == [
+        (
+            conversation_ref,
+            {
+                'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}},
+                'status': 'processing',
+                'finalization_job_id': intent['job_id'],
+                'finalization_revision': 1,
+                'finalization_status': 'queued',
+            },
+        )
+    ]
+
+
+def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(monkeypatch):
+    """Concurrent REST finalizers must recover a read-time Firestore abort."""
+
+    conversation_ref = _conversation()
+    jobs_collection = _Collection({})
+    transactions: list[_Transaction] = []
+
+    class _Client:
+        def transaction(self):
+            transaction = _Transaction()
+            transactions.append(transaction)
+            return transaction
+
+        def collection(self, name: str):
+            assert name == jobs.FINALIZATION_JOBS_COLLECTION
+            return jobs_collection
+
+    transactional_calls = 0
+
+    def transaction_wrapper(function):
+        def invoke(transaction, *args, **kwargs):
+            nonlocal transactional_calls
+            transactional_calls += 1
+            if transactional_calls == 1:
+                raise Aborted('read contention')
+            return function(transaction, *args, **kwargs)
+
+        return invoke
+
+    def fast_contention_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(jobs, '_conversation_ref', lambda *_args: conversation_ref)
+    monkeypatch.setattr(jobs.firestore, 'transactional', transaction_wrapper)
+    monkeypatch.setattr(jobs, 'run_with_transaction_contention_retry', fast_contention_retry)
+
+    intent = jobs.create_or_get_finalization_intent(
+        'uid-1',
+        'conversation-1',
+        requires_byok=False,
+        finalization_admission=_admit_finalization,
+        firestore_client=_Client(),
+    )
+
+    assert transactional_calls == 2
+    assert len(transactions) == 2
+    assert transactions[0] is not transactions[1]
+    assert intent['status'] == 'queued'
+    assert len(transactions[1].sets) == 1
 
 
 def test_photo_only_conversation_with_durable_content_marker_is_admitted():
@@ -570,6 +663,65 @@ def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
     assert update['status'] == 'dead_letter'
     assert update['task_retry_count'] == 5
     assert 'completed_at' not in update
+
+
+def test_final_attempt_atomically_closes_its_bound_processing_conversation():
+    transaction = _Transaction()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+            'dispatch_generation': 3,
+            'lease_epoch': 1,
+        },
+    )
+    conversation_ref = _conversation(
+        {
+            'status': 'processing',
+            'discarded': False,
+            'finalization_job_id': 'job-1',
+            'finalization_revision': 3,
+        }
+    )
+
+    assert (
+        jobs._mark_finalization_dead_letter_txn(
+            transaction,
+            job_ref,
+            3,
+            1,
+            5,
+            _now(),
+            lambda uid, conversation_id: conversation_ref,
+        )
+        is True
+    )
+
+    assert transaction.updates == [
+        (
+            job_ref,
+            {
+                'status': 'dead_letter',
+                'updated_at': _now(),
+                'terminal_at': _now(),
+                'lease_expires_at': _now(),
+                'reconcile_after_at': jobs.firestore.DELETE_FIELD,
+                'task_retry_count': 5,
+                'last_failure_code': 'final_attempt_failed',
+            },
+        ),
+        (
+            conversation_ref,
+            {
+                'status': 'failed',
+                'discarded': True,
+                'finalization_status': 'dead_letter',
+            },
+        ),
+    ]
 
 
 class _BoundedReplayCollection:

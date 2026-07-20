@@ -1,7 +1,7 @@
 import AppKit
 import Combine
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Memory categories for filtering. Mirrors the mobile app: filtering is driven
 /// purely by the backend `category` field (no tag-derived pseudo-categories), so
@@ -100,8 +100,12 @@ class MemoriesViewModel: ObservableObject {
   @Published var memories: [ServerMemory] = [] {
     didSet { recomputeCaches() }
   }
-  @Published var isLoading = false
-  @Published var isLoadingMore = false
+  @Published var isLoading = false {
+    didSet { resumeMemoryLoadLifecycleWaitersIfIdle() }
+  }
+  @Published var isLoadingMore = false {
+    didSet { resumeMemoryLoadLifecycleWaitersIfIdle() }
+  }
   @Published var hasMoreMemories = true
   @Published var errorMessage: String?
   @Published var searchText = "" {
@@ -197,6 +201,14 @@ class MemoriesViewModel: ObservableObject {
   private var deleteTask: Task<Void, Never>? = nil
   private var cancellables = Set<AnyCancellable>()
   private var hasLoadedInitially = false
+
+  /// A cache-first initial load can clear `isLoading` while its authoritative
+  /// API projection is still syncing. Automation search must wait for that
+  /// lifecycle to finish instead of treating the temporarily hidden spinner as
+  /// an idle projection.
+  private var inFlightInitialMemoryLoads = 0
+  private var memoryLoadLifecycleWaiters: [CheckedContinuation<Void, Never>] = []
+  private(set) var memoryLoadLifecycleWaiterCount = 0
 
   /// Whether the memories page is currently visible.
   /// Auto-refresh only runs when active to avoid unnecessary API calls.
@@ -545,15 +557,23 @@ class MemoriesViewModel: ObservableObject {
     displayLimit = pageSize
   }
 
-  /// Refresh memories if already loaded (for auto-refresh)
-  private func refreshMemoriesIfNeeded() async {
+  /// Refresh memories if already loaded (for auto-refresh).
+  ///
+  /// The automation bridge invokes this immediately before a lifecycle-scoped
+  /// SQLite search. Await an active initial/paginated load first so that search
+  /// cannot observe the stale capability projection which that load is about to
+  /// replace.
+  func refreshMemoriesIfNeeded() async {
     refreshInvocations += 1
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
     // Skip if page is not visible
     guard isActive else { return }
 
-    // Skip if currently loading or haven't loaded initially
+    await waitForMemoryLoadLifecycleToSettle()
+
+    // An initial request may fail, in which case there is no authoritative
+    // projection to refresh yet.
     guard !isLoading, !isLoadingMore, hasLoadedInitially else { return }
 
     // Skip if there's a pending delete (avoid interfering with undo)
@@ -588,6 +608,32 @@ class MemoriesViewModel: ObservableObject {
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
+    }
+  }
+
+  private var isMemoryLoadLifecycleActive: Bool {
+    inFlightInitialMemoryLoads > 0 || isLoading || isLoadingMore
+  }
+
+  private func waitForMemoryLoadLifecycleToSettle() async {
+    guard isMemoryLoadLifecycleActive else { return }
+    await withCheckedContinuation { continuation in
+      guard isMemoryLoadLifecycleActive else {
+        continuation.resume()
+        return
+      }
+      memoryLoadLifecycleWaiters.append(continuation)
+      memoryLoadLifecycleWaiterCount = memoryLoadLifecycleWaiters.count
+    }
+  }
+
+  private func resumeMemoryLoadLifecycleWaitersIfIdle() {
+    guard !isMemoryLoadLifecycleActive else { return }
+    let waiters = memoryLoadLifecycleWaiters
+    memoryLoadLifecycleWaiters.removeAll()
+    memoryLoadLifecycleWaiterCount = 0
+    for waiter in waiters {
+      waiter.resume()
     }
   }
 
@@ -822,6 +868,12 @@ class MemoriesViewModel: ObservableObject {
   func loadMemories() async {
     guard !isLoading else { return }
 
+    inFlightInitialMemoryLoads += 1
+    defer {
+      inFlightInitialMemoryLoads -= 1
+      resumeMemoryLoadLifecycleWaitersIfIdle()
+    }
+
     isLoading = true
     errorMessage = nil
     currentOffset = 0
@@ -884,11 +936,13 @@ class MemoriesViewModel: ObservableObject {
         isLoading = false
         return
       }
-      guard commitMemoryPageCapabilities(
-        page,
-        for: token,
-        deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
-      ) else {
+      guard
+        commitMemoryPageCapabilities(
+          page,
+          for: token,
+          deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
+        )
+      else {
         isLoading = false
         return
       }
@@ -941,7 +995,9 @@ class MemoriesViewModel: ObservableObject {
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
         hasMoreMemories = fetchedMemories.count >= pageSize
-        log("MemoriesViewModel: Showing \(visibleMemories.count) memories from \(wasDeviceScoped ? "device-scoped API" : "merged local cache")")
+        log(
+          "MemoriesViewModel: Showing \(visibleMemories.count) memories from \(wasDeviceScoped ? "device-scoped API" : "merged local cache")"
+        )
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
         // Fall back to API data if sync fails, preserving the desktop default-access guardrail.
@@ -1110,7 +1166,10 @@ class MemoriesViewModel: ObservableObject {
     isLoadingMore = true
     // Clear the flag on every exit path, including stale-scope guard returns,
     // so pagination is not permanently blocked by `guard !isLoadingMore`.
-    defer { isLoadingMore = false }
+    defer {
+      isLoadingMore = false
+      resumeMemoryLoadLifecycleWaitersIfIdle()
+    }
     let token = currentScopeToken
     let requestedOffset = currentOffset
     let requestedRawOffset = rawBackendOffset
@@ -1161,12 +1220,14 @@ class MemoriesViewModel: ObservableObject {
       )
       let page = fetchResult.page
       let newMemories = page.memories
-      guard commitMemoryPageCapabilities(
-        page,
-        for: token,
-        expectedOffset: requestedOffset,
-        deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
-      ) else { return }
+      guard
+        commitMemoryPageCapabilities(
+          page,
+          for: token,
+          expectedOffset: requestedOffset,
+          deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride
+        )
+      else { return }
 
       // Sync to local cache first
       try await MemoryStorage.shared.syncServerMemories(newMemories)
@@ -1180,7 +1241,9 @@ class MemoriesViewModel: ObservableObject {
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
       hasMoreMemories = newMemories.count >= pageSize
-      log("MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))")
+      log(
+        "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
+      )
     } catch {
       logError("Failed to load more memories", error: error)
     }
@@ -1427,13 +1490,13 @@ class MemoriesViewModel: ObservableObject {
     guard !didRegisterAutomationActions else { return }
     didRegisterAutomationActions = true
     let registry = DesktopAutomationActionRegistry.shared
-
     registry.register(
       name: "memories_search",
       summary: "Set memories search query and return filtered result count",
       params: ["query"]
     ) { [weak self] params in
       guard let self else { return ["error": "memories view model deallocated"] }
+      await self.refreshMemoriesIfNeeded()
       let query = params["query"] ?? ""
       self.searchText = query
       let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1501,13 +1564,15 @@ class MemoriesViewModel: ObservableObject {
       }
       let memory: ServerMemory?
       if let id = params["id"]?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty {
-        memory = self.memories.first(where: { $0.id == id })
+        memory =
+          self.memories.first(where: { $0.id == id })
           ?? self.searchResults.first(where: { $0.id == id })
           ?? self.filteredFromDatabase.first(where: { $0.id == id })
       } else if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines),
         !marker.isEmpty
       {
-        memory = self.memories.first(where: { $0.content.contains(marker) })
+        memory =
+          self.memories.first(where: { $0.content.contains(marker) })
           ?? self.searchResults.first(where: { $0.content.contains(marker) })
           ?? self.filteredFromDatabase.first(where: { $0.content.contains(marker) })
       } else {
@@ -1518,7 +1583,8 @@ class MemoriesViewModel: ObservableObject {
       }
       let priorVisibility = memory.visibility
       await self.toggleVisibility(memory)
-      let updated = self.memories.first(where: { $0.id == memory.id })
+      let updated =
+        self.memories.first(where: { $0.id == memory.id })
         ?? self.searchResults.first(where: { $0.id == memory.id })
         ?? self.filteredFromDatabase.first(where: { $0.id == memory.id })
       let newVisibility = updated?.visibility ?? (priorVisibility == "public" ? "private" : "public")
@@ -1744,7 +1810,8 @@ struct MemoriesPage: View {
             Image(systemName: viewModel.selectedLayerFilter == .archive ? "archivebox" : "clock.badge.checkmark")
               .scaledFont(size: OmiType.caption)
             Text(viewModel.selectedLayerFilter.displayName)
-              .scaledFont(size: OmiType.body, weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
+              .scaledFont(
+                size: OmiType.body, weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
             Image(systemName: "chevron.down")
               .scaledFont(size: OmiType.micro)
           }
@@ -2088,8 +2155,13 @@ struct MemoriesPage: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
-      .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
+      .disabled(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+      )
+      .opacity(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+          ? 0.5 : 1
+      )
       .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
 
       Button {
@@ -2110,8 +2182,13 @@ struct MemoriesPage: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
-      .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
+      .disabled(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+      )
+      .opacity(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+          ? 0.5 : 1
+      )
       .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
 
       Divider()
@@ -2137,8 +2214,13 @@ struct MemoriesPage: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
-      .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
+      .disabled(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+      )
+      .opacity(
+        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+          ? 0.5 : 1
+      )
       .help("Bulk memory deletion is disabled until the backend supports layer-scoped operations.")
     }
     .padding(.vertical, OmiSpacing.xxs)
@@ -2421,7 +2503,7 @@ private struct MemoryLayerBadge: View {
 }
 
 /// Reversible alias during WS-G client rename (Wave 36).
-fileprivate typealias MemoryTierBadge = MemoryLayerBadge
+private typealias MemoryTierBadge = MemoryLayerBadge
 
 private struct MemoryCardView: View {
   let memory: ServerMemory

@@ -636,7 +636,8 @@ def _process_proactive_notification(uid: str, app: App, data):
             )
     prompt = prompt.replace('    ', '').strip()
 
-    message = get_llm('app_integration').invoke(prompt).content
+    with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+        message = get_llm('app_integration').invoke(prompt).content
     if not message or len(message) < min_message_char_limit:
         logger.info(f"Plugins {app.id}, message too short {uid}")
         return None

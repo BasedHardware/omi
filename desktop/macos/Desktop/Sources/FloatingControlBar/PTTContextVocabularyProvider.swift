@@ -60,7 +60,8 @@ enum PTTContextVocabularyProvider {
 
   private static func captureImmediateScreenText(preferredImage: CGImage?) async -> String? {
     if let preferredImage,
-       let text = await extractVisibleText(from: preferredImage) {
+      let text = await extractVisibleText(from: preferredImage)
+    {
       log("PTTContextVocabulary: immediate OCR used pre-overlay display image")
       return text
     }
@@ -88,9 +89,11 @@ enum PTTContextVocabularyProvider {
     if let activeWindowImage {
       image = activeWindowImage
     } else {
-      image = await MainActor.run(resultType: CGImage?.self, body: {
-        ScreenCaptureManager.captureScreenImage()
-      })
+      image = await MainActor.run(
+        resultType: CGImage?.self,
+        body: {
+          ScreenCaptureManager.captureScreenImage()
+        })
     }
 
     guard let image else {
@@ -124,7 +127,8 @@ enum PTTTranscriptContextualCorrector {
   static func correct(_ transcript: String, keywords: [String]) -> String {
     let phraseCorrected = correctCommonPTTPhrases(in: transcript)
     let brandCorrected = correctOmiBrand(in: phraseCorrected)
-    let terms = keywords
+    let terms =
+      keywords
       .map { canonicalNameTerm($0) }
       .compactMap { $0 }
       .filter { $0.count >= 3 && $0.count <= 32 }
@@ -156,20 +160,21 @@ enum PTTTranscriptContextualCorrector {
   private static func correctGreetingTarget(in text: String, terms: [String]) -> String {
     let patterns = [
       #"(?i)^\s*(?:hey|hi|hello|yo|lol|help|ok|okay)(?:\s+|[,.;:!?-]+\s*)([A-Za-z][A-Za-z'\-]{1,31})"#,
-      #"(?i)^([A-Za-z][A-Za-z'\-]{1,31})(?=(?:[,.;:!?-]+\s*|\s+)(?:how|what|are|is|you)\b|[,.;:!?-])"#
+      #"(?i)^([A-Za-z][A-Za-z'\-]{1,31})(?=(?:[,.;:!?-]+\s*|\s+)(?:how|what|are|is|you)\b|[,.;:!?-])"#,
     ]
 
     for pattern in patterns {
       guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
       let nsText = text as NSString
       guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
-            match.numberOfRanges > 1 else { continue }
+        match.numberOfRanges > 1
+      else { continue }
 
       let candidate = nsText.substring(with: match.range(at: 1))
       guard !KeywordCollector.stopWords.contains(candidate.lowercased()),
-            let replacement = bestGreetingTargetReplacement(for: candidate, terms: terms),
-            replacement.caseInsensitiveCompare(candidate) != .orderedSame,
-            let range = Range(match.range(at: 1), in: text)
+        let replacement = bestGreetingTargetReplacement(for: candidate, terms: terms),
+        replacement.caseInsensitiveCompare(candidate) != .orderedSame,
+        let range = Range(match.range(at: 1), in: text)
       else { continue }
 
       var updated = text
@@ -184,20 +189,21 @@ enum PTTTranscriptContextualCorrector {
   private static func correctDirectedNameObject(in text: String, terms: [String]) -> String {
     let patterns = [
       #"(?i)\b(?:say|tell|send)\s+(?:hi|hello|hey)\s+(?:to|two|too)\s+([A-Za-z][A-Za-z'\-]{1,31})\b"#,
-      #"(?i)\b(?:say|tell|send)\s+([A-Za-z][A-Za-z'\-]{1,31})\s+(?:hi|hello|hey)\b"#
+      #"(?i)\b(?:say|tell|send)\s+([A-Za-z][A-Za-z'\-]{1,31})\s+(?:hi|hello|hey)\b"#,
     ]
 
     for pattern in patterns {
       guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
       let nsText = text as NSString
       guard let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: nsText.length)),
-            match.numberOfRanges > 1 else { continue }
+        match.numberOfRanges > 1
+      else { continue }
 
       let candidate = nsText.substring(with: match.range(at: 1))
       guard !KeywordCollector.stopWords.contains(candidate.lowercased()),
-            let replacement = bestGreetingTargetReplacement(for: candidate, terms: terms),
-            replacement.caseInsensitiveCompare(candidate) != .orderedSame,
-            let range = Range(match.range(at: 1), in: text)
+        let replacement = bestGreetingTargetReplacement(for: candidate, terms: terms),
+        replacement.caseInsensitiveCompare(candidate) != .orderedSame,
+        let range = Range(match.range(at: 1), in: text)
       else { continue }
 
       var updated = text
@@ -342,8 +348,9 @@ enum PTTTranscriptContextualCorrector {
     guard trimmed.range(of: #"^[A-Za-z][A-Za-z'\-]{2,31}$"#, options: .regularExpression) != nil else { return nil }
     guard !KeywordCollector.stopWords.contains(trimmed.lowercased()) else { return nil }
     if trimmed == trimmed.uppercased(),
-       trimmed.count <= 4,
-       trimmed.caseInsensitiveCompare("Omi") != .orderedSame {
+      trimmed.count <= 4,
+      trimmed.caseInsensitiveCompare("Omi") != .orderedSame
+    {
       return nil
     }
     return trimmed
@@ -428,7 +435,8 @@ actor PTTTranscriptCleanupService {
     let pattern = #"\b[A-Za-z][A-Za-z'\-]{1,31}\b"#
 
     for keyword in keywords {
-      let normalized = keyword
+      let normalized =
+        keyword
         .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         .trimmingCharacters(in: .whitespacesAndNewlines)
       guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
@@ -488,7 +496,7 @@ private struct KeywordCollector {
     "chat", "code", "done", "each", "for", "from", "has", "have", "here", "into", "just", "like", "more",
     "hello", "hi", "next", "not", "now", "okay", "open", "orange", "question", "reply", "running", "said",
     "say", "send", "sent", "show", "some", "task", "tell", "test", "text", "that", "the", "this", "thread",
-    "time", "to", "too", "two", "use", "user", "voice", "was", "what", "when", "with", "you", "your"
+    "time", "to", "too", "two", "use", "user", "voice", "was", "what", "when", "with", "you", "your",
   ]
 
   private let limit: Int
@@ -515,7 +523,7 @@ private struct KeywordCollector {
     let patterns = [
       #"\b[A-Z][A-Za-z'\-]{2,}(?:\s+[A-Z][A-Za-z'\-]{2,}){1,2}\b"#,
       #"\b[A-Z][A-Za-z'\-]{2,}\b"#,
-      #"\b[A-Z]{2,8}\b"#
+      #"\b[A-Z]{2,8}\b"#,
     ]
 
     for pattern in patterns {

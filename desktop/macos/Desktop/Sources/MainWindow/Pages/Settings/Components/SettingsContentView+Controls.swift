@@ -1,9 +1,9 @@
 import AppKit
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 enum SettingsControlMetrics {
   static let steppedSliderThumbDiameter: CGFloat = 22
@@ -118,13 +118,8 @@ extension SettingsContentView {
           }
           Spacer()
           Text("\(String(format: "%.1f", currentSpeed))×")
-            .font(.system(size: 22, weight: .bold, design: .rounded))
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(OmiColors.accent)
-            .frame(width: 52, height: 52)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                .fill(OmiColors.accent.opacity(0.15))
-            )
         }
 
         VStack(spacing: OmiSpacing.xs) {
@@ -638,6 +633,10 @@ extension SettingsContentView {
 
           if updaterViewModel.usesManagedUpdatePolicy {
             Text("Release builds always auto-check and auto-install updates in the background.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary)
+          } else if AppBuild.isNamedDevelopmentBundle {
+            Text("Named developer bundles do not use shared Sparkle updates. Run omi-dev update instead.")
               .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
           } else if AnalyticsManager.isDevBuild {

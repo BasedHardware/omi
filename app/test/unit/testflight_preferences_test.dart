@@ -9,12 +9,12 @@ void main() {
       await SharedPreferencesUtil.init();
     });
 
-    test('default testFlightApiEnvironment is production', () {
-      expect(SharedPreferencesUtil().testFlightApiEnvironment, 'production');
+    test('default testFlightApiEnvironment is beta staging', () {
+      expect(SharedPreferencesUtil().testFlightApiEnvironment, 'staging');
     });
 
-    test('default testFlightUseStagingApi is false', () {
-      expect(SharedPreferencesUtil().testFlightUseStagingApi, isFalse);
+    test('default testFlightUseStagingApi is true', () {
+      expect(SharedPreferencesUtil().testFlightUseStagingApi, isTrue);
     });
 
     test('setting production flips testFlightUseStagingApi to false', () {

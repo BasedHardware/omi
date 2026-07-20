@@ -1,3 +1,4 @@
+progressDeadlineSeconds: 1800
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -8,6 +9,7 @@ replicaCount: 1
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: gcr.io/based-hardware-dev/backend
+  digest: ""
   # This sets the pull policy for images.
   pullPolicy: Always
   # Build-specific; CI/manual deploy must pass --set-string image.tag=<short-sha>.
@@ -97,11 +99,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GEMINI_API_KEY
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -123,6 +120,8 @@ env:
     value: "dev"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+    value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
     value: "true"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
@@ -203,6 +202,10 @@ env:
         key: ADMIN_KEY
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
+  - name: STT_PRERECORDED_MODEL
+    value: "modulate-velma-2,parakeet"
+  - name: STT_SERVICE_MODELS
+    value: "modulate-velma-2,parakeet"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
@@ -270,10 +273,6 @@ env:
         key: TYPESENSE_API_KEY
   - name: MEMORY_TYPESENSE_COLLECTION
     value: "canonical_memory_atoms"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omiapi.com"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -308,6 +307,8 @@ env:
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware-dev"
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: TWILIO_AUTH_TOKEN
     valueFrom:
       secretKeyRef:

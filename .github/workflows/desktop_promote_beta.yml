@@ -26,13 +26,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout promotion controls
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Generate Omi Bot token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
@@ -48,7 +48,11 @@ jobs:
             echo "Automatic desktop beta promotion is paused by DESKTOP_AUTO_BETA_ENABLED=false." >&2
             exit 1
           fi
-          LATEST_TAG=$(git tag -l 'v*-macos' --sort=-v:refname | head -1)
+          LATEST_TAG=$(git for-each-ref --count=1 --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v*-macos')
+          if [[ -z "$LATEST_TAG" ]]; then
+            echo "Automatic beta promotion requires at least one macOS candidate tag." >&2
+            exit 1
+          fi
           if [[ "$RELEASE_TAG" != "$LATEST_TAG" ]]; then
             echo "Automatic beta promotion refuses stale tag $RELEASE_TAG; newest is $LATEST_TAG." >&2
             exit 1
@@ -98,7 +102,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Google Auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 

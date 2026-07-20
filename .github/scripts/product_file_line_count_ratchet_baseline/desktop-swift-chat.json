@@ -1,0 +1,11 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2204,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4310
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Named non-production fault bundle supplies an inert hermetic model token so fault injection reaches the configured remote 5xx backend without Firebase auth.",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Named non-production fault bundle supplies an inert hermetic model token so fault injection reaches the configured remote 5xx backend without Firebase auth."
+  },
+  "threshold": 1500
+}

@@ -173,11 +173,40 @@ def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
 
 def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: SimpleNamespace):
     deployment = preflight.rendered_pusher_deployment("dev")
-    expected, clear_historical_secret = preflight.dev_pusher_binding_contract()
+    expected, literals, clear_historical_secret = preflight.dev_pusher_binding_contract()
 
     assert preflight.direct_pusher_bindings(deployment) == expected
+    assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
+    assert literals == {
+        "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
+        "STT_PRERECORDED_MODEL": "modulate-velma-2,parakeet",
+        "STT_SERVICE_MODELS": "modulate-velma-2,parakeet",
+    }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
+
+
+def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(preflight: SimpleNamespace):
+    deployment = preflight.rendered_pusher_deployment("prod")
+    bindings = preflight.direct_pusher_bindings(deployment)
+    literals = preflight.literal_pusher_values(deployment)
+
+    assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
+    assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
+    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,parakeet"
+
+
+def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
+    deployment = copy.deepcopy(preflight.rendered_pusher_deployment("dev"))
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    stt_models = next(item for item in env if item["name"] == "STT_SERVICE_MODELS")
+    stt_models["value"] = "dg-nova-3"
+
+    assert preflight.validate_dev_pusher_binding_contract(deployment) == [
+        "dev pusher literal contract mismatch for STT_SERVICE_MODELS: "
+        "expected 'modulate-velma-2,parakeet', got 'dg-nova-3'"
+    ]
 
 
 def test_dev_pusher_contract_requires_typesense_host_secret_clear(preflight: SimpleNamespace):

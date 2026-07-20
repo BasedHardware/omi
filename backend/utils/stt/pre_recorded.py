@@ -11,12 +11,22 @@ import fal_client
 import httpx
 import numpy as np
 from deepgram import DeepgramClient, DeepgramClientOptions
+from pydub import AudioSegment  # pydub is untyped
 
 from config.prerecorded_stt import (
     PrerecordedSTTConfigurationError as _PrerecordedSTTConfigurationError,
     PrerecordedSTTService,
     get_prerecorded_models,
     require_provider_environment,
+)
+from config.stt_provider_policy import (
+    MODULATE_PROVIDER,
+    PARAKEET_PROVIDER,
+    STTServingSurface,
+    default_models_for_surface,
+    normalized_stt_language,
+    parakeet_supports_language,
+    provider_is_enabled,
 )
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
@@ -30,36 +40,6 @@ logger = logging.getLogger(__name__)
 
 # Public compatibility export used by chat/router boundaries.
 PrerecordedSTTConfigurationError = _PrerecordedSTTConfigurationError
-
-_parakeet_languages = {
-    'multi',
-    'bg',
-    'hr',
-    'cs',
-    'da',
-    'nl',
-    'en',
-    'et',
-    'fi',
-    'fr',
-    'de',
-    'el',
-    'hu',
-    'it',
-    'lt',
-    'lv',
-    'mt',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sl',
-    'es',
-    'sv',
-    'uk',
-}
-
 
 # ---------------------------------------------------------------------------
 # Provider-agnostic ABC — mirrors STTSocket for streaming
@@ -98,24 +78,35 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     """Route pre-recorded STT based on STT_PRERECORDED_MODEL env var.
 
     Iterates comma-separated models (same pattern as STT_SERVICE_MODELS for streaming).
-    First model that supports the language wins; falls back to Deepgram nova-3.
+    First model allowed by the central serving policy that supports the language
+    wins. Disabled-provider tokens are ignored, then policy-owned defaults provide
+    the serving fallback.
     """
-    base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-    for m in get_prerecorded_models():
-        m = m.strip()
-        if m.startswith('dg-'):
-            dg_model = m.replace('dg-', '', 1)
-            lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
-            return PrerecordedSTTService.DEEPGRAM, lang, dg_model
-        if m == 'modulate-velma-2':
-            if base_lang in {'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh'}:
-                return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
-            continue
-        if m == 'parakeet':
-            if base_lang in _parakeet_languages:
-                return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
-            continue
-    return PrerecordedSTTService.DEEPGRAM, language, 'nova-3'
+    base_lang = normalized_stt_language(language) or 'en'
+
+    def select(models: Sequence[str]) -> Optional[Tuple[str, Optional[str], str]]:
+        for m in models:
+            m = m.strip()
+            if m == 'modulate-velma-2' and provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
+                if base_lang in {'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh'}:
+                    return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
+                continue
+            if m == 'parakeet' and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.PRERECORDED):
+                if parakeet_supports_language(STTServingSurface.PRERECORDED, base_lang):
+                    return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
+        return None
+
+    selected = select(get_prerecorded_models())
+    if selected is not None:
+        return selected
+
+    # A disabled/unknown preference must not become a provider call. Use the
+    # deployment-validated, policy-owned defaults instead.
+    selected = select(default_models_for_surface(STTServingSurface.PRERECORDED))
+    if selected is not None:
+        return selected
+
+    raise RuntimeError(f'No configured pre-recorded STT provider supports language {language!r}')
 
 
 # Lazily initialized because constructing the SDK client at import makes every
@@ -139,8 +130,10 @@ def _get_deepgram_client() -> DeepgramClient:
     if _deepgram_client is None:
         with _deepgram_client_lock:
             if _deepgram_client is None:
-                require_provider_environment(PrerecordedSTTService.DEEPGRAM)
-                _deepgram_client = DeepgramClient(os.environ['DEEPGRAM_API_KEY'], _get_deepgram_options())
+                api_key = os.getenv('DEEPGRAM_API_KEY')
+                if not api_key:
+                    raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_API_KEY')
+                _deepgram_client = DeepgramClient(api_key, _get_deepgram_options())
     return _deepgram_client
 
 
@@ -769,6 +762,36 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
 _PARAKEET_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _PARAKEET_URL_DOWNLOAD_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 _PARAKEET_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+_PARAKEET_CONTAINER_MIME_FORMATS = {
+    'audio/webm': 'webm',
+    'video/webm': 'webm',
+    'audio/mp4': 'mp4',
+    'video/mp4': 'mp4',
+}
+
+
+class ParakeetAudioDecodeError(ValueError):
+    """A downloaded browser container cannot be made safe for Parakeet."""
+
+
+def _normalize_parakeet_download(audio_bytes: bytes, content_type: str | None) -> bytes:
+    """Convert browser containers to WAV before Parakeet's WAV-only batch path."""
+
+    media_type = (content_type or '').split(';', 1)[0].strip().lower()
+    container_format = _PARAKEET_CONTAINER_MIME_FORMATS.get(media_type)
+    if container_format is None:
+        return audio_bytes
+
+    try:
+        decoded_audio = AudioSegment.from_file(BytesIO(audio_bytes), format=container_format)
+        wav_buffer = BytesIO()
+        decoded_audio.export(wav_buffer, format='wav')
+        wav_bytes = wav_buffer.getvalue()
+        del decoded_audio
+        del wav_buffer
+        return wav_bytes
+    except Exception as error:
+        raise ParakeetAudioDecodeError('Browser audio container could not be decoded') from error
 
 
 @timeit
@@ -900,9 +923,12 @@ def parakeet_prerecorded(
                     chunks.append(chunk)
                 audio_bytes = b''.join(chunks)
                 del chunks
+                audio_bytes = _normalize_parakeet_download(audio_bytes, resp.headers.get('content-type'))
         return parakeet_prerecorded_from_bytes(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
         )
+    except ParakeetAudioDecodeError:
+        raise
     except Exception as e:
         logger.error(
             'Parakeet prerecorded (url) error exception_type=%s attempt=%s',
@@ -1025,7 +1051,7 @@ def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTPr
         return ModulatePrerecordedProvider()
     if service == PrerecordedSTTService.PARAKEET:
         return ParakeetPrerecordedProvider()
-    return DeepgramPrerecordedProvider(model=model)
+    raise RuntimeError(f'Unsupported serving pre-recorded STT provider {service!r} ({model!r})')
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   func advancedCategoryHeader(title: String, icon: String) -> some View {
@@ -84,13 +84,11 @@ extension SettingsContentView {
 
             Spacer()
 
-            Picker("", selection: $realtimeOmniProvider) {
+            SettingsMenuPicker(selection: $realtimeOmniProvider) {
               ForEach(RealtimeOmniProvider.allCases, id: \.rawValue) { p in
                 Text(p.displayName).tag(p.rawValue)
               }
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
             .onChange(of: realtimeOmniProvider) { _, newValue in
               if newValue == RealtimeOmniProvider.auto.rawValue {
                 AutoModelSelector.shared.refreshIfStale()

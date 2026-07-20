@@ -7,12 +7,24 @@ on:
         description: 'Newest v*-macos candidate tag to qualify'
         required: true
         type: string
+      dispatch_key:
+        description: 'Deterministic Codemagic handoff key; leave empty for a deduplicated manual run'
+        required: false
+        type: string
+      retry_nonce:
+        description: 'Required only to deliberately retry a terminal qualification failure'
+        required: false
+        type: string
+
+run-name: Qualify desktop beta ${{ inputs.release_tag }}
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-beta-qualification
+  # This is the authoritative atomic serialiser for release-body claims. No
+  # outside dispatcher may edit qualificationDispatch* metadata.
+  group: desktop-beta-qualification-${{ inputs.release_tag }}
   cancel-in-progress: false
 
 # This workflow deliberately runs only on the dedicated, trusted macOS runner.
@@ -25,7 +37,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout qualification controls
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Manual workflow dispatch permits choosing a ref. Never execute
           # branch-controlled scripts on this privileged self-hosted runner.
@@ -34,12 +46,63 @@ jobs:
 
       - name: Generate Omi Bot token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
+      - name: Claim one deduplicated qualification execution
+        id: claim
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+          DISPATCH_KEY_INPUT: ${{ inputs.dispatch_key }}
+          RETRY_NONCE: ${{ inputs.retry_nonce }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/desktop-beta-qualification
+          if [ -n "$RETRY_NONCE" ]; then
+            if ! printf '%s\n' "$RETRY_NONCE" | grep -qE '^[A-Za-z0-9._:-]{1,80}$'; then
+              echo "retry_nonce must be a bounded single-line token" >&2
+              exit 1
+            fi
+            DISPATCH_KEY="manual:${RELEASE_TAG}:${RETRY_NONCE}"
+            CLAIM_ARGS=(--allow-retry)
+          elif [ -n "$DISPATCH_KEY_INPUT" ]; then
+            DISPATCH_KEY="$DISPATCH_KEY_INPUT"
+            CLAIM_ARGS=()
+          else
+            DISPATCH_KEY="manual:${RELEASE_TAG}"
+            CLAIM_ARGS=()
+          fi
+          gh release view "$RELEASE_TAG" --repo "$REPO" --json body --jq .body \
+            > /tmp/desktop-beta-qualification/release-body-before-claim.md
+          python3 .github/scripts/desktop_qualification_dispatch.py claim \
+            --input /tmp/desktop-beta-qualification/release-body-before-claim.md \
+            --output /tmp/desktop-beta-qualification/release-body-after-claim.md \
+            --key "$DISPATCH_KEY" --updated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            "${CLAIM_ARGS[@]}" > /tmp/desktop-beta-qualification/claim.json
+          SHOULD_RUN=$(python3 -c 'import json; print(str(json.load(open("/tmp/desktop-beta-qualification/claim.json"))["should_run"]).lower())')
+          REASON=$(python3 -c 'import json; print(json.load(open("/tmp/desktop-beta-qualification/claim.json"))["reason"])')
+          if ! cmp -s /tmp/desktop-beta-qualification/release-body-before-claim.md \
+            /tmp/desktop-beta-qualification/release-body-after-claim.md; then
+            gh release edit "$RELEASE_TAG" --repo "$REPO" \
+              --notes-file /tmp/desktop-beta-qualification/release-body-after-claim.md
+          fi
+          echo "dispatch_key=$DISPATCH_KEY" >> "$GITHUB_OUTPUT"
+          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Desktop qualification dispatch"
+            echo "- Candidate: \`$RELEASE_TAG\`"
+            echo "- Dispatch key: \`$DISPATCH_KEY\`"
+            echo "- Decision: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Download and validate newest candidate evidence
+        id: candidate
+        if: steps.claim.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -84,6 +147,8 @@ jobs:
             --output /tmp/desktop-beta-qualification/candidate-gate.json
 
       - name: Qualify exact candidate on hermetic stack
+        id: qualify
+        if: steps.claim.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -96,7 +161,33 @@ jobs:
             --candidate-gate-result /tmp/desktop-beta-qualification/candidate-gate.json \
             "$RELEASE_TAG"
 
+      - name: Record terminal qualification state
+        if: always() && steps.claim.outputs.should_run == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+          DISPATCH_KEY: ${{ steps.claim.outputs.dispatch_key }}
+          CANDIDATE_OUTCOME: ${{ steps.candidate.outcome }}
+          QUALIFICATION_OUTCOME: ${{ steps.qualify.outcome }}
+        run: |
+          set -euo pipefail
+          PASSED=false
+          if [ "$CANDIDATE_OUTCOME" = success ] && [ "$QUALIFICATION_OUTCOME" = success ]; then
+            PASSED=true
+          fi
+          gh release view "$RELEASE_TAG" --repo "$REPO" --json body --jq .body \
+            > /tmp/desktop-beta-qualification/release-body-before-complete.md
+          python3 .github/scripts/desktop_qualification_dispatch.py complete \
+            --input /tmp/desktop-beta-qualification/release-body-before-complete.md \
+            --output /tmp/desktop-beta-qualification/release-body-after-complete.md \
+            --key "$DISPATCH_KEY" --updated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --passed "$PASSED" \
+            > /tmp/desktop-beta-qualification/complete.json
+          gh release edit "$RELEASE_TAG" --repo "$REPO" \
+            --notes-file /tmp/desktop-beta-qualification/release-body-after-complete.md
+
       - name: Request protected beta promotion
+        if: steps.claim.outputs.should_run == 'true' && steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}

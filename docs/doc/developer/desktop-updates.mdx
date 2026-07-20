@@ -23,7 +23,9 @@ Prometheus exposes the selected source, fallback reason, pointer/LKG age, feed v
 
 ## Release lifecycle
 
-The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`, including the signed-smoke evidence asset. It then dispatches `desktop_qualify_beta.yml`. That workflow runs only on the administrator-managed `self-hosted`, `macos`, `omi-desktop-qualification` runner, where Docker Desktop supports the hermetic stack. It verifies the published ZIP/DMG digests against signed-smoke evidence, runs static release checks, hermetic T2, and the fault-injection suite, and requests beta promotion only for the newest passing candidate.
+The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`, including the signed-smoke evidence asset. It records an owner-visible `qualificationDispatch*` lifecycle in that candidate’s metadata, then dispatches `desktop_qualify_beta.yml` with a deterministic tag-bound key. Codemagic retries an unconfirmed handoff three times with bounded backoff; an exhausted handoff records `dispatch_failed` and leaves the candidate non-live. The trusted workflow claims that key before using the runner, so an ambiguous timeout or duplicate dispatch can produce at most one qualification execution. Dispatch state is operational diagnostics only: it neither changes the immutable evidence assets nor authorizes promotion.
+
+That workflow runs only on the administrator-managed `self-hosted`, `macos`, `omi-desktop-qualification` runner, where Docker Desktop supports the hermetic stack. It verifies the published ZIP/DMG digests against signed-smoke evidence, runs static release checks, hermetic T2, and the fault-injection suite, and requests beta promotion only for the newest passing candidate. A terminal qualification failure remains non-live until an operator supplies an explicit new retry nonce; repeated normal dispatches retain their original deduplication key.
 
 | State | How to identify it | Customer visibility |
 | --- | --- | --- |
@@ -41,6 +43,22 @@ desktop/macos/scripts/qualify-desktop-beta.sh vX.Y.Z+BUILD-macos
 The automatic path calls the same script with `--automatic`, adding signed-artifact digest validation, static checks, and the hermetic fault suite to T2. The combined evidence asset records every gate. Before writing qualification metadata it rechecks that no newer tag exists. Promotion repeats the newest-tag check for automatic requests, validates the tag SHA and evidence, registers an immutable manifest, advances the beta pointer, changes GitHub metadata to live beta, and maintains the old-client Firestore bridge. Existing releases with legacy `blessed*` keys remain valid through dual-read compatibility.
 
 Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environment or GitHub's `prod` environment to pause automatic beta. Failures leave the candidate non-live. Stable nomination and `desktop_promote_prod.yml` remain manual-only.
+
+### Emergency macOS beta rollback
+
+`POST /v2/desktop/channels/rollback` is the only non-monotonic pointer operation. It is authenticated with `ADMIN_KEY` and accepts literal `platform: macos` and `channel: beta` values only. The request must include the target `release_id` plus the exact `expected_current_release_id` and `expected_generation`; all three are compared inside the Firestore transaction before either write occurs. The target must already be a registered macOS manifest with passed T2 qualification and an earlier build than the current beta pointer. The transaction creates an append-only immutable audit record and then advances only `desktop_update_channels/macos-beta`; it cannot write Stable, production, another channel, or another platform. The response returns that immutable audit payload and the new beta pointer. Normal `/v2/desktop/channels/promote` remains roll-forward only.
+
+### Emergency macOS beta forward promotion
+
+`desktop_emergency_promote_beta.yml` is a deliberately separate, manual break-glass lane for an already published signed macOS candidate when ordinary exact-candidate qualification is unavailable. It never accepts Stable or another platform, and it does not add a qualification bypass to normal promotion. Before the only pointer mutation it verifies the exact tag/SHA, a passing `Desktop Swift Build & Tests` source gate, published release state, signed-smoke evidence, freshly recomputed ZIP/DMG hashes, and a supplied incident-specific behavioral evidence attachment. The incident must remain open and contain exactly two distinct `MEMBER`/`OWNER` comments in this exact form:
+
+```text
+Emergency beta promotion approval: vX.Y.Z+BUILD-macos <40-char-source-sha> <expiry-ISO-8601>
+```
+
+The expiry must be within four hours. The protected workflow derives the initiating operator from `github.triggering_actor`, then records `emergencyPromotion`, the exact tag/SHA, incident, rationale, operator, expiry, approvers, and evidence URLs/digests in GitHub release metadata. It calls only `POST /v2/desktop/channels/emergency-promote-beta`; that API repeats the exact binding, performs the expected-current-release and generation CAS inside its Firestore transaction, and creates the immutable audit record with the server time before advancing `macos-beta`. It rejects an expired authorization, a non-macOS/beta request, missing artifacts/digests, missing/invalid operator, fewer than two distinct approvers, a stale pointer, or a non-forward release.
+
+The workflow snapshots and compares the Stable Firestore pointer, Stable release metadata, and Stable appcast entries before and after the mutation. It comments on the incident immediately, then holds a mandatory one-hour beta-only feed monitor. A regression posts a rollback recommendation pointing operators to the independently audited beta rollback endpoint; Stable is never altered.
 
 After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
 
@@ -93,17 +111,24 @@ The following sources of truth remain transitional until their named deletion ga
 
 Python `backend*` deployment identity is independent. V1 neither reads nor mutates Python backend release state; only the existing desktop manifest/pointer API is involved in the later control-plane migration.
 
-## Developer head-of-main
+## Named developer bundles
 
-Developers can use a local named bundle without creating a release:
+Use `omi-dev` to build and update a local named bundle without creating a release:
 
 ```bash
-desktop/macos/scripts/omi-main install
-desktop/macos/scripts/omi-main update
-desktop/macos/scripts/omi-main status
+desktop/macos/scripts/omi-dev update --name omi-alice --ref origin/main
+desktop/macos/scripts/omi-dev update --name omi-beta-local --ref v0.12.84+12084-macos
+desktop/macos/scripts/omi-dev status --name omi-alice
 ```
 
-This uses a dedicated detached worktree and `/Applications/omi-main.app`. It never replaces or launches the production Omi or Omi Beta bundles.
+Every `omi-<name>` gets its own detached worktree, state directory, bundle ID, ports, and
+`/Applications/omi-<name>.app` target. The command rejects standard application names, so it
+never replaces or launches Omi, Omi Beta, Stable, or their user data. Updates are explicit:
+named developer bundles do not use the shared production/beta Sparkle archive.
+
+`desktop/macos/scripts/omi-main` remains available as a compatibility wrapper for the
+`omi-main` bundle; it forwards to `omi-dev --name omi-main` and honors the legacy
+`OMI_MAIN_REPOSITORY`, `OMI_MAIN_WORKTREE`, and `OMI_MAIN_STATE_DIR` overrides.
 
 ## Update transaction truth
 

@@ -130,8 +130,7 @@ final class DesktopAutomationPresentationCoordinator: ObservableObject,
   private let timeoutWaiter: any DesktopAutomationPresentationTimeoutWaiting
   private var nextGeneration: UInt64 = 0
   private var resolutions: [UInt64: DesktopAutomationPresentationResolution] = [:]
-  private var continuations:
-    [UInt64: CheckedContinuation<DesktopAutomationPresentationResolution, Never>] = [:]
+  private var continuations: [UInt64: CheckedContinuation<DesktopAutomationPresentationResolution, Never>] = [:]
   private var timeoutTasks: [UInt64: Task<Void, Never>] = [:]
 
   init(

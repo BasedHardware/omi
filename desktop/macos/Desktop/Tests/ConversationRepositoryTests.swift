@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 @MainActor
@@ -32,6 +33,37 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(snapshots[2].conversations[0].status, .completed)
     XCTAssertFalse(snapshots[2].isLoading)
     XCTAssertEqual(local.stored.map(\.updatedAt), [server.updatedAt])
+  }
+
+  func testCacheReloadDuringPendingMutationKeepsOptimisticStar() async throws {
+    let unstarred = makeConversation(starred: false, revision: 1)
+    let suspendedStars = SuspendedConversationResults()
+    let remote = FakeConversationRemote(listResult: .success([unstarred]), countResult: .success(1))
+    remote.starHandler = { starred in try await suspendedStars.result(for: String(starred)) }
+    // The local cache still holds the pre-mutation (un-starred) row.
+    let local = FakeConversationLocal(listResult: [unstarred], count: 1)
+    let repository = ConversationRepository(remote: remote, local: local)
+    await repository.load(query: .all)
+
+    // Stage the optimistic star; the remote is suspended, so the mutation stays
+    // pending (pendingMutations retains it) while we reload.
+    let starTask = Task { try await repository.setStarred(id: unstarred.id, starred: true) }
+    await suspendedStars.waitUntilRequested("true")
+    XCTAssertTrue(repository.conversations[0].starred, "precondition: optimistic star is visible")
+
+    // The user toggles a filter mid-mutation → load() re-runs the cache-first
+    // path. Capture only the cache emit.
+    var cacheSnapshots: [ConversationRepositorySnapshot] = []
+    repository.onSnapshot = { if $0.source == .cache { cacheSnapshots.append($0) } }
+    await repository.load(query: .all)
+
+    XCTAssertEqual(
+      cacheSnapshots.last?.conversations.first?.starred, true,
+      "A cache reload mid-mutation must reapply the pending optimistic star, not revert it")
+
+    // Let the mutation settle so the task doesn't leak.
+    await suspendedStars.resume("true", with: .success(makeConversation(starred: true, revision: 2)))
+    try await starTask.value
   }
 
   func testServerFailureKeepsUsefulCacheVisibleWithoutBlankingTheList() async {
@@ -227,7 +259,8 @@ final class ConversationRepositoryTests: XCTestCase {
     await suspendedTitles.resume("Renamed", with: .success(titleCanonical))
     try await titleTask.value
     XCTAssertEqual(repository.conversations[0].structured.title, "Renamed")
-    XCTAssertTrue(repository.conversations[0].starred, "The title acknowledgement must not erase the queued star intent")
+    XCTAssertTrue(
+      repository.conversations[0].starred, "The title acknowledgement must not erase the queued star intent")
 
     await suspendedStars.waitUntilRequested("true")
     await suspendedStars.resume("true", with: .success(starCanonical))
@@ -753,20 +786,21 @@ final class ConversationRepositoryTests: XCTestCase {
     transcript: String? = nil
   ) -> ServerConversation {
     let created = Date(timeIntervalSince1970: 100)
-    let segments = transcript.map {
-      [
-        TranscriptSegment(
-          id: "segment-1",
-          backendId: "segment-1",
-          text: $0,
-          speaker: "SPEAKER_00",
-          isUser: true,
-          personId: nil,
-          start: 0,
-          end: 1
-        )
-      ]
-    } ?? []
+    let segments =
+      transcript.map {
+        [
+          TranscriptSegment(
+            id: "segment-1",
+            backendId: "segment-1",
+            text: $0,
+            speaker: "SPEAKER_00",
+            isUser: true,
+            personId: nil,
+            start: 0,
+            end: 1
+          )
+        ]
+      } ?? []
     return ServerConversation(
       id: id,
       createdAt: created,
@@ -799,14 +833,15 @@ final class ConversationRepositoryTests: XCTestCase {
   }
 }
 
-private extension ConversationListQuery {
-  static let all = ConversationListQuery(starredOnly: false, date: nil, folderId: nil)
+extension ConversationListQuery {
+  fileprivate static let all = ConversationListQuery(starredOnly: false, date: nil, folderId: nil)
 }
 
 private enum TestFailure: Error {
   case offline
 }
 
+@MainActor
 private final class FakeConversationRemote: ConversationRemoteDataSource {
   var listResult: Result<[ServerConversation], Error>
   var countResult: Result<Int, Error>
@@ -877,6 +912,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   }
 }
 
+@MainActor
 private final class FakeConversationLocal: ConversationLocalDataSource {
   var listResult: [ServerConversation]
   var countValue: Int

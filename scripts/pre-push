@@ -31,9 +31,9 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 done
 
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
-  echo "Running fast pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
+  echo "Running bounded pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
 else
-  echo "Running fast pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+  echo "Running bounded pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
 fi
 
 declare -a CHANGED_FILES=()
@@ -253,16 +253,8 @@ check_backend_typecheck_if_needed() {
     return
   fi
 
-  if ! changed_matches \
-    'backend/*.py' \
-    'backend/**/*.py' \
-    'backend/pyrightconfig.json' \
-    'backend/scripts/typecheck.sh' \
-    'backend/requirements.txt' \
-    'backend/pylock*.toml' \
-    '.github/workflows/backend-unit-tests.yml' \
-    'scripts/pre-push'
-  then
+  if ! printf '%s\n' "${CHANGED_FILES[@]}" | backend/scripts/needs-typecheck.sh; then
+    echo "Skipping backend type check: changed paths do not affect the typed boundary."
     return
   fi
 
@@ -328,6 +320,8 @@ check_backend_unit_tests_if_needed() {
     return
   fi
 
+  # #9440: pre-push is intentionally a bounded local-feedback gate, not a CI clone.
+  # Keep this cap: a broad selector must not turn ordinary pushes into the full suite.
   max_pre_push_tests="${PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40}"
   if [ "$selected_count" -gt "$max_pre_push_tests" ]; then
     : > "$FAST_BACKEND_TESTS"
@@ -358,6 +352,38 @@ check_backend_unit_tests_if_needed() {
     PYTHON="$BACKEND_PYTHON" bash test-preflight.sh
     BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" PYTHON="$BACKEND_PYTHON" bash test.sh
   )
+}
+
+check_runtime_image_source_closure_if_needed() {
+  if [ "${PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE:-}" = "1" ]; then
+    echo "Skipping runtime-image contract check because PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/**/Dockerfile*' \
+    'backend/runtime_images.json' \
+    'backend/scripts/runtime_image_contracts.py' \
+    '.github/workflows/runtime_image_contracts.yml' \
+    '.github/workflows/gcp_backend*.yml' \
+    '.github/workflows/gcp_diarizer.yml' \
+    '.github/workflows/gcp_models.yml' \
+    '.github/workflows/gcp_parakeet.yml' \
+    '.github/workflows/gcp_nllb_translation.yml' \
+    '.github/workflows/gcp_memory_maintenance_job*.yml' \
+    '.github/workflows/gcp_notifications_job.yml' \
+    '.github/workflows/gcp_plugins.yml' \
+    'plugins/*.py' \
+    'plugins/**/*.py' \
+    'plugins/Dockerfile' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+    python3 backend/scripts/runtime_image_contracts.py check
 }
 
 check_openapi_contract_if_needed() {
@@ -458,6 +484,8 @@ check_desktop_swift_if_needed() {
     return 1
   fi
 
+  # #9440: keep pre-push to this fast compile. The pinned-toolchain full suite and
+  # release compile belong to CI; adding them here causes push-time budget bloat.
   (
     cd desktop/macos
     xcrun swift build -c debug --package-path Desktop
@@ -552,6 +580,7 @@ run_step python3 .github/scripts/check-deployment-concurrency.py --self-test
 run_step python3 .github/scripts/check-deployment-concurrency.py
 run_step check_backend_runtime_env_if_needed
 run_step check_backend_typecheck_if_needed
+run_step check_runtime_image_source_closure_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
@@ -562,4 +591,4 @@ run_step check_desktop_tool_surfaces_if_needed
 run_step check_gauntlet_evidence_if_needed
 run_step check_optional_formatters
 
-echo "Fast pre-push checks passed."
+echo "Bounded pre-push gate passed; CI remains the full test authority."
