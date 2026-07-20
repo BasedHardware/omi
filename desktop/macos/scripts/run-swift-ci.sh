@@ -9,7 +9,7 @@ EXPECTED_XCODE_BUILD="16F6"
 XCODE_APP="${OMI_SWIFT_CI_XCODE_APP:-/Applications/Xcode_16.4.app}"
 
 usage() {
-  echo "usage: $0 --select-toolchain | --test | --release-compile | --release-notification-regression" >&2
+  echo "usage: $0 --select-toolchain | --test | --release-compile" >&2
   exit 2
 }
 
@@ -70,15 +70,6 @@ case "${1:-}" in
     rm -rf Desktop/.build
     ./scripts/generate-desktop-core-bindings.sh
     xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
-    ;;
-  --release-notification-regression)
-    [ "$#" -eq 1 ] || usage
-    select_toolchain
-    cd "$MACOS_DIR"
-    # Keep this narrow enough for a PR boundary check while exercising the
-    # release compiler mode used for signed candidates. This is the direct
-    # UserNotifications private-callback-to-MainActor regression suite.
-    xcrun swift test -c release --package-path Desktop --filter UserNotificationCallbackBridgeTests/
     ;;
   *)
     usage

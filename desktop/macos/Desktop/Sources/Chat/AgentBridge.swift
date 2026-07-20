@@ -897,10 +897,7 @@ actor AgentBridge {
       isManagedHarness
       && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
         requestedCredentials: requiresCredentials,
-        isNonProduction: AppBuild.isNonProduction,
-        hermeticFaultModelToken: AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
-          isNonProduction: AppBuild.isNonProduction,
-          bundleIdentifier: AppBuild.bundleIdentifier))
+        isNonProduction: AppBuild.isNonProduction)
     var acquiredRegistration = false
     do {
       if registeredThisCall {

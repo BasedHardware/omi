@@ -1971,16 +1971,17 @@ class ChatToolExecutor {
 
   private static func notificationPermissionGranted() async -> Bool? {
     await awaitCancellablePermissionRequest { completion in
-      UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
-        completion(authorizationStatus == .authorized)
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
+        completion(settings.authorizationStatus == .authorized)
       }
     }
   }
 
   private static func requestNotificationPermissionDirectly() async -> Bool? {
     await awaitCancellablePermissionRequest { completion in
-      UserNotificationCallbackBridge.requestAuthorization { result in
-        completion(result.granted)
+      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
+        granted, _ in
+        completion(granted)
       }
     }
   }
