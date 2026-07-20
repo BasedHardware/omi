@@ -612,13 +612,13 @@ describe("adapter capability matrix", () => {
       restartOrphanSemantics: { status: "required" },
     });
     expect(ADAPTER_CAPABILITY_MATRIX.codex.expectations).toMatchObject({
-      nativeResume: { status: "required" },
+      nativeResume: { status: "unsupported" },
       cancellationDispatch: { status: "required" },
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
-      pinnedWorker: { status: "unsupported" },
+      pinnedWorker: { status: "required" },
       modelSwitching: { status: "unsupported" },
       artifactEmission: { status: "unsupported" },
-      toolSupport: { status: "unsupported" },
+      toolSupport: { status: "required" },
       restartOrphanSemantics: { status: "required" },
     });
 
@@ -629,7 +629,7 @@ describe("adapter capability matrix", () => {
       pinnedWorker: { status: "required" },
       modelSwitching: { status: "unsupported" },
       artifactEmission: { status: "unsupported" },
-      toolSupport: { status: "unsupported" },
+      toolSupport: { status: "required" },
       restartOrphanSemantics: { status: "required" },
     });
 
