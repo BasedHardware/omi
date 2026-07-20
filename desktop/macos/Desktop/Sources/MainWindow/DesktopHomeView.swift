@@ -999,6 +999,7 @@ struct DesktopHomeView: View {
         secondBrainShell
       }
     }
+    .onExitCommand { navigateHomeOnEscapeIfNeeded() }
     .overlay {
       // Goal completion celebration overlay
       GoalCelebrationView()
@@ -1085,6 +1086,9 @@ struct DesktopHomeView: View {
       }
       // Only auto-refresh stores when their pages are visible
       updateStoreActivity(for: newValue)
+      // Shell tabs/overflow expose every page; enforce tier gating on navigation
+      // (the legacy sidebar filtered these; redirect keeps locked pages unreachable).
+      redirectIfPageHidden()
     }
     .onChange(of: useLegacyHomeDesign) { _, newValue in
       OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -1136,6 +1140,12 @@ struct DesktopHomeView: View {
         onOpenConversation: { _ in selectedIndex = SidebarNavItem.conversations.rawValue },
         onNavigate: { idx in selectedIndex = idx },
         onAsk: askFromSecondBrain
+      )
+    } else if selectedIndex == SidebarNavItem.conversations.rawValue {
+      SBConversationsContainer(appState: appState)
+    } else if selectedIndex == SidebarNavItem.tasks.rawValue {
+      SBFollowUpsContainer(
+        onOpenSettings: { selectedIndex = SidebarNavItem.settings.rawValue }
       )
     } else {
       PageContentView(

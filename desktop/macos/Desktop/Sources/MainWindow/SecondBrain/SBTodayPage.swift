@@ -10,7 +10,8 @@ struct SBFollowUpRow: Identifiable {
   let sub: String
   let cta: String
   var run: () -> Void
-  var skip: () -> Void
+  /// Optional dismissal. When nil, the "Later" affordance is hidden (no dead button).
+  var skip: (() -> Void)? = nil
 }
 
 /// A conversation / calendar item in the TODAY list.
@@ -29,6 +30,8 @@ struct SBTodayData {
   var isListening: Bool
   var screenOn: Bool
   var followUps: [SBFollowUpRow]
+  /// Total outstanding follow-ups (pre-truncation) for the header count.
+  var followUpTotal: Int
   var liveConversationTitle: String?
   var conversations: [SBTodayItem]
   var upcoming: [SBTodayItem]
@@ -166,7 +169,7 @@ struct SBTodayPage: View {
     VStack(alignment: .leading, spacing: 0) {
       if !data.followUps.isEmpty {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          SBSectionLabel(text: "Today's follow-ups · \(data.followUps.count)")
+          SBSectionLabel(text: "Today's follow-ups · \(data.followUpTotal)")
           Text("view all ›")
             .geistMono(size: 12)
             .foregroundStyle(sb.ink(.w25))
@@ -229,10 +232,12 @@ struct SBTodayPage: View {
       }
       Spacer(minLength: 8)
       SBInkButton(title: fu.cta, size: 13.5, horizontalPadding: 13, verticalPadding: 5, action: fu.run)
-      Button(action: fu.skip) {
-        Text("Later").geist(size: 13.5).foregroundStyle(sb.ink(.w45))
+      if let skip = fu.skip {
+        Button(action: skip) {
+          Text("Later").geist(size: 13.5).foregroundStyle(sb.ink(.w45))
+        }
+        .buttonStyle(.plain)
       }
-      .buttonStyle(.plain)
     }
     .padding(.vertical, 13)
     .overlay(alignment: .bottom) { Rectangle().fill(sb.ink(.w07)).frame(height: 1) }

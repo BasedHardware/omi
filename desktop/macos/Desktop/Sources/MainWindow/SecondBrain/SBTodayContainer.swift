@@ -36,6 +36,9 @@ struct SBTodayContainer: View {
     )
     .task { await tasks.loadDashboardTasks() }
     .onAppear { screenOn = AssistantSettings.shared.screenAnalysisEnabled }
+    .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidChange)) { _ in
+      screenOn = AssistantSettings.shared.screenAnalysisEnabled
+    }
   }
 
   private func buildData() -> SBTodayData {
@@ -46,17 +49,16 @@ struct SBTodayContainer: View {
     let followUpTasks = (tasks.overdueTasks + tasks.todaysTasks + tasks.tasksWithoutDueDate)
       .filter { !$0.completed }
     var seen = Set<String>()
-    let dedupedFollowUps = followUpTasks.filter { seen.insert($0.id).inserted }.prefix(3)
+    let dedupedFollowUps = followUpTasks.filter { seen.insert($0.id).inserted }
 
-    let followUps = dedupedFollowUps.map { task in
+    let followUps = dedupedFollowUps.prefix(3).map { task in
       SBFollowUpRow(
         id: task.id,
         label: task.description,
         sub: followUpSub(task),
         // Task export integrations don't exist yet — completing is the real action.
         cta: "Done",
-        run: { Task { await tasks.toggleTask(task) } },
-        skip: {}
+        run: { Task { await tasks.toggleTask(task) } }
       )
     }
 
@@ -78,7 +80,9 @@ struct SBTodayContainer: View {
         )
       }
 
-    let isFresh = appState.conversations.isEmpty && tasks.incompleteTasks.isEmpty
+    // Classify against the data this view actually loads (dashboard slices), not
+    // incompleteTasks (which only the Tasks page loads) — else seasoned users flash fresh.
+    let isFresh = appState.conversations.isEmpty && dedupedFollowUps.isEmpty
 
     return SBTodayData(
       name: name,
@@ -86,6 +90,7 @@ struct SBTodayContainer: View {
       isListening: listening,
       screenOn: screenOn,
       followUps: Array(followUps),
+      followUpTotal: dedupedFollowUps.count,
       liveConversationTitle: listening ? (live?.title ?? "Recording") : nil,
       conversations: Array(convRows),
       upcoming: [],
