@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import sys
 from pathlib import Path
-
 
 MODULE_PATH = Path(__file__).with_name("check_release_rings.py")
 SPEC = importlib.util.spec_from_file_location("check_release_rings", MODULE_PATH)
@@ -27,3 +27,24 @@ def test_missing_guard_is_reported(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(checker, "ROOT", tmp_path)
 
     assert any("missing required release-ring guard" in error for error in checker.check())
+
+
+def test_dispatch_release_id_cannot_be_interpolated_into_shell(tmp_path: Path, monkeypatch) -> None:
+    for relative in (
+        Path(".github/workflows/release-record.yml"),
+        Path(".github/workflows/deploy-release-ring.yml"),
+        Path("backend/deploy/release_rings.yaml"),
+    ):
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(checker.ROOT / relative, destination)
+    deploy_path = tmp_path / ".github/workflows/deploy-release-ring.yml"
+    deploy_path.write_text(
+        deploy_path.read_text(encoding="utf-8").replace(
+            'records/${RELEASE_ID}.json', 'records/${{ inputs.release_id }}.json'
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(checker, "ROOT", tmp_path)
+
+    assert any("must enter shell only through the job env" in error for error in checker.check())
