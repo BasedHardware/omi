@@ -934,41 +934,31 @@ public class ProactiveAssistantsPlugin: NSObject {
         captureTrigger.markCaptured(
           app: appName, windowTitle: currentWindowTitle, at: captureTime, frameHash: fullHash)
 
-        // Encode JPEG off main actor — CGImageDestinationFinalize is CPU-heavy
-        let captureService = screenCaptureService
-        let jpegData = await Task.detached(priority: .userInitiated) {
-          captureService.encodeJPEG(from: cgImage)
-        }.value
-        if let jpegData = jpegData {
+        // Privacy gate: skip ALL assistant paths for Rewind-excluded apps.
+        // This includes trackFrame — the tracked frame can be passed to assistants
+        // via onContextSwitch (e.g. TaskAssistant), so excluded frames must never
+        // be stored as lastTrackedFrame.
+        // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
+        // (set by checkContextSwitch), not lastTrackedFrame.
+        if !isRewindExcluded {
           let frame = CapturedFrame(
-            jpegData: jpegData,
+            cgImage: cgImage,
+            jpegQuality: 0.8,
             appName: appName,
             windowTitle: currentWindowTitle,
             frameNumber: frameCount,
             captureTime: captureTime
           )
-
-          // Privacy gate: skip ALL assistant paths for Rewind-excluded apps.
-          // This includes trackFrame — the tracked frame can be passed to assistants
-          // via onContextSwitch (e.g. TaskAssistant), so excluded frames must never
-          // be stored as lastTrackedFrame.
-          // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
-          // (set by checkContextSwitch), not lastTrackedFrame.
-          if isRewindExcluded {
-            log("PrivacyGate: Blocked frame from Rewind-excluded app '\(appName)' — not sent to assistants")
-          }
-          if !isRewindExcluded {
-            AssistantCoordinator.shared.trackFrame(frame)
-            if !isInDelayPeriod {
-              distributeFrameIfChanged(frame)
-            } else {
-              // During delay, still distribute to assistants that need it (e.g. refocus detection)
-              AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
-            }
+          AssistantCoordinator.shared.trackFrame(frame)
+          if !isInDelayPeriod {
+            distributeFrameIfChanged(frame)
+          } else {
+            // During delay, still distribute to assistants that need it (e.g. refocus detection)
+            AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
           }
         }
 
-        // Pass CGImage directly to RewindIndexer (only if not excluded from Rewind)
+        // Pass CGImage directly to RewindIndexer (only if not excluded from Rewind).
         // Backpressure: skip this frame if the previous one is still being processed.
         // Without this, fire-and-forget Tasks queue up holding CGImages (~24MB each),
         // causing multi-GB memory growth when encoding can't keep up with capture rate.
