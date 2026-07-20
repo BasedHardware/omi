@@ -2754,7 +2754,18 @@ actor AgentRuntimeProcess {
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
     ]
-    let adapterSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
+    // Also honor the user's PATH so binaries installed via nvm/asdf/custom npm
+    // prefixes are auto-wired too (PATH is minimal when launched from Finder,
+    // so the hardcoded well-known locations remain the reliable base).
+    let envPathDirs = (env["PATH"] ?? "")
+      .split(separator: ":")
+      .map(String.init)
+      .filter { !$0.isEmpty }
+    let adapterSearchDirs = adapterPathDirs + [
+      "\(home)/.local/bin",
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ] + envPathDirs
     let trustedPathDirs = [
       "/opt/homebrew/bin",
       "/usr/local/bin",
@@ -2791,45 +2802,18 @@ actor AgentRuntimeProcess {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
 
+    // Codex CLI has no native ACP mode; the zed-industries codex-acp bridge
+    // (installed alongside the codex CLI) speaks ACP over stdio and reuses
+    // the user's `codex login` credentials from ~/.codex. Omi's permission
+    // policy auto-denies external-adapter approval requests, so Codex must
+    // run approval-free inside its own workspace-write sandbox instead of
+    // escalating through Omi.
     if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
       let codexAcp = firstExecutable(named: "codex-acp", in: adapterSearchDirs)
     {
-      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexAcpPath: codexAcp)
+      env["OMI_CODEX_ADAPTER_COMMAND"] =
+        "\(Self.shellQuote(codexAcp)) -c approval_policy=never -c sandbox_mode=workspace-write"
     }
-  }
-
-  static func byokEnvironmentKey(for provider: BYOKProvider) -> String {
-    "OMI_BYOK_\(provider.rawValue.uppercased())"
-  }
-
-  static func removeInheritedBYOKEnvironment(from env: inout [String: String]) {
-    let inheritedBYOKKeys = env.keys.filter { $0.uppercased().hasPrefix("OMI_BYOK_") }
-    for key in inheritedBYOKKeys {
-      env.removeValue(forKey: key)
-    }
-  }
-
-  @MainActor
-  static func usableBYOKEnvironment() -> (values: [String: String], suppressedProviders: [BYOKProvider]) {
-    guard APIKeyService.isByokActive else {
-      return ([:], [])
-    }
-
-    var candidateValues: [String: String] = [:]
-    var suppressedProviders: [BYOKProvider] = []
-    for provider in BYOKProvider.allCases {
-      guard let key = APIKeyService.byokKey(provider) else { continue }
-      let fingerprint = APIKeyService.byokFingerprint(key)
-      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint) {
-        candidateValues[byokEnvironmentKey(for: provider)] = key
-      } else {
-        suppressedProviders.append(provider)
-      }
-    }
-    guard suppressedProviders.isEmpty, candidateValues.count == BYOKProvider.allCases.count else {
-      return ([:], suppressedProviders)
-    }
-    return (candidateValues, [])
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
@@ -3022,18 +3006,26 @@ actor AgentRuntimeProcess {
     let chunkReader = AgentRuntimeStdoutChunkReader()
 
     let handle = stdoutPipe.fileHandleForReading
-    handle.readabilityHandler = { [weak self] handle in
-      let chunk = chunkReader.read(from: handle)
-      guard !chunk.data.isEmpty else {
+    // Chunks must reach the actor in pipe order. An unstructured Task per
+    // readability callback gives no FIFO guarantee when hopping onto the
+    // actor, so under bursty output (e.g. large adapter message.delta
+    // streams) chunks could be appended to the line buffer out of order,
+    // corrupting the JSONL protocol mid-run (parse failures, pills stuck in
+    // "starting", invalid runtime responses). A single AsyncStream consumer
+    // preserves arrival order end to end.
+    let (stream, continuation) = AsyncStream.makeStream(of: Data.self)
+    handle.readabilityHandler = { handle in
+      let data = handle.availableData
+      guard !data.isEmpty else {
+        continuation.finish()
         handle.readabilityHandler = nil
         return
       }
-      Task { [weak self] in
-        await self?.processStdoutData(
-          chunk.data,
-          sequence: chunk.sequence,
-          generation: expectedGeneration
-        )
+      continuation.yield(data)
+    }
+    Task { [weak self] in
+      for await chunk in stream {
+        await self?.processStdoutData(chunk, generation: expectedGeneration)
       }
     }
   }

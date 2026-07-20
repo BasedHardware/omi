@@ -273,14 +273,14 @@ export const ADAPTER_CAPABILITY_MATRIX = {
     adapterId: "codex",
     productionAdapter: true,
     expectations: {
-      // Codex ACP sessions live in the codex-acp bridge process (which runs
-      // the Codex app-server); ids are process-local and stale after an
-      // adapter process restart, so bindings must not be native-resumable.
+      // Codex ACP sessions live in the codex-acp bridge process and are only
+      // valid for that process; after a restart old session ids are stale, so
+      // bindings must not be marked as native-resumable.
       nativeResume: unsupported("Codex ACP session ids are process-local and are stale after adapter process restart."),
-      cancellationDispatch: required("Codex supports cancellation dispatch for active attempts."),
-      cancellationAck: knownLimitation("Codex cancellation is dispatchable but no terminal adapter ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
-      pinnedWorker: required("Codex keeps session state in the adapter process and must stay worker-pinned while active."),
-      modelSwitching: unsupported("Codex does not accept Omi's Claude model aliases; model selection is configured in Codex itself."),
+      cancellationDispatch: required("Codex ACP accepts cancellation through the shared ACP interrupt path."),
+      cancellationAck: knownLimitation("Codex cancellation resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: required("Codex keeps session state in the codex-acp bridge process and must stay worker-pinned while active."),
+      modelSwitching: unsupported("Codex ACP does not expose session/set_model; model selection is configured through the Codex CLI."),
       artifactEmission: unsupported("Codex ACP adapter does not emit artifact references yet."),
       toolSupport: required("Codex projects tool calls through canonical adapter tool events."),
       restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks process-local Codex bindings stale."),

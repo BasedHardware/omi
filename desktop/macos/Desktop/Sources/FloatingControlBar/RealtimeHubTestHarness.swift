@@ -154,7 +154,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .updateActionItem: stub = "Updated the task."
     case .createCalendarEvent: stub = "Created calendar event: Example event."
     case .spawnAgent: stub = "Started a background agent."
-    case .setDesktopAttentionOverride: stub = "Attention override applied."
+    case .setupAgentProvider: stub = "Setup started for the provider."
     case .screenshot: stub = "Screen captured."
     case .reportScreenObservation: stub = "Screen observation accepted."
     case .pointClick: stub = "Clicked."

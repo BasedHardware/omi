@@ -37,6 +37,12 @@ final class AgentPill: ObservableObject, Identifiable {
     var canonicalRunId: String?
     var canonicalAttemptId: String?
 
+    /// Remaining auto-route fallback chain (a `nil` entry is the default Omi
+    /// orchestrator). When this pill fails, the manager consumes the chain and
+    /// respawns the task on the next provider. Empty for explicitly directed
+    /// pills — a user who names an agent should not be silently rerouted.
+    var fallbackProviders: [AgentPillsManager.DirectedProvider?] = []
+
     @Published var title: String
     @Published var status: Status = .queued
     @Published var latestActivity: String = "Queued…"
@@ -488,13 +494,6 @@ final class AgentPillsManager: ObservableObject {
         case openclaw
         case codex
 
-        init?(harnessMode: AgentHarnessMode) {
-            // Directed cases share raw values with AgentHarnessMode; the
-            // non-directed harnesses ("piMono", "acp") match no case here and
-            // correctly return nil.
-            self.init(rawValue: harnessMode.rawValue)
-        }
-
         var displayName: String {
             switch self {
             case .hermes: return "Hermes"
@@ -511,26 +510,11 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
-        /// One-line task-fit summary used by prompt surfaces so the model can
-        /// pick the best provider when the user doesn't name one.
-        var strengths: String {
-            switch self {
-            case .hermes:
-                return "long-running or recurring automations, learned skills, and broad research"
-            case .openclaw:
-                return "messaging/channels (WhatsApp, Telegram, Discord) and the user's OpenClaw automations"
-            case .codex:
-                return "coding, repositories, and terminal/software-engineering work"
-            }
-        }
-
         var executableName: String {
             switch self {
             case .hermes: return "hermes"
             case .openclaw: return "openclaw"
-            // Codex CLI has no ACP mode; we spawn the codex-acp bridge, so
-            // that binary is what "installed" means for task execution.
-            case .codex: return "codex-acp"
+            case .codex: return "codex"
             }
         }
 
@@ -1976,6 +1960,9 @@ final class AgentPillsManager: ObservableObject {
         Self.ensureFailureMessage(errorText, for: pill)
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
+        // Canonical run failures land here (not in complete()), so the
+        // auto-route fallback chain must be consumed on this path too.
+        attemptProviderFallback(for: pill)
     }
 
     private static func ensureStreamingAssistantMessage(for pill: AgentPill) {
@@ -2212,385 +2199,39 @@ final class AgentPillsManager: ObservableObject {
                     pill.conversationMessages.append(finalMessage)
                 }
             }
-          }
-          let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
-          if let entry = floating.first(where: {
-            canonicalString($0["sessionId"]) == sessionId
-          }) {
-            mergeProjectedPills(from: [entry])
-            return findPill(matching: preference) != nil
-          }
-        case .pillId(let pillId):
-          let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
-          if let entry = floating.first(where: { canonicalPillId(from: $0) == pillId }) {
-            mergeProjectedPills(from: [entry])
-            return findPill(matching: preference) != nil
-          }
-          let snapshot = await DesktopCoordinatorService.shared.awarenessSnapshot()
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
-          if let session = snapshot.sessions.first(where: {
-            $0.externalRefKind == "pill" && $0.externalRefId == pillId.uuidString
-          }) {
-            if upsertHydratedPill(
-              pillId: pillId,
-              sessionId: session.sessionId,
-              runId: session.runId,
-              attemptId: session.attemptId,
-              title: session.title,
-              query: nil,
-              provider: session.provider
-            ) {
-              return true
+            pill.latestActivity = String(trimmedFinalText.prefix(140))
+            pill.markContentChanged()
+        }
+        if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
+            Self.apply(projection: projection, to: pill)
+            if projection.status.isTerminal {
+                attemptProviderFallback(for: pill)
+                pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+                if pill.viewedAt != nil {
+                    scheduleViewedExpiration(for: pill)
+                }
+                return
             }
           }
         }
-      }
-    } catch {
-      logError("AgentPills: kernel hydrate failed", error: error)
-    }
-    return false
-  }
-
-  @discardableResult
-  private func upsertHydratedPill(
-    pillId: UUID?,
-    sessionId: String?,
-    runId: String?,
-    attemptId: String?,
-    title: String?,
-    query: String?,
-    provider: String?
-  ) -> Bool {
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
-    let trimmedSession = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let trimmedRun = runId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    guard !trimmedSession.isEmpty || !trimmedRun.isEmpty || pillId != nil else {
-      return false
-    }
-    let id = pillId ?? UUID()
-    let model =
-      ShortcutSettings.shared.selectedModel.isEmpty
-      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    let pill: AgentPill
-    if let existing = pills.first(where: { $0.id == id && $0.ownerID == ownerID }) {
-      pill = existing
-    } else if let existing = pills.first(where: {
-      $0.ownerID == ownerID
-        && ((!trimmedRun.isEmpty && $0.canonicalRunId == trimmedRun)
-          || (!trimmedSession.isEmpty && $0.canonicalSessionId == trimmedSession))
-    }) {
-      pill = existing
-    } else {
-      pill = AgentPill(
-        id: id,
-        query: (query?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-          ? query! : "Background agent",
-        model: model,
-        ownerID: ownerID
-      )
-      pills.append(pill)
-    }
-    pill.producingJournalSurface = producingJournalSurfaceByPill[pill.id]
-    if let title, !title.isEmpty {
-      pill.title = title
-    } else if pill.title.isEmpty {
-      pill.title = "Background agent"
-    }
-    if !trimmedSession.isEmpty {
-      pill.canonicalSessionId = trimmedSession
-    }
-    if !trimmedRun.isEmpty {
-      updateCanonicalRun(
-        for: pill,
-        runId: trimmedRun,
-        attemptId: attemptId,
-        preservingAttemptForSameRun: true
-      )
-    } else if let attemptId, !attemptId.isEmpty {
-      pill.canonicalAttemptId = attemptId
-    }
-    pill.applyCanonicalProviderIdentity(provider)
-    Self.ensureStreamingAssistantMessage(for: pill)
-    pill.markContentChanged()
-    objectWillChange.send()
-    return true
-  }
-
-  @MainActor
-  func upsertSpawnedPill(
-    id: UUID,
-    query: String,
-    title: String,
-    sessionId: String,
-    runId: String,
-    attemptId: String?,
-    provider: String? = nil,
-    producingJournalSurface: AgentSurfaceReference? = nil
-  ) {
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
-    let model =
-      ShortcutSettings.shared.selectedModel.isEmpty
-      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    let pill: AgentPill
-    if let existing = pills.first(where: { $0.id == id && $0.ownerID == ownerID }) {
-      pill = existing
-    } else {
-      pill = AgentPill(
-        id: id,
-        query: query.isEmpty ? "Background agent" : query,
-        model: model,
-        ownerID: ownerID)
-      pills.append(pill)
-    }
-    pill.title = title.isEmpty ? "Background agent" : title
-    pill.canonicalSessionId = sessionId
-    updateCanonicalRun(
-      for: pill,
-      runId: runId,
-      attemptId: attemptId,
-      preservingAttemptForSameRun: false
-    )
-    pill.applyCanonicalProviderIdentity(provider)
-    if let producingJournalSurface {
-      bindProducingJournalSurface(pillID: pill.id, surface: producingJournalSurface)
-    }
-    // A delayed duplicate spawn receipt must not turn a terminal pill back
-    // into a running row after the completion was already projected.
-    guard !pill.status.isFinished else { return }
-    pill.status = .running
-    pill.completedAt = nil
-    pill.latestActivity = "Working…"
-    Self.ensureStreamingAssistantMessage(for: pill)
-    pill.markContentChanged()
-    AgentRuntimeStatusStore.shared.recordAcceptedRun(
-      surface: .floatingPill(pillId: pill.id),
-      sessionId: sessionId,
-      runId: runId,
-      attemptId: attemptId,
-      statusText: "Working…"
-    )
-    ensureCanonicalReconciliation()
-    startCanonicalRunPolling(for: pill)
-    objectWillChange.send()
-  }
-
-  private func startCanonicalRunPolling(for pill: AgentPill) {
-    runTasksByPill[pill.id]?.cancel()
-    let generation = nextRunAttemptGeneration(for: pill.id)
-    runTasksByPill[pill.id] = Task { @MainActor [weak self, weak pill] in
-      guard let self, let pill else { return }
-      await self.pollCanonicalRun(for: pill, generation: generation)
-    }
-  }
-
-  private func mergeProjectedPills(from floating: [[String: Any]]) {
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
-    var seen = Set<UUID>()
-    var missingPillIDCount = 0
-    var missingSessionIDCount = 0
-    var missingRunIDCount = 0
-    for entry in floating {
-      guard let pillId = canonicalPillId(from: entry) else {
-        missingPillIDCount += 1
-        continue
-      }
-      guard let sessionId = canonicalString(entry["sessionId"]) else {
-        missingSessionIDCount += 1
-        continue
-      }
-      guard let runId = canonicalString(entry["runId"]) else {
-        missingRunIDCount += 1
-        continue
-      }
-      seen.insert(pillId)
-      let query = (entry["query"] as? String) ?? (entry["latestActivity"] as? String) ?? ""
-      let model =
-        ShortcutSettings.shared.selectedModel.isEmpty
-        ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-      let pill: AgentPill
-      if let existing = pills.first(where: { $0.id == pillId && $0.ownerID == ownerID }) {
-        pill = existing
-      } else {
-        pill = AgentPill(
-          id: pillId,
-          query: query.isEmpty ? "Background agent" : query,
-          model: model,
-          ownerID: ownerID)
-        pills.append(pill)
-      }
-      pill.producingJournalSurface = producingJournalSurfaceByPill[pill.id]
-      if let title = entry["title"] as? String, !title.isEmpty {
-        pill.title = title
-      }
-      pill.canonicalSessionId = sessionId
-      updateCanonicalRun(
-        for: pill,
-        runId: runId,
-        attemptId: canonicalString(entry["attemptId"]),
-        preservingAttemptForSameRun: false
-      )
-      pill.applyCanonicalProviderIdentity(canonicalString(entry["provider"]))
-      let projectedStatus = (entry["status"] as? String) ?? "running"
-      applyProjectedStatus(projectedStatus, to: pill)
-      if let activity = entry["latestActivity"] as? String, !activity.isEmpty {
-        pill.latestActivity = activity
-      }
-      reconcileProjectedPillRun(entryStatus: projectedStatus, pill: pill)
-      ensureTerminalJournalMaterialization(for: pill)
-      pill.markContentChanged()
-    }
-    if !floating.isEmpty {
-      log(
-        "AgentPills: canonical projection source=\(floating.count) accepted=\(seen.count) "
-          + "missing_pill_id=\(missingPillIDCount) missing_session_id=\(missingSessionIDCount) "
-          + "missing_run_id=\(missingRunIDCount)"
-      )
-    }
-    let removable = pills.filter { pill in
-      Self.shouldRemoveRenderedProjection(
-        status: pill.status,
-        isPolling: runTasksByPill[pill.id] != nil,
-        isSeenInRuntimeSnapshot: seen.contains(pill.id),
-        hasLocalTransientState: hasLocalTransientState(pillID: pill.id)
-      )
-    }
-    for pill in removable {
-      removeRenderedProjection(pillID: pill.id)
-    }
-    objectWillChange.send()
-    ensureCanonicalReconciliation()
-  }
-
-  /// Runtime session lists are intentionally an active-work snapshot and can
-  /// omit a run immediately after it completes. A finished pill remains a
-  /// user-visible attention item until the normal viewed/dismissed retention
-  /// policy removes it; a refresh must not orphan it from the hover list.
-  nonisolated static func shouldRemoveRenderedProjection(
-    status: AgentPill.Status,
-    isPolling: Bool,
-    isSeenInRuntimeSnapshot: Bool,
-    hasLocalTransientState: Bool
-  ) -> Bool {
-    guard !isPolling, !status.isFinished else { return false }
-    return !isSeenInRuntimeSnapshot && !hasLocalTransientState
-  }
-
-  private func applyRuntimeProjections() {
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
-    for pill in pills where pill.ownerID == ownerID {
-      if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
-        Self.apply(projection: projection, to: pill)
-      } else if let runId = pill.canonicalRunId,
-        let projection = AgentRuntimeStatusStore.shared.projection(for: .floatingBarRun(runId: runId))
-      {
-        Self.apply(projection: projection, to: pill)
-      }
-    }
-  }
-
-  private func applyProjectedStatus(_ status: String, to pill: AgentPill) {
-    if pill.status.isFinished && !isTerminalProjectedStatus(status) {
-      return
-    }
-    switch status {
-    case "queued":
-      pill.status = .queued
-    case "starting":
-      pill.status = .starting
-    case "running", "waiting_input", "waiting_approval", "cancelling":
-      pill.status = .running
-    case "succeeded", "completed":
-      pill.status = .done
-    case "cancelled":
-      pill.status = .stopped
-    case "failed", "timed_out", "orphaned":
-      pill.status = .failed("Agent failed")
-    default:
-      break
-    }
-  }
-
-  private func reconcileProjectedPillRun(entryStatus: String, pill: AgentPill) {
-    guard shouldPollCanonicalRun(for: pill, projectedStatus: entryStatus) else { return }
-    startCanonicalRunPolling(for: pill)
-  }
-
-  private func shouldPollCanonicalRun(for pill: AgentPill, projectedStatus: String) -> Bool {
-    guard pill.canonicalRunId?.isEmpty == false else { return false }
-    return AgentPillLifecycleConvergencePolicy.shouldStartCanonicalPoll(
-      projectedStatusIsTerminal: isTerminalProjectedStatus(projectedStatus),
-      pillStatus: pill.status,
-      hasCanonicalTerminalDetail: terminalCanonicalDetailsByPill[pill.id]?.runID == pill.canonicalRunId,
-      isPolling: runTasksByPill[pill.id] != nil
-    )
-  }
-
-  private func isTerminalProjectedStatus(_ status: String) -> Bool {
-    switch status {
-    case "succeeded", "completed", "cancelled", "failed", "timed_out", "orphaned":
-      return true
-    default:
-      return false
-    }
-  }
-
-  private func canonicalPillId(from entry: [String: Any]) -> UUID? {
-    guard let idString = canonicalString(entry["pillId"]) ?? canonicalString(entry["id"]) else { return nil }
-    return UUID(uuidString: idString)
-  }
-
-  private func canonicalString(_ value: Any?) -> String? {
-    guard let text = value as? String else { return nil }
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private func hasLocalTransientState(pillID: UUID) -> Bool {
-    pendingFollowUpsByPill[pillID]?.isEmpty == false
-  }
-
-  private func hasTerminalJournalCompletion(for pill: AgentPill) -> Bool {
-    let materialized = FloatingControlBarManager.shared.hasMaterializedAgentCompletion(
-      pillID: pill.id,
-      runID: pill.canonicalRunId
-    )
-    if materialized {
-      terminalJournalMaterializedPillIDs.insert(pill.id)
-    } else {
-      terminalJournalMaterializedPillIDs.remove(pill.id)
-    }
-    return materialized
-  }
-
-  private func hasTerminalJournalMaterializationFailure(for pill: AgentPill) -> Bool {
-    terminalJournalMaterializationFailedPillIDs.contains(pill.id)
-  }
-
-  private func needsCanonicalReconciliation() -> Bool {
-    pills.contains { pill in
-      AgentPillLifecycleConvergencePolicy.requiresCanonicalReconciliation(
-        status: pill.status,
-        requiresJournalCompletion: pill.producingJournalSurface != nil,
-        hasTerminalJournalCompletion: hasTerminalJournalCompletion(for: pill),
-        hasTerminalJournalMaterializationFailure: hasTerminalJournalMaterializationFailure(for: pill),
-        hasPendingFollowUp: hasLocalTransientState(pillID: pill.id)
-      )
-    }
-  }
-
-  private func ensureCanonicalReconciliation() {
-    guard canonicalReconciliationTask == nil,
-      needsCanonicalReconciliation(),
-      let ownerID = RuntimeOwnerIdentity.currentOwnerId()
-    else { return }
-    canonicalReconciliationGeneration &+= 1
-    let generation = canonicalReconciliationGeneration
-    canonicalReconciliationTask = Task { @MainActor [weak self] in
-      defer {
-        if let self, self.canonicalReconciliationGeneration == generation {
-          self.canonicalReconciliationTask = nil
+        if let errorText = provider.errorMessage, !errorText.isEmpty {
+            pill.status = .failed(errorText)
+            pill.latestActivity = errorText
+            pill.completedAt = Date()
+            Self.ensureFailureMessage(errorText, for: pill)
+            pill.markContentChanged()
+            attemptProviderFallback(for: pill)
+        } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
+            pill.status = .done
+            pill.completedAt = Date()
+            pill.markContentChanged()
+        } else {
+            pill.status = .failed("Agent ended before reporting a final result")
+            pill.completedAt = Date()
+            pill.latestActivity = "Agent ended before reporting a final result"
+            Self.ensureFailureMessage("Agent ended before reporting a final result", for: pill)
+            pill.markContentChanged()
+            attemptProviderFallback(for: pill)
         }
       }
       while !Task.isCancelled {
@@ -3112,28 +2753,176 @@ final class AgentPillsManager: ObservableObject {
       return
     }
 
-    switch projection.status {
-    case .queued:
-      pill.status = .queued
-      ensureStreamingAssistantMessage(for: pill)
-    case .starting, .running, .waitingInput, .waitingApproval, .cancelling:
-      pill.status = .running
-      pill.completedAt = nil
-      ensureStreamingAssistantMessage(for: pill)
-    case .succeeded:
-      if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !statusText.isEmpty
-      {
-        removeEmptyStreamingAssistantMessages(for: pill)
-        var finalMessage = currentAssistantMessage(for: pill) ?? ChatMessage(text: statusText, sender: .ai)
-        finalMessage.text = statusText
-        finalMessage.isStreaming = false
-        upsertAssistantMessage(finalMessage, for: pill)
-        pill.latestActivity = String(statusText.prefix(140))
-      } else if let last = currentAssistantMessage(for: pill) {
-        let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-          pill.latestActivity = String(trimmed.prefix(140))
+    /// Spawn a manually-driven setup pill that installs/repairs a local agent
+    /// provider via AgentProviderInstaller's deterministic recipe, then — on a
+    /// verified-healthy result — dispatches the user's original task to the
+    /// freshly set-up provider. Consent must be collected upstream (voice
+    /// confirmation or an explicit tool/bridge call).
+    @discardableResult
+    func spawnProviderSetup(provider: DirectedProvider, thenBrief: String?) -> AgentPill {
+        let pill = AgentPill(query: "Set up \(provider.displayName)", model: ModelQoS.Claude.defaultSelection)
+        pill.title = "Setting up \(provider.displayName)"
+        pill.status = .running
+        pill.latestActivity = "Checking \(provider.displayName)…"
+        trimForNewPillIfNeeded()
+        pills.append(pill)
+
+        let steps = AgentProviderInstaller.plan(for: provider)
+        let dispatchBrief: @MainActor () -> Void = { [weak self, weak pill] in
+            guard let self else { return }
+            if let thenBrief, !thenBrief.isEmpty {
+                let task = self.spawn(
+                    query: thenBrief,
+                    model: pill?.model ?? ModelQoS.Claude.defaultSelection,
+                    fromVoice: false,
+                    preFetchedTitle: provider.displayName,
+                    bridgeHarnessOverride: provider.harnessMode
+                )
+                task.fallbackProviders = [nil]
+            }
+        }
+
+        guard !steps.isEmpty else {
+            pill.status = .done
+            pill.completedAt = Date()
+            pill.latestActivity = "\(provider.displayName) is already set up."
+            pill.markContentChanged()
+            dispatchBrief()
+            return pill
+        }
+
+        let pillID = pill.id
+        Task {
+            let result = await AgentProviderInstaller.run(steps: steps) { line in
+                Task { @MainActor in
+                    guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillID }) else { return }
+                    pill.latestActivity = String(line.prefix(140))
+                    pill.transcript.append(line)
+                    pill.markContentChanged()
+                }
+            }
+            // The shared Node runtime reads adapter commands from its
+            // environment only at process start, so a provider installed
+            // mid-session is invisible to a running runtime ("Adapter not
+            // registered"). Restart it before dispatching the task; if a
+            // request is momentarily active, retry once. Dispatch is gated on
+            // the restart succeeding — dispatching into a stale runtime would
+            // fail and fall back to the default orchestrator, silently
+            // substituting a provider the user explicitly asked for.
+            var runtimeRestarted = false
+            if case .success = result, AgentProviderHealth.report(for: provider).readiness == .ready {
+                await MainActor.run {
+                    guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillID }) else { return }
+                    pill.latestActivity = "Restarting agent runtime to pick up \(provider.displayName)…"
+                    pill.markContentChanged()
+                }
+                for attempt in 1...2 {
+                    do {
+                        try await AgentRuntimeProcess.shared.restart(harnessMode: provider.harnessMode.rawValue)
+                        runtimeRestarted = true
+                        break
+                    } catch {
+                        log("AgentPills: runtime restart after \(provider.rawValue) setup failed (attempt \(attempt)): \(error)")
+                        if attempt == 1 {
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        }
+                    }
+                }
+            }
+            await MainActor.run {
+                guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillID }) else { return }
+                switch result {
+                case .success:
+                    let health = AgentProviderHealth.report(for: provider)
+                    if health.readiness == .ready, runtimeRestarted {
+                        pill.status = .done
+                        pill.completedAt = Date()
+                        pill.latestActivity = "\(provider.displayName) is ready."
+                        pill.markContentChanged()
+                        dispatchBrief()
+                    } else if health.readiness == .ready {
+                        pill.status = .failed("Agent runtime is busy")
+                        pill.completedAt = Date()
+                        pill.latestActivity =
+                            "\(provider.displayName) is installed, but the agent runtime is busy and couldn't restart. Ask for your task again in a moment."
+                        pill.markContentChanged()
+                    } else {
+                        pill.status = .failed(health.detail)
+                        pill.completedAt = Date()
+                        pill.latestActivity = "Setup finished but \(provider.displayName) is still not ready: \(health.detail)"
+                        pill.markContentChanged()
+                    }
+                case .failed(let step, let message):
+                    pill.status = .failed("\(step): \(message)")
+                    pill.completedAt = Date()
+                    pill.latestActivity = "Setup failed at \(step): \(message)"
+                    pill.markContentChanged()
+                }
+            }
+        }
+        return pill
+    }
+
+    /// Consume the pill's auto-route fallback chain after a terminal failure:
+    /// respawn the same task on the next installed provider (a `nil` hop is the
+    /// default Omi orchestrator). Idempotent — the chain is consumed on first
+    /// call, so repeated terminal projections can't spawn duplicate retries.
+    @discardableResult
+    func attemptProviderFallback(for pill: AgentPill) -> Bool {
+        guard case .failed = pill.status else { return false }
+        guard !pill.fallbackProviders.isEmpty else { return false }
+        var chain = pill.fallbackProviders
+        pill.fallbackProviders = []
+
+        var hop: DirectedProvider?
+        var foundHop = false
+        while !chain.isEmpty {
+            let candidate = chain.removeFirst()
+            if let provider = candidate {
+                if AgentProviderHealth.report(for: provider).readiness == .ready {
+                    hop = provider
+                    foundHop = true
+                    break
+                }
+            } else {
+                hop = nil  // default Omi orchestrator terminal fallback
+                foundHop = true
+                break
+            }
+        }
+        guard foundHop else { return false }
+
+        let display = hop?.displayName ?? "Omi"
+        log("AgentPills: pill '\(pill.title)' failed — falling back to \(display)")
+        pill.latestActivity = "Failed — retrying with \(display)"
+        pill.markContentChanged()
+
+        let successor = spawn(
+            query: pill.query,
+            model: pill.model,
+            fromVoice: false,
+            preFetchedTitle: pill.title,
+            bridgeHarnessOverride: hop?.harnessMode
+        )
+        successor.fallbackProviders = chain
+        successor.latestActivity = "Retrying via \(display)…"
+        successor.markContentChanged()
+        return true
+    }
+
+    private static func ensureFailureMessage(_ errorText: String, for pill: AgentPill) {
+        guard let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) else { return }
+        let failureMessage = ChatMessage(text: failureText, sender: .ai)
+        if pill.conversationMessages.isEmpty {
+            pill.conversationMessages = [
+                ChatMessage(text: pill.query, sender: .user),
+                failureMessage,
+            ]
+        } else if !pill.conversationMessages.contains(where: { message in
+            message.sender == .ai
+                && message.text.trimmingCharacters(in: .whitespacesAndNewlines) == failureMessage.text
+        }) {
+            pill.conversationMessages.append(failureMessage)
         }
         clearStreamingAssistantMessage(for: pill)
       } else {

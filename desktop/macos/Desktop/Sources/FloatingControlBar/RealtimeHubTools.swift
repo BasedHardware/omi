@@ -66,6 +66,9 @@ enum HubTool: String {
   case updateActionItem = "update_action_item"
   /// Create a Google Calendar event through the backend calendar tool.
   case createCalendarEvent = "create_calendar_event"
+  /// Install/repair a local agent provider (consent required), optionally
+  /// dispatching the user's original task to it once setup succeeds.
+  case setupAgentProvider = "setup_agent_provider"
   /// Capture the user's screen so the model can see what they're looking at.
   case screenshot = "screenshot"
   /// Click at on-screen coordinates (local).
@@ -73,19 +76,29 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
-  private static let directedProviders: [AgentPillsManager.DirectedProvider] = AgentPillsManager.orderedDirectedProviders
-
-  private static func localAgentProviderInstruction() -> String {
-    localAgentProviderInstruction(
-      availability: directedProviders.map { LocalAgentProviderDetector.availability(for: $0) })
+  /// One health probe per built artifact (instruction text or tool schema) so
+  /// each is internally consistent. Instructions and schema are constructed at
+  /// different moments by design; the authoritative gate is the dispatch-time
+  /// health preflight, so a stale snapshot can only yield a stale offer.
+  static func providerHealthSnapshot() -> [AgentProviderHealthReport] {
+    [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
+      .map { AgentProviderHealth.report(for: $0) }
   }
 
-  /// Availability-parameterized seam (same pattern as
-  /// `openAITools(availableDirectedProviders:)`) so instruction content is
-  /// testable without filesystem-dependent provider detection.
-  static func localAgentProviderInstruction(availability: [LocalAgentProviderAvailability]) -> String {
-    let available = availability.filter(\.isAvailable).map(\.provider)
-    let unavailable = availability.filter { !$0.isAvailable }
+  private static func localAgentProviderInstruction(
+    reports: [AgentProviderHealthReport] = providerHealthSnapshot()
+  ) -> String {
+    let available = reports.filter { $0.readiness == .ready }.map(\.provider)
+    let unavailable = reports.filter { $0.readiness != .ready }
+
+    let autoInstruction =
+      available.isEmpty
+      ? ""
+      : " If the user asks for an agent without naming one (e.g. \"have an agent do this\", \"use the best agent\"), call spawn_agent with provider set to \"auto\" — Omi picks the best installed agent for the task and falls back to the others automatically."
+
+    if unavailable.isEmpty {
+      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect." + autoInstruction
+    }
 
     var parts: [String] = []
     if !available.isEmpty {
@@ -106,13 +119,22 @@ enum RealtimeHubTools {
         .joined(separator: " ")
       parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and offer to install it: \(missingText) \(LocalAgentProviderInstaller.consentRule)")
     }
+    let missingText = unavailable
+      .map { "\($0.provider.displayName): \($0.detail)" }
+      .joined(separator: " ")
+    parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    parts.append(
+      "Then OFFER to set it up for them. If — and only if — the user agrees, call setup_agent_provider with that provider and their original task as brief; Omi installs it with live progress and runs the task once it's ready.")
+    if !autoInstruction.isEmpty {
+      parts.append(autoInstruction.trimmingCharacters(in: .whitespaces))
+    }
     return parts.joined(separator: " ")
   }
 
-  private static func availableDirectedProviderRawValues() -> [String] {
-    directedProviders
-      .filter { LocalAgentProviderDetector.isAvailable($0) }
-      .map(\.rawValue)
+  private static func availableDirectedProviderRawValues(
+    reports: [AgentProviderHealthReport] = providerHealthSnapshot()
+  ) -> [String] {
+    reports.filter { $0.readiness == .ready }.map(\.provider.rawValue)
   }
 
   private static func currentCalendarContext(now: Date = Date(), timeZone: TimeZone = .current) -> String {
@@ -278,10 +300,19 @@ enum RealtimeHubTools {
   }
 
   static func openAITools(availableDirectedProviders: [String]) -> [[String: Any]] {
-    let providerProperty: [String: Any]? =
-      availableDirectedProviders.isEmpty
-      ? nil
-      : [
+    let providerProperty: [String: Any]? = availableDirectedProviders.isEmpty ? nil : [
+      "type": "string",
+      "enum": availableDirectedProviders + ["auto"],
+      "description":
+        "Optional available local provider to run this background agent through. "
+        + "Use \"auto\" to let Omi pick the best installed provider for the task with automatic fallback.",
+    ]
+    return baseOpenAITools(providerProperty: providerProperty)
+  }
+
+  private static func baseOpenAITools(providerProperty: [String: Any]?) -> [[String: Any]] {
+    var spawnAgentProperties: [String: Any] = [
+      "brief": [
         "type": "string",
         "enum": availableDirectedProviders,
         "description":
@@ -673,6 +704,28 @@ enum RealtimeHubTools {
           "type": "object",
           "properties": spawnAgentProperties,
           "required": ["brief"],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.setupAgentProvider.rawValue,
+        "description":
+          "Install or repair a local agent provider (codex, openclaw, hermes) on the user's Mac, "
+          + "then optionally run their original task on it. ONLY call after the user explicitly "
+          + "agrees to install/set up the provider — never unprompted. Shows a setup pill with live progress.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "provider": [
+              "type": "string", "enum": ["codex", "openclaw", "hermes"],
+              "description": "The provider to install or repair.",
+            ],
+            "brief": [
+              "type": "string",
+              "description": "Optional: the user's original task, dispatched to the provider once setup succeeds.",
+            ],
+          ],
+          "required": ["provider"],
         ],
       ],
       [

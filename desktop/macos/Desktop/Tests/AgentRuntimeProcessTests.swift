@@ -1096,11 +1096,14 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    let readerStart = try XCTUnwrap(source.range(of: "private func startReadingStdout()"))
-    let readerEnd = try XCTUnwrap(source.range(of: "private func processStdoutData("))
-    let reader = String(source[readerStart.lowerBound..<readerEnd.lowerBound])
-
-    XCTAssertTrue(reader.contains("handle.readabilityHandler = { [weak self] handle in"))
+    // Stdout chunks must reach the actor strictly in pipe order: a single
+    // AsyncStream consumer guarantees FIFO, whereas one unstructured Task per
+    // readability callback does not (actor hops can reorder under bursty
+    // adapter output, reassembling JSONL lines out of order and corrupting
+    // the runtime protocol mid-run).
+    XCTAssertTrue(source.contains("AsyncStream.makeStream(of: Data.self)"))
+    XCTAssertTrue(source.contains("for await chunk in stream"))
+    XCTAssertFalse(source.contains("await self?.processStdoutData(data"))
     // The implementation now uses a generation-guarded signature; match the current
     // function name without coupling the test to the exact parameter list.
     XCTAssertTrue(source.contains("func processStdoutData("))

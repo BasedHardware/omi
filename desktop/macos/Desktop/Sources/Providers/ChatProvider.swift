@@ -1309,10 +1309,41 @@ class ChatProvider: ObservableObject {
       return session.messageCount > 1 || session.title != "New Chat"
     }
 
-    guard !searchQuery.isEmpty else { return nonEmptySessions }
-    let query = searchQuery.lowercased()
-    return nonEmptySessions.filter { session in
-      session.title.lowercased().contains(query) || (session.preview?.lowercased().contains(query) ?? false)
+    /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
+    /// When true, user can create multiple chat sessions
+    @AppStorage("multiChatEnabled") var multiChatEnabled = false
+
+    // MARK: - Bridge
+    // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
+    // not always defaulting to Omi mode on cold start.
+    //
+    // Default harness: piMono (Omi AI via the bundled pi-mono subprocess, authenticated
+    // with the user's Firebase ID token). Claude Code remains as an opt-in harness that
+    // uses the user's own Claude OAuth.
+    private lazy var agentBridge: AgentBridge = {
+        let harness = resolvedHarnessMode()
+        activeBridgeHarness = harness
+        return AgentBridge(harnessMode: harness)
+    }()
+    private var agentBridgeStarted = false
+    /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
+    /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
+    /// so comparing against it in switchBridgeMode() would always match → no-op.
+    private var activeBridgeHarness: String = "piMono"
+    /// True while switchBridgeMode is in the critical section between stopping the old
+    /// bridge and starting the new one.  sendMessage checks this to avoid racing.
+    private var modeSwitchInProgress = false
+    /// Continuations for callers waiting on an in-flight mode switch. Supports
+    /// arbitrary overlap (A→B→A→B) without losing waiters.
+    private var modeSwitchWaiters: [CheckedContinuation<Void, Never>] = []
+
+    enum BridgeMode: String {
+        case omiAI = "agentSDK"     // Legacy, auto-migrated to piMono
+        case userClaude = "claudeCode"
+        case piMono = "piMono"
+        case hermes = "hermes"
+        case openClaw = "openclaw"
+        case codex = "codex"
     }
   }
 

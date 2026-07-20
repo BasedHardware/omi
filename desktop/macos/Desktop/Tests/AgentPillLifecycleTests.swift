@@ -406,8 +406,10 @@ import XCTest
     let source = try floatingControlBarWindowSource()
 
     XCTAssertTrue(source.contains("let resolvedProvider = decision.directedProvider ?? directedProvider"))
-    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: resolvedProvider)"))
-    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
+    // Typed dispatch gates on full three-state health (installed AND wired AND
+    // authed), matching the voice hub and chat executor.
+    XCTAssertTrue(source.contains("AgentProviderHealth.report(for: resolvedProvider)"))
+    XCTAssertTrue(source.contains("guard health.readiness == .ready else"))
     XCTAssertTrue(source.contains("\\(logLabel)-provider-unavailable"))
     XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
     XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))

@@ -1044,15 +1044,19 @@ class ChatToolExecutor {
       return "Error: Missing brief. Pass a clear, self-contained task brief."
     }
     let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let providerName = AgentPillsManager.DirectedProvider.normalizedRawValue(args["provider"] as? String)
-    if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
-      return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
+    let providerName = ((args["provider"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: " ", with: "")
+    guard let decision = AgentProviderRouter.dispatchDecision(providerName: providerName, brief: brief) else {
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex, auto."
     }
-    let directedProvider = AgentPillsManager.DirectedProvider(rawValue: providerName)
+    let directedProvider = decision.primary
+    let routedFallbacks = decision.fallbacks
     if let directedProvider {
-      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
-      guard availability.isAvailable else {
-        return availability.toolError
+      let health = AgentProviderHealth.report(for: directedProvider)
+      guard health.readiness == .ready else {
+        return "Error: \(health.detail)"
       }
     }
     let model =
@@ -1075,6 +1079,7 @@ class ChatToolExecutor {
       return
         "Error: Missing self-contained brief. Pass a clear task with enough context for a background agent to execute independently."
     }
+    pill.fallbackProviders = routedFallbacks
     return """
       Agent started as a floating agent pill.
       id: \(pill.id.uuidString)

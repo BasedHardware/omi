@@ -1598,6 +1598,10 @@ async function main(): Promise<void> {
               if (!(await ensureCodexAdapter())) {
                 throw adapterNotActivatedError("codex");
               }
+            } else if (adapterId === "codex") {
+              if (!(await ensureCodexAdapter())) {
+                throw new Error(adapterActivationError("codex"));
+              }
             }
           } else if (adapterId === "openclaw") {
             if (!(await ensureOpenClawAdapter())) {

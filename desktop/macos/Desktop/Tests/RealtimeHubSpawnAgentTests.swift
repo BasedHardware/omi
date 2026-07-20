@@ -5,12 +5,18 @@ import XCTest
 
 @MainActor
 final class RealtimeHubSpawnAgentTests: XCTestCase {
-  func testLocalProfileTurnPlanIsFailClosedOutsideHermeticProfile() {
-    XCTAssertNil(
-      RealtimeLocalProfileTurnPlan.make(
-        transcript: RealtimeLocalProfileTurnPlan.exactMemoryAgentRequest,
-        voiceContext: "",
-        localProfileEnabled: false))
+  func testSpawnAgentSuppressesPostToolAssistantOutput() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
+    XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn else { return }"))
+    XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
+    // Routed spawns narrate the provider choice; explicit/default spawns keep
+    // the legacy result text so acknowledgment behavior is unchanged there.
+    XCTAssertTrue(source.contains("startedOutput = \"Agent started.\""))
+    XCTAssertTrue(source.contains("Agent started via \\(directedProvider.displayName)"))
+    XCTAssertTrue(source.contains("output: startedOutput"))
+    XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
   }
 
   func testLocalProfileExactMemoryRequestProducesOneCanonicalSpawnProposal() throws {
@@ -457,52 +463,18 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testSpawnAgentDelegatesDirectedProviderAvailabilityToKernel() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertFalse(source.contains("LocalAgentProviderDetector.availability"))
-    XCTAssertFalse(source.contains("directed_provider_unavailable"))
-    XCTAssertTrue(source.contains("invokeExternallyAuthorizedTool("))
-    XCTAssertFalse(source.contains("originSurface: .realtime"))
-  }
-
-  func testSetupAgentProviderUsesDeterministicInstallerNotAnAgentPill() throws {
-    let source = try realtimeHubControllerSource()
-
-    XCTAssertTrue(source.contains("case .setupAgentProvider:"))
-    // Idempotent already-installed path — no dialog, no reinstall.
-    XCTAssertTrue(source.contains("is already installed and ready — no setup needed."))
-    // The deterministic installer (native confirm dialog + Process) is the
-    // code-level consent gate; the hub never spawns an installer agent pill.
-    XCTAssertTrue(source.contains("LocalAgentProviderInstaller.shared.beginInstall(for: provider)"))
-    XCTAssertFalse(source.contains("spawnInstallAssistPill"))
-    // The tool result returns immediately — the voice turn never blocks on
-    // the dialog; the ack points the user at it.
-    XCTAssertTrue(source.contains("Please confirm the \\(provider.displayName) install in the dialog on screen."))
-    XCTAssertTrue(source.contains("output: installMessage)"))
-  }
-
-  func testForceRewarmIsIdleGatedAndDefersWhileVoiceListening() throws {
-    let source = try realtimeHubControllerSource()
-
-    // Shared idle-only re-warm used by system wake and provider-change
-    // refresh; the guard also skips an in-flight barge-in replacement. A
-    // request landing mid PTT capture (listening) is deferred to the end of
-    // the voice turn — never dropped — so async callers can't cut live audio
-    // and a wake during locked listening can't leave a stale socket forever.
-    XCTAssertTrue(source.contains("private func forceRewarm(reason: String) {"))
-    XCTAssertTrue(
-      source.contains("guard session != nil, !responding, !minting, !bargeInReplacementInFlight else { return }"))
-    XCTAssertTrue(source.contains("if barState?.isVoiceListening == true {"))
-    XCTAssertTrue(source.contains("pendingRewarmReason = reason"))
-    XCTAssertTrue(source.contains("forceRewarm(reason: \"system woke (dropping possibly-stale socket)\")"))
-    XCTAssertTrue(source.contains("forceRewarm(reason: \"local agent provider availability changed\")"))
-    // Deferred requests retry at both clean end-of-turn points, and any teardown
-    // or fresh session clears them (the rebuild is what the deferral wanted). A
-    // late turn-done that raced a new capture returns early — no rewarm, no
-    // exitVoiceUI teardown, no turnRecorded clobber of the live turn.
-    XCTAssertTrue(source.contains("private func firePendingRewarm() {"))
-    XCTAssertTrue(source.contains("late turn-done during a new capture — leaving voice UI untouched"))
-    XCTAssertTrue(source.contains("exitVoiceUI()\n    firePendingRewarm()"))
-    XCTAssertTrue(source.contains("exitVoiceUI(clearResponseGlow: true)\n    firePendingRewarm()"))
-    XCTAssertTrue(source.contains("pendingRewarmReason = nil"))
+    // Dispatch gates on full health (installed AND wired AND authed), not
+    // binary presence — a not-onboarded provider must not get a doomed spawn.
+    XCTAssertTrue(source.contains("AgentProviderHealth.report(for: directedProvider)"))
+    XCTAssertTrue(source.contains("guard health.readiness == .ready else"))
+    XCTAssertTrue(source.contains("assistantText = setupPrompt"))
+    XCTAssertTrue(source.contains("output: \"Error: \\(health.detail)\""))
+    // The not-ready path must not dead-end: it instructs the model to offer
+    // a consent-gated setup_agent_provider call carrying the original task,
+    // and the tool result must stay epoch-guarded like every other result.
+    XCTAssertTrue(source.contains("call setup_agent_provider with provider="))
+    XCTAssertTrue(source.contains("and their original task as brief."))
+    XCTAssertTrue(source.contains("expectedTurnEpoch: expectedTurnEpoch)"))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {

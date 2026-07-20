@@ -102,15 +102,10 @@ export function adapterProfile(adapterId: ProductionAdapterId): AdapterProfile {
 export function adapterActivationError(adapterId: ProductionAdapterId): string | undefined {
   const envName = adapterActivationEnv(adapterId);
   if (!envName) return undefined;
-  switch (adapterId) {
-    case "hermes":
-      return "Hermes is not available. Make sure Hermes is installed first, then try again.";
-    case "openclaw":
-      return "OpenClaw is not available. Make sure OpenClaw is installed first, then try again.";
-    case "codex":
-      return "Codex is not available. Make sure Codex and the codex-acp bridge are installed first, then try again.";
-    default:
-      return `${adapterId === "pi-mono" ? "pi-mono" : adapterId} adapter is unavailable.`;
+  const label =
+    adapterId === "pi-mono" ? "pi-mono" : adapterId === "openclaw" ? "OpenClaw" : adapterId === "codex" ? "Codex" : "Hermes";
+  if (adapterId === "hermes" || adapterId === "openclaw" || adapterId === "codex") {
+    return `${label} is not available. Make sure ${label} is installed first, then try again.`;
   }
 }
 

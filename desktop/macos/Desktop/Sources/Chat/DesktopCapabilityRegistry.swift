@@ -295,14 +295,8 @@ enum DesktopCapabilityRegistry {
       bullets: [
         "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
         "The only way to start a visible floating-bar background agent is to call spawn_agent; saying you will start one does not start it.",
-        "If the user asks to use OpenClaw, Hermes, or Codex, call spawn_agent with provider set to openclaw, hermes, or codex.",
-        "When the user does not name an agent, pick the connected provider whose strengths clearly match the task — "
-          + AgentPillsManager.orderedDirectedProviders
-          .map { "\($0.displayName): \($0.strengths)" }
-          .joined(separator: "; ")
-          + " — otherwise omit provider to use Omi's default agent.",
-        "When the user names an agent, always use exactly that one; if it is not installed yet, do not pass it to spawn_agent — offer to install it via setup_agent_provider instead.",
-        "Use delegate_agent instead when the new work must be linked to a known parent run.",
+        "If the user asks to use OpenClaw, Hermes, or Codex, call spawn_agent with provider set to openclaw, hermes, or codex. If they ask for an agent without naming one, use provider auto — Omi picks the best installed provider with automatic fallback.",
+        "Use delegate_agent instead when the new work must be linked to a known parent run."
       ]),
     Capability(
       toolName: "manage_agent_pills",

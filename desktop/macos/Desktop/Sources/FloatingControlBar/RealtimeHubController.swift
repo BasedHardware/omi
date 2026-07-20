@@ -2277,37 +2277,40 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           expectedTurnEpoch: toolTurnEpoch)
       }
     case .setupAgentProvider:
-      let setupProviderName = AgentPillsManager.DirectedProvider.normalizedRawValue(arguments["provider"] as? String)
-      guard let provider = AgentPillsManager.DirectedProvider(rawValue: setupProviderName) else {
+      let setupProviderName = ((arguments["provider"] as? String) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: " ", with: "")
+      let setupBrief = (arguments["brief"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let setupProvider = AgentPillsManager.DirectedProvider(rawValue: setupProviderName) else {
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,
-          output: AgentPillsManager.DirectedProvider.unsupportedProviderMessage(setupProviderName))
+          output: "Unknown provider '\(setupProviderName)'. Use 'codex', 'openclaw', or 'hermes'.",
+          expectedTurnEpoch: toolTurnEpoch)
         return
       }
-      // Idempotent: the tool is always advertised, so an already-installed
-      // provider just reports ready instead of reinstalling (no dialog).
-      guard !LocalAgentProviderDetector.isAvailable(provider) else {
-        log("RealtimeHub[\(providerTag)]: tool setup_agent_provider provider=\(provider.rawValue) already installed")
+      let health = AgentProviderHealth.report(for: setupProvider)
+      if health.readiness == .ready {
+        if let setupBrief, !setupBrief.isEmpty {
+          let model = ShortcutSettings.shared.selectedModel.isEmpty
+            ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
+          let pill = AgentPillsManager.shared.spawnFromUserQuery(
+            setupBrief, model: model, fromVoice: false,
+            preFetchedTitle: setupProvider.displayName,
+            bridgeHarnessOverride: setupProvider.harnessMode)
+          pill.fallbackProviders = [nil]
+        }
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,
-          output: "\(provider.displayName) is already installed and ready — no setup needed.")
+          output: "\(setupProvider.displayName) is already set up. \(setupBrief?.isEmpty == false ? "Task started." : "")",
+          expectedTurnEpoch: toolTurnEpoch)
         return
       }
-      // Deterministic code-owned install: LocalAgentProviderInstaller shows a
-      // native confirmation dialog with the exact command (the REAL consent
-      // gate — the prompt-level consent wording is only the first layer) and
-      // runs it via Process. No installer agent, so a prompt-injected tool
-      // call can never execute anything by itself. The tool result returns
-      // immediately; the voice turn never blocks on the dialog.
-      let installMessage = LocalAgentProviderInstaller.shared.beginInstall(for: provider)
-      log(
-        "RealtimeHub[\(providerTag)]: tool setup_agent_provider provider=\(provider.rawValue) → install confirmation requested"
-      )
+      let setupPill = AgentPillsManager.shared.spawnProviderSetup(
+        provider: setupProvider, thenBrief: setupBrief)
+      log("RealtimeHub[\(providerTag)]: tool setup_agent_provider → \(setupProvider.rawValue) (\(health.detail)) pill=\(setupPill.id)")
       if !audioReceivedThisTurn {
-        let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ack =
-          existingAck.isEmpty
-          ? "Please confirm the \(provider.displayName) install in the dialog on screen." : existingAck
+        let ack = "Setting up \(setupProvider.displayName) now. I'll start your task once it's ready."
         assistantText = ack
         barState?.isVoiceResponseActive = true
         FloatingBarVoicePlaybackService.shared.speakOneShot(ack)
@@ -2315,7 +2318,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       suppressAssistantOutputForCurrentTurn = true
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
-        output: installMessage)
+        output: "Setup started for \(setupProvider.displayName) (\(health.detail)) — progress shows as a pill. The original task will run automatically once setup succeeds.",
+        expectedTurnEpoch: toolTurnEpoch)
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the
       // tool is just an ack — pushing another image here is the broken path (mid-tool-call
@@ -2347,16 +2351,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     expectedTurnEpoch: Int
   ) async {
     let userText = turnTranscript
-    // Enum-driven parsing: adding a DirectedProvider case (e.g. codex) makes
-    // it valid here with no extra switch to maintain.
-    if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
+    guard let dispatch = AgentProviderRouter.dispatchDecision(providerName: providerName, brief: brief) else {
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
-        output: AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName),
+        output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', 'codex', or 'auto'.",
         expectedTurnEpoch: expectedTurnEpoch)
       return
     }
-    let directedProvider = AgentPillsManager.DirectedProvider(rawValue: providerName)
+    var directedProvider = dispatch.primary
+    var routedFallbacks = dispatch.fallbacks
+    log("RealtimeHub[\(providerTag)]: spawn_agent dispatch \(dispatch.reason)")
 
     let resolution = await AgentDelegationResolver.shared.resolve(
       .init(
@@ -2388,21 +2392,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return
     }
 
-    directedProvider = resolution.directedProvider ?? directedProvider
+    if let resolverProvider = resolution.directedProvider, resolverProvider != directedProvider {
+      // The resolver explicitly redirected the provider; respect it and drop
+      // the auto-route chain, which was computed for a different primary.
+      directedProvider = resolverProvider
+      routedFallbacks = []
+    }
     if let directedProvider {
-      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
-      guard availability.isAvailable else {
-        let setupPrompt = availability.setupPrompt
+      // Dispatch gates on full health (installed AND wired AND authed), not
+      // binary presence — a not-onboarded provider must not get a doomed spawn.
+      let health = AgentProviderHealth.report(for: directedProvider)
+      guard health.readiness == .ready else {
+        let setupPrompt = "\(health.detail) I can set it up for you."
         assistantText = setupPrompt
         barState?.isVoiceResponseActive = true
         if !audioReceivedThisTurn {
           FloatingBarVoicePlaybackService.shared.speakOneShot(directedProvider.setupNeededStatus)
         }
         suppressAssistantOutputForCurrentTurn = true
-        log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) unavailable")
+        log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) not ready (\(health.readiness.rawValue))")
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,
-          output: availability.toolError,
+          output: "Error: \(health.detail)"
+            + " Offer to set it up for the user; if they agree, call setup_agent_provider with provider=\"\(directedProvider.rawValue)\" and their original task as brief.",
           expectedTurnEpoch: expectedTurnEpoch)
         return
       }
@@ -2433,9 +2445,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return
     }
 
-    log(
-      "RealtimeHub[\(providerTag)]: tool spawn_agent → canonical pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false)"
-    )
+    pill.fallbackProviders = routedFallbacks
+    log("RealtimeHub[\(providerTag)]: tool spawn_agent → canonical pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") fallbacks=\(routedFallbacks.count) titled=\(title?.isEmpty == false)")
     let shouldAllowNativePostSpawnAck = !audioReceivedThisTurn
     if !audioReceivedThisTurn {
       let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2450,9 +2461,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // final ASR transcript is used instead of a partial interim transcript.
     pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)
     suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck
+    // When the router picked the provider (not the user), tell the model so
+    // it can narrate the choice — the routing decision should be observable
+    // to the user, not just to the logs. Explicit mentions and default-
+    // orchestrator spawns keep the exact legacy result text.
+    let startedOutput: String
+    if let directedProvider, dispatch.reason != "explicit" {
+      startedOutput =
+        "Agent started via \(directedProvider.displayName) — Omi picked it as the best fit for this task. In your brief acknowledgment, mention that \(directedProvider.displayName) is handling it."
+    } else {
+      startedOutput = "Agent started."
+    }
     sendToolResultIfCurrent(
       source: source, callId: callId, name: name,
-      output: "Agent started.",
+      output: startedOutput,
       expectedTurnEpoch: expectedTurnEpoch)
   }
 

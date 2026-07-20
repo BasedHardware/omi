@@ -24,16 +24,19 @@ enum AgentAdapterId: String {
 }
 
 enum AgentRuntimeRouting {
-  static func harnessMode(for mode: ChatProvider.BridgeMode) -> AgentHarnessMode {
-    switch mode {
-    case .omiAI, .piMono:
-      return .piMono
-    case .userClaude:
-      return .acp
-    case .hermes:
-      return .hermes
-    case .openClaw:
-      return .openclaw
+    static func harnessMode(for mode: ChatProvider.BridgeMode) -> AgentHarnessMode {
+        switch mode {
+        case .omiAI, .piMono:
+            return .piMono
+        case .userClaude:
+            return .acp
+        case .hermes:
+            return .hermes
+        case .openClaw:
+            return .openclaw
+        case .codex:
+            return .codex
+        }
     }
   }
 
@@ -91,9 +94,13 @@ struct LocalAgentProviderAvailability: Equatable {
     /// so all providers keep the same shape; the SPOKEN surface stays clean
     /// (voice only says `setupNeededStatus`).
     var setupPrompt: String {
-        var prompt = "I don't see \(provider.displayName) installed. Run `\(provider.installCommand)`"
-        if let note = provider.postInstallNote {
-            prompt += ", then \(note)"
+        switch provider {
+        case .hermes:
+            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
+        case .openclaw:
+            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+        case .codex:
+            return "I don't see Codex installed. Make sure Codex is installed first, then try again."
         }
         prompt += ". Or just ask me to install it for you. Install guide: \(provider.installDocsURL)"
         return prompt
@@ -128,12 +135,13 @@ enum LocalAgentProviderDetector {
     return LocalAgentProviderAvailability(provider: provider, status: .missing)
   }
 
-    private static func firstExecutable(
+    static func firstExecutable(
         named name: String,
         fileManager: FileManager,
-        homeDirectory: String
+        homeDirectory: String,
+        searchDirectories: [String]? = nil
     ) -> String? {
-        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory, fileManager: fileManager) {
+        for dir in searchDirectories ?? adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
             let path = (dir as NSString).appendingPathComponent(name)
             if fileManager.isExecutableFile(atPath: path) {
                 return path
@@ -142,12 +150,7 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    /// Shared with AgentRuntimeProcess so detection ("is it installed?") and
-    /// command discovery ("what do we spawn?") can never disagree.
-    static func adapterActivationSearchDirectories(
-        homeDirectory: String,
-        fileManager: FileManager = .default
-    ) -> [String] {
+    static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
         [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",

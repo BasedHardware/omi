@@ -2876,15 +2876,34 @@ class FloatingControlBarManager {
     window?.isVisible ?? false
   }
 
-  struct AutomationState {
-    let isVisible: Bool
-    let isAskOmiOpen: Bool
-    let isAskOmiFocused: Bool
-    let frame: String?
-    let isVoiceListening: Bool
-    let isVoiceResponseActive: Bool
-    let usesNotchIsland: Bool
-  }
+        let resolvedProvider = decision.directedProvider ?? directedProvider
+        if let resolvedProvider {
+            // Dispatch gates on full health (installed AND wired AND authed),
+            // matching the voice hub / chat executor — a needs-setup provider
+            // must get the setup prompt, not a doomed spawn.
+            let health = AgentProviderHealth.report(for: resolvedProvider)
+            guard health.readiness == .ready else {
+                let assistantText = "\(health.detail) I can set it up for you."
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: originalRequest,
+                    assistantText: assistantText,
+                    logLabel: "\(logLabel)-provider-unavailable"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentResponse(
+                        userText: originalRequest,
+                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.clearVoiceResponseState()
+                    FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)
+                }
+                return
+            }
+        }
 
   var automationState: AutomationState {
     guard let window else {

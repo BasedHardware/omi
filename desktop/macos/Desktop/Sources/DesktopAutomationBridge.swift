@@ -2138,6 +2138,99 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "spawn_agent_pill",
+      summary: "Spawn a real floating agent pill (provider-directed or auto-routed) for agent-dispatch e2e tests",
+      params: ["brief", "provider"]
+    ) { params in
+      let brief = (params["brief"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !brief.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("brief is required")
+      }
+      let providerName = (params["provider"] ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: " ", with: "")
+      return await MainActor.run {
+        guard let decision = AgentProviderRouter.dispatchDecision(providerName: providerName, brief: brief) else {
+          return ["error": "unknown provider '\(providerName)'; expected openclaw|hermes|codex|auto or empty"]
+        }
+        let directedProvider = decision.primary
+        let routedFallbacks = decision.fallbacks
+        let routeReason = decision.reason
+        if let directedProvider {
+          let health = AgentProviderHealth.report(for: directedProvider)
+          guard health.readiness == .ready else {
+            return ["error": "Error: \(health.detail)"]
+          }
+        }
+        let model = ShortcutSettings.shared.selectedModel.isEmpty
+          ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        let pill = AgentPillsManager.shared.spawnFromUserQuery(
+          brief,
+          model: model,
+          fromVoice: false,
+          preFetchedTitle: directedProvider?.displayName,
+          bridgeHarnessOverride: directedProvider?.harnessMode
+        )
+        pill.fallbackProviders = routedFallbacks
+        return [
+          "pillId": pill.id.uuidString,
+          "title": pill.title,
+          "provider": directedProvider?.rawValue ?? "default",
+          "fallbacks": routedFallbacks.map { $0?.rawValue ?? "default" }.joined(separator: ","),
+          "reason": routeReason,
+        ]
+      }
+    }
+
+    register(
+      name: "agent_pills_status",
+      summary: "List current floating agent pills with status, provider, and activity"
+    ) { _ in
+      let listing = await MainActor.run {
+        AgentPillsManager.shared.manage(action: "list", agentId: nil)
+      }
+      return ["pills": listing]
+    }
+
+    register(
+      name: "agent_providers_health",
+      summary: "Report ready/needs-setup/missing state for each local agent provider"
+    ) { _ in
+      var out: [String: String] = [:]
+      for report in AgentProviderHealth.reportsForAllProviders() {
+        out[report.provider.rawValue] =
+          report.detail.isEmpty ? report.readiness.rawValue : "\(report.readiness.rawValue): \(report.detail)"
+      }
+      return out
+    }
+
+    register(
+      name: "setup_agent_provider",
+      summary: "Run the deterministic install/repair recipe for a local agent provider as a setup pill; optionally dispatch a task to it after success",
+      params: ["provider", "brief"]
+    ) { params in
+      let providerName = (params["provider"] ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+      guard let provider = AgentPillsManager.DirectedProvider(rawValue: providerName) else {
+        throw DesktopAutomationActionError.invalidParams("unknown provider; expected codex|openclaw|hermes")
+      }
+      let brief = params["brief"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      return await MainActor.run {
+        let health = AgentProviderHealth.report(for: provider)
+        let steps = AgentProviderInstaller.plan(for: provider, health: health)
+        let pill = AgentPillsManager.shared.spawnProviderSetup(provider: provider, thenBrief: brief)
+        return [
+          "pillId": pill.id.uuidString,
+          "readiness": health.readiness.rawValue,
+          "detail": health.detail,
+          "steps": steps.map(\.title).joined(separator: " → "),
+        ]
+      }
+    }
+
+    register(
       name: "spatial_overlay_present_fixture",
       summary: "Present a deterministic spatial-overlay fixture for dogfood harnesses",
       params: ["fixture", "settleMs"]
