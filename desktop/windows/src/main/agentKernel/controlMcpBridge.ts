@@ -1,12 +1,24 @@
-// The model-facing edge of the agent control plane.
+// The model-facing edge of the agent control plane — the coding agent's `omi` MCP.
 //
-// WHAT THIS IS. Until now the 18 control tools were reachable only from trusted
-// host code (`controlPlane.ts`'s ipcMain path). This module is the other door:
-// it lets a MODEL running inside a subprocess adapter (Claude Code / ACP) call
-// them. It is the transport, and nothing more — every tool, schema, policy
-// decision and guard already lives in `controlTools.ts`, and every call from
-// here goes through `handleAgentControlToolCall`, which is what makes the leaf
-// guard, the trusted-control gate and the Zod validation apply to models too.
+// WHAT THIS IS. This module is the door that lets a MODEL running inside a
+// subprocess adapter (Claude Code / ACP) call Omi's tools. It IS the
+// `omi-tools-stdio` adapter surface, so it serves what macOS' omi-tools-stdio
+// server serves: the 18 agent-control tools AND the serviceable PRODUCT tools
+// (get_goals, get_memories, execute_sql, semantic_search, the task/conversation/
+// screen tools, …). It is the transport, and nothing more — every tool, schema,
+// policy decision and guard already lives in `controlTools.ts` /
+// `toolRelayBridge.ts`, and every call from here goes through `executeHostTool`,
+// which routes a control tool through `handleAgentControlToolCall` (leaf guard,
+// trusted-control gate, Zod validation) and a product tool through its executor,
+// both under HOST-derived identity — the SAME code path the pi-mono relay uses.
+//
+// HISTORY. This bridge originally advertised and dispatched ONLY the 18 control
+// tools; the product-tool half of omi-tools-stdio was never ported, so the coding
+// agent could not call get_goals / get_memories / execute_sql / … at all (they were
+// invisible in tools/list and rejected as "unknown_control_tool" at dispatch). That
+// gap was reachable only once the packaged agent could spawn (fix #241); before it
+// nobody could ask the coding agent to run a product tool. Product tools now flow
+// through the shared `executeHostTool` door alongside the control tools.
 //
 // WHY A PIPE. The kernel runs in-process in Electron main, but an MCP server has
 // to be a *spawnable command* — the ACP bridge starts it as its own subprocess
@@ -54,12 +66,9 @@ import { randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentRuntimeKernel } from './kernel'
-import {
-  agentControlToolDefinitionsFor,
-  handleAgentControlToolCall,
-  type AgentControlToolContext,
-  type AgentControlToolDefinition
-} from './controlTools'
+import { agentControlToolDefinitionsFor, type AgentControlToolDefinition } from './controlTools'
+import { executeHostTool, WINDOWS_SERVICEABLE_PRODUCT_TOOLS } from './toolRelayBridge'
+import { mcpToolDefinitionsForAdapter } from './omiToolManifest'
 
 /** A single frame may not exceed this. Hostile input must not exhaust main's heap. */
 const MAX_FRAME_BYTES = 1024 * 1024
@@ -227,9 +236,17 @@ export class AgentControlMcpBridge {
       if (frame.type === 'call') {
         const name = typeof frame.name === 'string' ? frame.name : ''
         const input = plainObject(frame.input)
-        // Everything that matters happens in here: leaf guard, trusted-control
-        // gate, owner guard, Zod validation, dispatch. Never bypass it.
-        const result = await handleAgentControlToolCall(this.contextFor(authority), name, input)
+        // One shared host-tool door for both kinds: a control tool goes through
+        // handleAgentControlToolCall (leaf guard, trusted-control gate, owner guard,
+        // Zod validation), a serviceable product tool through its executor — with
+        // HOST-derived identity (trustedUserControl:false) bound from this binding's
+        // session. Same code path the pi-mono relay + voice hub use. Never throws;
+        // a denial/error is returned as the tool result string, not a transport fault.
+        const result = await executeHostTool(name, input, {
+          kernel: this.kernel,
+          sessionId: authority.sessionId,
+          adapterId: authority.adapterId
+        })
         write(socket, { type: 'call_result', callId, result })
         return
       }
@@ -245,35 +262,40 @@ export class AgentControlMcpBridge {
   }
 
   /**
-   * The tools this caller may SEE. Listing is a convenience, not a gate — the
-   * same policy is re-applied at dispatch inside `handleAgentControlToolCall`,
-   * so a model that names a tool it was never shown is still rejected.
+   * The tools this caller may SEE. Listing is a convenience, not a gate — the same
+   * policy is re-applied at dispatch inside `executeHostTool`, so a model that names
+   * a tool it was never shown is still rejected (control tools) or degraded (a
+   * non-serviceable product tool).
+   *
+   * This `omi` MCP IS the `omi-tools-stdio` adapter surface, so it advertises the
+   * full set macOS' omi-tools-stdio server does: the role-gated CONTROL tools AND the
+   * serviceable PRODUCT tools (get_goals, get_memories, execute_sql, semantic_search,
+   * the task/conversation/screen tools, …). Product tools carry no coordinator/leaf
+   * restriction, so both roles see them; only the fanout control tools are role-gated.
+   * The list is limited to WINDOWS_SERVICEABLE_PRODUCT_TOOLS so a tool the bridge
+   * cannot dispatch is never advertised (load_skill, still pi-extension-only, is thus
+   * correctly withheld).
    */
-  private toolsFor(authority: BindingAuthority): AgentControlToolDefinition[] {
+  private toolsFor(authority: BindingAuthority): McpAdvertisedTool[] {
     const policy = this.kernel.executionPolicyForSession(authority.sessionId)
-    return agentControlToolDefinitionsFor({
+    const control = agentControlToolDefinitionsFor({
       executionRole: policy.executionRole,
       trustedUserControl: false
     })
-  }
-
-  private contextFor(authority: BindingAuthority): AgentControlToolContext {
-    // Read fresh on every call: a session whose role or owner changed must not
-    // keep acting under the authority it had when its subprocess started.
-    const policy = this.kernel.executionPolicyForSession(authority.sessionId)
-    return {
-      kernel: this.kernel,
-      // A model is never trusted user control. See note 2 at the top of the file.
-      trustedUserControl: false,
+    const controlNames = new Set<string>(control.map((tool) => tool.name))
+    const product = mcpToolDefinitionsForAdapter('omi-tools-stdio', {
       executionRole: policy.executionRole,
-      providerBoundary: policy.providerBoundary,
-      defaultAdapterId: policy.defaultAdapterId,
-      // Load-bearing — see note 4 at the top of the file.
-      callerSessionId: authority.sessionId,
-      getOwnerId: () => policy.ownerId
-    }
+      screenContext: true
+    }).filter(
+      (tool) => !controlNames.has(tool.name) && WINDOWS_SERVICEABLE_PRODUCT_TOOLS.has(tool.name)
+    )
+    return [...control, ...product]
   }
 }
+
+/** A `tools/list` entry the model-facing MCP entry relays verbatim. Structurally
+ *  shared by control-tool and product-tool definitions. */
+type McpAdvertisedTool = AgentControlToolDefinition | { name: string; description: string }
 
 function bindingKey(sessionId: string, adapterId: string): string {
   return `${sessionId}\0${adapterId}`

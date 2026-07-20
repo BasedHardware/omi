@@ -29,6 +29,7 @@ import { AgentRuntimeKernel } from './kernel'
 import { AdapterRegistry } from './adapterRegistry'
 import { SqliteAgentStore, type DatabaseFactory } from './store'
 import { AgentControlMcpBridge } from './controlMcpBridge'
+import { WINDOWS_SERVICEABLE_PRODUCT_TOOLS } from './toolRelayBridge'
 import { AGENT_CONTROL_TOOL_NAMES, TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES } from './controlTools'
 import { LEAF_AGENT_CONTROL_TOOLS } from './executionPolicy'
 import type { AgentExecutionRole } from './types'
@@ -170,6 +171,14 @@ class BridgeClient {
     return JSON.parse(String(frame.result)) as ToolEnvelope
   }
 
+  /** The raw `result` string from a tool call. Product tools return an opaque string
+   *  (their formatted output or an `"Error: …"`), not the control tools' JSON envelope,
+   *  so those must be read without JSON.parse. */
+  async callRawResult(name: string, input: Record<string, unknown> = {}): Promise<string> {
+    const frame = await this.send({ type: 'call', name, input })
+    return frame.type === 'error' ? `relay_error: ${String(frame.message)}` : String(frame.result)
+  }
+
   /** Send a raw line (possibly malformed) and resolve on the next host frame or close. */
   sendRaw(line: string): Promise<HostFrame> {
     const callId = `raw-${++this.counter}`
@@ -205,7 +214,7 @@ async function connect(pipePath: string, token: string): Promise<BridgeClient> {
 // === tools/list visibility ===================================================
 
 describe('tools/list visibility for a model-facing caller', () => {
-  it('a model-facing coordinator sees every tool EXCEPT the trusted-only two', async () => {
+  it('a model-facing coordinator sees every control tool EXCEPT the trusted-only two, plus product tools', async () => {
     const { kernel, store } = newKernel()
     const bridge = await startBridge(kernel)
     const { token, pipePath } = bindSession(bridge, store, 'coordinator')
@@ -217,10 +226,33 @@ describe('tools/list visibility for a model-facing caller', () => {
     for (const trustedOnly of TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES) {
       expect(names).not.toContain(trustedOnly)
     }
-    const expected = AGENT_CONTROL_TOOL_NAMES.filter(
+    const expectedControl = AGENT_CONTROL_TOOL_NAMES.filter(
       (n) => !TRUSTED_DIRECT_CONTROL_ONLY_TOOL_NAMES.has(n)
     )
-    expect(names.sort()).toEqual([...expected].sort())
+    for (const control of expectedControl) {
+      expect(names).toContain(control)
+    }
+
+    // This bridge IS the omi-tools-stdio surface: it must ALSO advertise the
+    // serviceable product tools. Regression guard for the coding agent seeing zero
+    // product tools (get_goals / get_memories / execute_sql / … were invisible).
+    for (const product of [
+      'get_goals',
+      'get_memories',
+      'execute_sql',
+      'semantic_search',
+      'get_conversations',
+      'get_work_context'
+    ]) {
+      expect(names).toContain(product)
+    }
+    // Every advertised name is either a control tool or a Windows-serviceable
+    // product tool — never a tool the bridge cannot dispatch (e.g. load_skill).
+    const controlSet = new Set<string>(AGENT_CONTROL_TOOL_NAMES)
+    for (const name of names) {
+      expect(controlSet.has(name) || WINDOWS_SERVICEABLE_PRODUCT_TOOLS.has(name)).toBe(true)
+    }
+    expect(names).not.toContain('load_skill')
   })
 
   it('a leaf caller is shown none of the four fanout tools', async () => {
@@ -264,6 +296,48 @@ describe('a hidden tool named on the wire is rejected at dispatch', () => {
     })
     expect(result.ok).toBe(false)
     expect(result.error?.code).toBe('policy_denied')
+  })
+})
+
+// === product tools are reachable through the bridge (not just control tools) =
+
+describe('product tools dispatch through the bridge to their executors', () => {
+  it('get_goals reaches its product executor, not the unknown_control_tool path', async () => {
+    const { kernel, store } = newKernel()
+    const bridge = await startBridge(kernel)
+    const { token, pipePath } = bindSession(bridge, store, 'coordinator')
+    const client = await connect(pipePath, token)
+
+    // No backend session is configured in the hermetic suite, so the executor
+    // returns its own not-signed-in string BEFORE any network call. The point is
+    // that it reached the get_goals executor at all: before the fix this returned
+    // the control-tool `{ok:false, error:{code:'unknown_control_tool'}}` envelope.
+    const result = await client.callRawResult('get_goals', {})
+    expect(result).not.toContain('unknown_control_tool')
+    expect(result).toMatch(/not signed in to Omi/)
+  })
+
+  it('save_knowledge_graph reaches its executor and returns the validation error', async () => {
+    const { kernel, store } = newKernel()
+    const bridge = await startBridge(kernel)
+    const { token, pipePath } = bindSession(bridge, store, 'coordinator')
+    const client = await connect(pipePath, token)
+
+    // Empty nodes → the executor returns its validation error before touching the
+    // DB (no native better-sqlite3 in this suite), proving product dispatch works.
+    const result = await client.callRawResult('save_knowledge_graph', { nodes: [], edges: [] })
+    expect(result).not.toContain('unknown_control_tool')
+    expect(result).toMatch(/no valid nodes to save/)
+  })
+
+  it('an unknown tool name still degrades cleanly (neither control nor product)', async () => {
+    const { kernel, store } = newKernel()
+    const bridge = await startBridge(kernel)
+    const { token, pipePath } = bindSession(bridge, store, 'coordinator')
+    const client = await connect(pipePath, token)
+
+    const result = await client.callRawResult('definitely_not_a_tool', {})
+    expect(result).toMatch(/not available on Windows yet/)
   })
 })
 
