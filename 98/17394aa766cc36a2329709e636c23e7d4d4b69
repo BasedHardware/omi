@@ -1,0 +1,28 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_2204722b151ea4::t_fc967ea852052d 50-51
+  s_2204722b151ea4::t_47f1d71053a02c 1093-1094
+  s_2204722b151ea4::t_ed70c0b9a11998 1133-1134
+  s_2204722b151ea4::t_27668116a0222f 1159-1176
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBSettings.swift
+  s_2204722b151ea4::t_35efec5f5d089c 1-144
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SecondBrainShell.swift
+  s_2204722b151ea4::t_badd94a2384736 113
+  s_2204722b151ea4::t_3f5c405eae8ed8 25
+  s_2204722b151ea4::t_5b91642e2ee2ae 137-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "9817394aa766cc36a2329709e636c23e7d4d4b69",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
