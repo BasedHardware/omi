@@ -490,7 +490,7 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
       .capture)
   }
 
-  func testCaptureTriggerPreviewHashSkipsUnchangedFrames() {
+  func testCaptureTriggerPreviewSimilaritySkipsUnchangedFrames() {
     let now = Date(timeIntervalSinceReferenceDate: 9_000)
     var trigger = ProactiveCaptureTrigger(
       idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
@@ -499,12 +499,22 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
       trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now),
       .capture)
 
-    // Simulate heartbeat returning identical preview hash.
-    trigger.markPreviewHash(0x1234)
+    // First captured frame seeds the preview history.
+    trigger.recordPreviewHash(0x1234)
     XCTAssertEqual(
       trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(3)),
       .preview)
-    XCTAssertTrue(trigger.isPreviewUnchanged(0x1235, threshold: 5))
-    XCTAssertFalse(trigger.isPreviewUnchanged(0xFFFF, threshold: 5))
+
+    // 0x1235 is one bit away from 0x1234 -> very high similarity.
+    XCTAssertEqual(trigger.previewSimilarity(to: 0x1235), 63.0 / 64.0, accuracy: 1e-9)
+    XCTAssertTrue(trigger.shouldSkipPreview(0x1235, similarityThreshold: 0.92))
+
+    // 0xFFFF is very different -> low similarity.
+    XCTAssertTrue(trigger.previewSimilarity(to: 0xFFFF) < 0.9)
+    XCTAssertFalse(trigger.shouldSkipPreview(0xFFFF, similarityThreshold: 0.92))
+
+    // A cycling frame that matches any recent preview is skipped.
+    trigger.recordPreviewHash(0xABCD)
+    XCTAssertTrue(trigger.shouldSkipPreview(0x1234, similarityThreshold: 0.92))
   }
 }

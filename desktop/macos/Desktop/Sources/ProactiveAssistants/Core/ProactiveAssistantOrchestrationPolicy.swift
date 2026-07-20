@@ -297,13 +297,14 @@ struct ProactiveFrameDistributionGate {
 /// full screenshot on a fixed cadence when nothing has changed. Instead, the
 /// loop polls cheap signals (idle time, active app/window) at a fast rate and
 /// only proceeds to a full capture when the user context changes or a heartbeat
-/// interval elapses. For heartbeat ticks it can request a cheap preview capture
-/// whose hash is compared to the last preview, so static screens are skipped.
+/// interval elapses. For heartbeat ticks it captures a tiny preview and computes
+/// a similarity index against recent previews, so static or cycling screens are
+/// skipped without a full screenshot.
 struct ProactiveCaptureTrigger {
   enum Decision: Equatable {
     /// Do not capture this tick.
     case skip
-    /// Capture a small preview and only proceed if its hash differs.
+    /// Capture a small preview and only proceed if its similarity index is low.
     case preview
     /// Perform a full capture immediately.
     case capture
@@ -312,28 +313,31 @@ struct ProactiveCaptureTrigger {
   private let idleThreshold: TimeInterval
   private var heartbeatInterval: TimeInterval
   private let appSwitchDebounce: TimeInterval
+  private let previewHistoryCapacity: Int
 
   private var lastApp: String?
   private var lastWindowTitle: String?
   private var lastCaptureTime: Date = .distantPast
-  private var lastPreviewHash: UInt64?
+  private var previewHashHistory: [UInt64] = []
   private var appSwitchRequest: (app: String, title: String?, time: Date)?
 
   init(
     idleThreshold: TimeInterval,
     heartbeatInterval: TimeInterval,
-    appSwitchDebounce: TimeInterval = 0.5
+    appSwitchDebounce: TimeInterval = 0.5,
+    previewHistoryCapacity: Int = 3
   ) {
     self.idleThreshold = idleThreshold
     self.heartbeatInterval = heartbeatInterval
     self.appSwitchDebounce = appSwitchDebounce
+    self.previewHistoryCapacity = previewHistoryCapacity
   }
 
   mutating func reset() {
     lastApp = nil
     lastWindowTitle = nil
     lastCaptureTime = .distantPast
-    lastPreviewHash = nil
+    previewHashHistory.removeAll()
     appSwitchRequest = nil
   }
 
@@ -390,22 +394,43 @@ struct ProactiveCaptureTrigger {
     app: String,
     windowTitle: String?,
     at time: Date,
-    previewHash: UInt64? = nil
+    frameHash: UInt64? = nil
   ) {
     lastApp = app
     lastWindowTitle = windowTitle
     lastCaptureTime = time
-    if let previewHash = previewHash {
-      lastPreviewHash = previewHash
+    if let frameHash = frameHash {
+      recordPreviewHash(frameHash)
     }
   }
 
-  mutating func markPreviewHash(_ hash: UInt64) {
-    lastPreviewHash = hash
+  mutating func recordPreviewHash(_ hash: UInt64) {
+    previewHashHistory.append(hash)
+    if previewHashHistory.count > previewHistoryCapacity {
+      previewHashHistory.removeFirst(previewHashHistory.count - previewHistoryCapacity)
+    }
   }
 
-  func isPreviewUnchanged(_ hash: UInt64, threshold: Int) -> Bool {
-    guard let last = lastPreviewHash else { return false }
-    return (hash ^ last).nonzeroBitCount <= threshold
+  /// Similarity index between a preview hash and the recent preview history.
+  /// Returns 1.0 for an exact match and 0.0 for a completely different 64-bit
+  /// hash. The index uses Hamming distance over the dHash output.
+  func previewSimilarity(to hash: UInt64) -> Double {
+    guard !previewHashHistory.isEmpty else { return 0.0 }
+    let maxDistance = Double(UInt64.bitWidth)  // 64
+    var best = 0.0
+    for previous in previewHashHistory {
+      let distance = (hash ^ previous).nonzeroBitCount
+      let similarity = 1.0 - Double(distance) / maxDistance
+      if similarity > best {
+        best = similarity
+      }
+    }
+    return best
+  }
+
+  /// Returns true when the preview is similar enough to a recent preview that
+  /// the full capture can be skipped.
+  func shouldSkipPreview(_ hash: UInt64, similarityThreshold: Double) -> Bool {
+    previewSimilarity(to: hash) >= similarityThreshold
   }
 }
