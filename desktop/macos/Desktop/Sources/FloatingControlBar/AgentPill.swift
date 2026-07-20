@@ -401,11 +401,13 @@ final class AgentPillsManager: ObservableObject {
   enum DirectedProvider: String, Equatable {
     case hermes
     case openclaw
+    case codex
 
     var displayName: String {
       switch self {
       case .hermes: return "Hermes"
       case .openclaw: return "OpenClaw"
+      case .codex: return "Codex"
       }
     }
 
@@ -413,6 +415,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return .hermes
       case .openclaw: return .openclaw
+      case .codex: return .codex
       }
     }
 
@@ -420,6 +423,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "hermes"
       case .openclaw: return "openclaw"
+      case .codex: return "codex"
       }
     }
 
@@ -427,6 +431,23 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
       case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+      case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
+      }
+    }
+
+    var installCommand: String {
+      switch self {
+      case .hermes: return "npm i -g @nous-research/hermes-agent || pipx install hermes-agent"
+      case .openclaw: return "npm i -g openclaw"
+      case .codex: return "npm i -g @openai/codex"
+      }
+    }
+
+    var loginCommand: String {
+      switch self {
+      case .hermes: return "hermes login"
+      case .openclaw: return "openclaw login"
+      case .codex: return "codex login"
       }
     }
 

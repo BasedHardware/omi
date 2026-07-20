@@ -1217,6 +1217,7 @@ class ChatProvider: ObservableObject {
     case piMono = "piMono"
     case hermes = "hermes"
     case openClaw = "openclaw"
+    case codex = "codex"
   }
   @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
