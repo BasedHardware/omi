@@ -32,6 +32,7 @@ import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -1907,7 +1908,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   Builder(
                     builder: (context) {
                       final deviceProvider = context.watch<DeviceProvider>();
-                      if (deviceProvider.isConnected && deviceProvider.pairedDevice != null) {
+                      if (FirmwareUpdateBuildPolicy.current.allowsOmiFirmwareUpdate &&
+                          deviceProvider.isConnected &&
+                          deviceProvider.pairedDevice != null) {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
