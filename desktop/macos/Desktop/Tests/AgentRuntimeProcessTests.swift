@@ -128,6 +128,43 @@ private actor CredentialFreeControlStartProbe {
 }
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testHermeticFaultModelTokenIsNonProductionOnlyAndAvoidsFirebaseRefresh() {
+    let environment = [
+      AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "fault-suite-model-token"
+    ]
+
+    let token = AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+      isNonProduction: true,
+      bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+      environment: environment)
+    XCTAssertEqual(token, "fault-suite-model-token")
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: true,
+        hermeticFaultModelToken: token),
+      "the isolated fault backend must exercise its injected response without Firebase")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: false,
+        bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+        environment: environment),
+      "production must never accept a harness-supplied model token")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: true,
+        bundleIdentifier: "com.omi.some-other-dev-bundle",
+        environment: environment),
+      "only the named fault bundle may opt into the inert model token")
+    XCTAssertNil(
+      AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+        isNonProduction: true,
+        bundleIdentifier: AgentRuntimeCredentialPolicy.hermeticFaultBundleIdentifier,
+        environment: [
+          AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "   "
+        ]))
+  }
+
   func testNonProductionJournalControlStartDoesNotRefreshCredentials() async throws {
     let probe = CredentialFreeControlStartProbe()
 
