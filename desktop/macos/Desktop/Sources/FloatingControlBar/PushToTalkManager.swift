@@ -142,16 +142,14 @@ extension Notification.Name {
   static let coreAudioCaptureRecoveryRequested = Notification.Name("coreAudioCaptureRecoveryRequested")
 }
 
-#if DEBUG
-  struct PTTOwnerBoundarySnapshot: Equatable {
-    let activeTurnID: VoiceTurnID?
-    let hasCaptureDriver: Bool
-    let captureStartInFlight: Bool
-    let hasTranscriptionDriver: Bool
-    let hasOmniDriver: Bool
-    let captureGeneration: UInt64
-  }
-#endif
+struct PTTOwnerBoundarySnapshot: Equatable {
+  let activeTurnID: VoiceTurnID?
+  let hasCaptureDriver: Bool
+  let captureStartInFlight: Bool
+  let hasTranscriptionDriver: Bool
+  let hasOmniDriver: Bool
+  let captureGeneration: UInt64
+}
 
 /// One delegate instance belongs to one reducer-issued transcription effect.
 /// Retiring the proxy when its physical service stops prevents a late callback
@@ -775,17 +773,15 @@ class PushToTalkManager: ObservableObject {
       cleanupCapability: cleanupCapability)
   }
 
-  #if DEBUG
-    var ownerBoundarySnapshot: PTTOwnerBoundarySnapshot {
-      PTTOwnerBoundarySnapshot(
-        activeTurnID: currentVoiceTurnID,
-        hasCaptureDriver: audioCaptureService != nil,
-        captureStartInFlight: micCaptureStartInFlight,
-        hasTranscriptionDriver: transcriptionService != nil,
-        hasOmniDriver: realtimeOmniService != nil,
-        captureGeneration: micCaptureGeneration)
-    }
-  #endif
+  var ownerBoundarySnapshot: PTTOwnerBoundarySnapshot {
+    PTTOwnerBoundarySnapshot(
+      activeTurnID: currentVoiceTurnID,
+      hasCaptureDriver: audioCaptureService != nil,
+      captureStartInFlight: micCaptureStartInFlight,
+      hasTranscriptionDriver: transcriptionService != nil,
+      hasOmniDriver: realtimeOmniService != nil,
+      captureGeneration: micCaptureGeneration)
+  }
 
   /// Cancel PTT without sending — used when conversation is closed mid-PTT.
   func cancelListening() {

@@ -507,39 +507,37 @@ enum RealtimeHubOwnerScope: Equatable, Sendable {
   }
 }
 
-#if DEBUG
-  struct RealtimeHubOwnerBoundarySnapshot: Equatable {
-    let hasPhysicalSession: Bool
-    let physicalOwnerID: String?
-    let prefetchedOwnerID: String?
-    let prefetchedContextIsEmpty: Bool
-    let hasPendingOwnerWork: Bool
-    let hubConnected: Bool
-    let turnAudioByteCount: Int
-  }
+struct RealtimeHubOwnerBoundarySnapshot: Equatable {
+  let hasPhysicalSession: Bool
+  let physicalOwnerID: String?
+  let prefetchedOwnerID: String?
+  let prefetchedContextIsEmpty: Bool
+  let hasPendingOwnerWork: Bool
+  let hubConnected: Bool
+  let turnAudioByteCount: Int
+}
 
-  /// Exact non-production capability for the hermetic local-profile transport.
-  /// A process-wide "test mode" boolean is not enough: the authority is bound to
-  /// one physical session and one immutable owner scope, so a replaced socket or
-  /// an owner transition cannot inherit the provider-warm bypass.
-  struct RealtimeLocalProfileTransportAuthority: Equatable {
-    let sourceID: ObjectIdentifier
-    let ownerScope: RealtimeHubOwnerScope
-    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+/// Exact non-production capability for the hermetic local-profile transport.
+/// A process-wide "test mode" boolean is not enough: the authority is bound to
+/// one physical session and one immutable owner scope, so a replaced socket or
+/// an owner transition cannot inherit the provider-warm bypass.
+struct RealtimeLocalProfileTransportAuthority: Equatable {
+  let sourceID: ObjectIdentifier
+  let ownerScope: RealtimeHubOwnerScope
+  let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
 
-    func accepts(
-      sourceID candidateSourceID: ObjectIdentifier?,
-      currentOwnerID: String?,
-      localProfileEnabled: Bool,
-      authorizationIsCurrent: Bool
-    ) -> Bool {
-      localProfileEnabled
-        && candidateSourceID == sourceID
-        && ownerScope.isCurrent(currentOwnerID: currentOwnerID)
-        && authorizationIsCurrent
-    }
+  func accepts(
+    sourceID candidateSourceID: ObjectIdentifier?,
+    currentOwnerID: String?,
+    localProfileEnabled: Bool,
+    authorizationIsCurrent: Bool
+  ) -> Bool {
+    localProfileEnabled
+      && candidateSourceID == sourceID
+      && ownerScope.isCurrent(currentOwnerID: currentOwnerID)
+      && authorizationIsCurrent
   }
-#endif
+}
 
 /// Shared owner policy used by warm reuse, delayed mint completion, and
 /// barge-in replacement. Keeping these three paths on one decision surface

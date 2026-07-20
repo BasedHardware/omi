@@ -489,112 +489,110 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     #endif
   }
 
-  #if DEBUG
-    /// Installs a detached, never-started physical session so owner-boundary
-    /// tests exercise the production controller without network or wall clocks.
-    func installOwnerBoundaryFixture(ownerID: String) {
-      teardownSession()
-      let ownerScope = RealtimeHubOwnerScope.authenticated(ownerID)
-      let fixtureSession = RealtimeHubSession(
-        provider: .openai,
-        auth: .byokKey("owner-boundary-fixture"),
-        instructions: "owner-boundary-fixture",
-        delegate: self)
-      session = fixtureSession
-      voiceSessionID = VoiceSessionID()
-      sessionProvider = .openai
-      sessionAuth = .byokKey("owner-boundary-fixture")
-      sessionOwnerBinding = PhysicalSessionOwnerBinding(
-        sourceID: ObjectIdentifier(fixtureSession),
-        ownerScope: ownerScope)
-      hubConnected = true
-      prefetchedVoiceContext = "owner-private-context"
-      prefetchedVoiceContextSessionID = "owner-session"
-      prefetchedVoiceContextFreshnessIdentity = "owner-freshness"
-      prefetchedVoiceContextPlanID = "owner-plan"
-      prefetchedVoiceStableCacheIdentity = "owner-stable-cache"
-      prefetchedVoiceDynamicContextIdentity = "owner-dynamic-context"
-      prefetchedVoiceSemanticGuidance = "owner semantic guidance"
-      prefetchedVoiceContextTurnIDs = ["owner-turn"]
-      prefetchedVoiceContextOwnerScope = ownerScope
-      pendingSessionRefreshReason = "owner-fixture-refresh"
-      turnAudio16k = Data(repeating: 1, count: 16)
-    }
+  /// Installs a detached, never-started physical session so owner-boundary
+  /// tests exercise the production controller without network or wall clocks.
+  func installOwnerBoundaryFixture(ownerID: String) {
+    teardownSession()
+    let ownerScope = RealtimeHubOwnerScope.authenticated(ownerID)
+    let fixtureSession = RealtimeHubSession(
+      provider: .openai,
+      auth: .byokKey("owner-boundary-fixture"),
+      instructions: "owner-boundary-fixture",
+      delegate: self)
+    session = fixtureSession
+    voiceSessionID = VoiceSessionID()
+    sessionProvider = .openai
+    sessionAuth = .byokKey("owner-boundary-fixture")
+    sessionOwnerBinding = PhysicalSessionOwnerBinding(
+      sourceID: ObjectIdentifier(fixtureSession),
+      ownerScope: ownerScope)
+    hubConnected = true
+    prefetchedVoiceContext = "owner-private-context"
+    prefetchedVoiceContextSessionID = "owner-session"
+    prefetchedVoiceContextFreshnessIdentity = "owner-freshness"
+    prefetchedVoiceContextPlanID = "owner-plan"
+    prefetchedVoiceStableCacheIdentity = "owner-stable-cache"
+    prefetchedVoiceDynamicContextIdentity = "owner-dynamic-context"
+    prefetchedVoiceSemanticGuidance = "owner semantic guidance"
+    prefetchedVoiceContextTurnIDs = ["owner-turn"]
+    prefetchedVoiceContextOwnerScope = ownerScope
+    pendingSessionRefreshReason = "owner-fixture-refresh"
+    turnAudio16k = Data(repeating: 1, count: 16)
+  }
 
-    /// Hermetic kernel-side external-run seam. The supplied closure is the
-    /// physical daemon completion boundary; owner-transition tests suspend it to
-    /// prove persisted owner mutation waits for a terminal receipt.
-    func installOwnerBoundaryExternalRunFixture(
-      ownerID: String,
-      turnID: VoiceTurnID,
-      onComplete:
-        @escaping @Sendable (
-          ExternalSurfaceRunBinding,
-          ExternalSurfaceRunTerminalStatus,
-          String?,
-          RuntimeOwnerTransitionCleanupCapability?
-        ) async throws -> Void
-    ) {
-      let binding = ExternalSurfaceRunBinding(
-        ownerID: ownerID,
-        sessionID: "owner-boundary-session",
-        turnID: turnID.rawValue.uuidString.lowercased(),
-        runID: "owner-boundary-run",
-        attemptID: "owner-boundary-attempt",
-        duplicate: false)
-      externalRunAuthorityState?.task.cancel()
-      externalRunAuthorityState = ExternalRunAuthorityState(
-        ownerID: ownerID,
-        turnID: turnID,
-        task: Task { binding })
-      ownerBoundaryExternalRunCompletion = onComplete
-    }
+  /// Hermetic kernel-side external-run seam. The supplied closure is the
+  /// physical daemon completion boundary; owner-transition tests suspend it to
+  /// prove persisted owner mutation waits for a terminal receipt.
+  func installOwnerBoundaryExternalRunFixture(
+    ownerID: String,
+    turnID: VoiceTurnID,
+    onComplete:
+      @escaping @Sendable (
+        ExternalSurfaceRunBinding,
+        ExternalSurfaceRunTerminalStatus,
+        String?,
+        RuntimeOwnerTransitionCleanupCapability?
+      ) async throws -> Void
+  ) {
+    let binding = ExternalSurfaceRunBinding(
+      ownerID: ownerID,
+      sessionID: "owner-boundary-session",
+      turnID: turnID.rawValue.uuidString.lowercased(),
+      runID: "owner-boundary-run",
+      attemptID: "owner-boundary-attempt",
+      duplicate: false)
+    externalRunAuthorityState?.task.cancel()
+    externalRunAuthorityState = ExternalRunAuthorityState(
+      ownerID: ownerID,
+      turnID: turnID,
+      task: Task { binding })
+    ownerBoundaryExternalRunCompletion = onComplete
+  }
 
-    /// Installs a begin task that completed without a binding. This models the
-    /// conservative side of a lost/failed begin receipt: Swift cannot prove that
-    /// Node did not create a run, so transition tracking must retain the entry
-    /// until the owner-wide runtime revocation barrier completes.
-    func installOwnerBoundaryUnresolvedExternalRunFixture(
-      ownerID: String,
-      turnID: VoiceTurnID
-    ) {
-      externalRunAuthorityState?.task.cancel()
-      externalRunAuthorityState = ExternalRunAuthorityState(
-        ownerID: ownerID,
-        turnID: turnID,
-        task: Task<ExternalSurfaceRunBinding, Error> {
-          throw ExternalSurfaceAuthorityError(code: "owner_boundary_begin_receipt_lost")
-        })
-      ownerBoundaryExternalRunCompletion = nil
-    }
+  /// Installs a begin task that completed without a binding. This models the
+  /// conservative side of a lost/failed begin receipt: Swift cannot prove that
+  /// Node did not create a run, so transition tracking must retain the entry
+  /// until the owner-wide runtime revocation barrier completes.
+  func installOwnerBoundaryUnresolvedExternalRunFixture(
+    ownerID: String,
+    turnID: VoiceTurnID
+  ) {
+    externalRunAuthorityState?.task.cancel()
+    externalRunAuthorityState = ExternalRunAuthorityState(
+      ownerID: ownerID,
+      turnID: turnID,
+      task: Task<ExternalSurfaceRunBinding, Error> {
+        throw ExternalSurfaceAuthorityError(code: "owner_boundary_begin_receipt_lost")
+      })
+    ownerBoundaryExternalRunCompletion = nil
+  }
 
-    /// Deterministically awaits and reconciles every tracked terminalization so
-    /// tests inspect the same pruning policy as the production completion task.
-    func settleOwnerBoundaryExternalRunTerminalizations() async {
-      let tracked = externalRunTerminalizations
-      for (id, terminalization) in tracked {
-        let result = await terminalization.task.value
-        reconcileTrackedExternalRunTerminalization(id: id, result: result)
-      }
+  /// Deterministically awaits and reconciles every tracked terminalization so
+  /// tests inspect the same pruning policy as the production completion task.
+  func settleOwnerBoundaryExternalRunTerminalizations() async {
+    let tracked = externalRunTerminalizations
+    for (id, terminalization) in tracked {
+      let result = await terminalization.task.value
+      reconcileTrackedExternalRunTerminalization(id: id, result: result)
     }
+  }
 
-    var ownerBoundarySnapshot: RealtimeHubOwnerBoundarySnapshot {
-      RealtimeHubOwnerBoundarySnapshot(
-        hasPhysicalSession: session != nil,
-        physicalOwnerID: sessionOwnerScope?.authenticatedOwnerID,
-        prefetchedOwnerID: prefetchedVoiceContextOwnerScope?.authenticatedOwnerID,
-        prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
-        hasPendingOwnerWork: pendingSessionRefreshReason != nil
-          || !turnPersistenceLedger.pendingContinuityKeys.isEmpty
-          || voiceContextPrefetchTask != nil
-          || turnPreparationTask != nil
-          || !detachedSessionsAwaitingDrain.isEmpty
-          || externalRunAuthorityState != nil
-          || !externalRunTerminalizations.isEmpty,
-        hubConnected: hubConnected,
-        turnAudioByteCount: turnAudio16k.count)
-    }
-  #endif
+  var ownerBoundarySnapshot: RealtimeHubOwnerBoundarySnapshot {
+    RealtimeHubOwnerBoundarySnapshot(
+      hasPhysicalSession: session != nil,
+      physicalOwnerID: sessionOwnerScope?.authenticatedOwnerID,
+      prefetchedOwnerID: prefetchedVoiceContextOwnerScope?.authenticatedOwnerID,
+      prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
+      hasPendingOwnerWork: pendingSessionRefreshReason != nil
+        || !turnPersistenceLedger.pendingContinuityKeys.isEmpty
+        || voiceContextPrefetchTask != nil
+        || turnPreparationTask != nil
+        || !detachedSessionsAwaitingDrain.isEmpty
+        || externalRunAuthorityState != nil
+        || !externalRunTerminalizations.isEmpty,
+      hubConnected: hubConnected,
+      turnAudioByteCount: turnAudio16k.count)
+  }
 
   @discardableResult
   func discardMismatchedSessionIfNeeded() -> Bool {
