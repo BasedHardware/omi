@@ -14,6 +14,7 @@ import { getAgentRuntimeKernel, controlPlaneOwnerId } from '../agentKernel/contr
 import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
 import { buildDesktopChatSystemPrompt } from '../agentKernel/desktopChatPrompt'
 import { formatTranscriptTail } from '../agentKernel/turnContext'
+import { recordFallback, type RecordFallback } from '../observability/fallback'
 import type { AgentRuntimeKernel } from '../agentKernel/kernel'
 import type { AgentEvent } from '../agentKernel/types'
 import type { MainChatEvent, MainChatResult, MainChatSendArgs } from '../../shared/types'
@@ -55,20 +56,45 @@ export interface MainChatTurnDeps {
   personalization?: () => Promise<string>
 }
 
+/**
+ * Build the per-turn personalization block, FAILING OPEN to '' when the reader
+ * throws (a DB not ready, or — the reason this is now instrumented — the packaged
+ * bytecode-entry export regressing so mainChatPersonalization's `index.<name>`
+ * reads return undefined). A failed reader must never sink a chat turn, but silent
+ * UX healing is not silent OPS (AGENTS.md fallback rules): this exact catch swallowed
+ * the packaged export break for months, so a failure now records a `degraded`
+ * fallback event. The reader (impure, lazily-loaded in production) and the sink are
+ * injected so this stays hermetically testable.
+ */
+export async function personalizationWithFallback(
+  read: () => string | Promise<string>,
+  record: RecordFallback = recordFallback
+): Promise<string> {
+  try {
+    return await read()
+  } catch (error) {
+    record({
+      component: 'other',
+      from: 'personalization',
+      to: 'none',
+      reason: 'other',
+      outcome: 'degraded',
+      detail: 'mainchat_personalization_read_failed',
+      message: error instanceof Error ? error.message : String(error)
+    })
+    return ''
+  }
+}
+
 function defaultDeps(): MainChatTurnDeps {
   return {
     kernel: getAgentRuntimeKernel(),
     ownerId: controlPlaneOwnerId(),
-    personalization: async () => {
-      try {
+    personalization: () =>
+      personalizationWithFallback(async () => {
         const { readTurnPersonalization } = await import('./mainChatPersonalization')
         return readTurnPersonalization()
-      } catch {
-        // A failed reader (or DB not ready) must never sink a chat turn — the
-        // turn just goes out without the personalization block.
-        return ''
-      }
-    }
+      })
   }
 }
 

@@ -48,6 +48,31 @@ for (const rel of ['out/main/index.js', 'out/preload/index.js']) {
   }
 }
 
+// 2b. STRUCTURAL GUARD (the coherent posture for the bytecode-entry export class):
+//     the MAIN entry stub MUST forward its compiled exports, i.e.
+//     `module.exports = require("./index.jsc")`. electron-vite's generated stub does
+//     NOT forward, so `require("../index.js")` from a plain chunk returns {} and any
+//     `require("../index.js").<name>(...)` throws `index.<name> is not a function` at
+//     runtime — in packaged builds only. scripts/patch-bytecode-entry-forward.mjs
+//     adds the forwarding; this asserts it stuck. With forwarding in place, a plain
+//     chunk reading ANY entry export is legitimately functional, so this single
+//     structural check (not a per-symbol denylist) covers the whole class — it would
+//     have gone red on BOTH shipped instances (getBackendSession + the
+//     mainChatPersonalization reads). The preload entry needs no forwarding (nothing
+//     requires its namespace; Electron loads it as the preload script).
+const mainEntry = p('out/main/index.js')
+if (existsSync(mainEntry)) {
+  const code = readFileSync(mainEntry, 'utf8')
+  if (!/module\.exports\s*=\s*require\((["'])\.\/index\.jsc\1\)/.test(code)) {
+    errors.push(
+      'out/main/index.js does not FORWARD its bytecode exports — expected ' +
+        '`module.exports = require("./index.jsc")`. Without it, `require("../index.js").<name>` ' +
+        'from any plain chunk is undefined at runtime (packaged only). Run ' +
+        'scripts/patch-bytecode-entry-forward.mjs after electron-vite build.'
+    )
+  }
+}
+
 // 3. kgWorker MUST stay plain JS. It is loaded via new Worker(kgWorker.js) in a
 //    worker thread that has no bytecode loader registered, so a bytecoded worker
 //    entry (a stub requiring kgWorker.jsc) would fail to load.

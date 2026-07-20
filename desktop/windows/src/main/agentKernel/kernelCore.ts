@@ -25,6 +25,7 @@ import type {
   AdapterStreamEvent,
   RuntimeAdapter
 } from '../codingAgent/interface'
+import { homedir } from 'node:os'
 import { AdapterRegistry } from './adapterRegistry'
 import { failureFromError, type RuntimeFailure } from '../codingAgent/failures'
 import { generateAgentId } from './store'
@@ -143,6 +144,21 @@ interface ActiveExecution {
   binding: AdapterBindingHandle
   attemptId: string
   sessionId: string
+}
+
+/**
+ * A sane, writable fallback cwd for an agent run/binding that specifies none.
+ *
+ * `process.cwd()` is wrong in a packaged app: launched from a Start-menu shortcut
+ * its working directory is the shortcut's "Start in" dir — often `C:\Windows\System32`
+ * or another unwritable/surprising path — not the repo dir it is in `pnpm dev`. That
+ * silently changed where a no-cwd agent run executed (dev vs packaged). The user's
+ * home dir is a stable, writable default on every platform. Pure (node `os` only) so
+ * kernelCore stays electron-free and hermetically testable; `process.cwd()` remains
+ * the last resort only if homedir() is somehow empty.
+ */
+export function fallbackCwd(): string {
+  return homedir() || process.cwd()
 }
 
 export class KernelCore {
@@ -1065,7 +1081,7 @@ export class KernelCore {
       adapterId: binding.adapterId,
       adapterNativeSessionId: binding.adapterNativeSessionId ?? '',
       resumeFidelity: binding.resumeFidelity,
-      cwd: binding.cwd ?? process.cwd(),
+      cwd: binding.cwd ?? fallbackCwd(),
       model: binding.modelId ?? undefined
     }
   }
@@ -1078,8 +1094,8 @@ export class KernelCore {
       adapter?: RuntimeAdapter
     }
   ): boolean {
-    const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? process.cwd()
-    const bindingCwd = binding.cwd ?? process.cwd()
+    const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? fallbackCwd()
+    const bindingCwd = binding.cwd ?? fallbackCwd()
     if (bindingCwd !== requestedCwd) {
       return false
     }
@@ -1143,14 +1159,10 @@ export class KernelCore {
       const resumed = await input.adapter.resumeBinding({
         sessionId: input.session.sessionId,
         adapterNativeSessionId: binding.adapterNativeSessionId,
-        cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? process.cwd(),
+        cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? fallbackCwd(),
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
-        mcpServers: this.bindingMcpServers(
-          input.input,
-          input.session.sessionId,
-          input.adapterId
-        ),
+        mcpServers: this.bindingMcpServers(input.input, input.session.sessionId, input.adapterId),
         metadata: {
           ...(input.input.metadata ?? {}),
           executionRole: input.session.executionRole,
@@ -1208,7 +1220,7 @@ export class KernelCore {
   }> {
     const opened = await input.adapter.openBinding({
       sessionId: input.session.sessionId,
-      cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
+      cwd: input.input.cwd ?? input.session.defaultCwd ?? fallbackCwd(),
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
       mcpServers: this.bindingMcpServers(input.input, input.session.sessionId, input.adapterId),

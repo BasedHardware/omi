@@ -33,7 +33,7 @@ import type {
 } from '../codingAgent/interface'
 import type { MainChatEvent } from '../../shared/types'
 import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
-import { projectKernelEvent, runMainChatTurn } from './mainChat'
+import { personalizationWithFallback, projectKernelEvent, runMainChatTurn } from './mainChat'
 
 const nodeSqliteFactory = DatabaseSync as unknown as DatabaseFactory
 const createdDirs: string[] = []
@@ -400,6 +400,35 @@ describe('runMainChatTurn', () => {
     )
     // Persona is present too — this is the Omi desktop chat prompt, not pi's default.
     expect(systemPrompt).toContain('You are Omi')
+  })
+
+  it('personalizationWithFallback records a degrade and returns "" when the reader throws', async () => {
+    const events: unknown[] = []
+    const result = await personalizationWithFallback(
+      () => {
+        // The exact shape of the packaged bytecode-entry-export break.
+        throw new Error('index.getLocalActionItems is not a function')
+      },
+      (e) => events.push(e)
+    )
+    expect(result).toBe('')
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      component: 'other',
+      from: 'personalization',
+      outcome: 'degraded',
+      detail: 'mainchat_personalization_read_failed'
+    })
+  })
+
+  it('personalizationWithFallback returns the reader block and records nothing on success', async () => {
+    const events: unknown[] = []
+    const result = await personalizationWithFallback(
+      async () => 'BLOCK',
+      (e) => events.push(e)
+    )
+    expect(result).toBe('BLOCK')
+    expect(events).toHaveLength(0)
   })
 
   it('prepends the per-turn personalization block to the dispatched prompt', async () => {
