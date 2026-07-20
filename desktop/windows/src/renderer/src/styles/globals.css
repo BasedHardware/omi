@@ -663,19 +663,23 @@
     }
   }
 
-  /* Page transition wrapper — every routed page fades + lifts in. */
+  /* Page transition — the active routed panel fades in on reveal, matching
+     macOS's 80ms easeOut pageNavigationAnimation (DesktopHomeView.swift). Applied
+     to the active panel in MainViews; the kept-mounted panels hide via
+     display:none, so the display:none→flex reveal restarts this on each switch.
+     Opacity-only (no positional travel) so a tab switch reads as a crisp
+     crossfade rather than a pop — and it stays vestibular-safe under
+     prefers-reduced-motion, so that block needs no override for it. */
   .page-enter {
-    animation: pageEnter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: pageEnter 80ms ease-out both;
   }
 
   @keyframes pageEnter {
     0% {
       opacity: 0;
-      transform: translateY(8px);
     }
     100% {
       opacity: 1;
-      transform: none;
     }
   }
 
@@ -815,14 +819,6 @@
       opacity: 0;
     }
     to {
-      opacity: 1;
-    }
-  }
-  @keyframes pageEnter {
-    0% {
-      opacity: 0;
-    }
-    100% {
       opacity: 1;
     }
   }
