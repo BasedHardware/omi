@@ -87,8 +87,9 @@ export function Memories(): React.JSX.Element {
   // lazy 3D chunk fails to load, or the GPU can't make a context, there is no
   // render loop to fire onPresentable — BrainGraph's static fallback fires it
   // directly, but as a belt-and-suspenders we also force the reveal on a timer.
-  // Once the data has settled only the paint is outstanding, so force soon (4s);
-  // before then wait longer (a slow fetch is legitimate — 15s).
+  // Kept generous so a slow-but-succeeding load is never pre-empted with a
+  // not-yet-painted view: 10s once the data has settled (only the paint is
+  // outstanding), 15s before then (a slow fetch is legitimate).
   const hasGraph = brainGraph.nodes.length > 0
   const [presentable, setPresentable] = useState(false)
   const [revealForced, setRevealForced] = useState(false)

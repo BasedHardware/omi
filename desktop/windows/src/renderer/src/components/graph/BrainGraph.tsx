@@ -13,6 +13,7 @@ import {
   type NodePosition
 } from '../../lib/useGraphSimulation'
 import { nodeColor } from './nodeColor'
+import { FirstContentFrame } from './FirstContentFrame'
 import { topRankedIds, DEFAULT_LABEL_TOPK } from '../../lib/graphDisplay'
 import { useWebglRecovery } from '../../lib/useWebglRecovery'
 import { BrainGraphFallback } from './BrainGraphFallback'
@@ -519,32 +520,6 @@ function CameraRig(): null {
     // eslint-disable-next-line react-hooks/immutability -- r3f: three.js objects (camera, vectors) are mutated imperatively by design
     cam.position.z = Math.max(fitForHeight, fitForWidth) * FRAME_MARGIN
     cam.lookAt(0, 0, 0)
-  })
-  return null
-}
-
-// Fires `onFire` exactly once, on the first render-loop tick where the scene has
-// real content to draw (nodes populated). Sits inside the Canvas so it shares the
-// r3f frame loop. This is what turns "renderer created" (onCreated, too early —
-// the node list is still the empty initial state, so GraphNodes draws its single
-// origin placeholder = a dot on a blank card) into "content is on screen".
-function FirstContentFrame({ ready, onFire }: { ready: boolean; onFire?: () => void }): null {
-  const invalidate = useThree((s) => s.invalidate)
-  const fired = useRef(false)
-  // Kick a render the moment content is ready. In frameLoop="demand" nothing
-  // repaints on its own after the node list lands, so without this the useFrame
-  // below can sit un-called for seconds — the reveal then falls to the bounded
-  // fallback, which can uncover a not-yet-painted frame (the blackout). This
-  // guarantees the very next frame runs, and GraphNodes' own per-frame invalidate
-  // (while the fly-in is moving) keeps it going from there.
-  useEffect(() => {
-    if (ready && !fired.current) invalidate()
-  }, [ready, invalidate])
-  useFrame(() => {
-    if (!fired.current && ready) {
-      fired.current = true
-      onFire?.()
-    }
   })
   return null
 }
