@@ -327,3 +327,39 @@ async def test_openai_compatible_provider_maps_byok_auth_and_rate_limit(monkeypa
         )
 
     assert exc_info.value.failure_class == failure_class
+
+
+def _anthropic_payload():
+    return {
+        'id': 'msg_test',
+        'content': [{'type': 'text', 'text': 'ok'}],
+        'stop_reason': 'end_turn',
+    }
+
+
+async def _normalize_anthropic(monkeypatch, payload=None):
+    """Run a real Anthropic response through the provider's OpenAI normalizer."""
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'test-key')
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload or _anthropic_payload())
+
+    provider = AnthropicMessagesProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    return await provider.create_chat_completion(
+        {'model': 'claude-sonnet-4-6', 'messages': [{'role': 'user', 'content': 'hello'}]},
+        provider_ref=ProviderRef(provider='anthropic', model='claude-sonnet-4-6'),
+        credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+        timeout_ms=8000,
+    )
+
+
+@pytest.mark.asyncio
+async def test_anthropic_response_is_wrapped_in_an_openai_envelope(monkeypatch):
+    response = await _normalize_anthropic(monkeypatch)
+
+    assert response['object'] == 'chat.completion'
+    assert response['id'] == 'msg_test'
+    assert response['model'] == 'claude-sonnet-4-6'
+    assert response['choices'][0]['message']['content'] == 'ok'
