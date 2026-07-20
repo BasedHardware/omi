@@ -46,8 +46,8 @@ describe("omi tool manifest", () => {
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_agent",
-      "manage_agent_pills",
-      "setup_agent_provider",
+      "run_agent_and_wait",
+      "set_desktop_attention_override",
       "search_tasks",
       "complete_task",
       "delete_task",
@@ -100,12 +100,11 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.inputSchema.required).toEqual(["objective"]);
     expect(spawnAgent?.inputSchema.properties).not.toHaveProperty("originSurfaceKind");
     expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
-      enum: ["openclaw", "hermes", "codex", "best"],
+      enum: ["openclaw", "hermes", "codex"],
     });
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='openclaw'");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='codex'");
-    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='best'");
   });
 
   it("leaves explicit provider delegation to the primary model loop", () => {

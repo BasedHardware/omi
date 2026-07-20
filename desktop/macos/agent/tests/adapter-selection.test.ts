@@ -56,24 +56,24 @@ describe("adapter selection and activation", () => {
     expect(adapterProfile("codex")).toMatchObject({
       adapterId: "codex",
       activationEnv: "OMI_CODEX_ADAPTER_COMMAND",
-      capabilities: { supportsTools: false, supportsModelSwitching: false },
+      capabilities: { supportsTools: true, supportsModelSwitching: false },
     });
     expect(adapterActivationError("codex")).toBe(
       "Codex is not available. Make sure Codex is installed first, then try again."
     );
     expect(adapterActivationError("codex")).not.toContain("OMI_CODEX_ADAPTER_COMMAND");
     expect(adapterActivationError("hermes")).toBe(
-      "Hermes is not available. Install it from github.com/NousResearch/hermes-agent with `pip install -e '.[acp]'` (or `uvx --from 'hermes-agent[acp]'`), then run `hermes model` to configure a provider, and try again."
+      "Hermes is not available. Make sure Hermes is installed first, then try again."
     );
     expect(adapterActivationError("hermes")).not.toContain("OMI_HERMES_ADAPTER_COMMAND");
     expect(adapterActivationError("openclaw")).toBe(
-      "OpenClaw is not available. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again."
+      "OpenClaw is not available. Make sure OpenClaw is installed first, then try again."
     );
     expect(adapterActivationError("openclaw")).not.toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
     expect(adapterProfile("codex")).toMatchObject({
       adapterId: "codex",
       activationEnv: "OMI_CODEX_ADAPTER_COMMAND",
-      capabilities: { supportsTools: false, supportsModelSwitching: false },
+      capabilities: { supportsTools: true, supportsModelSwitching: false },
     });
     expect(adapterActivationError("codex")).toBe(
       "Codex is not available. Make sure Codex is installed first, then try again."

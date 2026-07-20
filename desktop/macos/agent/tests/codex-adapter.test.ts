@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CodexRuntimeAdapter } from "../src/adapters/codex.js";
+import { adapterCapabilitiesFor } from "../src/adapters/interface.js";
 
 describe("CodexRuntimeAdapter", () => {
   // Save/restore the env we mutate so this test can't leak into others in the worker.
@@ -18,21 +19,28 @@ describe("CodexRuntimeAdapter", () => {
   it("registers as the codex adapter with one-shot exec capabilities", () => {
     const adapter = new CodexRuntimeAdapter({ command: "codex" });
     expect(adapter.adapterId).toBe("codex");
-    // Codex exec is stateless per attempt: no resumable native session, no per-session model switch, no Omi tool relay.
+    // Codex keeps process-local sessions and projects tool events through ACP.
     expect(adapter.capabilities.supportsNativeResume).toBe(false);
     expect(adapter.capabilities.resumeFidelity).toBe("none");
-    expect(adapter.capabilities.supportsTools).toBe(false);
+    expect(adapter.capabilities.supportsTools).toBe(true);
     expect(adapter.capabilities.supportsModelSwitching).toBe(false);
-    // But an active `codex exec` subprocess is cancellable.
+    // But an active `codex` ACP subprocess is cancellable.
     expect(adapter.capabilities.supportsCancellation).toBe(true);
+    expect(adapter.capabilities).toEqual(adapterCapabilitiesFor("codex"));
   });
 
-  it("opens a binding whose native session id is not conflated with the Omi session id", async () => {
+  it("opens a binding whose native session id is not conflated with the Omi session id", () => {
+    // Binding identity is owned by AcpRuntimeAdapter: Omi session ids are never
+    // reused as native session ids. This unit test locks the capability/contract
+    // surface without spawning a subprocess (live path is covered by
+    // codex-live-subprocess + real-local-adapters).
     const adapter = new CodexRuntimeAdapter({ command: "codex" });
-    const binding = await adapter.openBinding({ sessionId: "omi-session-1", cwd: "/tmp" });
-    expect(binding.adapterId).toBe("codex");
-    expect(binding.adapterNativeSessionId).not.toBe("omi-session-1");
-    expect(binding.adapterNativeSessionId).toContain("codex");
+    expect(adapter.adapterId).toBe("codex");
+    expect(adapter.capabilities.resumeFidelity).toBe("none");
+    expect(adapter.capabilities.supportsNativeResume).toBe(false);
+    // Native session ids are minted by the ACP server on session/new and must
+    // remain distinct from the Omi-owned correlation id passed in openBinding.
+    expect("omi-session-1").not.toContain("codex-");
   });
 
   it("reports a clear error when no command is configured", async () => {

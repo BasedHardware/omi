@@ -1050,10 +1050,10 @@ class ChatToolExecutor {
       .replacingOccurrences(of: " ", with: "")
     let requestedProvider: AgentPillsManager.DirectedProvider?
     switch providerName {
-    case "openclaw": directedProvider = .openclaw
-    case "hermes": directedProvider = .hermes
-    case "codex": directedProvider = .codex
-    case "": directedProvider = nil
+    case "openclaw": requestedProvider = .openclaw
+    case "hermes": requestedProvider = .hermes
+    case "codex": requestedProvider = .codex
+    case "", "auto", "best", "any": requestedProvider = nil
     default:
       return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
     }
@@ -1062,7 +1062,7 @@ class ChatToolExecutor {
       requestedProvider: requestedProvider,
       userRequestText: nil,
       title: title,
-      treatRequestedAsExplicit: true
+      treatRequestedAsExplicit: requestedProvider != nil
     )
     switch resolution {
     case .setupRequired(_, let setupPrompt, _):
@@ -1087,8 +1087,8 @@ class ChatToolExecutor {
       try? await Task.sleep(nanoseconds: 1_800_000_000)
       await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
       let startupFailure = await MainActor.run { () -> String? in
-        guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillId }),
-          case .failed(let errorText) = pill.status
+        guard let live = AgentPillsManager.shared.pills.first(where: { $0.id == pill.id }),
+          case .failed(let errorText) = live.status
         else { return nil }
         return errorText
       }
@@ -1100,9 +1100,8 @@ class ChatToolExecutor {
       }
       return """
         Agent started as a floating agent pill.
-        id: \(pillId.uuidString)
-        runId: \(accepted.runId)
-        title: \(accepted.title)
+        id: \(pill.id.uuidString)
+        title: \(pill.title)
         status: running
         If the user later asks about this agent's status or results, check get_task_agent_status first — never answer from memory.
         """
