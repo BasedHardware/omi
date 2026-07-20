@@ -53,6 +53,8 @@ interface PiRpcEvent {
 
 interface PiMonoRelayContext {
   capabilityRef: string;
+  /** Omi-owned opaque correlation id. Never contains prompt or account data. */
+  requestId: string;
 }
 
 interface PiAssistantMessageEvent {
@@ -832,7 +834,10 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
     mkdirSync(dirname(this.contextFilePath), { recursive: true });
-    writeFileSync(this.contextFilePath, JSON.stringify({ capabilityRef: context.capabilityRef }));
+    writeFileSync(
+      this.contextFilePath,
+      JSON.stringify({ capabilityRef: context.capabilityRef, requestId: context.requestId })
+    );
   }
 
   private clearRelayContext(expectedCapabilityRef?: string): void {
@@ -880,7 +885,7 @@ export class PiMonoAdapter implements HarnessAdapter {
         break;
 
       case "tool_execution_update":
-        // Partial tool output — emit as tool_activity
+        this.handleToolProgress(event);
         break;
 
       case "tool_execution_end":
@@ -1039,6 +1044,22 @@ export class PiMonoAdapter implements HarnessAdapter {
       toolUseId: toolCallId,
       name,
       output,
+    });
+  }
+
+  private handleToolProgress(event: PiRpcEvent): void {
+    const name = event.toolName as string;
+    const toolCallId = event.toolCallId as string;
+    if (!name || !toolCallId) return;
+
+    // A progress event proves the local tool is still moving, but its partial
+    // result can contain document content or filesystem paths. Carry only the
+    // bounded lifecycle identity across the bridge.
+    this.eventHandler?.({
+      type: "tool_activity",
+      name,
+      status: "progress",
+      toolUseId: toolCallId,
     });
   }
 
@@ -1233,6 +1254,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         signal,
         {
           capabilityRef: context.toolCapabilityRef,
+          requestId: context.requestId,
         }
       );
 

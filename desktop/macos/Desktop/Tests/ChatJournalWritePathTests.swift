@@ -123,6 +123,32 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertTrue(coordinator.schedule(messageID: messageID, supersededByTerminalization: false) {})
   }
 
+  func testTerminalizationRetriesOneFailedIdempotentProjection() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var attempts = 0
+
+    let accepted = await coordinator.retryTerminalization {
+      attempts += 1
+      return attempts == 2
+    }
+
+    XCTAssertTrue(accepted)
+    XCTAssertEqual(attempts, 2, "Terminalization retries exactly once after a transient failure")
+  }
+
+  func testTerminalizationRetryIsBounded() async {
+    let coordinator = ChatJournalWriteCoordinator()
+    var attempts = 0
+
+    let accepted = await coordinator.retryTerminalization {
+      attempts += 1
+      return false
+    }
+
+    XCTAssertFalse(accepted)
+    XCTAssertEqual(attempts, 2, "A persistent journal failure must not retry indefinitely")
+  }
+
   // MARK: - Bug 2: projection preserves local-only fields across replay
 
   func testProjectionPreservesLocalOnlyFieldsAcrossTerminalReplay() throws {

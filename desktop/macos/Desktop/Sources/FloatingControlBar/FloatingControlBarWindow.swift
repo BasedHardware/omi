@@ -779,15 +779,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     observePttHint()
   }
 
-  private func performSpacesTransitionGrowIn() {
+  // Internal so the regression test can exercise the same workspace-transition
+  // path that the NSWorkspace observer invokes.
+  func performSpacesTransitionGrowIn() {
     updateNotchIslandState()
     guard notchModeEnabled, isVisible else { return }
-    // The panel already lives on every Space (.canJoinAllSpaces), so switching
-    // Spaces must NOT replay the reveal "pop" — doing so re-zoomed the island on
-    // every desktop/app switch, which felt excessive. Keep it fully revealed and
-    // only re-assert the resting frame if the current one has actually drifted
-    // (e.g. the active screen's notch geometry changed).
+    // Do not replay the reveal "pop" on Space changes; preserve chat size while
+    // non-chat surfaces recover their canonical frame from this callback.
     state.notchRevealProgress = 1
+    guard !state.showingAIConversation else { return }
     let targetFrame = defaultFrameForCurrentState()
     guard !Self.framesEquivalent(frame, targetFrame) else { return }
     resizeToFrame(targetFrame, makeResizable: styleMask.contains(.resizable), animated: false)

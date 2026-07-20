@@ -342,7 +342,8 @@ enum RealtimeScreenEvidenceToolExecutionPolicy {
 /// screen observation, but it cannot make one user-visible until this policy validates it.
 enum RealtimeScreenEvidenceFailureDisposition: Equatable {
   /// The provider received a recoverable tool error and should answer in its
-  /// normal native voice lane (for example, by offering Screen Recording).
+  /// normal native voice lane (for example, by offering Screen Recording or
+  /// explaining that the current screen was temporarily unavailable).
   case providerContinuation
   /// No provider continuation can safely explain the failure, so the local
   /// deterministic result remains the terminal answer.
@@ -353,9 +354,15 @@ enum RealtimeScreenGroundingPolicy {
   static func failureDisposition(
     for evidence: RealtimeScreenEvidenceDescriptor?
   ) -> RealtimeScreenEvidenceFailureDisposition {
-    evidence?.captureFailure == .screenRecordingPermissionRequired
-      ? .providerContinuation
-      : .authoritativeLocalResult
+    switch evidence?.captureFailure {
+    case .screenRecordingPermissionRequired, .captureUnavailable:
+      // Screen Recording can be granted while the compositor is still
+      // initializing. That must degrade the visual tool result, never consume
+      // the user's PTT turn or replace native voice with a local terminal path.
+      return .providerContinuation
+    case nil:
+      return .authoritativeLocalResult
+    }
   }
 
   static func failureText(for evidence: RealtimeScreenEvidenceDescriptor?) -> String {

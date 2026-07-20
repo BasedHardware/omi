@@ -46,6 +46,24 @@ final class RealtimeHubSessionHandoffPolicyTests: XCTestCase {
       RealtimePersistedVoiceContextRefreshPolicy.shouldHandoffImmediately(provider: nil))
   }
 
+  func testStreamingContextUpdateDebouncesIdleSessionHandoff() {
+    XCTAssertEqual(
+      RealtimeVoiceContextRefreshPolicy.handoffDecision(
+        currentSnapshotIdentity: "newer", sessionSnapshotIdentity: "older", hasBufferedTurn: false),
+      .debounceIdleHandoff)
+    XCTAssertEqual(
+      RealtimeVoiceContextRefreshPolicy.handoffDecision(
+        currentSnapshotIdentity: "same", sessionSnapshotIdentity: "same", hasBufferedTurn: false),
+      .keepCurrentSession)
+  }
+
+  func testCapturedPTTBypassesIdleContextDebounce() {
+    XCTAssertEqual(
+      RealtimeVoiceContextRefreshPolicy.handoffDecision(
+        currentSnapshotIdentity: "newer", sessionSnapshotIdentity: "older", hasBufferedTurn: true),
+      .replacePreservingBufferedTurn)
+  }
+
   func testWarmSessionWaitsForOwnerBoundVoiceContext() {
     XCTAssertFalse(RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: false))
     XCTAssertTrue(RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: true))
