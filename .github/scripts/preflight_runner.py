@@ -17,6 +17,35 @@ from pathlib import Path
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
 
+# Signals forwarded to the owned child. SIGHUP is POSIX-only and is simply absent
+# on Windows, so the set is resolved against the host rather than assumed —
+# referencing signal.SIGHUP unconditionally raised AttributeError before any
+# pre-push check could run.
+FORWARDED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP")
+
+
+def forwardable_signals() -> tuple[int, ...]:
+    """Return the forwardable signals this platform actually defines."""
+    resolved = (getattr(signal, name, None) for name in FORWARDED_SIGNAL_NAMES)
+    return tuple(signum for signum in resolved if signum is not None)
+
+
+def signal_child(child: subprocess.Popen, signum: int) -> None:
+    """Forward a signal to the child, preferring its process group where supported.
+
+    The child is started with ``start_new_session=True``, so on POSIX it leads its
+    own process group and ``os.killpg`` reaches the whole tree. Windows has no
+    ``os.killpg``; fall back to signalling the process directly.
+    """
+    killpg = getattr(os, "killpg", None)
+    try:
+        if killpg is not None:
+            killpg(child.pid, signum)
+        else:
+            child.send_signal(signum)
+    except (ProcessLookupError, OSError):
+        pass
+
 
 def atomic_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
@@ -174,14 +203,9 @@ def run_owned(
 
     def forward_signal(signum: int, _frame: object) -> None:
         if child is not None and child.poll() is None:
-            try:
-                os.killpg(child.pid, signum)
-            except ProcessLookupError:
-                pass
+            signal_child(child, signum)
 
-    previous_handlers = {
-        signum: signal.signal(signum, forward_signal) for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-    }
+    previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in forwardable_signals()}
     exit_code = 1
     try:
         print(f"Pre-push single-flight log: {log_path}")

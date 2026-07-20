@@ -7,6 +7,7 @@ from contextlib import redirect_stderr
 import io
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -14,8 +15,9 @@ import time
 import unittest
 import urllib.error
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+import preflight_runner
 from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
 from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, select_checks
 
@@ -476,6 +478,60 @@ class SingleFlightTests(unittest.TestCase):
                 first.stdout.read()
                 first.stdout.close()
             self.assertEqual(first.wait(), 0)
+
+
+class SignalPortabilityTests(unittest.TestCase):
+    """The single-flight wrapper must start on hosts without POSIX signal APIs.
+
+    Windows Python defines neither ``signal.SIGHUP`` nor ``os.killpg``. Building the
+    handler map from a hard-coded tuple containing SIGHUP raised AttributeError inside
+    ``run_owned()``, so every ``git push`` failed before the pre-push checks began.
+    These exercise the selection/forwarding seams directly — no real signal is sent.
+    """
+
+    def test_forwardable_signals_omits_signals_absent_on_host(self) -> None:
+        had_sighup = hasattr(signal, "SIGHUP")
+        original = getattr(signal, "SIGHUP", None)
+        try:
+            if had_sighup:
+                delattr(signal, "SIGHUP")  # simulate Windows
+            selected = preflight_runner.forwardable_signals()
+        finally:
+            if had_sighup:
+                signal.SIGHUP = original
+        self.assertIn(signal.SIGINT, selected)
+        self.assertIn(signal.SIGTERM, selected)
+        self.assertTrue(all(signum is not None for signum in selected))
+
+    @unittest.skipUnless(hasattr(signal, "SIGHUP"), "POSIX-only")
+    def test_forwardable_signals_includes_sighup_on_posix(self) -> None:
+        self.assertIn(signal.SIGHUP, preflight_runner.forwardable_signals())
+
+    @unittest.skipUnless(hasattr(os, "killpg"), "POSIX-only")
+    def test_forwards_to_process_group_when_available(self) -> None:
+        child = Mock(pid=4321)
+        with patch.object(os, "killpg") as killpg:
+            preflight_runner.signal_child(child, signal.SIGTERM)
+        killpg.assert_called_once_with(4321, signal.SIGTERM)
+        child.send_signal.assert_not_called()
+
+    def test_forwards_via_send_signal_when_process_groups_unavailable(self) -> None:
+        child = Mock(pid=4321)
+        had_killpg = hasattr(os, "killpg")
+        original = getattr(os, "killpg", None)
+        try:
+            if had_killpg:
+                delattr(os, "killpg")  # simulate Windows
+            preflight_runner.signal_child(child, signal.SIGTERM)
+        finally:
+            if had_killpg:
+                os.killpg = original
+        child.send_signal.assert_called_once_with(signal.SIGTERM)
+
+    def test_forwarding_swallows_dead_child(self) -> None:
+        child = Mock(pid=4321)
+        with patch.object(os, "killpg", side_effect=ProcessLookupError):
+            preflight_runner.signal_child(child, signal.SIGTERM)  # must not raise
 
 
 if __name__ == "__main__":
