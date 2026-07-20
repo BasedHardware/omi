@@ -59,6 +59,36 @@ enum OnboardingFlow {
     return !(frontier..<target).contains { unskippableSteps.contains($0) }
   }
 
+  /// What a bare arrow key does at `step`. Left/up go back one step; right/down
+  /// jump forward when the next step is cleared or skippable, and otherwise
+  /// defer to the step's own Continue gating (the caller re-issues the default
+  /// action). Non-arrow key codes navigate nothing.
+  enum ArrowNavigation: Equatable {
+    case jump(to: Int)
+    case forwardDefaultAction
+  }
+
+  static func arrowNavigation(keyCode: UInt16, step: Int, furthestStep: Int) -> ArrowNavigation? {
+    switch keyCode {
+    case 123, 126:  // left, up
+      return step > 0 ? .jump(to: step - 1) : nil
+    case 124, 125:  // right, down
+      let next = step + 1
+      return canJump(to: next, furthestStep: furthestStep) ? .jump(to: next) : .forwardDefaultAction
+    default:
+      return nil
+    }
+  }
+
+  /// Validates a requested arrow-navigation target against live state before
+  /// the mounted view applies it: backward is always allowed, forward only
+  /// through cleared/skippable steps (same policy as the progress dots).
+  static func validatedNavigationTarget(_ target: Int, currentStep: Int, furthestStep: Int) -> Int? {
+    guard target >= 0, target <= lastStepIndex else { return nil }
+    if target > currentStep, !canJump(to: target, furthestStep: furthestStep) { return nil }
+    return target
+  }
+
   static func migratedStep(
     currentStep: Int,
     hasMigratedVideoStep: Bool,
