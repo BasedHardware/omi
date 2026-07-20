@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
+  s_2204722b151ea4::t_4525297f6a67d6 1-89,91,93-98
+  s_2204722b151ea4::t_2084fd55e06ad9 90,92
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_2204722b151ea4::t_a602946b33eeb4 580-583,589-652
+  s_2204722b151ea4::t_f7ee0a9204dbfa 653
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_2204722b151ea4::t_e11a97c5274838 443-444
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "6a6152209cccf6fd3b2064323a612a1bebdee0ad",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
