@@ -5,6 +5,8 @@ description: Redesigned Home stage transitions (hub/chat/connect) via automation
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeValueComponents.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeValueSnapshot.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeSuggestionsStore.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
