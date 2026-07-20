@@ -50,6 +50,40 @@ export default defineConfig({
           // The worker file must be a separate bundle (not inlined) because
           // new Worker(path) needs a real file — it can't load from the main bundle.
           kgWorker: resolve('src/main/ipc/kgWorker.ts')
+        },
+        output: {
+          // Keep the backend-SESSION module graph in its OWN plain chunk, OUT of the
+          // bytecode `index` entry.
+          //
+          // THE BUG THIS FIXES (packaged builds only): the lazy shared chunks that
+          // import `getBackendSession`/`getAbortSignal` — backendTools (get_goals,
+          // get_memories, the *_search REST tools) and taskSyncEngine (task writes) —
+          // are dynamic imports, so rollup emits them as separate PLAIN chunks. When
+          // rollup inlines session.ts into the bytecode `index` entry, those chunks
+          // compile to `require("../index.js").getBackendSession(...)`. But the bytecode
+          // stub's `index.js` is only `require("./bytecode-loader.cjs"); require("./index.jsc")`
+          // with NO `module.exports =` forwarding, so `require("../index.js")` returns
+          // `{}` → `index.getBackendSession is not a function` at call time. Dev has no
+          // bytecode (the require returns the real module), so it only bit packaged users.
+          //
+          // Pinning this closure to its own PLAIN chunk makes those imports resolve
+          // plain→plain (and the bytecode entry importing a plain chunk is fine). The
+          // set is session.ts plus exactly the telemetry leaves it pulls in
+          // (backendDegraded → rateLimitDegraded, fallback), so the chunk is
+          // self-contained and never back-references the entry. `scripts/check-bytecode-entry-exports.mjs`
+          // guards it. See fix/win-packaged-tools.
+          manualChunks(id) {
+            const p = id.replace(/\\/g, '/')
+            if (
+              p.includes('/src/main/assistants/core/session.') ||
+              p.includes('/src/main/observability/backendDegraded.') ||
+              p.includes('/src/main/observability/rateLimitDegraded.') ||
+              p.includes('/src/main/observability/fallback.')
+            ) {
+              return 'backend-session'
+            }
+            return undefined
+          }
         }
       }
     }
