@@ -123,6 +123,43 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("should_release=false", outputs)
         self.assertIn("required check is missing", outputs)
 
+    def test_break_glass_releases_over_a_blocked_source_check(self) -> None:
+        """The hatch for a broken source gate: force_release deliberately is not one."""
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=None),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
+                patch.object(planner, "git", return_value=SOURCE_SHA),
+                patch.object(planner, "required_desktop_swift_check_reason", return_value="required check is missing"),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY, "--mode", "break_glass"]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("should_release=true", outputs)
+        self.assertIn("source_gate_bypassed=true", outputs)
+
+    def test_break_glass_does_not_bypass_the_source_check_when_it_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=None),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
+                patch.object(planner, "git", return_value=SOURCE_SHA),
+                patch.object(planner, "required_desktop_swift_check_reason", return_value=None),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY, "--mode", "break_glass"]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("should_release=true", outputs)
+        self.assertNotIn("source_gate_bypassed=true", outputs)
+
     def test_force_release_keeps_its_normal_path_after_source_check_success(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "github-output"
