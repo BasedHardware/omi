@@ -278,6 +278,21 @@ export class VoiceHubTurnDriver {
     })
     this.coordinator.setEffectHandler(this.host.effectHandler)
     this.coordinator.configure(this.host.presenter)
+    // Release the audible-owner token the moment the COORDINATOR reaches a terminal
+    // turn, by ANY path — critically including reducer DEADLINE terminals
+    // (playbackDrain → playbackFailed, pendingTools → toolTimeout) that fire through
+    // the coordinator's own timer via `coordinator.send`, NOT this driver's
+    // `dispatch()`, so `dispatch()`'s reconciliation never sees them. Without this,
+    // a hub reply that started speaking and then hit a deadline terminal would leave
+    // the token claimed forever → every future cascade reply silently suppressed
+    // (a permanent mute, worse than the overlap it guards). Fires on every reducer
+    // transition; the guard makes it a no-op except on the leak edge, and release is
+    // idempotent with the paired speaking-end / dispatch / begin / dispose releases.
+    this.coordinator.setSnapshotHandler(() => {
+      if (this.realtimeAudibleToken !== null && this.coordinator.activeTurnID === null) {
+        this.releaseRealtimeAudible()
+      }
+    })
   }
 
   /** Eagerly open the warm socket (bar summon / hover). Idempotent; a no-op when
@@ -868,6 +883,10 @@ export class VoiceHubTurnDriver {
    *  and is deliberately left alone (a long spoken reply must never be cut). */
   private fireReleaseWatchdog(armedTurnID: VoiceTurnID): void {
     if (this.turnID !== armedTurnID) return
+    // Belt-and-suspenders: drop any audible-owner token BEFORE the phase early-returns
+    // below, so a wedged turn can never keep the realtime lane marked audible (which
+    // would deny all future TTS). Idempotent; the normal terminal paths already release.
+    this.releaseRealtimeAudible()
     const turn = this.coordinator.model.turn
     const phase = turn?.phase.kind
     const desynced = turn === null || turn.id !== armedTurnID

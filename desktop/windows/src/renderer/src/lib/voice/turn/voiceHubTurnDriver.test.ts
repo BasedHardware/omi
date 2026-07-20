@@ -1144,4 +1144,25 @@ describe('single-audible-owner (audibleOutputArbiter)', () => {
     h.driver.dispose()
     expect(isRealtimeAudible()).toBe(false)
   })
+
+  it('releases realtime-audible on a reducer DEADLINE terminal (not just driver events)', async () => {
+    // The MAJOR leak: reducer deadline terminals (playbackDrain → playbackFailed,
+    // pendingTools → toolTimeout) fire through the coordinator's OWN timer via
+    // coordinator.send, never this driver's dispatch(), so dispatch()'s reconciliation
+    // never runs. Before the coordinator snapshot observer, the token stayed claimed
+    // forever → every future cascade reply silently muted. Prove the snapshot observer
+    // releases it on the deadline-fired terminal with no further driver events.
+    __resetAudibleArbiterForTests()
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end()
+    h.hub.events().onSpeakingStart?.() // the hub reply is audibly playing (token claimed)
+    expect(isRealtimeAudible()).toBe(true)
+    // No further driver events — the playing-phase playbackDrain deadline fires.
+    h.scheduler.fire('playbackDrain')
+    expect(isRealtimeAudible()).toBe(false) // snapshot observer released it — no leak
+  })
 })

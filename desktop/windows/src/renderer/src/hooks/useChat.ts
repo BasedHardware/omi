@@ -28,6 +28,7 @@ import { CHAT_INFINITE_ID_KEY } from '../lib/chatStorageKeys'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 import { parseDoneMessage, type DoneMessage } from '../lib/messagesSse'
 import { speakText } from '../lib/voice/voiceController'
+import { isRealtimeAudible } from '../lib/voice/audibleOutputArbiter'
 import { withByokHeadersIfActive } from '../lib/byokKeys'
 import { friendlyChatError } from '../lib/chat/chatErrorCopy'
 import {
@@ -189,6 +190,10 @@ export function useChat(): UseChat {
   // internally if backend TTS is unavailable.
   const maybeSpeak = (text: string, fromVoice: boolean): void => {
     if (!fromVoice || !text.trim()) return
+    // If a realtime lane already owns the speaker (audibleOutputArbiter), speakText
+    // will DROP this reply — so don't flash the speaking glow for audio that never
+    // plays. Mirrors speakText's own deny-gate; the reply text is still rendered.
+    if (isRealtimeAudible()) return
     ttsActiveRef.current++
     setSpeaking(true)
     void speakText(text)

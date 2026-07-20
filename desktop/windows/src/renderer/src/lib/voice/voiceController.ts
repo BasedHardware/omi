@@ -120,6 +120,11 @@ function syncGate(): void {
   if (gate.watchdogExpired(now) && !watchdogReported) {
     watchdogReported = true
     record('gate-watchdog')
+    // The watchdog force-releasing means a terminal speaking-end edge was MISSED —
+    // so the continuous session's audible-owner token would otherwise leak (and deny
+    // all future cascade TTS). Drop it here alongside the gate release.
+    endRealtimeAudible(continuousAudibleToken)
+    continuousAudibleToken = null
     trackEvent('fallback_triggered', {
       component: 'voice_echo_gate',
       from: 'gated',
