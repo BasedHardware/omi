@@ -83,8 +83,6 @@ class McpScreenActivityRow(BaseModel):
     app_name: Optional[str] = None
     window_title: Optional[str] = None
     ocr_text: Optional[str] = None
-    device_name: Optional[str] = None
-    client_device_id: Optional[str] = None
 
 
 class McpScreenActivityAppSummary(BaseModel):

@@ -504,8 +504,6 @@ class TestScreenActivity:
             'appName': 'Cursor',
             'windowTitle': 'mcp.py',
             'ocrText': 'def foo',
-            'deviceName': 'Mac Studio',
-            'clientDeviceId': 'macos_abc12345',
         }
 
     @patch('routers.mcp.screen_activity_db')
@@ -519,8 +517,6 @@ class TestScreenActivity:
                 'app_name': 'Cursor',
                 'window_title': 'mcp.py',
                 'ocr_text': 'def foo',
-                'device_name': 'Mac Studio',
-                'client_device_id': 'macos_abc12345',
             }
         ]
 
