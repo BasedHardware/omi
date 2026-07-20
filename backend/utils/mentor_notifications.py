@@ -115,7 +115,14 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Lis
 
         text = segment['text'].strip()
         if text:
-            timestamp = segment.get('start', 0) or current_time
+            # A segment's ``start`` is relative capture seconds, so a legitimate 0.0 (the first
+            # utterance beginning at capture start) is a real timestamp, not a missing value.
+            # ``segment.get('start', 0) or current_time`` treated 0.0 as falsy and replaced it with
+            # wall-clock time, which sorted that opening line to the END of the timestamp-ordered
+            # context built below. Preserve a real numeric start; fall back to wall-clock only when
+            # ``start`` is genuinely absent or non-numeric.
+            raw_start = segment.get('start')
+            timestamp = raw_start if isinstance(raw_start, (int, float)) else current_time
             is_user = segment.get('is_user', False)
 
             # Count words after silence
