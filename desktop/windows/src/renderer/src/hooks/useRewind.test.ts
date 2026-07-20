@@ -160,3 +160,68 @@ describe('useRewind day scoping', () => {
     await waitFor(() => expect(sampledCalls).toContainEqual([yesterday, endOfLocalDay(yesterday)]))
   })
 })
+
+// Idle-burn fix: the Rewind panel stays mounted-hidden behind the Home hub, so the
+// silent 3s today-refresh must pause while the panel is off-screen (`active` false)
+// and resume — resampling immediately so it isn't stale — the moment it is shown.
+describe('useRewind today-refresh pauses while inactive', () => {
+  const TODAY_REFRESH_MS = 3000 // mirrors the hook's silent-refresh cadence
+
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('does NOT resample on the 3s cadence while the panel is hidden', async () => {
+    const today = startOfLocalDay(Date.now())
+    framesByDay.set(today, [frame(today + 1000, 1)])
+    renderHook(({ active }) => useRewind({ active }), { initialProps: { active: false } })
+    // Flush the mount-time loadDay (runs regardless of visibility so the panel is
+    // pre-populated for an instant first open).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const afterMount = sampledCalls.length
+    expect(afterMount).toBe(1)
+
+    // Several refresh intervals elapse — none should fire while hidden.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TODAY_REFRESH_MS * 3)
+    })
+    expect(sampledCalls.length).toBe(afterMount)
+  })
+
+  it('resamples immediately on show, then resumes the 3s cadence', async () => {
+    const today = startOfLocalDay(Date.now())
+    framesByDay.set(today, [frame(today + 1000, 1)])
+    const { rerender } = renderHook(({ active }) => useRewind({ active }), {
+      initialProps: { active: false }
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    const afterMount = sampledCalls.length // 1 (mount load only; refresh paused)
+
+    // Panel shown → one immediate resample so it reflects frames added while hidden.
+    await act(async () => {
+      rerender({ active: true })
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(sampledCalls.length).toBe(afterMount + 1)
+
+    // Cadence resumed.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TODAY_REFRESH_MS)
+    })
+    expect(sampledCalls.length).toBe(afterMount + 2)
+
+    // Hidden again → the interval is torn down (flush the re-render first so its
+    // cleanup runs before time advances), so no further resamples fire.
+    await act(async () => {
+      rerender({ active: false })
+    })
+    const afterHide = sampledCalls.length
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TODAY_REFRESH_MS * 2)
+    })
+    expect(sampledCalls.length).toBe(afterHide)
+  })
+})
