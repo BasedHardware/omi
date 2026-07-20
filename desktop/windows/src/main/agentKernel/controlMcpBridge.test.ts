@@ -255,7 +255,7 @@ describe('tools/list visibility for a model-facing caller', () => {
     expect(names).not.toContain('load_skill')
   })
 
-  it('a leaf caller is shown none of the four fanout tools', async () => {
+  it('a leaf caller is shown none of the four fanout tools, but STILL sees product tools', async () => {
     const { kernel, store } = newKernel()
     const bridge = await startBridge(kernel)
     const { token, pipePath } = bindSession(bridge, store, 'leaf')
@@ -265,6 +265,26 @@ describe('tools/list visibility for a model-facing caller', () => {
     for (const fanout of LEAF_AGENT_CONTROL_TOOLS) {
       expect(names).not.toContain(fanout)
     }
+    // Product tools carry NO coordinator/leaf restriction — only the fanout control
+    // tools are role-gated. A leaf worker must still be able to read the user's data.
+    for (const product of ['get_goals', 'get_memories', 'execute_sql']) {
+      expect(names).toContain(product)
+    }
+  })
+
+  it('a leaf caller can DISPATCH a product tool (reaches its executor)', async () => {
+    const { kernel, store } = newKernel()
+    const bridge = await startBridge(kernel)
+    const { token, pipePath } = bindSession(bridge, store, 'leaf')
+    const client = await connect(pipePath, token)
+
+    // The leaf role gate rejects the fanout tools; a product tool is NOT gated, so it
+    // reaches its executor (returns the not-signed-in string, not a policy denial or
+    // the unknown_control_tool envelope).
+    const result = await client.callRawResult('get_goals', {})
+    expect(result).not.toContain('unknown_control_tool')
+    expect(result).not.toContain('policy_denied')
+    expect(result).toMatch(/not signed in to Omi/)
   })
 })
 
