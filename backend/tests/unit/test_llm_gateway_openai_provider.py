@@ -394,3 +394,24 @@ async def test_anthropic_created_advances_between_calls(monkeypatch):
     assert first['created'] == 1_800_000_000
     assert second['created'] == 1_800_000_600
     assert second['created'] > first['created']
+
+
+def test_no_provider_normalizer_hardcodes_created():
+    """Only the test double may return a fixed `created` timestamp.
+
+    The Anthropic normalizer shipped with 1782522000 copied from
+    fake_success_response, which is invisible in review because the field is
+    well-formed. Require every other `created` in the providers module to be computed.
+    """
+    import re
+    from pathlib import Path
+
+    source = Path(providers_mod.__file__).read_text(encoding='utf-8')
+    fake_start = source.index('def fake_success_response')
+
+    offenders = [
+        source[: match.start()].count('\n') + 1
+        for match in re.finditer(r"'created':\s*(\d+)", source)
+        if match.start() < fake_start
+    ]
+    assert offenders == [], f'hardcoded chat.completion `created` outside the test double at line(s): {offenders}'
