@@ -103,6 +103,47 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
     monthly_usage.assert_called_once_with('uid')
 
 
+def _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds):
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None: False)
+    monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
+    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+    monkeypatch.setattr(
+        subscription_module.users_db,
+        'get_user_valid_subscription',
+        lambda uid: SimpleNamespace(plan=plan),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        subscription_module,
+        'get_monthly_usage_for_subscription',
+        lambda uid: {'transcription_seconds': used_seconds},
+    )
+
+
+def test_remaining_transcription_seconds_enforces_plus_bounded_cap(monkeypatch, subscription_module):
+    # Plus is a paid plan but carries a bounded 1500-min/month transcription cap. The
+    # remaining seconds must be reported (so the freemium on-device switch can fire), not
+    # short-circuited to None as if the plan were unlimited.
+    cap = subscription_module.PLUS_TIER_MONTHLY_SECONDS_LIMIT
+    assert cap and cap > 0  # Plus is bounded by construction
+    _stub_remaining_deps(monkeypatch, subscription_module, PlanType.plus, used_seconds=cap - 10000)
+    assert subscription_module.get_remaining_transcription_seconds('uid') == 10000
+
+
+def test_remaining_transcription_seconds_zero_at_plus_cap(monkeypatch, subscription_module):
+    cap = subscription_module.PLUS_TIER_MONTHLY_SECONDS_LIMIT
+    _stub_remaining_deps(monkeypatch, subscription_module, PlanType.plus, used_seconds=cap + 5000)
+    assert subscription_module.get_remaining_transcription_seconds('uid') == 0
+
+
+def test_remaining_transcription_seconds_none_for_unlimited_paid_plan(monkeypatch, subscription_module):
+    # Genuinely-unlimited paid plans (transcription_seconds unset) must still report None,
+    # i.e. dropping the is_paid_plan short-circuit must not start capping them.
+    for plan in (PlanType.architect, PlanType.operator, PlanType.unlimited, PlanType.unlimited_v2):
+        _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds=10_000_000)
+        assert subscription_module.get_remaining_transcription_seconds('uid') is None, plan
+
+
 def test_plus_and_unlimited_v2_price_ids_resolve(monkeypatch, subscription_module):
     monkeypatch.setenv("STRIPE_PLUS_MONTHLY_PRICE_ID", "price_plus_monthly")
     monkeypatch.setenv("STRIPE_PLUS_ANNUAL_PRICE_ID", "price_plus_annual")
