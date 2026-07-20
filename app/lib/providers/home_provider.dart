@@ -9,29 +9,25 @@ import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
 
-/// Languages supported by Deepgram Nova-3 multi-language auto-detection.
-/// When a user picks one of these, multi-language mode is enabled (single_language_mode = false).
+/// Base language codes eligible for live multi-language auto-detection.
+/// Mirrors the backend live STT capability policy
+/// (backend/config/stt_provider_policy.py MODULATE_SUPPORTED_LANGUAGES, #10022);
+/// regional variants ("pt-BR") are normalized to their base code before lookup.
 const multiLanguageSupported = {
-  'en',
-  'en-US',
-  'en-AU',
-  'en-GB',
-  'en-IN',
-  'en-NZ',
-  'es',
-  'es-419',
-  'fr',
-  'fr-CA',
-  'de',
-  'hi',
-  'ru',
-  'pt',
-  'pt-BR',
-  'pt-PT',
-  'ja',
-  'it',
-  'nl',
+  'multi',
+  'af', 'ar', 'az', 'be', 'bg', 'bn', 'bs', 'ca', 'cs', 'cy', 'da', 'de',
+  'el', 'en', 'es', 'et', 'eu', 'fa', 'fi', 'fr', 'gl', 'gu', 'he', 'hi',
+  'hr', 'hu', 'id', 'it', 'ja', 'kk', 'kn', 'ko', 'lt', 'lv', 'mk', 'ml',
+  'mr', 'ms', 'nl', 'no', 'pa', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sq',
+  'sr', 'sv', 'sw', 'ta', 'te', 'th', 'tl', 'tr', 'uk', 'ur', 'vi', 'zh',
 };
+
+/// Whether a (possibly regional) language code may enter live multi-language
+/// mode, matching the backend's normalized policy check.
+bool supportsLiveMultilingualMode(String languageCode) {
+  final base = languageCode.split('-').first.split('_').first.toLowerCase();
+  return multiLanguageSupported.contains(base);
+}
 
 class HomeProvider extends ChangeNotifier {
   int _sessionGeneration = 0;
@@ -274,7 +270,7 @@ class HomeProvider extends ChangeNotifier {
         PlatformManager.instance.analytics.setUserAttribute('Primary Language', languageCode);
 
         // Backend auto-sets single_language_mode — sync local state to match
-        final singleLanguageMode = !multiLanguageSupported.contains(languageCode);
+        final singleLanguageMode = !supportsLiveMultilingualMode(languageCode);
         userProvider?.updateSingleLanguageModeLocally(singleLanguageMode);
 
         notifyListeners();

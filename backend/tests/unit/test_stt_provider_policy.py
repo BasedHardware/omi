@@ -81,3 +81,30 @@ def test_live_multilingual_policy_normalizes_supported_locales_and_rejects_unkno
     assert supports_live_multilingual_mode('ar')
     assert modulate_supports_language('es-419')
     assert not supports_live_multilingual_mode('xx-unsupported')
+
+
+# ---------------------------------------------------------------------------
+# #10022: user language preference gate must follow the live policy
+# ---------------------------------------------------------------------------
+
+
+def test_user_language_route_gates_multilingual_mode_by_live_policy():
+    """Static tripwire (source order, not behavior): the PATCH /v1/users/language
+    preference gate derives single_language_mode from the live STT capability
+    policy, and the retired Deepgram Nova-3 multi-language list no longer
+    appears in the route module (#10022)."""
+    users_py = (Path(__file__).resolve().parents[2] / 'routers' / 'users.py').read_text(encoding='utf-8')
+    assert 'single_language_mode = not supports_live_multilingual_mode(language)' in users_py
+    assert 'deepgram_nova3_multi_languages' not in users_py
+
+
+@pytest.mark.parametrize('language', ['vi', 'vi-VN', 'ko', 'tr', 'ar', 'th', 'pt-BR', 'en'])
+def test_live_policy_admits_languages_beyond_the_retired_deepgram_list(language):
+    """vi/ko/tr/ar/th were wrongly locked into single-language mode by the old
+    19-locale Deepgram list; en/pt-BR keep their existing eligibility."""
+    assert supports_live_multilingual_mode(language) is True
+
+
+@pytest.mark.parametrize('language', ['my', 'am', 'lo'])
+def test_live_policy_rejects_languages_outside_modulate_auto_detection(language):
+    assert supports_live_multilingual_mode(language) is False
