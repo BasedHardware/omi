@@ -2508,10 +2508,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if !audioReceivedThisTurn {
       let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
       let resolvedAck = resolution.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let ack =
-        existingAck.isEmpty
-        ? (resolvedAck?.isEmpty == false ? resolvedAck! : "Starting a background agent.")
-        : existingAck
+      let ack: String
+      if existingAck.isEmpty {
+        if let resolvedAck, !resolvedAck.isEmpty {
+          ack = resolvedAck
+        } else {
+          ack = "Starting a background agent."
+        }
+      } else {
+        ack = existingAck
+      }
       assistantText = ack
     }
     // Defer durable chat-history handoff recording to hubDidFinishTurn so the
