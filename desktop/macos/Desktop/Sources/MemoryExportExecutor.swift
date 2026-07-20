@@ -315,7 +315,7 @@ enum MemoryExportExecutor {
 
   private static func requestAccessibilityApprovalForCloudSetup() {
     let options =
-      [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+      ["AXTrustedCheckOptionPrompt": true] as CFDictionary
     let trusted = AXIsProcessTrustedWithOptions(options)
     guard !trusted,
       let url = URL(
