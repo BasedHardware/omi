@@ -68,8 +68,6 @@ DEFAULT_CONFIG_DIR = _DEFAULT_GATEWAY_CONFIG_DIR
 def _load_lane_and_artifact(lane_id: str):
     """Load the default config and return (lane, artifact) for a lane id."""
     cfg = load_gateway_config(DEFAULT_CONFIG_DIR, prod_mode=False)
-    if lane_id not in cfg.lanes:
-        lane_id = "omi:auto:chat-structured"
     lane = cfg.lanes[lane_id]
     artifact = cfg.route_artifacts[lane.active_route]
     return lane, artifact
@@ -82,7 +80,7 @@ def _load_lane_and_artifact(lane_id: str):
 
 class TestBuildFixture:
     def test_fixture_always_includes_text_input(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         req = build_fixture(lane, artifact)
         assert req.messages  # at least one message
         assert req.messages[0]["role"] == "user"
@@ -93,7 +91,7 @@ class TestBuildFixture:
         assert req.model == artifact.primary.model  # claude-sonnet-4-6
 
     def test_fixture_json_schema_for_schema_mode(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         req = build_fixture(lane, artifact)
         assert req.response_format == {
             "type": "json_schema",
@@ -132,7 +130,7 @@ class TestBuildFixture:
         assert req.tools[0]["type"] == "function"
 
     def test_fixture_no_tools_when_capability_not_declared(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         req = build_fixture(lane, artifact)
         assert req.tools is None
 
@@ -142,12 +140,12 @@ class TestBuildFixture:
         assert req.stream is True
 
     def test_fixture_stream_false_when_streaming_capability_not_set(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         req = build_fixture(lane, artifact)
         assert req.stream is False
 
     def test_fixture_timeout_matches_artifact_timeout(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         req = build_fixture(lane, artifact)
         assert req.timeout_seconds == artifact.timeouts.request_ms / 1000.0
 
@@ -346,7 +344,7 @@ class TestFakeProviderScenarios:
 class TestSmokeLane:
     @pytest.mark.asyncio
     async def test_pass_lane(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         fake = FakeProvider()
         fake.set_default_scenario("pass")
         result = await smoke_lane(lane, artifact, fake)
@@ -357,7 +355,7 @@ class TestSmokeLane:
 
     @pytest.mark.asyncio
     async def test_timeout_lane_records_failure(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         fake = FakeProvider()
         fake.set_default_scenario("timeout")
         # chat-extraction has timeouts.request_ms=8000. Use a shorter timeout
@@ -380,7 +378,7 @@ class TestSmokeLane:
 
     @pytest.mark.asyncio
     async def test_auth_error_lane_records_failure(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         fake = FakeProvider()
         fake.set_default_scenario("auth_error")
         result = await smoke_lane(lane, artifact, fake)
@@ -389,7 +387,7 @@ class TestSmokeLane:
 
     @pytest.mark.asyncio
     async def test_schema_violation_lane_records_failure(self):
-        lane, artifact = _load_lane_and_artifact("omi:auto:chat-extraction")
+        lane, artifact = _load_lane_and_artifact("omi:auto:chat-structured")
         fake = FakeProvider()
         fake.set_default_scenario("schema_violation")
         result = await smoke_lane(lane, artifact, fake)
