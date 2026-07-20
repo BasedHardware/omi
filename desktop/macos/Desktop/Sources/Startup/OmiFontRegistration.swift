@@ -7,7 +7,8 @@ import Foundation
 /// (`Resources/Fonts/*.ttf`), so registration must happen here — `OmiTheme`'s own
 /// `Bundle.module` cannot see them.
 enum OmiFontRegistration {
-  private static var didRegister = false
+  // Touched only on the main thread from `applicationWillFinishLaunching`.
+  nonisolated(unsafe) private static var didRegister = false
 
   static func registerAll() {
     guard !didRegister else { return }

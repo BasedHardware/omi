@@ -43,6 +43,8 @@ struct DesktopHomeView: View {
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
+  /// Second Brain persistent ask-bar text.
+  @State private var sbAskText = ""
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -428,7 +430,7 @@ struct DesktopHomeView: View {
     }
     .background(OmiColors.backgroundPrimary)
     .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
-    .preferredColorScheme(.dark)
+    .withSecondBrainTheme()
     .tint(OmiColors.accent)
     .onAppear {
       log(
@@ -889,6 +891,7 @@ struct DesktopHomeView: View {
 
   private var mainContent: some View {
     HStack(spacing: 0) {
+      if isInSettings {
       // Sidebar slot: settings sidebar overlays main sidebar
       // IMPORTANT: SidebarView is kept alive (but hidden) when in settings to prevent
       // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
@@ -992,6 +995,9 @@ struct DesktopHomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(OmiSpacing.md)
+      } else {
+        secondBrainShell
+      }
     }
     .overlay {
       // Goal completion celebration overlay
@@ -1102,6 +1108,57 @@ struct DesktopHomeView: View {
     OmiMotion.withGated(Self.pageNavigationAnimation) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }
+  }
+
+  // MARK: - Second Brain shell (non-settings content)
+
+  @ViewBuilder private var secondBrainShell: some View {
+    SecondBrainShell(
+      selectedIndex: $selectedIndex,
+      isWorking: appState.isTranscribing,
+      askText: $sbAskText,
+      onSubmitAsk: submitSBAsk,
+      onOpenChats: { selectedIndex = SidebarNavItem.chat.rawValue },
+      onVoice: { FloatingControlBarManager.shared.toggleAIInput() },
+      onOpenPalette: {}
+    ) {
+      secondBrainPageBody
+    }
+  }
+
+  /// Today is Second-Brain-native; other content pages render inside the shell frame
+  /// (rebuilt in later phases). Settings never reaches here — it keeps its two-pane.
+  @ViewBuilder private var secondBrainPageBody: some View {
+    if selectedIndex == SidebarNavItem.dashboard.rawValue {
+      SBTodayContainer(
+        appState: appState,
+        dashboardViewModel: viewModelContainer.dashboardViewModel,
+        onOpenConversation: { _ in selectedIndex = SidebarNavItem.conversations.rawValue },
+        onNavigate: { idx in selectedIndex = idx },
+        onAsk: askFromSecondBrain
+      )
+    } else {
+      PageContentView(
+        selectedIndex: selectedIndex,
+        appState: appState,
+        viewModelContainer: viewModelContainer,
+        selectedSettingsSection: $selectedSettingsSection,
+        highlightedSettingId: $highlightedSettingId,
+        selectedTabIndex: $selectedIndex
+      )
+    }
+  }
+
+  private func submitSBAsk() {
+    let q = sbAskText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !q.isEmpty else { return }
+    sbAskText = ""
+    askFromSecondBrain(q)
+  }
+
+  private func askFromSecondBrain(_ query: String) {
+    selectedIndex = SidebarNavItem.chat.rawValue
+    Task { _ = await viewModelContainer.chatProvider.sendMainDraft(query) }
   }
 }
 
