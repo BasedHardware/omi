@@ -337,6 +337,8 @@ checks:
     reason: "#9991 mutation-tests workflow-run event, result, branch, SHA, repository, and manual proof drift"
 
 exempt:
+  - path: ".github/scripts/check-desktop-emergency-beta-promotion.py"
+    reason: "break-glass release verifier requires published artifacts, incident approvals, and protected workflow inputs"
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
     reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
