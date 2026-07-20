@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -27,11 +28,17 @@ def _asset(release: dict, names: set[str]) -> dict:
     fail(f"release is missing required asset: {', '.join(sorted(names))}")
 
 
-def _require_emergency_workflow_identity(evidence: dict) -> None:
-    for field in ("workflow_run_id", "workflow_run_attempt"):
-        value = evidence.get(field)
-        if type(value) is not int or value <= 0:
-            fail(f"emergency evidence {field} must be a positive GitHub Actions integer")
+def _require_emergency_operation_identity(evidence: dict, *, release_tag: str, target_sha: str) -> None:
+    operation_id = evidence.get("operation_id")
+    incident_id = evidence.get("incident_id")
+    if not isinstance(operation_id, str) or not re.fullmatch(r"[0-9a-f]{64}", operation_id):
+        fail("emergency evidence operation_id must be a SHA-256 digest")
+    if not isinstance(incident_id, str) or not incident_id.strip():
+        fail("emergency evidence incident_id is required")
+    binding = f"macos-beta-emergency-forward-promotion:{release_tag}:{target_sha.lower()}:{incident_id.strip()}"
+    expected = hashlib.sha256(binding.encode("utf-8")).hexdigest()
+    if operation_id != expected:
+        fail("emergency evidence operation_id does not bind the release decision")
 
 
 def prepare_manifest(
@@ -72,14 +79,14 @@ def prepare_manifest(
     qualification = desktop_qualification_from_metadata(metadata)
     if emergency_evidence is None:
         require_desktop_qualification(qualification, target_sha=target_sha, asset_names=asset_names)
+    elif not isinstance(emergency_evidence, dict):
+        fail("emergency evidence must be an object")
     elif emergency_evidence.get("release_tag") != release_tag or emergency_evidence.get("source_sha") != target_sha:
         fail("emergency evidence does not bind the requested release tag and source SHA")
     elif emergency_evidence.get("emergencyPromotion") is not True:
         fail("emergency evidence must explicitly declare emergencyPromotion")
-    elif not isinstance(emergency_evidence, dict):
-        fail("emergency evidence must be an object")
     else:
-        _require_emergency_workflow_identity(emergency_evidence)
+        _require_emergency_operation_identity(emergency_evidence, release_tag=release_tag, target_sha=target_sha)
 
     zip_asset = _asset(release, {"Omi.zip"})
     dmg_asset = _asset(release, {"Omi.dmg", "omi.dmg"})
@@ -133,9 +140,9 @@ def main() -> int:
     args = parser.parse_args()
 
     release = json.loads(Path(args.release_json).read_text())
-    emergency_evidence = (
-        json.loads(Path(args.emergency_evidence_json).read_text(encoding="utf-8")) if args.emergency_evidence_json else None
-    )
+    emergency_evidence = None
+    if args.emergency_evidence_json:
+        emergency_evidence = json.loads(Path(args.emergency_evidence_json).read_text(encoding="utf-8"))
     manifest = prepare_manifest(
         release,
         args.release_tag,

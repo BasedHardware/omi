@@ -20,8 +20,7 @@ def mark_emergency_beta(body: str, evidence: dict) -> str:
         "reason",
         "operator",
         "expires_at",
-        "workflow_run_id",
-        "workflow_run_attempt",
+        "operation_id",
         "approvers",
         "evidence",
     }
@@ -30,8 +29,8 @@ def mark_emergency_beta(body: str, evidence: dict) -> str:
     approvers = evidence["approvers"]
     if not isinstance(approvers, list) or len(approvers) != 2:
         fail("emergency metadata requires exactly two approvers")
-    if type(evidence["workflow_run_id"]) is not int or type(evidence["workflow_run_attempt"]) is not int:
-        fail("emergency metadata requires the GitHub Actions workflow identity")
+    if not isinstance(evidence["operation_id"], str) or not evidence["operation_id"]:
+        fail("emergency metadata requires a durable operation identity")
     values = {
         "emergencyPromotion": "true",
         "emergencyPromotionApprovers": ",".join(str(item) for item in approvers),
@@ -39,8 +38,7 @@ def mark_emergency_beta(body: str, evidence: dict) -> str:
         "emergencyPromotionReason": str(evidence["reason"]),
         "emergencyPromotionOperator": str(evidence["operator"]),
         "emergencyPromotionExpiresAt": str(evidence["expires_at"]),
-        "emergencyPromotionWorkflowRunId": str(evidence["workflow_run_id"]),
-        "emergencyPromotionWorkflowRunAttempt": str(evidence["workflow_run_attempt"]),
+        "emergencyPromotionOperationId": str(evidence["operation_id"]),
         "emergencyPromotionEvidence": json.dumps(evidence["evidence"], sort_keys=True, separators=(",", ":")),
     }
     lines, output, in_block, saw_block, saw_live, saw_channel = body.splitlines(), [], False, False, False, False
