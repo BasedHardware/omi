@@ -27,6 +27,7 @@ HUB_SOURCE = DESKTOP_DIR / "Desktop/Sources/FloatingControlBar/RealtimeHubContro
 VIEW_MODEL_ACTION_SOURCES = (
     DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
+    DESKTOP_DIR / "Desktop/Sources/MainWindow/Dashboard/ActivationProgressStore.swift",
 )
 
 TYPED_STEP_KEYS = {
