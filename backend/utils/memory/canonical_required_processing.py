@@ -299,6 +299,7 @@ def _apply_processed_result(
             "expected_item_revision": item.item_revision,
             "expected_content_hash": item.content_hash,
             "promotion_audit": promotion,
+            "expires_at": default_short_term_expiry(max(now, item.captured_at)).isoformat(),
             "subject_entity_id": processed.subject_entity_id,
             "predicate": processed.predicate,
             "arguments": processed.arguments,
