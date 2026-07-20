@@ -2,11 +2,38 @@
 // The Notifications tab: renders every row, greys the per-assistant rows when the
 // master toggle is off, writes the frequency through the scoped bridge, and picks
 // up a broadcast from another window.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup, act, fireEvent, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
+import {
+  render,
+  cleanup,
+  act,
+  fireEvent,
+  screen,
+  configure,
+  getConfig
+} from '@testing-library/react'
 import { NotificationsTab } from './NotificationsTab'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
 import type { AssistantSettingsView } from '../../../../../shared/types'
+
+// The tab renders nothing until assistantsGetSettings() (an async mock) resolves
+// and React commits, so every test opens on `findByText('Frequency')`. That
+// findBy defaults to a 1000ms wall-clock ceiling — fine in isolation, but under
+// full-suite parallel load the CPU-starved worker can miss it before the commit
+// lands, flaking a test that is actually correct. Raise the async-utils ceiling
+// (the MutationObserver still resolves the instant the DOM updates, so passing
+// tests aren't slowed) and restore it after the file so it can't bleed into
+// suites sharing the worker.
+let prevAsyncUtilTimeout = 1000
+beforeAll(() => {
+  prevAsyncUtilTimeout = getConfig().asyncUtilTimeout
+  configure({ asyncUtilTimeout: 5000 })
+  vi.setConfig({ testTimeout: 15000 })
+})
+afterAll(() => {
+  configure({ asyncUtilTimeout: prevAsyncUtilTimeout })
+  vi.resetConfig()
+})
 
 const DEFAULTS: AssistantSettingsView = {
   notificationsEnabled: true,

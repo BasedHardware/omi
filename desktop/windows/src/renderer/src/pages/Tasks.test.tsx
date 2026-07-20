@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach, beforeAll, afterAll } from 'vitest'
 import {
   render,
   cleanup,
@@ -7,10 +7,33 @@ import {
   fireEvent,
   createEvent,
   screen,
-  within
+  within,
+  configure,
+  getConfig
 } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { ActionItemRecord } from '../../../shared/types'
+
+// Every assertion here waits on a promise-driven re-render: the async IPC mocks
+// (tasksListIncomplete/…) resolve, then React commits, then the keyboard-nav
+// state updates re-render. testing-library's waitFor/findBy default to a 1000ms
+// wall-clock ceiling. In isolation each poll lands well inside that, but under
+// full-suite parallel load the vitest worker is CPU-starved and a single commit
+// can slip past 1000ms before the DOM updates — an intermittent timeout that is
+// a scheduling artifact, not a real failure (these pass 30/30 alone). Give the
+// async utils generous headroom; the MutationObserver still resolves them the
+// instant the DOM changes, so passing tests are never slowed. Restored after the
+// file so the raised ceiling can't bleed into other suites sharing the worker.
+let prevAsyncUtilTimeout = 1000
+beforeAll(() => {
+  prevAsyncUtilTimeout = getConfig().asyncUtilTimeout
+  configure({ asyncUtilTimeout: 5000 })
+  vi.setConfig({ testTimeout: 15000 })
+})
+afterAll(() => {
+  configure({ asyncUtilTimeout: prevAsyncUtilTimeout })
+  vi.resetConfig()
+})
 
 // The Tasks page is now local-first: it reads the task store over IPC
 // (window.omi.tasksListIncomplete + tasksListCompleted) instead of paging the

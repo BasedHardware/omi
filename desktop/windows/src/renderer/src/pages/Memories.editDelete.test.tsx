@@ -1,9 +1,37 @@
 // @vitest-environment jsdom
 import { StrictMode } from 'react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
+import {
+  render,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+  configure,
+  getConfig
+} from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { Memory } from '../hooks/useMemories'
+
+// Both tests drive the page through several promise-driven re-renders (a dynamic
+// import of the page, the mocked mutations resolving, then React commits) and
+// assert with findBy/waitFor, which default to a 1000ms wall-clock ceiling. In
+// isolation each step lands inside that, but under full-suite parallel load the
+// CPU-starved worker can slip past 1000ms before a commit — flaking correct
+// tests. Give the async utils headroom (the MutationObserver still resolves the
+// instant the DOM updates, so passing tests aren't slowed); restored after the
+// file so it can't bleed into suites sharing the worker.
+let prevAsyncUtilTimeout = 1000
+beforeAll(() => {
+  prevAsyncUtilTimeout = getConfig().asyncUtilTimeout
+  configure({ asyncUtilTimeout: 5000 })
+  vi.setConfig({ testTimeout: 15000 })
+})
+afterAll(() => {
+  configure({ asyncUtilTimeout: prevAsyncUtilTimeout })
+  vi.resetConfig()
+})
 
 // Drive the Memories page's edit/delete handlers through the real UI. The data
 // hook is mocked so we can assert exactly which backend mutations fire, and the
