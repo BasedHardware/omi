@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed a launch crash caused by macOS notification-permission callbacks."
+  ],
   "releases": [
     {
       "version": "0.12.87",
