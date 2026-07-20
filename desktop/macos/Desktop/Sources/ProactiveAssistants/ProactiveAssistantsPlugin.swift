@@ -161,8 +161,8 @@ public class ProactiveAssistantsPlugin: NSObject {
   )
   /// Fast poll interval for checking idle/app/window state without capturing.
   private let capturePollInterval: TimeInterval = 1.0
-  /// Preview hash similarity threshold; dHash distance ≤ this skips the full capture.
-  private let previewHashThreshold = 5
+  /// Preview similarity index threshold; similarity ≥ this skips the full capture.
+  private let previewSimilarityThreshold = 0.92
 
   // MARK: - Initialization
 
@@ -827,10 +827,12 @@ public class ProactiveAssistantsPlugin: NSObject {
           windowID: windowID, maxSize: 160)
         if case .success(let previewImage) = previewResult {
           let previewHash = RewindOCRService.dHash(of: previewImage)
-          if captureTrigger.isPreviewUnchanged(previewHash, threshold: previewHashThreshold) {
+          if captureTrigger.shouldSkipPreview(
+            previewHash, similarityThreshold: previewSimilarityThreshold)
+          {
             return
           }
-          captureTrigger.markPreviewHash(previewHash)
+          captureTrigger.recordPreviewHash(previewHash)
         }
       }
     case .capture:
@@ -883,7 +885,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         let captureTime = Date()
         let fullHash = RewindOCRService.dHash(of: cgImage)
         captureTrigger.markCaptured(
-          app: appName, windowTitle: currentWindowTitle, at: captureTime, previewHash: fullHash)
+          app: appName, windowTitle: currentWindowTitle, at: captureTime, frameHash: fullHash)
 
         // Encode JPEG off main actor — CGImageDestinationFinalize is CPU-heavy
         let captureService = screenCaptureService
