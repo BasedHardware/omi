@@ -731,6 +731,16 @@ public class ProactiveAssistantsPlugin: NSObject {
     ) {
       return
     }
+
+    // Cheap early exits before resolving the active window.
+    let idleSeconds = systemIdleSeconds()
+    if idleSeconds >= captureTrigger.idleThreshold {
+      return
+    }
+    if let currentApp = currentApp, RewindSettings.shared.isAppExcluded(currentApp) {
+      return
+    }
+
     // Get current window info (use real app name, not cached)
     let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
     guard !ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) else { return }
@@ -810,7 +820,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // Event-driven capture trigger: skip when idle, capture on context change,
     // and heartbeat only when the user is active.
-    let idleSeconds = systemIdleSeconds()
     switch captureTrigger.nextDecision(
       app: appName ?? "",
       windowTitle: currentWindowTitle,
@@ -820,19 +829,21 @@ public class ProactiveAssistantsPlugin: NSObject {
     case .skip:
       return
     case .preview:
-      // On macOS 14+ capture a tiny preview first; if it hasn't changed, skip
-      // the expensive full capture. Older macOS falls through to full capture.
+      // On macOS 14+ capture a tiny preview first; if it's similar enough to a
+      // recent preview, skip the expensive full capture and stretch the next
+      // heartbeat. Older macOS falls through to full capture.
       if #available(macOS 14.0, *) {
         let previewResult = await screenCaptureService.captureWindowCGImage(
           windowID: windowID, maxSize: 160)
         if case .success(let previewImage) = previewResult {
           let previewHash = RewindOCRService.dHash(of: previewImage)
-          if captureTrigger.shouldSkipPreview(
-            previewHash, similarityThreshold: previewSimilarityThreshold)
-          {
+          let similarity = captureTrigger.previewSimilarity(to: previewHash)
+          if similarity >= previewSimilarityThreshold {
+            captureTrigger.markPreviewSkipped(
+              at: now, similarity: similarity, threshold: previewSimilarityThreshold)
             return
           }
-          captureTrigger.recordPreviewHash(previewHash)
+          captureTrigger.recordPreviewHash(previewHash, at: now)
         }
       }
     case .capture:

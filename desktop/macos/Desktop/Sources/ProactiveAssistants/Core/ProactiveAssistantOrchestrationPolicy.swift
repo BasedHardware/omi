@@ -310,27 +310,34 @@ struct ProactiveCaptureTrigger {
     case capture
   }
 
-  private let idleThreshold: TimeInterval
+  let idleThreshold: TimeInterval
   private var heartbeatInterval: TimeInterval
   private let appSwitchDebounce: TimeInterval
   private let previewHistoryCapacity: Int
+  private let maxHeartbeatMultiplier: Double
+  private let heartbeatGrowthPerSimilarPreview: Double
 
   private var lastApp: String?
   private var lastWindowTitle: String?
   private var lastCaptureTime: Date = .distantPast
   private var previewHashHistory: [UInt64] = []
+  private var consecutiveSimilarPreviews: Int = 0
   private var appSwitchRequest: (app: String, title: String?, time: Date)?
 
   init(
     idleThreshold: TimeInterval,
     heartbeatInterval: TimeInterval,
     appSwitchDebounce: TimeInterval = 0.5,
-    previewHistoryCapacity: Int = 3
+    previewHistoryCapacity: Int = 3,
+    maxHeartbeatMultiplier: Double = 2.0,
+    heartbeatGrowthPerSimilarPreview: Double = 0.5
   ) {
     self.idleThreshold = idleThreshold
     self.heartbeatInterval = heartbeatInterval
     self.appSwitchDebounce = appSwitchDebounce
     self.previewHistoryCapacity = previewHistoryCapacity
+    self.maxHeartbeatMultiplier = maxHeartbeatMultiplier
+    self.heartbeatGrowthPerSimilarPreview = heartbeatGrowthPerSimilarPreview
   }
 
   mutating func reset() {
@@ -338,6 +345,7 @@ struct ProactiveCaptureTrigger {
     lastWindowTitle = nil
     lastCaptureTime = .distantPast
     previewHashHistory.removeAll()
+    consecutiveSimilarPreviews = 0
     appSwitchRequest = nil
   }
 
@@ -375,19 +383,29 @@ struct ProactiveCaptureTrigger {
       lastApp = app
       lastWindowTitle = windowTitle
       lastCaptureTime = now
+      consecutiveSimilarPreviews = 0
       return .capture
     }
 
-    // Same context: only sample on heartbeat.
-    if now.timeIntervalSince(lastCaptureTime) >= heartbeatInterval {
+    // Same context: only sample on heartbeat. The heartbeat interval grows when
+    // recent previews are all similar, so static screens are probed less often.
+    if now.timeIntervalSince(lastCaptureTime) >= effectiveHeartbeatInterval {
       return .preview
     }
 
     return .skip
   }
 
+  private var effectiveHeartbeatInterval: TimeInterval {
+    let multiplier = min(
+      maxHeartbeatMultiplier,
+      1.0 + Double(consecutiveSimilarPreviews) * heartbeatGrowthPerSimilarPreview)
+    return heartbeatInterval * multiplier
+  }
+
   mutating func updateHeartbeatInterval(_ interval: TimeInterval) {
     heartbeatInterval = interval
+    consecutiveSimilarPreviews = 0
   }
 
   mutating func markCaptured(
@@ -399,15 +417,27 @@ struct ProactiveCaptureTrigger {
     lastApp = app
     lastWindowTitle = windowTitle
     lastCaptureTime = time
+    consecutiveSimilarPreviews = 0
     if let frameHash = frameHash {
-      recordPreviewHash(frameHash)
+      recordPreviewHash(frameHash, at: time)
     }
   }
 
-  mutating func recordPreviewHash(_ hash: UInt64) {
+  mutating func recordPreviewHash(_ hash: UInt64, at time: Date) {
     previewHashHistory.append(hash)
     if previewHashHistory.count > previewHistoryCapacity {
       previewHashHistory.removeFirst(previewHashHistory.count - previewHistoryCapacity)
+    }
+    lastCaptureTime = time
+    consecutiveSimilarPreviews = 0
+  }
+
+  mutating func markPreviewSkipped(at time: Date, similarity: Double, threshold: Double) {
+    lastCaptureTime = time
+    if similarity >= threshold {
+      consecutiveSimilarPreviews += 1
+    } else {
+      consecutiveSimilarPreviews = 0
     }
   }
 
