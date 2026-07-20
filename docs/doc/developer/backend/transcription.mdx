@@ -157,7 +157,7 @@ The canonical provider/surface matrix and default model order live in
 `backend/config/stt_provider_policy.py`. The deployment validator requires
 `STT_SERVICE_MODELS` and `STT_PRERECORDED_MODEL` to match that code-owned
 policy; an environment edit cannot re-enable hosted Deepgram. The normal serving
-defaults are `parakeet,modulate-velma-2`. Self-hosted Deepgram is a distinct,
+defaults are `modulate-velma-2,parakeet`. Self-hosted Deepgram is a distinct,
 streaming-only provider that requires `DEEPGRAM_SELF_HOSTED_ENABLED=true` and a
 non-cloud `DEEPGRAM_SELF_HOSTED_URL`; it is never a fallback to
 `api.deepgram.com`. If no supported provider can serve a language, the request

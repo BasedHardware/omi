@@ -465,8 +465,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     }
 
     return Column(
-      children:
-          filtered.map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap)).toList(),
+      children: filtered
+          .map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap))
+          .toList(),
     );
   }
 
@@ -551,8 +552,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    final page =
-                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                    final page = SharedPreferencesUtil().deviceSupportsMultiFileSync
+                        ? const AutoSyncPage()
+                        : const SyncPage();
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),
@@ -748,7 +750,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               style: const TextStyle(color: Colors.white, fontSize: 14),
                               cursorColor: Colors.white,
                               decoration: InputDecoration(
-                                hintText: 'Search settings…',
+                                hintText: context.l10n.searchSettings,
                                 hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
                                 filled: true,
                                 fillColor: const Color(0xFF1C1C1E),
@@ -789,7 +791,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               });
                               _searchFocusNode.unfocus();
                             },
-                            child: const Text('Cancel', style: TextStyle(color: Colors.white, fontSize: 16)),
+                            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white, fontSize: 16)),
                           ),
                         ],
                       ),

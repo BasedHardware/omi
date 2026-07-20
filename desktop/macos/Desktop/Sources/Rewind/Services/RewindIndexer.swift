@@ -6,6 +6,11 @@ import Foundation
 actor RewindIndexer {
   static let shared = RewindIndexer()
 
+  /// Capture provenance is sampled once per session so every new row carries
+  /// a stable canonical-memory identity plus a user-facing computer name.
+  private let currentComputerName = Host.current().localizedName
+  private let currentClientDeviceId = ClientDeviceService.shared.clientDeviceId
+
   private var isInitialized = false
   private var isInitializing = false
 
@@ -271,7 +276,9 @@ actor RewindIndexer {
         frameOffset: encodedFrame.frameOffset,
         ocrText: ocrText,
         ocrDataJson: ocrDataJson,
-        isIndexed: isIndexed
+        isIndexed: isIndexed,
+        deviceName: currentComputerName,
+        clientDeviceId: currentClientDeviceId
       )
 
       let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -354,7 +361,9 @@ actor RewindIndexer {
         frameOffset: encodedFrame.frameOffset,
         ocrText: ocrText,
         ocrDataJson: ocrDataJson,
-        isIndexed: isIndexed
+        isIndexed: isIndexed,
+        deviceName: currentComputerName,
+        clientDeviceId: currentClientDeviceId
       )
 
       let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -463,7 +472,9 @@ actor RewindIndexer {
         isIndexed: isIndexed,
         focusStatus: focusStatus,
         extractedTasksJson: tasksJson,
-        adviceJson: adviceJson
+        adviceJson: adviceJson,
+        deviceName: currentComputerName,
+        clientDeviceId: currentClientDeviceId
       )
 
       let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -761,7 +772,10 @@ actor RewindIndexer {
         frameOffset: frameOffset,
         ocrText: nil,
         ocrDataJson: nil,
-        isIndexed: false
+        isIndexed: false,
+        // Historical video chunks do not carry authoritative device provenance.
+        deviceName: nil,
+        clientDeviceId: nil
       )
     }
   }

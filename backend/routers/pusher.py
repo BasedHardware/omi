@@ -3,7 +3,7 @@ import asyncio
 import json
 import time
 from collections import deque
-from typing import Any, Coroutine, Dict, List, Optional, Set, TypedDict, cast
+from typing import Any, Dict, List, Optional, TypedDict, cast
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -25,7 +25,7 @@ from utils.conversations.finalizer import (
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
-from utils.executors import db_executor, storage_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
 from utils.async_tasks import (
     supervise_tasks,
     drain_tasks,
@@ -135,10 +135,23 @@ async def _process_conversation_task(
         set_byok_uid(uid)
 
     async def send_result(result: Dict[str, Any]) -> None:
+        """Attempt the optional live acknowledgement after durable work.
+
+        The Firestore finalization transition is authoritative. A listener can
+        close after handing opcode 104 to pusher, so a failed result write must
+        never turn an already-completed durable job into a worker failure.
+        """
         data = bytearray()
         data.extend(struct.pack("I", 201))
         data.extend(bytes(json.dumps(result), "utf-8"))
-        await websocket.send_bytes(bytes(data))
+        try:
+            await websocket.send_bytes(bytes(data))
+        except (RuntimeError, WebSocketDisconnect):
+            logger.info(
+                'pusher finalization result undeliverable after source close uid=%s conversation=%s',
+                uid,
+                conversation_id,
+            )
 
     job_id: Optional[str] = None
     generation: Optional[int] = None
@@ -332,25 +345,6 @@ async def _websocket_util_trigger(
     except Exception:
         journey_attempt.finish('failure')
         raise
-
-    # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
-    bg_tasks: Set[asyncio.Task[Any]] = set()
-
-    def spawn(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
-        """Create a tracked background task that will be cancelled on cleanup."""
-        task = asyncio.create_task(coro)
-        bg_tasks.add(task)
-
-        def on_done(t: asyncio.Task[Any]) -> None:
-            bg_tasks.discard(t)
-            if t.cancelled():
-                return
-            exc = t.exception()
-            if exc:
-                logger.error(f"Unhandled exception in background task: {exc} {uid}")
-
-        task.add_done_callback(on_done)
-        return task
 
     # Bounded queues — prevent unbounded memory growth during backpressure
     speaker_sample_queue: deque[_SpeakerSampleRequest] = deque(maxlen=SPEAKER_SAMPLE_QUEUE_WARN_SIZE)
@@ -672,7 +666,11 @@ async def _websocket_util_trigger(
                     dispatch_generation = res.get('dispatch_generation')
                     if conversation_id:
                         logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
-                        spawn(
+                        # Durable finalization already has a Firestore owner. It
+                        # must survive an originating listen socket close after
+                        # this handoff, so pusher owns it at process scope. Its
+                        # lifespan drains tracked tasks on process shutdown.
+                        start_background_task(
                             _process_conversation_task(
                                 uid,
                                 conversation_id,
@@ -681,7 +679,8 @@ async def _websocket_util_trigger(
                                 byok_keys,
                                 finalization_job_id if isinstance(finalization_job_id, str) else None,
                                 dispatch_generation if isinstance(dispatch_generation, int) else None,
-                            )
+                            ),
+                            name=f'pusher_finalization:{uid}:{conversation_id}',
                         )
                     continue
 
@@ -855,9 +854,8 @@ async def _websocket_util_trigger(
         shutdown_event.set()
         websocket_active = False
 
-        all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
+        all_to_cancel = [t for t in bg_main_tasks if not t.done()]
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
-        bg_tasks.clear()
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
 

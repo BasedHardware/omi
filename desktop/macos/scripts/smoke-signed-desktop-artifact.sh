@@ -23,6 +23,7 @@ RUN_AUTH_STORAGE_CANARY=false
 RUN_CHAT=false
 RUN_PERMISSIONS=false
 RUN_STORAGE=false
+RUN_NOTIFICATION_CALLBACK_CANARY=false
 APPLY_QUARANTINE=false
 INSTALL_DIR=""
 KEEP_INSTALL=false
@@ -32,6 +33,9 @@ ZIP_EXTRACT_DIR=""
 DMG_MOUNTPOINT=""
 SMOKE_CHECKS=()
 SMOKE_ARTIFACTS=()
+NOTIFICATION_CALLBACK_MARKER=""
+NOTIFICATION_CALLBACK_MARKER_IS_TEMP=false
+NOTIFICATION_CALLBACK_PROOF=""
 
 usage() {
   cat <<'USAGE'
@@ -61,6 +65,11 @@ Options:
   --auth-storage-canary      Run synthetic Keychain round trip in the signed app
   --chat                     Run minimal chat probe (requires --auth env)
   --permissions             Verify permission surface/fail-graceful live path
+  --notification-callback-canary
+                             Require the launched app to prove its
+                             UserNotifications settings callback completed
+  --notification-callback-marker PATH
+                             Callback-proof path (a unique temporary path by default)
   --storage                  Verify local storage opens in live path
   --quarantine              Apply download quarantine to launch copy before launch
   --result-json PATH         Write machine-readable smoke result JSON
@@ -79,6 +88,10 @@ Optional live-probe environment:
       Required for --chat until a dedicated release canary OAuth fixture exists.
   OMI_SIGNED_ARTIFACT_SMOKE_CHAT_URL='https://...'
       Chat API URL to probe; defaults to https://api.omi.me/v2/chat/completions.
+  OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH
+      Passed to the app only with --notification-callback-canary. The app must
+      atomically write the callback result after its
+      UserNotifications callback has run; staying alive is not sufficient.
 
 Smoke paths covered:
   - Launch + identity
@@ -148,6 +161,8 @@ parse_args() {
       --auth-storage-canary) RUN_AUTH_STORAGE_CANARY=true; shift ;;
       --chat) RUN_CHAT=true; shift ;;
       --permissions) RUN_PERMISSIONS=true; shift ;;
+      --notification-callback-canary) RUN_NOTIFICATION_CALLBACK_CANARY=true; shift ;;
+      --notification-callback-marker) require_option_value "$1" "${2:-}"; NOTIFICATION_CALLBACK_MARKER="$2"; shift 2 ;;
       --storage) RUN_STORAGE=true; shift ;;
       --quarantine) APPLY_QUARANTINE=true; shift ;;
       --result-json) require_option_value "$1" "${2:-}"; RESULT_JSON="$2"; shift 2 ;;
@@ -223,6 +238,9 @@ cleanup() {
   if [[ "$KEEP_INSTALL" != true && -n "$INSTALL_DIR" && "$INSTALL_DIR" == "${TMPDIR:-/tmp}"/omi-signed-smoke-install.* ]]; then
     rm -rf "$INSTALL_DIR"
   fi
+  if [[ "$NOTIFICATION_CALLBACK_MARKER_IS_TEMP" == true && -n "$NOTIFICATION_CALLBACK_MARKER" ]]; then
+    rm -f "$NOTIFICATION_CALLBACK_MARKER"
+  fi
 }
 trap cleanup EXIT
 
@@ -289,6 +307,7 @@ write_result_json() {
     RESULT_BUILD="$build" \
     RESULT_TEAM_ID="$team_id" \
     RESULT_APP_EXECUTABLE_SHA256="$app_sha" \
+    RESULT_NOTIFICATION_CALLBACK_PROOF="$NOTIFICATION_CALLBACK_PROOF" \
     python3 - <<'PY' > "$RESULT_JSON"
 import json
 import os
@@ -306,6 +325,11 @@ for line in os.environ.get("ARTIFACTS_JOINED", "").splitlines():
         artifact["sha256"] = sha
     artifacts.append(artifact)
 
+notification_callback_canary = None
+proof = os.environ.get("RESULT_NOTIFICATION_CALLBACK_PROOF", "")
+if proof:
+    notification_callback_canary = json.loads(proof)
+
 print(json.dumps({
     "ok": True,
     "finished_at": datetime.now(timezone.utc).isoformat(),
@@ -316,6 +340,7 @@ print(json.dumps({
     "build": os.environ.get("RESULT_BUILD") or None,
     "team_id": os.environ.get("RESULT_TEAM_ID") or None,
     "app_executable_sha256": os.environ.get("RESULT_APP_EXECUTABLE_SHA256") or None,
+    "notification_callback_canary": notification_callback_canary,
     "artifacts": artifacts,
     "checks": [line for line in os.environ.get("CHECKS_JOINED", "").splitlines() if line],
 }, indent=2, sort_keys=True))
@@ -516,8 +541,21 @@ run_launch_probe() {
   executable="$APP_BUNDLE/Contents/MacOS/$(plist_read CFBundleExecutable)"
   [[ -x "$executable" ]] || fail "executable missing before launch"
 
+  # The callback-only probe deliberately exits after atomically recording its
+  # result. Run the bundle executable directly so its opt-in result-path
+  # environment is deterministic; LaunchServices does not guarantee that it
+  # propagates shell environment variables into a newly launched app.
+  if [[ "$RUN_NOTIFICATION_CALLBACK_CANARY" == true ]]; then
+    OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH="$NOTIFICATION_CALLBACK_MARKER" \
+      "$executable" >/tmp/omi-signed-artifact-smoke.out 2>/tmp/omi-signed-artifact-smoke.err &
+    SMOKE_PID=$!
+    pass "Signed app launched for UserNotifications callback canary"
+    return 0
+  fi
+
   open -n "$APP_BUNDLE" >/tmp/omi-signed-artifact-smoke.out 2>/tmp/omi-signed-artifact-smoke.err \
     || fail "LaunchServices failed to open signed app"
+
   sleep 8
   SMOKE_PID="$(pgrep -f "$executable" | head -1 || true)"
   [[ -n "$SMOKE_PID" ]] || {
@@ -530,6 +568,67 @@ run_launch_probe() {
   }
 
   pass "Signed app launches and remains alive"
+}
+
+prepare_notification_callback_canary() {
+  [[ "$RUN_NOTIFICATION_CALLBACK_CANARY" == true ]] || return 0
+  [[ "$RUN_LAUNCH" == true ]] || fail "--notification-callback-canary requires --launch"
+
+  if [[ -z "$NOTIFICATION_CALLBACK_MARKER" ]]; then
+    NOTIFICATION_CALLBACK_MARKER="$(mktemp "${TMPDIR:-/tmp}/omi-notification-callback.XXXXXX.json")"
+    NOTIFICATION_CALLBACK_MARKER_IS_TEMP=true
+  fi
+  rm -f "$NOTIFICATION_CALLBACK_MARKER"
+}
+
+run_notification_callback_canary() {
+  [[ "$RUN_NOTIFICATION_CALLBACK_CANARY" == true ]] || return 0
+  [[ -n "$NOTIFICATION_CALLBACK_MARKER" ]] \
+    || fail "notification callback canary was not prepared"
+
+  local deadline=$((SECONDS + TIMEOUT_SECONDS))
+  while (( SECONDS < deadline )); do
+    if [[ -f "$NOTIFICATION_CALLBACK_MARKER" && ! -L "$NOTIFICATION_CALLBACK_MARKER" ]] \
+      && [[ "$(stat -f '%Lp' "$NOTIFICATION_CALLBACK_MARKER")" == "600" ]]; then
+      break
+    fi
+    if [[ -n "${SMOKE_PID:-}" ]] && ! kill -0 "$SMOKE_PID" >/dev/null 2>&1; then
+      fail "signed app exited before the UserNotifications callback completed"
+    fi
+    sleep 1
+  done
+
+  [[ -f "$NOTIFICATION_CALLBACK_MARKER" && ! -L "$NOTIFICATION_CALLBACK_MARKER" ]] \
+    && [[ "$(stat -f '%Lp' "$NOTIFICATION_CALLBACK_MARKER")" == "600" ]] \
+    || fail "UserNotifications callback marker was not securely written within ${TIMEOUT_SECONDS}s"
+
+  NOTIFICATION_CALLBACK_PROOF="$(python3 - "$NOTIFICATION_CALLBACK_MARKER" "$EXPECTED_BUNDLE_ID" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+marker_path, expected_bundle_id = sys.argv[1:]
+try:
+    marker = Path(marker_path).read_text(encoding="utf-8").strip()
+except OSError as error:
+    raise SystemExit(f"invalid UserNotifications callback marker: {error}")
+match = re.fullmatch(r"main_actor=true authorization_status=(\d+)", marker)
+if match is None:
+    raise SystemExit("UserNotifications callback marker must prove main_actor=true and an authorization status")
+
+print(json.dumps({
+    "schema": 1,
+    "event": "user-notifications-settings-callback-completed",
+    "bundle_id": expected_bundle_id,
+    "main_actor": True,
+    "authorization_status": int(match.group(1)),
+    "validated": True,
+}, sort_keys=True))
+PY
+)" || fail "UserNotifications callback marker did not prove callback completion"
+
+  pass "UserNotifications settings callback completion canary passed"
 }
 
 run_auth_probe() {
@@ -638,9 +737,11 @@ main() {
   record_artifact "app_executable" "$APP_BUNDLE/Contents/MacOS/$(plist_read CFBundleExecutable)"
 
   maybe_copy_for_launch
+  prepare_notification_callback_canary
   [[ "$RUN_NETWORK" == true ]] && run_network_probes
   [[ "$RUN_AUTH_STORAGE_CANARY" == true ]] && run_auth_storage_canary
   [[ "$RUN_LAUNCH" == true ]] && run_launch_probe
+  run_notification_callback_canary
   [[ "$RUN_AUTH" == true ]] && run_auth_probe
   [[ "$RUN_CHAT" == true ]] && run_chat_probe
   [[ "$RUN_PERMISSIONS" == true ]] && run_permission_surface_probe

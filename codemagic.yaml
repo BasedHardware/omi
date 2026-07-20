@@ -23,7 +23,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -175,6 +175,7 @@ workflows:
 
           flutter build ipa \
             --release \
+            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
@@ -241,7 +242,7 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -415,6 +416,7 @@ workflows:
 
           flutter build appbundle \
             --release \
+            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
@@ -462,7 +464,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -565,6 +567,7 @@ workflows:
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build ipa \
             --release \
+            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
@@ -840,7 +843,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -968,6 +971,7 @@ workflows:
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build appbundle \
             --release \
+            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
@@ -1014,7 +1018,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1754,7 +1758,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        STAGING_API_URL: "https://api.omiapi.com/"
+        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -2759,7 +2763,9 @@ workflows:
               --dmg "$DMG_PATH" \
               --tag "$CM_TAG" \
               --expected-channel beta \
+              --launch \
               --auth-storage-canary \
+              --notification-callback-canary \
               --result-json "$BUILD_DIR/desktop-smoke-result.json"
           fi
 
@@ -2861,19 +2867,21 @@ workflows:
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
 
-          # Safe re-run: delete existing release if it exists
-          gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
-            gh release delete "$CM_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null || true
-
-          gh release create "$CM_TAG" \
-            --repo "$GITHUB_REPO" \
-            --title "Omi Desktop v${VERSION} (candidate)" \
-            --notes "$RELEASE_NOTES" \
-            "$SPARKLE_ZIP_PATH" \
-            "$DMG_PATH" \
-            "$BUILD_DIR/desktop-smoke-result.json"
-
-          echo "GitHub release candidate created: $CM_TAG"
+          # A candidate is the evidence container. Once published, preserve its
+          # signed artifacts and every qualification observation; retries only
+          # resume the dispatch handoff below.
+          if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
+            echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
+          else
+            gh release create "$CM_TAG" \
+              --repo "$GITHUB_REPO" \
+              --title "Omi Desktop v${VERSION} (candidate)" \
+              --notes "$RELEASE_NOTES" \
+              "$SPARKLE_ZIP_PATH" \
+              "$DMG_PATH" \
+              "$BUILD_DIR/desktop-smoke-result.json"
+            echo "GitHub release candidate created: $CM_TAG"
+          fi
 
       - name: Dispatch trusted macOS beta qualification
         script: |
@@ -2885,8 +2893,23 @@ workflows:
             echo "Automatic desktop beta qualification paused by DESKTOP_AUTO_BETA_ENABLED=false; candidate remains non-live."
             exit 0
           fi
-          gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-            -f release_tag="$CM_TAG"
+          set -euo pipefail
+          dispatch_key="codemagic:${CM_TAG}"
+          # The GitHub Actions workflow owns every release-body transition.
+          # Its per-candidate concurrency group is the authoritative atomic
+          # serialiser for claim/running/complete state; Codemagic must never
+          # replay a stale queued body over a runner-owned transition.
+          for attempt in 1 2 3; do
+            if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
+              -f release_tag="$CM_TAG" -f dispatch_key="$dispatch_key"; then
+              echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep "$((attempt * 2))"
+            fi
+          done
+          echo "WARNING: qualification dispatch was not confirmed after bounded retry; candidate remains non-live."
 
     artifacts:
       - build/*.app

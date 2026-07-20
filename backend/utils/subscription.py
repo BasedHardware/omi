@@ -1241,13 +1241,16 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
     if not subscription:
         # No subscription = use basic limits
         limits = get_basic_plan_limits()
-    elif is_paid_plan(subscription.plan):
-        return None  # Unlimited
     else:
+        # Resolve the plan's limits and let the transcription_seconds check below decide
+        # unlimited-ness. Do NOT short-circuit on is_paid_plan(): Plus is a paid plan that
+        # still carries a bounded monthly transcription cap (PLUS_TIER_MONTHLY_SECONDS_LIMIT),
+        # so treating every paid plan as unlimited leaked its cap and never triggered the
+        # freemium on-device switch. This mirrors has_transcription_credits().
         limits = get_plan_limits(subscription.plan)
 
     if not limits.transcription_seconds or limits.transcription_seconds <= 0:
-        return None  # Unlimited (limit is 0 or not set)
+        return None  # Unlimited (limit is 0 or not set — operator/architect/neo/unlimited_v2)
 
     usage = get_monthly_usage_for_subscription(uid)
     used_seconds = usage.get('transcription_seconds', 0)

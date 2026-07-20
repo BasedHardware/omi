@@ -1,3 +1,0 @@
-{
-  "change": "Fixed personalized home suggestions so switching accounts mid-refresh can never show or store another account's questions"
-}

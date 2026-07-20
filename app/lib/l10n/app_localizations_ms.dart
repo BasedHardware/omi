@@ -9629,4 +9629,153 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get dataEncryptedBanner =>
       'Data anda dilindungi secara lalai dengan penyulitan yang kuat, dan anda mengawal cara ia disimpan dan digunakan.';
+
+  @override
+  String get sttModelAccuracy => 'Accuracy';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Transkripsi awan';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Delete Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloaded';
+
+  @override
+  String get sttModelFaster => 'Faster';
+
+  @override
+  String get sttFilterAuto => 'Auto';
+
+  @override
+  String get sttModelHigher => 'Higher';
+
+  @override
+  String get whisperModelSizeLarge => 'Large';
+
+  @override
+  String get sttModelLower => 'Lower';
+
+  @override
+  String get whisperModelSizeMedium => 'Medium';
+
+  @override
+  String get onDeviceModelDeleted => 'Model deleted';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model download failed';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get onDeviceModelSize => 'Model Size';
+
+  @override
+  String get sttNone => 'None';
+
+  @override
+  String get onDeviceTranscription => 'Transkripsi pada peranti';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripsi diproses secara tempatan pada peranti anda';
+
+  @override
+  String get sttModelSlower => 'Slower';
+
+  @override
+  String get whisperModelSizeSmall => 'Small';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Penyedia pertuturan-ke-teks';
+
+  @override
+  String get speechToTextProviderDesc => 'Pilih perkhidmatan yang digunakan untuk transkripsi';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Speed';
+
+  @override
+  String get whisperModelSizeTiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Bahasa transkripsi';
+
+  @override
+  String get transcriptionLanguageDesc => 'Pilih bahasa untuk transkripsi pertuturan';
+
+  @override
+  String get whisperModel => 'Model Whisper';
+
+  @override
+  String get whisperModelDesc => 'Pilih model untuk transkripsi pada peranti';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+
+  @override
+  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+
+  @override
+  String get downgradeLimitBattery => '7x battery consumption';
+
+  @override
+  String get downgradeLimitQuality => '30% less transcription quality';
+
+  @override
+  String get downgradeLimitDelay => '5-7 second delay';
+
+  @override
+  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+
+  @override
+  String get downgradeAnyway => 'Downgrade Anyway';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Linked to \"$title\"';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+
+  @override
+  String get thanksForYourFeedback => 'Thanks for your feedback!';
+
+  @override
+  String get copyMessage => 'Copy message';
+
+  @override
+  String get searchSettings => 'Search settings…';
+
+  @override
+  String get errorLoadingAudio => 'Error loading audio';
 }

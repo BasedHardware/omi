@@ -217,6 +217,7 @@
 		EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
 		FG12345678901234567890FG /* WifiNetworkPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WifiNetworkPlugin.swift; sourceTree = "<group>"; };
+		9E3D54F7F2F961A21E817773 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -553,6 +554,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				ja,
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
@@ -801,6 +803,7 @@
 		6436409C27A31CD800820AF7 /* InfoPlist.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
+				9E3D54F7F2F961A21E817773 /* ja */,
 			);
 			name = InfoPlist.strings;
 			sourceTree = "<group>";

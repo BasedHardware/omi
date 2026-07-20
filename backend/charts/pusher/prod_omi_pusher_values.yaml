@@ -15,6 +15,7 @@ replicaCount: 1
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: gcr.io/based-hardware/pusher
+  digest: ""
   # This sets the pull policy for images.
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
@@ -254,9 +255,9 @@ env:
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
-    value: "parakeet,modulate-velma-2"
+    value: "modulate-velma-2,parakeet"
   - name: STT_SERVICE_MODELS
-    value: "parakeet,modulate-velma-2"
+    value: "modulate-velma-2,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:

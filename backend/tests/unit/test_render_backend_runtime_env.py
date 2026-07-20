@@ -51,7 +51,7 @@ def test_provisional_env_var_present_is_rendered(monkeypatch):
 @pytest.mark.parametrize(
     ('value', 'expected'),
     [
-        ('parakeet,modulate-velma-2', r'parakeet\,modulate-velma-2'),
+        ('modulate-velma-2,parakeet', r'modulate-velma-2\,parakeet'),
         (r'C:\models', r'C:\\models'),
         ('first\nsecond', 'first\\\nsecond'),
         ('first\rsecond', 'first\\\rsecond'),
@@ -113,7 +113,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     out = capsys.readouterr().out
 
     memory_env = _job_env_block(out, 'memory_maintenance_job')
-    assert r'STT_PRERECORDED_MODEL=parakeet\,modulate-velma-2' in out
+    assert r'STT_PRERECORDED_MODEL=modulate-velma-2\,parakeet' in out
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true' in memory_env
     assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env

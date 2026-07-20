@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "node --test src/__tests__/*.test.mjs",
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",

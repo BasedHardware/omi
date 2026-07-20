@@ -9,6 +9,7 @@ replicaCount: 1
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: gcr.io/based-hardware/backend
+  digest: ""
   # This sets the pull policy for images.
   pullPolicy: Always
   # Build-specific; CI/manual deploy must pass --set-string image.tag=<short-sha>.
@@ -123,6 +124,8 @@ env:
   - name: OMI_ENV_STAGE
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
+    value: "off"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE
     value: "true"
@@ -284,9 +287,9 @@ env:
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
-    value: "parakeet,modulate-velma-2"
+    value: "modulate-velma-2,parakeet"
   - name: STT_SERVICE_MODELS
-    value: "parakeet,modulate-velma-2"
+    value: "modulate-velma-2,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

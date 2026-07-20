@@ -561,6 +561,7 @@ start_fault_stack() {
       OMI_PYTHON_API_URL="$OMI_FAULT_URL" \
       OMI_DESKTOP_API_URL="$OMI_FAULT_URL" \
       OMI_AUTH_API_URL="$OMI_FAULT_URL" \
+      OMI_FAULT_MODEL_AUTH_TOKEN="omi-fault-model-token" \
       OMI_AUTOMATION_PORT="$PORT" \
       OMI_APP_NAME="$FAULT_BUNDLE" \
       ./run.sh

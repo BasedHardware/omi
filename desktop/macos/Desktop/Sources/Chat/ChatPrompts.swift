@@ -499,6 +499,8 @@ struct ChatPrompts {
       "focusStatus": "Whether user was focused or distracted (focused/distracted)",
       "skippedForBattery":
         "Legacy flag for screenshots captured before battery mode switched to adaptive capture cadence",
+      "deviceName": "Computer name that captured this screenshot (optional; absent when provenance is unknown)",
+      "clientDeviceId": "Stable capture-device identifier used for canonical memory provenance",
     ],
     "action_items": [
       "description": "The task text shown to the user",

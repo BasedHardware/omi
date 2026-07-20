@@ -737,9 +737,8 @@ class SharedPreferencesUtil {
 
   //------------------------ TestFlight API Environment ----------------------//
 
-  /// Which API environment the TestFlight user prefers: 'staging' or 'production'.
-  /// Default is 'production' so new TestFlight installs hit prod by default.
-  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'production');
+  /// Legacy display preference only. TestFlight routing is always the beta ring.
+  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'staging');
 
   set testFlightApiEnvironment(String value) => saveString('testFlightApiEnvironment', value);
 

@@ -1640,7 +1640,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get whatShouldWeMake => '何を作りましょうか？';
 
   @override
-  String get appName => 'App Name';
+  String get appName => 'アプリ名';
 
   @override
   String get description => '説明';
@@ -2450,7 +2450,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get detailedDiagnosticMessages => '詳細な診断メッセージ';
 
   @override
-  String get autoCreateSpeakers => 'スピーカーを自動作成';
+  String get autoCreateSpeakers => '話者を自動作成';
 
   @override
   String get autoCreateWhenNameDetected => '名前が検出されたら自動作成';
@@ -2522,13 +2522,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sdCardSyncDescription => 'SDカード同期は、SDカードからアプリに記憶をインポートします';
 
   @override
-  String get checksForAudioFiles => 'SDカード上のオーディオファイルをチェックします';
+  String get checksForAudioFiles => 'SD カード上の音声ファイルを確認します';
 
   @override
-  String get omiSyncsAudioFiles => 'Omiはその後、オーディオファイルをサーバーと同期します';
+  String get omiSyncsAudioFiles => 'Omi はその後、音声ファイルをサーバーと同期します';
 
   @override
-  String get serverProcessesAudio => 'サーバーがオーディオファイルを処理し、記憶を作成します';
+  String get serverProcessesAudio => 'サーバーが音声ファイルを処理し、記憶を作成します';
 
   @override
   String get youreAllSet => '準備完了です！';
@@ -2616,7 +2616,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get startCapturingConversations => 'Omiデバイスで会話のキャプチャを開始して、ここに表示します。';
 
   @override
-  String get useMobileAppToCapture => 'モバイルアプリを使用してオーディオをキャプチャします';
+  String get useMobileAppToCapture => 'モバイルアプリで音声をキャプチャします';
 
   @override
   String get conversationsProcessedAutomatically => '会話は自動的に処理されます';
@@ -3377,10 +3377,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get screenRecording => '画面録画';
 
   @override
-  String get captureSystemAudioFromMeetings => '会議からシステムオーディオをキャプチャ';
+  String get captureSystemAudioFromMeetings => '会議のシステム音声をキャプチャ';
 
   @override
-  String get screenRecordingDescription => 'Omiは、ブラウザベースの会議からシステムオーディオをキャプチャするために画面録画権限が必要です。';
+  String get screenRecordingDescription => 'Omi はブラウザベースの会議からシステム音声をキャプチャするために画面録画権限が必要です。';
 
   @override
   String get accessibility => 'アクセシビリティ';
@@ -3484,10 +3484,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get triggersWhenNewTranscriptReceived => '新しい文字起こしを受信したときにトリガーされます。';
 
   @override
-  String get realtimeAudioBytes => 'リアルタイムオーディオバイト';
+  String get realtimeAudioBytes => 'リアルタイム音声バイト';
 
   @override
-  String get triggersWhenAudioBytesReceived => 'オーディオバイトを受信したときにトリガーされます。';
+  String get triggersWhenAudioBytesReceived => '音声バイトを受信したときにトリガーされます。';
 
   @override
   String get everyXSeconds => 'x秒ごと';
@@ -3614,10 +3614,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get startYourFirstRecording => '最初の録音を開始';
 
   @override
-  String get preparingSystemAudioCapture => 'システムオーディオキャプチャを準備中';
+  String get preparingSystemAudioCapture => 'システム音声キャプチャを準備中';
 
   @override
-  String get clickTheButtonToCaptureAudio => 'ボタンをクリックして、ライブ文字起こし、AI インサイト、自動保存のためにオーディオをキャプチャします。';
+  String get clickTheButtonToCaptureAudio => 'ボタンをクリックして、ライブ文字起こし・AI インサイト・自動保存のために音声をキャプチャします。';
 
   @override
   String get reconnecting => '再接続中...';
@@ -3640,10 +3640,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tapPlayToResume => '再開するには再生をタップ';
 
   @override
-  String get listeningForAudio => 'オーディオを聴取中...';
+  String get listeningForAudio => '音声を待機中...';
 
   @override
-  String get preparingAudioCapture => 'オーディオキャプチャを準備中';
+  String get preparingAudioCapture => '音声キャプチャを準備中';
 
   @override
   String get clickToBeginRecording => 'クリックして録音を開始';
@@ -3685,13 +3685,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get clickPlayToResumeOrStop => '再開するには再生、終了するには停止をクリック';
 
   @override
-  String get settingUpSystemAudioCapture => 'システムオーディオキャプチャを設定中';
+  String get settingUpSystemAudioCapture => 'システム音声キャプチャを設定中';
 
   @override
-  String get capturingAudioAndGeneratingTranscript => 'オーディオをキャプチャして文字起こしを生成中';
+  String get capturingAudioAndGeneratingTranscript => '音声をキャプチャして文字起こしを生成中';
 
   @override
-  String get clickToBeginRecordingSystemAudio => 'クリックしてシステムオーディオ録音を開始';
+  String get clickToBeginRecordingSystemAudio => 'クリックしてシステム音声の録音を開始';
 
   @override
   String get you => 'あなた';
@@ -3715,16 +3715,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String audioInputSetTo(String deviceName) {
-    return 'オーディオ入力を$deviceNameに設定';
+    return '音声入力を$deviceNameに設定';
   }
 
   @override
   String errorSwitchingAudioDevice(String error) {
-    return 'オーディオデバイスの切り替えエラー: $error';
+    return '音声デバイスの切り替えエラー: $error';
   }
 
   @override
-  String get selectAudioInput => 'オーディオ入力を選択';
+  String get selectAudioInput => '音声入力を選択';
 
   @override
   String get loadingDevices => 'デバイスを読み込み中...';
@@ -4752,10 +4752,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enable => '有効にする';
 
   @override
-  String get storeAudioOnPhone => '電話にオーディオを保存';
+  String get storeAudioOnPhone => 'スマートフォンに音声を保存';
 
   @override
-  String get on => 'On';
+  String get on => 'オン';
 
   @override
   String get storeAudioDescription => 'すべての音声録音を電話にローカルで保存します。無効にすると、ストレージ容量を節約するために失敗したアップロードのみが保持されます。';
@@ -4773,7 +4773,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enableCloudStorage => 'クラウドストレージを有効にする';
 
   @override
-  String get storeAudioOnCloud => 'クラウドにオーディオを保存';
+  String get storeAudioOnCloud => 'クラウドに音声を保存';
 
   @override
   String get cloudStorageDialogMessage => 'リアルタイムの録音は、話している間にプライベートクラウドストレージに保存されます。';
@@ -5743,7 +5743,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get internetRequired => 'インターネット接続が必要です';
 
   @override
-  String get processAudio => 'オーディオを処理';
+  String get processAudio => '音声を処理';
 
   @override
   String get start => '開始';
@@ -5752,7 +5752,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noRecordings => '録音なし';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Omiデバイスからのオーディオがここに表示されます';
+  String get audioFromOmiWillAppearHere => 'Omi デバイスからの音声がここに表示されます';
 
   @override
   String get deleteProcessed => '処理済みを削除';
@@ -5971,7 +5971,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryDrainSignificantly => 'バッテリー消費が大幅に増加します。';
 
   @override
-  String get premiumMinutesMonth => '月間300プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
+  String get premiumMinutesMonth => '月間 600 分のプレミアム枠。「オンデバイス」タブでは無料の無制限文字起こしが利用できます。';
 
   @override
   String get audioProcessedLocally => '音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。';
@@ -6530,7 +6530,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transferRequired => '転送が必要です';
 
   @override
-  String get downloadingAudioFromSdCard => 'デバイスのSDカードからオーディオをダウンロード中';
+  String get downloadingAudioFromSdCard => 'デバイスの SD カードから音声をダウンロード中';
 
   @override
   String get transferRequiredDescription => 'この録音はデバイスのSDカードに保存されています。再生や共有するには電話に転送してください。';
@@ -6566,7 +6566,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get durationLabel => '再生時間';
 
   @override
-  String get audioFormatLabel => 'オーディオ形式';
+  String get audioFormatLabel => '音声形式';
 
   @override
   String get storageLocationLabel => '保存場所';
@@ -7163,7 +7163,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get onboardingScreenCaptureRequired => 'システムオーディオの録音には画面キャプチャ権限が必要です。';
+  String get onboardingScreenCaptureRequired => 'システム音声を録音するには画面キャプチャ権限が必要です。';
 
   @override
   String get onboardingScreenCaptureDenied => '画面キャプチャ権限が拒否されました。システム環境設定 > プライバシーとセキュリティ > 画面収録で権限を許可してください。';
@@ -7270,7 +7270,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureDisplayDetectionFailed => 'ディスプレイの検出に失敗しました。録画を停止しました。';
 
   @override
-  String get devModeInvalidAudioBytesWebhookUrl => 'オーディオバイトのWebhook URLが無効です';
+  String get devModeInvalidAudioBytesWebhookUrl => '音声バイトの Webhook URL が無効です';
 
   @override
   String get devModeInvalidRealtimeTranscriptWebhookUrl => 'リアルタイム文字起こしのWebhook URLが無効です';
@@ -7408,7 +7408,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get saySomething => '何か話してください...';
 
   @override
-  String get initialisingSystemAudio => 'システムオーディオを初期化中';
+  String get initialisingSystemAudio => 'システム音声を初期化中';
 
   @override
   String get stopRecording => '録音を停止';
@@ -7547,7 +7547,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get capabilityNotification => '通知';
 
   @override
-  String get triggerAudioBytes => 'オーディオバイト';
+  String get triggerAudioBytes => '音声バイト';
 
   @override
   String get triggerConversationCreation => '会話作成';
@@ -7868,7 +7868,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enterWifiPassword => 'WiFiパスワードを入力';
 
   @override
-  String get appIconLabel => 'App Icon';
+  String get appIconLabel => 'アプリアイコン';
 
   @override
   String get onboardingWhatIKnowAboutYouTitle => 'あなたについて知っていること';
@@ -8343,7 +8343,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cancelSyncQuestion => '同期をキャンセルしますか？';
 
   @override
-  String get omisStorageDesc => 'Omiがスマートフォンに接続されていない時、内蔵メモリにオーディオをローカル保存します。録音を失うことはありません。';
+  String get omisStorageDesc => 'Omi がスマートフォンに接続されていない時、内蔵メモリに音声をローカル保存します。録音を失うことはありません。';
 
   @override
   String get phoneStorageDesc => 'Omiが再接続すると、録音はアップロード前に自動的にスマートフォンに転送されます。';
@@ -8647,7 +8647,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcriptionUnavailable => '文字起こしは利用できません';
 
   @override
-  String get audioOutput => 'オーディオ出力';
+  String get audioOutput => '音声出力';
 
   @override
   String get firmwareWarningTitle => '重要：更新前にお読みください';
@@ -8880,7 +8880,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'チャット: $used / $limit 件の今月のメッセージ';
+    return '今月のチャット: $used / $limit 件';
   }
 
   @override
@@ -8889,7 +8889,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+  String get chatQuotaSubtitle => '今月 Omi で使用した AI チャットメッセージ数。';
 
   @override
   String get chatQuotaExceededReply => '月間制限に達しました。制限なくOmiとチャットを続けるにはアップグレードしてください。';
@@ -8922,7 +8922,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get startCallRecording => '通話録音を開始';
 
   @override
-  String get mindMap => 'Mind Map';
+  String get mindMap => 'マインドマップ';
 
   @override
   String get voiceMode => '音声モード';
@@ -9445,4 +9445,153 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dataEncryptedBanner => 'あなたのデータはデフォルトで強力な暗号化により保護されており、保存や利用の方法はあなたが管理できます。';
+
+  @override
+  String get sttModelAccuracy => '精度';
+
+  @override
+  String get whisperModelSizeBase => 'ベース';
+
+  @override
+  String get cloudTranscription => 'クラウド文字起こし';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'モデルを削除';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'このモデルを削除してもよろしいですか？';
+
+  @override
+  String get onDeviceModelDownloaded => 'ダウンロード済み';
+
+  @override
+  String get sttModelFaster => 'より速い';
+
+  @override
+  String get sttFilterAuto => '自動';
+
+  @override
+  String get sttModelHigher => 'より高い';
+
+  @override
+  String get whisperModelSizeLarge => '大';
+
+  @override
+  String get sttModelLower => 'より低い';
+
+  @override
+  String get whisperModelSizeMedium => '中';
+
+  @override
+  String get onDeviceModelDeleted => 'モデルが削除されました';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'モデルのダウンロードに失敗しました';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisperモデルのダウンロードに失敗しました。もう一度お試しください。';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'モデルがダウンロードされました';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisperモデルが正常にダウンロードされました';
+
+  @override
+  String get onDeviceModelSize => 'モデルサイズ';
+
+  @override
+  String get sttNone => 'なし';
+
+  @override
+  String get onDeviceTranscription => 'オンデバイス文字起こし';
+
+  @override
+  String get onDeviceTranscriptionDesc => '文字起こしはデバイス上でローカルに処理されます';
+
+  @override
+  String get sttModelSlower => 'より遅い';
+
+  @override
+  String get whisperModelSizeSmall => '小';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => '音声認識プロバイダー';
+
+  @override
+  String get speechToTextProviderDesc => '文字起こしに使用するサービスを選択してください';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => '速度';
+
+  @override
+  String get whisperModelSizeTiny => '極小';
+
+  @override
+  String get transcriptionLanguage => '文字起こし言語';
+
+  @override
+  String get transcriptionLanguageDesc => '音声文字起こしの言語を選択してください';
+
+  @override
+  String get whisperModel => 'Whisperモデル';
+
+  @override
+  String get whisperModelDesc => 'オンデバイス文字起こし用のモデルを選択してください';
+
+  @override
+  String get downgradeToFreemiumTitle => 'フリーミアムにダウングレードしますか？';
+
+  @override
+  String get downgradeLimitationsHeading => '以下の制限が適用されます：';
+
+  @override
+  String get downgradeLimitBattery => 'バッテリー消費が7倍';
+
+  @override
+  String get downgradeLimitQuality => '文字起こし品質が30%低下';
+
+  @override
+  String get downgradeLimitDelay => '5〜7秒の遅延';
+
+  @override
+  String get downgradeLimitSpeakers => '話者を識別できません';
+
+  @override
+  String get downgradeAnyway => 'それでもダウングレード';
+
+  @override
+  String get googleCalendarNotConnected => 'Google カレンダーが未接続です';
+
+  @override
+  String get googleCalendarConnectPrompt => '会話をカレンダーの予定に紐付けるには、Google カレンダーを接続してください。';
+
+  @override
+  String linkedToEvent(String title) {
+    return '「$title」に紐付けました';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'カレンダーの予定への紐付けに失敗しました';
+
+  @override
+  String get thanksForYourFeedback => 'フィードバックありがとうございます！';
+
+  @override
+  String get copyMessage => 'メッセージをコピー';
+
+  @override
+  String get searchSettings => '設定を検索…';
+
+  @override
+  String get errorLoadingAudio => '音声の読み込みエラー';
 }

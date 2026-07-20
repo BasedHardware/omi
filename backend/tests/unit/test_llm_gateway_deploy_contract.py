@@ -192,6 +192,8 @@ def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_
     assert 'Verify LLM gateway control plane before promotion' in auto_dev
     assert 'Probe LLM gateway from the Cloud Run VPC before promotion' in auto_dev
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in auto_dev
+    assert '--lane omi:auto:public-shared-conversation-chat' in workflow
+    assert '--lane omi:auto:public-shared-conversation-chat' in auto_dev
 
 
 def test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract():

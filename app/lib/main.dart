@@ -80,17 +80,19 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/notification_channel_strings.dart';
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  await NotificationChannelStrings.loadAppLocale();
 
   await AwesomeNotifications().initialize(null, [
     NotificationChannel(
       channelKey: 'channel',
-      channelName: 'Omi Notifications',
-      channelDescription: 'Notification channel for Omi',
+      channelName: NotificationChannelStrings.omiChannelName,
+      channelDescription: NotificationChannelStrings.omiChannelDescription,
       defaultColor: const Color(0xFF9D50DD),
       ledColor: Colors.white,
     ),
@@ -144,6 +146,7 @@ Future _init() async {
   }
 
   await PlatformManager.initializeServices();
+  await NotificationChannelStrings.loadAppLocale();
   await NotificationService.instance.initialize();
 
   // Register FCM background message handler
@@ -156,19 +159,14 @@ Future _init() async {
   // TestFlight environment detection — must be after SharedPreferencesUtil.init()
   if (F.env == Environment.prod) {
     final isTestFlight = await EnvironmentDetector.isTestFlight();
-    if (isTestFlight) {
-      Env.isTestFlight = true;
-      if (SharedPreferencesUtil().testFlightUseStagingApi) {
-        final staging = Env.stagingApiUrl;
-        if (staging != null) {
-          Env.overrideApiBaseUrl(staging);
-          debugPrint('TestFlight detected: using staging backend ($staging)');
-        } else {
-          debugPrint('TestFlight detected: staging preferred but STAGING_API_URL not configured, using production');
-        }
-      } else {
-        debugPrint('TestFlight detected: user chose production backend');
+    if (EnvironmentDetector.shouldUseBetaReleaseRing(isTestFlight)) {
+      Env.isTestFlight = isTestFlight;
+      final beta = Env.stagingApiUrl;
+      if (beta == null) {
+        throw StateError('Beta release build requires STAGING_API_URL to point at the beta release ring');
       }
+      Env.overrideApiBaseUrl(beta);
+      debugPrint('Beta release build detected: using beta release ring ($beta)');
     }
   }
 
@@ -292,8 +290,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

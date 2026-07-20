@@ -84,13 +84,31 @@ enum AgentRuntimeStartupAdmission {
 
 /// Firebase credentials are mandatory for every production and model runtime
 /// start. The sole exception is a non-production journal-control start, whose
-/// owner-bound RPCs deliberately operate without a model credential.
+/// owner-bound RPCs deliberately operate without a model credential. The
+/// fault suite supplies a separate, inert model token so its named test bundle
+/// can reach the local 5xx endpoint without contacting Firebase.
 enum AgentRuntimeCredentialPolicy {
+  static let hermeticFaultModelTokenEnvironmentKey = "OMI_FAULT_MODEL_AUTH_TOKEN"
+  static let hermeticFaultBundleIdentifier = "com.omi.omi-fault"
+
+  static func hermeticFaultModelToken(
+    isNonProduction: Bool,
+    bundleIdentifier: String,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> String? {
+    guard isNonProduction, bundleIdentifier == hermeticFaultBundleIdentifier else { return nil }
+    let token =
+      environment[hermeticFaultModelTokenEnvironmentKey]?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return token.isEmpty ? nil : token
+  }
+
   static func requiresManagedCredentials(
     requestedCredentials: Bool,
-    isNonProduction: Bool
+    isNonProduction: Bool,
+    hermeticFaultModelToken: String? = nil
   ) -> Bool {
-    requestedCredentials || !isNonProduction
+    (requestedCredentials || !isNonProduction) && hermeticFaultModelToken == nil
   }
 }
 
@@ -2548,6 +2566,11 @@ actor AgentRuntimeProcess {
     proc.arguments = ["--max-old-space-size=256", "--max-semi-space-size=16", bridgePath]
 
     var env = ProcessInfo.processInfo.environment
+    let hermeticFaultModelToken = AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+      isNonProduction: AppBuild.isNonProduction,
+      bundleIdentifier: AppBuild.bundleIdentifier,
+      environment: env)
+    env.removeValue(forKey: AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey)
     env["NODE_NO_WARNINGS"] = "1"
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
@@ -2595,7 +2618,8 @@ actor AgentRuntimeProcess {
       preferredAdapterId == .piMono
       && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
         requestedCredentials: requiresCredentials,
-        isNonProduction: AppBuild.isNonProduction)
+        isNonProduction: AppBuild.isNonProduction,
+        hermeticFaultModelToken: hermeticFaultModelToken)
     let authService = await MainActor.run { AuthService.shared }
     let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
     let authHeader = try? await Self.startupAuthHeader(
@@ -2608,7 +2632,10 @@ actor AgentRuntimeProcess {
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
-    if let authHeader,
+    if let hermeticFaultModelToken {
+      env["OMI_AUTH_TOKEN"] = hermeticFaultModelToken
+      log("AgentRuntimeProcess: starting non-production fault-model runtime without Firebase auth")
+    } else if let authHeader,
       let token = Self.bearerToken(from: authHeader)
     {
       env["OMI_AUTH_TOKEN"] = token
