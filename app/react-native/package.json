@@ -54,6 +54,7 @@
     "@types/react": "~19.2.0",
     "babel-plugin-module-resolver": "^5.0.3",
     "babel-preset-expo": "56.0.17",
+    "metro-resolver": "0.84.4",
     "patch-package": "^8.0.0",
     "typescript": "~6.0.3"
   },

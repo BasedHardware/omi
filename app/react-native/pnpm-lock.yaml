@@ -134,6 +134,9 @@ importers:
       babel-preset-expo:
         specifier: 56.0.17
         version: 56.0.17(@babel/core@7.29.7)(@babel/runtime@7.29.7)(expo@56.0.16)(react-refresh@0.14.2)
+      metro-resolver:
+        specifier: 0.84.4
+        version: 0.84.4
       patch-package:
         specifier: ^8.0.0
         version: 8.0.1
