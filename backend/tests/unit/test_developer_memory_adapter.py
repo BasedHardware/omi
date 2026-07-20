@@ -185,16 +185,22 @@ def test_developer_update_route_checks_split_brain_guard_before_reads_and_legacy
 
 
 def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision():
+    # Static tripwire (source order, not behavior): the list route may reach the
+    # legacy read only through the deny branch's narrow un-enrolled guard (#9892);
+    # the vector route still requires an explicit legacy-safe decision.
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     contents = developer_py.read_text(encoding='utf-8')
     denied_check = 'if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:'
-    legacy_safe_check = 'if memory_result.should_use_legacy_fallback:'
+    unenrolled_guard = "if memory_result.fallback_reason != 'missing_rollout_state':"
     legacy_call = 'memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])'
     assert denied_check in contents
-    assert legacy_safe_check in contents
+    assert unenrolled_guard in contents
     assert legacy_call in contents
-    assert contents.index(denied_check) < contents.index(legacy_safe_check) < contents.index(legacy_call)
+    assert contents.index(denied_check) < contents.index(unenrolled_guard) < contents.index(legacy_call)
     vector_route_source = _function_source_for_route('/v1/dev/user/memories/vector/search', 'get')
+    legacy_safe_check = 'if memory_result.should_use_legacy_fallback:'
+    assert denied_check in vector_route_source
+    assert legacy_safe_check in vector_route_source
     assert vector_route_source.index(denied_check) < vector_route_source.index(legacy_safe_check)
 
 
