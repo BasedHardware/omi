@@ -23,6 +23,7 @@ import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -54,7 +55,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _hasLowBatteryAlerted = false;
   bool _hasFullyChargedAlerted = false;
   bool _havingNewFirmware = false;
-  bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
+  bool get havingNewFirmware =>
+      _havingNewFirmware && pairedDevice != null && isConnected && _allowsFirmwareUpdateForPairedDevice;
 
   // Track firmware update state to prevent showing dialog during updates
   bool _isCheckingFirmware = false;
@@ -615,6 +617,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _checkFirmwareUpdates() async {
+    if (!_allowsFirmwareUpdateForPairedDevice) {
+      _havingNewFirmware = false;
+      return;
+    }
     if (_isFirmwareUpdateInProgress || _isCheckingFirmware) {
       return;
     }
@@ -638,17 +644,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
   }
 
-  bool get _isOmiGlassDevice {
-    if (pairedDevice == null) return false;
-    if (pairedDevice!.type == DeviceType.openglass) return true;
-    // Name matching only applies to Omi-family devices: Ray-Ban Meta names can
-    // contain 'glasses' but its firmware is managed by the Meta AI app.
-    if (pairedDevice!.type != DeviceType.omi) return false;
-    final name = pairedDevice!.name.toLowerCase();
-    return name.contains('openglass') || name.contains('omiglass') || name.contains('glass');
-  }
+  bool get _isOmiGlassDevice => FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(pairedDevice);
+
+  bool get _allowsFirmwareUpdateForPairedDevice =>
+      FirmwareUpdateBuildPolicy.current.allowsFirmwareUpdateForDevice(pairedDevice);
 
   Future checkFirmwareUpdates() async {
+    if (!_allowsFirmwareUpdateForPairedDevice) {
+      _havingNewFirmware = false;
+      return false;
+    }
     int retryCount = 0;
     const maxRetries = 3;
     const retryDelay = Duration(seconds: 3);
@@ -710,7 +715,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void showFirmwareUpdateDialog(BuildContext context) {
-    if (!_havingNewFirmware ||
+    if (!_allowsFirmwareUpdateForPairedDevice ||
+        !_havingNewFirmware ||
         !SharedPreferencesUtil().showFirmwareUpdateDialog ||
         _isFirmwareUpdateInProgress ||
         _isFirmwareDialogShowing ||
@@ -787,7 +793,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void onStatusChanged(DeviceServiceStatus status) {}
 
   prepareDFU() {
-    if (connectedDevice == null) {
+    if (!FirmwareUpdateBuildPolicy.current.allowsOmiFirmwareUpdate || connectedDevice == null) {
       return;
     }
     setFirmwareUpdateInProgress(true);

@@ -9,39 +9,31 @@ capture + HFP audio. Full mode is required for founder acceptance.
 1. **Hardware**: Ray-Ban Meta (Gen 1/Gen 2) or Oakley Meta glasses, paired to
    the **Meta AI app** on the test iPhone and updated to current glasses
    firmware.
-2. **Meta Wearables Developer Center** account: <https://wearables.developer.meta.com>.
-   Create an app to obtain:
-   - `MetaAppID`
-   - `ClientToken`
-3. **Developer mode / test channel**: DAT apps cannot ship through the App
-   Store yet. Run local development builds, or distribute to your org's
-   testers through the Wearables Developer Center beta channel.
-4. Xcode 16.4+ (per `app/setup.sh`; repo currently builds with Xcode 26), iOS device on iOS 15.2+.
+2. **Developer Mode** enabled in the Meta AI app for local testing. A Meta
+   Wearables Developer Center app, `MetaAppID`, and `ClientToken` are needed
+   only for a future beta-channel distribution build.
+3. DAT apps cannot ship through the App Store yet. Use a local development
+   build for this checklist.
+4. Xcode 26 with the iOS 26 SDK, CocoaPods 1.16.2, Flutter 3.41.9, and an iOS
+   15.2+ device. The current `.allowBluetoothHFP` source requires the iOS 26
+   SDK even though the app back-deploys to iOS 15.2.
 
-## Step 1 — Link the DAT Swift package (deliberately NOT linked by default)
+## Step 1 — Confirm the isolated DAT target
 
-The default project ships **without** the Meta package: `MWDATCore.framework`
-embeds SwiftProtobuf, which collides with the copy `mcumgr_flutter` links and
-crashes at launch (see `rayban-meta-troubleshooting.md` → "App crashes at
-launch"). For a DAT development build, link it manually:
+The project pins `https://github.com/facebook/meta-wearables-dat-ios` to exact
+0.8.0. `MWDATCore` and `MWDATCamera` belong only to `RunnerRayBanDat` /
+`raybanDat`; they must never be added to default `Runner`, which still links
+`mcumgr_flutter` for Omi pendant firmware updates.
 
-1. Open `app/ios/Runner.xcworkspace` → Runner project → **Package
-   Dependencies** → `+` → `https://github.com/facebook/meta-wearables-dat-ios`
-   (exact 0.8.0; binary xcframeworks).
-2. Add products **MWDATCore** and **MWDATCamera** to the **Runner** target.
-   (Optionally **MWDATMockDevice** for hardware-free testing on Debug.)
+Verify the committed graph without opening Xcode:
 
-`RayBanMetaHostApiImpl.swift` activates its DAT path via
-`#if canImport(MWDATCore)` — no source changes needed. The DAT branch was
-written against the published 0.8.0 interfaces (the shipped `.swiftinterface`);
-symbols can drift between SDK releases, so expect to reconcile on upgrade (see
-rayban-meta-troubleshooting.md). Do not commit the linkage until the
-SwiftProtobuf collision is resolved.
+```bash
+ruby app/ios/test/rayban_dat_xcode_graph_test.rb
+```
 
-Note: building with `.allowBluetoothHFP` (the current, non-deprecated spelling
-of the Bluetooth session option) requires the iOS 26 SDK (Xcode 26); it
-back-deploys to the app's iOS 15 target at runtime. If CI pins an older Xcode,
-the build will fail on that symbol.
+`RayBanMetaHostApiImpl.swift` activates the full path through `canImport` only
+in that target. `MWDATMockDevice` is intentionally not linked; add it only to
+`RunnerRayBanDat` for a temporary hardware-free test.
 
 ## Step 2 — Credentials (distribution builds only — SKIP for Developer Mode)
 
@@ -84,13 +76,38 @@ mode `audio`.
 
 ## Step 3 — Build
 
+Run the standard `bash setup.sh ios` once in a fresh checkout to seed Firebase
+files and generated Dart sources, then stop its default launch. Set `.dev.env`
+afterward; the DAT xcconfigs enforce the exact development team and bundle ID
+even if setup generated a machine-specific `Custom.xcconfig`.
+
+For a local backend, start it first and put the printed LAN URL in
+`app/.dev.env` so the iPhone can reach it:
+
 ```bash
-cd app
-bash setup.sh ios              # first time only
-flutter build ios --flavor dev --debug   # or run on device from Xcode
+cd backend
+./scripts/dev-serve.sh
+
+cd ../app
+# .dev.env
+# API_BASE_URL=http://<mac-lan-ip>:<printed-port>/
+# USE_WEB_AUTH=true
+# USE_AUTH_CUSTOM_TOKEN=true
+
+FLUTTER_BIN=/path/to/flutter-3.41.9/bin/flutter \
+  scripts/rayban_dat.sh run -d <physical-iphone-id>
 ```
 
-`getAvailabilityMode()` now returns `full` once the SDK is linked.
+The wrapper performs the DAT-only plugin transform and CocoaPods install,
+launches with `--flavor raybanDat --dart-define=OMI_RAYBAN_DAT=true --no-pub`,
+and restores the exact default graph plus the prior `Generated.xcconfig` and
+`flutter_export_environment.sh` bytes when Flutter exits. Its setup/cleanup
+`pub get` calls enforce the committed lockfile, so use the pinned Flutter
+version above. Use
+`scripts/rayban_dat.sh restore` after an interrupted cleanup. Standard
+`flutter run --flavor dev` remains the default audio-only build.
+
+`getAvailabilityMode()` returns `full` in the running DAT build.
 
 ## Step 4 — Authorize and pair inside Omi
 
@@ -117,7 +134,7 @@ flutter build ios --flavor dev --debug   # or run on device from Xcode
 
 ## MockDevice (no hardware)
 
-Add **MWDATMockDevice** to the Runner target in Debug and follow Meta's
+Add **MWDATMockDevice** to `RunnerRayBanDat` in Debug and follow Meta's
 MockDeviceKit docs to simulate a paired device, permissions, and photo
 capture. Useful for exercising the pairing sheet and photo pipeline in CI-less
 environments; founder acceptance still requires real glasses.
