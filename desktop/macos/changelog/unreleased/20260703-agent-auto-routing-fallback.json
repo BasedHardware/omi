@@ -1,3 +1,0 @@
-{
-  "change": "Ask for an agent without naming one and Omi now picks the best ready agent for the task, automatically falling back to the next one if it fails"
-}

@@ -1,0 +1,3 @@
+{
+  "change": "Added Codex as a local coding agent — say \"ask Codex to …\" via push-to-talk or chat. Routes through @agentclientprotocol/codex-acp bridge with locally-installed credentials (codex login) or BYOK OpenAI API key fallback."
+}

@@ -1,3 +1,0 @@
-{
-  "change": "Fixed background agent pills getting stuck on 'Starting…' when an agent streams large output — runtime status messages could arrive out of order and corrupt the update channel"
-}

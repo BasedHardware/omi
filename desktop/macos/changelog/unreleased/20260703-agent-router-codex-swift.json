@@ -1,3 +1,0 @@
-{
-  "change": "Added Codex as a routable coding agent: say 'use codex' or 'codex: <task>' to direct tasks to Codex CLI, with guided setup guidance when it's not installed"
-}

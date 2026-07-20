@@ -1,3 +1,0 @@
-{
-    "change": "Smart agent routing on the floating bar and voice path now picks the best installed local agent (Codex, OpenClaw, Hermes), falls back when one is missing or fails to start, auto-installs Codex when you ask for it and it's not installed, and shows install guidance for Hermes/OpenClaw"
-}
