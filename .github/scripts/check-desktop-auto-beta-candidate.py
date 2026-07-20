@@ -131,9 +131,6 @@ def validate(args: argparse.Namespace) -> dict:
     metadata = parse_metadata(release.get("body") or "")
     if metadata.get("channel") != "candidate" or metadata.get("isLive", "").lower() not in {"false", "0", "no"}:
         fail("automatic beta qualification requires channel: candidate and isLive: false")
-    if metadata.get("stableCandidate", "").lower() in {"true", "1", "yes"}:
-        fail("automatic beta qualification refuses a release already nominated for stable")
-
     expected_version = match.group("version")
     expected_build = match.group("build")
     checks = _validate_smoke_contract(

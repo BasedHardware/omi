@@ -25,7 +25,6 @@ from desktop_release_doctor_report import (
     format_summary,
 )
 
-
 REPOSITORY = "BasedHardware/omi"
 PRIVATE_KEY_VALUE_BLOCK_RE = re.compile(r"<!--\s*KEY_VALUE_START.*?KEY_VALUE_END\s*-->", re.DOTALL)
 STALE_STABLE_PROSE_RE = re.compile(r"stable\s+(?:remains\s+)?blocked", re.IGNORECASE)
@@ -69,10 +68,6 @@ def _metadata_from_release_body(body: object) -> tuple[dict[str, str], bool]:
         "qualifiedBetaSha",
         "qualifiedBetaTier",
         "qualifiedBetaEvidence",
-        "stableCandidate",
-        "stableCandidateTag",
-        "stableCandidateSha",
-        "stableCandidateQualificationEvidence",
     )
     public_metadata = {key: metadata[key] for key in safe_keys if key in metadata}
     human_prose = PRIVATE_KEY_VALUE_BLOCK_RE.sub("", body)
@@ -115,13 +110,17 @@ def _http_json(url: str, *, token: str | None = None) -> object:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310: URLs are fixed release-control endpoints.
+    with urllib.request.urlopen(
+        request, timeout=30
+    ) as response:  # nosec B310: URLs are fixed release-control endpoints.
         return json.loads(response.read().decode("utf-8"))
 
 
 def _http_text(url: str) -> str:
     request = urllib.request.Request(url, headers={"Accept": "application/xml,application/json,text/plain"})
-    with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310: URLs are fixed release-control endpoints.
+    with urllib.request.urlopen(
+        request, timeout=30
+    ) as response:  # nosec B310: URLs are fixed release-control endpoints.
         return response.read().decode("utf-8")
 
 
@@ -179,7 +178,9 @@ def _project_release_summary(release: object) -> dict[str, object]:
         return _unavailable("GitHub release response was not an object")
     metadata, stale_human_prose = _metadata_from_release_body(release.get("body"))
     assets = release.get("assets", [])
-    asset_names = [asset.get("name") for asset in assets if isinstance(asset, dict) and isinstance(asset.get("name"), str)]
+    asset_names = [
+        asset.get("name") for asset in assets if isinstance(asset, dict) and isinstance(asset.get("name"), str)
+    ]
     return {
         "tag_name": _optional_string(release.get("tagName")),
         "is_draft": release.get("isDraft") is True,
@@ -193,7 +194,11 @@ def _project_release_summary(release: object) -> dict[str, object]:
 def _safe_static_json(bucket: str, name: str) -> dict[str, object]:
     object_path = f"{bucket.rstrip('/')}/{name}"
     result = subprocess.run(
-        ("gcloud", "storage", "cat", object_path), check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ("gcloud", "storage", "cat", object_path),
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
     if result.returncode != 0:
         return _unavailable(f"static object unavailable: {name}")
@@ -277,7 +282,16 @@ def collect_snapshot(
             "desktop_release_manifests",
             release_tag,
             access_token,
-            allowed_fields=("release_id", "platform", "version", "build_number", "source_sha", "zip_sha256", "dmg_sha256", "qualification"),
+            allowed_fields=(
+                "release_id",
+                "platform",
+                "version",
+                "build_number",
+                "source_sha",
+                "zip_sha256",
+                "dmg_sha256",
+                "qualification",
+            ),
         ),
         "pointers": {
             "beta": _safe_firestore_document(
@@ -285,14 +299,30 @@ def collect_snapshot(
                 "desktop_update_channels",
                 "macos-beta",
                 access_token,
-                allowed_fields=("platform", "channel", "release_id", "version", "build_number", "generation", "updated_at"),
+                allowed_fields=(
+                    "platform",
+                    "channel",
+                    "release_id",
+                    "version",
+                    "build_number",
+                    "generation",
+                    "updated_at",
+                ),
             ),
             "stable": _safe_firestore_document(
                 project_id,
                 "desktop_update_channels",
                 "macos-stable",
                 access_token,
-                allowed_fields=("platform", "channel", "release_id", "version", "build_number", "generation", "updated_at"),
+                allowed_fields=(
+                    "platform",
+                    "channel",
+                    "release_id",
+                    "version",
+                    "build_number",
+                    "generation",
+                    "updated_at",
+                ),
             ),
         },
         "legacy_release": _safe_firestore_document(
@@ -311,9 +341,15 @@ def collect_snapshot(
             "stable": _safe_static_json(bucket, "stable/latest.json"),
         },
         "backend": _safe_health(service_url),
-        "tracking": {"desktop_backend_prod_deployed_sha": tracking_sha} if tracking_sha else _unavailable("tracking tag is absent"),
+        "tracking": (
+            {"desktop_backend_prod_deployed_sha": tracking_sha}
+            if tracking_sha
+            else _unavailable("tracking tag is absent")
+        ),
         "codemagic": _unavailable("Codemagic API is not yet a release-control dependency"),
-        "metrics": {name: _unavailable("metric collection is advisory work not yet wired") for name in METRIC_CONTRACTS},
+        "metrics": {
+            name: _unavailable("metric collection is advisory work not yet wired") for name in METRIC_CONTRACTS
+        },
     }
 
 
