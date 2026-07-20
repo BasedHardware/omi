@@ -4,6 +4,8 @@
   "bundle": {
     "macOS": {
       "infoPlist": "Info.plist",
+      "entitlements": "Omi.entitlements",
+      "hardenedRuntime": true,
       "minimumSystemVersion": "14.0"
     }
   }
