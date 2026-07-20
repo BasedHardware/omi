@@ -547,7 +547,7 @@ def emergency_promote_macos_beta_channel(
         raise ValueError("emergency promotion evidence is incomplete")
     normalized_evidence: dict[str, str] = {}
     for key, value in evidence.items():
-        if not isinstance(value, str) or not value.strip():
+        if not value.strip():
             raise ValueError(f"emergency promotion evidence {key} is required")
         normalized_evidence[key] = value.strip()
     for key in ("signed_smoke_url", "behavioral_url", "source_gate_url"):
