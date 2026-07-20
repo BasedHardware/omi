@@ -1,7 +1,10 @@
 {
   "files": {
+    "backend/database/conversations.py": 1580,
     "backend/database/users.py": 1943
   },
-  "raise_justifications": {},
+  "raise_justifications": {
+    "backend/database/conversations.py": "Public shared-chat uses the existing conversation storage format for bounded, safe transcript decoding; extraction would duplicate crypto/storage invariants."
+  },
   "threshold": 1500
 }
