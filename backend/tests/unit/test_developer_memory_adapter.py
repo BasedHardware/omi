@@ -565,6 +565,40 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
     assert all((item['policy']['archive_capability'] is False for item in results))
 
 
+def test_developer_vector_adapter_serves_limits_above_the_default_candidate_budget():
+    """A limit inside the route's advertised window must not blow up the request.
+
+    GET /v1/dev/user/memories/vector/search declares `limit: int = Query(10, ge=1, le=100)`
+    and the developer_api branch of execute_default_read_vector_search admits up to 100.
+    But fetch_default_vector_memory_search defaults max_candidates to
+    DEFAULT_MEMORY_VECTOR_MAX_CANDIDATES (50) and rejects max_candidates < limit, so every
+    limit in 51..100 raised "max_candidates must be between limit and 100" — an HTTP 500
+    on an input the route says is valid.
+    """
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    items = [_memory_item(f'long-{i}', tier=MemoryTier.long_term, now=now, content=f'coffee {i}') for i in range(3)]
+    db_client = _FirestoreFake({f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in items})
+    decision = read_default_read_rollout(
+        uid='u1',
+        db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}),
+        consumer='developer_api',
+    )
+
+    def vector_query(uid, query, *, mode, limit):
+        return _VectorCandidateResult(
+            hits=[_hit(item, score=0.9 - index * 0.01) for index, item in enumerate(items)],
+            rejected_count=0,
+        )
+
+    result = search_memory_default_developer_memories_vector(
+        uid='u1', query='coffee', limit=60, db_client=db_client, rollout_decision=decision, vector_query=vector_query
+    )
+
+    assert result.read_decision == MemoryReadDecision.USE_MEMORY
+    assert result.fallback_reason is None
+    assert [item['id'] for item in result.memories] == ['long-0', 'long-1', 'long-2']
+
+
 def test_developer_vector_adapter_returns_denied_decision_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
     now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
