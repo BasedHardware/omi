@@ -20,7 +20,7 @@ struct OnboardingExportsStepView: View {
       totalSteps: totalSteps,
       eyebrow: "",
       title: "Use Omi memory where you work.",
-      description: "Export Omi context to the tools you already use.",
+      description: "Connect Omi context to the tools you already use.",
       rightPaneFooterText: summaryText,
       graphLeading: true,
       showsSkip: true,
