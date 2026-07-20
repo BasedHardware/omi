@@ -50,18 +50,8 @@ struct AppleEventKitFetchParameters: Equatable, Sendable {
   }
 }
 
-struct AppleReminderRecord: Equatable, Identifiable, Sendable {
-  let id: String
-  let title: String
-  let notes: String
-  let dueAt: Date?
-  let completedAt: Date?
-  let isCompleted: Bool
-  let priority: Int
-  let listTitle: String
-}
-
 struct AppleRemindersSyncResult: Equatable, Sendable {
+  let total: Int
   let exported: Int
   let updated: Int
   let deleted: Int
@@ -73,7 +63,6 @@ protocol AppleEventKitStore: AnyObject {
   func requestFullAccessToEvents() async throws -> Bool
   func requestFullAccessToReminders() async throws -> Bool
   func calendarEvents(start: Date, end: Date) -> [EKEvent]
-  func reminders() async -> [EKReminder]
   func newReminder() -> EKReminder
   func calendarItem(withIdentifier identifier: String) -> EKCalendarItem?
   func defaultCalendarForNewReminders() -> EKCalendar?
@@ -91,20 +80,13 @@ extension EKEventStore: AppleEventKitStore {
     events(matching: predicateForEvents(withStart: start, end: end, calendars: nil))
   }
 
-  func reminders() async -> [EKReminder] {
-    let predicate = predicateForReminders(in: nil)
-    return await withCheckedContinuation { continuation in
-      fetchReminders(matching: predicate) { continuation.resume(returning: $0 ?? []) }
-    }
-  }
-
   func newReminder() -> EKReminder {
     EKReminder(eventStore: self)
   }
 }
 
 enum AppleEventKitConnectionStatus: Equatable, Sendable {
-  case connected(itemCount: Int)
+  case connected
   case needsAccess(message: String, reasonCode: String)
   case error(message: String, reasonCode: String)
 }
@@ -155,26 +137,10 @@ final class AppleEventKitReaderService {
     self.eventStore = eventStore
   }
 
-  func connectionStatus(
-    for source: AppleEventKitSource,
-    daysBack: Int = 1,
-    daysForward: Int = 1,
-    maxResults: Int = 1
-  ) async -> AppleEventKitConnectionStatus {
+  func connectionStatus(for source: AppleEventKitSource) async -> AppleEventKitConnectionStatus {
     do {
-      switch source {
-      case .calendar:
-        let count = try await readCalendarEvents(
-          daysBack: daysBack,
-          daysForward: daysForward,
-          maxResults: maxResults,
-          requestAccess: false
-        ).count
-        return .connected(itemCount: count)
-      case .reminders:
-        let count = try await readReminders(maxResults: maxResults, requestAccess: false).count
-        return .connected(itemCount: count)
-      }
+      try await ensureAccess(to: source, requestIfNeeded: false)
+      return .connected
     } catch let error as AppleEventKitReaderError {
       switch error {
       case .accessDenied:
@@ -222,29 +188,6 @@ final class AppleEventKitReaderService {
           location: event.location ?? "",
           description: event.notes ?? "",
           isAllDay: event.isAllDay
-        )
-      }
-  }
-
-  func readReminders(maxResults: Int = 500, requestAccess: Bool = true) async throws -> [AppleReminderRecord] {
-    try await ensureAccess(to: .reminders, requestIfNeeded: requestAccess)
-    let limit = min(max(maxResults, 1), 2500)
-    let reminders = await eventStore.reminders()
-
-    return
-      reminders
-      .sorted { ($0.lastModifiedDate ?? .distantPast) > ($1.lastModifiedDate ?? .distantPast) }
-      .prefix(limit)
-      .map { reminder in
-        AppleReminderRecord(
-          id: reminder.calendarItemIdentifier,
-          title: reminder.title ?? "Untitled reminder",
-          notes: reminder.notes ?? "",
-          dueAt: reminder.dueDateComponents.flatMap { Calendar.current.date(from: $0) },
-          completedAt: reminder.completionDate,
-          isCompleted: reminder.isCompleted,
-          priority: reminder.priority,
-          listTitle: reminder.calendar.title
         )
       }
   }
@@ -359,6 +302,7 @@ final class AppleEventKitReaderService {
     try await APIClient.shared.syncAppleReminders(updates)
     for id in deletedIDs { try await APIClient.shared.deleteActionItem(id: id) }
     return AppleRemindersSyncResult(
+      total: max(0, pending.pendingExport.count + pending.syncedItems.count - deletedIDs.count),
       exported: pending.pendingExport.count,
       updated: changed,
       deleted: deletedIDs.count
