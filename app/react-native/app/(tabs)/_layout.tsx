@@ -3,7 +3,7 @@ import { Tabs, Redirect } from 'expo-router';
 import { useAuthStore } from '@/state/authStore';
 import HomeScreen from '@/screens/HomeScreen';
 import ConversationsScreen from '@/screens/ConversationsScreen';
-import MemoriesScreen from '@/screens/MemoriesScreen';
+import GoalsScreen from '@/screens/GoalsScreen';
 import AppsScreen from '@/screens/AppsScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
 
@@ -18,7 +18,7 @@ export default function TabsLayout() {
     <Tabs screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="home" options={{ title: 'Home' }} />
       <Tabs.Screen name="conversations" options={{ title: 'Conversations' }} />
-      <Tabs.Screen name="memories" options={{ title: 'Memories' }} />
+      <Tabs.Screen name="goals" options={{ title: 'Goals' }} />
       <Tabs.Screen name="apps" options={{ title: 'Apps' }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
     </Tabs>

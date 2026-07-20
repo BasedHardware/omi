@@ -60,19 +60,19 @@ export default function HomeScreen() {
     <View style={styles.root}>
       <View style={styles.topBar}>
         <TouchableOpacity
+          style={styles.connectBtn}
+          onPress={() => router.push('/(tabs)/settings')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.connectText}>Connect</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={styles.recordBtn}
           onPress={() => router.push('/(tabs)/capture')}
           activeOpacity={0.8}
         >
           <Text style={styles.recordIcon}>●</Text>
           <Text style={styles.recordText}>Record</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.settingsBtn}
-          onPress={() => router.push('/(tabs)/settings')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.settingsIcon}>⚙</Text>
         </TouchableOpacity>
       </View>
 
@@ -117,7 +117,7 @@ export default function HomeScreen() {
         <View style={styles.inputBox}>
           <TextInput
             style={styles.input}
-            placeholder="omi, anything about your life?"
+            placeholder="Ask Omi anything about your life..."
             placeholderTextColor="#7A7A80"
             value={query}
             onChangeText={setQuery}
@@ -143,11 +143,11 @@ const styles = StyleSheet.create({
   },
   recordIcon: { color: '#FF453A', fontSize: 12 },
   recordText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-  settingsBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#1C1C1E',
-    alignItems: 'center', justifyContent: 'center',
+  connectBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#1C1C1E', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
   },
-  settingsIcon: { color: '#FFF', fontSize: 18 },
+  connectText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 16 },
   sectionTitle: {

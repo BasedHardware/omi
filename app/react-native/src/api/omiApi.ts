@@ -56,6 +56,19 @@ export async function getConversation(id: string) {
   return omiApi.get<Conversation>(`/v1/conversations/${id}`);
 }
 
+export async function getActionItems(limit = 50, offset = 0) {
+  return omiApi.get<Paginated<ActionItem>>('/v1/action-items', { params: { limit, offset } });
+}
+
+export interface ActionItem {
+  id: string;
+  description: string;
+  completed?: boolean;
+  due_date?: string | null;
+  created_at?: string;
+  priority?: string;
+}
+
 export interface Memory {
   id: string;
   content: string;
