@@ -4,6 +4,29 @@ import OmiTheme
 import SceneKit
 import SwiftUI
 
+/// Stable mounted owner for replaceable onboarding view identities. It keeps
+/// exactly one local monitor coordinator for the lifetime of this onboarding
+/// presentation, without app-global state.
+struct OnboardingViewOwner: View {
+  @ObservedObject var appState: AppState
+  @ObservedObject var chatProvider: ChatProvider
+  var onComplete: (() -> Void)? = nil
+  var exportStepOverride: Int? = nil
+  var isExportPreview = false
+  @StateObject private var keyboardNavigationCoordinator = OnboardingKeyboardNavigationCoordinator()
+
+  var body: some View {
+    OnboardingView(
+      appState: appState,
+      chatProvider: chatProvider,
+      onComplete: onComplete,
+      exportStepOverride: exportStepOverride,
+      isExportPreview: isExportPreview,
+      keyboardNavigationCoordinator: keyboardNavigationCoordinator
+    )
+  }
+}
+
 struct OnboardingView: View {
   @ObservedObject var appState: AppState
   @ObservedObject var chatProvider: ChatProvider
@@ -37,7 +60,8 @@ struct OnboardingView: View {
   @AppStorage("onboardingBYOKStepRemoved") private var hasRemovedBYOKStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
-  @StateObject private var keyboardNavigationCoordinator = OnboardingKeyboardNavigationCoordinator()
+  @ObservedObject var keyboardNavigationCoordinator: OnboardingKeyboardNavigationCoordinator
+  @State private var keyboardNavigationLease: OnboardingKeyboardNavigationCoordinator.MountLease?
   @FocusState private var contentFocused: Bool
 
   let steps = OnboardingFlow.steps
@@ -113,7 +137,8 @@ struct OnboardingView: View {
       mountKeyNavigation()
     }
     .onDisappear {
-      keyboardNavigationCoordinator.unmount()
+      keyboardNavigationCoordinator.unmount(keyboardNavigationLease)
+      keyboardNavigationLease = nil
     }
     .task {
       guard !isExportPreview else { return }
@@ -513,18 +538,17 @@ struct OnboardingView: View {
     currentStep = index
   }
 
-  /// Arrow-key navigation uses one local monitor owned by this mounted view.
-  /// It deliberately stays connected to live `@AppStorage` bindings rather
-  /// than a copied view value or an app-global notification relay.
+  /// Arrow-key navigation borrows the stable parent's one monitor and keeps its
+  /// live bindings in the mounted child that currently holds the lease.
   private func mountKeyNavigation() {
     guard !isExportPreview, !appState.hasCompletedOnboarding else { return }
     let currentStep = $currentStep
     let furthestStep = $furthestStep
     let appState = appState
-    keyboardNavigationCoordinator.mount(
+    keyboardNavigationLease = keyboardNavigationCoordinator.mount(
       .init(
         isActive: { !appState.hasCompletedOnboarding },
-        focusedControlOwnsArrows: Self.focusedControlOwnsArrows,
+        focusedControlOwnsArrows: { OnboardingKeyboardResponderPolicy.ownsArrows(in: NSApp.keyWindow) },
         currentStep: { currentStep.wrappedValue },
         furthestStep: { furthestStep.wrappedValue },
         apply: { action in
@@ -547,45 +571,18 @@ struct OnboardingView: View {
     )
   }
 
-  private static func focusedControlOwnsArrows() -> Bool {
-    guard let keyWindow = NSApp.keyWindow else { return false }
-    if keyWindow is FloatingControlBarWindow { return true }
-
-    var responder: NSResponder? = keyWindow.firstResponder
-    while let current = responder {
-      if current is NSText || current is NSControl || current is NSTableView || current is NSOutlineView
-        || current is NSCollectionView
-      {
-        return true
-      }
-      responder = current.nextResponder
-    }
-    return false
-  }
-
   /// Forward arrow == pressing the step's visible Continue button. Re-issuing the
   /// default-action key (Return) reuses each step's own gating (name/goal required,
   /// demo completion) instead of blindly advancing `currentStep`.
   private static func handleForwardKey() -> Bool {
-    guard let window = NSApp.keyWindow else { return false }
-    for phase in [NSEvent.EventType.keyDown, .keyUp] {
-      guard
-        let event = NSEvent.keyEvent(
-          with: phase, location: .zero, modifierFlags: [],
-          timestamp: ProcessInfo.processInfo.systemUptime,
-          windowNumber: window.windowNumber, context: nil,
-          characters: "\r", charactersIgnoringModifiers: "\r",
-          isARepeat: false, keyCode: 36)
-      else { continue }
-      window.postEvent(event, atStart: false)
-    }
-    return true
+    OnboardingDefaultActionPoster.post(in: NSApp.keyWindow)
   }
 
   /// Complete onboarding — start all services and transition to the app
   private func handleOnboardingComplete() {
     log("OnboardingView: Onboarding complete")
-    keyboardNavigationCoordinator.unmount()
+    keyboardNavigationCoordinator.unmount(keyboardNavigationLease)
+    keyboardNavigationLease = nil
     AnalyticsManager.shared.onboardingCompleted()
 
     // Stop the AI if it's still running

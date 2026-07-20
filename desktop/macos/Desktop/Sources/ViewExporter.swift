@@ -116,7 +116,13 @@ enum ViewExporter {
 
       (
         "12-onboarding",
-        { AnyView(OnboardingView(appState: AppState(), chatProvider: ChatProvider())) },
+        {
+          AnyView(
+            OnboardingViewOwner(
+              appState: AppState(),
+              chatProvider: ChatProvider()
+            ))
+        },
         CGSize(width: 900, height: 600)
       ),
 
@@ -177,7 +183,7 @@ enum ViewExporter {
     let step = onboardingExportSteps[index]
     let appState = AppState()
     appState.hasCompletedOnboarding = false
-    let view = OnboardingView(
+    let view = OnboardingViewOwner(
       appState: appState,
       chatProvider: ChatProvider(),
       exportStepOverride: step.1,

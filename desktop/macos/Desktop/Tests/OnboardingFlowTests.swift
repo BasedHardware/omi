@@ -434,26 +434,86 @@ final class OnboardingFlowTests: XCTestCase {
       }
     )
 
-    owner.mount(navigation)
-    owner.mount(navigation)
+    let firstLease = owner.mount(navigation)
+    let replacementLease = owner.mount(navigation)
 
     XCTAssertEqual(monitor.installCount, 1, "repeated mount must retain one monitor token")
     XCTAssertNil(monitor.dispatch(onboardingKeyEvent(keyCode: 124)))
     XCTAssertEqual(navigationCount, 1, "the installed monitor must call the mounted navigation owner")
     XCTAssertEqual(currentStep, 11)
+    owner.unmount(firstLease)
+    XCTAssertEqual(monitor.removeCount, 0, "the first lease is stale after replacement")
+    owner.unmount(replacementLease)
+    XCTAssertEqual(monitor.removeCount, 1)
   }
 
   @MainActor
-  func testKeyboardNavigationOwnerPreservesFocusedModifiedAndRepeatedArrows() {
+  func testKeyboardNavigationReplacementSharesOneMonitorAndIgnoresStaleUnmount() {
+    let monitor = OnboardingKeyboardMonitorSpy()
+    let owner = OnboardingKeyboardNavigationCoordinator(
+      installMonitor: monitor.install,
+      removeMonitor: monitor.remove
+    )
+    var outgoingMutations = 0
+    var replacementStep = 10
+
+    let firstLease = owner.mount(
+      .init(
+        isActive: { true },
+        focusedControlOwnsArrows: { false },
+        currentStep: { 10 },
+        furthestStep: { 15 },
+        apply: { _ in
+          outgoingMutations += 1
+          return true
+        }
+      ))
+    let replacementLease = owner.mount(
+      .init(
+        isActive: { true },
+        focusedControlOwnsArrows: { false },
+        currentStep: { replacementStep },
+        furthestStep: { 15 },
+        apply: { action in
+          guard case .jump(let target) = action else { return false }
+          replacementStep = target
+          return true
+        }
+      ))
+
+    XCTAssertEqual(monitor.installCount, 1, "a replacement must not install a second local monitor")
+    owner.unmount(firstLease)
+    XCTAssertNil(monitor.dispatch(onboardingKeyEvent(keyCode: 124)))
+    XCTAssertEqual(outgoingMutations, 0, "a stale owner must not receive navigation")
+    XCTAssertEqual(replacementStep, 11)
+    owner.unmount(replacementLease)
+    XCTAssertEqual(monitor.removeCount, 1, "the final active lease removes the one monitor")
+  }
+
+  @MainActor
+  func testKeyboardNavigationResponderPolicyPreservesTextAndDirectionalControlsButNotButtons() {
+    XCTAssertTrue(OnboardingKeyboardResponderPolicy.ownsArrows(firstResponder: NSTextView()))
+    XCTAssertTrue(OnboardingKeyboardResponderPolicy.ownsArrows(firstResponder: NSSegmentedControl()))
+    XCTAssertTrue(OnboardingKeyboardResponderPolicy.ownsArrows(firstResponder: NSStepper()))
+    XCTAssertFalse(
+      OnboardingKeyboardResponderPolicy.ownsArrows(
+        firstResponder: NSButton(title: "Continue", target: nil, action: nil)),
+      "ordinary default-action buttons must leave arrows available to onboarding navigation"
+    )
+  }
+
+  @MainActor
+  func testKeyboardNavigationPreservesFocusedModifiedAndRepeatedArrows() {
     let monitor = OnboardingKeyboardMonitorSpy()
     let owner = OnboardingKeyboardNavigationCoordinator(
       installMonitor: monitor.install,
       removeMonitor: monitor.remove
     )
     var navigationCount = 0
+    var firstResponder: NSResponder? = NSTextView()
     let navigation = OnboardingKeyboardNavigationCoordinator.Navigation(
       isActive: { true },
-      focusedControlOwnsArrows: { true },
+      focusedControlOwnsArrows: { OnboardingKeyboardResponderPolicy.ownsArrows(firstResponder: firstResponder) },
       currentStep: { 10 },
       furthestStep: { 15 },
       apply: { _ in
@@ -462,14 +522,17 @@ final class OnboardingFlowTests: XCTestCase {
       }
     )
 
-    owner.mount(navigation)
+    let textLease = owner.mount(navigation)
     let focusedArrow = onboardingKeyEvent(keyCode: 124)
     XCTAssertTrue(monitor.dispatch(focusedArrow) === focusedArrow)
 
-    owner.mount(
+    firstResponder = NSButton(title: "Continue", target: nil, action: nil)
+    let buttonLease = owner.mount(
       OnboardingKeyboardNavigationCoordinator.Navigation(
         isActive: { true },
-        focusedControlOwnsArrows: { false },
+        focusedControlOwnsArrows: {
+          OnboardingKeyboardResponderPolicy.ownsArrows(firstResponder: firstResponder)
+        },
         currentStep: { 10 },
         furthestStep: { 15 },
         apply: { _ in
@@ -477,23 +540,27 @@ final class OnboardingFlowTests: XCTestCase {
           return true
         }
       ))
+    XCTAssertNil(monitor.dispatch(onboardingKeyEvent(keyCode: 124)))
     let modifiedArrow = onboardingKeyEvent(keyCode: 124, modifierFlags: [.command])
     let repeatArrow = onboardingKeyEvent(keyCode: 124, isARepeat: true)
     XCTAssertTrue(monitor.dispatch(modifiedArrow) === modifiedArrow)
     XCTAssertTrue(monitor.dispatch(repeatArrow) === repeatArrow)
-    XCTAssertEqual(navigationCount, 0)
+    XCTAssertEqual(navigationCount, 1, "an ordinary button must not block onboarding navigation")
     XCTAssertEqual(monitor.installCount, 1, "updating mounted state must not install a second monitor")
+    owner.unmount(textLease)
+    XCTAssertEqual(monitor.removeCount, 0)
+    owner.unmount(buttonLease)
   }
 
   @MainActor
-  func testKeyboardNavigationOwnerInvokesRequiredStepDefaultActionOnce() {
+  func testKeyboardNavigationInvokesRequiredStepDefaultActionOnce() {
     let monitor = OnboardingKeyboardMonitorSpy()
     let owner = OnboardingKeyboardNavigationCoordinator(
       installMonitor: monitor.install,
       removeMonitor: monitor.remove
     )
-    var defaultActionCount = 0
-    owner.mount(
+    let window = OnboardingDefaultActionRecordingWindow()
+    let lease = owner.mount(
       OnboardingKeyboardNavigationCoordinator.Navigation(
         isActive: { true },
         focusedControlOwnsArrows: { false },
@@ -501,44 +568,14 @@ final class OnboardingFlowTests: XCTestCase {
         furthestStep: { 1 },
         apply: { action in
           guard case .forwardDefaultAction = action else { return false }
-          defaultActionCount += 1
-          return true
+          return OnboardingDefaultActionPoster.post(in: window)
         }
       ))
 
     XCTAssertNil(monitor.dispatch(onboardingKeyEvent(keyCode: 124)))
-    XCTAssertEqual(defaultActionCount, 1)
-  }
-
-  @MainActor
-  func testKeyboardNavigationOwnerRemovesExactlyOnceForEveryOnboardingExit() {
-    for exit in ["completion", "unmount", "sign-out", "recovery replacement", "window close"] {
-      let monitor = OnboardingKeyboardMonitorSpy()
-      let owner = OnboardingKeyboardNavigationCoordinator(
-        installMonitor: monitor.install,
-        removeMonitor: monitor.remove
-      )
-      var navigationCount = 0
-      owner.mount(
-        OnboardingKeyboardNavigationCoordinator.Navigation(
-          isActive: { true },
-          focusedControlOwnsArrows: { false },
-          currentStep: { 10 },
-          furthestStep: { 15 },
-          apply: { _ in
-            navigationCount += 1
-            return true
-          }
-        ))
-
-      owner.unmount()
-      owner.unmount()
-
-      XCTAssertEqual(monitor.removeCount, 1, "\(exit) must converge on one teardown")
-      let arrow = onboardingKeyEvent(keyCode: 124)
-      XCTAssertTrue(monitor.dispatch(arrow) === arrow, "\(exit) must leave arrows unconsumed")
-      XCTAssertEqual(navigationCount, 0, "\(exit) must detach mounted navigation")
-    }
+    XCTAssertEqual(window.postedEvents.map(\.type), [.keyDown, .keyUp])
+    XCTAssertTrue(window.postedEvents.allSatisfy { $0.keyCode == 36 })
+    owner.unmount(lease)
   }
 
   @MainActor
@@ -557,9 +594,9 @@ final class OnboardingFlowTests: XCTestCase {
       apply: { _ in true }
     )
 
-    owner?.mount(navigation)
-    owner?.unmount()
-    owner?.mount(navigation)
+    let firstLease = owner?.mount(navigation)
+    owner?.unmount(firstLease)
+    _ = owner?.mount(navigation)
     XCTAssertEqual(monitor.installCount, 2)
     XCTAssertEqual(monitor.removeCount, 1)
     XCTAssertNotEqual(monitor.installedTokens[0], monitor.installedTokens[1])
@@ -658,5 +695,23 @@ private final class OnboardingKeyboardMonitorSpy {
   func dispatch(_ event: NSEvent) -> NSEvent? {
     guard let handler else { return event }
     return handler(event)
+  }
+}
+
+@MainActor
+private final class OnboardingDefaultActionRecordingWindow: NSWindow {
+  private(set) var postedEvents: [NSEvent] = []
+
+  init() {
+    super.init(
+      contentRect: .zero,
+      styleMask: [.titled],
+      backing: .buffered,
+      defer: false
+    )
+  }
+
+  override func postEvent(_ event: NSEvent, atStart flag: Bool) {
+    postedEvents.append(event)
   }
 }
