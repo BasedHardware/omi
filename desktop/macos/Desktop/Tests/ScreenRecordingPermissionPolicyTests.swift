@@ -168,6 +168,52 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertFalse(ScreenRecordingPermissionPolicy.shouldMarkCaptureKitBroken(tccGranted: false))
   }
 
+  /// Regression: the onboarding request tool reopened System Settings (and the
+  /// FDA drag card) even when the permission was already granted. Opening must
+  /// stay behind a granted check, like the notifications/automation cases.
+  func testRequestToolOpensSettingsOnlyWhenDenied() throws {
+    // omi-test-quality: source-inspection -- static contract: the tool's
+    // NSWorkspace/System Settings side effects cannot be exercised hermetically.
+    let src = try sourceFile("Sources/Providers/ChatToolExecutor.swift")
+    for (caseStart, caseEnd, grantedGuard, pane) in [
+      ("case \"screen_recording\":", "case \"microphone\":", "if !screenRecordingGranted {", "Privacy_ScreenCapture"),
+      ("case \"full_disk_access\":", "default:", "if !checkFullDiskAccessDirectly() {", "Privacy_AllFiles"),
+    ] {
+      guard let start = src.range(of: caseStart)?.upperBound,
+        let end = src.range(of: caseEnd, range: start..<src.endIndex)?.lowerBound
+      else { return XCTFail("request tool must handle \(caseStart)") }
+      let body = String(src[start..<end])
+      guard let guardPos = body.range(of: grantedGuard)?.lowerBound,
+        let openPos = body.range(of: pane)?.lowerBound
+      else { return XCTFail("\(caseStart) must guard its \(pane) open behind \(grantedGuard)") }
+      XCTAssertLessThan(
+        guardPos, openPos,
+        "\(caseStart): opening \(pane) must sit inside the not-granted branch")
+    }
+  }
+
+  /// Regression: the onboarding "Reopen Omi" prompt looped forever because the
+  /// offer was static step config with no memory of restarts. The offer must
+  /// fire only for a grant that arrived during this process's lifetime.
+  func testRelaunchOfferedOnlyForGrantsArrivingWhileRunning() {
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: true, grantedAtLaunch: false),
+      "granted while running → capture is dead until relaunch, offer the reopen")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: true, grantedAtLaunch: true),
+      "already granted at launch (incl. right after a reopen) → never re-offer")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: false, grantedAtLaunch: false),
+      "not granted → nothing to apply")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: false, grantedAtLaunch: true),
+      "revoked while running → a relaunch can't help; the grant flow handles it")
+  }
+
   func testScreenCaptureRestartsUseSharedRelaunchCommand() throws {
     let src = try sourceFile("Sources/ScreenCaptureService.swift")
     XCTAssertTrue(src.contains("static func screenCaptureRelaunchCommand(appPath: String) -> String"))

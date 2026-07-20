@@ -2954,6 +2954,46 @@ class FloatingControlBarManager {
     ]
   }
 
+  // MARK: - Reach error (actionable "Couldn't reach Omi" card)
+
+  private var reachRetryAction: (() -> Void)?
+
+  /// Show an actionable "Couldn't reach Omi" card on the bar once transient
+  /// retries are exhausted. Retry re-runs `onRetry` (restarting the backoff);
+  /// Skip abandons the turn and returns the bar to idle. Unlike passive hints
+  /// it persists until the user chooses, since it needs a decision.
+  func showReachError(
+    message: String = "",
+    onRetry: @escaping () -> Void
+  ) {
+    reachRetryAction = onRetry
+    notificationDismissWorkItem?.cancel()
+    notificationDismissWorkItem = nil
+    if !isVisible { show() }
+    // Use the window's presenter directly (not the owner-gated manager
+    // overload): a reach error is UI state, not a runtime-owner notification.
+    window?.showNotification(
+      FloatingBarNotification(
+        ownerID: RuntimeOwnerIdentity.currentOwnerId() ?? "",
+        title: "Couldn't reach Omi",
+        message: message,
+        assistantId: "reach_error"
+      )
+    )
+  }
+
+  func retryReachError() {
+    let action = reachRetryAction
+    reachRetryAction = nil
+    dismissCurrentNotification()
+    action?()
+  }
+
+  func dismissReachError() {
+    reachRetryAction = nil
+    dismissCurrentNotification()
+  }
+
   func closeAskOmiForAutomation(wait: Bool = true) async -> [String: String] {
     guard let window else {
       return ["error": "floating_bar_window_unavailable"]

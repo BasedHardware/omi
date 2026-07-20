@@ -282,6 +282,10 @@ class AppState: ObservableObject {
   @Published var hasNotificationPermission = false
   @Published var notificationAlertStyle: UNAlertStyle = .none  // .none, .banner, or .alert
   @Published var hasScreenRecordingPermission = false
+  /// TCC state captured once at process launch. A grant that arrives while the
+  /// app is running doesn't apply to this process until relaunch
+  /// (see ScreenRecordingPermissionPolicy.needsRelaunchToApply).
+  let screenRecordingGrantedAtLaunch = ScreenCaptureService.checkPermission()
   @Published var hasBluetoothPermission = false
 
   // Track last notification settings for change detection (avoid duplicate analytics)

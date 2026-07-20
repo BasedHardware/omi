@@ -1,0 +1,3 @@
+{
+  "change": "Fixed onboarding opening System Settings (and the drag helper) for Screen Recording and Disk Access even when the permission was already granted"
+}

@@ -35,6 +35,7 @@ struct DesktopHomeView: View {
   @State private var isSidebarCollapsed: Bool = true
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
   @AppStorage("onboardingStep") private var onboardingStep = 0
+  @AppStorage("onboardingFurthestStep") private var onboardingFurthestStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
@@ -340,6 +341,7 @@ struct DesktopHomeView: View {
               resetSessionScopedStartupWarmups(preserveCrispReadState: false)
               appState.hasCompletedOnboarding = false
               onboardingStep = 0
+              onboardingFurthestStep = 0
               onboardingJustCompleted = false
               appState.stopTranscription()
             }
