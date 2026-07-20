@@ -4,8 +4,8 @@ import XCTest
 @testable import Omi_Computer
 
 final class RewindDeviceNameTests: XCTestCase {
-  private var testUserId: String!
-  private var userDir: URL!
+  private var testUserId = ""
+  private var userDir: URL?
 
   override func setUp() async throws {
     try await super.setUp()
@@ -15,8 +15,9 @@ final class RewindDeviceNameTests: XCTestCase {
     await RewindDatabase.shared.configure(userId: testUserId)
     try await RewindDatabase.shared.initialize()
 
-    let appSupport = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let appSupport = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+      "Application Support directory should be available")
     userDir =
       appSupport
       .appendingPathComponent("Omi", isDirectory: true)
@@ -108,10 +109,15 @@ final class RewindDeviceNameTests: XCTestCase {
           """,
         arguments: ["2026-06-26T20:00:00Z", "Safari", "GitHub", "review thread", embedding, deviceName, clientDeviceId])
 
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId FROM sync_rows"
-      )!
+      guard
+        let row = try Row.fetchOne(
+          db,
+          sql:
+            "SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId FROM sync_rows"
+        )
+      else {
+        throw RewindDeviceNameTestError.missingRow
+      }
       guard let payload = ScreenActivitySyncService.payloadRow(from: row) else {
         throw RewindDeviceNameTestError.missingPayload
       }
@@ -122,4 +128,5 @@ final class RewindDeviceNameTests: XCTestCase {
 
 private enum RewindDeviceNameTestError: Error {
   case missingPayload
+  case missingRow
 }
