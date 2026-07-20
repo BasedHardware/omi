@@ -99,6 +99,21 @@ async function main() {
     )
     log('app up, e2e voice hook + arbiter probes present')
 
+    // Route ALL of this probe's spoken output to VB-Audio Virtual Cable ("CABLE
+    // Input") when present, so the two "allow" checks below are INAUDIBLE on the
+    // physical speakers (this instance shares the host's default audio device). The
+    // core deny checks emit no audio at all; this only silences the confirmation
+    // clips. Falls back to the default device (audible) when the cable isn't
+    // installed — logged so it's never a silent assumption.
+    const outputs = await page.evaluate(() => globalThis.__omiVoice.listOutputs())
+    const cable = outputs.find((d) => /cable input|vb-audio/i.test(d.label))
+    if (cable) {
+      await page.evaluate((id) => globalThis.__omiVoice.setOutputDevice(id), cable.deviceId)
+      log(`routed spoken output to virtual sink: "${cable.label}" (inaudible)`)
+    } else {
+      log('NOTE: VB-Cable "CABLE Input" not found — confirmation clips play on the default device')
+    }
+
     // Baseline: nothing realtime is audible.
     const idle = await page.evaluate(() => globalThis.__omiVoice.isRealtimeAudible())
     check('no realtime lane audible at rest', idle === false, `isRealtimeAudible=${idle}`)
