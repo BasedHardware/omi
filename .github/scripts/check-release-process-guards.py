@@ -102,6 +102,10 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
     if "desktop_qualify_beta.yml" not in desktop_workflow_body:
         errors.append("desktop release must dispatch the trusted macOS qualification workflow")
+    if "if ! gh workflow run desktop_qualify_beta.yml" not in desktop_workflow_body:
+        errors.append("desktop qualification handoff must not fail a published candidate on a transient dispatch error")
+    if "candidate remains non-live" not in desktop_workflow_body:
+        errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
     if "docker info" in desktop_workflow_body:
         errors.append("Codemagic desktop release must not run Docker-backed beta qualification")
     if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
