@@ -1048,15 +1048,14 @@ final class ImportConnectorStatusStore: ObservableObject {
 
   private func refreshAppleEventKitMetrics(source: AppleEventKitSource, connectorID: String) async {
     let status = await AppleEventKitReaderService.shared.connectionStatus(for: source)
+    applyAppleEventKitStatus(status, connectorID: connectorID)
+  }
+
+  func applyAppleEventKitStatus(_ status: AppleEventKitConnectionStatus, connectorID: String) {
     switch status {
-    case .connected(let itemCount):
+    case .connected:
       var metrics = metricsByID[connectorID] ?? ConnectorMetrics()
-      metrics.sourceCount = itemCount
       metrics.availabilityText = "Local access verified"
-      defaults.set(
-        itemCount,
-        forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: connectorID)
-      )
       defaults.set(
         "Local access verified",
         forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: connectorID)
@@ -1064,7 +1063,10 @@ final class ImportConnectorStatusStore: ObservableObject {
       metricsByID[connectorID] = metrics
     case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
       log("ImportConnectorStatusStore: \(connectorID) refresh unavailable code=\(reasonCode)")
-      clearStoredMetrics(for: connectorID)
+      var metrics = metricsByID[connectorID] ?? ConnectorMetrics()
+      metrics.availabilityText = nil
+      defaults.removeObject(forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: connectorID))
+      metricsByID[connectorID] = metrics
     }
   }
 
