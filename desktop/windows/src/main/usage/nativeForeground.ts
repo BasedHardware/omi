@@ -42,6 +42,7 @@ function load(): Win32 | null {
   if (cached) return cached
   if (loadFailed) return null
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const koffi = require('koffi') as typeof import('koffi')
     const user32 = koffi.load('user32.dll')
     const kernel32 = koffi.load('kernel32.dll')

@@ -43,6 +43,7 @@ function load(): Advapi | null {
   if (advapi) return advapi
   if (loadFailed) return null
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const koffi = require('koffi') as typeof import('koffi')
     const lib = koffi.load('advapi32.dll')
     advapi = {
