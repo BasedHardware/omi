@@ -13,6 +13,7 @@ import {
   type NodePosition
 } from '../../lib/useGraphSimulation'
 import { nodeColor } from './nodeColor'
+import { FirstContentFrame } from './FirstContentFrame'
 import { topRankedIds, DEFAULT_LABEL_TOPK } from '../../lib/graphDisplay'
 import { useWebglRecovery } from '../../lib/useWebglRecovery'
 import { BrainGraphFallback } from './BrainGraphFallback'
@@ -38,6 +39,15 @@ export type BrainGraphProps = {
   // the cheapest available "first frame is imminent" signal. Callers use this
   // to swap a loading placeholder for the canvas without guessing at timing.
   onReady?: () => void
+  // Fired once the scene has PAINTED A FRAME WITH THE REAL LAID-OUT GRAPH — the
+  // first render loop where the node set is populated (positions seeded, camera
+  // framed). This is the correct "safe to reveal" signal: onReady/onCreated fire
+  // when the renderer exists but before any content is drawn, so a caller that
+  // crossfades on onReady shows the raw warmup (an origin placeholder dot, the
+  // pre-layout blank, the fly-in's first frames) instead of a clean entry. Also
+  // fired when the static fallback is shown (a dead GPU/chunk has no frames), so
+  // a caller gating solely on this still reveals that surface.
+  onPresentable?: () => void
   // Fired whenever the canvas mounts/unmounts under pauseWhenHidden (e.g. the
   // host tab going hidden then shown again tears down and recreates the WebGL
   // context). A caller tracking readiness from onReady alone would otherwise
@@ -520,7 +530,8 @@ function GraphScene({
   interactive,
   shuffleKey,
   frameLoop = 'always',
-  labelMode = 'all'
+  labelMode = 'all',
+  onPresentable
 }: BrainGraphProps): React.JSX.Element {
   // The interactive full-screen brain map runs the layout in 3D (OrbitControls lets
   // the user rotate to read depth, mirroring macOS's SceneKit MemoryGraphPage); the
@@ -576,9 +587,15 @@ function GraphScene({
     }
   }, [shuffleKey, sim, reduced, frameLoop, invalidate])
 
+  // Repaint on demand whenever the scene's content changes — the graph prop AND
+  // the derived `nodes` list. `nodes` matters because it lands one commit AFTER
+  // setGraph (useGraphSimulation sets it from a state update), and in demand mode
+  // nothing else invalidates for it: without this the first frame carrying the
+  // real node set never paints on its own, so the fly-in stalls and the
+  // first-content-frame signal (FirstContentFrame → onPresentable) fires late.
   useEffect(() => {
     if (frameLoop === 'demand') invalidate()
-  }, [graph, frameLoop, invalidate])
+  }, [graph, nodes, frameLoop, invalidate])
 
   // Diagnostic: publish the count of nodes actually fed to the scene so the perf
   // harness can assert the cap round-trip (Show all → Show key drops it back).
@@ -614,6 +631,7 @@ function GraphScene({
 
   return (
     <>
+      <FirstContentFrame ready={nodes.length > 0} onFire={onPresentable} />
       <ambientLight intensity={0.8} />
       <directionalLight position={[200, 300, 400]} intensity={0.6} />
       {/* Depth fog in 3D so far spheres/edges recede — a depth cue for the mesh
@@ -790,10 +808,14 @@ export function BrainGraph({
   frameLoop = 'always',
   onReady,
   onVisibleChange,
+  onPresentable,
   labelMode = 'all'
 }: BrainGraphProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(true)
+  const onPresentableRef = useRef(onPresentable)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (onPresentable is passed as an inline callback; keeps the fallback path from re-firing on identity changes)
+  onPresentableRef.current = onPresentable
   // Latest-ref so the effect below can depend on just `showCanvas` (only fire
   // on real transitions) without also re-firing whenever a caller passes a
   // new inline callback identity on every render.
@@ -961,9 +983,11 @@ export function BrainGraph({
     reportMode(false, 'renderer_init_failed')
     setRenderFailed(true) // arm the heal loop
     // The static mark IS the finished surface in this mode. Callers gate a loading
-    // placeholder on onReady (Memories crossfades on it), so without this the mark
-    // would sit invisible behind a spinner until their bounded timeout.
+    // placeholder on onReady/onPresentable (Memories crossfades on onPresentable),
+    // so without this the mark would sit invisible behind a spinner until their
+    // bounded timeout — there is no render loop to fire onPresentable from.
     onReadyRef.current?.()
+    onPresentableRef.current?.()
   }, [reportMode])
 
   const handleCreated = useCallback((): void => {
@@ -1005,6 +1029,7 @@ export function BrainGraph({
               shuffleKey={shuffleKey}
               frameLoop={frameLoop}
               labelMode={labelMode}
+              onPresentable={onPresentable}
             />
           </Canvas>
         </ErrorBoundary>

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Search, Maximize2 } from 'lucide-react'
-import type { KnowledgeGraph } from '../../../shared/types'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -28,13 +27,6 @@ import { auth } from '../lib/firebase'
 // filtering/selection still operate on the full (filtered) set, not just what's
 // rendered.
 const RENDER_CAP = 400
-
-// Stable empty graph fed to the preview until its data has settled, so BrainGraph
-// runs exactly ONE layout pass — of the final merged graph — instead of laying out
-// each intermediate (floor-only, then floor+server-KG) as they load. A module-level
-// constant keeps the reference stable across renders (a fresh {} each render would
-// re-trigger the sim's setGraph every time).
-const EMPTY_GRAPH: KnowledgeGraph = { nodes: [], edges: [] }
 
 const emptyCategorySet = (): Set<MemoryCategory> => new Set<MemoryCategory>()
 
@@ -66,47 +58,54 @@ export function Memories(): React.JSX.Element {
     () => capGraph(brainGraph, DEFAULT_NODE_CAP, centerNodeId),
     [brainGraph, centerNodeId]
   )
-  // Reveal the map only once it is READY TO SHOW ITS FINAL FORM, not the moment
-  // the WebGL canvas is created. Two independent signals gate the crossfade:
+  // Reveal the map only once the graph has actually PAINTED ITS FINAL FORM — not
+  // when the data resolved, and not when the WebGL renderer was created. The gate:
   //
-  //  - settled: every source the graph merges has resolved — the memory list
-  //    (useMemories), the onboarding floor, and the server KG (both via
-  //    useMemoryGraph.loading). Revealing on canvas-creation instead let the user
-  //    watch the graph churn through intermediate states as those loaded in turn
-  //    (floor-only, then floor+server-KG, then re-scoped) — the reported "glitches
-  //    into different views". Holding the loader until they settle means the first
-  //    thing shown is the final graph, flying in once. Stays settled once resolved
-  //    (dataLoading is monotonic), so a later background revalidation swaps in place
-  //    rather than dropping back to the loader.
-  //  - canvasLive: BrainGraph reported a live WebGL context (onReady) — the canvas
-  //    can actually paint. Reset to false when we tear the preview canvas down (see
-  //    the teardown effect) so a revisit falls back to the loader until the fresh
-  //    canvas is ready, rather than crossfading straight to a blank pane.
+  //  - presentable: BrainGraph rendered a frame containing the real laid-out graph
+  //    (onPresentable). This is the load-bearing fix. Revealing on canvas creation
+  //    (onReady/onCreated) instead uncovered the raw warmup — the renderer exists
+  //    but has drawn nothing, so the crossfade exposed the origin placeholder dot,
+  //    a blank/black card, and the fly-in's first frames. On the warm/cached path
+  //    onReady fires almost immediately, so the loader hid before ANY content was
+  //    on screen (Chris: "no loader → dot → flashes → blackout → then the fly-in").
+  //    Gating on the first CONTENT frame means the first thing ever visible is the
+  //    graph doing its entry animation, nothing before it.
+  //  - showFinalGraph gates whether the canvas is MOUNTED AT ALL: no BrainGraph
+  //    until the data has settled (memory list + onboarding floor + server KG, via
+  //    useMemoryGraph.loading). So there is no live WebGL context during the loader
+  //    phase — nothing to throw transiently on a flaky GPU and force a reveal over a
+  //    black canvas — and the sim lays out (and flies in) the final set exactly
+  //    once, never an intermediate.
   //
-  // revealForced is the bounded fallback that keeps the loader from latching
-  // forever, and it forces the FULL reveal (both axes), not just `settled`: if the
-  // lazy 3D chunk fails to load, LazyBrainGraph renders its static fallback and
-  // onReady never fires, so canvasLive would stay false and the placeholder would
-  // sit on top of that fallback indefinitely. Once the data has settled only the
-  // canvas is outstanding, so force the reveal soon after; before then wait longer
-  // (a slow fetch is legitimate — revealing early would flash a partial graph).
+  // revealForced is the bounded fallback so the loader can't latch forever: if the
+  // lazy 3D chunk fails to load, or the GPU can't make a context, there is no
+  // render loop to fire onPresentable — BrainGraph's static fallback fires it
+  // directly, but as a belt-and-suspenders we also force the reveal on a timer.
+  // Kept generous so a slow-but-succeeding load is never pre-empted with a
+  // not-yet-painted view: 10s once the data has settled (only the paint is
+  // outstanding), 15s before then (a slow fetch is legitimate).
   const hasGraph = brainGraph.nodes.length > 0
-  const [canvasLive, setCanvasLive] = useState(false)
+  const [presentable, setPresentable] = useState(false)
   const [revealForced, setRevealForced] = useState(false)
   // dataLoading is monotonic (each source flips true→false once and never back —
   // revalidation/refetch don't re-raise it), so `settled` needs no latch.
   const dataLoading = loading || graphLoading
   const settled = !dataLoading
-  const normalReady = canvasLive && settled
   useEffect(() => {
-    if (normalReady || revealForced || !hasGraph) return
-    const t = setTimeout(() => setRevealForced(true), settled ? 4000 : 15000)
+    if (presentable || revealForced || !hasGraph) return
+    // Long, last-resort only: normally `presentable` fires first — on the first
+    // painted content frame, or immediately via the fallback paths if the chunk /
+    // GPU is dead. This just guarantees the loader can't latch forever if the data
+    // never settles (before-settled) or nothing ever paints (after-settled). Kept
+    // generous so a slow-but-succeeding load (lazy chunk fetch + ~1s layout can run
+    // several seconds after settle) is never pre-empted with a not-yet-painted view.
+    const t = setTimeout(() => setRevealForced(true), settled ? 10000 : 15000)
     return () => clearTimeout(t)
-  }, [normalReady, revealForced, hasGraph, settled])
-  const graphReady = normalReady || revealForced
-  // Feed the settled graph once we're ready to show it (data settled, or the
-  // fallback forced the reveal); until then EMPTY so the sim lays the final set
-  // out exactly once.
+  }, [presentable, revealForced, hasGraph, settled])
+  const graphReady = presentable || revealForced
+  // Mount the canvas (and feed the final graph) once we're ready to show it — data
+  // settled, or the fallback forced the reveal. Before that the canvas isn't mounted
+  // at all (see above), so the loader has no live GL context behind it.
   const showFinalGraph = settled || revealForced
 
   // Mount the preview's WebGL canvas for as long as the Memories route is active,
@@ -133,15 +132,15 @@ export function Memories(): React.JSX.Element {
     return () => clearTimeout(t)
   }, [previewRouteActive])
 
-  // Reset canvasLive whenever the canvas is actually torn down — the route teardown
-  // above, or the card's hasGraph gate dropping it — so a later remount re-earns
-  // onReady instead of us crossfading over a fresh, not-yet-painted canvas (stale
-  // canvasLive=true → a blank flash on remount). The cleanup runs on the unmount
-  // transition; the effect body sets no state.
+  // Reset `presentable` whenever the canvas is actually torn down — the route
+  // teardown above, or the card's hasGraph gate dropping it — so a later remount
+  // re-earns its first-content-frame instead of us crossfading over a fresh,
+  // not-yet-painted canvas (stale presentable=true → the exact blank flash this
+  // fix removes). The cleanup runs on the unmount transition; body sets no state.
   useEffect(() => {
-    if (!(mountPreview && hasGraph)) return
-    return () => setCanvasLive(false)
-  }, [mountPreview, hasGraph])
+    if (!(mountPreview && showFinalGraph)) return
+    return () => setPresentable(false)
+  }, [mountPreview, showFinalGraph])
 
   // Revalidate when the window regains focus, so memories the backend distilled
   // from new conversations during the session show up on return without an app
@@ -549,13 +548,17 @@ export function Memories(): React.JSX.Element {
               <div
                 className={`h-full w-full transition-opacity duration-500 ${graphReady ? 'opacity-100' : 'opacity-0'}`}
               >
-                {mountPreview && (
+                {mountPreview && showFinalGraph && (
                   <BrainGraph
-                    // Feed the final graph only once we're ready to show it; until
-                    // then an empty graph, so the sim lays out the final node set
-                    // exactly once (and flies it in once) at reveal, rather than
-                    // laying out each intermediate as floor/server-KG load in.
-                    graph={showFinalGraph ? previewGraph : EMPTY_GRAPH}
+                    // Mount the canvas ONLY once the data is ready to show, and feed
+                    // it the final graph directly. Mounting an empty canvas earlier
+                    // (to pre-warm it during the fetch) meant a live WebGL context
+                    // existed all through the loader phase — and under a flaky GPU
+                    // its creation can throw, whose failure path would crossfade the
+                    // loader away over a black, still-recovering canvas. No canvas
+                    // before there's real content to lay out = no such blackout, and
+                    // the sim still lays the final set out (and flies it in) once.
+                    graph={previewGraph}
                     centerNodeId={centerNodeId}
                     interactive={false}
                     labelMode="declutter"
@@ -564,12 +567,14 @@ export function Memories(): React.JSX.Element {
                     // the canvas down mid-load on the transient 0×0 during layout.
                     pauseWhenHidden={false}
                     frameLoop="demand"
-                    onReady={() => setCanvasLive(true)}
-                    // Still fires on a WebGL context loss (independent of
-                    // pauseWhenHidden): drop back to the loader while
-                    // useWebglRecovery remounts the canvas, then onReady re-reveals.
+                    // Reveal only once a real content frame has painted (not on
+                    // canvas creation) — see the graphReady comment above.
+                    onPresentable={() => setPresentable(true)}
+                    // Fires on a WebGL context loss (independent of pauseWhenHidden):
+                    // drop back to the loader while useWebglRecovery remounts the
+                    // canvas, then onPresentable re-reveals once it repaints content.
                     onVisibleChange={(v) => {
-                      if (!v) setCanvasLive(false)
+                      if (!v) setPresentable(false)
                     }}
                   />
                 )}
