@@ -2547,6 +2547,15 @@ actor RewindDatabase {
       }
     }
 
+    // Legacy and rebuilt screenshots cannot safely assert an originating machine.
+    // New captures retain a display name and the canonical memory device identity.
+    migrator.registerMigration("addScreenshotDeviceProvenance") { db in
+      try db.alter(table: "screenshots") { t in
+        t.add(column: "deviceName", .text)
+        t.add(column: "clientDeviceId", .text)
+      }
+    }
+
     try migrator.migrate(queue)
   }
 
