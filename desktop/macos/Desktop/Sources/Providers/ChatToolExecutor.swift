@@ -228,10 +228,33 @@ class ChatToolExecutor {
         toolCall.arguments,
         expectedOwnerID: expectedOwnerID)
 
-    case .deleteTask:
-      return await executeDeleteTask(
+    case "manage_agent_pills":
+      return await executeManageAgentPills(toolCall.arguments)
+
+    case "setup_agent_provider":
+      return await executeSetupAgentProvider(
         toolCall.arguments,
-        expectedOwnerID: expectedOwnerID)
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
+
+    case "execute_sql":
+      return await executeSQL(toolCall.arguments)
+
+    case "semantic_search", "search_screen_history":
+      return await executeSemanticSearch(toolCall.arguments)
+
+    case "get_daily_recap":
+      return await executeDailyRecap(toolCall.arguments)
+
+    case "search_tasks":
+      return await executeSearchTasks(toolCall.arguments)
+
+    case "complete_task":
+      return await executeCompleteTask(toolCall.arguments)
+
+    case "delete_task":
+      return await executeDeleteTask(toolCall.arguments)
 
     // Onboarding tools
     case .requestPermission:
@@ -1011,7 +1034,85 @@ class ChatToolExecutor {
       await retryUnsyncedTasks()
       guard ownerIsCurrent(expectedOwnerID) else { return false }
     }
-    return true
+    if originatingClientScope == AgentLegacyClientScope.floatingPill {
+      return
+        "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
+    }
+    let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !brief.isEmpty else {
+      return "Error: Missing brief. Pass a clear, self-contained task brief."
+    }
+    let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let providerName = AgentPillsManager.DirectedProvider.normalizedRawValue(args["provider"] as? String)
+    if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
+      return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
+    }
+    let directedProvider = AgentPillsManager.DirectedProvider(rawValue: providerName)
+    if let directedProvider {
+      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
+      guard availability.isAvailable else {
+        return availability.toolError
+      }
+    }
+    let model =
+      ShortcutSettings.shared.selectedModel.isEmpty
+      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+    guard
+      let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
+        .init(
+          originalUserText: brief,
+          brief: brief,
+          title: (title?.isEmpty == false) ? title : directedProvider?.displayName,
+          spokenAck: nil,
+          directedProvider: directedProvider,
+          validateAgainstOriginalUserText: false
+        ),
+        model: model,
+        fromVoice: false
+      )
+    else {
+      return
+        "Error: Missing self-contained brief. Pass a clear task with enough context for a background agent to execute independently."
+    }
+    return """
+      Agent started as a floating agent pill.
+      id: \(pill.id.uuidString)
+      title: \(pill.title)
+      status: \(pill.status.displayLabel)
+      """
+  }
+
+  /// Install a missing local agent provider through the deterministic
+  /// LocalAgentProviderInstaller: a native confirmation dialog showing the
+  /// exact command is the REAL consent gate, then code runs the official
+  /// install command via Process and verifies with the shared detector — no
+  /// installer agent, so a prompt-injected call can never execute anything
+  /// by itself. Idempotent for already-installed providers.
+  private static func executeSetupAgentProvider(
+    _ args: [String: Any],
+    originatingChatMode: ChatMode?,
+    originatingClientScope: String?
+  ) async -> String {
+    if originatingChatMode == .ask {
+      return
+        "Error: setup_agent_provider is unavailable in Ask mode. Switch to Act mode before installing an agent provider."
+    }
+    if originatingClientScope == AgentLegacyClientScope.floatingPill {
+      return "Error: setup_agent_provider is unavailable from an existing floating background agent."
+    }
+    let providerName = AgentPillsManager.DirectedProvider.normalizedRawValue(args["provider"] as? String)
+    guard let provider = AgentPillsManager.DirectedProvider(rawValue: providerName) else {
+      return "Error: \(AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName))"
+    }
+    return LocalAgentProviderInstaller.shared.beginInstall(for: provider)
+  }
+
+  private static func executeManageAgentPills(_ args: [String: Any]) async -> String {
+    let action = ((args["action"] as? String) ?? "list")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let agentId = (args["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return AgentPillsManager.shared.manage(action: action, agentId: agentId)
   }
 
   // MARK: - Local Status

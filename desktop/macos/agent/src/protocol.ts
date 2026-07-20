@@ -626,6 +626,8 @@ export interface RuntimeFailurePayload {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  /** "startup" only when the runtime proved execution never began (see runtime/failures.ts). */
+  phase?: "startup" | "execution";
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {

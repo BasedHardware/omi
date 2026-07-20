@@ -69,6 +69,9 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   // the Node bridge; forwarding it lets the spawned `hermes acp` subprocess
   // locate its config/state instead of falling back to defaults.
   "HERMES_HOME",
+  // codex-acp reads Codex config/auth from CODEX_HOME (default ~/.codex via
+  // HOME); forward it so users with a custom Codex home keep their auth.
+  "CODEX_HOME",
 ] as const;
 
 /**
@@ -245,9 +248,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.envCommandName = options.envCommandName;
     this.sessionMcpServersMode = options.sessionMcpServersMode ?? "passthrough";
     this.supportsSessionSetModel = options.supportsSessionSetModel ?? this.capabilities.supportsModelSwitching;
+    // External command-based adapters (those activated via an env command) get
+    // a progress watchdog by default; the bundled Claude adapter does not.
     this.noProgressTimeoutMs = options.noProgressTimeoutMs
       ?? parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS)
-      ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
+      ?? (this.envCommandName ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
   }
 
   async start(): Promise<void> {

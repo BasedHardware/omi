@@ -1,0 +1,3 @@
+{
+  "change": "When you don't name a specific agent, Omi now picks OpenClaw, Hermes, or Codex based on the task — and if the chosen provider fails to start, automatically retries with the next available one before falling back to Omi's own agent"
+}

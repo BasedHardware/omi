@@ -1,0 +1,3 @@
+{
+  "change": "A system wake or a just-finished agent install no longer interrupts a voice command in progress — the session refresh now waits until your turn ends instead of cutting off your audio or being skipped"
+}

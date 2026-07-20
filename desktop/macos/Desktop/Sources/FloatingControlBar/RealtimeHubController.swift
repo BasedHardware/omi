@@ -905,6 +905,38 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  /// Rewarm request that arrived mid PTT capture — retried at the clean
+  /// end-of-turn points (hubDidFinishTurn / cancelTurn). Any teardownSession
+  /// clears it: the rebuild that follows is what the deferred request wanted.
+  private var pendingRewarmReason: String?
+
+  /// Shared idle-only "drop and rebuild the warm session" used by discrete
+  /// refresh events. Only acts when idle: a live session exists and we're
+  /// neither mid-reply, mid-mint, nor mid barge-in replacement, so this never
+  /// interrupts an active turn or races a connect already in flight. A request
+  /// landing mid PTT capture (voice UI listening) is deferred to the end of
+  /// the voice turn, not dropped: tearing down now would cut the audio being
+  /// spoken, but skipping outright could leave a possibly-stale socket alive
+  /// with no recovery (e.g. system wake during locked listening). teardown
+  /// forces session=nil so ensureWarm() rebuilds (it would otherwise treat
+  /// the stale socket as already-warm and no-op).
+  private func forceRewarm(reason: String) {
+    guard session != nil, !responding, !minting, !bargeInReplacementInFlight else { return }
+    if barState?.isVoiceListening == true {
+      pendingRewarmReason = reason
+      return
+    }
+    log("RealtimeHub: \(reason) — re-warming session")
+    teardownSession()
+    ensureWarm()
+  }
+
+  /// Retry a rewarm deferred by forceRewarm once the voice turn has ended.
+  private func firePendingRewarm() {
+    guard let reason = pendingRewarmReason else { return }
+    forceRewarm(reason: reason)
+  }
+
   /// Headless E2E for the PTT language path: drives the REAL controller turn flow
   /// (beginTurn → paced feedAudio → commitTurn → turn-done) with a PCM file, so the
   /// early language ID, the provider hint, and the bubble fallback run exactly as a
@@ -1346,12 +1378,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// System woke from sleep — proactively replace a possibly-stale socket so the first PTT
   /// after sleep doesn't hit a zombie session (commit → no reply → no fallback → hang).
-  /// Only acts when idle: a live session exists and we're neither mid-reply nor mid-mint, so
-  /// this never interrupts an active turn or races a connect already in flight. teardown
-  /// forces session=nil so ensureWarm() rebuilds (it would otherwise treat the stale socket
-  /// as already-warm and no-op).
   @objc private func systemDidWake() {
-    requestSessionHandoff(reason: .systemWake)
+    forceRewarm(reason: "system woke (dropping possibly-stale socket)")
+  }
+
+  /// A local agent provider was just installed (or removed) — re-warm the
+  /// session so the tool schema enum and provider instruction, both computed
+  /// at session start, pick up the change. When a turn is in flight the
+  /// change simply lands on the next reconnect.
+  func refreshForLocalAgentProviderChange() {
+    forceRewarm(reason: "local agent provider availability changed")
   }
 
   /// Voice languages changed: prewarm the LID model (a 1→2 language change would
@@ -1368,10 +1404,571 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     resetFailoverForProviderSettingsChange()
     // Only reconnect if the provider actually changed — avoids redundant
     // teardown/recreate races on unrelated notifications.
-    if session != nil, sessionProvider == RealtimeHubSettings.shared.provider,
-      RealtimeHubOwnerFence.canReuseWarmSession(
-        sessionOwner: sessionOwnerScope,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId())
+    if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
+    teardownSession()
+    refreshAboutUserCard()
+    ensureWarm()
+  }
+
+  // MARK: - Warm session lifecycle (kept open between turns)
+
+  /// Open the WS now if it isn't already (no-op if already warm). BYOK → connect
+  /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
+  /// ephemeral token and connect with it.
+  func ensureWarm() {
+    let provider = effectiveProvider
+    if session != nil, sessionProvider == provider { return }
+    if session != nil { teardownSession() }
+
+    if let key = APIKeyService.byokKey(provider.byokProvider) {
+      let fingerprint = APIKeyService.byokFingerprint(key)
+      guard CredentialHealthManager.shared.canUseBYOK(provider: provider.byokProvider, fingerprint: fingerprint) else {
+        log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
+        if failoverToAlternateProvider() {
+          return
+        } else if AuthService.shared.isSignedIn {
+          mintAndConnect(provider: provider)
+        } else {
+          CredentialHealthManager.shared.recordProviderFailure(
+            .providerAuthFailed(provider: provider, mode: .byok),
+            provider: provider,
+            authMode: .byok,
+            fingerprint: fingerprint,
+            context: "realtime_byok_blocked")
+        }
+        return
+      }
+      startSession(provider: provider, auth: .byokKey(key))
+    } else if AuthService.shared.isSignedIn {
+      mintAndConnect(provider: provider)
+    } else {
+      log("RealtimeHub: no BYOK key and not signed in — hub unavailable (cascade).")
+    }
+  }
+
+  /// Managed users: fetch a short-lived ephemeral token from the backend (gated by
+  /// auth + paywall there), then connect. On any failure (incl. 402 not-entitled),
+  /// leave the session nil so PTT falls back to the cascade.
+  private func mintAndConnect(provider: RealtimeHubProvider) {
+    guard !minting else { return }
+    minting = true
+    let providerParam = provider == .openai ? "openai" : "gemini"
+    log("RealtimeHub: minting ephemeral \(provider.displayName) token (managed)")
+    Task { [weak self] in
+      guard let self else { return }
+      let token: String
+      do {
+        token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      } catch let error as CredentialHealthError {
+        self.minting = false
+        CredentialHealthManager.shared.record(error, context: "realtime_mint")
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: error.failureClass.logValue,
+          phase: "warm",
+          httpStatusCode: error.failureClass.httpStatusCode)
+        if error.failureClass.isAccountWide {
+          log("RealtimeHub: account credential failure during mint — staying on cascade")
+        } else if !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
+        }
+        return
+      } catch {
+        self.minting = false
+        let typed = CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
+        CredentialHealthManager.shared.record(typed, context: "realtime_mint")
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: "backend_transient",
+          phase: "warm")
+        if !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
+        }
+        return
+      }
+      self.minting = false
+      // Provider may have changed (picker/failover) while minting; only connect if still wanted.
+      guard self.effectiveProvider == provider, self.session == nil
+      else { return }
+      self.startSession(provider: provider, auth: .ephemeral(token))
+      if self.pendingBargeInReplacement != nil {
+        self.finishBargeInReplacementAfterSessionStart(provider: provider)
+      }
+    }
+  }
+
+  private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
+    let topLevelContext = combinedTopLevelVoiceContinuityContext()
+    let instructions = RealtimeHubTools.systemInstruction(
+      aboutUser: aboutUserCard,
+      topLevelConversationContext: topLevelContext,
+      userLanguages: AssistantSettings.shared.voiceBaseLanguages)
+    let s = RealtimeHubSession(provider: provider, auth: auth, instructions: instructions, delegate: self)
+    lastWarmAt = nil
+    hubConnected = false
+    session = s
+    sessionProvider = provider
+    sessionAuth = auth
+    // A brand-new session IS the rebuild a deferred rewarm wanted — also covers
+    // restartSessionForBargeIn, which replaces the session without teardownSession.
+    pendingRewarmReason = nil
+    // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
+    // selected app voice playback handles any no-audio fallback.
+    if pcmPlayer == nil {
+      pcmPlayer = makePCMPlayer()
+    }
+    s.start()
+    log(
+      "RealtimeHub: warming \(provider.displayName) session "
+        + "(\(auth.isEphemeral ? "ephemeral/managed" : "client-direct/BYOK"), "
+        + "continuityTurns=\(voiceContinuityTurns.count), contextChars=\(topLevelContext.count))")
+  }
+
+  private func teardownSession() {
+    // Detach first so a socket we're dropping can't deliver a late error/close to us
+    // and tear down the fresh session we're about to create.
+    session?.detach()
+    session?.stop()
+    session = nil
+    sessionProvider = nil
+    sessionAuth = nil
+    hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
+    clearBargeInReplacementState()
+    pendingRewarmReason = nil  // the rebuild that follows any teardown is what the deferral wanted
+    pendingCompletedAgentDeltaAckIds.removeAll()
+    pendingCompletedAgentDeltaHighWaterMs = nil
+    clearRealtimeToolTracking()
+  }
+
+  private func clearBargeInReplacementState() {
+    pendingBargeInReplacement = nil
+  }
+
+  @discardableResult
+  private func restartSessionForBargeIn() -> Bool {
+    guard let provider = sessionProvider, let auth = sessionAuth else { return false }
+    session?.detach()
+    session?.stop()
+    session = nil
+    sessionProvider = nil
+    sessionAuth = nil
+    hubConnected = false
+    pendingBargeInReplacement = PendingBargeInReplacementTurn()
+    switch auth {
+    case .byokKey:
+      startReplacementSessionForBargeIn(provider: provider, auth: auth)
+    case .ephemeral:
+      remintReplacementSessionForBargeIn(provider: provider)
+    }
+    return true
+  }
+
+  private func remintReplacementSessionForBargeIn(provider: RealtimeHubProvider) {
+    guard !minting else {
+      log("RealtimeHub[\(provider.displayName)]: barge-in replacement queued behind existing token mint")
+      return
+    }
+    minting = true
+    let providerParam = provider == .openai ? "openai" : "gemini"
+    log("RealtimeHub[\(provider.displayName)]: minting fresh token for barge-in replacement")
+    Task { [weak self] in
+      guard let self else { return }
+      guard self.pendingBargeInReplacement != nil else {
+        self.minting = false
+        return
+      }
+      guard self.effectiveProvider == provider, self.session == nil else {
+        self.minting = false
+        self.clearBargeInReplacementState()
+        self.ensureWarm()
+        return
+      }
+      let token: String
+      do {
+        token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      } catch let error as CredentialHealthError {
+        self.minting = false
+        CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: error.failureClass.logValue,
+          phase: "barge_in_replacement",
+          httpStatusCode: error.failureClass.httpStatusCode)
+        self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
+        if self.shouldFailoverToAlternate(for: error.failureClass), self.failoverToAlternateProvider() {
+          return
+        } else if !error.failureClass.isAccountWide {
+          log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
+        }
+        return
+      } catch {
+        self.minting = false
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: "backend_transient",
+          phase: "barge_in_replacement")
+        self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
+        log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
+        return
+      }
+      self.minting = false
+      self.startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))
+    }
+  }
+
+  private func startReplacementSessionForBargeIn(provider: RealtimeHubProvider, auth: HubAuth) {
+    startSession(provider: provider, auth: auth)
+    finishBargeInReplacementAfterSessionStart(provider: provider)
+  }
+
+  private func finishBargeInReplacementAfterSessionStart(provider: RealtimeHubProvider) {
+    guard var pending = pendingBargeInReplacement else { return }
+    pendingBargeInReplacement = nil
+    if pending.pendingBegin {
+      pending.pendingBegin = false
+      session?.beginInputTurn(interrupting: false)
+    }
+    if provider == .gemini, let speculativeScreenshot {
+      session?.sendVideoFrame(speculativeScreenshot, mime: "image/jpeg")
+    }
+    flushBargeInReplacementAudioBuffer(pending.audioBuffer)
+    if pending.pendingCommit {
+      pending.pendingCommit = false
+      session?.commitInputTurn()
+    }
+  }
+
+  private func failBargeInReplacement(provider: RealtimeHubProvider, reason: String) {
+    let hadCommittedTurn = pendingBargeInReplacement?.pendingCommit == true
+    clearBargeInReplacementState()
+    guard hadCommittedTurn else { return }
+    log("RealtimeHub[\(provider.displayName)]: barge-in replacement failed after commit — \(reason)")
+    responding = false
+    realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
+    pcmPlayer?.stop()
+    responseGlowGate.clearImmediately()
+    exitVoiceUI(clearResponseGlow: true)
+  }
+
+  private func flushBargeInReplacementAudioBuffer(_ bufferedChunks: [Data]) {
+    guard let s = session, !bufferedChunks.isEmpty else { return }
+    for pcm16k in bufferedChunks {
+      sendAudio(pcm16k, to: s)
+    }
+  }
+
+  private func makePCMPlayer() -> StreamingPCMPlayer {
+    let player = StreamingPCMPlayer(sampleRate: 24000)
+    player.onPlaybackScheduled = { [weak self] playbackEpoch in
+      Task { @MainActor in
+        guard let self else { return }
+        self.realtimePlaybackActive = true
+        self.realtimePlaybackEpoch = playbackEpoch
+      }
+    }
+    player.onPlaybackIdle = { [weak self] playbackEpoch in
+      Task { @MainActor in
+        guard let self, self.realtimePlaybackEpoch == playbackEpoch else { return }
+        self.realtimePlaybackActive = false
+        self.clearResponseGlowIfRealtimeAudioIdle()
+      }
+    }
+    return player
+  }
+
+  // MARK: - PTT integration
+
+  /// PTT-down: make sure the socket is warm and reset per-turn state. Captures a
+  /// speculative screenshot in the background (non-blocking) for the screenshot tool.
+  func beginTurn() {
+    // Barge-in: was a reply from the previous turn still in flight when the user
+    // started talking again?
+    let providerResponseInFlight = responding
+    let voicePlaybackActive = FloatingBarVoicePlaybackService.shared.isSpeaking
+    let bargeIn = responding || realtimePlaybackActive || voicePlaybackActive
+    if bargeIn {
+      preserveInterruptedTurnForContinuity()
+    }
+    responding = false
+    realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
+    var replacementSessionOwnsInputTurn = false
+    turnTranscript = ""
+    assistantText = ""
+    speculativeWarmDone = false
+    speculativeScreenshot = nil
+    audioReceivedThisTurn = false
+    turnGeneration &+= 1
+    let screenshotTurnGeneration = turnGeneration
+    suppressAssistantOutputForCurrentTurn = false
+    turnRecorded = false
+    earlyUserMessageShown = false
+    earlyUserMessageId = nil
+    turnEpoch += 1
+    turnAudio16k.removeAll(keepingCapacity: true)
+    earlyLIDTask = nil
+    turnEarlyVerdictCode = nil
+    fullLIDTask = nil
+    testProviderTranscriptOverride = nil  // never leak a test override into a real turn
+    pendingVoiceAgentHandoff = nil
+    pendingCompletedAgentDeltaAckIds.removeAll()
+    pendingCompletedAgentDeltaHighWaterMs = nil
+    clearRealtimeToolTracking()
+    lastTurnAt = Date()
+    if bargeIn {
+      pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
+    }
+    FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+    responseGlowGate.clearImmediately()
+    if providerResponseInFlight {
+      switch session?.bargeInStrategy ?? .inSessionCancel {
+      case .inSessionCancel:
+        // OpenAI exposes an explicit response.cancel path, so the warm socket and
+        // conversation context survive while the next input buffer starts clean.
+        log("RealtimeHub[\(providerTag)]: barge-in — interrupting in-flight reply (same session)")
+        session?.cancelActiveResponse()
+      case .freshSession:
+        // Gemini Live has no reliable in-session cancel for a streaming reply. Reusing
+        // that socket can leave the next PTT turn queued behind the old generation, so
+        // replace the connection and let the fresh session buffer this new turn while it opens.
+        if restartSessionForBargeIn() {
+          replacementSessionOwnsInputTurn = true
+          log("RealtimeHub: barge-in — replacing session for clean next turn")
+        } else {
+          session?.cancelActiveResponse()
+        }
+      }
+    } else if bargeIn {
+      log("RealtimeHub[\(providerTag)]: barge-in — stopping local playback tail")
+    }
+    ensureWarm()  // (re)connect only if the socket idle-closed
+    // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
+    // turn on a warm session; OpenAI no-op).
+    if !replacementSessionOwnsInputTurn {
+      session?.beginInputTurn(interrupting: providerResponseInFlight)
+    }
+    // Capture the screen at turn START and, for Gemini, send it in-turn right away — early
+    // enough that the ~450KB JPEG uploads/decodes during the seconds of speech, so the
+    // model can see it when it answers. A frame attached at commit (PTT-up) lands too late:
+    // the model starts generating before it decodes and answers blind on the first turn
+    // (correct only on the next turn, once the frame is in context). Non-blocking.
+    Task.detached(priority: .utility) {
+      let jpeg = ScreenCaptureManager.captureScreenJPEG()
+      await MainActor.run {
+        guard self.turnGeneration == screenshotTurnGeneration else { return }
+        self.speculativeScreenshot = jpeg
+        if self.sessionProvider == .gemini, let jpeg {
+          self.session?.sendVideoFrame(jpeg, mime: "image/jpeg")
+        }
+      }
+    }
+  }
+
+  private func preserveInterruptedTurnForContinuity() {
+    guard !turnRecorded else { return }
+    let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !heard.isEmpty else { return }
+    let partialReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let interruptedReply: String
+    if partialReply.isEmpty {
+      interruptedReply = "Interrupted before the assistant finished responding."
+    } else {
+      interruptedReply = "\(partialReply)\n\n[Interrupted by the next push-to-talk turn before completion.]"
+    }
+    turnRecorded = true
+    rememberVoiceContinuityTurn(userText: heard, assistantText: interruptedReply, interrupted: true)
+    // Runs synchronously in beginTurn before earlyUserMessageId is reset, so this is
+    // still the interrupted turn's bubble id.
+    FloatingControlBarManager.shared.recordVoiceTurn(
+      userText: heard, assistantText: interruptedReply, earlyUserMessageId: earlyUserMessageId)
+  }
+
+  /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
+  func feedAudio(_ pcm16k: Data) {
+    // Mic chunks arrive on the CoreAudio IOProc thread — @MainActor is NOT enforced
+    // here under minimal concurrency checking. Turn-buffer state is main-isolated, so
+    // hop before touching it (the session send path below is thread-safe: it hops to
+    // the session's own serial queue internally). The hop can land a tail chunk after
+    // commitTurn's snapshot; that only trims the LOCAL fallback transcript, never the
+    // audio sent to the provider.
+    DispatchQueue.main.async { [weak self] in self?.bufferTurnAudio(pcm16k) }
+    guard let s = session else {
+      if pendingBargeInReplacement != nil {
+        pendingBargeInReplacement?.audioBuffer.append(pcm16k)
+      } else {
+        log("RealtimeHub[\(providerTag)]: dropping mic audio because no realtime session owns this turn")
+      }
+      return
+    }
+    sendAudio(pcm16k, to: s)
+  }
+
+  /// Keep a local copy of the turn's audio and kick the early language-ID pass once
+  /// ~1.5 s has accumulated — it runs WHILE the user is still holding the key, so the
+  /// verdict is ready at PTT-up and hinting the provider costs zero perceived latency.
+  /// Skipped for single-language users (no identification needed to pick the hint).
+  private func bufferTurnAudio(_ pcm16k: Data) {
+    guard turnAudio16k.count < Self.maxTurnAudioBytes else { return }
+    turnAudio16k.append(pcm16k)
+    guard earlyLIDTask == nil, turnAudio16k.count >= Self.earlyLIDBytes else { return }
+    let candidates = AssistantSettings.shared.voiceBaseLanguages
+    guard candidates.count > 1 else { return }
+    let audio = Data(turnAudio16k.prefix(Self.earlyLIDBytes * 2))
+    let epoch = turnEpoch
+    let task = Task.detached(priority: .userInitiated) {
+      await PTTLanguageIdentifier.shared.identify(pcm16k: audio, candidates: candidates)
+    }
+    earlyLIDTask = task
+    // Land the verdict back on the turn as soon as it's ready (normally well before
+    // PTT-up). Commit reads it synchronously — no await window, no droppable turn.
+    Task { @MainActor [weak self] in
+      let verdict = await task.value
+      guard let self, self.turnEpoch == epoch else { return }
+      self.turnEarlyVerdictCode = verdict.languageCode
+    }
+  }
+
+  private func sendAudio(_ pcm16k: Data, to s: RealtimeHubSession) {
+    let rate = s.requiredInputSampleRate
+    let pcm = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
+    s.sendAudio(pcm)
+  }
+
+  /// PTT-up: end the turn; the model now responds (and may call tools).
+  func commitTurn() -> RealtimeHubCommitResult {
+    responding = true
+    // (The screen frame is sent at turn START — see beginTurn — so it has time to
+    // upload/decode before the model answers. Nothing to attach here.)
+    let candidates = AssistantSettings.shared.voiceBaseLanguages
+    // Full-buffer decode for the bubble-fallback transcript (both providers). Kicked
+    // BEFORE the session guard; if the commit is rejected the result is simply unused.
+    // Runs during the seconds the model spends answering; consumed at turn-done.
+    if !turnAudio16k.isEmpty, !candidates.isEmpty {
+      let audio = turnAudio16k
+      fullLIDTask = Task.detached(priority: .userInitiated) {
+        await PTTLanguageIdentifier.shared.identify(pcm16k: audio, candidates: candidates)
+      }
+    }
+    guard let s = session else {
+      if var pending = pendingBargeInReplacement {
+        pending.pendingCommit = true
+        pendingBargeInReplacement = pending
+        log(
+          "RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — "
+            + "deferring commit (bufferedChunks=\(pending.audioBuffer.count))"
+        )
+        ensureWarm()
+        return .deferredForReplacement
+      }
+      responding = false
+      exitVoiceUI(clearResponseGlow: true)
+      return .rejectedNoSession
+    }
+    // Hint the provider's transcription with the identified language, entirely
+    // synchronously: one configured language → hint it directly; several → whatever the
+    // mid-hold verdict produced by now (nil clears any stale hint from a prior turn and
+    // leaves the provider on auto-detect — same as today's behavior).
+    if s.supportsInputTranscriptionLanguage, !candidates.isEmpty {
+      s.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
+    }
+    s.commitInputTurn()
+    return .accepted
+  }
+
+  /// Await a task's value with a REAL deadline on return time. A plain withTaskGroup
+  /// race is not enough: the group awaits its remaining children at scope exit and
+  /// `Task<T, Never>.value` is not cancellation-interruptible, so the "timeout" would
+  /// still block for the task's full duration (e.g. a cold model load). Unstructured
+  /// racers + a resume-once gate make the deadline bound the return, not just the value.
+  private static func value<T: Sendable>(of task: Task<T, Never>, timeoutMs: UInt64) async -> T? {
+    let once = ResumeOnceGate()
+    return await withCheckedContinuation { (cont: CheckedContinuation<T?, Never>) in
+      Task {
+        let v = await task.value
+        if once.first() { cont.resume(returning: v) }
+      }
+      Task {
+        try? await Task.sleep(nanoseconds: timeoutMs * 1_000_000)
+        if once.first() { cont.resume(returning: nil) }
+      }
+    }
+  }
+
+  /// Abandon the turn without committing (silent tap / cancel). Must leave NO open
+  /// turn behind, or the model answers the non-speech later.
+  func cancelTurn() {
+    responding = false
+    realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
+    turnGeneration &+= 1
+    turnTranscript = ""
+    assistantText = ""
+    pendingVoiceAgentHandoff = nil
+    pendingCompletedAgentDeltaAckIds.removeAll()
+    pendingCompletedAgentDeltaHighWaterMs = nil
+    clearRealtimeToolTracking()
+    clearBargeInReplacementState()
+    // Abandon the open turn WITHOUT tearing down the socket: close the speech window
+    // and leave the reply gated off so the model never answers the silence. Keeps the
+    // warm session (and its context) so the next real turn is instant and in-context.
+    session?.abandonInputTurn()
+    exitVoiceUI(clearResponseGlow: true)
+    firePendingRewarm()
+  }
+
+  // MARK: - RealtimeHubSessionDelegate
+
+  private func isCurrentSession(_ source: RealtimeHubSession) -> Bool {
+    source === session
+  }
+
+  private func sendToolResultIfCurrent(
+    source: RealtimeHubSession,
+    callId: String,
+    name: String,
+    output: String,
+    expectedTurnEpoch: Int? = nil
+  ) {
+    guard isCurrentSession(source) else {
+      log("RealtimeHub[\(providerTag)]: dropping stale tool result \(name)")
+      return
+    }
+    let turnEpoch = expectedTurnEpoch ?? realtimeToolTurnEpoch
+    let key = toolCallKey(callId: callId, name: name, turnEpoch: turnEpoch)
+    guard turnEpoch == realtimeToolTurnEpoch, pendingRealtimeToolCallIds.contains(key) else {
+      log("RealtimeHub[\(providerTag)]: dropping stale tool result \(name) epoch=\(turnEpoch)")
+      return
+    }
+    pendingRealtimeToolCallIds.remove(key)
+    source.sendToolResult(callId: callId, name: name, output: output)
+  }
+
+  func hubDidConnect(source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
+    lastWarmAt = Date()
+    hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
+    log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
+  }
+
+  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
+    if isFinal {
+      if !text.isEmpty { turnTranscript = text }
+      // OpenAI marks the input transcript final before/as the model starts replying —
+      // surface the question in chat now instead of waiting for the whole turn.
+      showUserQuestionEarly()
+    } else {
+      turnTranscript += text
+    }
+    // Don't surface Gemini's LIVE partial transcript on the bar: on a quiet/near-silent
+    // hold it transcribes background noise into random words (the bar shows "…" on commit
+    // instead). turnTranscript is still kept for the agent-warm heuristic and the final.
+    // Speculatively warm the agent bridge while the user is still talking, if the
+    // request looks action-y (inverse of the chat fast-path heuristic). Keeps the
+    // existing conditional-attach heuristic intact.
+    if !speculativeWarmDone, !turnTranscript.isEmpty,
+      !FloatingControlBarManager.routerCanSkipToChat(turnTranscript)
     {
       return
     }
@@ -1394,23 +1991,534 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     switch decision {
     case .keepActive:
       return
-    case .deferUntilIdle:
-      pendingSessionRefreshReason = reason.rawValue
-      log("RealtimeHub: deferring \(reason.rawValue) handoff until active voice turn terminates")
+    }
+    func arg(_ key: String) -> String { (arguments[key] as? String) ?? turnTranscript }
+    func argInt(_ key: String) -> Int? { (arguments[key] as? Int) ?? (arguments[key] as? NSNumber)?.intValue }
+    switch tool {
+    case .askHigherModel:
+      let query = arg("query")
+      let context = (arguments["context"] as? String) ?? ""
+      log(
+        "RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (\(ModelQoS.Claude.defaultSelection)) query=\"\(query.prefix(80))\""
+      )
+      Task { [weak self] in
+        guard let self else { return }
+        let answer = await self.escalateToHigherModel(
+          query, context: context, aboutUser: self.aboutUserCard)
+        self.sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: answer, expectedTurnEpoch: toolTurnEpoch)
+      }
+    case .getTasks:
+      // Fast LOCAL read — no agent. Fetch today's + overdue tasks and hand them back
+      // as text for the model to speak (this is the read path, vs spawn_agent actions).
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        await TasksStore.shared.loadDashboardTasks()
+        let overdue = TasksStore.shared.overdueTasks
+        let today = TasksStore.shared.todaysTasks
+        // Include the task id (for update_action_item) — the model is told never to speak ids.
+        func list(_ items: [TaskActionItem]) -> String {
+          items.prefix(15).map { "- \($0.description) [id:\($0.id)]" }.joined(separator: "\n")
+        }
+        var out = ""
+        if !overdue.isEmpty { out += "Overdue (\(overdue.count)):\n\(list(overdue))\n" }
+        if !today.isEmpty { out += "Due today (\(today.count)):\n\(list(today))\n" }
+        if out.isEmpty { out = "No tasks overdue or due today." }
+        log("RealtimeHub[\(self.providerTag)]: tool get_tasks → \(overdue.count) overdue, \(today.count) today")
+        self.sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: out, expectedTurnEpoch: toolTurnEpoch)
+      }
+    case .getMemories:
+      // Fast READ — "who am I" / "what do you know about me". Backend memories+facts.
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name,
+        emptyText: "I don't have any memories saved about you yet.",
+        errorText: "Could not read your memories right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) { try await APIClient.shared.toolGetMemories(limit: 15).resultText }
+    case .searchMemories:
+      let query = arg("query")
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
+        emptyText: "I couldn't find anything about that.",
+        errorText: "Could not search your memories right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) { try await APIClient.shared.toolSearchMemories(query: query, limit: 5).resultText }
+    case .searchConversations:
+      // Capped for voice: top 5, summaries only (no full transcripts).
+      let query = arg("query")
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
+        emptyText: "I couldn't find a conversation about that.",
+        errorText: "Could not search your conversations right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        try await APIClient.shared.toolSearchConversations(
+          query: query, limit: 5, includeTranscript: false
+        ).resultText
+      }
+    case .getConversations:
+      // Fast READ — most recent conversations, newest first (backend orders created_at DESC).
+      // Capped for voice: top 3, summaries only. This is the recency path; search_conversations
+      // is semantic and must NOT be used for "most recent".
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name,
+        emptyText: "I don't see any recent conversations.",
+        errorText: "Could not read your recent conversations right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        try await APIClient.shared.toolGetConversations(
+          limit: 3, includeTranscript: false
+        ).resultText
+      }
+    case .getDailyRecap:
+      // Fast LOCAL read of the on-device activity DB — apps/minutes, conversations, tasks,
+      // focus, screen context. Reuses the SAME executor the desktop chat uses, so voice and
+      // chat answer "what did I do yesterday" from one code path.
+      let daysAgo = argInt("days_ago") ?? 1
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "days_ago=\(daysAgo)",
+        emptyText: "I don't have any activity recorded for then.",
+        errorText: "Could not pull up your activity right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        await ChatToolExecutor.execute(
+          ToolCall(name: "get_daily_recap", arguments: ["days_ago": daysAgo], thoughtSignature: nil))
+      }
+    case .getActionItems:
+      // Backend READ of the full task list with filters (completed / due-date range) — the
+      // capable sibling of the local get_tasks. Same APIClient path the chat agent uses.
+      let completed = arguments["completed"] as? Bool
+      let dueStart = arguments["due_start_date"] as? String
+      let dueEnd = arguments["due_end_date"] as? String
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: completed.map { "completed=\($0)" } ?? "",
+        emptyText: "I couldn't find any matching tasks.",
+        errorText: "Could not read your tasks right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        try await APIClient.shared.toolGetActionItems(
+          limit: 25, completed: completed, dueStartDate: dueStart, dueEndDate: dueEnd
+        ).resultText
+      }
+    case .getTaskAgentStatus:
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "coordinator_open_loops_and_completion_delta",
+        emptyText: "No active agent attention items.",
+        errorText: "Could not read the agent coordinator right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        do {
+          let openLoops = try await DesktopCoordinatorService.shared.openLoopsJSON()
+          if let completionDelta = await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surfaceKind: "ptt") {
+            self.pendingCompletedAgentDeltaAckIds = completionDelta.ids
+            self.pendingCompletedAgentDeltaHighWaterMs = completionDelta.completedAtHighWaterMs
+            return """
+              \(openLoops)
+
+              # Completed Agent Delta
+              \(completionDelta.prompt)
+              """
+          }
+          if self.coordinatorOpenLoopsIsEmpty(openLoops) {
+            let fallback = TaskAgentStatusRegistry.shared.combinedSummary()
+            if !fallback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+              return """
+                No open coordinator loops or newly completed canonical agent deltas.
+
+                # Legacy/Floating Agent Status
+                \(fallback)
+                """
+            }
+          }
+          return openLoops
+        } catch {
+          logError("RealtimeHub[\(self.providerTag)]: coordinator status fallback failed", error: error)
+          return TaskAgentStatusRegistry.shared.combinedSummary()
+        }
+      }
+    case .manageAgentPills:
+      let action =
+        ((arguments["action"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
+        .flatMap { $0.isEmpty ? nil : $0 } ?? "list"
+      let agentId = (arguments["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard Self.userExplicitlyRequestedPillManagement(action: action, transcript: turnTranscript) else {
+        log("RealtimeHub[\(providerTag)]: blocked manage_agent_pills action=\(action) without explicit user request")
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Dismissal blocked: only dismiss or clear floating agent pills when the user explicitly asks.")
+        return
+      }
+      let result = AgentPillsManager.shared.manage(action: action, agentId: agentId)
+      log("RealtimeHub[\(providerTag)]: tool manage_agent_pills action=\(action)")
+      sendToolResultIfCurrent(source: source, callId: callId, name: name, output: result)
+    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle:
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
+        emptyText: "No canonical agent data came back.",
+        errorText: "Could not reach the agent control plane right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        try await self.agentControlService.executeVoiceTool(name: name, arguments: arguments)
+      }
+    case .searchScreenHistory:
+      // Fast LOCAL semantic search over screen history (same executor as chat).
+      let query = arg("query")
+      var toolArgs: [String: Any] = ["query": query]
+      if let days = argInt("days") { toolArgs["days"] = days }
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
+        emptyText: "I couldn't find anything on your screen about that.",
+        errorText: "Could not search your screen history right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        await ChatToolExecutor.execute(
+          ToolCall(name: "search_screen_history", arguments: toolArgs, thoughtSignature: nil))
+      }
+    case .createActionItem:
+      let description =
+        (arguments["description"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let dueAt = arguments["due_at"] as? String
+      guard !description.isEmpty else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: "No task description was given.")
+        return
+      }
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "\"\(description.prefix(60))\"",
+        emptyText: "Task created.",
+        errorText: "Could not create the task right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        try await APIClient.shared.toolCreateActionItem(
+          description: description, dueAt: dueAt
+        ).resultText
+      }
+    case .updateActionItem:
+      guard let id = (arguments["id"] as? String), !id.isEmpty else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Missing the task id — call get_tasks first to find it.")
+        return
+      }
+      let completed = arguments["completed"] as? Bool
+      let newDescription = arguments["description"] as? String
+      let dueAt = arguments["due_at"] as? String
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "id=\(id.prefix(8))",
+        emptyText: "Task updated.",
+        errorText: "Could not update the task right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        try await APIClient.shared.toolUpdateActionItem(
+          id: id, completed: completed, description: newDescription, dueAt: dueAt
+        ).resultText
+      }
+    case .createCalendarEvent:
+      let title =
+        (arguments["title"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !title.isEmpty else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: "No calendar event title was given.")
+        return
+      }
+      guard let startTime = arguments["start_time"] as? String, !startTime.isEmpty else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: "No calendar event start time was given.")
+        return
+      }
+      guard let endTime = arguments["end_time"] as? String, !endTime.isEmpty else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: "No calendar event end time was given.")
+        return
+      }
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "\"\(title.prefix(60))\"",
+        emptyText: "Calendar event created.",
+        errorText: "Could not create the calendar event right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        try await APIClient.shared.toolCreateCalendarEvent(
+          title: title,
+          startTime: startTime,
+          endTime: endTime,
+          description: arguments["description"] as? String,
+          location: arguments["location"] as? String,
+          attendees: arguments["attendees"] as? String
+        ).resultText
+      }
+    case .spawnAgent:
+      let brief = arg("brief")
+      let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let providerName = AgentPillsManager.DirectedProvider.normalizedRawValue(arguments["provider"] as? String)
+      Task { [weak self] in
+        guard let self else { return }
+        await self.handleRealtimeDelegationRequest(
+          brief: brief,
+          title: title,
+          providerName: providerName,
+          source: source,
+          callId: callId,
+          name: name,
+          expectedTurnEpoch: toolTurnEpoch)
+      }
+    case .setupAgentProvider:
+      let setupProviderName = AgentPillsManager.DirectedProvider.normalizedRawValue(arguments["provider"] as? String)
+      guard let provider = AgentPillsManager.DirectedProvider(rawValue: setupProviderName) else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: AgentPillsManager.DirectedProvider.unsupportedProviderMessage(setupProviderName))
+        return
+      }
+      // Idempotent: the tool is always advertised, so an already-installed
+      // provider just reports ready instead of reinstalling (no dialog).
+      guard !LocalAgentProviderDetector.isAvailable(provider) else {
+        log("RealtimeHub[\(providerTag)]: tool setup_agent_provider provider=\(provider.rawValue) already installed")
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "\(provider.displayName) is already installed and ready — no setup needed.")
+        return
+      }
+      // Deterministic code-owned install: LocalAgentProviderInstaller shows a
+      // native confirmation dialog with the exact command (the REAL consent
+      // gate — the prompt-level consent wording is only the first layer) and
+      // runs it via Process. No installer agent, so a prompt-injected tool
+      // call can never execute anything by itself. The tool result returns
+      // immediately; the voice turn never blocks on the dialog.
+      let installMessage = LocalAgentProviderInstaller.shared.beginInstall(for: provider)
+      log(
+        "RealtimeHub[\(providerTag)]: tool setup_agent_provider provider=\(provider.rawValue) → install confirmation requested"
+      )
+      if !audioReceivedThisTurn {
+        let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ack =
+          existingAck.isEmpty
+          ? "Please confirm the \(provider.displayName) install in the dialog on screen." : existingAck
+        assistantText = ack
+        barState?.isVoiceResponseActive = true
+        FloatingBarVoicePlaybackService.shared.speakOneShot(ack)
+      }
+      suppressAssistantOutputForCurrentTurn = true
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: installMessage)
+    case .screenshot:
+      // Gemini: the screen is already attached to every turn (see commitTurn), so the
+      // tool is just an ack — pushing another image here is the broken path (mid-tool-call
+      // injection self-interrupts the turn / closes the socket 1007). OpenAI: add the image
+      // as an ordered conversation item (that path works for OpenAI).
+      let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
+      if sessionProvider == .openai, let shot { session?.injectImage(shot) }
+      log("RealtimeHub[\(providerTag)]: tool screenshot → ack (\(shot?.count ?? 0) bytes, screen on turn)")
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: shot == nil ? "Could not capture the screen." : "Screen captured.")
+    case .pointClick:
+      let x = (arguments["x"] as? Double) ?? (arguments["x"] as? NSNumber)?.doubleValue ?? 0
+      let y = (arguments["y"] as? Double) ?? (arguments["y"] as? NSNumber)?.doubleValue ?? 0
+      let ok = Self.click(at: CGPoint(x: x, y: y))
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: ok ? "Clicked at \(Int(x)), \(Int(y))." : "Could not click.")
+    }
+  }
+
+  private func handleRealtimeDelegationRequest(
+    brief: String,
+    title: String?,
+    providerName: String,
+    source: RealtimeHubSession,
+    callId: String,
+    name: String,
+    expectedTurnEpoch: Int
+  ) async {
+    let userText = turnTranscript
+    // Enum-driven parsing: adding a DirectedProvider case (e.g. codex) makes
+    // it valid here with no extra switch to maintain.
+    if !providerName.isEmpty, AgentPillsManager.DirectedProvider(rawValue: providerName) == nil {
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: AgentPillsManager.DirectedProvider.unsupportedProviderMessage(providerName),
+        expectedTurnEpoch: expectedTurnEpoch)
       return
-    case .fallbackToTranscription:
-      // The caller that owns the buffered turn translates this into the
-      // reducer's existing fallback route. Never replace a second time here.
+    }
+    let directedProvider = AgentPillsManager.DirectedProvider(rawValue: providerName)
+
+    let resolution = await AgentDelegationResolver.shared.resolve(
+      .init(
+        surface: .realtimeVoice,
+        userText: userText,
+        proposedBrief: brief,
+        proposedTitle: title,
+        proposedAck: nil,
+        directedProvider: directedProvider,
+        topLevelContext: combinedTopLevelVoiceContinuityContext(),
+        agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
+        explicitDelegationRequested: true))
+    guard isCurrentToolTurn(source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch) else {
+      log("RealtimeHub[\(providerTag)]: dropping stale spawn_agent resolution before side effects")
       return
-    case .replacePreservingBufferedTurn:
-      if hasBufferedTurn {
-        log("RealtimeHub: handoff requested reason=\(reason.rawValue) mode=buffered_turn")
+    }
+    guard resolution.action == .spawn,
+      let resolvedBrief = resolution.brief?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !resolvedBrief.isEmpty
+    else {
+      assistantText = resolution.userFacingText
+      barState?.isVoiceResponseActive = true
+      suppressAssistantOutputForCurrentTurn = false
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent blocked by resolver action=\(resolution.action.rawValue)")
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: "No agent started. Ask the user: \(resolution.userFacingText)",
+        expectedTurnEpoch: expectedTurnEpoch)
+      return
+    }
+
+    directedProvider = resolution.directedProvider ?? directedProvider
+    if let directedProvider {
+      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
+      guard availability.isAvailable else {
+        let setupPrompt = availability.setupPrompt
+        assistantText = setupPrompt
+        barState?.isVoiceResponseActive = true
+        if !audioReceivedThisTurn {
+          FloatingBarVoicePlaybackService.shared.speakOneShot(directedProvider.setupNeededStatus)
+        }
+        suppressAssistantOutputForCurrentTurn = true
+        log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) unavailable")
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: availability.toolError,
+          expectedTurnEpoch: expectedTurnEpoch)
+        return
+      }
+    }
+
+    let model =
+      ShortcutSettings.shared.selectedModel.isEmpty
+      ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
+    guard
+      let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
+        .init(
+          originalUserText: userText,
+          brief: resolvedBrief,
+          title: resolution.title ?? ((title?.isEmpty == false) ? title : directedProvider?.displayName),
+          spokenAck: resolution.ack,
+          directedProvider: directedProvider),
+        model: model,
+        fromVoice: false)
+    else {
+      assistantText = "What should the background agent do?"
+      barState?.isVoiceResponseActive = true
+      suppressAssistantOutputForCurrentTurn = false
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent refused by delegation executor")
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
+        output: "No agent started. Ask the user what the background agent should do.",
+        expectedTurnEpoch: expectedTurnEpoch)
+      return
+    }
+
+    log(
+      "RealtimeHub[\(providerTag)]: tool spawn_agent → canonical pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false)"
+    )
+    let shouldAllowNativePostSpawnAck = !audioReceivedThisTurn
+    if !audioReceivedThisTurn {
+      let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+      let resolvedAck = resolution.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let ack =
+        existingAck.isEmpty
+        ? (resolvedAck?.isEmpty == false ? resolvedAck! : "Starting a background agent.")
+        : existingAck
+      assistantText = ack
+    }
+    // Defer durable chat-history handoff recording to hubDidFinishTurn so the
+    // final ASR transcript is used instead of a partial interim transcript.
+    pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)
+    suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck
+    sendToolResultIfCurrent(
+      source: source, callId: callId, name: name,
+      output: "Agent started.",
+      expectedTurnEpoch: expectedTurnEpoch)
+  }
+
+  func hubDidFinishTurn(source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
+    guard pendingRealtimeToolCallIds.isEmpty else {
+      log(
+        "RealtimeHub[\(providerTag)]: deferring turn done with \(pendingRealtimeToolCallIds.count) tool result(s) pending"
+      )
+      return
+    }
+    responding = false
+    hubReconnectStrikes = 0  // a completed turn proves the hub works — reset the budget
+    var heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let forced = testProviderTranscriptOverride {
+      testProviderTranscriptOverride = nil
+      heard = forced
+      log("RealtimeHub: TEST override provider transcript → \"\(forced.prefix(60))\"")
+    }
+    let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
+    if realtimePlaybackActive {
+      log("RealtimeHub[\(providerTag)]: server turn done; waiting for local playback to drain")
+    }
+    // A turn-done delivered late — after the user already began the next capture —
+    // must leave that capture alone: beginTurn already wiped this turn's transcript
+    // buffers (nothing left to record) and reset turnRecorded for the new turn,
+    // exitVoiceUI would clear the live listening/locked state and collapse the bar
+    // mid-hold, and the pending rewarm would tear the session down mid-turn. All of
+    // it stays parked for the new turn's own clean end.
+    if barState?.isVoiceListening == true {
+      log("RealtimeHub[\(providerTag)]: late turn-done during a new capture — leaving voice UI untouched")
+      return
+    }
+    // Record the completed turn into chat history (+ backend sync) in the background.
+    // The hub plays its reply itself and never routes through the query path, so this is
+    // the only place voice turns get persisted. Idempotent per turn; recordVoiceTurn is
+    // fire-and-forget so it never stalls the warm socket or the next PTT press.
+    if !turnRecorded {
+      turnRecorded = true
+      if let handoff = pendingVoiceAgentHandoff {
+        pendingVoiceAgentHandoff = nil
+        let assistantText = "Started background agent \"\(handoff.title)\" for: \(handoff.brief)"
+        rememberVoiceContinuityTurn(userText: heard, assistantText: assistantText, interrupted: false)
+        FloatingControlBarManager.shared.recordVoiceAgentHandoff(
+          userText: heard,
+          agentTitle: handoff.title,
+          agentBrief: handoff.brief,
+          earlyUserMessageId: earlyUserMessageId)
       } else {
         log("RealtimeHub: handoff requested reason=\(reason.rawValue) mode=idle")
       }
       if session != nil { teardownSession(preservingReconnectAudio: hasBufferedTurn) }
       ensureWarm()
     }
+    if !pendingCompletedAgentDeltaAckIds.isEmpty {
+      DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
+        surfaceKind: "ptt",
+        ids: pendingCompletedAgentDeltaAckIds,
+        completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs
+      )
+      pendingCompletedAgentDeltaAckIds.removeAll()
+      pendingCompletedAgentDeltaHighWaterMs = nil
+    }
+    exitVoiceUI()
+    firePendingRewarm()
   }
 
   func applyPendingSessionRefreshIfIdle() {

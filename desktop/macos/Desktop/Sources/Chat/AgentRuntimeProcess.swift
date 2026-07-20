@@ -2749,7 +2749,16 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
-    let adapterPathDirs = Self.localAdapterSearchDirectories(home: home)
+    let adapterPathDirs = [
+      "\(home)/.hermes/hermes-agent/venv/bin",
+      "\(home)/.hermes/node/bin",
+      "\(home)/.hermes/hermes-agent",
+    ]
+    let adapterSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
+    let trustedPathDirs = [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     var pathElements: [String] = []
     for path in existingPath.split(separator: ":").map(String.init) + adapterPathDirs {
@@ -2780,6 +2789,12 @@ actor AgentRuntimeProcess {
       ).status
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
+    }
+
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let codexAcp = firstExecutable(named: "codex-acp", in: adapterSearchDirs)
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexAcpPath: codexAcp)
     }
   }
 
@@ -2825,63 +2840,16 @@ actor AgentRuntimeProcess {
     return "\(shellQuote(openClawPath)) acp"
   }
 
-  /// Directly launched app bundles do not inherit the shell's FNM multishell
-  /// PATH entry. Search the stable Node-install roots as well, so a globally
-  /// installed OpenClaw CLI remains available to the shared agent bridge.
-  static func localAdapterSearchDirectories(
-    home: String,
-    fileManager: FileManager = .default
-  ) -> [String] {
-    let adapterPathDirs = [
-      "\(home)/.hermes/hermes-agent/venv/bin",
-      "\(home)/.hermes/node/bin",
-      "\(home)/.hermes/hermes-agent",
-      "\(home)/.local/bin",
-    ]
-    let managedNodeRoots = [
-      "\(home)/.nvm/versions/node",
-      "\(home)/.fnm/node-versions",
-      "\(home)/.local/share/fnm/node-versions",
-      "\(home)/.nodenv/versions",
-      "\(home)/.asdf/installs/nodejs",
-    ]
-    // User-managed Node installations take precedence over machine-wide fallbacks.
-    return Self.uniquePaths(
-      adapterPathDirs
-        + managedNodeRoots.flatMap {
-          Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
-        }
-        + [
-          "/opt/homebrew/bin",
-          "/usr/local/bin",
-        ])
-  }
-
-  private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
-    guard let versions = try? fileManager.contentsOfDirectory(atPath: root) else { return [] }
-    return versions.compactMap { version in
-      let versionDirectory = (root as NSString).appendingPathComponent(version)
-      let directBin = (versionDirectory as NSString).appendingPathComponent("bin")
-      if fileManager.fileExists(atPath: directBin) { return directBin }
-      let installationBin = (versionDirectory as NSString).appendingPathComponent("installation/bin")
-      if fileManager.fileExists(atPath: installationBin) { return installationBin }
-      return nil
+  /// The codex-acp bridge is a stdio ACP server itself, so no subcommand is
+  /// appended. Prefer a sibling node binary (npm global installs place one
+  /// next to the script) so the `#!/usr/bin/env node` shebang never depends
+  /// on the minimal adapter PATH.
+  static func codexAdapterCommand(codexAcpPath: String, fileManager: FileManager = .default) -> String {
+    let nodePath = ((codexAcpPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("node")
+    if fileManager.isExecutableFile(atPath: nodePath) {
+      return "\(shellQuote(nodePath)) \(shellQuote(codexAcpPath))"
     }
-  }
-
-  private static func uniquePaths(_ paths: [String]) -> [String] {
-    paths.reduce(into: [String]()) { result, path in
-      guard !path.isEmpty, !result.contains(path) else { return }
-      result.append(path)
-    }
-  }
-
-  private nonisolated static func bearerToken(from header: String) -> String? {
-    let prefix = "Bearer "
-    guard header.hasPrefix(prefix) else { return nil }
-    let token = String(header.dropFirst(prefix.count))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    return token.isEmpty ? nil : token
+    return shellQuote(codexAcpPath)
   }
 
   private static func shellQuote(_ value: String) -> String {

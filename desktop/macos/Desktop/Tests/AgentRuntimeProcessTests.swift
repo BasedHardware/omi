@@ -918,6 +918,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+    XCTAssertTrue(source.contains(#"env["OMI_CODEX_ADAPTER_COMMAND"]"#))
   }
 
   @MainActor
@@ -1055,28 +1056,37 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(command, "'\(openClawPath)' acp")
   }
 
-  func testOpenClawDiscoveryFindsXDGFnmInstall() throws {
-    let home = FileManager.default.temporaryDirectory
-      .appendingPathComponent("openclaw-fnm-home-\(UUID().uuidString)", isDirectory: true)
-    defer { try? FileManager.default.removeItem(at: home) }
+  func testCodexAdapterCommandUsesSiblingNodeWhenAvailable() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
 
-    let bin =
-      home
-      .appendingPathComponent(".local/share/fnm/node-versions/v24.12.0/installation/bin", isDirectory: true)
-    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-    let openClaw = bin.appendingPathComponent("openclaw")
-    FileManager.default.createFile(atPath: openClaw.path, contents: Data("#!/bin/sh\n".utf8))
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: openClaw.path)
+    let nodePath = tempDir.appendingPathComponent("node").path
+    let codexAcpPath = tempDir.appendingPathComponent("codex-acp").path
+    FileManager.default.createFile(atPath: nodePath, contents: Data("#!/bin/sh\n".utf8))
+    FileManager.default.createFile(atPath: codexAcpPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: nodePath)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexAcpPath)
 
-    let directories = AgentRuntimeProcess.localAdapterSearchDirectories(home: home.path)
-    let discovered = AgentRuntimeProcess.firstExecutable(named: "openclaw", in: directories)
+    let command = AgentRuntimeProcess.codexAdapterCommand(codexAcpPath: codexAcpPath)
 
-    XCTAssertEqual(discovered, openClaw.path)
-    XCTAssertLessThan(
-      try XCTUnwrap(directories.firstIndex(of: openClaw.deletingLastPathComponent().path)),
-      try XCTUnwrap(directories.firstIndex(of: "/opt/homebrew/bin")),
-      "A home-scoped FNM installation must take precedence over machine-wide Homebrew."
-    )
+    XCTAssertEqual(command, "'\(nodePath)' '\(codexAcpPath)'")
+  }
+
+  func testCodexAdapterCommandFallsBackToLauncherWithoutSiblingNode() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let codexAcpPath = tempDir.appendingPathComponent("codex-acp").path
+    FileManager.default.createFile(atPath: codexAcpPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexAcpPath)
+
+    let command = AgentRuntimeProcess.codexAdapterCommand(codexAcpPath: codexAcpPath)
+
+    XCTAssertEqual(command, "'\(codexAcpPath)'")
   }
 
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {

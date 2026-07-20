@@ -1,10 +1,11 @@
 import Foundation
 
 enum AgentHarnessMode: String {
-  case piMono = "piMono"
-  case acp = "acp"
-  case hermes = "hermes"
-  case openclaw = "openclaw"
+    case piMono = "piMono"
+    case acp = "acp"
+    case hermes = "hermes"
+    case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 extension Optional where Wrapped == AgentHarnessMode {
@@ -15,10 +16,11 @@ extension Optional where Wrapped == AgentHarnessMode {
 }
 
 enum AgentAdapterId: String {
-  case piMono = "pi-mono"
-  case acp = "acp"
-  case hermes = "hermes"
-  case openclaw = "openclaw"
+    case piMono = "pi-mono"
+    case acp = "acp"
+    case hermes = "hermes"
+    case openclaw = "openclaw"
+    case codex = "codex"
 }
 
 enum AgentRuntimeRouting {
@@ -35,31 +37,37 @@ enum AgentRuntimeRouting {
     }
   }
 
-  static func harnessMode(from rawValue: String) -> AgentHarnessMode? {
-    switch rawValue {
-    case AgentHarnessMode.piMono.rawValue, "pi-mono":
-      return .piMono
-    case AgentHarnessMode.acp.rawValue:
-      return .acp
-    case AgentHarnessMode.hermes.rawValue:
-      return .hermes
-    case AgentHarnessMode.openclaw.rawValue, "openClaw":
-      return .openclaw
-    default:
-      return nil
+    static func harnessMode(from rawValue: String) -> AgentHarnessMode? {
+        switch rawValue {
+        case AgentHarnessMode.piMono.rawValue, "pi-mono":
+            return .piMono
+        case AgentHarnessMode.acp.rawValue:
+            return .acp
+        case AgentHarnessMode.hermes.rawValue:
+            return .hermes
+        case AgentHarnessMode.openclaw.rawValue, "openClaw":
+            return .openclaw
+        case AgentHarnessMode.codex.rawValue:
+            return .codex
+        default:
+            return nil
+        }
     }
   }
 
-  static func adapterId(for harnessMode: AgentHarnessMode) -> AgentAdapterId {
-    switch harnessMode {
-    case .piMono:
-      return .piMono
-    case .acp:
-      return .acp
-    case .hermes:
-      return .hermes
-    case .openclaw:
-      return .openclaw
+    static func adapterId(for harnessMode: AgentHarnessMode) -> AgentAdapterId {
+        switch harnessMode {
+        case .piMono:
+            return .piMono
+        case .acp:
+            return .acp
+        case .hermes:
+            return .hermes
+        case .openclaw:
+            return .openclaw
+        case .codex:
+            return .codex
+        }
     }
   }
 }
@@ -78,12 +86,17 @@ struct LocalAgentProviderAvailability: Equatable {
     return false
   }
 
-  var setupPrompt: String {
-    switch provider {
-    case .hermes:
-      return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
-    case .openclaw:
-      return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+    /// Full setup guidance shown in the bar / returned to the model when the
+    /// provider is missing. Built from the provider's structured install data
+    /// so all providers keep the same shape; the SPOKEN surface stays clean
+    /// (voice only says `setupNeededStatus`).
+    var setupPrompt: String {
+        var prompt = "I don't see \(provider.displayName) installed. Run `\(provider.installCommand)`"
+        if let note = provider.postInstallNote {
+            prompt += ", then \(note)"
+        }
+        prompt += ". Or just ask me to install it for you. Install guide: \(provider.installDocsURL)"
+        return prompt
     }
   }
 
@@ -115,39 +128,77 @@ enum LocalAgentProviderDetector {
     return LocalAgentProviderAvailability(provider: provider, status: .missing)
   }
 
-  static func isAvailable(
-    _ provider: AgentPillsManager.DirectedProvider,
-    environment: [String: String] = ProcessInfo.processInfo.environment,
-    fileManager: FileManager = .default,
-    homeDirectory: String = NSHomeDirectory()
-  ) -> Bool {
-    availability(for: provider, environment: environment, fileManager: fileManager, homeDirectory: homeDirectory)
-      .isAvailable
-  }
+    private static func firstExecutable(
+        named name: String,
+        fileManager: FileManager,
+        homeDirectory: String
+    ) -> String? {
+        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory, fileManager: fileManager) {
+            let path = (dir as NSString).appendingPathComponent(name)
+            if fileManager.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        return nil
+    }
 
-  private static func configuredCommand(
-    for provider: AgentPillsManager.DirectedProvider,
-    environment: [String: String]
-  ) -> String? {
-    let key = provider.commandEnvironmentName
-    let value = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return value.isEmpty ? nil : value
-  }
+    /// Shared with AgentRuntimeProcess so detection ("is it installed?") and
+    /// command discovery ("what do we spawn?") can never disagree.
+    static func adapterActivationSearchDirectories(
+        homeDirectory: String,
+        fileManager: FileManager = .default
+    ) -> [String] {
+        [
+            "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
+            "\(homeDirectory)/.hermes/node/bin",
+            "\(homeDirectory)/.hermes/hermes-agent",
+            "\(homeDirectory)/.local/bin",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            // `npm install -g` under a node version manager lands outside the
+            // fixed directories above.
+            "\(homeDirectory)/.volta/bin",
+            "\(homeDirectory)/Library/pnpm",
+            "\(homeDirectory)/Library/Application Support/fnm/aliases/default/bin",
+        ] + nvmNodeBinDirectories(homeDirectory: homeDirectory, fileManager: fileManager)
+    }
 
-  private static func firstExecutable(
-    named name: String,
-    fileManager: FileManager,
-    environment: [String: String],
-    homeDirectory: String
-  ) -> String? {
-    for dir in adapterActivationSearchDirectories(
-      environment: environment,
-      homeDirectory: homeDirectory
-    ) {
-      let path = (dir as NSString).appendingPathComponent(name)
-      if fileManager.isExecutableFile(atPath: path) {
-        return path
-      }
+    private static func nvmNodeBinDirectories(homeDirectory: String, fileManager: FileManager) -> [String] {
+        let versionsDir = "\(homeDirectory)/.nvm/versions/node"
+        let scanned = ((try? fileManager.contentsOfDirectory(atPath: versionsDir)) ?? [])
+            .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+            .map { "\(versionsDir)/\($0)/bin" }
+        // `npm install -g` lands in nvm's DEFAULT version, which is not
+        // necessarily the numerically-highest installed one — prefer it.
+        guard let defaultBin = nvmDefaultAliasBinDirectory(homeDirectory: homeDirectory, fileManager: fileManager)
+        else {
+            return scanned
+        }
+        return [defaultBin] + scanned.filter { $0 != defaultBin }
+    }
+
+    /// Resolve `~/.nvm/alias/default` — a text file naming a version or another
+    /// alias (e.g. "v20.11.0", or "lts/*" → "lts/jod" → "v20.11.0"). GUI apps
+    /// never inherit NVM_BIN from the shell, so the alias file is the only
+    /// reliable way to learn which version `npm install -g` targets.
+    private static func nvmDefaultAliasBinDirectory(homeDirectory: String, fileManager: FileManager) -> String? {
+        var alias = "default"
+        for _ in 0..<3 {
+            guard
+                let contents = try? String(
+                    contentsOfFile: "\(homeDirectory)/.nvm/alias/\(alias)", encoding: .utf8)
+            else { return nil }
+            let resolved = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !resolved.isEmpty else { return nil }
+            if resolved.hasPrefix("v") {
+                let bin = "\(homeDirectory)/.nvm/versions/node/\(resolved)/bin"
+                var isDirectory: ObjCBool = false
+                return fileManager.fileExists(atPath: bin, isDirectory: &isDirectory) && isDirectory.boolValue
+                    ? bin : nil
+            }
+            alias = resolved
+        }
+        return nil
     }
     return nil
   }

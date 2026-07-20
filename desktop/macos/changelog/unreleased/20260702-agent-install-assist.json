@@ -1,0 +1,3 @@
+{
+  "change": "When you ask for an agent that isn't installed yet (OpenClaw, Hermes, or Codex), Omi now shows the official install command and can install it for you — you approve the exact command in a confirmation dialog first, and Omi notifies you when the install finishes"
+}

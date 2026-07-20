@@ -96,6 +96,7 @@ import {
   DEFAULT_LOCAL_OWNER_ID,
   type AgentControlToolContext,
 } from "./runtime/control-tools.js";
+import { AdapterRuntimeError } from "./runtime/failures.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
@@ -173,7 +174,23 @@ const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
 
 // --- Helpers ---
 
-function send(msg: OutboundMessageDraft): void {
+/**
+ * Structured activation failure for a directed adapter whose activation env
+ * is unset (provider not installed/connected). Thrown by the per-query gate
+ * BEFORE facade.handleQuery, so it is provably pre-execution (phase startup).
+ */
+function adapterNotActivatedError(adapterId: "hermes" | "openclaw" | "codex"): AdapterRuntimeError {
+  return new AdapterRuntimeError({
+    code: "adapter_not_activated",
+    source: "runtime",
+    adapterId,
+    retryable: false,
+    phase: "startup",
+    userMessage: adapterActivationError(adapterId) ?? `${adapterId} adapter is unavailable.`,
+  });
+}
+
+function send(msg: OutboundMessage): void {
   try {
     process.stdout.write(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
   } catch (err) {
@@ -1306,9 +1323,17 @@ async function main(): Promise<void> {
       onCreate: (adapter) => localAcpAdapters.add(adapter),
     });
   };
+  const ensureCodexAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "codex", {
+      log: logErr,
+      maxWorkers: 1,
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
-  if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
+  const codexAvailable = await ensureCodexAdapter();
+  if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
@@ -1324,6 +1349,12 @@ async function main(): Promise<void> {
   }
   if (!openClawAvailable && defaultAdapterId === "openclaw") {
     const msg = adapterActivationError("openclaw") ?? "OpenClaw adapter is unavailable.";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!codexAvailable && defaultAdapterId === "codex") {
+    const msg = adapterActivationError("codex") ?? "Codex adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -1542,16 +1573,31 @@ async function main(): Promise<void> {
           }
           const queryOwnerId = resolveActiveOwner(query.ownerId);
           query.ownerId = queryOwnerId;
-          query.requestId = query.requestId.trim();
-          const adapterId = kernel.sessionExecutionProfile(query.sessionId, queryOwnerId).adapterId;
-          if (adapterId === "acp") {
-            await startAcpProcess();
-            await initializeAcp();
-          } else if (adapterId === "pi-mono") {
-            await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
-          } else if (adapterId === "hermes") {
-            if (!(await ensureHermesAdapter())) {
-              throw new Error(adapterActivationError("hermes"));
+          query.requestId = query.protocolVersion === 2 ? query.requestId!.trim() : requestIdFor(query)?.trim() || randomUUID();
+          const queryRequestId = requestIdFor(query);
+          const queryOwnerKey =
+            controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
+            (query.protocolVersion === 2 ? undefined : legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId }));
+          const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
+          currentOwnerId = queryOwnerId;
+          try {
+            if (adapterId === "acp") {
+              await startAcpProcess();
+              await initializeAcp();
+            } else if (adapterId === "pi-mono") {
+              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+            } else if (adapterId === "hermes") {
+              if (!(await ensureHermesAdapter())) {
+                throw adapterNotActivatedError("hermes");
+              }
+            } else if (adapterId === "openclaw") {
+              if (!(await ensureOpenClawAdapter())) {
+                throw adapterNotActivatedError("openclaw");
+              }
+            } else if (adapterId === "codex") {
+              if (!(await ensureCodexAdapter())) {
+                throw adapterNotActivatedError("codex");
+              }
             }
           } else if (adapterId === "openclaw") {
             if (!(await ensureOpenClawAdapter())) {
@@ -1566,10 +1612,12 @@ async function main(): Promise<void> {
           const envelope = runtimeErrorEnvelope(err);
           send({
             type: "error",
-            message: envelope.message,
-            failure: envelope.failure,
-            protocolVersion: PROTOCOL_VERSION,
-            requestId: query.requestId,
+            message: String(err),
+            // Preserve the structured failure (code/source/phase) so Swift can
+            // classify startup-class errors without string matching.
+            failure: err instanceof AdapterRuntimeError ? err.failure : undefined,
+            protocolVersion: query.protocolVersion,
+            requestId: requestIdFor(query),
             clientId: query.clientId,
           });
         });
