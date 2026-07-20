@@ -471,6 +471,8 @@ class TestMacosBetaEmergencyPromotionRules:
                 now=now,
             )
 
+    def test_beta_rollback_rejects_non_macos_target(self):
+        current = normalize_release_manifest(_manifest())
         windows = normalize_release_manifest(
             _manifest(
                 release_id="v0.12.73+12073-windows",
