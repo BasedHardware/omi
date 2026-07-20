@@ -1,19 +1,19 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1969,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3643,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3598,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4467,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5706,
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1690
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5518,
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1570
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "SB redesign: Omi-mark avatar on replies that spins while thinking (typing-dots suppressed for Omi's own replies) and tool-call chips gated to the streaming turn, merged with main's metadata-row reveal honoring keyboard focus (shared FocusState + testable ChatBubbleMetadataReveal); a component split is tracked follow-up.",
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Keeps all chat tool groups compact and collapsed while streamed steps increment, with an explicit expansion policy, fixed collapsed height, and regression coverage.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Rebase reconciliation applies the pinned swift-format to the main-branch app-detail safety fixes; runtime behavior is unchanged.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home ask bar now auto-grows as a multi-line TextField so long messages wrap instead of scrolling off-screen (+14 lines over the prior SB-redesign home/chat layout); a component split is tracked follow-up.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": "Home redesign: chat-as-home surface plus the 2nd-brain knows-list hub replace the wordmark/ribbon/WMN-card layout; a component split is tracked follow-up.",
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "Bridge memory search now awaits the active initial or pagination projection before refreshing, preventing an immediate post-navigation marker search from using stale lifecycle capability state.",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "SB redesign: adds the Notion-style status board (time-bucket columns, task cards with priority/due chips) and Board/List toggle alongside the existing list; a component split is tracked follow-up.",
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "SB redesign: adds the hover-expand AppNavRail (icons\u2192labels) and the merged/simplified navigation (Memory, Insights) driving selectedIndex; a component split is tracked follow-up."
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": "The Load-more-tasks action reads displayTasks.last at execution time via loadMoreTapped() instead of force-unwrapping (an emptied list no longer crashes); merged with main binding first-load/loading/error/retry state to the selected To Do or Done view.",
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": "Strict concurrency imports annotate legacy AppKit image usage without changing runtime behavior."
   },
   "threshold": 1500
 }
