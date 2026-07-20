@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2214,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4317
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4310
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Consolidation wires Codex/agent routing failure surface into AgentBridge without changing conversation ownership.",
