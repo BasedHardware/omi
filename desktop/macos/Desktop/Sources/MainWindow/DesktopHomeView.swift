@@ -437,6 +437,9 @@ struct DesktopHomeView: View {
     .withSecondBrainTheme()
     .tint(OmiColors.accent)
     .onAppear {
+      // Register bundled Geist / Geist Mono fonts (idempotent; kept out of the
+      // frozen OmiApp.swift per the product-file line-count ratchet).
+      OmiFontRegistration.registerAll()
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )
