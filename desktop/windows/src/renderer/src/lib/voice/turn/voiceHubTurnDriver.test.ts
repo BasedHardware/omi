@@ -12,6 +12,7 @@ import {
   resamplePcm16,
   type VoiceHubTurnDriverDeps
 } from './voiceHubTurnDriver'
+import { isRealtimeAudible, __resetAudibleArbiterForTests } from '../audibleOutputArbiter'
 import type { HubController, HubControllerEvents } from '../hub/hubController'
 import type { PttCapture, PttCaptureOptions } from '../../ptt/capture'
 import type { VoiceHubBarState } from '../../../../../shared/types'
@@ -1095,6 +1096,52 @@ describe('dispose (resetVoicePlane)', () => {
     ev.onTurnDone?.(null)
     ev.onSpeakingEnd?.()
     expect(h.states.at(-1)!.active).toBe(false)
-    expect(h.spies.onRecordTurn).not.toHaveBeenCalledWith('', '', expect.anything(), expect.anything())
+    expect(h.spies.onRecordTurn).not.toHaveBeenCalledWith(
+      '',
+      '',
+      expect.anything(),
+      expect.anything()
+    )
+  })
+})
+
+// ---- (z) single-audible-owner arbiter: the hub reply excludes the TTS cascade ----
+// Regression for the "two/three voices at once" bug (2026-07-20). When the hub
+// reply is audibly playing it must be the single audible owner so a concurrent
+// `fromVoice` cascade reply (`voiceController.speakText`) is denied; the marker
+// must clear on every terminal so it can never leak and deny all future TTS.
+describe('single-audible-owner (audibleOutputArbiter)', () => {
+  it('claims realtime-audible while the hub reply plays and releases on speaking-end', async () => {
+    __resetAudibleArbiterForTests()
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end()
+    const ev = h.hub.events()
+    expect(isRealtimeAudible()).toBe(false) // not yet speaking
+    ev.onSpeakingStart?.()
+    expect(isRealtimeAudible()).toBe(true) // the hub owns the speaker → cascade denied
+    ev.onTurnDone?.(null)
+    ev.onSpeakingEnd?.()
+    expect(isRealtimeAudible()).toBe(false) // released — future TTS allowed again
+  })
+
+  it('releases realtime-audible when a barge-in terminates a still-speaking turn', async () => {
+    __resetAudibleArbiterForTests()
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.capture.feed(voiced1s())
+    h.driver.end()
+    h.hub.events().onSpeakingStart?.() // the reply is audibly playing
+    expect(isRealtimeAudible()).toBe(true)
+    // A new hold supersedes the speaking turn (no speaking-end edge fires).
+    h.driver.begin({ backfillMs: 0 })
+    expect(isRealtimeAudible()).toBe(false) // terminal reconciliation released it
+    h.driver.dispose()
+    expect(isRealtimeAudible()).toBe(false)
   })
 })

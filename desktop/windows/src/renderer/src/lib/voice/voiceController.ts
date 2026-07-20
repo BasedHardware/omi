@@ -31,6 +31,12 @@ import { synthesizeTts, DEFAULT_TTS_VOICE } from './tts'
 import { chunkTts } from './ttsChunker'
 import type { ProviderSessionCallbacks, ProviderSessionHandle } from './providerSession'
 import type { VoiceLeaseID } from './turn/voiceTurnMachine'
+import {
+  beginRealtimeAudible,
+  endRealtimeAudible,
+  isRealtimeAudible,
+  registerTtsStop
+} from './audibleOutputArbiter'
 
 type Listener = (state: VoiceSessionState) => void
 
@@ -64,6 +70,11 @@ let stopCurrentTts: (() => void) | null = null
 // clears useChat.speaking → the bar orb's speaking glow.
 let ttsGeneration = 0
 let currentTtsAbort: AbortController | null = null
+// The continuous realtime session's audible-owner token (audibleOutputArbiter):
+// held while the Home voice session is audibly speaking so a concurrent `fromVoice`
+// cascade reply is denied, and preempts an in-flight cascade the instant it speaks.
+// Cleared on speaking-end and unconditionally on teardown so it can never leak.
+let continuousAudibleToken: symbol | null = null
 // The filler phrase (system voice) covering first-chunk synth latency; its own
 // cancel handle, independent of stopCurrentTts, so it can never clobber a real
 // chunk's playback teardown.
@@ -178,6 +189,11 @@ function makeCallbacks(mySeq: number): ProviderSessionCallbacks {
     onSpeakingStart: () => {
       if (mySeq !== startSeq) return // late event from a stopped session
       record('speaking-start')
+      // This live realtime session is now the single audible owner: preempt any
+      // in-flight cascade TTS and deny a concurrent `fromVoice` reply (Mac's
+      // shared-lease exclusion, ported via audibleOutputArbiter).
+      endRealtimeAudible(continuousAudibleToken)
+      continuousAudibleToken = beginRealtimeAudible()
       watchdogReported = false
       gate.playbackStarted(Date.now())
       syncGate()
@@ -185,6 +201,8 @@ function makeCallbacks(mySeq: number): ProviderSessionCallbacks {
     onSpeakingEnd: () => {
       if (mySeq !== startSeq) return
       record('speaking-end')
+      endRealtimeAudible(continuousAudibleToken)
+      continuousAudibleToken = null
       gate.playbackDrained(Date.now())
       syncGate()
     },
@@ -202,6 +220,11 @@ function makeCallbacks(mySeq: number): ProviderSessionCallbacks {
 function teardown(): void {
   handle?.stop()
   handle = null
+  // The session is gone — it can no longer be audible; drop its arbiter token
+  // unconditionally so a session that died without a speaking-end edge can never
+  // leave the realtime lane marked audible (which would deny all future TTS).
+  endRealtimeAudible(continuousAudibleToken)
+  continuousAudibleToken = null
   // Silence any in-flight TTS — releasing the gate while a TTS element keeps
   // playing on speakers would leak Omi's voice into transcription. Also aborts a
   // chunk fetch, cancels the filler, and bumps the generation so the pipeline bails.
@@ -527,6 +550,10 @@ function resetTtsPipeline(): void {
   stopCurrentTts?.()
 }
 
+// A realtime lane (hub / continuous session) becoming audible physically preempts
+// the cascade by calling this — the exact stop `interruptCurrentResponse` runs.
+registerTtsStop(resetTtsPipeline)
+
 /**
  * PTT barge-in: stop the current spoken reply immediately — stop playback,
  * cancel any in-flight synth + filler, reset the pipeline. Wired (over IPC) to
@@ -648,6 +675,18 @@ export async function speakText(
   void leaseID
   const chunks = chunkTts(text)
   if (chunks.length === 0) return
+
+  // Single-audible-owner exclusion (audibleOutputArbiter): if a realtime lane
+  // (the hub reply, or the continuous Home session) is currently audible, DROP
+  // this cascade reply rather than speak over it — Mac denies the TTS lease while
+  // a realtime turn owns it. The reply text is already recorded/shown by useChat;
+  // this only suppresses the duplicate spoken output. Without it, a late/degraded
+  // `fromVoice` cascade reply played simultaneously with the realtime voice (the
+  // "two voices at once" bug).
+  if (isRealtimeAudible()) {
+    record('tts-suppressed-realtime-active', text.slice(0, 80))
+    return
+  }
 
   // A fresh reply supersedes anything still playing/synthesizing and takes a new
   // generation + abort handle (so a barge-in can invalidate exactly this run).
