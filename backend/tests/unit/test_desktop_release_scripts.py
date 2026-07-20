@@ -21,11 +21,10 @@ def _load(name: str, filename: str):
 
 
 mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
-mark_emergency_beta = _load("mark_desktop_release_emergency_beta", "mark-desktop-release-emergency-beta.py")
-emergency_promotion = _load("check_desktop_emergency_beta_promotion", "check-desktop-emergency-beta-promotion.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 nominate_stable = _load("nominate_desktop_stable_candidate", "nominate-desktop-stable-candidate.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
+qualification_dispatch = _load("desktop_qualification_dispatch", "desktop_qualification_dispatch.py")
 
 
 def _release(body: str | None = None):
@@ -61,56 +60,6 @@ def test_mark_beta_changes_only_visibility_fields():
     assert "isLive: true" in result
     assert "channel: beta" in result
     assert "qualifiedBetaSha: " + "a" * 40 in result
-
-
-def test_emergency_metadata_records_two_bound_approvals_without_making_the_release_stable():
-    result = mark_emergency_beta.mark_emergency_beta(
-        _release()["body"],
-        {
-            "emergencyPromotion": True,
-            "release_tag": "v0.12.64+12064-macos",
-            "source_sha": "a" * 40,
-            "incident_id": "10063",
-            "reason": "qualification runner unavailable",
-            "operator": "release-operator",
-            "expires_at": "2026-07-19T13:00:00Z",
-            "approvers": ["alice", "bob"],
-            "evidence": {"behavioral_url": "https://example.test/behavior.json"},
-        },
-    )
-    assert "emergencyPromotion: true" in result
-    assert "emergencyPromotionApprovers: alice,bob" in result
-    assert "emergencyPromotionOperator: release-operator" in result
-    assert "channel: beta" in result
-    assert "channel: stable" not in result
-
-
-def test_emergency_approval_parser_requires_two_distinct_authorized_commenters_bound_to_the_candidate():
-    comments = [
-        {
-            "body": f"Emergency beta promotion approval: v0.12.64+12064-macos {'a' * 40} 2026-07-19T13:00:00Z",
-            "author_association": "MEMBER",
-            "user": {"login": "alice"},
-        },
-        {
-            "body": f"Emergency beta promotion approval: v0.12.64+12064-macos {'a' * 40} 2026-07-19T13:00:00Z",
-            "author_association": "OWNER",
-            "user": {"login": "bob"},
-        },
-    ]
-    assert emergency_promotion.approval_identities(
-        comments, "v0.12.64+12064-macos", "a" * 40, "2026-07-19T13:00:00Z"
-    ) == ["alice", "bob"]
-
-    comments[1]["author_association"] = "CONTRIBUTOR"
-    with pytest.raises(SystemExit, match="exactly two"):
-        emergency_promotion.approval_identities(comments, "v0.12.64+12064-macos", "a" * 40, "2026-07-19T13:00:00Z")
-
-
-def test_emergency_incident_state_normalizes_github_open_casing():
-    assert emergency_promotion.incident_is_open({"number": 10063, "state": "OPEN"}, "10063")
-    assert emergency_promotion.incident_is_open({"number": "10063", "state": "open"}, "10063")
-    assert not emergency_promotion.incident_is_open({"number": 10063, "state": "closed"}, "10063")
 
 
 def test_prepare_manifest_requires_exact_qualification_and_assets():
@@ -325,39 +274,6 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
     assert automatic_gate < candidate_download
 
 
-def test_emergency_beta_runs_notification_and_monitor_only_after_authoritative_reconciliation():
-    """Static wiring contract: recover only from the bound emergency transaction."""
-    workflow = EMERGENCY_BETA_WORKFLOW.read_text()
-    pointer = workflow.index("      - name: Register manifest and compare-and-swap only macOS beta")
-    stable_proof = workflow.index("      - name: Prove Stable pointer, release metadata, and appcast are unchanged")
-    github_metadata = workflow.index(
-        "      - name: Reconcile explicit emergency release metadata after beta pointer CAS"
-    )
-    notify_job = workflow.index("  notify:")
-    notify = workflow.index("      - name: Notify incident responders immediately")
-    metadata_step = workflow[github_metadata:notify]
-
-    assert pointer < stable_proof < github_metadata < notify_job < notify
-    assert "authoritative macOS beta pointer compare-and-swap did not succeed" in workflow
-    assert "if: always()" in metadata_step
-    assert "id: reconcile" in metadata_step
-    assert "emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}" in workflow
-    assert "emergency-promote-beta/reconciliation" in metadata_step
-    assert "source_sha=$SOURCE_SHA" in metadata_step
-    assert "authoritative emergency transaction reconciliation did not verify this release identity" in metadata_step
-    assert 'echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"' in metadata_step
-    assert "gh api --paginate --slurp" in workflow
-    assert "for comment in page" in workflow
-
-    notification = workflow[notify_job : workflow.index("  monitor:")]
-    monitor = workflow[workflow.index("  monitor:") :]
-    expected_condition = "if: ${{ always() && needs.promote.outputs.emergency_reconciled == 'true' }}"
-    assert expected_condition in notification
-    assert expected_condition in monitor
-    assert "environment: prod" not in notification
-    assert "environment: prod" not in monitor
-
-
 def test_qualification_claims_are_serialized_by_the_trusted_runner_only():
     codemagic = CODEMAGIC_CONFIG.read_text()
     dispatch = codemagic[codemagic.index("      - name: Dispatch trusted macOS beta qualification") :]
@@ -369,6 +285,37 @@ def test_qualification_claims_are_serialized_by_the_trusted_runner_only():
     assert "cancel-in-progress: false" in qualification
     assert "desktop_qualification_dispatch.py claim" in qualification
     assert "desktop_qualification_dispatch.py complete" in qualification
+
+
+def test_qualified_dispatch_retry_skips_runner_but_requests_promotion():
+    body = """<!-- KEY_VALUE_START
+qualificationDispatchState: qualified
+qualificationDispatchKey: codemagic:v0.12.64+12064-macos
+qualificationDispatchAttempt: 1
+qualificationDispatchUpdatedAt: 2026-07-09T12:00:00Z
+qualificationDispatchDiagnostic: trusted qualification completed
+KEY_VALUE_END -->"""
+
+    result, should_run, should_promote, reason = qualification_dispatch.claim(
+        body,
+        key="codemagic:v0.12.64+12064-macos",
+        updated_at="2026-07-09T12:05:00Z",
+        run_id="12345",
+        run_url="https://github.com/BasedHardware/omi/actions/runs/12345",
+        allow_retry=False,
+    )
+
+    assert result == body
+    assert should_run is False
+    assert should_promote is True
+    assert reason == "dispatch key already qualified"
+
+
+def test_qualification_workflow_promotes_already_qualified_claims():
+    qualification = QUALIFY_BETA_WORKFLOW.read_text()
+
+    assert "should_promote=" in qualification
+    assert "steps.claim.outputs.should_promote == 'true'" in qualification
 
 
 def test_stable_promotion_remains_manual_only():

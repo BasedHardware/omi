@@ -120,14 +120,24 @@ DESKTOP_LAUNCH_PID=""
 QUALIFICATION_SUCCESS=0
 BRIDGE_WAIT_SECS=900
 
-gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,body \
+gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
   > /tmp/desktop-qualification-release.json
 
 python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
 
-rm -rf "$WORKTREE"
+remove_registered_qualification_worktree() {
+  if git -C "$REPO_ROOT" worktree list --porcelain | grep -Fxq "worktree $WORKTREE"; then
+    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE"
+    git -C "$REPO_ROOT" worktree prune
+  elif [[ -e "$WORKTREE" ]]; then
+    echo "qualification failed: unregistered worktree path exists: $WORKTREE" >&2
+    return 1
+  fi
+}
+
+remove_registered_qualification_worktree
 git -C "$REPO_ROOT" worktree add --detach "$WORKTREE" "$RELEASE_TAG"
 
 LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
@@ -246,7 +256,8 @@ cleanup() {
     (cd "$WORKTREE" && PROVIDER_MODE=offline make dev-down) >/dev/null 2>&1 || true
   fi
   if [[ "$QUALIFICATION_SUCCESS" -eq 1 ]]; then
-    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || rm -rf "$WORKTREE"
+    remove_registered_qualification_worktree || \
+      echo "qualification cleanup: retained unregistered worktree path: $WORKTREE" >&2
   fi
   exit "$exit_code"
 }
@@ -316,7 +327,8 @@ cp "$EVIDENCE/manifest.json" "$EVIDENCE_FILE"
 
 if [[ "$AUTOMATIC" -eq 1 ]]; then
   git -C "$REPO_ROOT" fetch origin --tags --force
-  LATEST_TAG=$(git -C "$REPO_ROOT" tag -l 'v*-macos' --sort=-v:refname | head -1)
+  LATEST_TAG=$(git -C "$REPO_ROOT" for-each-ref --count=1 --sort=-v:refname \
+    --format='%(refname:strip=2)' 'refs/tags/v*-macos')
   if [[ "$LATEST_TAG" != "$RELEASE_TAG" ]]; then
     echo "automatic qualification stopped: newer candidate exists ($LATEST_TAG)" >&2
     exit 1

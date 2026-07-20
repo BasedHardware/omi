@@ -13,11 +13,9 @@ from pydantic import BaseModel, Field
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
-    emergency_promote_macos_beta_channel,
     promote_channel,
     register_release_manifest,
     rollback_macos_beta_channel,
-    verify_emergency_macos_beta_reconciliation,
 )
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
@@ -82,6 +80,10 @@ class DesktopChannelPromotionRequest(BaseModel):
     channel: str = Field(pattern="^(beta|stable)$")
     release_id: str
     expected_generation: Optional[int] = Field(default=None, ge=0)
+    expected_current_release_id: Optional[str] = None
+    #: Beta-only break-glass: skip the T2 qualification gate. Requires both
+    #: compare-and-swap fields above so the bypass cannot race normal promotion.
+    emergency: bool = False
 
 
 class DesktopBetaRollbackRequest(BaseModel):
@@ -92,29 +94,6 @@ class DesktopBetaRollbackRequest(BaseModel):
     release_id: str = Field(min_length=1)
     expected_current_release_id: str = Field(min_length=1)
     expected_generation: int = Field(ge=0)
-
-
-class DesktopBetaEmergencyPromotionRequest(BaseModel):
-    """Deliberately non-generic break-glass request for macOS beta only."""
-
-    platform: Literal["macos"]
-    channel: Literal["beta"]
-    release_id: str = Field(min_length=1)
-    source_sha: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
-    expected_current_release_id: str = Field(min_length=1)
-    expected_generation: int = Field(ge=0)
-    incident_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-    operator: str = Field(min_length=1, max_length=39, pattern=r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$")
-    expires_at: str = Field(min_length=1)
-    approvers: List[str] = Field(min_length=2, max_length=2)
-    signed_smoke_url: str = Field(min_length=1)
-    signed_smoke_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
-    behavioral_url: str = Field(min_length=1)
-    behavioral_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
-    source_gate_url: str = Field(min_length=1)
-    zip_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
-    dmg_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
 
 
 class DesktopPreviewPublishRequest(BaseModel):
@@ -905,7 +884,13 @@ async def register_desktop_release(request: DesktopReleaseManifestRequest, secre
 
 @router.post("/v2/desktop/channels/promote")
 async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secret_key: str = Header(...)):
-    """Atomically advance one explicit channel pointer to a registered release."""
+    """Atomically advance one explicit channel pointer to a registered release.
+
+    ``emergency`` is the beta-only break-glass path: it skips the T2
+    qualification gate and requires an explicit compare-and-swap on both the
+    current release id and generation, so a concurrent normal promotion cannot
+    be silently clobbered.
+    """
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
@@ -916,6 +901,8 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
             request.channel,
             request.release_id,
             expected_generation=request.expected_generation,
+            expected_current_release_id=request.expected_current_release_id,
+            emergency=request.emergency,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -943,62 +930,4 @@ async def rollback_macos_beta_channel_endpoint(request: DesktopBetaRollbackReque
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
-    return {"success": True, **result}
-
-
-@router.post("/v2/desktop/channels/emergency-promote-beta")
-async def emergency_promote_macos_beta_channel_endpoint(
-    request: DesktopBetaEmergencyPromotionRequest, secret_key: str = Header(...)
-):
-    """Break-glass forward promotion with a beta-only transactional CAS and audit."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    evidence = {
-        "signed_smoke_url": request.signed_smoke_url,
-        "signed_smoke_sha256": request.signed_smoke_sha256,
-        "behavioral_url": request.behavioral_url,
-        "behavioral_sha256": request.behavioral_sha256,
-        "source_gate_url": request.source_gate_url,
-        "zip_sha256": request.zip_sha256,
-        "dmg_sha256": request.dmg_sha256,
-    }
-    try:
-        result = await run_blocking(
-            db_executor,
-            emergency_promote_macos_beta_channel,
-            request.release_id,
-            source_sha=request.source_sha,
-            expected_current_release_id=request.expected_current_release_id,
-            expected_generation=request.expected_generation,
-            incident_id=request.incident_id,
-            reason=request.reason,
-            operator=request.operator,
-            expires_at=request.expires_at,
-            approvers=request.approvers,
-            evidence=evidence,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
-    return {"success": True, **result}
-
-
-@router.get("/v2/desktop/channels/emergency-promote-beta/reconciliation")
-async def verify_emergency_macos_beta_reconciliation_endpoint(
-    release_id: str = Query(min_length=1),
-    source_sha: str = Query(pattern=r"^[0-9a-fA-F]{40}$"),
-    secret_key: str = Header(...),
-):
-    """Verify an emergency transaction before repairing GitHub release metadata."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    try:
-        result = await run_blocking(
-            db_executor,
-            verify_emergency_macos_beta_reconciliation,
-            release_id,
-            source_sha=source_sha,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"success": True, **result}

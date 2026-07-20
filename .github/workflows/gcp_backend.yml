@@ -31,6 +31,28 @@ on:
         options:
           - all
           - cloud-run-only
+      # Break-glass: the eligibility proof requires a *successful* Release
+      # Eligibility push-run on this exact SHA. A flaky or red check therefore
+      # poisons that SHA permanently -- rerunning does not retroactively make
+      # the original run succeed, so the only other recovery is pushing a new
+      # commit to main and waiting for a full green run. That is unacceptable
+      # for a hotfix, so this hatch exists.
+      #
+      # It does NOT relax the property that matters: the SHA must still be an
+      # ancestor of main, so unreviewed code can never reach production.
+      skip_eligibility_proof:
+        description: 'Break-glass: deploy without a Release Eligibility proof (still requires a merged main SHA)'
+        required: false
+        default: false
+        type: boolean
+      break_glass_confirm:
+        description: 'Type deploy-without-proof when skip_eligibility_proof is set'
+        required: false
+        default: ''
+      break_glass_reason:
+        description: 'Why the eligibility proof is unavailable (required with skip_eligibility_proof)'
+        required: false
+        default: ''
 
 # Cloud Run revision promotion/traffic repair and the shared backend GKE resources
 # are one environment-scoped mutation domain across the backend deploy workflows.
@@ -110,6 +132,7 @@ jobs:
     runs-on: ubuntu-latest-m
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+      break_glass: ${{ steps.admitted_source.outputs.break_glass }}
     steps:
       - name: Validate Firestore readiness inputs
         env:
@@ -145,6 +168,9 @@ jobs:
         env:
           DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
           GH_TOKEN: ${{ github.token }}
+          SKIP_PROOF: ${{ github.event.inputs.skip_eligibility_proof }}
+          BREAK_GLASS_CONFIRM: ${{ github.event.inputs.break_glass_confirm }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
         run: |
           set -euo pipefail
           if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]; then
@@ -154,15 +180,35 @@ jobs:
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
           git cat-file -e "${DEPLOY_SHA}^{commit}"
-          git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"
-          proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
-          gh api -H "Accept: application/vnd.github+json" \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
-            > "$proof_path"
-          python3 .github/scripts/verify_backend_release_admission.py \
-            --sha "$DEPLOY_SHA" \
-            --repository "$GITHUB_REPOSITORY" \
-            --workflow-runs "$proof_path"
+
+          # Always enforced, break-glass or not: only merged main code deploys.
+          if ! git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"; then
+            echo "ERROR: release_sha is not an ancestor of origin/main; only merged code may deploy."
+            exit 1
+          fi
+
+          if [[ "${SKIP_PROOF:-false}" == "true" ]]; then
+            if [[ "$BREAK_GLASS_CONFIRM" != "deploy-without-proof" ]]; then
+              echo "ERROR: skip_eligibility_proof requires break_glass_confirm=deploy-without-proof." >&2
+              exit 1
+            fi
+            if [[ -z "${BREAK_GLASS_REASON// }" ]]; then
+              echo "ERROR: skip_eligibility_proof requires a non-empty break_glass_reason." >&2
+              exit 1
+            fi
+            echo "::warning::Release Eligibility proof skipped for ${DEPLOY_SHA}: ${BREAK_GLASS_REASON}"
+            printf 'break_glass=true\n' >> "$GITHUB_OUTPUT"
+          else
+            proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+            gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+              > "$proof_path"
+            python3 .github/scripts/verify_backend_release_admission.py \
+              --sha "$DEPLOY_SHA" \
+              --repository "$GITHUB_REPOSITORY" \
+              --workflow-runs "$proof_path"
+            printf 'break_glass=false\n' >> "$GITHUB_OUTPUT"
+          fi
           printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Checkout admitted Firestore source
@@ -214,6 +260,40 @@ jobs:
           path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
           if-no-files-found: error
           retention-days: 1
+
+  # Kept out of firestore_readiness on purpose: that job is a least-privilege
+  # release-proof boundary limited to actions:read/contents:read, so the audit
+  # side effect gets its own job rather than widening it.
+  record_break_glass:
+    needs: firestore_readiness
+    if: ${{ needs.firestore_readiness.outputs.break_glass == 'true' }}
+    permissions:
+      contents: 'read'
+      issues: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record that the eligibility proof was bypassed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEPLOY_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
+        run: |
+          set -euo pipefail
+          gh issue create --repo "$REPO" \
+            --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
+            --label release-gate-failure \
+            --body "$(printf '%s\n' \
+              "Backend deploy ran without a Release Eligibility proof." \
+              "" \
+              "- SHA: \`${DEPLOY_SHA}\` (verified ancestor of main)" \
+              "- Environment: ${DEPLOY_ENVIRONMENT}" \
+              "- Operator: @${GITHUB_ACTOR}" \
+              "- Reason: ${BREAK_GLASS_REASON}" \
+              "- Run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}" \
+              "" \
+              "The gate being unusable is the defect. Fix the gate, then close this.")"
 
   deploy:
     needs: firestore_readiness

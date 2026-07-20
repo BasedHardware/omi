@@ -91,8 +91,11 @@ jobs:
             gh release edit "$RELEASE_TAG" --repo "$REPO" \
               --notes-file /tmp/desktop-beta-qualification/release-body-after-claim.md
           fi
-          echo "dispatch_key=$DISPATCH_KEY" >> "$GITHUB_OUTPUT"
-          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+          {
+            echo "dispatch_key=$DISPATCH_KEY"
+            echo "should_run=$SHOULD_RUN"
+            python3 -c 'import json; print("should_promote=" + str(json.load(open("/tmp/desktop-beta-qualification/claim.json"))["should_promote"]).lower())'
+          } >> "$GITHUB_OUTPUT"
           {
             echo "## Desktop qualification dispatch"
             echo "- Candidate: \`$RELEASE_TAG\`"
@@ -187,7 +190,7 @@ jobs:
             --notes-file /tmp/desktop-beta-qualification/release-body-after-complete.md
 
       - name: Request protected beta promotion
-        if: steps.claim.outputs.should_run == 'true' && steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'
+        if: (steps.claim.outputs.should_run == 'true' && steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success') || steps.claim.outputs.should_promote == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}

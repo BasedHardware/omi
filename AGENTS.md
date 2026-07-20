@@ -126,6 +126,17 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 - Backend: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`. Runtime env contract: `backend/AGENTS.md` → Service Map.
 - Firmware (Omi CV1): `omi/firmware/AGENTS.md`.
 
+**Every gated surface has a break-glass hatch. A broken gate is never a reason to be stuck.** Each records a tracking issue; repeated use means the gate is the defect.
+
+| Blocked on | Hatch |
+|---|---|
+| Desktop candidate won't cut (`Desktop Swift Build & Tests` red/flaky) | `desktop_auto_release.yml` with `release_mode=break_glass` |
+| Beta qualification broken | `desktop_emergency_promote_beta.yml` (`confirm=emergency-promote-beta`) |
+| Stable promotion blocked | `desktop_promote_prod.yml` with `break_glass_confirm` |
+| Backend deploy has no Release Eligibility proof | `gcp_backend.yml` with `skip_eligibility_proof=true`, `break_glass_confirm=deploy-without-proof`, `break_glass_reason` |
+
+Hatches relax *evidence* requirements only. They never relax that code is merged to `main` first, and never reach stable/prod pointers without their own explicit confirm.
+
 ## Documentation Maintenance
 
 - **This file is the single source of truth for cross-component agent rules; component `AGENTS.md` files own their component's detail.** `CLAUDE.md` files are pointers only.
