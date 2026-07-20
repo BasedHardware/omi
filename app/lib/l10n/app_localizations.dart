@@ -18098,6 +18098,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Choose the model for on-device transcription'**
   String get whisperModelDesc;
+
+  /// Title of the confirmation dialog before downgrading to the free plan
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade to Freemium?'**
+  String get downgradeToFreemiumTitle;
+
+  /// Heading shown above the list of free-plan limitations in the downgrade dialog
+  ///
+  /// In en, this message translates to:
+  /// **'You will experience these limitations:'**
+  String get downgradeLimitationsHeading;
+
+  /// Free-plan limitation: 7x battery consumption
+  ///
+  /// In en, this message translates to:
+  /// **'7x battery consumption'**
+  String get downgradeLimitBattery;
+
+  /// Free-plan limitation: lower transcription quality
+  ///
+  /// In en, this message translates to:
+  /// **'30% less transcription quality'**
+  String get downgradeLimitQuality;
+
+  /// Free-plan limitation: noticeable transcription delay
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second delay'**
+  String get downgradeLimitDelay;
+
+  /// Free-plan limitation: speaker identification disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot identify speakers'**
+  String get downgradeLimitSpeakers;
+
+  /// Destructive confirm button on the downgrade dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade Anyway'**
+  String get downgradeAnyway;
+
+  /// Dialog title shown when trying to link a conversation to a calendar event without Google Calendar connected
+  ///
+  /// In en, this message translates to:
+  /// **'Google Calendar Not Connected'**
+  String get googleCalendarNotConnected;
+
+  /// Dialog body for the Google-Calendar-not-connected dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your Google Calendar to link conversations to calendar events.'**
+  String get googleCalendarConnectPrompt;
+
+  /// Snackbar shown after a conversation is linked to a calendar event
+  ///
+  /// In en, this message translates to:
+  /// **'Linked to \"{title}\"'**
+  String linkedToEvent(String title);
+
+  /// Snackbar shown when linking a conversation to a calendar event fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to link calendar event'**
+  String get failedToLinkCalendarEvent;
+
+  /// Snackbar shown after the user gives feedback on an AI chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks for your feedback!'**
+  String get thanksForYourFeedback;
+
+  /// Label of the copy-message action on an AI chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Copy message'**
+  String get copyMessage;
+
+  /// Placeholder of the search input in the settings drawer
+  ///
+  /// In en, this message translates to:
+  /// **'Search settings…'**
+  String get searchSettings;
+
+  /// Title shown when an audio recording fails to load in the conversation player
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading audio'**
+  String get errorLoadingAudio;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
