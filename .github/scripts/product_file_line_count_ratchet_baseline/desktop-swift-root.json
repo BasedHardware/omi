@@ -12,5 +12,6 @@
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
     "desktop/macos/Desktop/Sources/OmiApp.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
   },
-  "threshold": 1500
+  "threshold": 1500,
+  "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4272
 }

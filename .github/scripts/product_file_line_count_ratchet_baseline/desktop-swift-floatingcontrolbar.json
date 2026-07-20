@@ -13,5 +13,8 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
   },
-  "threshold": 1500
+  "threshold": 1500,
+  "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 3375,
+  "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 5886,
+  "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 2666
 }

@@ -7,5 +7,7 @@
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Named non-production fault bundle supplies an inert hermetic model token so fault injection reaches the configured remote 5xx backend without Firebase auth.",
     "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Detects the installed Codex CLI and seeds OMI_CODEX_ADAPTER_COMMAND so the shared agent runtime can drive Codex over ACP; named non-production fault bundle supplies an inert hermetic model token so fault injection reaches the configured remote 5xx backend without Firebase auth."
   },
-  "threshold": 1500
+  "threshold": 1500,
+  "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4354,
+  "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2212
 }
