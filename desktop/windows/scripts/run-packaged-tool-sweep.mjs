@@ -14,8 +14,14 @@
 // WHAT IT DOES
 //   1. Takes an already-built dist/win-unpacked (or --app-dir).
 //   2. Creates a THROWAWAY userData profile and seeds the signed-in Firebase
-//      session (firebase-auth.json, DPAPI — decryptable as the same Windows user)
-//      into it. Never touches the real profile — copies out, read-only.
+//      session into it: firebase-auth.json (main-side safeStorage/DPAPI session)
+//      PLUS the renderer state that gates the signed-in UI — Local State (the
+//      Chromium os_crypt key), Local Storage + IndexedDB (the onboarding-complete
+//      flag / prefs / Firebase persistence leveldb, encrypted with that key). All
+//      decryptable because the throwaway profile runs as the same Windows user.
+//      Never touches the real profile — copies out, read-only. Without Local State
+//      + Local Storage the app boots to onboarding and never relays the session,
+//      so the owner is never wired and waitForOwner times out.
 //   3. Boots the real exe with that isolated profile + a CDP port.
 //   4. Waits for the signed-in owner to be wired (voiceToolExecute stops
 //      returning "sign-in has not completed").
@@ -53,11 +59,17 @@ function arg(name) {
 const APP_DIR =
   arg('--app-dir') || process.env.OMI_SMOKE_APP_DIR || path.join(ROOT, 'dist', 'win-unpacked')
 const EXE = path.join(APP_DIR, 'omi-windows.exe')
-const AUTH_FILE =
-  process.env.OMI_SMOKE_AUTH_FILE ||
-  path.join(process.env.APPDATA || '', 'omi-windows', 'firebase-auth.json')
+// The signed-in profile to copy the session + renderer state OUT of (read-only).
+const SRC_PROFILE =
+  process.env.OMI_SMOKE_SRC_PROFILE || path.join(process.env.APPDATA || '', 'omi-windows')
+const AUTH_FILE = process.env.OMI_SMOKE_AUTH_FILE || path.join(SRC_PROFILE, 'firebase-auth.json')
 const DB_FILE = process.env.OMI_SMOKE_DB_FILE || ''
 const CDP_PORT = Number(process.env.OMI_SMOKE_CDP_PORT || 9533)
+
+// Renderer state that must ride along with firebase-auth.json so the app boots
+// signed-in AND past onboarding (else it shows onboarding and never relays the
+// session). Best-effort: a missing one is skipped.
+const SEED_RENDERER_STATE = ['Local State', 'Local Storage', 'IndexedDB', 'Session Storage']
 
 // The agent-reachable tools, with benign read-only args. `mutation`/`native-ui`
 // tools are SKIPPED with a documented reason — they share the same session/db
@@ -94,6 +106,14 @@ const SWEEP = [
   { name: 'capture_screen', skip: 'native UI — captures the user screen; needs consent gate' },
   { name: 'spawn_agent', skip: 'starts a real background agent / costs tokens' }
 ]
+
+// The agent-control tools return a JSON `{ok:...}` envelope; product tools return
+// an opaque string (or an "Error: …" string on failure). Only list_agent_sessions
+// is swept here.
+const CONTROL_TOOL_NAMES = new Set(['list_agent_sessions'])
+function isAgentControlTool(name) {
+  return CONTROL_TOOL_NAMES.has(name)
+}
 
 function fail(msg) {
   console.error(`\n[packaged-tool-sweep] FAIL: ${msg}\n`)
@@ -136,9 +156,18 @@ function cleanup() {
 
 async function main() {
   // Seed the isolated profile: the signed-in Firebase session goes where the app's
-  // encrypted persistence reads it — <userData>/firebase-auth.json.
+  // encrypted persistence reads it — <userData>/firebase-auth.json — plus the
+  // renderer state (Local State key + Local Storage/IndexedDB) that gates the
+  // signed-in, past-onboarding UI.
   mkdirSync(profileDir, { recursive: true })
   cpSync(AUTH_FILE, path.join(profileDir, 'firebase-auth.json'))
+  for (const name of SEED_RENDERER_STATE) {
+    const src = path.join(SRC_PROFILE, name)
+    if (existsSync(src)) {
+      cpSync(src, path.join(profileDir, name), { recursive: true })
+    }
+  }
+  console.log(`[packaged-tool-sweep] seeded session + renderer state from ${SRC_PROFILE}`)
   if (DB_FILE && existsSync(DB_FILE)) {
     cpSync(DB_FILE, path.join(profileDir, 'omi.db'))
     console.log(`[packaged-tool-sweep] seeded omi.db from ${DB_FILE}`)
@@ -159,9 +188,31 @@ async function main() {
   const page = await findMainPage(browser, 25_000)
   if (!page) throw new Error('main app window (index.html) never appeared')
 
+  // The app mounts the authed shell (which relays the pi-mono session → owner)
+  // only when onboarding is complete: `onboarded = isOnboardingComplete()` and
+  // that is `typeof prefs.onboardingCompletedAt === 'number'` (App.tsx /
+  // lib/preferences.ts). The seeded prefs can lack it (leveldb flush/origin
+  // timing), leaving the app on the wizard so it never relays. The real user IS
+  // onboarded, so mark it complete + reload — the same shape as the app's own
+  // dev/e2e onboarded-bypass. Firebase itself is already signed in from the seed.
+  await page.evaluate(() => {
+    const KEY = 'omi-windows-prefs-v1'
+    let prefs = {}
+    try {
+      prefs = JSON.parse(localStorage.getItem(KEY) || '{}')
+    } catch {
+      prefs = {}
+    }
+    if (typeof prefs.onboardingCompletedAt !== 'number') {
+      prefs.onboardingCompletedAt = Date.now()
+      localStorage.setItem(KEY, JSON.stringify(prefs))
+    }
+  })
+  await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
+
   // Wait for the signed-in owner to be wired (renderer relays the Firebase session
   // to main → setControlPlaneOwner). Until then voiceToolExecute fails closed.
-  await waitForOwner(page, 45_000)
+  await waitForOwner(page, 60_000)
 
   const results = []
   for (const t of SWEEP) {
@@ -185,13 +236,20 @@ async function main() {
     )
     const raw = (out.result || '').replace(/\s+/g, ' ').trim()
     const preview = raw.slice(0, 140)
-    // A product tool returns an "Error: …" string on failure; a control tool a JSON
-    // envelope with ok:false. Treat either as ERROR — except an expected validation
-    // error, which still proves the executor ran.
+    // Failure signal: a product executor returns an "Error: …" STRING on failure
+    // (this is exactly how the bug surfaced: "Error: index.getBackendSession is not
+    // a function"). A structured JSON result — even one with `ok:false` and a
+    // `failure_code` like get_work_context's `no_recent_capture` — is a VALID
+    // executor response, not a failure. A control tool (list_agent_sessions) returns
+    // a JSON envelope; flag it only if that envelope is `ok:false`.
     let status = 'OK'
     if (t.expectError) {
       status = t.expectError.test(raw) ? 'OK' : 'ERROR'
-    } else if (!out.ok || /^Error:/i.test(raw) || /"ok"\s*:\s*false/.test(raw)) {
+    } else if (!out.ok) {
+      status = 'ERROR'
+    } else if (/^Error:/i.test(raw)) {
+      status = 'ERROR'
+    } else if (isAgentControlTool(t.name) && /^\{/.test(raw) && /"ok"\s*:\s*false/.test(raw)) {
       status = 'ERROR'
     }
     results.push({ name: t.name, status, detail: preview })
