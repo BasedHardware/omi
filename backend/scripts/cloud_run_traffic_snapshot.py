@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -22,6 +23,9 @@ DEFAULT_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend
 SNAPSHOT_SCHEMA_VERSION = 1
 
 RunCommand = Callable[[Sequence[str]], None]
+FetchService = Callable[..., Mapping[str, Any]]
+
+_TRAFFIC_TAG_RE = re.compile(r'^[a-z][a-z0-9-]{0,62}$')
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
@@ -49,6 +53,23 @@ def _traffic_entries(value: Any) -> list[dict[str, Any]]:
             sanitized['latestRevision'] = True
         entries.append(sanitized)
     return entries
+
+
+def _traffic_tags(value: Any) -> set[str]:
+    if not isinstance(value, list):
+        return set()
+    return {
+        tag
+        for raw_entry in value
+        if isinstance(raw_entry, Mapping)
+        for tag in (raw_entry.get('tag'),)
+        if isinstance(tag, str) and tag
+    }
+
+
+def _is_not_found(exc: subprocess.CalledProcessError) -> bool:
+    evidence = f"{getattr(exc, 'stderr', '')} {getattr(exc, 'output', '')}".lower()
+    return 'not found' in evidence or 'notfound' in evidence
 
 
 def sanitize_service_document(service: str, document: Mapping[str, Any]) -> dict[str, Any]:
@@ -105,8 +126,7 @@ def capture_snapshot(
         try:
             document = fetcher(project=project, region=region, service=service)
         except subprocess.CalledProcessError as exc:
-            evidence = f"{getattr(exc, 'stderr', '')} {getattr(exc, 'output', '')}".lower()
-            if allow_missing and ('not found' in evidence or 'notfound' in evidence):
+            if allow_missing and _is_not_found(exc):
                 missing.append(service)
                 continue
             raise
@@ -147,14 +167,25 @@ def _load_snapshot(path: Path) -> dict[str, Any]:
     return cast(dict[str, Any], loaded)
 
 
-def restore_targets(service_snapshot: Mapping[str, Any]) -> list[tuple[str, int]]:
-    """Resolve a recorded spec.traffic entry to immutable revision percentages."""
-    spec = _mapping(service_snapshot.get('spec'))
+def restore_targets(
+    service_snapshot: Mapping[str, Any],
+    *,
+    traffic_source: str = 'spec',
+) -> list[tuple[str, int]]:
+    """Resolve recorded traffic entries to immutable revision percentages.
+
+    ``traffic_source`` selects which sanitized section holds the entries to
+    resolve. The recorded snapshot (what we restore *to*) lives under ``spec``;
+    the live read-back after a restore must resolve ``status`` so a wedged Cloud
+    Run service whose ``status.traffic`` still serves a different revision than
+    its just-updated ``spec.traffic`` cannot be falsely reported as restored.
+    """
+    source = _mapping(service_snapshot.get(traffic_source))
     status = _mapping(service_snapshot.get('status'))
     fallback = status.get('latestReadyRevisionName')
     targets: list[tuple[str, int]] = []
     seen: set[str] = set()
-    for entry in _traffic_entries(spec.get('traffic')):
+    for entry in _traffic_entries(source.get('traffic')):
         percent = cast(int, entry['percent'])
         if percent == 0:
             continue
@@ -173,9 +204,16 @@ def restore_targets(service_snapshot: Mapping[str, Any]) -> list[tuple[str, int]
     return targets
 
 
-def restore_command(*, project: str, region: str, service: str, targets: Sequence[tuple[str, int]]) -> list[str]:
+def restore_command(
+    *,
+    project: str,
+    region: str,
+    service: str,
+    targets: Sequence[tuple[str, int]],
+    remove_tag: str | None = None,
+) -> list[str]:
     rendered_targets = ','.join(f'{revision}={percent}' for revision, percent in targets)
-    return [
+    command = [
         'gcloud',
         'run',
         'services',
@@ -184,20 +222,51 @@ def restore_command(*, project: str, region: str, service: str, targets: Sequenc
         f'--project={project}',
         f'--region={region}',
         f'--to-revisions={rendered_targets}',
+    ]
+    if remove_tag:
+        if not _TRAFFIC_TAG_RE.fullmatch(remove_tag):
+            raise ValueError(f'invalid Cloud Run traffic tag {remove_tag!r}')
+        command.append(f'--remove-tags={remove_tag}')
+    command.append('--quiet')
+    return command
+
+
+def delete_service_command(*, project: str, region: str, service: str) -> list[str]:
+    return [
+        'gcloud',
+        'run',
+        'services',
+        'delete',
+        service,
+        f'--project={project}',
+        f'--region={region}',
         '--quiet',
     ]
+
+
+def _observed_targets(document: Mapping[str, Any]) -> list[tuple[str, int]]:
+    sanitized = sanitize_service_document('observed', document)
+    return restore_targets(sanitized, traffic_source='status')
 
 
 def restore_snapshot(
     snapshot: Mapping[str, Any],
     *,
     runner: RunCommand | None = None,
+    fetcher: FetchService = _fetch_service,
+    remove_tag: str | None = None,
+    delete_missing: bool = False,
 ) -> dict[str, Any]:
-    """Restore every recorded traffic spec, retaining bounded per-service evidence."""
+    """Restore and observe every recorded route, retaining bounded evidence."""
     project = cast(str, snapshot['project'])
     region = cast(str, snapshot['region'])
     services = cast(Mapping[str, Any], snapshot['services'])
-    if not services:
+    missing_services = snapshot.get('missing_services', [])
+    if not isinstance(missing_services, list) or any(
+        not isinstance(item, str) or not item for item in missing_services
+    ):
+        raise ValueError('traffic snapshot contains invalid missing_services')
+    if not services and not delete_missing:
         return {
             'schema_version': SNAPSHOT_SCHEMA_VERSION,
             'scope': 'backend Cloud Run traffic restoration',
@@ -205,7 +274,7 @@ def restore_snapshot(
             'result': 'pass',
             'failed_services': [],
             'services': {},
-            'note': 'no prior Cloud Run services existed; candidate remains non-serving',
+            'note': 'no prior Cloud Run services existed',
         }
     execute = runner or (lambda command: subprocess.run(command, check=True, capture_output=True, text=True))
     results: dict[str, dict[str, Any]] = {}
@@ -215,7 +284,13 @@ def restore_snapshot(
         if not isinstance(raw_service_snapshot, Mapping):
             raise ValueError(f'{service}: traffic snapshot service entry is invalid')
         targets = restore_targets(raw_service_snapshot)
-        command = restore_command(project=project, region=region, service=service, targets=targets)
+        command = restore_command(
+            project=project,
+            region=region,
+            service=service,
+            targets=targets,
+            remove_tag=remove_tag,
+        )
         result: dict[str, Any] = {
             'targets': [{'revision': revision, 'percent': percent} for revision, percent in targets],
             'command': ' '.join(command),
@@ -225,9 +300,47 @@ def restore_snapshot(
         except subprocess.CalledProcessError as exc:
             result.update({'result': 'failed', 'error': f'gcloud exited with code {exc.returncode}'})
         else:
-            result['result'] = 'restored'
+            try:
+                observed = fetcher(project=project, region=region, service=service)
+                observed_targets = _observed_targets(observed)
+                observed_tags = _traffic_tags(_mapping(observed.get('spec')).get('traffic'))
+            except (ValueError, subprocess.CalledProcessError):
+                result.update({'result': 'failed', 'error': 'could not observe restored traffic'})
+            else:
+                result['observed_targets'] = [
+                    {'revision': revision, 'percent': percent} for revision, percent in observed_targets
+                ]
+                if sorted(observed_targets) != sorted(targets):
+                    result.update({'result': 'failed', 'error': 'observed traffic does not match snapshot'})
+                elif remove_tag and remove_tag in observed_tags:
+                    result.update({'result': 'failed', 'error': 'candidate traffic tag remains after restore'})
+                else:
+                    result['result'] = 'restored'
         results[service] = result
+
+    deleted: dict[str, dict[str, Any]] = {}
+    if delete_missing:
+        for service in missing_services:
+            command = delete_service_command(project=project, region=region, service=service)
+            result = {'command': ' '.join(command)}
+            try:
+                execute(command)
+            except subprocess.CalledProcessError as exc:
+                if not _is_not_found(exc):
+                    result.update({'result': 'failed', 'error': f'gcloud exited with code {exc.returncode}'})
+            if 'result' not in result:
+                try:
+                    fetcher(project=project, region=region, service=service)
+                except subprocess.CalledProcessError as exc:
+                    if _is_not_found(exc):
+                        result['result'] = 'deleted'
+                    else:
+                        result.update({'result': 'failed', 'error': 'could not verify service deletion'})
+                else:
+                    result.update({'result': 'failed', 'error': 'service still exists after delete'})
+            deleted[service] = result
     failures = [service for service, result in results.items() if result['result'] != 'restored']
+    failures.extend(service for service, result in deleted.items() if result['result'] != 'deleted')
     return {
         'schema_version': SNAPSHOT_SCHEMA_VERSION,
         'scope': 'backend Cloud Run traffic restoration',
@@ -235,6 +348,7 @@ def restore_snapshot(
         'result': 'pass' if not failures else 'fail',
         'failed_services': failures,
         'services': results,
+        'deleted_services': deleted,
     }
 
 
@@ -260,6 +374,8 @@ def main() -> int:
     restore = commands.add_parser('restore', help='restore Cloud Run traffic from a recorded snapshot')
     restore.add_argument('--snapshot', type=Path, required=True)
     restore.add_argument('--evidence-path', type=Path, required=True)
+    restore.add_argument('--remove-tag')
+    restore.add_argument('--delete-missing', action='store_true')
     args = parser.parse_args()
     try:
         if args.command == 'capture':
@@ -273,7 +389,11 @@ def main() -> int:
             print(f'captured sanitized Cloud Run traffic snapshot at {args.output}')
             return 0
         snapshot = _load_snapshot(args.snapshot)
-        evidence = restore_snapshot(snapshot)
+        evidence = restore_snapshot(
+            snapshot,
+            remove_tag=args.remove_tag,
+            delete_missing=args.delete_missing,
+        )
         _write_json(args.evidence_path, evidence)
         print(json.dumps(evidence, indent=2, sort_keys=True))
         return 0 if evidence['result'] == 'pass' else 1

@@ -100,6 +100,30 @@ def test_active_pointer_promote_and_hold_are_monotonic() -> None:
         release_rings.build_active_pointer(ring="beta", release_id="2026-07-20.2", existing=held)
 
 
+def test_recovery_pointer_uses_pre_mutation_state_after_a_late_failure() -> None:
+    before = {
+        "current_release_id": "2026-07-19.1",
+        "previous_verified_release_id": "2026-07-18.1",
+        "held_release_ids": [],
+    }
+    promoted = release_rings.build_active_pointer(
+        ring="prod", release_id="2026-07-20.1", existing=before, updated_at="2026-07-20T00:00:00+00:00"
+    )
+    assert promoted["current_release_id"] == "2026-07-20.1"
+
+    recovered = release_rings.build_active_pointer(
+        ring="prod",
+        release_id="2026-07-20.1",
+        existing=before,
+        hold=True,
+        updated_at="2026-07-20T00:01:00+00:00",
+    )
+
+    assert recovered["current_release_id"] == "2026-07-19.1"
+    assert recovered["previous_verified_release_id"] == "2026-07-18.1"
+    assert recovered["held_release_ids"] == ["2026-07-20.1"]
+
+
 def test_receipt_keeps_partial_mutation_distinct_from_restoration() -> None:
     receipt = release_rings.build_receipt(
         ring="prod",
