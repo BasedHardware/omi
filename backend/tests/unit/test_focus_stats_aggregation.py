@@ -103,6 +103,25 @@ class TestDistractedSessions:
         assert result['distracted_minutes'] == 1
         assert result['top_distractions'][0]['total_seconds'] == 60
 
+    def test_explicit_zero_duration_is_not_rounded_up_to_a_minute(self, stats):
+        # duration_seconds is Optional[int] with ge=0 on both the model and the route,
+        # so 0 is a valid measured value and must be distinguished from None. `or 60`
+        # conflated them and invented a minute of distraction that never happened.
+        result = stats([_session('distracted', 0)])
+        assert result['distracted_minutes'] == 0
+        assert result['distracted_count'] == 1
+        assert result['top_distractions'] == [{'app_or_site': 'Slack', 'total_seconds': 0, 'count': 1}]
+
+    def test_zero_duration_sessions_do_not_inflate_the_daily_total(self, stats):
+        # Ten zero-second distractions previously reported ten minutes of lost focus.
+        result = stats([_session('distracted', 0) for _ in range(10)])
+        assert result['distracted_minutes'] == 0
+
+    def test_zero_and_unknown_durations_are_scored_differently(self, stats):
+        result = stats([_session('distracted', 0, app='Slack'), _session('distracted', _MISSING, app='X')])
+        by_app = {entry['app_or_site']: entry['total_seconds'] for entry in result['top_distractions']}
+        assert by_app == {'Slack': 0, 'X': 60}
+
 
 class TestTopDistractions:
     def test_ranked_by_total_seconds_and_counted_per_app(self, stats):

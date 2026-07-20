@@ -87,7 +87,11 @@ def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
             total_focus_seconds += s.get('duration_seconds') or 0
         elif s.get('status') == 'distracted':
             distracted_count += 1
-            distracted_seconds = s.get('duration_seconds') or DEFAULT_DISTRACTED_SECONDS
+            # Only an *unknown* duration earns the default. duration_seconds is
+            # Optional[int] with ge=0, so a stored 0 is a real zero-second distraction and
+            # `or` would have silently rounded it up to a full minute.
+            raw_duration = s.get('duration_seconds')
+            distracted_seconds = DEFAULT_DISTRACTED_SECONDS if raw_duration is None else raw_duration
             total_distracted_seconds += distracted_seconds
             app = str(s.get('app_or_site', 'Unknown'))
             entry = distractions.setdefault(app, {'total_seconds': 0, 'count': 0})
