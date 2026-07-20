@@ -80,6 +80,7 @@ from utils.memory.default_read_rollout import (
     guard_legacy_memory_write,
     read_default_read_rollout,
 )
+from utils.observability import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -393,11 +394,21 @@ def get_memories(
     if memory_result.read_decision == MemoryReadDecision.USE_MEMORY:
         return [CleanerMemory.model_validate(memory) for memory in memory_result.memories]
     if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        raise HTTPException(
-            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
+        if memory_result.fallback_reason != 'missing_rollout_state':
+            raise HTTPException(
+                status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
+            )
+        # pin_memory_system above already resolved this account to LEGACY, so an absent
+        # memory_control/state doc is the expected un-enrolled state and the legacy
+        # `memories` collection is the authoritative read surface — not a fail-closed
+        # migration condition (#9892).
+        record_fallback(
+            component='other',
+            from_mode='memory_default_read',
+            to_mode='legacy_memories',
+            reason='policy',
+            outcome='recovered',
         )
-    if memory_result.should_use_legacy_fallback:
-        pass
 
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
