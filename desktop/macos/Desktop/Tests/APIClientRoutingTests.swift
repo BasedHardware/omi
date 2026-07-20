@@ -256,18 +256,40 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
   }
 
-  func testBetaProductionBundleRoutesToDevelopmentBackends() {
-    XCTAssertTrue(
+  func testBetaProductionBundleUsesDedicatedRingRatherThanDevelopment() {
+    XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
         updateChannel: "beta"
       ))
-    // "staging" is normalized to "beta" — same routing.
-    XCTAssertTrue(
+    // "staging" is normalized to "beta" — same ring.
+    XCTAssertFalse(
       DesktopBackendEnvironment.shouldUseDevelopmentBackends(
         bundleIdentifier: "com.omi.computer-macos",
         updateChannel: "staging"
       ))
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseBetaRingBackends(
+        bundleIdentifier: "com.omi.computer-macos",
+        updateChannel: "beta"
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: false,
+        useBetaRingBackends: true,
+        environmentValue: nil
+      ),
+      "https://api-beta.omi.me/"
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.rustBackendURL(
+        useDevelopmentBackends: false,
+        useBetaRingBackends: true,
+        environmentValue: nil,
+        launchEnvironmentValue: nil
+      ),
+      ""
+    )
   }
 
   func testStableProductionBundleKeepsProductionBackends() {

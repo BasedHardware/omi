@@ -38,7 +38,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          image: "{{ required "image.repository is required" .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ required "image.tag is required" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["uvicorn"]
           args: ["llm_gateway.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.service.port }}", "--loop", "uvloop"]
