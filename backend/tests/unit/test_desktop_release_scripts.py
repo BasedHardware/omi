@@ -24,6 +24,7 @@ mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 nominate_stable = _load("nominate_desktop_stable_candidate", "nominate-desktop-stable-candidate.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
+qualification_dispatch = _load("desktop_qualification_dispatch", "desktop_qualification_dispatch.py")
 
 
 def _release(body: str | None = None):
@@ -284,6 +285,37 @@ def test_qualification_claims_are_serialized_by_the_trusted_runner_only():
     assert "cancel-in-progress: false" in qualification
     assert "desktop_qualification_dispatch.py claim" in qualification
     assert "desktop_qualification_dispatch.py complete" in qualification
+
+
+def test_qualified_dispatch_retry_skips_runner_but_requests_promotion():
+    body = """<!-- KEY_VALUE_START
+qualificationDispatchState: qualified
+qualificationDispatchKey: codemagic:v0.12.64+12064-macos
+qualificationDispatchAttempt: 1
+qualificationDispatchUpdatedAt: 2026-07-09T12:00:00Z
+qualificationDispatchDiagnostic: trusted qualification completed
+KEY_VALUE_END -->"""
+
+    result, should_run, should_promote, reason = qualification_dispatch.claim(
+        body,
+        key="codemagic:v0.12.64+12064-macos",
+        updated_at="2026-07-09T12:05:00Z",
+        run_id="12345",
+        run_url="https://github.com/BasedHardware/omi/actions/runs/12345",
+        allow_retry=False,
+    )
+
+    assert result == body
+    assert should_run is False
+    assert should_promote is True
+    assert reason == "dispatch key already qualified"
+
+
+def test_qualification_workflow_promotes_already_qualified_claims():
+    qualification = QUALIFY_BETA_WORKFLOW.read_text()
+
+    assert "should_promote=" in qualification
+    assert "steps.claim.outputs.should_promote == 'true'" in qualification
 
 
 def test_stable_promotion_remains_manual_only():
