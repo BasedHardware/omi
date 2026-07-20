@@ -149,6 +149,34 @@ final class ChatJournalWritePathTests: XCTestCase {
     XCTAssertEqual(attempts, 2, "A persistent journal failure must not retry indefinitely")
   }
 
+  func testAcceptedTerminalContentWinsOverStaleStreamingProjection() {
+    let full = "RELAUNCH-PERSIST-1784573311"
+    let staleStreamingMessage = ChatMessage(
+      id: "attempt-relaunch-assistant",
+      text: "RELAUNCH-PERSIST-1",
+      sender: .ai,
+      isStreaming: true
+    )
+
+    XCTAssertEqual(
+      KernelTurnProjection.acceptedTerminalContent(
+        message: staleStreamingMessage,
+        acceptedContent: full
+      ),
+      full,
+      "The accepted agent result, not a stale UI streaming buffer, is canonical terminal content"
+    )
+    let blocks = KernelTurnProjection.acceptedTerminalContentBlocks(
+      message: staleStreamingMessage,
+      acceptedContent: full
+    )
+    XCTAssertEqual(
+      ChatContentBlockCodec.encode(blocks),
+      ChatContentBlockCodec.encode([
+        .text(id: "attempt-relaunch-assistant:terminal", text: full)
+      ]))
+  }
+
   // MARK: - Bug 2: projection preserves local-only fields across replay
 
   func testProjectionPreservesLocalOnlyFieldsAcrossTerminalReplay() throws {
