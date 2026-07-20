@@ -613,7 +613,7 @@ try:
     marker = Path(marker_path).read_text(encoding="utf-8").strip()
 except OSError as error:
     raise SystemExit(f"invalid UserNotifications callback marker: {error}")
-match = re.fullmatch(r"main_actor=true authorization_status=(\\d+)", marker)
+match = re.fullmatch(r"main_actor=true authorization_status=(\d+)", marker)
 if match is None:
     raise SystemExit("UserNotifications callback marker must prove main_actor=true and an authorization status")
 
