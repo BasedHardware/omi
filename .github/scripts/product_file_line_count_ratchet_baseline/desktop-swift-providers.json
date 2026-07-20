@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6186,
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2850
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2849
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Adds carryingLocalOnlyFields projection guard so journal replay preserves local-only row state (metadata/rating/notificationScreenshot); INV-CHAT-1 write-path fix.",
