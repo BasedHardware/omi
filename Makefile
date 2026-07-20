@@ -1,6 +1,10 @@
-ROOT := $(shell git rev-parse --show-toplevel)
 HOOKS_DIR := $(shell git rev-parse --git-path hooks)
-PYTHON ?= $(shell bash -c 'source "$(ROOT)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+# Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
+# (Make text interpolation). Shell variable expansion treats the resolved path
+# as data and cannot be broken by quote or command-substitution characters in
+# the checkout root, unlike Make interpolation into recipe shell text.
+export PYTHON
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
 
@@ -60,20 +64,20 @@ dev-logs:
 	bash scripts/dev-harness/dev-logs.sh
 
 list-memory-scenarios:
-	"$(PYTHON)" scripts/dev-harness/list-memory-scenarios.py
+	"$$PYTHON" scripts/dev-harness/list-memory-scenarios.py
 
 seed-memory-scenario:
-	"$(PYTHON)" scripts/dev-harness/seed-memory-scenario.py $(SCENARIO)
+	"$$PYTHON" scripts/dev-harness/seed-memory-scenario.py $(SCENARIO)
 
 reset-memory-scenario:
-	"$(PYTHON)" scripts/dev-harness/reset-memory-scenario.py $(SCENARIO)
+	"$$PYTHON" scripts/dev-harness/reset-memory-scenario.py $(SCENARIO)
 
 desktop-run-local:
 	@if [ -n "$(DESKTOP_APP_NAME)" ]; then \
-		PYTHON="$(PYTHON)" OMI_APP_NAME="$(DESKTOP_APP_NAME)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
+		PYTHON="$$PYTHON" OMI_APP_NAME="$(DESKTOP_APP_NAME)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
 	else \
-		PYTHON="$(PYTHON)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
+		PYTHON="$$PYTHON" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
 	fi
 
 run-canonical-promotion:
-	PYTHON="$(PYTHON)" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" "$(PYTHON)" scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"
+	PYTHON="$$PYTHON" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" "$$PYTHON" scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"
