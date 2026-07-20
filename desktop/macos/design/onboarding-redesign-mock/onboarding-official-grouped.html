@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Omi Onboarding (official flow) — grouped progress</title>
+<style>
+/* Official 18-step onboarding (OnboardingFlow.steps) rendered in the app's
+   OnboardingStepScaffold style, but the top progress dots are collapsed into
+   5 grouped sections that fill as you move through their steps. */
+:root {
+  --bg-primary: #0f0f0f; --bg-secondary: #1a1a1a; --bg-tertiary: #252525;
+  --text-primary: #fff; --text-secondary: #e5e5e5; --text-tertiary: #b0b0b0; --text-quaternary: #888;
+  --hairline: rgba(255,255,255,0.08); --success: #10b981;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg-primary); color: var(--text-primary); overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.window { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---------- Grouped phase bar (top, official position) ---------- */
+.gbar { flex: none; display: flex; gap: 12px; align-items: flex-start; justify-content: center; padding: 30px 24px 8px; }
+.seg { display: flex; flex-direction: column; align-items: center; gap: 7px; cursor: pointer; }
+.seg-track { width: 60px; height: 5px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.seg-fill { height: 100%; width: 0; background: #fff; border-radius: 999px; transition: width 0.45s cubic-bezier(0.4,0,0.2,1); }
+.seg-label { font-size: 11px; font-weight: 600; letter-spacing: 0.2px; white-space: nowrap; color: var(--text-quaternary); transition: color 0.3s ease; }
+.seg.done .seg-label { color: var(--text-tertiary); }
+.seg.active .seg-label { color: #fff; }
+.seg:hover .seg-label { color: var(--text-secondary); }
+@media (prefers-reduced-motion: reduce) { .seg-fill { transition: none; } }
+
+/* ---------- Step scaffold ---------- */
+.steps { flex: 1; position: relative; overflow: hidden; }
+.step { position: absolute; inset: 0; display: none; overflow-y: auto; }
+.step.on { display: flex; }
+.step-inner { margin: auto; max-width: 560px; padding: 24px 40px 20px; width: 100%; text-align: center;
+  display: flex; flex-direction: column; align-items: center; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-quaternary); margin-bottom: 16px; min-height: 15px; }
+.title { font-size: 38px; font-weight: 700; line-height: 1.1; letter-spacing: -0.4px; color: #fff; white-space: pre-line; }
+.sub { font-size: 16px; font-weight: 400; line-height: 1.5; color: var(--text-secondary); max-width: 460px; margin-top: 16px; }
+.body { width: 100%; margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+/* entrance */
+.step.on .eyebrow, .step.on .title, .step.on .sub, .step.on .body { animation: rise .5s cubic-bezier(0.16,1,0.3,1) backwards; }
+.step.on .title { animation-delay: .05s; } .step.on .sub { animation-delay: .1s; } .step.on .body { animation-delay: .16s; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .step.on * { animation: none !important; } }
+
+/* ---------- Shared components ---------- */
+.field { font-size: 15px; color: #fff; background: var(--bg-secondary); border: 1px solid var(--hairline); border-radius: 12px; padding: 13px 16px; width: 320px; outline: none; text-align: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 460px; }
+.chip { font-size: 14px; font-weight: 600; padding: 9px 15px; border-radius: 999px; background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--hairline); cursor: pointer; }
+.chip.sel { background: #fff; color: #000; border-color: transparent; }
+.card { display: flex; align-items: center; gap: 16px; text-align: left; width: 100%; background: var(--bg-secondary); border: 1px solid var(--hairline); border-radius: 15px; padding: 15px 18px; }
+.card .ic { width: 24px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+.card .t { font-size: 15px; font-weight: 600; }
+.card .d { font-size: 13px; color: var(--text-tertiary); margin-top: 2px; }
+.keys { display: flex; gap: 10px; }
+.keycap { min-width: 46px; height: 46px; padding: 0 14px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; border-radius: 12px; background: var(--bg-secondary); border: 1px solid var(--hairline); }
+.settings-btn { margin-top: 4px; font-size: 14px; font-weight: 600; color: #000; background: #fff; border: none; border-radius: 10px; padding: 10px 18px; cursor: pointer; }
+
+/* ---------- Footer ---------- */
+.foot { flex: none; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 18px 24px 30px; }
+.btn { font-family: inherit; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+.btn-back { background: var(--bg-tertiary); color: #fff; font-size: 15px; padding: 12px 26px; border-radius: 12px; }
+.btn-back.hidden { visibility: hidden; }
+.btn-continue { background: #fff; color: #000; font-size: 15px; padding: 12px 40px; border-radius: 12px; }
+.btn-skip { background: none; color: var(--text-tertiary); font-size: 14px; padding: 10px; }
+.btn-skip.hidden { display: none; }
+
+/* ---------- Viewer nav (mock only) ---------- */
+.viewer-nav { position: fixed; top: 10px; right: 12px; z-index: 100; display: flex; gap: 6px; align-items: center;
+  background: rgba(26,26,26,0.95); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 5px 7px; }
+.viewer-nav button { background: var(--bg-tertiary); color: #fff; border: none; border-radius: 7px; width: 26px; height: 26px; cursor: pointer; }
+.viewer-nav select { background: var(--bg-tertiary); color: #fff; border: 1px solid var(--hairline); border-radius: 7px; padding: 4px; font-size: 12px; max-width: 190px; }
+</style>
+</head>
+<body>
+<nav class="viewer-nav">
+  <button id="nav-prev">◂</button>
+  <select id="screen-select"></select>
+  <button id="nav-next">▸</button>
+</nav>
+
+<div class="window">
+  <div class="gbar" id="gbar"></div>
+  <div class="steps" id="steps"></div>
+  <div class="foot">
+    <button class="btn btn-back" id="f-back">Back</button>
+    <button class="btn btn-continue" id="f-cont">Continue</button>
+    <button class="btn btn-skip" id="f-skip">Skip</button>
+  </div>
+</div>
+
+<script>
+/* ---------- Official 18 steps (OnboardingFlow.steps) with authentic copy ---------- */
+const P = { screen: '🖥️', disk: '📁', mic: '🎙️', acc: '✨', bolt: '⚡️', scan: '🔎' };
+const permCard = (icon, t, d) => `<div class="card"><div class="ic">${icon}</div><div><div class="t">${t}</div><div class="d">${d}</div></div></div><button class="settings-btn">Open System Settings</button>`;
+const STEPS = [
+  { key:'Name', eyebrow:'Name', title:'What should Omi call you?', body:`<input class="field" value="Alex">` },
+  { key:'Language', eyebrow:'Languages', title:'Pick every language you speak.', body:`<div class="chips"><span class="chip sel">English ✓</span><span class="chip">Spanish</span><span class="chip">French</span><span class="chip">German</span><span class="chip">Hindi</span><span class="chip">Japanese</span><span class="chip">Other…</span></div>` },
+  { key:'HowDidYouHear', eyebrow:'Quick question', title:'How did you hear\nabout Omi?', body:`<div class="chips"><span class="chip">YouTube</span><span class="chip">Twitter</span><span class="chip">Friend</span><span class="chip">Podcast</span><span class="chip">Product Hunt</span><span class="chip">Other</span></div>` },
+  { key:'Trust', eyebrow:'Before we continue', title:'I’m going to ask for\na few permissions.', sub:'Omi is open source and private by design.', body:`<div class="card"><div class="ic">${P.screen}</div><div><div class="t">Screen + files</div><div class="d">Build context from what you’re working on.</div></div></div><div class="card"><div class="ic">${P.mic}</div><div><div class="t">Microphone</div><div class="d">Capture voice notes and meeting context.</div></div></div><div class="card"><div class="ic">${P.acc}</div><div><div class="t">Accessibility + automation</div><div class="d">Know the active app and act when you ask.</div></div></div>` },
+  { key:'ScreenRecording', eyebrow:'Permission', title:'Let Omi read your screen.', body: permCard(P.screen,'Screen Recording','See what you’re working on.') },
+  { key:'FullDiskAccess', eyebrow:'Access', title:'Let Omi scan your work.', body: permCard(P.disk,'Full Disk Access','Index your projects and files.') },
+  { key:'FileScan', eyebrow:'Discovery', title:'Start building your profile.', sub:'Omi looks through your recent work to understand what matters.', body:`<div class="card"><div class="ic">${P.scan}</div><div><div class="t">Scanning your Mac…</div><div class="d">Recent files, projects, and notes.</div></div></div>` },
+  { key:'Microphone', eyebrow:'Permission', title:'Let Omi use your mic.', body: permCard(P.mic,'Microphone','Transcribe meetings and voice notes.') },
+  { key:'Accessibility', eyebrow:'Permission', title:'Let Omi see the active app.', body: permCard(P.acc,'Accessibility','Know which app is active so context follows you.') },
+  { key:'Automation', eyebrow:'Permission', title:'Let Omi act when asked.', body: permCard(P.bolt,'Automation','Take actions in your apps when you ask.') },
+  { key:'FloatingBarShortcut', eyebrow:'Shortcut', title:'Set your Ask shortcut.', sub:'Press this shortcut. Do the buttons light up?', body:`<div class="keys"><span class="keycap">⌘</span><span class="keycap">O</span></div>` },
+  { key:'FloatingBar', eyebrow:'Try it', title:'Ask Omi anything.', sub:'Omi sees your screen and gives hyper-personalized responses.', body:`<div class="card"><div class="ic">${P.bolt}</div><div><div class="t">Which computer should I buy?</div><div class="d">Press ⌘O to open the Floating Bar.</div></div></div>` },
+  { key:'VoiceShortcut', eyebrow:'Shortcut', title:'Set your voice shortcut.', sub:'Press and hold to test. Does it light up?', body:`<div class="keys"><span class="keycap">⌥ hold</span></div>` },
+  { key:'VoiceDemo', eyebrow:'Try it', title:'Hold and ask.', sub:'Try asking: What’s on my screen?', body:`<div class="card"><div class="ic">${P.mic}</div><div><div class="t">Hold ⌥, speak, release</div><div class="d">Omi listens and answers out loud.</div></div></div>` },
+  { key:'DataSources', eyebrow:'Sources', title:'Your 2nd brain is live.', body:`<div class="card"><div class="ic">📅</div><div><div class="t">Calendar</div><div class="d">Connected</div></div></div><div class="card"><div class="ic">✉️</div><div><div class="t">Email</div><div class="d">Connected</div></div></div>` },
+  { key:'Exports', eyebrow:'Exports', title:'Put your memories\nwhere you work.', body:`<div class="chips"><span class="chip">Claude</span><span class="chip">ChatGPT</span><span class="chip">Cursor</span><span class="chip">Notion</span></div>` },
+  { key:'Goal', eyebrow:'Goal', title:'Pick one goal.', body:`<div class="chips"><span class="chip sel">Stop dropping follow-ups</span><span class="chip">Plan my week</span><span class="chip">Remember everything</span></div>` },
+  { key:'Tasks', eyebrow:'Tasks', title:'Here’s where you’ll start.', body:`<div class="card"><div class="ic">☑️</div><div><div class="t">Reply to the venue about Friday</div><div class="d">From your Gmail</div></div></div><div class="card"><div class="ic">☑️</div><div><div class="t">Answer the CCAI invitation</div><div class="d">Unanswered 3 days</div></div></div>` },
+];
+const UNSKIPPABLE = new Set([0,1,2,3]);
+
+/* ---------- 5 groups over the 18 steps ---------- */
+const GROUPS = [
+  { label:'About you', start:0, end:3 },     // Name, Language, HowDidYouHear, Trust
+  { label:'Permissions', start:4, end:9 },   // ScreenRec, FullDisk, FileScan, Mic, Accessibility, Automation
+  { label:'Shortcuts', start:10, end:13 },   // FloatingBarShortcut, FloatingBar, VoiceShortcut, VoiceDemo
+  { label:'Sources', start:14, end:15 },     // DataSources, Exports
+  { label:'Goals', start:16, end:17 },       // Goal, Tasks
+];
+
+/* ---------- Build steps ---------- */
+const stepsEl = document.getElementById('steps');
+const select = document.getElementById('screen-select');
+STEPS.forEach((s, i) => {
+  const sec = document.createElement('section');
+  sec.className = 'step';
+  sec.innerHTML = `<div class="step-inner">
+    <div class="eyebrow">${s.eyebrow || ''}</div>
+    <div class="title">${s.title}</div>
+    ${s.sub ? `<div class="sub">${s.sub}</div>` : ''}
+    <div class="body">${s.body || ''}</div>
+  </div>`;
+  stepsEl.appendChild(sec);
+  const o = document.createElement('option');
+  o.value = i; o.textContent = (i+1).toString().padStart(2,'0') + ' · ' + s.key;
+  select.appendChild(o);
+});
+const stepEls = [...document.querySelectorAll('.step')];
+
+/* ---------- Grouped bar ---------- */
+const gbar = document.getElementById('gbar');
+const segs = [];
+GROUPS.forEach((g) => {
+  const seg = document.createElement('div'); seg.className = 'seg';
+  seg.onclick = () => show(g.start);
+  const track = document.createElement('div'); track.className = 'seg-track';
+  const fill = document.createElement('div'); fill.className = 'seg-fill';
+  track.appendChild(fill); seg.appendChild(track);
+  const lbl = document.createElement('div'); lbl.className = 'seg-label'; lbl.textContent = g.label;
+  seg.appendChild(lbl);
+  gbar.appendChild(seg); segs.push({ seg, fill });
+});
+function updateBar() {
+  GROUPS.forEach((g, i) => {
+    const { seg, fill } = segs[i];
+    seg.classList.remove('active','done');
+    let pct = 0;
+    if (idx > g.end) { pct = 100; seg.classList.add('done'); }
+    else if (idx >= g.start) { pct = Math.round((idx - g.start + 1) / (g.end - g.start + 1) * 100); seg.classList.add('active'); }
+    fill.style.width = pct + '%';
+  });
+}
+
+/* ---------- Navigation ---------- */
+const startAt = parseInt(location.hash.slice(1)) || parseInt(localStorage.getItem('idx-official')) || 1;
+let idx = Math.min(Math.max(startAt - 1, 0), STEPS.length - 1);
+function show(i) {
+  idx = (i + STEPS.length) % STEPS.length;
+  stepEls.forEach((el, j) => el.classList.toggle('on', j === idx));
+  updateBar();
+  select.value = idx;
+  document.getElementById('f-back').classList.toggle('hidden', idx === 0);
+  document.getElementById('f-skip').classList.toggle('hidden', UNSKIPPABLE.has(idx) || idx === STEPS.length - 1);
+  document.getElementById('f-cont').textContent = idx === STEPS.length - 1 ? 'Take me to Omi' : 'Continue';
+  history.replaceState(null, '', '#' + (idx + 1));
+  localStorage.setItem('idx-official', idx + 1);
+}
+document.getElementById('f-back').onclick = () => show(idx - 1);
+document.getElementById('f-cont').onclick = () => show(idx + 1);
+document.getElementById('f-skip').onclick = () => show(idx + 1);
+document.getElementById('nav-prev').onclick = () => show(idx - 1);
+document.getElementById('nav-next').onclick = () => show(idx + 1);
+select.onchange = () => show(+select.value);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'Enter') show(idx + 1);
+  if (e.key === 'ArrowLeft') show(idx - 1);
+});
+show(idx);
+</script>
+</body>
+</html>

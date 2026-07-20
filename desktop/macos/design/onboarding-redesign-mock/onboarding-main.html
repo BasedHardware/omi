@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Omi Onboarding — existing flow (main)</title>
+<style>
+/* Faithful replica of the onboarding on origin/main:
+   OnboardingStepScaffold (logo header + skip, divider, 4-segment
+   OnboardingProgressBar, title block, inline buttons), centered / split
+   (2nd-brain graph pane) / full-width layouts per step, real copy and
+   component styling transcribed from the SwiftUI sources. */
+:root {
+  --bg-primary: #0f0f0f; --bg-secondary: #1a1a1a; --bg-tertiary: #252525; --bg-quaternary: #35343b;
+  --text-primary: #fff; --text-secondary: #e5e5e5; --text-tertiary: #b0b0b0;
+  --hairline: rgba(255,255,255,0.08); --success: #10b981; --warning: #f59e0b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg-primary); color: var(--text-primary); overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.window { position: relative; display: flex; flex-direction: column; height: 100vh; }
+
+/* ---------- Header: logo left, Skip right ---------- */
+.header { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
+.logo { font-size: 18px; font-weight: 600; color: #fff; letter-spacing: 0.5px; }
+.skip-btn { background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--text-tertiary); cursor: pointer; padding: 6px 8px; }
+.skip-btn:hover { color: #fff; }
+.skip-btn.hidden { visibility: hidden; }
+.hr { height: 1px; background: var(--bg-tertiary); flex: none; }
+
+/* ---------- Real OnboardingProgressBar: 4 proportional segments ---------- */
+.pbar { display: flex; gap: 8px; align-items: center; }
+.pbar-wrap { flex: none; display: flex; justify-content: center; padding: 24px 0 0; }
+.seg { position: relative; height: 5px; border-radius: 999px; background: rgba(255,255,255,0.22); }
+.seg-fill { position: absolute; left: 0; top: 0; height: 100%; width: 0; background: #fff;
+  border-radius: 999px; transition: width 0.2s cubic-bezier(0.2,0,0,1); }
+.seg-slices { position: absolute; left: 0; top: -8px; bottom: -8px; right: 0; display: flex; }
+.slice { width: 14px; cursor: pointer; position: relative; }
+.slice .tick { display: none; position: absolute; left: -0.75px; top: 6px; width: 1.5px; height: 9px;
+  border-radius: 0.75px; background: var(--bg-primary); }
+.seg:hover .slice:not(:first-child) .tick { display: block; }
+@media (prefers-reduced-motion: reduce) { .seg-fill { transition: none; } }
+
+/* ---------- Step containers ---------- */
+.step { display: none; flex: 1; min-height: 0; }
+.step.on { display: flex; }
+
+/* centered layout */
+.step.centered { overflow-y: auto; flex-direction: column; }
+.step.centered .pane { margin: auto; max-width: 560px; width: 100%; padding: 24px 40px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; }
+
+/* split layout: content left, graph right */
+.step.split { flex-direction: row-reverse; }
+.step.split.lead { flex-direction: row; }
+.step.split .pane { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.step.split .pane-inner { margin: auto; max-width: 500px; width: 100%; padding: 28px 36px;
+  display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+.vr { width: 1px; background: var(--bg-tertiary); flex: none; }
+.graph-pane { flex: 1; background: var(--bg-secondary); position: relative; display: flex;
+  align-items: center; justify-content: center; min-width: 0; }
+.graph-pane svg { width: 88%; max-width: 640px; }
+.brand-chip { position: absolute; top: 16px; right: 18px; font-size: 12px; font-weight: 600;
+  color: var(--text-secondary); background: rgba(0,0,0,0.28); border-radius: 8px; padding: 5px 10px; }
+.graph-foot { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(15,15,15,0.92);
+  padding: 14px 20px; text-align: left; }
+.graph-foot .k { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-tertiary); }
+.graph-foot .v { font-size: 13px; color: var(--text-secondary); margin-top: 4px; line-height: 1.45; }
+
+/* KG caption + hints (mirrors the app's bottom overlay) */
+.kg-cap { position: absolute; left: 0; right: 0; bottom: 96px; text-align: center; pointer-events: none; }
+.kg-cap .t { font-size: 15px; font-weight: 600; color: #fff; }
+.kg-hints { display: flex; gap: 20px; justify-content: center; margin-top: 7px;
+  font-size: 11px; color: rgba(255,255,255,0.5); }
+.graph-pane svg { cursor: grab; }
+.graph-pane svg.dragging { cursor: grabbing; }
+
+/* full-width custom layout */
+.step.full { overflow-y: auto; flex-direction: column; }
+.step.full .pane { margin: auto; max-width: 640px; width: 100%; padding: 24px 40px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; }
+
+/* ---------- Title block ---------- */
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-tertiary); margin-bottom: 14px; }
+.title { font-size: 40px; font-weight: 700; line-height: 1.15; color: #fff; white-space: pre-line; max-width: 460px; }
+.step.full .title { font-size: 28px; line-height: 1.3; }
+.desc { font-size: 16px; font-weight: 400; line-height: 1.5; color: var(--text-secondary); max-width: 460px; margin-top: 14px; white-space: pre-line; }
+.body { width: 100%; margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
+.centered .body, .full .body { align-items: center; }
+.split .body { align-items: flex-start; }
+.split .btn-row { align-self: flex-end; }
+
+/* entrance */
+.step.on .eyebrow, .step.on .title, .step.on .desc, .step.on .body, .step.on .btn-row { animation: rise .45s cubic-bezier(0.16,1,0.3,1) backwards; }
+.step.on .title { animation-delay: .04s; } .step.on .desc { animation-delay: .08s; }
+.step.on .body { animation-delay: .12s; } .step.on .btn-row { animation-delay: .16s; }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .step.on * { animation: none !important; } }
+
+/* ---------- Buttons (inline, below content) ---------- */
+.btn-row { display: flex; gap: 12px; align-items: center; margin-top: 26px; }
+.btn { font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  padding: 12px 18px; border-radius: 14px; border: 1px solid transparent; transition: opacity .12s ease, transform .12s ease; }
+.btn:active { opacity: 0.92; transform: scale(0.985); }
+.btn-primary { background: #fff; color: #000; min-width: 130px; }
+.btn.hidden { display: none; }
+.btn.granted { background: transparent; color: var(--success); border-color: transparent; opacity: 1; }
+.btn-secondary { background: var(--bg-tertiary); color: #fff; border-color: var(--hairline); }
+.btn-plain { background: none; border: none; color: var(--text-secondary); font-size: 13px; font-weight: 500; padding: 8px; }
+.btn-plain:hover { color: #fff; }
+
+/* ---------- Fields & chips ---------- */
+.field { font-family: inherit; font-size: 14px; color: #fff; background: var(--bg-secondary);
+  border: 1px solid var(--hairline); border-radius: 14px; padding: 12px 14px; width: 320px; outline: none; }
+.field::placeholder { color: var(--text-tertiary); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.centered .chips { justify-content: center; max-width: 480px; }
+.chip { font-family: inherit; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 14px;
+  background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--hairline); cursor: pointer; }
+.chip:hover { background: var(--bg-tertiary); }
+.chip.sel { background: #fff; color: #000; border-color: transparent; }
+.chip .g, .goal-chip .g { margin-right: 7px; font-size: 13px; }
+.hint { font-size: 12px; font-weight: 500; color: var(--text-tertiary); }
+
+/* ---------- Sign in ---------- */
+.auth-mark { width: 84px; height: 84px; margin-bottom: 8px; }
+.auth-stack { width: 320px; max-width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.auth-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 16px; border-radius: 14px;
+  background: #fff; color: #000; border: 1px solid transparent; cursor: pointer; }
+.auth-btn.apple { background: var(--bg-secondary); color: #fff; border-color: var(--hairline); }
+.auth-btn svg { flex: none; }
+
+/* ---------- Open-source chip (recovered from permissions-trust mock) ---------- */
+.oss { display: inline-flex; align-items: center; gap: 9px;
+  padding: 9px 16px; border-radius: 999px; background: var(--bg-secondary);
+  border: 1px solid var(--hairline); color: var(--text-secondary);
+  font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+.oss:hover { background: var(--bg-tertiary); border-color: rgba(255, 255, 255, 0.16); color: #fff; }
+.oss svg { flex: none; }
+.oss .arrow { color: var(--text-tertiary); font-size: 12px; }
+
+/* ---------- Trust rows ---------- */
+.trust-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px; width: 100%; max-width: 520px;
+  background: rgba(37,37,37,0.55); border-radius: 14px; text-align: left; }
+.trust-ic { width: 28px; height: 28px; border-radius: 8px; flex: none; background: var(--bg-secondary);
+  color: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center; }
+.trust-t { font-size: 14px; font-weight: 600; }
+.trust-d { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+/* ---------- Permission card ---------- */
+.perm-card { display: flex; gap: 16px; align-items: center; width: 100%; max-width: 540px; text-align: left; }
+.perm-ic { width: 58px; height: 58px; border-radius: 20px; flex: none; background: var(--bg-secondary);
+  display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+.perm-t { font-size: 18px; font-weight: 600; }
+.perm-s { font-size: 13px; font-weight: 500; color: var(--text-tertiary); margin-top: 3px; }
+.perm-s.ok { color: var(--success); }
+
+/* ---------- File scan ---------- */
+.scan-box { width: 100%; max-width: 560px; padding: 32px 0; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.scan-logo { width: 64px; height: 64px; animation: scan-flicker 1.4s ease-in-out infinite, scan-shine 1.4s ease-in-out infinite, scan-spin 1.8s linear infinite; }
+.scan-status { font-size: 14px; font-weight: 500; color: var(--text-tertiary); }
+@keyframes scan-spin { to { transform: rotate(360deg); } }
+@keyframes scan-shine {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255,255,255,0.15)); }
+  50% { filter: drop-shadow(0 0 16px rgba(255,255,255,0.45)); }
+}
+@keyframes scan-flicker {
+  0%, 100% { opacity: 0.35; } 9% { opacity: 0.85; } 16% { opacity: 0.5; }
+  31% { opacity: 1; } 44% { opacity: 0.55; } 58% { opacity: 0.9; }
+  71% { opacity: 0.42; } 86% { opacity: 0.8; }
+}
+
+/* ---------- Keycaps ---------- */
+.keys { display: flex; gap: 10px; align-items: center; justify-content: center; }
+.keycap { min-width: 64px; min-height: 64px; padding: 8px 10px; border-radius: 12px;
+  background: var(--bg-tertiary); border: 2px solid rgba(255,255,255,0.3); color: var(--text-tertiary);
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; }
+.keycap .sym { font-size: 18px; font-weight: 600; }
+.keycap .nm { font-size: 10px; font-weight: 500; align-self: center; }
+.keycap.wide { min-width: 116px; }
+.key-panel { width: 100%; max-width: 480px; background: var(--bg-secondary); border-radius: 16px;
+  padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 14px; min-height: 152px; justify-content: center; }
+.key-sub { font-size: 13px; font-weight: 500; color: var(--text-tertiary); }
+.preset-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.preset { font-family: inherit; font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: 12px;
+  background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--hairline); cursor: pointer; }
+.preset.sel { background: #fff; color: #000; border-color: transparent; }
+
+/* ---------- Ask Omi shortcut ---------- */
+.keycaps { display: flex; gap: 8px; align-items: center; justify-content: center; }
+.keycap-lg {
+  min-width: 64px; min-height: 64px; padding: 0 16px;
+  border-radius: 14px; background: var(--bg-tertiary);
+  border: 2px solid rgba(176, 176, 176, 0.3);
+  font-size: 26px; font-weight: 600; color: var(--text-primary);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.keycap-lg.lit { background: #fff; color: #000; border-color: #fff; }
+.plus-sep { font-size: 15px; font-weight: 500; color: var(--text-tertiary); }
+.ask-bar {
+  position: absolute; top: 116px; left: 50%; transform: translateX(-50%); z-index: 20;
+  display: flex; gap: 10px; align-items: center; width: 480px; max-width: calc(100% - 48px);
+  background: var(--bg-secondary); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px; padding: 10px 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.ask-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; flex: none; animation: pulse-dot 1.6s ease-in-out infinite; }
+.ask-input { flex: 1; font-family: inherit; font-size: 14px; color: var(--text-primary); background: none; border: none; outline: none; }
+.ask-resp {
+  position: absolute; top: 180px; left: 50%; transform: translateX(-50%); z-index: 20;
+  width: 480px; max-width: calc(100% - 48px);
+  background: var(--bg-secondary); border: 1px solid var(--hairline);
+  border-radius: 16px; padding: 14px 16px; text-align: left;
+  font-size: 13px; line-height: 1.55; color: var(--text-secondary);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.ask-resp .mark { color: var(--success); margin-right: 6px; }
+.ask-cue {
+  position: absolute; top: 184px; left: 50%; transform: translateX(-50%); z-index: 19;
+  font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.ask-bar[hidden], .ask-cue[hidden], .ask-resp[hidden] { display: none; }
+@keyframes pulse-dot { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+/* ---------- Mac lineup (real app resource) ---------- */
+.lineup { width: 100%; max-width: 640px; display: block; }
+
+/* ---------- Source / destination lists ---------- */
+.src-list { width: 100%; max-width: 520px; background: var(--bg-secondary); border: 1px solid var(--hairline);
+  border-radius: 22px; overflow: hidden; }
+.src-row { display: flex; gap: 12px; align-items: center; padding: 12px 16px; text-align: left; }
+.src-row + .src-row { border-top: 1px solid rgba(255,255,255,0.05); }
+.src-ic { width: 38px; height: 38px; border-radius: 12px; flex: none; display: flex; align-items: center;
+  justify-content: center; font-size: 18px; background: var(--bg-tertiary); }
+.src-t { font-size: 15px; font-weight: 600; }
+.src-m { font-size: 12px; font-weight: 500; color: var(--text-tertiary); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.src-act { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.pill-btn { font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  background: var(--bg-primary); border: 1px solid var(--hairline); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+.tog { width: 38px; height: 22px; border-radius: 999px; background: rgba(255,255,255,0.9); flex: none; position: relative; opacity: 0.9; }
+.tog::after { content: ""; position: absolute; top: 3px; left: 19px; width: 16px; height: 16px; border-radius: 50%; background: #000; }
+.tog.off { background: var(--bg-quaternary); }
+.tog.off::after { left: 3px; background: #888; }
+
+/* ---------- Goal grid ---------- */
+.goal-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 8px; width: 100%; max-width: 480px; }
+.goal-chip { font-family: inherit; font-size: 13px; font-weight: 600; padding: 12px; border-radius: 14px;
+  background: rgba(255,255,255,0.05); color: #fff; border: 1px solid var(--hairline); cursor: pointer; text-align: center; }
+.goal-chip.sel { background: #fff; color: #000; border-color: transparent; }
+
+/* ---------- Goal scan (ported from redesign 'What Omi found') ---------- */
+.goal-scan { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 6px 0 18px; }
+.gs-head { font-size: 19px; font-weight: 600; color: var(--text-primary); }
+.gs-sub { font-size: 14px; color: var(--text-tertiary); }
+
+/* ---------- Goal rows (ported from redesign found rows) ---------- */
+.goal-rows { width: 100%; max-width: 480px; }
+.cx-row { padding: 15px 0 16px; border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 10px;
+  transition: background 0.4s ease, box-shadow 0.4s ease; }
+.cx-row.selecting { background: rgba(255,255,255,0.05); box-shadow: 0 0 22px rgba(255,255,255,0.1); }
+.cx-row-title { font-size: 15px; font-weight: 600; line-height: 20px; color: var(--text-secondary); }
+.cx-row.selecting .cx-row-title { color: var(--text-primary); }
+.cx-row-desc { font-size: 13px; line-height: 18px; color: var(--text-tertiary); margin-top: 4px; }
+.src-icon { width: 36px; height: 36px; border-radius: 10px; flex: none; background: var(--bg-tertiary);
+  border: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+
+/* ---------- Fullscreen goal chat (ported from redesign convo mock) ---------- */
+.chat-screen { position: fixed; inset: 0; z-index: 90; background: var(--bg-primary); display: none; flex-direction: column; }
+.chat-screen.on { display: flex; }
+.chat-top { flex: none; display: flex; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--bg-tertiary); }
+.chat-top .logo { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+.chat-back { margin-left: auto; background: none; border: none; color: var(--text-tertiary); font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+.chat-back:hover { color: #fff; }
+.chat-scroll { flex: 1; overflow-y: auto; }
+.chat-col { max-width: 720px; margin: 0 auto; padding: 30px 24px 16px; display: flex; flex-direction: column; gap: 16px; }
+.chat-inputwrap { max-width: 720px; margin: 0 auto; padding: 10px 24px 24px; display: flex; gap: 10px; align-items: center; width: 100%; box-sizing: border-box; }
+.chat-field { flex: 1; background: var(--bg-secondary); border: 1px solid var(--hairline); border-radius: 16px; padding: 13px 16px; color: var(--text-primary); font-family: inherit; font-size: 14px; outline: none; }
+.chat-field::placeholder { color: var(--text-tertiary); }
+.cv-step { opacity: 0; transform: translateY(6px); transition: opacity 0.35s ease, transform 0.35s ease; }
+.cv-step.shown { opacity: 1; transform: none; }
+.chat-user-row { display: flex; justify-content: flex-end; gap: 10px; align-items: flex-start; }
+/* Bubble column hugs its right edge so the bubble sits flush against the avatar */
+.chat-user-row > div:first-child { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.chat-user { max-width: 78%; background: var(--bg-tertiary); color: var(--text-primary); border-radius: 18px; padding: 10px 16px; font-size: 14px; line-height: 1.5; }
+.chat-avatar { width: 32px; height: 32px; border-radius: 50%; flex: none; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; }
+.chat-avatar.user { margin-top: 2px; }
+.chat-ai-row { display: flex; gap: 12px; align-items: flex-start; }
+.chat-ai-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1; }
+.tool-group { background: rgba(37,37,37,0.72); border-radius: 12px; padding: 2px 0; max-width: 480px; }
+.tool-row { display: flex; gap: 7px; align-items: center; padding: 8px 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; overflow: hidden; white-space: nowrap; }
+.tool-name { color: var(--text-secondary); flex: none; }
+.tool-dot { color: var(--text-tertiary); flex: none; }
+.tool-sum { color: var(--text-tertiary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.tool-chev { margin-left: auto; color: var(--text-tertiary); font-size: 10px; flex: none; }
+.cv-ok { display: none; color: var(--text-tertiary); font-size: 11px; flex: none; width: 13px; text-align: center; }
+.tool-row.done .cv-ok { display: inline; }
+.tool-row.done .cv-spin { display: none; }
+.tool-row.working .cv-spin { display: block; }
+.cv-spin { width: 12px; height: 12px; border-radius: 50%; flex: none; align-self: center; display: none;
+  background: conic-gradient(from 0deg, transparent 0 55%, var(--text-secondary) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  animation: orbit-spin 0.9s linear infinite; }
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
+.chat-ai-bubble { font-size: 14px; line-height: 1.55; color: var(--text-primary); background: rgba(37,37,37,0.92); border-radius: 18px; padding: 12px 16px; max-width: 560px; }
+.chat-time { font-size: 10.5px; color: var(--text-tertiary); margin-top: 4px; }
+.chat-time.right { text-align: right; }
+
+/* ---------- Post-onboarding home: one big task ---------- */
+.home-screen { position: fixed; inset: 0; z-index: 85; background: var(--bg-primary); display: none; flex-direction: column; overflow-y: auto; }
+.home-screen.on { display: flex; }
+.home-col { max-width: 640px; margin: auto; width: 100%; padding: 40px 24px 110px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; }
+.home-greet { font-size: 34px; font-weight: 700; }
+.home-greet-sub { display: block; margin-top: 6px; font-size: 17px; font-weight: 500; color: var(--text-secondary); }
+.home-sub { font-size: 15px; color: var(--text-secondary); margin-bottom: 12px; }
+.big-task { position: relative; width: 100%; background: var(--bg-primary); border: 1px solid var(--hairline);
+  border-radius: 28px; padding: 30px 72px 26px; display: flex; flex-direction: column; align-items: center; gap: 10px; overflow: hidden; }
+.task-card-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 38px; height: 38px;
+  border-radius: 50%; border: 1px solid var(--hairline); background: var(--bg-secondary); color: var(--text-secondary);
+  font-family: inherit; font-size: 22px; cursor: pointer; }
+.task-card-arrow:hover { background: var(--bg-tertiary); color: #fff; }
+.task-card-arrow.prev { left: 16px; }
+.task-card-arrow.next { right: 16px; }
+.bt-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-tertiary); }
+.bt-title { font-size: 26px; font-weight: 700; line-height: 1.25; }
+.bt-progress { width: 240px; height: 6px; border-radius: 999px; background: rgba(255,255,255,0.14); overflow: hidden; margin-top: 6px; }
+.bt-fill { display: block; width: 12%; height: 100%; border-radius: 999px; background: #fff; }
+.bt-meta { font-size: 12.5px; font-weight: 500; color: var(--text-tertiary); }
+.bt-next { font-size: 14px; line-height: 1.5; color: var(--text-secondary); max-width: 420px; margin-top: 8px; }
+.big-task .btn { margin-top: 14px; }
+.home-tasks { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.home-logo { width: 84px; height: 84px; margin-bottom: 18px; }
+.hg-nav { display: flex; align-items: center; gap: 16px; margin-top: 6px; }
+.hg-dots { display: flex; gap: 7px; }
+.hg-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.22); cursor: pointer; }
+.hg-dot.on { background: #fff; }
+.home-ask { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center;
+  padding: 26px 24px 24px; background: linear-gradient(transparent, var(--bg-primary) 55%); }
+.home-screen.side-open .home-ask { left: 216px; }
+.home-askbox { position: relative; width: 100%; max-width: 640px; }
+.home-askbox .chat-field { width: 100%; padding-left: 48px; padding-right: 52px; }
+.home-file { position: absolute; left: 7px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--text-secondary); font-size: 17px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.home-file:hover { background: var(--bg-tertiary); }
+.home-send { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px;
+  border: 0; border-radius: 11px; background: #fff; color: #000; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; }
+/* ---------- Home sidebar + views (collapsed by default) ---------- */
+.home-screen.side-open .home-side { display: flex; }
+.hs-toggle { position: absolute; top: 14px; left: 16px; z-index: 5; width: 34px; height: 34px;
+  background: var(--bg-secondary); border: 1px solid var(--hairline); border-radius: 9px;
+  color: var(--text-secondary); font-size: 15px; cursor: pointer; font-family: inherit; }
+.hs-toggle:hover { background: var(--bg-tertiary); color: #fff; }
+.home-screen.side-open .hs-toggle { left: 232px; }
+.home-screen.on { display: flex; flex-direction: row; }
+.home-side { display: none; width: 216px; flex: none; border-right: 1px solid var(--bg-tertiary); padding: 18px 12px;
+  flex-direction: column; gap: 4px; }
+.hs-logo { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; padding: 4px 12px 16px; }
+.hs-item { display: flex; align-items: center; gap: 10px; font-family: inherit; font-size: 13.5px; font-weight: 500;
+  color: var(--text-secondary); background: none; border: none; border-radius: 10px; padding: 9px 12px;
+  cursor: pointer; text-align: left; }
+.hs-item:hover { background: var(--bg-secondary); color: #fff; }
+.hs-item.on { background: var(--bg-tertiary); color: #fff; }
+.hs-ic { width: 18px; text-align: center; font-size: 14px; }
+.home-main { flex: 1; min-width: 0; overflow-y: auto; display: flex; position: relative; }
+.home-view { display: none; width: 100%; }
+.home-view.on { display: flex; }
+.hv-col { max-width: 640px; margin: 0 auto; width: 100%; padding: 44px 24px 110px;
+  display: flex; flex-direction: column; gap: 8px; }
+.hv-title { font-size: 24px; font-weight: 700; margin-bottom: 12px; }
+.shot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.shot { aspect-ratio: 16 / 10; border-radius: 10px; background: var(--bg-tertiary); border: 1px solid var(--hairline);
+  display: flex; align-items: flex-end; padding: 8px; }
+.shot span { font-size: 10.5px; color: var(--text-tertiary); }
+.home-tasks-label { font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-tertiary); margin-top: 10px; }
+
+/* ---------- Tasks (final) ---------- */
+.glow-wrap { position: relative; width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; }
+.glow { position: absolute; inset: 0; border-radius: 50%; background: rgba(255,255,255,0.15); filter: blur(20px);
+  animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+.glow-ic { position: relative; font-size: 44px; background: linear-gradient(135deg,#fff,#9a9a9a);
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.task-row { display: flex; gap: 10px; align-items: center; width: 100%; max-width: 420px; text-align: left;
+  padding: 8px 12px; background: var(--bg-secondary); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; }
+.task-dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--text-tertiary); flex: none; }
+.task-dot.done { border: none; background: var(--success); display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 10px; }
+.task-t { font-size: 13px; }
+.task-t.done { color: var(--text-tertiary); text-decoration: line-through; }
+.task-s { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
+
+</style>
+</head>
+<body>
+<div class="home-screen" id="home-screen">
+  <button class="hs-toggle" onclick="document.getElementById('home-screen').classList.toggle('side-open')" aria-label="Toggle sidebar">&#9776;</button>
+  <div class="home-side">
+    <div class="hs-logo">omi</div>
+    <button class="hs-item on" onclick="setHomeView('home', this)"><span class="hs-ic">⌂</span>Home</button>
+    <button class="hs-item" onclick="setHomeView('conversations', this)"><span class="hs-ic">💬</span>Conversations</button>
+    <button class="hs-item" onclick="setHomeView('tasks', this)"><span class="hs-ic">☑︎</span>Tasks</button>
+    <button class="hs-item" onclick="setHomeView('memories', this)"><span class="hs-ic">🧠</span>Memories</button>
+    <button class="hs-item" onclick="setHomeView('screenshots', this)"><span class="hs-ic">🖼</span>Screenshots</button>
+  </div>
+  <div class="home-main">
+    <div class="home-view on" id="hv-home">
+  <div class="home-col">
+    <svg class="home-logo" viewBox="237.360 237.338 549.318 549.322" aria-hidden="true"><circle cx="282.523" cy="511.982" r="45.163" fill="white"/><circle cx="339.909" cy="339.890" r="45.107" fill="white"/><circle cx="512.014" cy="282.495" r="45.156" fill="white"/><circle cx="684.096" cy="339.880" r="45.103" fill="white"/><circle cx="741.511" cy="512.003" r="45.167" fill="white"/><circle cx="684.096" cy="684.094" r="45.103" fill="white"/><circle cx="511.981" cy="741.500" r="45.160" fill="white"/><circle cx="339.902" cy="684.107" r="45.103" fill="white"/></svg>
+    <div class="home-greet">Hey Alex,<span class="home-greet-sub">here’s what we can do today.</span></div>
+    <div class="big-task">
+          <button class="task-card-arrow prev" onclick="shiftHomeGoal(-1)" aria-label="Previous goal">‹</button>
+          <div class="bt-eyebrow" id="hg-count">Your goals · 1 of 4</div>
+          <div class="bt-title" id="hg-title"></div>
+          <div class="bt-next" id="hg-next"></div>
+          <button class="btn btn-primary" style="margin-top:14px" onclick="openGoalChat(HOME_GOALS[hgIdx].title, null, true)">Start this task</button>
+          <button class="task-card-arrow next" onclick="shiftHomeGoal(1)" aria-label="Next goal">›</button>
+        </div>
+        <div class="hg-nav">
+          <div class="hg-dots" id="hg-dots"></div>
+        </div>
+      </div>
+    </div>
+    <div class="home-view" id="hv-conversations">
+      <div class="hv-col">
+        <div class="hv-title">Conversations</div>
+        <div class="task-row"><div><div class="task-t">Onboarding design review</div><div class="task-s">2:14 PM · moved the progress bar, reworked the goal screen</div></div></div>
+        <div class="task-row"><div><div class="task-t">Startup demo prep</div><div class="task-s">11:30 AM · pipeline filters and the outreach pool</div></div></div>
+        <div class="task-row"><div><div class="task-t">Call with Alex (Northwind)</div><div class="task-s">Yesterday · intro engineering call notes</div></div></div>
+      </div>
+    </div>
+    <div class="home-view" id="hv-tasks">
+      <div class="hv-col">
+        <div class="hv-title">Tasks</div>
+        <div class="task-row"><div class="task-dot done">✓</div><div><div class="task-t done">Draft 3 personalized invites</div><div class="task-s">Done during onboarding</div></div></div>
+        <div class="task-row"><div class="task-dot"></div><div><div class="task-t">Send invites to your 3 testers</div><div class="task-s">Drafts ready in Gmail</div></div></div>
+        <div class="task-row"><div class="task-dot"></div><div><div class="task-t">Book Thursday 4pm test session</div><div class="task-s">Slot is free on your calendar</div></div></div>
+        <div class="task-row"><div class="task-dot"></div><div><div class="task-t">Reply to Sam at Northwind</div><div class="task-s">Draft waiting in Gmail</div></div></div>
+      </div>
+    </div>
+    <div class="home-view" id="hv-memories">
+      <div class="hv-col">
+        <div class="hv-title">Memories</div>
+        <div class="task-row"><div><div class="task-t">Building an AI-powered outbound GTM platform</div><div class="task-s">From your files</div></div></div>
+        <div class="task-row"><div><div class="task-t">Goal: 5 bug-free onboarding users by Friday</div><div class="task-s">From onboarding</div></div></div>
+        <div class="task-row"><div><div class="task-t">Reads on Kindle, reviews highlights in Anki</div><div class="task-s">From your apps</div></div></div>
+        <div class="task-row"><div><div class="task-t">Develops Omi desktop in parallel git worktrees</div><div class="task-s">From your screen</div></div></div>
+      </div>
+    </div>
+    <div class="home-view" id="hv-screenshots">
+      <div class="hv-col">
+        <div class="hv-title">Screenshots</div>
+        <div class="shot-grid">
+          <div class="shot"><span>Xcode · 4:02 PM</span></div>
+          <div class="shot"><span>Chrome · 3:58 PM</span></div>
+          <div class="shot"><span>Gmail · 3:41 PM</span></div>
+          <div class="shot"><span>Terminal · 3:22 PM</span></div>
+          <div class="shot"><span>Calendar · 2:57 PM</span></div>
+          <div class="shot"><span>Notes · 2:31 PM</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="home-ask">
+      <div class="home-askbox">
+        <button class="home-file" aria-label="Attach file">📎</button>
+        <input class="chat-field" id="home-ask-input" placeholder="Ask Omi anything&#8230;" aria-label="Ask Omi anything" onkeydown="if(event.key==='Enter')sendHomeAsk()">
+        <button class="home-send" onclick="sendHomeAsk()" aria-label="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="chat-screen" id="chat-screen">
+  <div class="chat-top"><div class="logo">omi</div><button class="chat-back" onclick="closeGoalChat()">&#8249; Back to menu</button></div>
+  <div class="chat-scroll"><div class="chat-col" id="chat-col"></div></div>
+  <div class="chat-inputwrap">
+    <div class="home-askbox">
+      <button class="home-file" aria-label="Attach file">📎</button>
+      <input class="chat-field" placeholder="Message Omi&#8230;" aria-label="Message Omi">
+      <button class="home-send" aria-label="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+    </div>
+    <button class="btn btn-primary" id="chat-continue" style="display:none" onclick="closeGoalChat(); show(idx + 1)">Continue</button>
+  </div>
+</div>
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+    <button class="skip-btn hidden" id="h-skip">Skip</button>
+  </div>
+  <div class="hr"></div>
+  <div id="steps" style="display:flex;flex-direction:column;flex:1;min-height:0"></div>
+</div>
+
+<script>
+/* ---------- Shared pieces ---------- */
+const GRAPH = `
+  <div class="graph-pane">
+    <div class="brand-chip">omi.me</div>
+    <svg viewBox="0 0 800 600" aria-hidden="true">
+      <defs><filter id="kgblur" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5"/></filter></defs>
+      <g stroke-width="1"><line class="kg-e" data-a="0" data-b="21" x1="400" y1="300" x2="486" y2="478" stroke="rgba(127,188,255,0.25)"/><line class="kg-e" data-a="0" data-b="25" x1="400" y1="300" x2="220" y2="437" stroke="rgba(127,188,255,0.25)"/><line class="kg-e" data-a="0" data-b="5" x1="400" y1="300" x2="498" y2="375" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="34" x1="400" y1="300" x2="422" y2="87" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="33" x1="400" y1="300" x2="348" y2="115" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="32" x1="400" y1="300" x2="265" y2="110" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="35" x1="400" y1="300" x2="489" y2="123" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="27" x1="400" y1="300" x2="147" y2="350" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="28" x1="400" y1="300" x2="104" y2="299" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="29" x1="400" y1="300" x2="148" y2="248" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="30" x1="400" y1="300" x2="148" y2="188" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="31" x1="400" y1="300" x2="222" y2="161" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="22" x1="400" y1="300" x2="418" y2="513" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="26" x1="400" y1="300" x2="146" y2="410" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="13" x1="400" y1="300" x2="552" y2="147" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="14" x1="400" y1="300" x2="631" y2="167" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="15" x1="400" y1="300" x2="641" y2="226" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="16" x1="400" y1="300" x2="693" y2="272" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="17" x1="400" y1="300" x2="659" y2="327" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="12" x1="400" y1="300" x2="365" y2="185" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="23" x1="400" y1="300" x2="345" y2="484" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="20" x1="400" y1="300" x2="569" y2="475" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="19" x1="400" y1="300" x2="602" y2="420" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="18" x1="400" y1="300" x2="671" y2="386" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="8" x1="400" y1="300" x2="271" y2="378" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="6" x1="400" y1="300" x2="435" y2="415" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="7" x1="400" y1="300" x2="353" y2="396" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="1" x1="400" y1="300" x2="447" y2="204" stroke="rgba(255,191,127,0.25)"/><line class="kg-e" data-a="0" data-b="2" x1="400" y1="300" x2="529" y2="222" stroke="rgba(255,191,127,0.25)"/><line class="kg-e" data-a="0" data-b="3" x1="400" y1="300" x2="545" y2="280" stroke="rgba(255,229,127,0.25)"/><line class="kg-e" data-a="0" data-b="4" x1="400" y1="300" x2="563" y2="337" stroke="rgba(255,191,127,0.25)"/><line class="kg-e" data-a="0" data-b="10" x1="400" y1="300" x2="237" y2="263" stroke="rgba(127,255,206,0.25)"/><line class="kg-e" data-a="0" data-b="9" x1="400" y1="300" x2="255" y2="320" stroke="rgba(127,188,255,0.25)"/><line class="kg-e" data-a="0" data-b="24" x1="400" y1="300" x2="262" y2="489" stroke="rgba(127,188,255,0.25)"/><line class="kg-e" data-a="0" data-b="11" x1="400" y1="300" x2="302" y2="225" stroke="rgba(255,229,127,0.25)"/></g>
+      <g class="kg-n" data-i="0"><circle cx="400" cy="300" r="22.0" fill="#ffffff" opacity="0.22" filter="url(#kgblur)"/><circle cx="400" cy="300" r="10" fill="#ffffff" opacity="1"/><text x="400" y="284" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Alex</text></g><g class="kg-n" data-i="1"><circle cx="447" cy="204" r="13.200000000000001" fill="#ff7f00" opacity="0.16" filter="url(#kgblur)"/><circle cx="447" cy="204" r="6" fill="#ff7f00" opacity="0.95"/><text x="447" y="192" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Acme</text></g><g class="kg-n" data-i="2"><circle cx="529" cy="222" r="13.200000000000001" fill="#ff7f00" opacity="0.16" filter="url(#kgblur)"/><circle cx="529" cy="222" r="6" fill="#ff7f00" opacity="0.95"/><text x="529" y="210" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">BasedHardware/omi</text></g><g class="kg-n" data-i="3"><circle cx="545" cy="280" r="13.200000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="545" cy="280" r="6" fill="#ffcc00" opacity="0.95"/><text x="545" y="268" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Omi Desktop App</text></g><g class="kg-n" data-i="4"><circle cx="563" cy="337" r="13.200000000000001" fill="#ff7f00" opacity="0.16" filter="url(#kgblur)"/><circle cx="563" cy="337" r="6" fill="#ff7f00" opacity="0.95"/><text x="563" y="325" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Anthropic</text></g><g class="kg-n" data-i="5"><circle cx="498" cy="375" r="13.200000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="498" cy="375" r="6" fill="#ffcc00" opacity="0.95"/><text x="498" y="363" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">claude-code</text></g><g class="kg-n" data-i="6"><circle cx="435" cy="415" r="13.200000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="435" cy="415" r="6" fill="#ffcc00" opacity="0.95"/><text x="435" y="403" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Gmail</text></g><g class="kg-n" data-i="7"><circle cx="353" cy="396" r="13.200000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="353" cy="396" r="6" fill="#ffcc00" opacity="0.95"/><text x="353" y="384" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Calendar</text></g><g class="kg-n" data-i="8"><circle cx="271" cy="378" r="13.200000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="271" cy="378" r="6" fill="#ffcc00" opacity="0.95"/><text x="271" y="366" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Apple Notes</text></g><g class="kg-n" data-i="9"><circle cx="255" cy="320" r="13.200000000000001" fill="#007aff" opacity="0.16" filter="url(#kgblur)"/><circle cx="255" cy="320" r="6" fill="#007aff" opacity="0.95"/><text x="255" y="308" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">AI Agents</text></g><g class="kg-n" data-i="10"><circle cx="237" cy="263" r="13.200000000000001" fill="#00ff9e" opacity="0.16" filter="url(#kgblur)"/><circle cx="237" cy="263" r="6" fill="#00ff9e" opacity="0.95"/><text x="237" y="251" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">New York City</text></g><g class="kg-n" data-i="11"><circle cx="302" cy="225" r="13.200000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="302" cy="225" r="6" fill="#ffcc00" opacity="0.95"/><text x="302" y="213" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Arc</text></g><g class="kg-n" data-i="12"><circle cx="365" cy="185" r="13.200000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="365" cy="185" r="6" fill="#ffcc00" opacity="0.95"/><text x="365" y="173" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)" font-family="-apple-system, sans-serif">Anki</text></g><g class="kg-n" data-i="13"><circle cx="552" cy="147" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="552" cy="147" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="552" y="137.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Activation Tool</text></g><g class="kg-n" data-i="14"><circle cx="631" cy="167" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="631" cy="167" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="631" y="157.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">ActivityWatch</text></g><g class="kg-n" data-i="15"><circle cx="641" cy="226" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="641" cy="226" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="641" y="216.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">AltTab</text></g><g class="kg-n" data-i="16"><circle cx="693" cy="272" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="693" cy="272" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="693" y="262.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Amazon Kindle</text></g><g class="kg-n" data-i="17"><circle cx="659" cy="327" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="659" cy="327" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="659" y="317.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Amphetamine</text></g><g class="kg-n" data-i="18"><circle cx="671" cy="386" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="671" cy="386" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="671" y="376.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Apple Notes Store</text></g><g class="kg-n" data-i="19"><circle cx="602" cy="420" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="602" cy="420" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="602" y="410.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Apps</text></g><g class="kg-n" data-i="20"><circle cx="569" cy="475" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="569" cy="475" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="569" y="465.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Downloads</text></g><g class="kg-n" data-i="21"><circle cx="486" cy="478" r="7.700000000000001" fill="#007aff" opacity="0.16" filter="url(#kgblur)"/><circle cx="486" cy="478" r="3.5" fill="#007aff" opacity="0.8"/><text x="486" y="468.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">English</text></g><g class="kg-n" data-i="22"><circle cx="418" cy="513" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="418" cy="513" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="418" y="503.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">JavaScript</text></g><g class="kg-n" data-i="23"><circle cx="345" cy="484" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="345" cy="484" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="345" y="474.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Projects</text></g><g class="kg-n" data-i="24"><circle cx="262" cy="489" r="7.700000000000001" fill="#007aff" opacity="0.16" filter="url(#kgblur)"/><circle cx="262" cy="489" r="3.5" fill="#007aff" opacity="0.8"/><text x="262" y="479.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Python</text></g><g class="kg-n" data-i="25"><circle cx="220" cy="437" r="7.700000000000001" fill="#007aff" opacity="0.16" filter="url(#kgblur)"/><circle cx="220" cy="437" r="3.5" fill="#007aff" opacity="0.8"/><text x="220" y="427.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">Spanish</text></g><g class="kg-n" data-i="26"><circle cx="146" cy="410" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="146" cy="410" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="146" y="400.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">TypeScript</text></g><g class="kg-n" data-i="27"><circle cx="147" cy="350" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="147" cy="350" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="147" y="340.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">android</text></g><g class="kg-n" data-i="28"><circle cx="104" cy="299" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="104" cy="299" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="104" y="289.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">app</text></g><g class="kg-n" data-i="29"><circle cx="148" cy="248" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="148" cy="248" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="148" y="238.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">ios</text></g><g class="kg-n" data-i="30"><circle cx="148" cy="188" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="148" cy="188" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="148" y="178.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">macos</text></g><g class="kg-n" data-i="31"><circle cx="222" cy="161" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="222" cy="161" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="222" y="151.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">omi-linear-app</text></g><g class="kg-n" data-i="32"><circle cx="265" cy="110" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="265" cy="110" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="265" y="100.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">omi-onboard-lag</text></g><g class="kg-n" data-i="33"><circle cx="348" cy="115" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="348" cy="115" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="348" y="105.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">omi-v3-dmg</text></g><g class="kg-n" data-i="34"><circle cx="422" cy="87" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="422" cy="87" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="422" y="77.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">omi-worktrees</text></g><g class="kg-n" data-i="35"><circle cx="489" cy="123" r="7.700000000000001" fill="#ffcc00" opacity="0.16" filter="url(#kgblur)"/><circle cx="489" cy="123" r="3.5" fill="#ffcc00" opacity="0.8"/><text x="489" y="113.5" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.45)" font-family="-apple-system, sans-serif">python</text></g>
+    </svg>
+    <div class="kg-cap"><div class="t">This is your 2nd brain</div>
+      <div class="kg-hints"><span>&#8635; Drag to rotate</span><span>&#8597; Scroll to zoom</span><span>&#10021; Two-finger to pan</span></div>
+    </div>
+    <div class="graph-foot"><div class="k">Who you are</div><div class="v">Alex — building an AI outbound platform and contributing to the open-source Omi desktop app; iterating this onboarding toward 5 bug-free users.</div></div>
+  </div><div class="vr"></div>`;
+
+const IC = {
+  display: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  displaySm: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  drive: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="20" height="8" rx="2"/><circle cx="6.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>',
+  mic: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>',
+  micSm: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>',
+  person: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="3.5"/><path d="M4 21c0-4 3.5-6.5 8-6.5S20 17 20 21"/></svg>',
+  bolt: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M13 7l-4 6h3l-1 4 4-6h-3l1-4z" fill="currentColor" stroke="none"/></svg>',
+  sparkle: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.5 4L18 8.5l-4.5 1.5L12 14l-1.5-4L6 8.5 10.5 7 12 3z"/><path d="M18.5 14l.9 2.4 2.6.9-2.6.9-.9 2.4-.9-2.4-2.6-.9 2.6-.9.9-2.4z"/></svg>',
+};
+
+const permBody = (icon, title, btnLabel) => `
+  <div class="perm-card"><div class="perm-ic">${icon}</div>
+    <div><div class="perm-t">${title}</div><div class="perm-s">Not granted yet</div></div></div>`;
+
+const keycaps = (caps, sub) => `
+  <div class="key-panel"><div class="keys">${caps.map(c =>
+    `<div class="keycap${c.wide?' wide':''}"><span class="sym">${c.sym}</span><span class="nm">${c.nm||''}</span></div>`).join('')}
+  </div><div class="key-sub">${sub}</div></div>`;
+
+/* ---------- The onboarding steps on main ---------- */
+const STEPS = [
+  { key:'SignIn', layout:'centered', title:'Welcome to your 2nd brain',
+    body:`<svg class="auth-mark" viewBox="237.360 237.338 549.318 549.322" role="img" aria-label="Omi"><circle cx="282.523" cy="511.982" r="45.163" fill="white"/><circle cx="339.909" cy="339.890" r="45.107" fill="white"/><circle cx="512.014" cy="282.495" r="45.156" fill="white"/><circle cx="684.096" cy="339.880" r="45.103" fill="white"/><circle cx="741.511" cy="512.003" r="45.167" fill="white"/><circle cx="684.096" cy="684.094" r="45.103" fill="white"/><circle cx="511.981" cy="741.500" r="45.160" fill="white"/><circle cx="339.902" cy="684.107" r="45.103" fill="white"/></svg>
+      <div class="auth-stack">
+        <button class="auth-btn act-next"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.205c0-.638-.057-1.252-.164-1.841H9v3.482h4.844a4.14 4.14 0 0 1-1.797 2.716v2.258h2.909c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.468-.806 5.956-2.18l-2.909-2.258c-.806.54-1.835.859-3.047.859-2.344 0-4.328-1.585-5.037-3.714H.956v2.332A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.963 10.707A5.41 5.41 0 0 1 3.682 9c0-.592.102-1.168.281-1.707V4.961H.956A9 9 0 0 0 0 9c0 1.452.347 2.826.956 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.579c1.321 0 2.507.454 3.441 1.346l2.581-2.581C13.464.892 11.426 0 9 0A9 9 0 0 0 .956 4.961l3.007 2.332C4.672 5.164 6.656 3.579 9 3.579z"/></svg>Continue with Google</button>
+        <button class="auth-btn apple act-next"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 12.54c-.03-3.13 2.56-4.65 2.68-4.72-1.47-2.15-3.75-2.44-4.56-2.47-1.92-.2-3.78 1.15-4.76 1.15-1 0-2.51-1.13-4.14-1.1-2.1.03-4.07 1.25-5.15 3.14-2.21 3.83-.56 9.46 1.56 12.56 1.06 1.51 2.3 3.2 3.93 3.14 1.6-.07 2.2-1.01 4.13-1.01 1.91 0 2.48 1.01 4.15.97 1.72-.03 2.81-1.52 3.83-3.04 1.22-1.73 1.71-3.43 1.73-3.52-.04-.01-3.37-1.29-3.4-5.1zM13.91 3.31A5.52 5.52 0 0 0 15.18-.66a5.62 5.62 0 0 0-3.64 1.89 5.29 5.29 0 0 0-1.3 3.82 4.65 4.65 0 0 0 3.67-1.74z"/></svg>Continue with Apple</button>
+      </div>`,
+    primary:null, skippable:false },
+
+  { key:'Name', layout:'centered', title:'What should Omi call you?',
+    body:`<input class="field" placeholder="Your name" value="Alex">`,
+    primary:'Continue', skippable:false },
+
+  { key:'Language', layout:'centered', eyebrow:'Languages', title:'Pick every language you speak.',
+    desc:'Omi listens to all of them. Your first pick is the primary, used for prompts and summaries.',
+    body:`<div class="chips"><span class="chip sel"><span class="g">🇺🇸</span>English ✓</span><span class="chip"><span class="g">🇪🇸</span>Spanish</span><span class="chip"><span class="g">🇫🇷</span>French</span><span class="chip"><span class="g">🇩🇪</span>German</span><span class="chip"><span class="g">🇵🇹</span>Portuguese</span><span class="chip"><span class="g">🇷🇺</span>Russian</span><span class="chip"><span class="g">🇮🇳</span>Hindi</span><span class="chip"><span class="g">🇯🇵</span>Japanese</span><span class="chip"><span class="g">🇮🇹</span>Italian</span><span class="chip"><span class="g">🇳🇱</span>Dutch</span><span class="chip"><span class="g">🌐</span>Other</span></div>`,
+    primary:'Continue', skippable:false },
+
+  { key:'HowDidYouHear', layout:'centered', eyebrow:'Quick question', title:'How did you hear\nabout Omi?',
+    body:`<div class="chips source-chips"><span class="chip"><span class="g">📱</span>Social media</span><span class="chip"><span class="g"><svg width="16" height="12" viewBox="0 0 28 20" style="vertical-align:-1px"><rect width="28" height="20" rx="4.4" fill="#FF0000"/><path d="M11.3 5.8v8.4L18.7 10l-7.4-4.2z" fill="#fff"/></svg></span>YouTube</span><span class="chip"><span class="g">👋</span>Friend</span><span class="chip"><span class="g">🔍</span>Search engine</span><span class="chip"><span class="g">✨</span>AI chat</span><span class="chip"><span class="g">🎙️</span>Podcast</span><span class="chip"><span class="g">🧑‍💻</span>Colleague</span><span class="chip"><span class="g"><svg width="14" height="14" viewBox="0 0 40 40" style="vertical-align:-2px"><circle cx="20" cy="20" r="20" fill="#DA552F"/><path d="M22.667 20H17v-6h5.667a3 3 0 1 1 0 6zM22.667 10H13v20h4v-6h5.667a7 7 0 1 0 0-14z" fill="#fff"/></svg></span>Product Hunt</span><span class="chip"><span class="g">💬</span>Other</span></div>`,
+    primary:'Continue', primaryHidden:true, skippable:false },
+
+  { key:'Trust', layout:'centered', eyebrow:'Before I continue', title:"I'm going to ask for a few permissions.",
+    body:`<a class="oss" href="https://github.com/BasedHardware/omi" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        Open source &amp; private by design
+        <span class="arrow">&#8599;</span>
+      </a>
+      <div class="trust-row"><div class="trust-ic">${IC.displaySm}</div><div><div class="trust-t">Screen + files</div><div class="trust-d">Build context from what you're working on.</div></div></div>
+      <div class="trust-row"><div class="trust-ic">${IC.micSm}</div><div><div class="trust-t">Microphone</div><div class="trust-d">Capture voice notes and meeting context.</div></div></div>
+      <div class="trust-row"><div class="trust-ic">${IC.sparkle}</div><div><div class="trust-t">Accessibility + automation</div><div class="trust-d">Know the active app and act when you ask.</div></div></div>`,
+    primary:'Continue', skippable:false },
+
+  { key:'ScreenRecording', layout:'split', eyebrow:'Permission', title:'Let Omi read your screen.',
+    desc:"Screen Recording lets Omi see what you're working on.",
+    body: permBody(IC.display,'Screen Recording'), primary:'Open Screen Recording settings', permission:true, skippable:true },
+
+  { key:'FullDiskAccess', layout:'split', eyebrow:'Access', title:'Let Omi scan your work.',
+    desc:'File access lets Omi map your projects and files.',
+    body: permBody(IC.drive,'Full Disk Access'), primary:'Open Disk Access', permission:true, skippable:true },
+
+  { key:'FileScan', layout:'split', eyebrow:'Discovery', title:'Start building your profile.',
+    desc:'Omi scans projects and recent files.',
+    body:`<div class="scan-box"><svg class="scan-logo" viewBox="237.360 237.338 549.318 549.322" role="img" aria-label="Omi is scanning"><circle cx="282.523" cy="511.982" r="45.163" fill="white"/><circle cx="339.909" cy="339.890" r="45.107" fill="white"/><circle cx="512.014" cy="282.495" r="45.156" fill="white"/><circle cx="684.096" cy="339.880" r="45.103" fill="white"/><circle cx="741.511" cy="512.003" r="45.167" fill="white"/><circle cx="684.096" cy="684.094" r="45.103" fill="white"/><circle cx="511.981" cy="741.500" r="45.160" fill="white"/><circle cx="339.902" cy="684.107" r="45.103" fill="white"/></svg><div class="scan-status">Scanning and indexing your workspace…</div></div>`,
+    primary:'Continue', skippable:true },
+
+  { key:'Microphone', layout:'split', eyebrow:'Permission', title:'Let Omi use your mic.',
+    desc:'Microphone lets Omi transcribe meetings and voice notes.',
+    body: permBody(IC.mic,'Microphone'), primary:'Grant microphone access', permission:true, skippable:true },
+
+  { key:'Accessibility', layout:'split', eyebrow:'Permission', title:'Let Omi see the active app.',
+    desc:'Accessibility lets Omi know which app is active.',
+    body: permBody(IC.person,'Accessibility'), primary:'Open Accessibility settings', permission:true, skippable:true },
+
+  { key:'Automation', layout:'split', eyebrow:'Permission', title:'Let Omi act when asked.',
+    desc:'Automation lets Omi take actions for you.',
+    body: permBody(IC.bolt,'Automation'), primary:'Grant automation access', permission:true, skippable:true },
+
+  { key:'FloatingBarShortcut', layout:'full', title:'Press this button to open Ask Omi.',
+    body:`<div class="keycaps">
+        <span class="keycap-lg" id="k-cmd" onclick="lightKey('cmd')">⌘</span>
+        <span class="plus-sep">+</span>
+        <span class="keycap-lg" id="k-o" onclick="lightKey('o')">O</span>
+      </div>
+      <div class="hint" id="ask-hint">Press the shortcut, or tap the keys</div>
+      <div class="ask-bar" id="ask-bar" hidden>
+        <div class="ask-dot"></div>
+        <input class="ask-input" id="ask-input" placeholder="Ask Omi anything…" aria-label="Ask Omi" onkeydown="if(event.key==='Enter')sendAsk()">
+        <button class="btn btn-primary" onclick="sendAsk()">Ask</button>
+      </div>
+      <div class="ask-cue" id="ask-cue" hidden>Now ask Omi</div>
+      <div class="ask-resp" id="ask-resp" hidden>
+        <span class="mark">✓</span>Reply drafted and saved to your Gmail drafts. Nothing sends without you.
+      </div>
+      <button class="btn btn-primary" id="ask-continue" style="visibility:hidden" onclick="show(12)">Continue</button>`,
+    primary:null, skippable:true },
+
+  { key:'FloatingBar', layout:'full', title:'Omi sees your screen and gives you hyper-personalized responses',
+    desc:'Press this shortcut to open Ask Omi.',
+    body: keycaps([{sym:'⌘',nm:'command'},{sym:'O'}],'Ask Omi opens at the top of your screen.') +
+      `<img class="lineup" src="onboarding_mac_lineup.png" alt="Mac lineup">`,
+    primary:null, skippable:true },
+
+  { key:'VoiceShortcut', layout:'full', title:'Hold ⌥ and just talk.',
+    desc:'Ask out loud, release when done. Omi answers out loud too.',
+    body:`<div class="keycaps">
+        <span class="keycap-lg" id="k-opt" style="min-width:96px" onpointerdown="voiceDown()" onpointerup="voiceUp()" onpointerleave="voiceUp()">⌥</span>
+      </div>
+      <div class="hint" id="voice-hint">Press and hold Option, or press and hold the key</div>
+      <button class="btn btn-primary" id="voice-continue" style="visibility:hidden" onclick="show(14)">Continue</button>`,
+    primary:null, skippable:true },
+
+  { key:'VoiceDemo', layout:'full', title:'Now try it with Option.',
+    desc:"Keep Option held with your finger and ask: What's on my screen?",
+    body: keycaps([{sym:'⌥',nm:'option',wide:true}],'Keep holding while you speak, then release'),
+    primary:null, skippable:true },
+
+  { key:'DataSources', layout:'split', title:'Your 2nd brain is live.',
+    desc:'Connect more of your context.',
+    body:`<div class="src-list">
+      <div class="src-row"><div class="src-ic">📅</div><div><div class="src-t">Calendar</div><div class="src-m">12 events • 8 memories</div></div><div class="src-act"><div class="tog"></div></div></div>
+      <div class="src-row"><div class="src-ic">✉️</div><div><div class="src-t">Email</div><div class="src-m">300 messages • 41 memories</div></div><div class="src-act"><div class="tog"></div></div></div>
+      <div class="src-row"><div class="src-ic">📁</div><div><div class="src-t">Local files</div><div class="src-m">42 files • 5 memories</div></div><div class="src-act"><div class="tog"></div></div></div>
+      <div class="src-row"><div class="src-ic">📝</div><div><div class="src-t">Apple Notes</div><div class="src-m">Not connected</div></div><div class="src-act"><div class="tog off"></div></div></div>
+      <div class="src-row"><div class="src-ic">🤖</div><div><div class="src-t">ChatGPT</div><div class="src-m">Memory log import</div></div><div class="src-act"><div class="tog off"></div></div></div>
+      <div class="src-row"><div class="src-ic">✳️</div><div><div class="src-t">Claude</div><div class="src-m">Memory log import</div></div><div class="src-act"><div class="tog off"></div></div></div>
+    </div>`,
+    primary:'Continue', skippable:true },
+
+  { key:'Exports', layout:'split lead', title:'Use Omi memory where you work.',
+    desc:'Export Omi context to the tools you already use.',
+    body:`<div class="src-list">
+      <div class="src-row"><div class="src-ic">🗒️</div><div><div class="src-t">Notion</div><div class="src-m">Copy-ready page</div></div><div class="src-act"><button class="pill-btn">Connect</button></div></div>
+      <div class="src-row"><div class="src-ic">💎</div><div><div class="src-t">Obsidian</div><div class="src-m">Automatic export</div></div><div class="src-act"><button class="pill-btn">Connect</button></div></div>
+      <div class="src-row"><div class="src-ic">🤖</div><div><div class="src-t">ChatGPT</div><div class="src-m">Agent prompt ready</div></div><div class="src-act"><button class="pill-btn">Connect</button></div></div>
+      <div class="src-row"><div class="src-ic">✳️</div><div><div class="src-t">Claude</div><div class="src-m">Agent prompt ready</div></div><div class="src-act"><button class="pill-btn">Connect</button></div></div>
+      <div class="src-row"><div class="src-ic">✨</div><div><div class="src-t">Gemini</div><div class="src-m">Agent prompt ready</div></div><div class="src-act"><button class="pill-btn">Connect</button></div></div>
+    </div>`,
+    primary:'Continue', skippable:true },
+
+  { key:'Goal', layout:'split', title:'',
+    body:`<div class="goal-scan">
+        <div class="gs-head">Here's what Omi found for you</div>
+        <div class="gs-sub">What do you want to start working on?</div>
+      </div>
+      <div class="goal-rows"><div class="cx-row selecting"><div style="display:flex;align-items:center;gap:14px"><div class="src-icon">📁</div><div style="flex:1"><div class="cx-row-title">Get 5 bug-free onboarding users</div><div class="cx-row-desc">Your Jul 18 target from the Omi onboarding sprint</div></div><div><button class="pill-btn" onclick="pickGoal(this)">Prioritize onboarding</button></div></div></div><div class="cx-row"><div style="display:flex;align-items:center;gap:14px"><div class="src-icon">📚</div><div style="flex:1"><div class="cx-row-title">Read 2 books per month</div><div class="cx-row-desc">Your Kindle highlights are piling up faster than you finish books</div></div><div><button class="pill-btn" onclick="pickGoal(this)">Set goal</button></div></div></div><div class="cx-row"><div style="display:flex;align-items:center;gap:14px"><div class="src-icon">📅</div><div style="flex:1"><div class="cx-row-title">Ship 2 product features per week</div><div class="cx-row-desc">Demo calls on your calendar keep the roadmap moving</div></div><div><button class="pill-btn" onclick="pickGoal(this)">Ship Acme</button></div></div></div><div class="cx-row"><div style="display:flex;align-items:center;gap:14px"><div class="src-icon"><svg width="18" height="14" viewBox="0 0 48 36" aria-hidden="true"><path fill="#4285F4" d="M3.3 36h6.9V19.2L0 11.4v21.3C0 34.5 1.5 36 3.3 36z"/><path fill="#34A853" d="M37.8 36h6.9c1.8 0 3.3-1.5 3.3-3.3V11.4l-10.2 7.8V36z"/><path fill="#FBBC04" d="M37.8 5.4v13.8L48 11.4V7.2c0-4.1-4.7-6.5-8-4l-2.2 2.2z"/><path fill="#EA4335" d="M10.2 19.2V5.4L24 15.6 37.8 5.4v13.8L24 29.4 10.2 19.2z"/><path fill="#C5221F" d="M0 7.2v4.2l10.2 7.8V5.4L8 3.2C4.7.7 0 3.1 0 7.2z"/></svg></div><div style="flex:1"><div class="cx-row-title">Reply to every email within 24h</div><div class="cx-row-desc">Unanswered threads in your inbox are older than 3 days</div></div><div><button class="pill-btn" onclick="pickGoal(this)">Clear my inbox</button></div></div></div><div class="cx-row"><div style="display:flex;align-items:center;gap:14px"><div class="src-icon">✏️</div><div style="flex:1"><div class="cx-row-title">Type my own</div><div class="cx-row-desc">Describe a measurable goal in your own words</div></div><div><button class="pill-btn" onclick="pickGoal(this)">Write</button></div></div></div></div>`,
+    primary:'Continue', skippable:true },
+
+  { key:'Tasks', layout:'full', title:'Auto-created Tasks',
+    desc:'omi listens to your conversations and automatically\ncreates tasks, action items, and follow-ups for you.',
+    body:`<div class="glow-wrap"><div class="glow"></div><div class="glow-ic">☑</div></div>
+      <div class="task-row"><div class="task-dot done">✓</div><div><div class="task-t done">Book flight to SF</div><div class="task-s">From your recent activity</div></div></div>
+      <div class="task-row"><div class="task-dot"></div><div><div class="task-t">Reply to the venue about Friday</div><div class="task-s">Due tomorrow</div></div></div>
+      <div class="task-row"><div class="task-dot"></div><div><div class="task-t">Send Sam the updated proposal</div><div class="task-s">From your recent activity</div></div></div>`,
+    primary:'Take me to Omi', skippable:false, noBack:false },
+];
+
+/* ---------- Real phases (OnboardingFlow.phases) ---------- */
+const PHASES = [
+  { title:'Profile', start:0, end:3 },
+  { title:'Permissions', start:4, end:10 },
+  { title:'Shortcuts', start:11, end:14 },
+  { title:'Your memory', start:15, end:18 },
+];
+const PAGE_W = 14;
+
+function pbarHTML() {
+  return `<div class="pbar-wrap"><div class="pbar">` + PHASES.map(ph => {
+    const pages = ph.end - ph.start + 1;
+    return `<div class="seg" style="width:${pages*PAGE_W}px" title="${ph.title}"><div class="seg-fill"></div>
+      <div class="seg-slices">${Array.from({length: pages}, (_, k) =>
+        `<div class="slice" data-target="${Math.min(ph.start+k+1, STEPS.length-1)}" title="${ph.title} — step ${k+1} of ${pages}"><div class="tick"></div></div>`).join('')}</div></div>`;
+  }).join('') + `</div></div>`;
+}
+
+/* ---------- Build DOM ---------- */
+const stepsEl = document.getElementById('steps');
+STEPS.forEach((s, i) => {
+  const sec = document.createElement('section');
+  sec.className = 'step ' + s.layout;
+  const titleBlock = `
+    ${s.eyebrow ? `<div class="eyebrow">${s.eyebrow}</div>` : ''}
+    <div class="title">${s.title}</div>
+    ${s.desc ? `<div class="desc">${s.desc}</div>` : ''}
+    <div class="body">${s.body || ''}</div>
+    <div class="btn-row">
+      ${i > 0 ? `<button class="btn btn-secondary act-back">Back</button>` : ''}
+      ${s.primary ? `<button class="btn btn-primary ${s.permission ? 'act-grant' : 'act-next'}${s.primaryHidden ? ' hidden' : ''}">${s.primary}</button>` : ''}
+      ${s.extraPlain ? `<button class="btn btn-plain">${s.extraPlain}</button>` : ''}
+    </div>`;
+  if (s.layout.startsWith('split')) {
+    sec.innerHTML = GRAPH + `<div class="pane">${pbarHTML()}<div class="pane-inner">${titleBlock}</div></div>`;
+  } else {
+    sec.innerHTML = `${pbarHTML()}<div class="pane">${titleBlock}</div>`;
+  }
+  if (s.key === 'Goal') sec.querySelectorAll('.pill-btn').forEach(btn => btn.textContent = 'Start');
+  stepsEl.appendChild(sec);
+});
+const stepEls = [...document.querySelectorAll('.step')];
+// The rise entrance animation puts a transform on .body, which would trap the
+// absolutely-positioned ask overlays — reparent them to the (untransformed) step.
+document.querySelectorAll('.ask-bar, .ask-cue, .ask-resp').forEach(el => el.closest('.step').appendChild(el));
+
+/* ---------- Progress fill (fill stands at start of current page) ---------- */
+function updateBars() {
+  stepEls.forEach((el) => {
+    [...el.querySelectorAll('.seg')].forEach((seg, i) => {
+      const ph = PHASES[i], pages = ph.end - ph.start + 1;
+      let filled = 0;
+      for (let s = ph.start; s <= ph.end; s++) if (s < idx) filled++;
+      seg.querySelector('.seg-fill').style.width = (filled / pages * 100) + '%';
+    });
+  });
+}
+
+
+function pickGoal(btn) {
+  const row = btn.closest('.cx-row');
+  row.closest('.goal-rows').querySelectorAll('.cx-row').forEach(r => r.classList.remove('selecting'));
+  row.classList.add('selecting');
+  setTimeout(() => openGoalChat(row.querySelector('.cx-row-title').textContent), 280);
+}
+
+/* ---------- Fullscreen goal chat ---------- */
+const OMI_AV = `<svg width="15" height="15" viewBox="237.360 237.338 549.318 549.322" aria-hidden="true"><circle cx="282.523" cy="511.982" r="45.163" fill="white"/><circle cx="339.909" cy="339.890" r="45.107" fill="white"/><circle cx="512.014" cy="282.495" r="45.156" fill="white"/><circle cx="684.096" cy="339.880" r="45.103" fill="white"/><circle cx="741.511" cy="512.003" r="45.167" fill="white"/><circle cx="684.096" cy="684.094" r="45.103" fill="white"/><circle cx="511.981" cy="741.500" r="45.160" fill="white"/><circle cx="339.902" cy="684.107" r="45.103" fill="white"/></svg>`;
+const USER_AV = `<svg width="16" height="16" viewBox="0 0 24 24" fill="#cfcfcf" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6v1H4z"/></svg>`;
+const GOAL_CONVOS = {
+  'Get 5 bug-free onboarding users': {
+    ask: 'Hi Omi, can you help me get 5 bug-free onboarding users by Friday?',
+    tools: [['Search Contacts', '3 people offered to test Omi'], ['Read Calendar', 'free slots Thu + Fri'], ['Draft Invites', '3 personalized messages']],
+    reply: "Let's do it. Three people already offered to test Omi — I drafted personal invites and found shared free slots Thursday and Friday. Approve the drafts and I'll track who books." },
+  'Read 2 books per month': {
+    ask: 'Hi Omi, can you help me read 2 books per month?',
+    tools: [['Read Kindle', 'highlights from 3 open books'], ['Check Calendar', 'evenings free after 9pm'], ['Create Habit', '30-min nightly reading block']],
+    reply: "Done — I blocked 30 minutes nightly at 9:30pm and I'll resurface your Kindle highlights each morning so open books actually get finished." },
+  'Ship 2 product features per week': {
+    ask: 'Hi Omi, can you help me ship 2 Acme features per week?',
+    tools: [['Scan Repo', '12 open branches'], ['Read Calendar', 'demo call Thursday'], ['Create Tasks', '2 feature cut-offs before demo']],
+    reply: "You ship fastest Tuesday and Wednesday mornings. I set two feature cut-offs ahead of Thursday's demo and I'll nudge you when a branch sits idle for two days." },
+  'Reply to every email within 24h': {
+    ask: 'Hi Omi, can you help me reply to every email within 24 hours?',
+    tools: [['Scan Inbox', '6 threads over 24h'], ['Draft Replies', '6 drafts ready in Gmail'], ['Set Watch', 'daily 5pm inbox sweep']],
+    reply: "Six threads are past the line — drafts are waiting in Gmail. From now on I'll sweep your inbox at 5pm daily and pre-draft anything getting close." },
+  'Type my own': {
+    ask: 'Hi Omi, I want to set my own goal.',
+    tools: [['Open Notes', 'goal template ready']],
+    reply: "Tell me the goal — include a number so we can measure progress, and I'll build the plan and reminders around it." },
+  'Ask Omi': {
+    ask: 'What can you help me with?',
+    tools: [['Read Context', 'screen, files, meetings, and memories']],
+    reply: "I’m connected to your context and ready to help. Ask me to find, remember, plan, write, or take action." },
+};
+let goalChatTimer = null;
+function escapeHTML(value) {
+  const el = document.createElement('div');
+  el.textContent = value;
+  return el.innerHTML;
+}
+let chatNoContinue = false;
+function openGoalChat(title, prompt, noContinue) {
+  chatNoContinue = !!noContinue;
+  const c = GOAL_CONVOS[title] || GOAL_CONVOS['Type my own'];
+  const ask = prompt ? escapeHTML(prompt) : c.ask;
+  const toolRows = c.tools.map(([n, s]) =>
+    `<div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">${n}</span><span class="tool-dot">·</span><span class="tool-sum">${s}</span><span class="tool-chev">⌄</span></div>`).join('');
+  document.getElementById('chat-col').innerHTML =
+    `<div class="cv-step chat-user-row"><div><div class="chat-user">${ask}</div><div class="chat-time right">9:41</div></div><div class="chat-avatar user">${USER_AV}</div></div>` +
+    `<div class="cv-step chat-ai-row"><div class="chat-avatar">${OMI_AV}</div><div class="chat-ai-col">` +
+    `<div class="tool-group">${toolRows}</div>` +
+    `<div class="cv-step"><div class="chat-ai-bubble">${c.reply}</div><div class="chat-time">9:41</div></div>` +
+    `</div></div>`;
+  document.getElementById('chat-screen').classList.add('on');
+  document.getElementById('chat-continue').style.display = 'none';
+  // Reveal order: user bubble → omi row (avatar + first tool) → tools → reply.
+  // The ai-row container is excluded from the step list and shown alongside
+  // the first tool so the avatar/empty box never precede the user message.
+  const aiRow = document.querySelector('#chat-col .chat-ai-row');
+  const steps = [...document.querySelectorAll('#chat-col .cv-step')].filter(el => el !== aiRow);
+  let k = 0;
+  clearInterval(goalChatTimer);
+  goalChatTimer = setInterval(() => {
+    k++;
+    aiRow.classList.toggle('shown', k >= 2);
+    steps.forEach((el, i) => {
+      el.classList.toggle('shown', i < k);
+      const isTool = el.classList.contains('tool-row');
+      el.classList.toggle('working', isTool && i === k - 1);
+      el.classList.toggle('done', isTool && i < k - 1);
+    });
+    if (k > steps.length) {
+      steps.forEach(el => { el.classList.remove('working'); if (el.classList.contains('tool-row')) el.classList.add('done'); });
+      clearInterval(goalChatTimer);
+      if (!chatNoContinue) document.getElementById('chat-continue').style.display = '';
+    }
+  }, 750);
+}
+function sendHomeAsk() {
+  const input = document.getElementById('home-ask-input');
+  const prompt = input.value.trim();
+  if (!prompt) return input.focus();
+  input.value = '';
+  openGoalChat('Ask Omi', prompt);
+}
+function closeGoalChat() {
+  clearInterval(goalChatTimer);
+  document.getElementById('chat-screen').classList.remove('on');
+}
+
+function setHomeView(v, btn) {
+  document.querySelectorAll('.home-view').forEach(el => el.classList.toggle('on', el.id === 'hv-' + v));
+  document.querySelectorAll('.hs-item').forEach(b => b.classList.toggle('on', b === btn));
+}
+
+/* ---------- Home goal carousel ---------- */
+const HOME_GOALS = [
+  { title: 'Get 5 bug-free onboarding users', next: "Next step: send the 3 invites Omi drafted — they're waiting in Gmail." },
+  { title: 'Read 2 books per month', next: 'Next step: tonight 9:30pm reading block is on your calendar.' },
+  { title: 'Ship 2 product features per week', next: "Next step: two cut-offs are set before Thursday's demo." },
+  { title: 'Reply to every email within 24h', next: 'Next step: approve the 6 drafts waiting in Gmail.' },
+];
+let hgIdx = 0;
+function renderHomeGoal() {
+  const g = HOME_GOALS[hgIdx];
+  document.getElementById('hg-title').textContent = g.title;
+  document.getElementById('hg-next').textContent = g.next;
+  document.getElementById('hg-count').textContent = `Your goals · ${hgIdx + 1} of ${HOME_GOALS.length}`;
+  document.getElementById('hg-dots').innerHTML = HOME_GOALS.map((_, i) =>
+    `<span class="hg-dot${i === hgIdx ? ' on' : ''}" onclick="hgIdx=${i};renderHomeGoal()"></span>`).join('');
+}
+function shiftHomeGoal(delta) {
+  hgIdx = (hgIdx + delta + HOME_GOALS.length) % HOME_GOALS.length;
+  renderHomeGoal();
+}
+renderHomeGoal();
+
+/* ---------- Navigation ---------- */
+const startAt = parseInt(location.hash.slice(1)) || parseInt(localStorage.getItem('idx-main')) || 1;
+let idx = Math.min(Math.max(startAt - 1, 0), STEPS.length - 1);
+function show(i) {
+  idx = Math.min(Math.max(i, 0), STEPS.length - 1);
+  stepEls.forEach((el, j) => el.classList.toggle('on', j === idx));
+  updateBars();
+  document.getElementById('h-skip').classList.toggle('hidden', !STEPS[idx].skippable);
+  history.replaceState(null, '', '#' + (idx + 1));
+  localStorage.setItem('idx-main', idx + 1);
+  if (idx === 11) resetAsk();
+  if (idx === 13) resetVoice();
+}
+
+let voiceDone = false, voiceT0 = 0;
+function voiceDown() {
+  if (voiceT0) return;
+  voiceT0 = Date.now();
+  document.getElementById('k-opt').classList.add('lit');
+  document.getElementById('voice-hint').textContent = 'Listening… release when done';
+}
+function voiceUp() {
+  if (!voiceT0) return;
+  const held = Date.now() - voiceT0;
+  voiceT0 = 0;
+  if (held >= 600) {
+    voiceDone = true;
+    document.getElementById('voice-hint').textContent = '✓ Heard you. Omi answers out loud.';
+    document.getElementById('voice-continue').style.visibility = 'visible';
+  } else {
+    document.getElementById('k-opt').classList.remove('lit');
+    document.getElementById('voice-hint').textContent = 'Hold it a moment longer, then release';
+  }
+}
+function resetVoice() {
+  voiceDone = false; voiceT0 = 0;
+  const optionKey = document.getElementById('k-opt');
+  if (!optionKey) return;
+  optionKey.classList.remove('lit');
+  document.getElementById('voice-hint').textContent = 'Press and hold Option, or press and hold the key';
+  document.getElementById('voice-continue').style.visibility = 'hidden';
+}
+
+const litKeys = { cmd: false, o: false };
+let comboDone = false;
+function lightKey(k) {
+  litKeys[k] = true;
+  document.getElementById(k === 'cmd' ? 'k-cmd' : 'k-o').classList.add('lit');
+  if (litKeys.cmd && litKeys.o) { comboDone = true; setTimeout(openAskBar, 220); }
+}
+function resetAsk() {
+  litKeys.cmd = false; litKeys.o = false; comboDone = false;
+  document.getElementById('k-cmd').classList.remove('lit');
+  document.getElementById('k-o').classList.remove('lit');
+  document.getElementById('ask-bar').hidden = true;
+  document.getElementById('ask-cue').hidden = true;
+  document.getElementById('ask-resp').hidden = true;
+  document.getElementById('ask-continue').style.visibility = 'hidden';
+  document.getElementById('ask-hint').textContent = 'Press the shortcut, or tap the keys';
+}
+function openAskBar() {
+  document.getElementById('ask-bar').hidden = false;
+  document.getElementById('ask-cue').hidden = false;
+  document.getElementById('ask-resp').hidden = true;
+  document.getElementById('ask-hint').textContent = 'Ask about the follow-up, or type anything';
+  document.getElementById('ask-input').focus();
+}
+function sendAsk() {
+  document.getElementById('ask-cue').hidden = true;
+  document.getElementById('ask-resp').hidden = false;
+  document.getElementById('ask-hint').textContent = '';
+  document.getElementById('ask-continue').style.visibility = 'visible';
+}
+document.addEventListener('click', (e) => {
+  const sourceChip = e.target.closest('.source-chips .chip');
+  const grantButton = e.target.closest('.act-grant');
+  if (sourceChip) {
+    sourceChip.parentElement.querySelectorAll('.chip').forEach(chip => chip.classList.toggle('sel', chip === sourceChip));
+    sourceChip.closest('.step').querySelector('.act-next').classList.remove('hidden');
+  } else if (grantButton) {
+    const status = grantButton.closest('.step').querySelector('.perm-s');
+    status.textContent = 'Enabled';
+    status.classList.add('ok');
+    grantButton.textContent = 'Granted';
+    grantButton.classList.add('granted');
+    grantButton.disabled = true;
+    setTimeout(() => show(idx + 1), 350);
+  } else if (e.target.closest('.act-back')) show(idx - 1);
+  else if (e.target.closest('.act-next')) {
+    if (idx === STEPS.length - 1) document.getElementById('home-screen').classList.add('on');
+    else show(idx + 1);
+  }
+  else if (e.target.closest('.slice')) show(+e.target.closest('.slice').dataset.target);
+});
+document.getElementById('h-skip').onclick = () => show(idx + 1);
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (idx === 13 && e.key === 'Alt') voiceDown();
+  if (idx === 11 && (e.key === 'Meta' || e.key === 'Control') && !comboDone) {
+    document.getElementById('k-cmd').classList.add('lit');
+  }
+  if (idx === 11 && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'o') {
+    e.preventDefault();
+    comboDone = true;
+    litKeys.cmd = true; litKeys.o = true;
+    document.getElementById('k-cmd').classList.add('lit');
+    document.getElementById('k-o').classList.add('lit');
+    setTimeout(openAskBar, 220);
+    return;
+  }
+  if (e.key === 'ArrowRight' || e.key === 'Enter') show(idx + 1);
+  if (e.key === 'ArrowLeft') show(idx - 1);
+});
+document.addEventListener('keyup', (e) => {
+  if (idx === 13 && e.key === 'Alt') voiceUp();
+  if (idx === 11 && (e.key === 'Meta' || e.key === 'Control') && !comboDone && !litKeys.cmd) {
+    document.getElementById('k-cmd').classList.remove('lit');
+  }
+});
+
+
+show(idx);
+
+/* KG-ZOOM start — scroll to zoom, drag to pan, dblclick to reset */
+(function () {
+  document.querySelectorAll('.graph-pane svg').forEach(svg => {
+    const view = { x: 0, y: 0, w: 800, h: 600 };
+    const apply = () => svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+    const toSvg = (e) => {
+      const r = svg.getBoundingClientRect();
+      return { x: view.x + (e.clientX - r.left) / r.width * view.w,
+               y: view.y + (e.clientY - r.top) / r.height * view.h };
+    };
+    svg.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const p = toSvg(e);
+      const k = Math.exp(e.deltaY * 0.002);
+      const w = Math.min(1600, Math.max(160, view.w * k));
+      const scale = w / view.w;
+      view.x = p.x - (p.x - view.x) * scale;
+      view.y = p.y - (p.y - view.y) * scale;
+      view.w = w; view.h = view.h * scale;
+      apply();
+    }, { passive: false });
+    let drag = null;
+    svg.addEventListener('pointerdown', (e) => {
+      drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+      svg.classList.add('dragging'); svg.setPointerCapture(e.pointerId);
+    });
+    svg.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const r = svg.getBoundingClientRect();
+      view.x = drag.vx - (e.clientX - drag.x) / r.width * view.w;
+      view.y = drag.vy - (e.clientY - drag.y) / r.height * view.h;
+      apply();
+    });
+    svg.addEventListener('pointerup', () => { drag = null; svg.classList.remove('dragging'); });
+    svg.addEventListener('dblclick', () => { view.x = 0; view.y = 0; view.w = 800; view.h = 600; apply(); });
+  });
+})();
+/* KG-ZOOM end */
+/* KG-ANIM start — idle float like the app's settled force simulation */
+(function () {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const insts = [...document.querySelectorAll('.graph-pane svg')].map(svg => ({
+    svg,
+    nodes: [...svg.querySelectorAll('.kg-n')],
+    edges: [...svg.querySelectorAll('.kg-e')].map(l => ({ l, a: +l.dataset.a, b: +l.dataset.b,
+      x1: +l.getAttribute('x1'), y1: +l.getAttribute('y1'),
+      x2: +l.getAttribute('x2'), y2: +l.getAttribute('y2') })),
+  }));
+  const prm = i => ({ a1: 4 + (i * 7) % 6, a2: 3 + (i * 5) % 5,
+    w1: 0.35 + ((i * 13) % 10) / 22, w2: 0.22 + ((i * 11) % 10) / 30, p1: i * 2.4, p2: i * 1.7 });
+  function tick(t) {
+    const s = t / 1000;
+    insts.forEach(inst => {
+      const step = inst.svg.closest('.step');
+      if (step && !step.classList.contains('on')) return;
+      const off = [];
+      inst.nodes.forEach(n => {
+        const i = +n.dataset.i;
+        let dx = 0, dy = 0;
+        if (i !== 0) { // center node is fixed, like the app
+          const q = prm(i);
+          dx = q.a1 * Math.sin(q.w1 * s + q.p1);
+          dy = q.a2 * Math.sin(q.w2 * s + q.p2);
+        }
+        off[i] = [dx, dy];
+        n.setAttribute('transform', `translate(${dx},${dy})`);
+      });
+      inst.edges.forEach(e => {
+        const [ax, ay] = off[e.a] || [0, 0], [bx, by] = off[e.b] || [0, 0];
+        e.l.setAttribute('x1', e.x1 + ax); e.l.setAttribute('y1', e.y1 + ay);
+        e.l.setAttribute('x2', e.x2 + bx); e.l.setAttribute('y2', e.y2 + by);
+      });
+    });
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+/* KG-ANIM end */
+</script>
+</body>
+</html>

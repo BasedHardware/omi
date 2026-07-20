@@ -1,0 +1,1382 @@
+<meta charset="utf-8">
+<title>Omi Onboarding Mocks</title>
+<style>
+/* Omi desktop onboarding — HTML mock styles.
+   Tokens transcribed from Desktop/Sources/Theme/OmiColors.swift and
+   Desktop/Sources/Onboarding/OnboardingStepScaffold.swift.
+   v2 flow (6 steps) — components unchanged from v1. */
+
+:root {
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #252525;
+  --bg-quaternary: #35343b;
+  --text-primary: #ffffff;
+  --text-secondary: #e5e5e5;
+  --text-tertiary: #b0b0b0;
+  --text-quaternary: #888888;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --hairline: rgba(255, 255, 255, 0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.window { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---------- Header (all screens) ---------- */
+.header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; flex: none; }
+.logo { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; color: #fff; }
+.hr { height: 1px; background: var(--bg-tertiary); flex: none; }
+
+/* ---------- Centered layout ---------- */
+.centered { flex: 1; overflow-y: auto; display: flex; }
+.content-centered { margin: auto; max-width: 560px; padding: 36px 40px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 28px; }
+
+/* ---------- Progress capsules (unused in grouped mock) ---------- */
+.foot .progress { display: none; }
+
+/* ---------- Grouped phase bar (shared, fixed at bottom) ---------- */
+/* Ported from the existing-main mock: proportional per-phase segments (width =
+   page count × 14px), fill stands at the current page, per-page click slices,
+   hover reveals page-boundary ticks. */
+.gbar { position: fixed; left: 50%; transform: translateX(-50%); top: 76px; z-index: 60;
+  display: flex; gap: 8px; align-items: center; }
+.gbar.hide { display: none; }
+.seg { position: relative; height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); }
+.seg-fill { position: absolute; left: 0; top: 0; height: 100%; width: 0; background: #fff;
+  border-radius: 999px; transition: width 0.2s cubic-bezier(0.2, 0, 0, 1); }
+.seg-slices { position: absolute; left: 0; top: -8px; bottom: -8px; right: 0; display: flex; }
+.slice { width: 14px; cursor: pointer; position: relative; }
+.slice .tick { display: none; position: absolute; left: -0.75px; top: 6px; width: 1.5px; height: 9px;
+  border-radius: 0.75px; background: var(--bg-primary); }
+.seg:hover .slice:not(:first-child) .tick { display: block; }
+@media (prefers-reduced-motion: reduce) { .seg-fill { transition: none; } }
+
+/* ---------- Title block ---------- */
+.title-block { display: flex; flex-direction: column; gap: 14px; }
+.title { font-size: 40px; font-weight: 700; line-height: 1.15; color: var(--text-primary); }
+.title.md { font-size: 32px; }
+.desc { font-size: 16px; font-weight: 400; line-height: 1.5; color: var(--text-secondary); max-width: 460px; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: inherit; font-size: 15px; font-weight: 600;
+  padding: 12px 18px; border-radius: 14px; border: 1px solid transparent;
+  cursor: pointer; transition: opacity 0.12s ease-out, transform 0.12s ease-out;
+}
+.btn:active { opacity: 0.92; transform: scale(0.985); }
+.btn-primary { background: #fff; color: #000; }
+.btn[disabled] { opacity: 0.4; cursor: default; }
+.btn-text { background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; }
+.btn-cta { min-width: 280px; border-radius: 12px; }
+
+/* ---------- Chips ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip {
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  padding: 10px 16px; border-radius: 999px;
+  background: var(--bg-secondary); color: var(--text-secondary);
+  border: 1px solid var(--hairline); cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.chip:hover { background: var(--bg-tertiary); border-color: rgba(255, 255, 255, 0.14); color: var(--text-primary); }
+.chip.selected { background: #fff; color: #000; border-color: transparent; }
+
+/* ---------- Text field ---------- */
+.field {
+  font-family: inherit; font-size: 14px; color: var(--text-primary);
+  background: var(--bg-secondary); border: 1px solid var(--hairline);
+  border-radius: 14px; padding: 14px 16px; outline: none; width: 100%;
+}
+.field::placeholder { color: var(--text-quaternary); }
+
+.hint { font-size: 12px; font-weight: 500; color: var(--text-tertiary); }
+
+/* ---------- Pill button (row actions) ---------- */
+.pill-btn {
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  padding: 8px 12px; border-radius: 999px; background: var(--bg-primary);
+  border: 1px solid var(--hairline); cursor: pointer; flex: none;
+}
+.pill-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+/* ---------- Trust rows (final screen) ---------- */
+.trust-rows { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 520px; }
+.trust-row { display: flex; gap: 12px; align-items: flex-start; padding: 14px; background: rgba(37, 37, 37, 0.55); border-radius: 14px; text-align: left; }
+.trust-icon {
+  width: 28px; height: 28px; border-radius: 8px; flex: none;
+  background: var(--bg-secondary); color: rgba(255, 255, 255, 0.85);
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.trust-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.trust-detail { font-size: 13px; color: var(--text-secondary); }
+
+/* ---------- Glow icon (final screen) ---------- */
+.glow-wrap { position: relative; width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; }
+.glow {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15); filter: blur(20px);
+  animation: glowPulse 2s ease-in-out infinite;
+}
+@keyframes glowPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+.glow-icon { position: relative; font-size: 44px; background: linear-gradient(135deg, #fff, #9a9a9a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ---------- Draft panel ---------- */
+.panel {
+  width: 100%; border-radius: 20px; background: var(--bg-secondary);
+  border: 1px solid var(--hairline); padding: 18px;
+  display: flex; flex-direction: column; gap: 14px; text-align: left;
+}
+.panel .desc-sm { font-size: 13px; color: var(--text-secondary); }
+.textarea {
+  font-family: inherit; font-size: 13px; color: var(--text-primary);
+  background: var(--bg-secondary); border: 1px solid var(--hairline);
+  border-radius: 18px; padding: 12px 14px; min-height: 160px; width: 100%; resize: vertical; outline: none;
+}
+.inline { display: flex; gap: 8px; align-items: center; }
+
+/* ---------- Boot screen (dot mark flicker while loading) ---------- */
+.boot-logo { width: 88px; height: 88px; }
+@keyframes flicker {
+  0%, 100% { opacity: 0.35; }
+  9%  { opacity: 0.85; }
+  16% { opacity: 0.5; }
+  31% { opacity: 1; }
+  44% { opacity: 0.55; }
+  58% { opacity: 0.9; }
+  71% { opacity: 0.42; }
+  86% { opacity: 0.8; }
+}
+
+/* ---------- Connect / found screens (Linear-style column) ---------- */
+.cx { width: 100%; max-width: 440px; text-align: left; }
+.cx-head { font-size: 19px; font-weight: 600; line-height: 24px; color: var(--text-primary); }
+.cx-sub { font-size: 14px; font-weight: 400; line-height: 20px; color: var(--text-quaternary); margin-top: 8px; }
+.cx-div { height: 1px; background: rgba(255, 255, 255, 0.06); margin-top: 24px; }
+.cx-row { padding: 19px 0 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; transition: background 0.5s ease, box-shadow 0.5s ease; }
+.cx-row.selecting { background: rgba(255, 255, 255, 0.05); box-shadow: 0 0 22px rgba(255, 255, 255, 0.1); }
+.src-icon { transition: filter 0.5s ease; }
+.cx-row.selecting .src-icon { filter: brightness(1.25) drop-shadow(0 0 5px rgba(255, 255, 255, 0.4)); }
+.cx-row.selecting .cx-row-title { color: var(--text-primary); }
+.cx-row-title { font-size: 15px; font-weight: 600; line-height: 20px; color: var(--text-secondary); }
+.cx-row-desc { font-size: 13px; font-weight: 400; line-height: 18px; color: var(--text-quaternary); margin-top: 4px; }
+.src-icon {
+  width: 36px; height: 36px; border-radius: 10px; flex: none;
+  background: var(--bg-tertiary); border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 8px;
+}
+.cx-actions { display: flex; justify-content: flex-end; gap: 11px; margin-top: 36px; }
+.cx-pill {
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  height: 42px; padding: 0 20px; border-radius: 21px; border: none;
+  background: var(--bg-tertiary); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.cx-pill:hover { background: var(--bg-quaternary); color: var(--text-primary); }
+.cx-pill.ghost { background: transparent; border: 1px solid transparent; color: var(--text-tertiary); }
+.cx-pill.ghost:hover { background: var(--bg-tertiary); border-color: var(--hairline); color: var(--text-primary); }
+
+/* ---------- Ghost skip button (text only; shape appears on hover) ---------- */
+.skip-ghost {
+  font-family: inherit; font-size: 15px; font-weight: 600; color: var(--text-tertiary);
+  padding: 12px 18px; border-radius: 14px; background: transparent; border: 1px solid transparent;
+  cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.skip-ghost:hover { background: var(--bg-tertiary); border-color: var(--hairline); color: var(--text-primary); }
+
+/* ---------- Bottom progress bar + back ---------- */
+.foot { flex: none; padding: 16px 24px 20px; display: flex; align-items: center; justify-content: center; position: relative; }
+.back-btn {
+  position: absolute; left: 24px; width: 34px; height: 34px;
+  font-family: inherit; font-size: 17px; font-weight: 600; color: var(--text-tertiary);
+  background: var(--bg-secondary); border: 1px solid var(--hairline); border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.back-btn:hover { color: #fff; background: var(--bg-tertiary); }
+.foot .progress span { cursor: pointer; transition: background 0.15s ease; }
+@keyframes capGrow { from { width: 8px; } to { width: 28px; } }
+@keyframes capShrink { from { width: 28px; } to { width: 8px; } }
+.screen.on .foot .progress span.active { animation: capGrow 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; will-change: width; }
+@keyframes capShrinkBack { from { width: 28px; background: #fff; } to { width: 8px; background: rgba(255, 255, 255, 0.1); } }
+body.nav-fwd .screen.on .foot .progress span.done:has(+ span.active) { animation: capShrink 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; will-change: width; }
+body.nav-back .screen.on .foot .progress span.active + span { animation: capShrinkBack 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; will-change: width; }
+@media (prefers-reduced-motion: reduce) { .screen.on .foot .progress span.active { animation: none; } }
+.foot .progress span:hover { background: rgba(255, 255, 255, 0.45); }
+.foot .progress span.done:hover, .foot .progress span.active:hover { background: #fff; }
+
+/* ---------- Page slide on screen switch (direction-aware) ---------- */
+@keyframes pageInFwd { from { opacity: 0; transform: translateX(38px); } to { opacity: 1; transform: none; } }
+@keyframes pageInBack { from { opacity: 0; transform: translateX(-38px); } to { opacity: 1; transform: none; } }
+body.nav-fwd .screen.on { animation: pageInFwd 0.42s cubic-bezier(0.16, 1, 0.3, 1) both; }
+body.nav-back .screen.on { animation: pageInBack 0.42s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* ---------- Ease-out entrance on screen switch ---------- */
+@keyframes riseIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.screen.on .content-centered > * { animation: riseIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.screen.on .content-centered > *:nth-child(2) { animation-delay: 0.06s; }
+.screen.on .content-centered > *:nth-child(3) { animation-delay: 0.12s; }
+.screen.on .content-centered > *:nth-child(4) { animation-delay: 0.18s; }
+.screen.on .content-centered > *:nth-child(n+5) { animation-delay: 0.24s; }
+.screen.on .boot-logo { animation: riseIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards, flicker 5.5s ease-in-out 0.5s infinite; }
+
+/* ---------- Found-screen scan: mark flickers and shines, then spins out ---------- */
+.found-scan { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 44px 0 12px; }
+.found-logo { width: 64px; height: 64px; animation: flicker 2.6s ease-in-out infinite, shine 2.6s ease-in-out infinite, slowspin 16s linear infinite; }
+@keyframes slowspin { to { transform: rotate(360deg); } }
+.found-logo.accel { animation: none; }
+@keyframes shine {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.15)); }
+  50% { filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.45)); }
+}
+.found-status { font-size: 13px; font-weight: 500; color: var(--text-tertiary); min-height: 18px; }
+#loops-wrap { display: none; }
+#loops-wrap.live { display: block; }
+#loops-wrap.live #loop1, #loops-wrap.live #loop2, #loops-wrap.live #loop3 {
+  animation: riseIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+#loops-wrap.live #loop1 { animation-delay: 0.05s; }
+#loops-wrap.live #loop2 { animation-delay: 0.13s; }
+#loops-wrap.live #loop3 { animation-delay: 0.21s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.on .content-centered > *, .screen.on .boot-logo,
+  .found-logo, .found-logo.accel, .glow,
+  body.nav-fwd .screen.on, body.nav-back .screen.on,
+  #loops-wrap.live #loop1, #loops-wrap.live #loop2, #loops-wrap.live #loop3 { animation: none; }
+}
+
+/* ---------- Mock-only viewer nav ---------- */
+.screen { display: none; }
+.screen.on { display: block; }
+.viewer-nav {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 100;
+  display: flex; gap: 8px; align-items: center;
+  background: rgba(26,26,26,0.95); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.viewer-nav button {
+  font-family: inherit; font-size: 13px; font-weight: 600; color: #e5e5e5;
+  background: #252525; border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+}
+.viewer-nav button:hover { background: #35343b; }
+.viewer-nav select {
+  font-family: inherit; font-size: 13px; font-weight: 500; color: #fff;
+  background: #0f0f0f; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px; padding: 6px 10px; cursor: pointer; outline: none;
+}
+.viewer-hint { font-size: 11px; color: #888; padding-right: 4px; }
+
+/* ---------- Try-the-shortcut screen ---------- */
+.window { position: relative; }
+.keycaps { display: flex; gap: 8px; align-items: center; justify-content: center; }
+.keycap-lg {
+  min-width: 64px; min-height: 64px; padding: 0 16px;
+  border-radius: 14px; background: var(--bg-tertiary);
+  border: 2px solid rgba(176, 176, 176, 0.3);
+  font-size: 26px; font-weight: 600; color: var(--text-primary);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.keycap-lg.lit { background: #fff; color: #000; border-color: #fff; }
+.plus-sep { font-size: 15px; font-weight: 500; color: var(--text-tertiary); }
+.ask-bar {
+  position: absolute; top: 84px; left: 50%; transform: translateX(-50%); z-index: 20;
+  display: flex; gap: 10px; align-items: center; width: 480px; max-width: calc(100% - 48px);
+  background: var(--bg-secondary); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px; padding: 10px 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.ask-dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; flex: none; animation: pulseDot 1.6s ease-in-out infinite; }
+@keyframes pulseDot { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+.ask-input {
+  flex: 1; font-family: inherit; font-size: 14px; color: var(--text-primary);
+  background: none; border: none; outline: none;
+}
+.ask-resp {
+  position: absolute; top: 148px; left: 50%; transform: translateX(-50%); z-index: 20;
+  width: 480px; max-width: calc(100% - 48px);
+  background: var(--bg-secondary); border: 1px solid var(--hairline);
+  border-radius: 16px; padding: 14px 16px; text-align: left;
+  font-size: 13px; line-height: 1.55; color: var(--text-secondary);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  animation: riseIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.ask-resp .mark { color: var(--success); margin-right: 6px; }
+.ask-cue {
+  position: absolute; top: 152px; left: 50%; transform: translateX(-50%); z-index: 19;
+  font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  animation: pulseDot 1.8s ease-in-out infinite;
+}
+
+/* ---------- Final screen: check first, then the words ---------- */
+@keyframes glowGrow { from { transform: scale(0.2); opacity: 0.15; } to { transform: scale(1); opacity: 1; } }
+.screen.on #final-glow {
+  animation: glowGrow 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.25s backwards,
+             glowPulse 2s ease-in-out 1.45s infinite;
+}
+.screen.on #final-content > *:nth-child(1) { animation-delay: 0s; }
+.screen.on #final-content > *:nth-child(2) { animation-delay: 0.45s; }
+.screen.on #final-content > *:nth-child(3) { animation-delay: 0.45s; }
+
+/* ---------- Connect screen: value showcase (left) + sources (right) ---------- */
+.split2 { display: flex; flex: 1; min-height: 0; }
+.show-pane {
+  flex: 1; order: 2; background: var(--bg-secondary); border-left: 1px solid var(--bg-tertiary);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+}
+.src-pane { flex: 0 0 620px; order: 1; display: flex; align-items: center; justify-content: center; padding: 36px 40px; overflow-y: auto; }
+.show-stage { position: relative; width: 350px; height: 380px; }
+.show-scene { position: absolute; inset: 0; opacity: 0; transition: opacity 0.55s ease; display: flex; flex-direction: column; gap: 16px; justify-content: flex-start; }
+.show-scene.on { opacity: 1; }
+.show-cap { font-size: 14px; font-weight: 500; color: var(--text-secondary); text-align: center; }
+.show-dots { display: flex; gap: 7px; }
+.show-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); transition: background 0.3s ease; cursor: pointer; }
+.show-dots span:hover { background: rgba(255, 255, 255, 0.5); }
+.show-dots span.on { background: #fff; }
+.mini-card {
+  background: var(--bg-primary); border: 1px solid var(--hairline); border-radius: 16px;
+  padding: 16px; display: flex; flex-direction: column; gap: 10px; text-align: left;
+}
+.mini-head { display: flex; gap: 10px; align-items: center; margin-bottom: 2px; }
+.mini-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-quaternary); flex: none; }
+.mini-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.mini-sub { font-size: 11px; color: var(--text-quaternary); }
+.mini-line { height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.09); }
+.mini-reply {
+  display: flex; gap: 8px; align-items: center; margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 10px;
+  font-size: 11.5px; color: var(--text-secondary);
+}
+.mini-omi-dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; flex: none; animation: pulseDot 1.4s ease-in-out infinite; }
+.mini-search {
+  font-size: 12px; color: var(--text-primary); background: var(--bg-tertiary);
+  border: 1px solid var(--hairline); border-radius: 10px; padding: 8px 10px;
+}
+.mini-file {
+  font-size: 12px; color: var(--text-tertiary); padding: 8px 10px;
+  border: 1px solid transparent; border-radius: 10px;
+}
+.mini-file.hit { color: var(--text-primary); background: var(--bg-tertiary); border-color: rgba(255, 255, 255, 0.18); }
+.mini-slot { display: flex; gap: 10px; align-items: center; }
+.mini-time { font-size: 11px; color: var(--text-quaternary); width: 34px; flex: none; font-variant-numeric: tabular-nums; }
+.mini-ev {
+  flex: 1; font-size: 11.5px; color: var(--text-secondary);
+  background: var(--bg-tertiary); border-radius: 8px; padding: 7px 10px;
+}
+.mini-ev.new { background: rgba(255, 255, 255, 0.92); color: #000; font-weight: 600; }
+
+/* ---------- Showcase scenes as rendered product simulations ---------- */
+.mini-win {
+  background: var(--bg-primary); border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px; overflow: hidden; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  text-align: left;
+}
+.mini-chrome {
+  display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07); background: var(--bg-secondary);
+}
+.mini-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
+.mini-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.mini-body.convo { height: 268px; justify-content: flex-start; }
+.mini-body-head { font-size: 12px; font-weight: 500; color: var(--text-tertiary); padding-bottom: 2px; }
+.task-row2 {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--bg-secondary); border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px; padding: 9px 11px;
+}
+.task-row2.pending { opacity: 0.65; }
+.task-spin {
+  width: 15px; height: 15px; border-radius: 50%; flex: none; margin-top: 2px;
+  background: conic-gradient(from 0deg, transparent 0 55%, var(--text-secondary) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  animation: orbitSpin 1s linear infinite;
+}
+@keyframes orbitSpin { to { transform: rotate(360deg); } }
+.task-circle { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.18); flex: none; margin-top: 3px; }
+.task-title2 { font-size: 12.5px; font-weight: 600; color: var(--text-primary); line-height: 1.35; }
+.task-sub2 { font-size: 11px; color: var(--text-quaternary); margin-top: 1px; }
+.task-sub2 b { color: var(--text-tertiary); font-weight: 500; }
+.trace-bubble {
+  font-size: 12.5px; color: var(--text-primary);
+  background: var(--bg-tertiary); border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px; padding: 9px 11px; margin-bottom: 4px;
+}
+.trace-line { display: flex; gap: 6px; font-size: 12px; color: var(--text-tertiary); padding-left: 4px; line-height: 1.6; overflow: hidden; white-space: nowrap; }
+.trace-line b { color: var(--text-secondary); font-weight: 500; flex: none; }
+.trace-line span { opacity: 0.6; text-overflow: ellipsis; overflow: hidden; }
+
+/* ---------- Source screens: simulated conversation with live tool calls ---------- */
+.cv-step { opacity: 0; transform: translateY(6px); transition: opacity 0.35s ease, transform 0.35s ease; }
+.cv-step.shown { opacity: 1; transform: none; }
+.cv-spin {
+  width: 11px; height: 11px; border-radius: 50%; flex: none; align-self: center; display: none;
+  background: conic-gradient(from 0deg, transparent 0 55%, var(--text-secondary) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  animation: orbitSpin 0.9s linear infinite;
+}
+.trace-line.working .cv-spin, .tool-row.working .cv-spin { display: block; }
+.trace-line.working b { color: var(--text-primary); }
+.cv-answer {
+  font-size: 12.5px; line-height: 1.5; color: var(--text-secondary);
+  background: var(--bg-secondary); border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px; padding: 9px 11px; margin-top: 4px;
+}
+
+/* ---------- Real-chat translation (ChatBubble.swift) ---------- */
+.chat-user {
+  align-self: flex-end; max-width: 82%;
+  font-size: 12.5px; line-height: 1.45; color: var(--text-primary);
+  background: var(--bg-tertiary); border-radius: 18px; padding: 8px 14px;
+}
+.chat-ai-row { display: flex; gap: 10px; align-items: flex-start; }
+.chat-avatar {
+  width: 28px; height: 28px; border-radius: 50%; flex: none;
+  background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;
+}
+.chat-ai-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.tool-group { background: rgba(37, 37, 37, 0.72); border-radius: 12px; padding: 2px 0; }
+.tool-row {
+  display: flex; gap: 6px; align-items: center; padding: 6px 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px;
+  overflow: hidden; white-space: nowrap;
+}
+.tool-name { color: var(--text-secondary); flex: none; }
+.tool-dot { color: var(--text-tertiary); flex: none; }
+.tool-sum { color: var(--text-quaternary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.tool-chev { margin-left: auto; color: var(--text-quaternary); font-size: 9px; flex: none; }
+.cv-ok { display: none; color: var(--text-quaternary); font-size: 10px; flex: none; width: 12px; text-align: center; }
+.tool-row.done .cv-ok { display: inline; }
+.tool-row.done .cv-spin { display: none; }
+.tool-row .cv-spin { width: 11px; }
+.chat-ai-bubble {
+  font-size: 12.5px; line-height: 1.5; color: var(--text-primary);
+  background: rgba(37, 37, 37, 0.92); border-radius: 16px; padding: 10px 14px;
+  max-width: 100%;
+}
+.mini-body.convo { gap: 10px; }
+
+/* ---------- Connect sources column: slightly larger ---------- */
+.src-pane .cx { max-width: 560px; }
+.src-pane .cx-head { font-size: 22px; line-height: 28px; }
+.src-pane .cx-sub { font-size: 15px; }
+.src-pane .cx-row-title { font-size: 16px; line-height: 22px; }
+.src-pane .cx-row-desc { font-size: 13.5px; line-height: 19px; }
+.src-pane .src-icon { width: 40px; height: 40px; border-radius: 11px; }
+.src-pane .src-icon svg { transform: scale(1.12); }
+.src-pane .cx-pill { height: 46px; padding: 0 22px; font-size: 14px; border-radius: 23px; }
+
+/* ---------- Real chat look (product screenshot) ---------- */
+.chat-user-row { display: flex; justify-content: flex-end; gap: 8px; align-items: flex-start; }
+.chat-user {
+  align-self: auto; max-width: 100%;
+  background: #5E5CE6; color: #fff; border-radius: 18px; padding: 8px 14px;
+  font-size: 12.5px; line-height: 1.45;
+}
+.chat-avatar.user { width: 30px; height: 30px; margin-top: 2px; }
+.chat-time { font-size: 9.5px; color: var(--text-quaternary); margin-top: 4px; }
+.chat-time.right { text-align: right; }
+.chat-ai-bubble { border-radius: 18px; }
+</style>
+
+<nav class="viewer-nav">
+  <button id="nav-prev" aria-label="Previous screen">◂</button>
+  <select id="screen-select" aria-label="Screen"></select>
+  <button id="nav-next" aria-label="Next screen">▸</button>
+  <span class="viewer-hint">← → keys work too</span>
+</nav>
+
+<div class="gbar" id="gbar"></div>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="00 · Boot (loading)">
+<div class="window">
+  <div class="centered">
+    <div class="content-centered" style="gap:22px">
+      <svg class="boot-logo" viewBox="237.360 237.338 549.318 549.322" role="img" aria-label="Omi is starting">
+        <circle cx="282.523" cy="511.982" r="45.163" fill="white"/>
+        <circle cx="339.909" cy="339.890" r="45.107" fill="white"/>
+        <circle cx="512.014" cy="282.495" r="45.156" fill="white"/>
+        <circle cx="684.096" cy="339.880" r="45.103" fill="white"/>
+        <circle cx="741.511" cy="512.003" r="45.167" fill="white"/>
+        <circle cx="684.096" cy="684.094" r="45.103" fill="white"/>
+        <circle cx="511.981" cy="741.500" r="45.160" fill="white"/>
+        <circle cx="339.902" cy="684.107" r="45.103" fill="white"/>
+      </svg>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="01 · Name">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+  </div>
+  <div class="hr"></div>
+
+  <div class="centered">
+    <div class="content-centered">
+      <div class="title-block">
+        <div class="title">What should Omi call you?</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:center;gap:18px;width:100%">
+        <input class="field" style="max-width:320px" value="Alex" aria-label="Your name">
+        <button class="btn btn-primary" onclick="show(2)">Continue</button>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="02 · Language">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+  </div>
+  <div class="hr"></div>
+
+  <div class="centered">
+    <div class="content-centered">
+      <div class="title-block" style="align-items:center">
+        <div class="title md">What languages do you speak?</div>
+        <div class="desc" style="text-align:center">Omi listens in all of them. Your first pick is the primary.</div>
+      </div>
+
+      <div class="chips" style="justify-content:center;max-width:460px">
+        <button class="chip selected" onclick="pickLang(this)">English</button>
+        <button class="chip" onclick="pickLang(this)">Spanish</button>
+        <button class="chip" onclick="pickLang(this)">French</button>
+        <button class="chip" onclick="pickLang(this)">German</button>
+        <button class="chip" onclick="pickLang(this)">Portuguese</button>
+        <button class="chip" onclick="pickLang(this)">Hindi</button>
+        <button class="chip" onclick="pickLang(this)">Japanese</button>
+        <button class="chip" onclick="pickLang(this)">Italian</button>
+        <button class="chip" onclick="pickLang(this)">Chinese</button>
+        <button class="chip" onclick="pickLang(this)">Other</button>
+      </div>
+      <button class="btn btn-primary" style="margin-top:22px" onclick="show(3)">Continue</button>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="03 · How did you find us">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+  </div>
+  <div class="hr"></div>
+
+  <div class="centered">
+    <div class="content-centered">
+      <div class="title-block" style="align-items:center">
+        <div class="title md">Where did you find us?</div>
+      </div>
+
+      <div class="chips" style="justify-content:center;max-width:480px">
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px">📱</span>Social media</button>
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px"><svg width="16" height="12" viewBox="0 0 28 20" style="vertical-align:-1px"><rect width="28" height="20" rx="4.4" fill="#FF0000"/><path d="M11.3 5.8v8.4L18.7 10l-7.4-4.2z" fill="#fff"/></svg></span>YouTube</button>
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px"><svg width="13" height="13" viewBox="0 0 24 24" fill="#fff" style="vertical-align:-1px"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></span>Twitter</button>
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px">👋</span>Friend</button>
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px">💼</span>Colleague</button>
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px">🎙️</span>Podcast</button>
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px">📰</span>Article</button>
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px"><svg width="14" height="14" viewBox="0 0 40 40" style="vertical-align:-2px"><circle cx="20" cy="20" r="20" fill="#DA552F"/><path d="M22.667 20H17v-6h5.667a3 3 0 1 1 0 6zM22.667 10H13v20h4v-6h5.667a7 7 0 1 0 0-14z" fill="#fff"/></svg></span>Product Hunt</button>
+        <button class="chip" onclick="pickSource(this)"><span style="margin-right:7px">💬</span>Other</button>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- ============================================================ -->
+<!-- ============================================================ -->
+<section class="screen" data-label="04 · Connect your sources">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+    <button class="skip-ghost" onclick="show(5)">Skip</button>
+  </div>
+  <div class="hr"></div>
+
+  <div class="split2">
+    <div class="src-pane">
+      <div class="cx">
+        <div class="cx-head">Connect your sources</div>
+        <div class="cx-sub">Omi works from what you already have</div>
+        <div class="cx-div"></div>
+        <div class="cx-row">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="src-icon"><svg width="18" height="14" viewBox="0 0 48 36" aria-hidden="true"><path fill="#4285F4" d="M3.3 36h6.9V19.2L0 11.4v21.3C0 34.5 1.5 36 3.3 36z"/><path fill="#34A853" d="M37.8 36h6.9c1.8 0 3.3-1.5 3.3-3.3V11.4l-10.2 7.8V36z"/><path fill="#FBBC04" d="M37.8 5.4v13.8L48 11.4V7.2c0-4.1-4.7-6.5-8-4l-2.2 2.2z"/><path fill="#EA4335" d="M10.2 19.2V5.4L24 15.6 37.8 5.4v13.8L24 29.4 10.2 19.2z"/><path fill="#C5221F" d="M0 7.2v4.2l10.2 7.8V5.4L8 3.2C4.7.7 0 3.1 0 7.2z"/></svg></div>
+            <div style="flex:1">
+              <div class="cx-row-title">Gmail</div>
+              <div class="cx-row-desc">Finds bounced replies, dropped threads, and asks you never answered</div>
+            </div>
+          </div>
+        </div>
+        <div class="cx-row">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="src-icon"><svg width="17" height="17" viewBox="0 0 200 200" aria-hidden="true"><path fill="#fff" d="M152.6 47.4H47.4v105.2h105.2z"/><path fill="#EA4335" d="M152.6 200 200 152.6h-47.4z"/><path fill="#188038" d="M0 152.6v31.6C0 193 7 200 15.8 200h31.6v-47.4z"/><path fill="#1967D2" d="M200 47.4V15.8C200 7 193 0 184.2 0h-31.6v47.4z"/><path fill="#FBBC04" d="M152.6 47.4v105.2H200V47.4z"/><path fill="#34A853" d="M47.4 152.6v47.4h105.2v-47.4z"/><path fill="#4285F4" d="M15.8 0C7 0 0 7 0 15.8v136.8h47.4V47.4h105.2V0z"/><path fill="#4285F4" d="M68.6 129.2c-3.9-2.7-6.7-6.5-8.2-11.6l9.2-3.8c.8 3.2 2.3 5.7 4.4 7.4 2.1 1.7 4.7 2.6 7.7 2.6 3.1 0 5.7-.9 7.9-2.7 2.2-1.8 3.3-4.1 3.3-6.9 0-2.9-1.2-5.2-3.5-7-2.3-1.8-5.2-2.7-8.6-2.7h-5.3v-9.1h4.8c3 0 5.5-.8 7.5-2.4 2-1.6 3-3.8 3-6.6 0-2.5-.9-4.5-2.7-6-1.8-1.5-4.1-2.2-6.9-2.2-2.7 0-4.9.7-6.5 2.2-1.6 1.5-2.8 3.3-3.5 5.4l-9.1-3.8c1.2-3.4 3.4-6.4 6.7-9 3.3-2.6 7.4-3.9 12.5-3.9 3.7 0 7.1.7 10.1 2.2 3 1.5 5.3 3.5 7 6.1 1.7 2.6 2.5 5.5 2.5 8.7 0 3.3-.8 6.1-2.4 8.4-1.6 2.3-3.5 4-5.9 5.2v.5c3 1.3 5.6 3.3 7.5 5.9 2 2.6 3 5.8 3 9.5s-.9 7-2.8 9.9c-1.9 2.9-4.5 5.2-7.8 6.9-3.3 1.7-7.1 2.5-11.2 2.5-4.9.1-9.4-1.3-13.3-4z"/><path fill="#4285F4" d="M121.6 89.1l-10.1 7.3-5.1-7.7 18.2-13.1h7v53.6h-10z"/></svg></div>
+            <div style="flex:1">
+              <div class="cx-row-title">Google Calendar</div>
+              <div class="cx-row-desc">Knows your commitments and travel, so loops resurface at the right time</div>
+            </div>
+          </div>
+        </div>
+        <div class="cx-row">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="src-icon" style="font-size:16px">📁</div>
+            <div style="flex:1">
+              <div class="cx-row-title">Local files</div>
+              <div class="cx-row-desc">Projects and recent files, indexed on this Mac</div>
+            </div>
+          </div>
+        </div>
+        <div class="cx-actions">
+          <button class="cx-pill ghost" onclick="show(5)">Skip</button>
+          <button class="cx-pill" onclick="show(5)">
+            <svg width="14" height="14" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Authenticate with Google
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="show-pane">
+      <div class="show-stage" style="height:380px">
+        <div class="show-scene on" id="scene-0">
+          <div class="mini-win" style="width:350px">
+            <div class="mini-chrome"><span class="mini-dot"></span><span class="mini-dot"></span><span class="mini-dot"></span></div>
+            <div class="mini-body convo" id="convo-0">
+              <div class="cv-step chat-user-row"><div><div class="chat-user">Did I ever reply to the venue about Friday?</div><div class="chat-time right">9:41</div></div><div class="chat-avatar user"><svg width="15" height="15" viewBox="0 0 24 24" fill="#cfcfcf" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6v1H4z"/></svg></div></div>
+              <div class="cv-step chat-ai-row">
+                <div class="chat-avatar"><svg width="14" height="14" viewBox="237.360 237.338 549.318 549.322" aria-hidden="true"><circle cx="282.523" cy="511.982" r="45.163" fill="white"/><circle cx="339.909" cy="339.890" r="45.107" fill="white"/><circle cx="512.014" cy="282.495" r="45.156" fill="white"/><circle cx="684.096" cy="339.880" r="45.103" fill="white"/><circle cx="741.511" cy="512.003" r="45.167" fill="white"/><circle cx="684.096" cy="684.094" r="45.103" fill="white"/><circle cx="511.981" cy="741.500" r="45.160" fill="white"/><circle cx="339.902" cy="684.107" r="45.103" fill="white"/></svg></div>
+                <div class="chat-ai-col">
+                <div class="tool-group">
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Search Gmail</span><span class="tool-dot">·</span><span class="tool-sum">venue Friday</span><span class="tool-chev">⌄</span></div>
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Read Email</span><span class="tool-dot">·</span><span class="tool-sum">Re: Friday booking</span><span class="tool-chev">⌄</span></div>
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Check Sent</span><span class="tool-dot">·</span><span class="tool-sum">no reply found</span><span class="tool-chev">⌄</span></div>
+                </div>
+                <div class="cv-step"><div class="chat-ai-bubble">Not yet. They asked for a headcount by Thursday. I drafted a reply, want to see it?</div><div class="chat-time">9:41</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="show-cap">Gmail: Omi reads the thread and answers with receipts</div>
+        </div>
+        <div class="show-scene" id="scene-1">
+          <div class="mini-win" style="width:350px">
+            <div class="mini-chrome"><span class="mini-dot"></span><span class="mini-dot"></span><span class="mini-dot"></span></div>
+            <div class="mini-body convo" id="convo-1">
+              <div class="cv-step chat-user-row"><div><div class="chat-user">Find me 45 minutes with Sam this week</div><div class="chat-time right">9:41</div></div><div class="chat-avatar user"><svg width="15" height="15" viewBox="0 0 24 24" fill="#cfcfcf" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6v1H4z"/></svg></div></div>
+              <div class="cv-step chat-ai-row">
+                <div class="chat-avatar"><svg width="14" height="14" viewBox="237.360 237.338 549.318 549.322" aria-hidden="true"><circle cx="282.523" cy="511.982" r="45.163" fill="white"/><circle cx="339.909" cy="339.890" r="45.107" fill="white"/><circle cx="512.014" cy="282.495" r="45.156" fill="white"/><circle cx="684.096" cy="339.880" r="45.103" fill="white"/><circle cx="741.511" cy="512.003" r="45.167" fill="white"/><circle cx="684.096" cy="684.094" r="45.103" fill="white"/><circle cx="511.981" cy="741.500" r="45.160" fill="white"/><circle cx="339.902" cy="684.107" r="45.103" fill="white"/></svg></div>
+                <div class="chat-ai-col">
+                <div class="tool-group">
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Read Calendar</span><span class="tool-dot">·</span><span class="tool-sum">this week, 14 events</span><span class="tool-chev">⌄</span></div>
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Find Availability</span><span class="tool-dot">·</span><span class="tool-sum">you and Sam</span><span class="tool-chev">⌄</span></div>
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Hold Slot</span><span class="tool-dot">·</span><span class="tool-sum">Thu 14:00</span><span class="tool-chev">⌄</span></div>
+                </div>
+                <div class="cv-step"><div class="chat-ai-bubble">Thursday 2:00 works for you both. Want me to send the invite?</div><div class="chat-time">9:41</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="show-cap">Calendar: Omi checks real availability before it suggests</div>
+        </div>
+        <div class="show-scene" id="scene-2">
+          <div class="mini-win" style="width:350px">
+            <div class="mini-chrome"><span class="mini-dot"></span><span class="mini-dot"></span><span class="mini-dot"></span></div>
+            <div class="mini-body convo" id="convo-2">
+              <div class="cv-step chat-user-row"><div><div class="chat-user">Open the contract I was editing last week</div><div class="chat-time right">9:41</div></div><div class="chat-avatar user"><svg width="15" height="15" viewBox="0 0 24 24" fill="#cfcfcf" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6v1H4z"/></svg></div></div>
+              <div class="cv-step chat-ai-row">
+                <div class="chat-avatar"><svg width="14" height="14" viewBox="237.360 237.338 549.318 549.322" aria-hidden="true"><circle cx="282.523" cy="511.982" r="45.163" fill="white"/><circle cx="339.909" cy="339.890" r="45.107" fill="white"/><circle cx="512.014" cy="282.495" r="45.156" fill="white"/><circle cx="684.096" cy="339.880" r="45.103" fill="white"/><circle cx="741.511" cy="512.003" r="45.167" fill="white"/><circle cx="684.096" cy="684.094" r="45.103" fill="white"/><circle cx="511.981" cy="741.500" r="45.160" fill="white"/><circle cx="339.902" cy="684.107" r="45.103" fill="white"/></svg></div>
+                <div class="chat-ai-col">
+                <div class="tool-group">
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Search Files</span><span class="tool-dot">·</span><span class="tool-sum">contract</span><span class="tool-chev">⌄</span></div>
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Rank Recent</span><span class="tool-dot">·</span><span class="tool-sum">by last opened</span><span class="tool-chev">⌄</span></div>
+                  <div class="cv-step tool-row"><span class="cv-spin"></span><span class="cv-ok">✓</span><span class="tool-name">Open File</span><span class="tool-dot">·</span><span class="tool-sum">MSA-final-v3.docx</span><span class="tool-chev">⌄</span></div>
+                </div>
+                <div class="cv-step"><div class="chat-ai-bubble">Here it is, last edited Tuesday afternoon. Opening it now.</div><div class="chat-time">9:41</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="show-cap">Files: Omi finds them the way you remember them</div>
+        </div>
+      </div>
+      <div class="show-dots"><span class="on"></span><span></span><span></span></div>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="05 · What Omi found (wow)">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+    <button class="skip-ghost" onclick="show(6)">Skip</button>
+  </div>
+  <div class="hr"></div>
+
+  <div class="centered">
+    <div class="content-centered">
+        <div class="cx">
+          <div class="cx-head" id="found-head">Omi is looking through your day</div>
+          <div class="cx-sub" id="found-sub">Reading your mail and calendar on this Mac</div>
+          <div class="cx-div"></div>
+
+          <div class="found-scan" id="found-scan">
+            <svg class="found-logo" id="found-logo" viewBox="237.360 237.338 549.318 549.322" aria-hidden="true">
+              <circle cx="282.523" cy="511.982" r="45.163" fill="white"/>
+              <circle cx="339.909" cy="339.890" r="45.107" fill="white"/>
+              <circle cx="512.014" cy="282.495" r="45.156" fill="white"/>
+              <circle cx="684.096" cy="339.880" r="45.103" fill="white"/>
+              <circle cx="741.511" cy="512.003" r="45.167" fill="white"/>
+              <circle cx="684.096" cy="684.094" r="45.103" fill="white"/>
+              <circle cx="511.981" cy="741.500" r="45.160" fill="white"/>
+              <circle cx="339.902" cy="684.107" r="45.103" fill="white"/>
+            </svg>
+            <div class="found-status" id="found-status">Reading your email…</div>
+          </div>
+
+          <div id="loops-wrap">
+            <div class="cx-row" id="loop1">
+              <div style="display:flex;align-items:center;gap:18px">
+                <div class="src-icon"><svg width="18" height="14" viewBox="0 0 48 36" aria-hidden="true"><path fill="#4285F4" d="M3.3 36h6.9V19.2L0 11.4v21.3C0 34.5 1.5 36 3.3 36z"/><path fill="#34A853" d="M37.8 36h6.9c1.8 0 3.3-1.5 3.3-3.3V11.4l-10.2 7.8V36z"/><path fill="#FBBC04" d="M37.8 5.4v13.8L48 11.4V7.2c0-4.1-4.7-6.5-8-4l-2.2 2.2z"/><path fill="#EA4335" d="M10.2 19.2V5.4L24 15.6 37.8 5.4v13.8L24 29.4 10.2 19.2z"/><path fill="#C5221F" d="M0 7.2v4.2l10.2 7.8V5.4L8 3.2C4.7.7 0 3.1 0 7.2z"/></svg></div>
+                <div style="flex:1">
+                  <div class="cx-row-title">Your reply to Northwind bounced</div>
+                  <div class="cx-row-desc">The address was not found; your call with Alex is already booked for Jul 30</div>
+                </div>
+                <div id="loop1-t"><button class="pill-btn" onclick="decide('loop1','handle')">Set a reminder</button></div>
+              </div>
+              <div class="hint" id="loop1-r" style="display:none;margin-top:10px"></div>
+            </div>
+            <div class="cx-row" id="loop2">
+              <div style="display:flex;align-items:center;gap:18px">
+                <div class="src-icon"><svg width="18" height="14" viewBox="0 0 48 36" aria-hidden="true"><path fill="#4285F4" d="M3.3 36h6.9V19.2L0 11.4v21.3C0 34.5 1.5 36 3.3 36z"/><path fill="#34A853" d="M37.8 36h6.9c1.8 0 3.3-1.5 3.3-3.3V11.4l-10.2 7.8V36z"/><path fill="#FBBC04" d="M37.8 5.4v13.8L48 11.4V7.2c0-4.1-4.7-6.5-8-4l-2.2 2.2z"/><path fill="#EA4335" d="M10.2 19.2V5.4L24 15.6 37.8 5.4v13.8L24 29.4 10.2 19.2z"/><path fill="#C5221F" d="M0 7.2v4.2l10.2 7.8V5.4L8 3.2C4.7.7 0 3.1 0 7.2z"/></svg></div>
+                <div style="flex:1">
+                  <div class="cx-row-title">The CCAI invitation is still unanswered</div>
+                  <div class="cx-row-desc">They asked you to be a Summer School ambassador three days ago</div>
+                </div>
+                <div id="loop2-t"><button class="pill-btn" onclick="decide('loop2','handle')">Draft reply</button></div>
+              </div>
+              <div class="hint" id="loop2-r" style="display:none;margin-top:10px"></div>
+            </div>
+            <div class="cx-row" id="loop3">
+              <div style="display:flex;align-items:center;gap:18px">
+                <div class="src-icon"><svg width="18" height="14" viewBox="0 0 48 36" aria-hidden="true"><path fill="#4285F4" d="M3.3 36h6.9V19.2L0 11.4v21.3C0 34.5 1.5 36 3.3 36z"/><path fill="#34A853" d="M37.8 36h6.9c1.8 0 3.3-1.5 3.3-3.3V11.4l-10.2 7.8V36z"/><path fill="#FBBC04" d="M37.8 5.4v13.8L48 11.4V7.2c0-4.1-4.7-6.5-8-4l-2.2 2.2z"/><path fill="#EA4335" d="M10.2 19.2V5.4L24 15.6 37.8 5.4v13.8L24 29.4 10.2 19.2z"/><path fill="#C5221F" d="M0 7.2v4.2l10.2 7.8V5.4L8 3.2C4.7.7 0 3.1 0 7.2z"/></svg></div>
+                <div style="flex:1">
+                  <div class="cx-row-title">ITA Airways wants a survey</div>
+                  <div class="cx-row-desc">A satisfaction survey about your flight, probably optional</div>
+                </div>
+                <div id="loop3-t"><button class="pill-btn" onclick="decide('loop3','drop')">Dismiss</button></div>
+              </div>
+              <div class="hint" id="loop3-r" style="display:none;margin-top:10px"></div>
+            </div>
+
+            <div id="learned" style="display:none;flex-direction:column;gap:14px;align-items:center;width:100%;margin-top:24px">
+              <div class="chips" id="learned-chips" style="justify-content:center"></div>
+              <div class="hint">Saved to your memories, editable anytime</div>
+            </div>
+
+            <div class="cx-actions">
+              <button class="cx-pill" onclick="show(6)">Continue</button>
+            </div>
+          </div>
+        </div>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="06 · Try the shortcut">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+    <button class="skip-ghost" onclick="show(7)">Skip</button>
+  </div>
+  <div class="hr"></div>
+
+    <div class="centered">
+    <div class="content-centered">
+      <div class="title-block" style="align-items:center">
+        <div class="title md">Ask Omi to follow up on the CCAI invitation.</div>
+      </div>
+
+      <div class="keycaps">
+        <span class="keycap-lg" id="k-cmd" onclick="lightKey('cmd')">⌘</span>
+        <span class="plus-sep">+</span>
+        <span class="keycap-lg" id="k-o" onclick="lightKey('o')">O</span>
+      </div>
+      <div class="hint" id="ask-hint">Press the shortcut, or tap the keys</div>
+
+      <div class="ask-bar" id="ask-bar" hidden>
+    <div class="ask-dot"></div>
+    <input class="ask-input" id="ask-input" value="Follow up on the CCAI invitation" aria-label="Ask Omi">
+    <button class="pill-btn" onclick="sendAsk()">Ask</button>
+  </div>
+      <div class="ask-cue" id="ask-cue" hidden>Now ask Omi</div>
+      <div class="ask-resp" id="ask-resp" hidden>
+    <span class="mark">✓</span>Reply drafted and saved to your Gmail drafts. Nothing sends without you.
+  </div>
+
+      <button class="btn btn-primary" id="ask-continue" style="visibility:hidden" onclick="show(7)">Continue</button>
+    </div>
+  </div>
+
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="07 · Allow access">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+    <button class="skip-ghost" onclick="show(8)">Skip</button>
+  </div>
+  <div class="hr"></div>
+
+  <div class="centered">
+    <div class="content-centered">
+        <div class="cx">
+          <div class="cx-head">Allow access</div>
+          <div class="cx-sub">macOS needs your approval for these two</div>
+          <div class="cx-div"></div>
+          <div class="cx-row">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="flex:1">
+                <div class="cx-row-title">Screen Recording</div>
+                <div class="cx-row-desc">Lets Omi see what you are working on</div>
+              </div>
+              <button class="pill-btn" id="perm-sr" onclick="grantPerm(this)">Allow</button>
+            </div>
+          </div>
+          <div class="cx-row">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="flex:1">
+                <div class="cx-row-title">Full Disk Access</div>
+                <div class="cx-row-desc">Lets Omi index your projects and files</div>
+              </div>
+              <button class="pill-btn" id="perm-fda" onclick="grantPerm(this)">Allow</button>
+            </div>
+          </div>
+          <div class="hint" style="margin-top:14px">Omi opens the exact pane and continues by itself once you toggle it on.</div>
+          <div class="cx-actions">
+            <button class="cx-pill ghost" onclick="show(8)">Skip</button>
+            <button class="cx-pill" onclick="show(8)">Continue</button>
+          </div>
+        </div>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="08 · Quick permissions">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+    <button class="skip-ghost" onclick="show(9)">Skip</button>
+  </div>
+  <div class="hr"></div>
+
+  <div class="centered">
+    <div class="content-centered">
+        <div class="cx">
+          <div class="cx-head">Quick approvals</div>
+          <div class="cx-sub">One click each, macOS asks right here</div>
+          <div class="cx-div"></div>
+          <div class="cx-row">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="flex:1">
+                <div class="cx-row-title">Microphone</div>
+                <div class="cx-row-desc">Transcribes meetings and voice notes</div>
+              </div>
+              <button class="pill-btn" onclick="grantPerm(this)">Allow</button>
+            </div>
+          </div>
+          <div class="cx-row">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="flex:1">
+                <div class="cx-row-title">Accessibility</div>
+                <div class="cx-row-desc">Knows which app is active so context follows you</div>
+              </div>
+              <button class="pill-btn" onclick="grantPerm(this)">Allow</button>
+            </div>
+          </div>
+          <div class="cx-row">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="flex:1">
+                <div class="cx-row-title">Automation</div>
+                <div class="cx-row-desc">Acts in other apps when you ask</div>
+              </div>
+              <button class="pill-btn" onclick="grantPerm(this)">Allow</button>
+            </div>
+          </div>
+          <div class="cx-actions">
+            <button class="cx-pill ghost" onclick="show(9)">Skip</button>
+            <button class="cx-pill" onclick="show(9)">Continue</button>
+          </div>
+        </div>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="09 · Hold to talk">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+    <button class="skip-ghost" onclick="show(10)">Skip</button>
+  </div>
+  <div class="hr"></div>
+
+  <div class="centered">
+    <div class="content-centered">
+      <div class="title-block" style="align-items:center">
+        <div class="title md">Hold ⌥ and just talk.</div>
+        <div class="desc" style="margin:0 auto">Ask out loud, release when done. Omi answers out loud too.</div>
+      </div>
+
+      <div class="keycaps">
+        <span class="keycap-lg" id="k-opt" style="min-width:96px" onpointerdown="voiceDown()" onpointerup="voiceUp()" onpointerleave="voiceUp()">⌥</span>
+      </div>
+      <div class="hint" id="voice-hint">Press and hold Option, or press and hold the key</div>
+
+      <button class="btn btn-primary" id="voice-continue" style="visibility:hidden" onclick="show(10)">Continue</button>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section class="screen" data-label="10 · You're all set">
+<div class="window">
+  <div class="header">
+    <div class="logo">omi</div>
+  </div>
+  <div class="hr"></div>
+
+  <div class="centered">
+    <div class="content-centered" id="final-content">
+      <div class="glow-wrap">
+        <div class="glow" id="final-glow" style="background:rgba(52,199,89,0.32);inset:-16px"></div>
+        <div style="position:relative;font-size:70px;line-height:1" role="img" aria-label="Done">✅</div>
+      </div>
+
+      <div class="title-block" style="align-items:center">
+        <div class="title md">You're all set.</div>
+        <div class="desc" style="margin:0 auto">Omi keeps watch so things stop slipping and remembers what you teach it.</div>
+      </div>
+
+      <button class="btn btn-primary btn-cta">Take me to Omi</button>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="back-btn" onclick="show(idx-1)" aria-label="Back">&#8249;</button>
+    <div class="progress"></div>
+  </div>
+</div>
+</section>
+
+<script>
+/* ---------- Viewer nav (mock-only) ---------- */
+const screens = [...document.querySelectorAll('.screen')];
+const select = document.getElementById('screen-select');
+screens.forEach((s, i) => {
+  const o = document.createElement('option');
+  o.value = i; o.textContent = s.dataset.label;
+  select.appendChild(o);
+});
+const startAt = parseInt(location.hash.slice(1)) || parseInt(localStorage.getItem('idx-grouped')) || 1;
+let idx = Math.min(Math.max(startAt - 1, 0), screens.length - 1);
+function show(i) {
+  const _old = idx;
+  idx = (i + screens.length) % screens.length;
+  document.body.classList.toggle('nav-back', idx < _old);
+  document.body.classList.toggle('nav-fwd', idx >= _old);
+  screens.forEach((s, j) => s.classList.toggle('on', j === idx));
+  updateBar();
+  select.value = idx;
+  history.replaceState(null, '', '#' + (idx + 1));
+  localStorage.setItem('idx-grouped', idx + 1);
+  if (idx === 4) startShowcase(); else stopShowcase();
+  if (idx === 5) foundSequence();
+  if (idx === 6) resetAsk();
+  if (idx === 9) resetVoice();
+}
+select.onchange = () => show(+select.value);
+/* ---------- Grouped phase bar: 5 sections spanning the 10 screens ---------- */
+const PHASES = [
+  { label: 'You', start: 1, end: 3 },       // Name, Language, How did you hear
+  { label: 'Connect', start: 4, end: 4 },   // Connect sources
+  { label: 'Discover', start: 5, end: 5 },  // What Omi found
+  { label: 'Set up', start: 6, end: 9 },    // shortcut, permissions x2, hold to talk
+  { label: 'Done', start: 10, end: 10 },    // You're all set
+];
+const gbar = document.getElementById('gbar');
+const PAGE_W = 14;
+PHASES.forEach((ph) => {
+  const pages = ph.end - ph.start + 1;
+  const seg = document.createElement('div');
+  seg.className = 'seg';
+  seg.style.width = (pages * PAGE_W) + 'px';
+  seg.title = ph.label;
+  seg.innerHTML = `<div class="seg-fill"></div><div class="seg-slices">` +
+    Array.from({ length: pages }, (_, k) => {
+      const target = Math.min(ph.start + k + 1, screens.length - 1);
+      return `<div class="slice" data-target="${target}" title="${ph.label} — step ${k + 1} of ${pages}"><div class="tick"></div></div>`;
+    }).join('') + `</div>`;
+  gbar.appendChild(seg);
+});
+gbar.addEventListener('click', (e) => {
+  const s = e.target.closest('.slice');
+  if (s) show(+s.dataset.target);
+});
+function updateBar() {
+  gbar.classList.toggle('hide', idx === 0);
+  [...gbar.querySelectorAll('.seg')].forEach((seg, i) => {
+    const ph = PHASES[i], pages = ph.end - ph.start + 1;
+    let filled = 0;
+    for (let s = ph.start; s <= ph.end; s++) if (s < idx) filled++;
+    seg.querySelector('.seg-fill').style.width = (filled / pages * 100) + '%';
+  });
+}
+document.getElementById('nav-prev').onclick = () => show(idx - 1);
+document.getElementById('nav-next').onclick = () => show(idx + 1);
+document.addEventListener('keyup', (e) => {
+  if (idx === 6 && (e.key === 'Meta' || e.key === 'Control') && !comboDone && !litKeys.cmd) {
+    document.getElementById('k-cmd').classList.remove('lit');
+  }
+  if (idx === 9 && e.key === 'Alt') voiceUp();
+});
+document.addEventListener('keydown', (e) => {
+  if (idx === 6 && (e.key === 'Meta' || e.key === 'Control') && !comboDone) {
+    document.getElementById('k-cmd').classList.add('lit');
+  }
+  if (idx === 6 && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'o') {
+    e.preventDefault();
+    comboDone = true;
+    document.getElementById('k-cmd').classList.add('lit');
+    document.getElementById('k-o').classList.add('lit');
+    setTimeout(openAskBar, 220);
+    return;
+  }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    if (e.key === 'Enter') {
+      if (idx === 6 && e.target.id === 'ask-input') { sendAsk(); return; }
+      if (idx === 1) { show(2); return; }
+    }
+    return;
+  }
+  if (idx === 9 && e.key === 'Alt' && !voiceDone) { voiceDown(); return; }
+  if (e.key === 'Enter') { enterAdvance(); return; }
+  if (e.key === 'ArrowLeft') show(idx - 1);
+  if (e.key === 'ArrowRight') show(idx + 1);
+});
+
+/* Language: multi-select toggle */
+function pickLang(el) { el.classList.toggle('selected'); }
+
+/* Attribution: tap selects, auto-advances */
+function pickSource(el) {
+  [...el.parentElement.children].forEach(c => c.style.background = '');
+  el.style.background = '#fff'; el.style.color = '#000'; el.style.borderColor = 'transparent';
+  setTimeout(() => show(4), 300);
+}
+
+/* Hold-to-talk screen */
+let voiceDone = false, voiceT0 = 0;
+function voiceDown() {
+  if (voiceT0) return;
+  voiceT0 = Date.now();
+  document.getElementById('k-opt').classList.add('lit');
+  document.getElementById('voice-hint').textContent = 'Listening… release when done';
+}
+function voiceUp() {
+  if (!voiceT0) return;
+  const held = Date.now() - voiceT0;
+  voiceT0 = 0;
+  if (held >= 600) {
+    voiceDone = true;
+    document.getElementById('voice-hint').textContent = '✓ Heard you. Omi answers out loud.';
+    document.getElementById('voice-continue').style.visibility = 'visible';
+  } else {
+    document.getElementById('k-opt').classList.remove('lit');
+    document.getElementById('voice-hint').textContent = 'Hold it a moment longer, then release';
+  }
+}
+function resetVoice() {
+  voiceDone = false; voiceT0 = 0;
+  const k = document.getElementById('k-opt');
+  if (!k) return;
+  k.classList.remove('lit');
+  document.getElementById('voice-hint').textContent = 'Press and hold Option, or press and hold the key';
+  document.getElementById('voice-continue').style.visibility = 'hidden';
+}
+
+/* Enter advances once the current step is complete */
+function enterAdvance() {
+  if (idx === 0) { bootDone = true; show(1); return; }
+  if (idx === 1) { show(2); return; }
+  if (idx === 2) { show(3); return; }
+  if (idx === 3) { return; }
+  if (idx === 4) { show(5); return; }
+  if (idx === 5) {
+    if (document.getElementById('loops-wrap').classList.contains('live')) show(6);
+    return;
+  }
+  if (idx === 6) {
+    if (document.getElementById('ask-continue').style.visibility === 'visible') show(7);
+    return;
+  }
+  if (idx === 7) { show(8); return; }
+  if (idx === 8) { show(9); return; }
+  if (idx === 9) {
+    if (document.getElementById('voice-continue').style.visibility === 'visible') show(10);
+    return;
+  }
+}
+
+/* ---------- Try-the-shortcut screen ---------- */
+const litKeys = { cmd: false, o: false };
+let comboDone = false;
+function lightKey(k) {
+  litKeys[k] = true;
+  document.getElementById(k === 'cmd' ? 'k-cmd' : 'k-o').classList.add('lit');
+  if (litKeys.cmd && litKeys.o) { comboDone = true; setTimeout(openAskBar, 220); }
+}
+function resetAsk() {
+  litKeys.cmd = false; litKeys.o = false; comboDone = false;
+  document.getElementById('k-cmd').classList.remove('lit');
+  document.getElementById('k-o').classList.remove('lit');
+  document.getElementById('ask-bar').hidden = true;
+  document.getElementById('ask-cue').hidden = true;
+  document.getElementById('ask-resp').hidden = true;
+  document.getElementById('ask-continue').style.visibility = 'hidden';
+  document.getElementById('ask-hint').textContent = 'Press the shortcut, or tap the keys';
+}
+function openAskBar() {
+  document.getElementById('ask-bar').hidden = false;
+  document.getElementById('ask-cue').hidden = false;
+  document.getElementById('ask-resp').hidden = true;
+  document.getElementById('ask-hint').textContent = 'Ask about the invitation, or type anything';
+  document.getElementById('ask-input').focus();
+}
+function sendAsk() {
+  document.getElementById('ask-cue').hidden = true;
+  document.getElementById('ask-resp').hidden = false;
+  document.getElementById('ask-hint').textContent = '';
+  document.getElementById('ask-continue').style.visibility = 'visible';
+}
+
+/* ---------- Boot screen: auto-advance once, like a real launch ---------- */
+let bootDone = false;
+if (idx === 0) {
+  setTimeout(() => { if (idx === 0 && !bootDone) { bootDone = true; show(1); } }, 3200);
+}
+
+/* ---------- Source screens: conversation replays with live tool calls ---------- */
+let convoTimer = null;
+function startConvo(n) {
+  stopConvo();
+  const box = document.getElementById('convo-' + n);
+  if (!box) return;
+  const steps = [...box.querySelectorAll('.cv-step')];
+  let k = 0;
+  const tick = () => {
+    steps.forEach((el, i) => {
+      el.classList.toggle('shown', i < k);
+      const isTool = el.classList.contains('tool-row');
+      el.classList.toggle('working', isTool && i === k - 1 && k <= steps.length);
+      el.classList.toggle('done', isTool && i < k - 1);
+    });
+    k++;
+    if (k > steps.length + 4) k = 0;
+  };
+  tick();
+  convoTimer = setInterval(tick, 750);
+}
+function stopConvo() { if (convoTimer) { clearInterval(convoTimer); convoTimer = null; } }
+
+/* ---------- Connect screen: scenes rotate, each plays its conversation ---------- */
+let showTimer = null, showIdx = 0;
+function startShowcase() {
+  stopShowcase();
+  const scenes = [...document.querySelectorAll('.show-scene')];
+  const dots = [...document.querySelectorAll('.show-dots span')];
+  if (!scenes.length) return;
+  const srcRows = [...document.querySelectorAll('.src-pane .cx-row')];
+  const apply = () => {
+    const cur = showIdx % scenes.length;
+    scenes.forEach((sc, i) => sc.classList.toggle('on', i === cur));
+    dots.forEach((d, i) => d.classList.toggle('on', i === cur));
+    srcRows.forEach((r, i) => r.classList.toggle('selecting', i === cur));
+    startConvo(cur);
+  };
+  const resetRot = () => {
+    if (showTimer) clearInterval(showTimer);
+    showTimer = setInterval(() => { showIdx++; apply(); }, 7200);
+  };
+  dots.forEach((d, i) => {
+    d.setAttribute('role', 'button');
+    d.setAttribute('aria-label', 'Show example ' + (i + 1));
+    d.onclick = () => { showIdx = i; apply(); resetRot(); };
+  });
+  apply();
+  resetRot();
+}
+function stopShowcase() { if (showTimer) { clearInterval(showTimer); showTimer = null; } stopConvo(); }
+
+/* ---------- Found screen: mark flickers while reading, accelerates, hands over ---------- */
+let foundTimers = [];
+let foundDone = false;
+function foundSequence() {
+  const scan = document.getElementById('found-scan');
+  const logo = document.getElementById('found-logo');
+  const status = document.getElementById('found-status');
+  const wrap = document.getElementById('loops-wrap');
+  if (!scan || !wrap) return;
+  if (foundDone) {
+    scan.style.display = 'none';
+    document.getElementById('found-head').textContent = "Here's what Omi found for you";
+    document.getElementById('found-sub').textContent = 'From your mail and calendar, just now';
+    wrap.classList.add('live');
+    return;
+  }
+  foundTimers.forEach(clearTimeout); foundTimers = [];
+  wrap.classList.remove('live');
+  scan.style.display = 'flex';
+  logo.classList.remove('accel');
+  document.getElementById('found-head').textContent = 'Omi is looking through your day';
+  document.getElementById('found-sub').textContent = 'Reading your mail and calendar on this Mac';
+  const msgs = ['Reading your email…', 'Reading your calendar…', 'Checking your sent mail…', 'Putting it together…'];
+  status.textContent = msgs[0];
+  msgs.slice(1).forEach((m, i) => foundTimers.push(setTimeout(() => { status.textContent = m; }, (i + 1) * 1150)));
+  foundTimers.push(setTimeout(() => {
+    status.textContent = '';
+    const t = getComputedStyle(logo).transform;
+    let angle = 0;
+    if (t && t !== 'none') {
+      const m = new DOMMatrixReadOnly(t);
+      angle = Math.atan2(m.b, m.a) * 180 / Math.PI;
+    }
+    logo.classList.add('accel');
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      logo.animate([
+        { transform: 'rotate(' + angle + 'deg) scale(1)', opacity: 1 },
+        { transform: 'rotate(' + (angle + 740) + 'deg) scale(0.55)', opacity: 0 }
+      ], { duration: 820, easing: 'cubic-bezier(0.6, 0, 1, 0.4)', fill: 'forwards' });
+    }
+  }, msgs.length * 1150));
+  foundTimers.push(setTimeout(() => {
+    foundDone = true;
+    scan.style.display = 'none';
+    document.getElementById('found-head').textContent = "Here's what Omi found for you";
+    document.getElementById('found-sub').textContent = 'From your mail and calendar, just now';
+    wrap.classList.add('live');
+  }, msgs.length * 1150 + 800));
+}
+
+/* ---------- Found items: one action each ---------- */
+const RECEIPTS = {
+  loop1: { handle: "Reminder set for Jul 20." },
+  loop2: { handle: "Draft ready on the next screen." },
+  loop3: { drop: "Dismissed. Surveys will not come up again." },
+};
+const LEARNED = {
+  loop1: { handle: "Bounced replies → flag them" },
+  loop2: { handle: "CCAI → matters" },
+  loop3: { drop: "Surveys → skip" },
+};
+const decided = {};
+function decide(id, choice) {
+  decided[id] = choice;
+  document.getElementById(id + '-t').style.display = 'none';
+  const r = document.getElementById(id + '-r');
+  r.style.display = 'block';
+  r.textContent = '✓ ' + RECEIPTS[id][choice];
+  if (choice === 'drop') document.getElementById(id).style.opacity = '0.45';
+  if (Object.keys(decided).length === 3) {
+    const chips = document.getElementById('learned-chips');
+    chips.innerHTML = '';
+    for (const k of ['loop1', 'loop2', 'loop3']) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.style.fontSize = '12px';
+      chip.textContent = LEARNED[k][decided[k]] + ' ×';
+      chip.onclick = () => chip.remove();
+      chips.appendChild(chip);
+    }
+    document.getElementById('learned').style.display = 'flex';
+  }
+}
+
+/* ---------- Permissions (mock grant) ---------- */
+function grantPerm(btn) {
+  btn.textContent = 'Granted';
+  btn.style.color = 'var(--success)';
+  btn.style.borderColor = 'transparent';
+  btn.disabled = true;
+}
+
+
+/* Initial render — after all state above exists (fixes empty screen on hash load) */
+show(idx);
+</script>

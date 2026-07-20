@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Omi Onboarding</title>
+<style>
+* { margin: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: #060606; color: #fff; overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  display: flex; flex-direction: column; height: 100vh; }
+.frame { flex: 1; min-height: 0; }
+iframe { width: 100%; height: 100%; border: 0; display: block; }
+</style>
+</head>
+<body>
+<div class="frame"><iframe id="f" src="onboarding-main.html"></iframe></div>
+<script>
+document.getElementById('f').src = 'onboarding-main.html?t=' + Date.now();
+</script>
+</body>
+</html>
