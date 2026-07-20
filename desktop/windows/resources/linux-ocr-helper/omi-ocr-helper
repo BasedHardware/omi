@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+/*
+ * Linux OCR + window-info helper for Omi.
+ * Drop-in replacement for win-ocr-helper.exe, speaking the same stdio protocol
+ * (src/main/ocr/helperProtocol.ts):
+ *   Request : [uint32 LE length][1 byte opcode][payload]
+ *   Response: [uint32 LE length][UTF-8 JSON]
+ *   OP_OCR=1    payload=JPEG bytes -> {"ok":true,"fullText","lines":[]}
+ *                                  or {"ok":false,"code","message"}
+ *   OP_WINDOW=2 payload=empty      -> {"app","title","pid","processName"}
+ * Backed by the `tesseract` CLI for OCR and `xprop`/`/proc` for window info.
+ * One request at a time (the supervisor serializes), never throws.
+ */
+'use strict'
+const { execFileSync } = require('child_process')
+const { writeFileSync, unlinkSync, readlinkSync } = require('fs')
+const { tmpdir } = require('os')
+const { join, basename } = require('path')
+
+const OP_OCR = 1
+const OP_WINDOW = 2
+
+let seq = 0
+function ocr(jpeg) {
+  const tmp = join(tmpdir(), `omi-ocr-${process.pid}-${seq++}.jpg`)
+  try {
+    writeFileSync(tmp, jpeg)
+    // --psm 6: assume a uniform block of text; good default for screen content.
+    const out = execFileSync('tesseract', [tmp, 'stdout', '--psm', '6'], {
+      encoding: 'utf8',
+      timeout: 4000,
+      maxBuffer: 16 * 1024 * 1024
+    })
+    return { ok: true, fullText: out.replace(/\s+$/g, ''), lines: [] }
+  } catch (e) {
+    return { ok: false, code: 'HELPER_ERROR', message: String(e && e.message || e) }
+  } finally {
+    try { unlinkSync(tmp) } catch (_) { /* ignore */ }
+  }
+}
+
+function xprop(args) {
+  return execFileSync('xprop', args, { encoding: 'utf8', timeout: 600 })
+}
+function windowInfo() {
+  let title = '', pid = 0, processName = '', app = ''
+  try {
+    const idm = xprop(['-root', '_NET_ACTIVE_WINDOW']).match(/window id # (0x[0-9a-fA-F]+)/)
+    const win = idm && !/^0x0+$/.test(idm[1]) ? idm[1] : null
+    if (win) {
+      const nm = xprop(['-id', win, '_NET_WM_NAME']).match(/_NET_WM_NAME\([^)]*\) = "((?:[^"\\]|\\.)*)"/)
+      if (nm) title = nm[1].replace(/\\(["\\])/g, '$1')
+      const pm = xprop(['-id', win, '_NET_WM_PID']).match(/_NET_WM_PID\(CARDINAL\) = (\d+)/)
+      if (pm) {
+        pid = Number(pm[1])
+        try {
+          const exe = readlinkSync(`/proc/${pid}/exe`)
+          processName = basename(exe)
+          app = processName
+        } catch (_) { /* process gone / perm */ }
+      }
+    }
+  } catch (_) { /* X unavailable */ }
+  return { app: app || processName, title, pid, processName }
+}
+
+function writeFrame(obj) {
+  const json = Buffer.from(JSON.stringify(obj), 'utf8')
+  const header = Buffer.alloc(4)
+  header.writeUInt32LE(json.length, 0)
+  process.stdout.write(Buffer.concat([header, json]))
+}
+
+// Decode incoming request frames and respond one-for-one, in order.
+let buf = Buffer.alloc(0)
+process.stdin.on('data', (chunk) => {
+  buf = Buffer.concat([buf, chunk])
+  for (;;) {
+    if (buf.length < 4) return
+    const len = buf.readUInt32LE(0)
+    if (buf.length < 4 + len) return
+    const opcode = buf[4]
+    const payload = buf.subarray(5, 4 + len)
+    buf = buf.subarray(4 + len)
+    if (opcode === OP_OCR) writeFrame(ocr(payload))
+    else if (opcode === OP_WINDOW) writeFrame(windowInfo())
+    else writeFrame({ ok: false, code: 'HELPER_ERROR', message: `bad opcode ${opcode}` })
+  }
+})
+process.stdin.on('end', () => process.exit(0))
+process.stdin.resume()
