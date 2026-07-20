@@ -1,12 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildCalendarPrompt, parseCalendarTasks } from './calendarExtract'
+import { buildCalendarPrompt, extractCalendarTasks, parseCalendarTasks } from './calendarExtract'
 import type { CalendarItem } from '../../../shared/types'
 
-vi.mock('./apiClient', () => ({
-  desktopApi: {
-    post: vi.fn()
-  }
-}))
+const { callAgentLLM } = vi.hoisted(() => ({ callAgentLLM: vi.fn() }))
+vi.mock('./agentLLM', () => ({ callAgentLLM }))
 
 const ev = (over: Partial<CalendarItem>): CalendarItem => ({
   id: 'e1',
@@ -46,4 +43,10 @@ describe('parseCalendarTasks', () => {
     expect(parseCalendarTasks('```json\n{"tasks":[]}\n```')).toEqual([])
     expect(parseCalendarTasks('not json')).toEqual([])
   })
+})
+
+it('routes synthesis through the shared agent runtime', async () => {
+  callAgentLLM.mockResolvedValueOnce('{"tasks":[]}')
+  await expect(extractCalendarTasks([ev({})])).resolves.toEqual([])
+  expect(callAgentLLM).toHaveBeenCalledWith(expect.stringContaining('calendar events'))
 })

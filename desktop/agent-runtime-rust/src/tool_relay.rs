@@ -2,6 +2,8 @@ use crate::safety::{inspect_tool_call, ToolKind};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use tokio::sync::oneshot;
 
 pub const MANIFEST_VERSION: u64 = 1;
 pub const MANIFEST_DIGEST: &str = "omi-rx4-tools@1";
@@ -17,10 +19,10 @@ pub struct Identity {
     pub daemon_boot_epoch: String,
     pub execution_generation: u64,
 }
-#[derive(Clone)]
 struct Pending {
     identity: Identity,
     input_hash: String,
+    completion: oneshot::Sender<Value>,
 }
 pub struct ToolRelay {
     pending: HashMap<String, Pending>,
@@ -46,30 +48,34 @@ impl ToolRelay {
         identity: Identity,
         tool_name: String,
         input: Map<String, Value>,
+        workspace_root: PathBuf,
         surface_kind: String,
         external_ref_kind: Option<String>,
         external_ref_id: Option<String>,
         run_mode: String,
-    ) -> Result<Value, String> {
+    ) -> Result<(Value, oneshot::Receiver<Value>), String> {
         if self.pending.contains_key(&identity.invocation_id)
             || self.completed.contains_key(&identity.invocation_id)
         {
             return Err("authorized tool invocation is already known".into());
         }
-        if let Some(reason) = inspect(&tool_name, &input) {
+        if let Some(reason) = inspect(&tool_name, &input, &workspace_root) {
             return Err(reason);
         }
         let input_hash = hash_input(&input)?;
+        let (completion, receiver) = oneshot::channel();
         self.pending.insert(
             identity.invocation_id.clone(),
             Pending {
                 identity: identity.clone(),
                 input_hash: input_hash.clone(),
+                completion,
             },
         );
-        Ok(
+        Ok((
             json!({"type":"authorized_tool_execution","protocolVersion":2,"invocationId":identity.invocation_id,"ownerId":identity.owner_id,"sessionId":identity.session_id,"runId":identity.run_id,"attemptId":identity.attempt_id,"profileGeneration":identity.profile_generation,"manifestVersion":MANIFEST_VERSION,"manifestDigest":MANIFEST_DIGEST,"daemonBootEpoch":identity.daemon_boot_epoch,"executionGeneration":identity.execution_generation,"toolName":tool_name,"input":input,"inputHash":input_hash,"effectClass":"non_idempotent_write","retryPolicy":"never_auto_retry","surfaceKind":surface_kind,"externalRefKind":external_ref_kind,"externalRefId":external_ref_id,"originatingUserText":"","precedingAssistantText":Value::Null,"runMode":run_mode,"chatMode":Value::Null}),
-        )
+            receiver,
+        ))
     }
     pub fn complete(&mut self, result: &Map<String, Value>) -> Result<(Value, bool), String> {
         let invocation_id = string(result, "invocationId")?;
@@ -88,12 +94,16 @@ impl ToolRelay {
         let result_text = string(result, "result")?;
         let completion =
             json!({"invocationId":invocation_id,"outcome":outcome,"result":result_text});
-        self.pending.remove(&invocation_id);
+        let pending = self
+            .pending
+            .remove(&invocation_id)
+            .ok_or_else(|| "authorized tool result is unknown".to_owned())?;
+        let _ = pending.completion.send(completion.clone());
         self.completed.insert(invocation_id, completion.clone());
         Ok((completion, false))
     }
 }
-fn inspect(name: &str, input: &Map<String, Value>) -> Option<String> {
+fn inspect(name: &str, input: &Map<String, Value>, workspace_root: &Path) -> Option<String> {
     let (kind, value) = match name {
         "bash" | "terminal" => (
             ToolKind::Bash,
@@ -112,7 +122,18 @@ fn inspect(name: &str, input: &Map<String, Value>) -> Option<String> {
         ),
         _ => (ToolKind::Other, ""),
     };
-    inspect_tool_call(kind, value).map(|decision| decision.reason.to_owned())
+    if let Some(reason) = inspect_tool_call(kind, value) {
+        return Some(reason.reason.to_owned());
+    }
+    match name {
+        "read" | "write" | "edit" | "edit_diff" => {
+            rx4::SandboxManager::new(rx4::SandboxProfile::Workspace, workspace_root.to_path_buf())
+                .validate_path(Path::new(value), !matches!(name, "read"))
+                .err()
+                .map(|error| error.to_string())
+        }
+        _ => None,
+    }
 }
 fn hash_input(input: &Map<String, Value>) -> Result<String, String> {
     let bytes = serde_json::to_vec(input).map_err(|error| error.to_string())?;
@@ -172,17 +193,19 @@ mod tests {
                 identity.clone(),
                 "bash".into(),
                 serde_json::from_value(json!({"command":"sudo rm -rf /"})).unwrap_or_default(),
+                PathBuf::from("/tmp"),
                 "main_chat".into(),
                 None,
                 None,
                 "act".into()
             )
             .is_err());
-        let dispatch = relay
+        let (dispatch, mut receiver) = relay
             .dispatch(
                 identity,
                 "bash".into(),
                 serde_json::from_value(json!({"command":"pwd"})).unwrap_or_default(),
+                PathBuf::from("/tmp"),
                 "main_chat".into(),
                 None,
                 None,
@@ -212,5 +235,34 @@ mod tests {
             .complete(&result)
             .unwrap_or_else(|error| panic!("repeat completion failed: {error}"));
         assert!(duplicate);
+        assert!(receiver.try_recv().is_ok());
+    }
+
+    #[test]
+    fn denies_file_tool_paths_outside_the_session_workspace() {
+        let mut relay = ToolRelay::new();
+        let identity = Identity {
+            invocation_id: "i".into(),
+            owner_id: "o".into(),
+            session_id: "s".into(),
+            run_id: "r".into(),
+            attempt_id: "a".into(),
+            profile_generation: 1,
+            daemon_boot_epoch: "b".into(),
+            execution_generation: 1,
+        };
+        let error = relay
+            .dispatch(
+                identity,
+                "write".into(),
+                serde_json::from_value(json!({"path":"/private/omi-outside"})).unwrap_or_default(),
+                PathBuf::from("/tmp/omi-workspace"),
+                "main_chat".into(),
+                None,
+                None,
+                "act".into(),
+            )
+            .expect_err("session workspace must constrain file tools");
+        assert!(error.contains("denied"));
     }
 }

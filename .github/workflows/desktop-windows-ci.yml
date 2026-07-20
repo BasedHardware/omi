@@ -1,17 +1,5 @@
 name: Desktop Windows CI
 
-# The Windows desktop app had no CI: its typecheck and ~550-test suite never ran
-# on a PR. This workflow gates every change under desktop/windows/.
-#
-# - `checks` runs on ubuntu (fast; the vitest electron stub lets the suite run
-#   without the electron binary) and BLOCKS merge on typecheck/test failures.
-# - `build-windows` proves the app still packages on a real Windows runner,
-#   exercising the native paths (better-sqlite3 rebuild, OCR/automation helpers)
-#   that ubuntu cannot.
-#
-# Lint runs as a blocking check: ESLint errors fail the build; Prettier
-# formatting warnings remain non-blocking (formatting is not enforced here).
-
 on:
   push:
     branches: [main]
@@ -34,59 +22,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # The app is pnpm-managed (pnpm-lock.yaml, lockfileVersion 9).
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: desktop/windows/pnpm-lock.yaml
-      # Checks need no native modules; --ignore-scripts skips the electron-rebuild
-      # / OCR-helper postinstall. The vitest electron stub (test/electronStub.ts)
-      # lets the suite run without the electron binary.
+      - uses: oven-sh/setup-bun@v2
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: bun install --frozen-lockfile --ignore-scripts
       - name: Typecheck
-        run: pnpm run typecheck
-      # Errors block; Prettier formatting warnings remain non-blocking,
-      # matching the repo's current state (formatting is not enforced here).
+        run: bun run typecheck
       - name: Lint
-        run: pnpm run lint
+        run: bun run lint
       - name: Test
-        run: pnpm test
+        run: bun run test
 
   build-windows:
     name: Windows build smoke
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: desktop/windows/pnpm-lock.yaml
-      # OCR + UI-automation helpers are .NET projects built during install/build.
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '8.0.x'
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
       - name: Provision .env (ships public Firebase/PostHog config)
         shell: pwsh
         run: Copy-Item .env.example .env
-      # Full install: runs postinstall (electron-builder install-app-deps,
-      # electron-rebuild better-sqlite3, ensure-ocr-helper).
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build unpacked app
-        run: pnpm run build:unpack
-      - name: Upload unpacked build
+        run: bun install --frozen-lockfile
+      - name: Build Tauri installers
+        run: bun run build:win
+      - name: Upload Tauri installers
         uses: actions/upload-artifact@v7
         with:
-          name: omi-windows-unpacked
-          path: desktop/windows/dist/win-unpacked
+          name: omi-windows-installers
+          path: |
+            desktop/target/release/bundle/nsis/**
+            desktop/target/release/bundle/msi/**
           if-no-files-found: warn
           retention-days: 7

@@ -1,5 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import type { KnowledgeGraph } from '../../../shared/types'
+import type {
+  KnowledgeGraph,
+  OnboardingGraphEdge,
+  OnboardingGraphNode
+} from '../../../shared/types'
+import { native } from './native'
+
+vi.mock('./native', () => ({
+  native: {
+    localGraphClear: vi.fn(),
+    localGraphUpsert: vi.fn()
+  }
+}))
+
 import {
   resetOnboardingGraph,
   addUserNode,
@@ -13,21 +26,21 @@ import {
 function installFakeBridge(): void {
   const nodes = new Map<string, KnowledgeGraph['nodes'][number]>()
   const edges = new Map<string, KnowledgeGraph['edges'][number]>()
-  const snapshot = (): KnowledgeGraph => ({ nodes: [...nodes.values()], edges: [...edges.values()] })
-  ;(globalThis as unknown as { window: { omi: unknown } }).window = {
-    omi: {
-      localGraphClear: vi.fn(async () => {
-        nodes.clear()
-        edges.clear()
-      }),
-      localGraphUpsert: vi.fn(async (ns: KnowledgeGraph['nodes'], es: KnowledgeGraph['edges']) => {
-        for (const n of ns) nodes.set(n.id, { ...n, aliases: n.aliases ?? [], memoryIds: [] })
-        for (const e of es) edges.set(e.id, { ...e, memoryIds: [] })
-        return snapshot()
-      }),
-      localGraphLoad: vi.fn(async () => snapshot())
+  const snapshot = (): KnowledgeGraph => ({
+    nodes: [...nodes.values()],
+    edges: [...edges.values()]
+  })
+  vi.mocked(native.localGraphClear).mockImplementation(async () => {
+    nodes.clear()
+    edges.clear()
+  })
+  vi.mocked(native.localGraphUpsert).mockImplementation(
+    async (ns: OnboardingGraphNode[], es: OnboardingGraphEdge[]) => {
+      for (const n of ns) nodes.set(n.id, { ...n, aliases: n.aliases ?? [], memoryIds: [] })
+      for (const e of es) edges.set(e.id, { ...e, memoryIds: [] })
+      return snapshot()
     }
-  }
+  )
 }
 
 describe('onboardingGraph', () => {

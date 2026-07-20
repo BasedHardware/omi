@@ -1,5 +1,7 @@
 import { Monitor } from 'lucide-react'
 import { PermissionStep } from './PermissionStep'
+import { rewind } from '../../lib/native'
+import { toast } from '../../lib/toast'
 
 type ScreenPermissionStepProps = {
   stepIndex: number
@@ -16,20 +18,24 @@ export function ScreenPermissionStep({
   onContinue,
   onSkip
 }: ScreenPermissionStepProps): React.JSX.Element {
-  // Placeholder grant: the real Windows permission request will be wired when the
-  // screen engine is built. Until then we simulate the OS round-trip, then turn on
-  // Rewind screen capture so granting "Screen Recording" actually starts the local
-  // screen timeline (the Settings "Capture my screen" toggle). Best-effort — a
-  // failure here must never block onboarding.
-  const requestAccess = async (): Promise<void> => {
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+  const requestAccess = async (): Promise<boolean> => {
     try {
-      const current = await window.omi.rewindGetSettings()
-      if (!current.captureEnabled) {
-        await window.omi.rewindSetSettings({ ...current, captureEnabled: true })
+      const capability = await rewind.requestCapturePermission()
+      if (!capability.supported) {
+        alert(capability.reason)
+        return false
       }
-    } catch {
-      /* leave capture off; the user can enable it from Settings */
+      const current = await rewind.getSettings()
+      if (!current.captureEnabled) {
+        await rewind.setSettings({ ...current, captureEnabled: true })
+      }
+      return true
+    } catch (error) {
+      toast('Could not request Screen Recording permission', {
+        tone: 'error',
+        body: (error as Error).message
+      })
+      return false
     }
   }
 
@@ -44,12 +50,12 @@ export function ScreenPermissionStep({
       cardLabel="Screen Recording"
       statusText={{
         idle: 'Not granted yet',
-        waiting: 'Waiting for Windows',
+        waiting: 'Waiting for permission',
         granted: 'Granted'
       }}
       buttonLabel={{
         idle: 'Grant access',
-        waiting: 'Waiting for Windows',
+        waiting: 'Waiting for permission',
         granted: 'Granted'
       }}
       onActivate={requestAccess}

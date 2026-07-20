@@ -1,7 +1,5 @@
-import { desktopApi } from './apiClient'
+import { callAgentLLM } from './agentLLM'
 import { extractJSONObject } from './extractJson'
-
-const MODEL = 'claude-haiku-4-5-20251001'
 
 /**
  * Generate a topic emoji + short title for a finalized conversation from its
@@ -15,30 +13,15 @@ export async function generateConversationTopic(
 ): Promise<{ emoji: string; title: string } | null> {
   const text = transcript.trim()
   if (!text) return null
-  try {
-    const res = await desktopApi.post('/v2/chat/completions', {
-      model: MODEL,
-      stream: false,
-      messages: [
-        {
-          role: 'user',
-          content:
-            'Summarize this conversation as a topic. Respond with ONLY a JSON object ' +
-            '{"emoji":"<one emoji that captures the topic>","title":"<a short title, max 5 words>"} ' +
-            'and nothing else.\n\nTranscript:\n' +
-            text.slice(0, 4000)
-        }
-      ]
-    })
-    const content =
-      (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-        ?.content ?? ''
-    const obj = JSON.parse(extractJSONObject(content)) as { emoji?: unknown; title?: unknown }
-    const emoji = typeof obj.emoji === 'string' ? obj.emoji.trim() : ''
-    const title = typeof obj.title === 'string' ? obj.title.trim() : ''
-    if (!emoji && !title) return null
-    return { emoji, title }
-  } catch {
-    return null
-  }
+  const content = await callAgentLLM(
+    'Summarize this conversation as a topic. Respond with ONLY a JSON object ' +
+      '{"emoji":"<one emoji that captures the topic>","title":"<a short title, max 5 words>"} ' +
+      'and nothing else.\n\nTranscript:\n' +
+      text.slice(0, 4000)
+  )
+  const obj = JSON.parse(extractJSONObject(content)) as { emoji?: unknown; title?: unknown }
+  const emoji = typeof obj.emoji === 'string' ? obj.emoji.trim() : ''
+  const title = typeof obj.title === 'string' ? obj.title.trim() : ''
+  if (!emoji && !title) throw new Error('Omi could not generate a conversation topic.')
+  return { emoji, title }
 }

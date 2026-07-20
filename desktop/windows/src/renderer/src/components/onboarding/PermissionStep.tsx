@@ -17,7 +17,7 @@ type PermissionStepProps = {
   statusText: Record<PermissionStatus, string>
   buttonLabel: Record<PermissionStatus, string>
   /** The grant/scan work to run on click. Resolves when access is settled. */
-  onActivate: () => Promise<void>
+  onActivate: () => Promise<boolean>
   /** Advance to the next step. Called automatically after the granted state. */
   onContinue: () => void
   /** Skip this permission without granting it (small text button up top). */
@@ -49,12 +49,16 @@ export function PermissionStep({
   const handleActivate = async (): Promise<void> => {
     setStatus('waiting')
     try {
-      await onActivate()
-    } finally {
-      setStatus('granted')
-      // Brief confirmation of the granted state, then auto-advance.
-      setTimeout(onContinue, 1000)
+      if (await onActivate()) {
+        setStatus('granted')
+        setTimeout(onContinue, 1000)
+        return
+      }
+    } catch {
+      setStatus('idle')
+      return
     }
+    setStatus('idle')
   }
 
   return (

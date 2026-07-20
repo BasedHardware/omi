@@ -214,7 +214,7 @@ async fn get_agent_status(
                         );
                         // Update Firestore to reflect stopped state
                         let now = chrono::Utc::now().to_rfc3339();
-                        let _ = state
+                        if let Err(error) = state
                             .firestore
                             .set_agent_vm(
                                 &user.uid,
@@ -225,7 +225,15 @@ async fn get_agent_status(
                                 &vm.auth_token,
                                 &now,
                             )
-                            .await;
+                            .await
+                        {
+                            tracing::error!(
+                                "Failed to mark stopped VM {} provisioning: {}",
+                                vm.vm_name,
+                                error
+                            );
+                            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                        }
 
                         // Start the VM in the background
                         let firestore = state.firestore.clone();
@@ -241,7 +249,7 @@ async fn get_agent_status(
                                 Ok(ip) => {
                                     tracing::info!("VM {} restarted with IP {}", vm_name, ip);
                                     let now = chrono::Utc::now().to_rfc3339();
-                                    let _ = firestore
+                                    if let Err(error) = firestore
                                         .set_agent_vm(
                                             &uid,
                                             &vm_name,
@@ -251,12 +259,19 @@ async fn get_agent_status(
                                             &auth_token,
                                             &now,
                                         )
-                                        .await;
+                                        .await
+                                    {
+                                        tracing::error!(
+                                            "Failed to mark restarted VM {} ready: {}",
+                                            vm_name,
+                                            error
+                                        );
+                                    }
                                 }
                                 Err(e) => {
                                     tracing::error!("Failed to restart VM {}: {}", vm_name, e);
                                     let now = chrono::Utc::now().to_rfc3339();
-                                    let _ = firestore
+                                    if let Err(error) = firestore
                                         .set_agent_vm(
                                             &uid,
                                             &vm_name,
@@ -266,7 +281,14 @@ async fn get_agent_status(
                                             &auth_token,
                                             &now,
                                         )
-                                        .await;
+                                        .await
+                                    {
+                                        tracing::error!(
+                                            "Failed to mark restart failure for VM {}: {}",
+                                            vm_name,
+                                            error
+                                        );
+                                    }
                                 }
                             }
                         });
@@ -283,7 +305,14 @@ async fn get_agent_status(
                             "VM {} no longer exists in GCP — clearing Firestore record",
                             vm.vm_name
                         );
-                        let _ = state.firestore.delete_agent_vm(&user.uid).await;
+                        if let Err(error) = state.firestore.delete_agent_vm(&user.uid).await {
+                            tracing::error!(
+                                "Failed to clear missing VM {} from Firestore: {}",
+                                vm.vm_name,
+                                error
+                            );
+                            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                        }
                         return Ok(Json(None));
                     }
                     Ok(gce_status)
@@ -306,36 +335,51 @@ async fn get_agent_status(
                         let gce_project = gce_project_id.clone();
 
                         tokio::spawn(async move {
-                            let project = &gce_project;
                             let instance_url = format!(
                                 "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
-                                project, zone, vm_name
+                                gce_project, zone, vm_name
                             );
-                            if let Ok(resp) = firestore
-                                .build_compute_request(reqwest::Method::GET, &instance_url)
-                                .await
-                            {
-                                if let Ok(resp) = resp.send().await {
-                                    if let Ok(instance) = resp.json::<serde_json::Value>().await {
-                                        let ip = instance["networkInterfaces"][0]["accessConfigs"]
-                                            [0]["natIP"]
-                                            .as_str()
-                                            .unwrap_or("unknown")
-                                            .to_string();
-                                        let now = chrono::Utc::now().to_rfc3339();
-                                        let _ = firestore
-                                            .set_agent_vm(
-                                                &uid,
-                                                &vm_name,
-                                                &zone,
-                                                Some(&ip),
-                                                AgentVmStatus::Ready,
-                                                &auth_token,
-                                                &now,
-                                            )
-                                            .await;
-                                        tracing::info!("VM {} recovered — ip={}", vm_name, ip);
-                                    }
+                            let recovery = async {
+                                let response = firestore
+                                    .build_compute_request(reqwest::Method::GET, &instance_url)
+                                    .await
+                                    .map_err(|error| error.to_string())?;
+                                let instance = response
+                                    .send()
+                                    .await
+                                    .map_err(|error| error.to_string())?
+                                    .error_for_status()
+                                    .map_err(|error| error.to_string())?
+                                    .json::<serde_json::Value>()
+                                    .await
+                                    .map_err(|error| error.to_string())?;
+                                let ip = instance["networkInterfaces"][0]["accessConfigs"][0]
+                                    ["natIP"]
+                                    .as_str()
+                                    .filter(|ip| !ip.is_empty())
+                                    .ok_or_else(|| {
+                                        "recovered VM response has no external IP".to_owned()
+                                    })?;
+                                let now = chrono::Utc::now().to_rfc3339();
+                                firestore
+                                    .set_agent_vm(
+                                        &uid,
+                                        &vm_name,
+                                        &zone,
+                                        Some(ip),
+                                        AgentVmStatus::Ready,
+                                        &auth_token,
+                                        &now,
+                                    )
+                                    .await
+                                    .map_err(|error| error.to_string())?;
+                                Ok::<_, String>(())
+                            }
+                            .await;
+                            match recovery {
+                                Ok(()) => tracing::info!("VM {} recovered", vm_name),
+                                Err(error) => {
+                                    tracing::error!("Failed to recover VM {}: {}", vm_name, error)
                                 }
                             }
                         });

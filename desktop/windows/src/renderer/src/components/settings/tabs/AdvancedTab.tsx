@@ -4,11 +4,15 @@ import { omiApi } from '../../../lib/apiClient'
 import { toast } from '../../../lib/toast'
 import { extractMemories, type MemorySource } from '../../../lib/memoryExtract'
 import { buildLocalGraph } from '../../../lib/kgSynthesis'
-import { summarizeMemories, appIndexMemoryIds, type MemoryBreakdown } from '../../../lib/memoryCleanup'
+import {
+  summarizeMemories,
+  appIndexMemoryIds,
+  type MemoryBreakdown
+} from '../../../lib/memoryCleanup'
 import { useMemories, type Memory } from '../../../hooks/useMemories'
 import { resetOnboarding } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
-import { IntegrationsTab } from './IntegrationsTab'
+import { native } from '../../../lib/native'
 import type {
   ExportMemory,
   FileIndexStatus,
@@ -23,13 +27,16 @@ export function AdvancedTab(): React.JSX.Element {
   const [fileIndex, setFileIndex] = useState<FileIndexStatus | null>(null)
   const [scanning, setScanning] = useState(false)
   useEffect(() => {
-    window.omi.indexFilesStatus().then(setFileIndex).catch(() => setFileIndex(null))
+    native
+      .fileIndexStatus()
+      .then(setFileIndex)
+      .catch(() => setFileIndex(null))
   }, [])
   const rescan = async (): Promise<void> => {
     if (scanning) return
     setScanning(true)
     try {
-      setFileIndex(await window.omi.indexFilesScan())
+      setFileIndex(await native.fileIndexScan())
       toast('File index updated', { tone: 'success' })
       void buildLocalGraph().catch(() => {})
     } catch (e) {
@@ -43,7 +50,10 @@ export function AdvancedTab(): React.JSX.Element {
   const [kgStatus, setKgStatus] = useState<LocalKGStatus | null>(null)
   const [rebuildingKg, setRebuildingKg] = useState(false)
   useEffect(() => {
-    window.omi.kgStatus().then(setKgStatus).catch(() => setKgStatus(null))
+    native
+      .kgStatus()
+      .then(setKgStatus)
+      .catch(() => setKgStatus(null))
   }, [])
   const rebuildKg = async (): Promise<void> => {
     if (rebuildingKg) return
@@ -75,14 +85,19 @@ export function AdvancedTab(): React.JSX.Element {
       const { memories: list, profile: summary } = await extractMemories(dump, source, existing)
       setParsed(list)
       setProfile(summary)
-      if (list.length === 0) toast('No new memories found — they may already be saved', { tone: 'warn' })
+      if (list.length === 0)
+        toast('No new memories found — they may already be saved', { tone: 'warn' })
     } catch (e) {
       console.warn('[memoryImport] AI extraction failed, falling back to split:', e)
       try {
         const norm = (s: string): string =>
-          s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim()
+          s
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, '')
+            .replace(/\s+/g, ' ')
+            .trim()
         const have = new Set(existing.map(norm))
-        const list = (await window.omi.memoryImportParse(dump)).filter((m) => !have.has(norm(m)))
+        const list = (await native.memoryImportParse(dump)).filter((m) => !have.has(norm(m)))
         setParsed(list)
         toast('AI extraction unavailable — used a basic line split', {
           tone: 'warn',
@@ -134,7 +149,11 @@ export function AdvancedTab(): React.JSX.Element {
   const [notionPage, setNotionPage] = useState('')
   const [exporting, setExporting] = useState(false)
   const toExportMemories = (): ExportMemory[] =>
-    memories.map((m) => ({ content: m.content, category: m.category ?? null, createdAt: m.created_at }))
+    memories.map((m) => ({
+      content: m.content,
+      category: m.category ?? null,
+      createdAt: m.created_at
+    }))
 
   const runExport = async (target: 'obsidian' | 'file' | 'notion'): Promise<void> => {
     if (exporting) return
@@ -150,16 +169,20 @@ export function AdvancedTab(): React.JSX.Element {
     try {
       const mems = toExportMemories()
       let r: MemoryExportResult
-      if (target === 'obsidian') r = await window.omi.memoryExportObsidian(mems)
-      else if (target === 'file') r = await window.omi.memoryExportFile(mems)
-      else
-        r = await window.omi.memoryExportNotion({
-          token: notionToken.trim(),
+      if (target === 'obsidian') r = await native.memoryExportObsidian(mems)
+      else if (target === 'file') r = await native.memoryExportFile(mems)
+      else {
+        await native.notionSetToken(notionToken.trim())
+        r = await native.memoryExportNotion({
           parentPageId: notionPage.trim(),
           memories: mems
         })
+      }
       if (!r.canceled) {
-        toast(`Exported ${r.count} memor${r.count === 1 ? 'y' : 'ies'}`, { tone: 'success', body: r.location })
+        toast(`Exported ${r.count} memor${r.count === 1 ? 'y' : 'ies'}`, {
+          tone: 'success',
+          body: r.location
+        })
       }
     } catch (e) {
       toast('Export failed', { tone: 'error', body: (e as Error).message })
@@ -209,7 +232,12 @@ export function AdvancedTab(): React.JSX.Element {
   const deleteAppIndexMemories = async (): Promise<void> => {
     const ids = appIndexMemoryIds(memAllMemories)
     if (ids.length === 0 || memDeleting) return
-    if (!window.confirm(`Permanently delete ${ids.length} app/file-index memories? This cannot be undone.`)) return
+    if (
+      !window.confirm(
+        `Permanently delete ${ids.length} app/file-index memories? This cannot be undone.`
+      )
+    )
+      return
     setMemDeleting(true)
     setMemDeleteProgress(0)
     const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -224,13 +252,16 @@ export function AdvancedTab(): React.JSX.Element {
           await omiApi.delete(`/v3/memories/${id}`, { ...({ __noRetry: true } as object) })
           return 'ok'
         } catch (e) {
-          const resp = (e as { response?: { status?: number; headers?: Record<string, string> } }).response
+          const resp = (e as { response?: { status?: number; headers?: Record<string, string> } })
+            .response
           const status = resp?.status
           if (status === 404) return 'gone'
           if (status === 429) {
             paceMs = 1100
             const ra = Number(resp?.headers?.['retry-after'])
-            await sleep(Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000))
+            await sleep(
+              Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000)
+            )
             continue
           }
           if (!firstError) firstError = status ? `HTTP ${status}` : (e as Error).message
@@ -250,7 +281,9 @@ export function AdvancedTab(): React.JSX.Element {
       }
       toast(`Deleted ${deleted} of ${ids.length} memories`, {
         tone: failed ? 'warn' : 'success',
-        body: failed ? `${failed} failed${firstError ? ` — ${firstError}` : ''}. Analyze again to retry.` : undefined
+        body: failed
+          ? `${failed} failed${firstError ? ` — ${firstError}` : ''}. Analyze again to retry.`
+          : undefined
       })
     } catch (e) {
       toast('Delete failed', { tone: 'error', body: (e as Error).message })
@@ -299,22 +332,36 @@ export function AdvancedTab(): React.JSX.Element {
             className="input-field resize-none"
           />
           <div className="flex items-center gap-2">
-            <button onClick={extractDump} disabled={!dump.trim() || extracting || importing} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={extractDump}
+              disabled={!dump.trim() || extracting || importing}
+              className="btn-ghost disabled:opacity-40"
+            >
               {extracting ? 'Extracting…' : 'Extract memories'}
             </button>
             {parsed && parsed.length > 0 && (
-              <button onClick={importMemories} disabled={importing} className="btn-primary px-4 py-2 disabled:opacity-40">
-                {importing ? 'Importing…' : `Import ${parsed.length} memor${parsed.length === 1 ? 'y' : 'ies'}`}
+              <button
+                onClick={importMemories}
+                disabled={importing}
+                className="btn-primary px-4 py-2 disabled:opacity-40"
+              >
+                {importing
+                  ? 'Importing…'
+                  : `Import ${parsed.length} memor${parsed.length === 1 ? 'y' : 'ies'}`}
               </button>
             )}
           </div>
           {profile && (
-            <p className="glass-subtle rounded-lg px-4 py-3 text-sm italic text-text-tertiary">{profile}</p>
+            <p className="glass-subtle rounded-lg px-4 py-3 text-sm italic text-text-tertiary">
+              {profile}
+            </p>
           )}
           {parsed && parsed.length > 0 && (
             <ul className="glass-subtle max-h-40 overflow-y-auto rounded-lg px-4 py-3 text-sm text-text-tertiary">
               {parsed.map((m, i) => (
-                <li key={i} className="py-0.5">• {m}</li>
+                <li key={i} className="py-0.5">
+                  • {m}
+                </li>
               ))}
             </ul>
           )}
@@ -329,10 +376,18 @@ export function AdvancedTab(): React.JSX.Element {
       >
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => runExport('obsidian')} disabled={exporting} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={() => runExport('obsidian')}
+              disabled={exporting}
+              className="btn-ghost disabled:opacity-40"
+            >
               Obsidian vault…
             </button>
-            <button onClick={() => runExport('file')} disabled={exporting} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={() => runExport('file')}
+              disabled={exporting}
+              className="btn-ghost disabled:opacity-40"
+            >
               Plain file…
             </button>
           </div>
@@ -352,7 +407,11 @@ export function AdvancedTab(): React.JSX.Element {
               placeholder="Parent page ID"
               className="glass-subtle mb-2 w-full rounded-lg px-4 py-3 text-sm text-text-secondary focus:outline-none"
             />
-            <button onClick={() => runExport('notion')} disabled={exporting} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={() => runExport('notion')}
+              disabled={exporting}
+              className="btn-ghost disabled:opacity-40"
+            >
               {exporting ? 'Exporting…' : 'Export to Notion'}
             </button>
           </div>
@@ -367,11 +426,19 @@ export function AdvancedTab(): React.JSX.Element {
       >
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <button onClick={auditMemories} disabled={memAuditing || memDeleting} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={auditMemories}
+              disabled={memAuditing || memDeleting}
+              className="btn-ghost disabled:opacity-40"
+            >
               {memAuditing ? 'Analyzing…' : 'Analyze memories'}
             </button>
             {memBreakdown && memBreakdown.appIndexCount > 0 && (
-              <button onClick={deleteAppIndexMemories} disabled={memDeleting || memAuditing} className="btn-primary px-4 py-2 disabled:opacity-40">
+              <button
+                onClick={deleteAppIndexMemories}
+                disabled={memDeleting || memAuditing}
+                className="btn-primary px-4 py-2 disabled:opacity-40"
+              >
                 {memDeleting
                   ? `Deleting ${memDeleteProgress}/${memBreakdown.appIndexCount}…`
                   : `Delete ${memBreakdown.appIndexCount} app/file memories`}
@@ -382,12 +449,15 @@ export function AdvancedTab(): React.JSX.Element {
             <div className="glass-subtle rounded-lg px-4 py-3 text-sm text-text-tertiary">
               <p className="mb-2 text-text-secondary">
                 {memBreakdown.total} total memories ·{' '}
-                <span className="text-text-primary">{memBreakdown.appIndexCount}</span> app/file-index matches
+                <span className="text-text-primary">{memBreakdown.appIndexCount}</span>{' '}
+                app/file-index matches
               </p>
               {memBreakdown.appIndexCount > 0 && (
                 <ul className="mb-3 max-h-32 overflow-y-auto">
                   {memBreakdown.appIndexSamples.map((s, i) => (
-                    <li key={i} className="py-0.5">• {s}</li>
+                    <li key={i} className="py-0.5">
+                      • {s}
+                    </li>
                   ))}
                 </ul>
               )}
@@ -396,7 +466,9 @@ export function AdvancedTab(): React.JSX.Element {
                 {memBreakdown.groups.map((g) => (
                   <li key={g.key} className="py-0.5">
                     <span className="text-text-primary">{g.count}</span> — {g.key}
-                    {g.samples[0] ? <span className="opacity-60"> · e.g. “{g.samples[0]}”</span> : null}
+                    {g.samples[0] ? (
+                      <span className="opacity-60"> · e.g. “{g.samples[0]}”</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -405,16 +477,15 @@ export function AdvancedTab(): React.JSX.Element {
         </div>
       </SettingRow>
 
-      {/* Integrations (Sticky Notes, Google) live under Advanced. */}
-      <IntegrationsTab />
-
       <SettingRow
         icon={FolderSearch}
         title="File indexing"
         subtitle={
           fileIndex
             ? `${fileIndex.filesIndexed.toLocaleString()} items indexed${
-                fileIndex.lastRunAt ? ` · last run ${new Date(fileIndex.lastRunAt).toLocaleString()}` : ''
+                fileIndex.lastRunAt
+                  ? ` · last run ${new Date(fileIndex.lastRunAt).toLocaleString()}`
+                  : ''
               }`
             : 'Indexes file names/metadata locally (contents never read or uploaded).'
         }
@@ -432,13 +503,19 @@ export function AdvancedTab(): React.JSX.Element {
         subtitle={
           kgStatus
             ? `${kgStatus.nodeCount.toLocaleString()} nodes · ${kgStatus.edgeCount.toLocaleString()} relationships${
-                kgStatus.lastBuiltAt ? ` · last built ${new Date(kgStatus.lastBuiltAt).toLocaleString()}` : ''
+                kgStatus.lastBuiltAt
+                  ? ` · last built ${new Date(kgStatus.lastBuiltAt).toLocaleString()}`
+                  : ''
               }`
             : 'A local graph of your projects, tech, people, and apps — used to ground chat answers.'
         }
         keywords="knowledge graph rebuild kg nodes"
         control={
-          <button onClick={rebuildKg} disabled={rebuildingKg} className="btn-ghost disabled:opacity-40">
+          <button
+            onClick={rebuildKg}
+            disabled={rebuildingKg}
+            className="btn-ghost disabled:opacity-40"
+          >
             {rebuildingKg ? 'Rebuilding…' : 'Rebuild now'}
           </button>
         }

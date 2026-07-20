@@ -1,13 +1,9 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  House,
-  GanttChartSquare,
-  ListChecks,
-  LayoutGrid,
-  History,
   Monitor,
   Mic,
+  Gift,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react'
@@ -16,14 +12,8 @@ import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/p
 import { cn } from '../../lib/utils'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
-
-const navItems = [
-  { label: 'Home', to: '/home', Icon: House },
-  { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
-  { label: 'Tasks', to: '/tasks', Icon: ListChecks },
-  { label: 'Rewind', to: '/rewind', Icon: History },
-  { label: 'Apps', to: '/apps', Icon: LayoutGrid }
-]
+import { rewind as rewindNative } from '../../lib/native'
+import { isNavActive, navRoutes } from '../../routes/manifest'
 
 const COLLAPSE_KEY = 'omi.sidebar.collapsed'
 
@@ -50,7 +40,7 @@ export function Sidebar(): React.JSX.Element {
   }, [collapsed])
 
   useEffect(() => {
-    void window.omi.rewindGetSettings().then(setRewind)
+    void rewindNative.getSettings().then(setRewind)
   }, [])
 
   const email = user?.email
@@ -68,7 +58,7 @@ export function Sidebar(): React.JSX.Element {
     if (!rewind) return
     const next = { ...rewind, captureEnabled: !rewind.captureEnabled }
     setRewind(next)
-    void window.omi.rewindSetSettings(next).then(setRewind)
+    void rewindNative.setSettings(next).then(setRewind)
   }
 
   // Microphone = always-on listening. The toggle reflects the `continuousRecording`
@@ -179,17 +169,21 @@ export function Sidebar(): React.JSX.Element {
       <div className="my-2 h-px w-full bg-white/10" />
 
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
-        {navItems.map(({ label: text, to, Icon }) => (
+        {navRoutes().map((entry) => {
+          const nav = entry.nav
+          if (!nav || !entry.path) return null
+          const { label: text, Icon } = nav
+          return (
           <NavLink
-            key={to}
-            to={to}
+            key={entry.path}
+            to={entry.path}
             title={collapsed ? text : undefined}
             className={({ isActive }) =>
-              linkClass(isActive || (to === '/tasks' && pathname === '/goals'))
+              linkClass(isActive || isNavActive(entry, pathname))
             }
           >
             {({ isActive }) => {
-              const active = isActive || (to === '/tasks' && pathname === '/goals')
+              const active = isActive || isNavActive(entry, pathname)
               return (
                 <>
                   <Icon
@@ -204,7 +198,8 @@ export function Sidebar(): React.JSX.Element {
               )
             }}
           </NavLink>
-        ))}
+          )
+        })}
       </div>
 
       <div className="my-2 h-px w-full bg-white/10" />
@@ -218,40 +213,54 @@ export function Sidebar(): React.JSX.Element {
       <div className="my-2 h-px w-full bg-white/10" />
 
       {/* Account row → opens Settings (Sign out now lives in Settings). */}
-      <NavLink
-        to="/settings"
-        title={collapsed ? displayName : undefined}
-        className={({ isActive }) =>
-          cn(
-            'flex w-full items-center rounded-xl px-2.5 py-2 text-sm transition-colors duration-150',
-            !collapsed && 'gap-3',
-            isActive ? 'nav-active' : cn('text-white/60 hover:text-white/90', HOVER)
-          )
-        }
-      >
-        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10">
-          <img
-            src={photoURL ?? ''}
-            alt=""
-            className={cn('h-full w-full object-cover', photoURL ? 'block' : 'hidden')}
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              const el = e.currentTarget
-              el.classList.add('hidden')
-              el.nextElementSibling?.classList.remove('hidden')
-            }}
-          />
-          <div
-            className={cn(
-              'flex h-full w-full items-center justify-center bg-white/10 text-[11px] font-semibold text-white',
-              photoURL ? 'hidden' : ''
-            )}
-          >
-            {initial}
+      <div className={cn('flex items-center', !collapsed && 'gap-1')}>
+        <NavLink
+          to="/settings"
+          title={collapsed ? displayName : undefined}
+          className={({ isActive }) =>
+            cn(
+              'flex min-w-0 flex-1 items-center rounded-xl px-2.5 py-2 text-sm transition-colors duration-150',
+              !collapsed && 'gap-3',
+              isActive ? 'nav-active' : cn('text-white/60 hover:text-white/90', HOVER)
+            )
+          }
+        >
+          <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10">
+            <img
+              src={photoURL ?? ''}
+              alt=""
+              className={cn('h-full w-full object-cover', photoURL ? 'block' : 'hidden')}
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                const el = e.currentTarget
+                el.classList.add('hidden')
+                el.nextElementSibling?.classList.remove('hidden')
+              }}
+            />
+            <div
+              className={cn(
+                'flex h-full w-full items-center justify-center bg-white/10 text-[11px] font-semibold text-white',
+                photoURL ? 'hidden' : ''
+              )}
+            >
+              {initial}
+            </div>
           </div>
-        </div>
-        {label(displayName)}
-      </NavLink>
+          {label(displayName)}
+        </NavLink>
+        <button
+          type="button"
+          title="Refer a friend"
+          aria-label="Refer a friend"
+          onClick={() => window.open('https://affiliate.omi.me')}
+          className={cn(
+            'rounded-xl p-2 text-white/50 transition-colors hover:text-white/80',
+            HOVER
+          )}
+        >
+          <Gift className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+      </div>
     </nav>
   )
 }

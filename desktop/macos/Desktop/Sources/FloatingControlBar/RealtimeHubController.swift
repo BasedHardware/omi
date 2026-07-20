@@ -174,7 +174,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let task: Task<ExternalRunTerminalizationResult, Never>
   }
   static let externalRunClientID = "omi-realtime-voice"
-  static let externalRunHarnessMode = "piMono"
+  static let externalRunHarnessMode = "rx4"
   var externalRunAuthorityState: ExternalRunAuthorityState?
   var externalRunTerminalizations: [UUID: TrackedExternalRunTerminalization] = [:]
   /// The begin RPC itself is bounded to 10 seconds. Two seconds of scheduling

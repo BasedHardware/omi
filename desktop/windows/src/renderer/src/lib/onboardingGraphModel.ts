@@ -38,3 +38,16 @@ export function buildApps(apps: { name: string }[]): { nodes: OnboardingGraphNod
   }
   return { nodes, edges }
 }
+
+export function buildWorkspaceFolders(folders: string[]): { nodes: OnboardingGraphNode[]; edges: OnboardingGraphEdge[] } {
+  const nodes: OnboardingGraphNode[] = []
+  const edges: OnboardingGraphEdge[] = []
+  for (const folder of folders) {
+    const label = folder.split(/[\\/]/).filter(Boolean).pop()?.trim() ?? ''
+    if (!label) continue
+    const id = `workspace_${slugId(folder)}`
+    nodes.push({ id, label, nodeType: 'thing' })
+    edges.push({ id: `edge_${USER_NODE_ID}_${id}`, sourceId: USER_NODE_ID, targetId: id, label: 'works in' })
+  }
+  return { nodes, edges }
+}

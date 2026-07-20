@@ -1,20 +1,17 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { screen } from './native'
 import { readCurrentScreen } from './screenContext'
+
+vi.mock('./native', () => ({ screen: { readText: vi.fn() } }))
 
 // Mock window.omi.screenReadText so we can drive the OCR result.
 function mockScreenReadText(value: string): void {
-  if (!globalThis.window) {
-    // @ts-expect-error — test-only minimal shim when there's no DOM window
-    globalThis.window = {}
-  }
-  // @ts-expect-error — test-only minimal shim of the omi bridge
-  globalThis.window.omi = { screenReadText: vi.fn(async () => value) }
+  vi.mocked(screen.readText).mockResolvedValue(value)
 }
 
 describe('readCurrentScreen', () => {
   afterEach(() => {
-    // @ts-expect-error — clean up the test shim
-    delete globalThis.window?.omi
+    vi.mocked(screen.readText).mockReset()
   })
 
   it('prepends the ambient screen-context preamble and includes the OCR text', async () => {

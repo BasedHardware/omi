@@ -9,6 +9,14 @@ description = "Platform-neutral Omi desktop policy and wire types"
 [lib]
 crate-type = ["rlib", "staticlib", "cdylib"]
 
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["uniffi-bindgen"]
+
+[features]
+uniffi-bindgen = []
+
 [lints.clippy]
 unwrap_used = "deny"
 

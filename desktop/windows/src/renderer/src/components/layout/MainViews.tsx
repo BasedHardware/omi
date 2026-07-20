@@ -1,15 +1,6 @@
-import { memo, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { Home } from '../../pages/Home'
-import { Conversations } from '../../pages/Conversations'
-import { Memories } from '../../pages/Memories'
-import { Settings } from '../../pages/Settings'
-import { ConversationDetail } from '../../pages/ConversationDetail'
-import { Tasks } from '../../pages/Tasks'
-import { Goals } from '../../pages/Goals'
-import { Apps } from '../../pages/Apps'
-import { Rewind } from '../../pages/Rewind'
-import { LiveConversation } from '../../pages/LiveConversation'
+import { panelRoutes, resolveRoute } from '../../routes/manifest'
 
 // Every page stays mounted (inactive ones are just hidden) so switching tabs is
 // instant. But the pages take no props, so without memo they ALL re-render on
@@ -18,15 +9,6 @@ import { LiveConversation } from '../../pages/LiveConversation'
 // or large memory/conversation lists, which is what made tab switches lag.
 // memo() makes a page re-render only from its OWN hooks/state, never from a
 // parent navigation, so changing tabs just toggles the wrapper's visibility.
-const HomePanel = memo(Home)
-const ConversationsPanel = memo(Conversations)
-const MemoriesPanel = memo(Memories)
-const SettingsPanel = memo(Settings)
-const TasksPanel = memo(Tasks)
-const GoalsPanel = memo(Goals)
-const AppsPanel = memo(Apps)
-const RewindPanel = memo(Rewind)
-
 function panelClass(active: boolean): string {
   return active ? 'flex h-full min-h-0 flex-col' : 'hidden'
 }
@@ -49,45 +31,23 @@ export function MainViews(): React.JSX.Element {
     return () => clearTimeout(timer)
   }, [])
 
-  // Home merges the old Chat and Record screens.
-  if (pathname === '/' || pathname === '/live' || pathname === '/chat') {
-    return <Navigate to="/home" replace />
-  }
+  const resolved = resolveRoute(pathname)
+  if (resolved && 'redirectTo' in resolved) return <Navigate to={resolved.redirectTo} replace />
+  if (resolved?.entry.kind === 'exclusive') return resolved.entry.render?.(resolved.params) ?? <></>
 
-  if (pathname === '/conversations/live') {
-    return <LiveConversation />
-  }
-
-  const detailMatch = pathname.match(/^\/conversations\/([^/]+)$/)
-  if (detailMatch) {
-    return <ConversationDetail conversationId={detailMatch[1]} />
-  }
-
-  const isHome = pathname === '/home'
-  const isConversations = pathname === '/conversations'
-  const isMemories = pathname === '/memories'
-  const isSettings = pathname === '/settings'
-  const isTasks = pathname === '/tasks'
-  const isGoals = pathname === '/goals'
-  const isApps = pathname === '/apps'
-  const isRewind = pathname === '/rewind'
+  const activePath = resolved?.entry.path
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className={panelClass(isHome)}>{(isHome || hydrateAll) && <HomePanel />}</div>
-      <div className={panelClass(isConversations)}>
-        {(isConversations || hydrateAll) && <ConversationsPanel />}
-      </div>
-      <div className={panelClass(isMemories)}>
-        {(isMemories || hydrateAll) && <MemoriesPanel />}
-      </div>
-      <div className={panelClass(isSettings)}>
-        {(isSettings || hydrateAll) && <SettingsPanel />}
-      </div>
-      <div className={panelClass(isTasks)}>{(isTasks || hydrateAll) && <TasksPanel />}</div>
-      <div className={panelClass(isGoals)}>{(isGoals || hydrateAll) && <GoalsPanel />}</div>
-      <div className={panelClass(isApps)}>{(isApps || hydrateAll) && <AppsPanel />}</div>
-      <div className={panelClass(isRewind)}>{(isRewind || hydrateAll) && <RewindPanel />}</div>
+      {panelRoutes().map((entry) => {
+        const active = entry.path === activePath
+        const Panel = entry.Component
+        return (
+          <div key={entry.id} className={panelClass(active)}>
+            {(active || hydrateAll) && Panel ? <Panel /> : null}
+          </div>
+        )
+      })}
     </div>
   )
 }

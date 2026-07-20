@@ -9,6 +9,7 @@ import {
   formatGapDuration
 } from '../../lib/rewindStrip'
 import { useElementWidth } from '../../hooks/useElementWidth'
+import { rewind } from '../../lib/native'
 
 // Gap spacers are sized by duration so blank time is proportional.
 const GAP_PX_PER_MS = 0.001
@@ -37,7 +38,7 @@ const Thumb = memo(function Thumb({
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
           io.disconnect()
-          void window.omi.rewindFrameImage(frame.imagePath).then((d) => {
+          void rewind.frameImage(frame.imagePath).then((d) => {
             if (alive) setSrc(d)
           })
         }

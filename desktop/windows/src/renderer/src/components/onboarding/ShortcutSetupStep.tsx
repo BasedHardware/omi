@@ -7,6 +7,7 @@ import {
   eventToAccelerator,
   validateCustomAccelerator
 } from '../../lib/overlayShortcut'
+import { overlay } from '../../lib/native'
 
 type ShortcutSetupStepProps = {
   stepIndex: number
@@ -39,15 +40,29 @@ export function ShortcutSetupStep({
   // Enable + warm the overlay here (not before), apply the current accelerator,
   // and light up the keys whenever the shortcut fires.
   useEffect(() => {
-    window.omiOverlay?.setEnabled(true)
-    void window.omiOverlay?.setAccelerator(accel)
-    const off = window.omiOverlay?.onSummoned(() => {
+    let off: (() => void) | undefined
+    let disposed = false
+    const onSummoned = (): void => {
       setWorked(true)
       setLit(true)
       if (litTimer.current) clearTimeout(litTimer.current)
       litTimer.current = setTimeout(() => setLit(false), 450)
-    })
+    }
+    void (async () => {
+      try {
+        off = await overlay.onSummonedReady(onSummoned)
+        if (disposed) {
+          off()
+          return
+        }
+        await overlay.setEnabled(true)
+        await overlay.setAccelerator(accel)
+      } catch (error) {
+        setError(`Couldn't set up this shortcut: ${(error as Error).message}`)
+      }
+    })()
     return () => {
+      disposed = true
       off?.()
       if (litTimer.current) clearTimeout(litTimer.current)
     }
@@ -63,8 +78,10 @@ export function ShortcutSetupStep({
       e.preventDefault()
       e.stopPropagation()
       if (e.key === 'Escape') {
-        void window.omiOverlay?.resumeShortcut()
-        setRecording(false)
+        void overlay
+          .resumeShortcut()
+          .then(() => setRecording(false))
+          .catch((error) => setError(`Couldn't restore the shortcut: ${(error as Error).message}`))
         return
       }
       const next = eventToAccelerator(e)
@@ -77,17 +94,21 @@ export function ShortcutSetupStep({
         return
       }
       void (async () => {
-        const ok = await window.omiOverlay?.setAccelerator(next)
-        if (ok) {
-          setAccel(next)
-          setPreferences({ overlayShortcut: next })
-          setWorked(false)
-          setError(null)
-          setRecording(false)
-        } else {
-          // Another app already owns it (registration failed; main rolled back).
-          setError('That shortcut is already in use — try another.')
-          setRecording(false)
+        try {
+          const ok = await overlay.setAccelerator(next)
+          if (ok) {
+            setAccel(next)
+            setPreferences({ overlayShortcut: next })
+            setWorked(false)
+            setError(null)
+            setRecording(false)
+          } else {
+            // Another app already owns it (registration failed; main rolled back).
+            setError('That shortcut is already in use — try another.')
+            setRecording(false)
+          }
+        } catch (error) {
+          setError(`Couldn't save this shortcut: ${(error as Error).message}`)
         }
       })()
     }
@@ -95,11 +116,15 @@ export function ShortcutSetupStep({
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [recording])
 
-  const startCustom = (): void => {
+  const startCustom = async (): Promise<void> => {
     setError(null)
     setWorked(false)
-    window.omiOverlay?.suspendShortcut()
-    setRecording(true)
+    try {
+      await overlay.suspendShortcut()
+      setRecording(true)
+    } catch (error) {
+      setError(`Couldn't record a shortcut: ${(error as Error).message}`)
+    }
   }
 
   // Leaving the step — via Continue or Skip — always persists the current
@@ -162,7 +187,7 @@ export function ShortcutSetupStep({
         <p className="text-sm leading-relaxed text-white">Choose a different shortcut</p>
         <button
           type="button"
-          onClick={startCustom}
+          onClick={() => void startCustom()}
           disabled={recording}
           className={
             'rounded-xl border border-white/10 px-5 py-2.5 text-sm font-medium transition-colors ' +

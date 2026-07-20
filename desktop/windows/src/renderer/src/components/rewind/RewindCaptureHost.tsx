@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RewindSettings } from '../../../../shared/types'
+import { toast } from '../../lib/toast'
 
 // Cap the longest sampled edge — plenty for a timeline + OCR, and keeps each
 // canvas grab + JPEG encode cheap.
@@ -16,6 +17,7 @@ const JPEG_QUALITY = 0.6
  * which stalled the whole system when polled.
  */
 export function RewindCaptureHost(): React.JSX.Element {
+  const tauri = '__TAURI_INTERNALS__' in window
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -25,9 +27,12 @@ export function RewindCaptureHost(): React.JSX.Element {
 
   // Load settings once, then react to changes pushed from the Settings page.
   useEffect(() => {
-    void window.omi.rewindGetSettings().then(setSettings)
+    if (tauri) return
+    void window.omi.rewindGetSettings().then(setSettings).catch((error: Error) => {
+      toast('Could not load Rewind settings', { tone: 'error', body: error.message })
+    })
     return window.omi.onRewindSettings(setSettings)
-  }, [])
+  }, [tauri])
 
   useEffect(() => {
     const enabled = !!settings?.captureEnabled
@@ -75,7 +80,7 @@ export function RewindCaptureHost(): React.JSX.Element {
           }
         }
       } catch (e) {
-        console.error('[rewind] sample failed:', (e as Error).message)
+        toast('Rewind capture failed', { tone: 'error', body: (e as Error).message })
       } finally {
         if (!cancelled) timerRef.current = setTimeout(() => void grabAndSchedule(), intervalMs)
       }
@@ -118,7 +123,7 @@ export function RewindCaptureHost(): React.JSX.Element {
         }
         timerRef.current = setTimeout(() => void grabAndSchedule(), intervalMs)
       } catch (e) {
-        console.error('[rewind] failed to start capture:', (e as Error).message)
+        toast('Rewind capture failed to start', { tone: 'error', body: (e as Error).message })
       }
     }
 
@@ -129,7 +134,9 @@ export function RewindCaptureHost(): React.JSX.Element {
       cancelled = true
       stop()
     }
-  }, [settings?.captureEnabled, settings?.intervalMs])
+  }, [settings?.captureEnabled, settings?.intervalMs, tauri])
+
+  if (tauri) return <></>
 
   return (
     <video

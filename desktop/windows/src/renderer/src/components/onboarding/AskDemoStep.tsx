@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { StepScaffold } from './StepScaffold'
 import macsImg from '../../assets/macs.png'
+import { overlay } from '../../lib/native'
 
 type AskDemoStepProps = {
   stepIndex: number
@@ -28,7 +29,7 @@ export function AskDemoStep({
 
   useEffect(() => {
     // The bar should already be enabled/warm from earlier steps; ensure it.
-    window.omiOverlay?.setEnabled(true)
+    void overlay.setEnabled(true)
     const id = requestAnimationFrame(() => setRevealed(true))
     return () => cancelAnimationFrame(id)
   }, [])
@@ -37,7 +38,7 @@ export function AskDemoStep({
     <StepScaffold
       stepIndex={stepIndex}
       totalSteps={totalSteps}
-      title={'Type in the floating bar “Which computer should I buy?”'}
+      title={'Type in the Notch “Which computer should I buy?”'}
       align="center"
       widthClassName="max-w-[820px]"
       onContinue={onContinue}

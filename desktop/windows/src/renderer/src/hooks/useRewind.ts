@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RewindFrame, RewindSearchGroup } from '../../../shared/types'
 import { mergeFrames, isFollowingLive } from '../lib/rewindLive'
+import { rewind } from '../lib/native'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 // How often the open timeline polls for newly-captured frames.
@@ -31,11 +32,11 @@ export function useRewind(): RewindState {
   useEffect(() => { cursorRef.current = cursorTs }, [cursorTs])
 
   const reload = useCallback(async () => {
-    const b = await window.omi.rewindDayBounds()
+    const b = await rewind.dayBounds()
     setBounds(b)
     const to = b?.max ?? Date.now()
     const from = to - DAY_MS
-    const f = await window.omi.rewindFrames(from, to)
+    const f = await rewind.frames(from, to)
     setFrames(f)
     if (f.length > 0) setCursorTs(f[f.length - 1].ts)
   }, [])
@@ -52,14 +53,14 @@ export function useRewind(): RewindState {
   useEffect(() => {
     let alive = true
     const id = setInterval(async () => {
-      const b = await window.omi.rewindDayBounds()
+      const b = await rewind.dayBounds()
       if (!alive || !b) return
       // Keep the same object when unchanged so we don't re-render every tick.
       setBounds((prev) => (prev && prev.min === b.min && prev.max === b.max ? prev : b))
       const current = framesRef.current
       const haveMax = current.length > 0 ? current[current.length - 1].ts : 0
       if (b.max <= haveMax) return
-      const incoming = await window.omi.rewindFrames(haveMax + 1, b.max)
+      const incoming = await rewind.frames(haveMax + 1, b.max)
       if (!alive || incoming.length === 0) return
       const following = isFollowingLive(cursorRef.current, current)
       const merged = mergeFrames(current, incoming)
@@ -89,7 +90,7 @@ export function useRewind(): RewindState {
   }, [playing, frames])
 
   const search = useCallback(async (q: string) => {
-    setResults(await window.omi.rewindSearch(q))
+    setResults(await rewind.search(q))
   }, [])
 
   return {

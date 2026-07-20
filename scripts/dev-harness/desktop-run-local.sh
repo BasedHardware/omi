@@ -14,7 +14,8 @@ PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - <<'P
 from __future__ import annotations
 
 import os
-import platform
+import json
+import re
 import shlex
 import subprocess
 import sys
@@ -51,12 +52,16 @@ if user not in users:
     print("Next step: choose one of the seeded synthetic users, e.g. make desktop-run-local DESKTOP_USER=alice")
     raise SystemExit(1)
 
-run_sh = repo / "desktop" / "macos" / "run.sh"
-if not run_sh.is_file():
-    print(f"Cannot launch desktop local profile: missing {run_sh}")
+desktop_dir = repo / "desktop" / "windows"
+if not (desktop_dir / "package.json").is_file():
+    print(f"Cannot launch desktop local profile: missing {desktop_dir / 'package.json'}")
     raise SystemExit(1)
 
-profile = desktop_profile.resolve_profile(cfg, user=user, seeded_users=users, env=os.environ)
+profile_env = {
+    **os.environ,
+    "OMI_APP_NAME": os.environ.get("OMI_APP_NAME") or os.environ.get("DESKTOP_APP_NAME") or "omi-memory",
+}
+profile = desktop_profile.resolve_profile(cfg, user=user, seeded_users=users, env=profile_env)
 errors = desktop_profile.validate_profile(profile)
 if errors:
     print("Static local desktop profile safety scan failed:")
@@ -79,19 +84,54 @@ print(f"caches: {profile.caches_dir}")
 print(f"firebase_project: {profile.firebase_project_id}")
 print(f"auth_emulator: {profile.firebase_auth_emulator_host}")
 print(f"resolved_profile: {resolved_path}")
-print("Firebase Auth emulator bootstrap: scenario seed creates local_default_user, alice, and bob; this launch selects the requested USER and Swift signs in to the Auth emulator with the seeded synthetic email/password.")
+print("Firebase Auth emulator bootstrap: scenario seed creates local_default_user, alice, and bob; this launch uses the selected seeded email/password through the Tauri renderer.")
 print("Static safety scan: PASS (localhost endpoints, demo-omi-local, no provider credential env in resolved profile).")
 
-command = ["./run.sh"]
-env_prefix = " ".join(f"{key}={shlex.quote(value)}" for key, value in sorted(profile.env.items()))
+profile_root = cfg.layout.state_root / "desktop-tauri" / profile.app_name / profile.selected_user
+data_root = profile_root / "data"
+profile_root.mkdir(parents=True, exist_ok=True)
+data_root.mkdir(parents=True, exist_ok=True)
+user_suffix = re.sub(r"[^a-z0-9]+", "-", profile.selected_user.lower()).strip("-")
+if not user_suffix:
+    print(f"Cannot launch desktop local profile: selected user {profile.selected_user!r} cannot form a Tauri identifier.")
+    raise SystemExit(2)
+local_identifier = f"{profile.bundle_id}.{user_suffix}"
+tauri_config = profile_root / "tauri.local.conf.json"
+tauri_config.write_text(
+    json.dumps({"productName": f"{profile.app_name}-{profile.selected_user}", "identifier": local_identifier}),
+    encoding="utf-8",
+)
+local_env = {
+    **profile.env,
+    "OMI_DB_PATH": str(profile_root / "omi.db"),
+    "OMI_DATA_ROOT": str(data_root),
+    "VITE_OMI_DESKTOP_LOCAL_PROFILE": "1",
+    "VITE_OMI_API_BASE": profile.python_api_url,
+    "VITE_OMI_DESKTOP_API_BASE": profile.desktop_api_url,
+    "VITE_FIREBASE_API_KEY": profile.firebase_api_key,
+    "VITE_FIREBASE_AUTH_DOMAIN": f"{profile.firebase_project_id}.firebaseapp.com",
+    "VITE_FIREBASE_PROJECT_ID": profile.firebase_project_id,
+    "VITE_FIREBASE_AUTH_EMULATOR_HOST": profile.firebase_auth_emulator_host,
+    "VITE_OMI_LOCAL_AUTH_EMAIL": profile.selected_user_email,
+    "VITE_OMI_LOCAL_AUTH_PASSWORD": profile.selected_user_password,
+}
+command = ["bun", "run", "tauri", "dev", "--config", str(tauri_config)]
+env_prefix = " ".join(f"{key}={shlex.quote(value)}" for key, value in sorted(local_env.items()))
 print("Launch command:")
-print(f"  cd desktop/macos && {env_prefix} ./run.sh")
-
-if platform.system() != "Darwin":
-    print(f"Current platform is {platform.system()}, not macOS/Darwin; native Swift desktop build/launch is blocked here and intentionally not faked.")
-    raise SystemExit(0)
+print(f"  cd desktop/windows && {env_prefix} bun run tauri dev --config {shlex.quote(str(tauri_config))}")
 
 env = os.environ.copy()
-env.update(profile.env)
-subprocess.run(command, cwd=repo / "desktop" / "macos", env=env, check=True)
+for key in (
+    "OPENAI_API_KEY",
+    "DEEPGRAM_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENROUTER_API_KEY",
+    "GROQ_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+):
+    env.pop(key, None)
+env.update(local_env)
+subprocess.run(command, cwd=desktop_dir, env=env, check=True)
 PY

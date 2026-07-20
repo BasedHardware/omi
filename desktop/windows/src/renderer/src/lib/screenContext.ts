@@ -1,3 +1,5 @@
+import { screen } from './native'
+
 // Reads what's on screen RIGHT NOW for the chat: the current screen's OCR text
 // (main process hot cache), attached to EVERY message as ambient context so the
 // model can answer about the screen when it's relevant. The framing tells the model
@@ -21,7 +23,7 @@ const MAX_SCREEN_CHARS = 4000
 export async function readCurrentScreen(): Promise<string> {
   try {
     const text = await Promise.race([
-      window.omi.screenReadText(),
+      screen.readText(),
       new Promise<string>((resolve) => setTimeout(() => resolve(''), SCREEN_TIMEOUT_MS))
     ])
     const trimmed = (text ?? '').trim()

@@ -4,6 +4,7 @@ import type { Memory } from './useMemories'
 import { useKnowledgeGraph } from './useKnowledgeGraph'
 import { mergeGraphs, scopeGraphToMemories } from '../lib/mergeGraphs'
 import { USER_NODE_ID } from '../lib/onboardingGraphModel'
+import { native } from '../lib/native'
 
 const EMPTY: KnowledgeGraph = { nodes: [], edges: [] }
 
@@ -33,7 +34,7 @@ export function useMemoryGraph(memories: Memory[]): {
   // session) we must read it back from the onboarding_kg_* tables.
   useEffect(() => {
     let cancelled = false
-    window.omi
+    native
       .localGraphLoad()
       .then((g) => {
         if (!cancelled) setFloor(g)

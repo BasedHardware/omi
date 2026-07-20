@@ -82,8 +82,8 @@ struct ChatRunAccountingPolicy: Equatable {
   let recordsPersonalProviderUsage: Bool
 
   init(pinnedAdapterID: String) {
-    usesOmiAccountQuota = pinnedAdapterID == AgentAdapterId.piMono.rawValue
-    recordsPersonalProviderUsage = pinnedAdapterID == AgentAdapterId.acp.rawValue
+    usesOmiAccountQuota = pinnedAdapterID == AgentAdapterId.rx4.rawValue
+    recordsPersonalProviderUsage = false
   }
 }
 
@@ -1206,24 +1206,25 @@ class ChatProvider: ObservableObject {
   /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
   /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
   /// so comparing against it in switchBridgeMode() would always match → no-op.
-  private var activeBridgeHarness: String = "piMono"
+  private var activeBridgeHarness: String = "rx4"
   /// Orders rapid preference changes without treating them as runtime lifecycle.
   /// The kernel applies each preference only when creating future sessions.
   private var profilePreferenceChangeGeneration: UInt64 = 0
 
   enum BridgeMode: String {
+    case rx4
     case omiAI = "agentSDK"  // Legacy, auto-migrated to piMono
     case userClaude = "claudeCode"
     case piMono = "piMono"
     case hermes = "hermes"
     case openClaw = "openclaw"
   }
-  @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
+  @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.rx4.rawValue
 
   /// Future-session preference hint for startup/UI only. A live send must use
   /// `ChatRunAccountingPolicy` from its resolved immutable session profile.
   var isUsingOmiAccountProvider: Bool {
-    resolvedHarnessMode() == "piMono"
+    resolvedHarnessMode() == "rx4"
   }
 
   nonisolated static func harnessMode(for mode: BridgeMode) -> String {
@@ -1231,11 +1232,7 @@ class ChatProvider: ObservableObject {
   }
 
   private func resolvedHarnessMode() -> String {
-    if let override = bridgeHarnessOverride {
-      return override.rawValue
-    }
-    let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
-    return Self.harnessMode(for: BridgeMode(rawValue: mode) ?? .piMono)
+    AgentHarnessMode.rx4.rawValue
   }
 
   /// The legacy "$50 lifetime Omi AI spend" upgrade nudge (`showOmiThresholdAlert`)
@@ -1393,14 +1390,14 @@ class ChatProvider: ObservableObject {
     isRestoringDraft = false
     log("ChatProvider initialized, will start Claude bridge on first use")
 
-    // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
+    // Migrate legacy agent harness preferences to the sole Rust runtime.
     // Pre-6594 installs may have the old agentSDK tag saved; the settings
     // picker no longer offers it, so leaving it stored would leave the UI
     // in an inconsistent state.
     let stored = UserDefaults.standard.string(forKey: "chatBridgeMode")
-    if stored == BridgeMode.omiAI.rawValue {
-      UserDefaults.standard.set(BridgeMode.piMono.rawValue, forKey: "chatBridgeMode")
-      log("ChatProvider: migrated legacy agentSDK bridgeMode -> piMono")
+    if stored != BridgeMode.rx4.rawValue {
+      UserDefaults.standard.set(BridgeMode.rx4.rawValue, forKey: "chatBridgeMode")
+      log("ChatProvider: migrated legacy bridgeMode -> rx4")
     }
 
     // Observe changes to multiChatEnabled setting
@@ -1924,8 +1921,8 @@ class ChatProvider: ObservableObject {
 
   /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
   func switchBridgeMode(to mode: BridgeMode) async {
-    let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
-    let newHarness = Self.harnessMode(for: resolvedMode)
+    let resolvedMode: BridgeMode = .rx4
+    let newHarness = AgentHarnessMode.rx4.rawValue
     let previousHarness = activeBridgeHarness
     guard newHarness != previousHarness else { return }
     log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
@@ -1943,10 +1940,9 @@ class ChatProvider: ObservableObject {
       guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
       }
-      let usesNativeModelChoice = newHarness == "hermes" || newHarness == "openclaw"
       let configured = try await resolvedAgentClient().configureDefaultExecutionProfile(
         adapterId: adapterId,
-        modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+        modelProfile: ModelQoS.Claude.chat,
         workingDirectory: effectiveAgentWorkingDirectory()
       )
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
@@ -5994,7 +5990,7 @@ class ChatProvider: ObservableObject {
         registerControlOnlyRuntime: {
           try await runtime.registerClient(
             clientId: probeClientID,
-            harnessMode: "piMono",
+            harnessMode: "rx4",
             authorizationSnapshot: authorization)
         },
         synchronizeOwner: {

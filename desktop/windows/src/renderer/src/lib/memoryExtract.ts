@@ -1,17 +1,5 @@
-// LLM-based memory-log extraction — the faithful port of the macOS desktop's
-// OnboardingMemoryLogImportService. The desktop sends the pasted export to its
-// AgentBridge (harness "piMono"), which authenticates a Firebase ID token
-// against POST /v2/chat/completions on the Rust desktop-backend and runs the
-// Claude "synthesis" model. We reproduce that transport directly: `desktopApi`
-// already targets VITE_OMI_DESKTOP_API_BASE and attaches the Firebase token, so
-// a single OpenAI-shaped chat/completions call gets us the same result without
-// the Node agent subprocess (which only exists for tool-using chat).
-import { desktopApi } from './apiClient'
+import { callAgentLLM } from './agentLLM'
 import { extractJSONObject } from './extractJson'
-
-// ModelQoS.Claude.synthesis on desktop — the cheap extraction tier used for
-// calendar/gmail/notes/memory-import synthesis tasks.
-const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001'
 
 // Verbatim from the desktop's bridge.query systemPrompt.
 const SYSTEM_PROMPT =
@@ -97,23 +85,7 @@ export async function extractMemories(
   const trimmed = rawText.trim()
   if (!trimmed) return { memories: [], profile: '' }
 
-  // Synthesis over up to 40k chars can exceed the default 12s client timeout.
-  const res = await desktopApi.post(
-    '/v2/chat/completions',
-    {
-      model: SYNTHESIS_MODEL,
-      stream: false,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildImportPrompt(trimmed, source, existing) }
-      ]
-    },
-    { timeout: 60_000 }
-  )
-
-  const content: string =
-    (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-      ?.content ?? ''
+  const content = await callAgentLLM(`${SYSTEM_PROMPT}\n\n${buildImportPrompt(trimmed, source, existing)}`)
   const parsed = JSON.parse(extractJSONObject(content)) as {
     memories?: unknown
     profile?: unknown

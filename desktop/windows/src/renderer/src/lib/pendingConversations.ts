@@ -22,9 +22,11 @@ export function createPendingConversation(segments: TranscriptLine[]): void {
   const transcript = segmentsToTranscript(segments)
   if (!transcript) return
   const id = addPendingConversation(transcript)
-  void generateConversationTopic(transcript).then((t) => {
-    if (!t) return
-    setPendingTopic(id, t.title, t.emoji) // the Conversations list
-    liveConversation.setSavedTopic(t.title, t.emoji) // the live view header
-  })
+  void generateConversationTopic(transcript)
+    .then((t) => {
+      if (!t) return
+      setPendingTopic(id, t.title, t.emoji)
+      liveConversation.setSavedTopic(t.title, t.emoji)
+    })
+    .catch((error) => console.warn('[conversations] topic generation failed', error))
 }

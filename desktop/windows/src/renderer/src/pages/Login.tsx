@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { signInWithGoogle } from '../lib/firebase'
+import { signInWithDesktopGoogle } from '../lib/firebase'
 import omiLogo from '../assets/omilogo.png'
 
 export function Login(): React.JSX.Element {
@@ -9,7 +9,7 @@ export function Login(): React.JSX.Element {
     if (signing) return
     setSigning(true)
     try {
-      const user = await signInWithGoogle()
+      const user = await signInWithDesktopGoogle()
       console.log('Signed in as', user.email)
     } catch (e) {
       console.error('Sign-in failed:', e)

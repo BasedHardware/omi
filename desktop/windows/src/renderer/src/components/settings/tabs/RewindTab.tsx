@@ -10,6 +10,7 @@ import type {
   ScreenSynthState,
   InsightSettings
 } from '../../../../../shared/types'
+import { insights as insightNative, rewind as rewindNative, screenSynth as screenSynthNative } from '../../../lib/native'
 
 // Preset cadences offered for proactive insights (minutes). Each run is a Gemini
 // call via Omi's proxy, so longer intervals mean less backend cost.
@@ -37,35 +38,39 @@ export function RewindTab(): React.JSX.Element {
   }
 
   useEffect(() => {
-    void window.omi.rewindGetSettings().then(setRewind)
-    void window.omi.screenSynthGetState().then(setScreenSynth)
-    void window.omi.insightGetSettings().then(setInsight)
+    void rewindNative.getSettings().then(setRewind)
+    void screenSynthNative.getState().then(setScreenSynth)
+    void insightNative.getSettings().then(setInsight)
   }, [])
 
-  const saveRewind = (next: RewindSettings): void => {
+  const saveRewind = async (next: RewindSettings): Promise<void> => {
+    if (next.captureEnabled && !rewind?.captureEnabled) {
+      const capability = await rewindNative.requestCapturePermission()
+      if (!capability.supported) return
+    }
     setRewind(next) // optimistic
-    void window.omi.rewindSetSettings(next).then(setRewind)
+    setRewind(await rewindNative.setSettings(next))
   }
   const addExcludedApp = (): void => {
     const name = newExcluded.trim()
     if (!rewind || !name) return
     setNewExcluded('')
     if (rewind.excludedApps.some((a) => a.toLowerCase() === name.toLowerCase())) return
-    saveRewind({ ...rewind, excludedApps: [...rewind.excludedApps, name] })
+    void saveRewind({ ...rewind, excludedApps: [...rewind.excludedApps, name] })
   }
   const removeExcludedApp = (app: string): void => {
     if (!rewind) return
-    saveRewind({ ...rewind, excludedApps: rewind.excludedApps.filter((a) => a !== app) })
+    void saveRewind({ ...rewind, excludedApps: rewind.excludedApps.filter((a) => a !== app) })
   }
   const patchScreenSynth = async (patch: Partial<ScreenSynthState>): Promise<void> => {
-    setScreenSynth(await window.omi.screenSynthSetState(patch))
+    setScreenSynth(await screenSynthNative.setState(patch))
   }
   const synthesizeNow = async (): Promise<void> => {
     await runScreenSynthesisOnce()
-    setScreenSynth(await window.omi.screenSynthGetState())
+    setScreenSynth(await screenSynthNative.getState())
   }
   const patchInsight = async (patch: Partial<InsightSettings>): Promise<void> => {
-    setInsight(await window.omi.insightSetSettings(patch))
+    setInsight(await insightNative.setSettings(patch))
   }
 
   // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
@@ -124,7 +129,7 @@ export function RewindTab(): React.JSX.Element {
         control={
           <Toggle
             on={!!rewind?.captureEnabled}
-            onChange={(on) => rewind && saveRewind({ ...rewind, captureEnabled: on })}
+            onChange={(on) => rewind && void saveRewind({ ...rewind, captureEnabled: on })}
             disabled={!rewind}
             label="Capture my screen"
           />
@@ -138,7 +143,7 @@ export function RewindTab(): React.JSX.Element {
         control={
           <select
             value={rewind?.intervalMs ?? 1000}
-            onChange={(e) => rewind && saveRewind({ ...rewind, intervalMs: Number(e.target.value) })}
+            onChange={(e) => rewind && void saveRewind({ ...rewind, intervalMs: Number(e.target.value) })}
             disabled={!rewind}
             className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-40"
           >
@@ -163,7 +168,7 @@ export function RewindTab(): React.JSX.Element {
               onChange={(e) => {
                 const days = Number(e.target.value)
                 if (rewind && Number.isFinite(days) && days >= 1)
-                  saveRewind({ ...rewind, retentionDays: days })
+                  void saveRewind({ ...rewind, retentionDays: days })
               }}
               disabled={!rewind}
               className="w-16 rounded-md bg-white/10 px-2 py-1.5 text-white focus:outline-none disabled:opacity-40"
@@ -316,7 +321,7 @@ export function RewindTab(): React.JSX.Element {
                 <option value="native" className="bg-neutral-900">Windows notification</option>
               </select>
             </label>
-            <button onClick={() => window.omi.insightTest()} className="btn-ghost self-start">
+            <button onClick={() => void insightNative.test()} className="btn-ghost self-start">
               Send a test notification
             </button>
             <textarea
