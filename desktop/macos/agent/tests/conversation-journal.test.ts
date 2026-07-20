@@ -409,14 +409,34 @@ describe("kernel conversation journal", () => {
     const stateDir = newStateDir();
     const store = new SqliteAgentStore({ stateDir, reconcileOnOpen: false });
     const fixture = insertSurface(store, "main_chat", "chat", "lost-terminal-ack");
-    const continuityKey = "logical-turn:lost-terminal-ack";
-    const userTurnId = `turn:${continuityKey}:user`;
-    const assistantTurnId = `turn:${continuityKey}:assistant`;
+    // Keep these identical to ChatProvider.messageIds(forAttemptId:): the
+    // attempt is the user identity and its `-assistant` suffix is the peer.
+    const attemptId = "RELAUNCH-PERSIST-1784573311";
+    const userTurnId = attemptId;
+    const assistantTurnId = `${attemptId}-assistant`;
+    const fullText = "RELAUNCH-PERSIST-1784573311";
+    const preservedSpawn = {
+      type: "agentSpawn" as const,
+      id: "lost-ack:spawn",
+      sessionId: fixture.sessionId,
+      runId: "run_lost_terminal_ack",
+      title: "Durable child",
+      objective: "Preserve the child card across terminal replay",
+    };
+    const terminalResource = {
+      id: "artifact:lost-terminal-ack",
+      origin: "generatedArtifact" as const,
+      title: "durable-result.txt",
+      state: "retained" as const,
+      artifactId: "artifact-lost-terminal-ack",
+      sessionId: fixture.sessionId,
+      runId: "run_lost_terminal_ack",
+    };
     const run = store.insertRun({
       sessionId: fixture.sessionId,
       runId: "run_lost_terminal_ack",
       clientId: "main-chat",
-      requestId: continuityKey,
+      requestId: attemptId,
       status: "succeeded",
       mode: "act",
     });
@@ -438,8 +458,8 @@ describe("kernel conversation journal", () => {
           surfaceKind: "main_chat",
           origin: "typed_chat" as const,
           status: "completed" as const,
-          content: "What survived the retry?",
-          contentBlocks: [{ type: "text" as const, id: "lost-ack:user", text: "What survived the retry?" }],
+          content: "Echo the durable nonce.",
+          contentBlocks: [{ type: "text" as const, id: "lost-ack:user", text: "Echo the durable nonce." }],
           createdAtMs: 10,
         },
         {
@@ -448,8 +468,11 @@ describe("kernel conversation journal", () => {
           surfaceKind: "main_chat",
           origin: "typed_chat" as const,
           status: "streaming" as const,
-          content: "",
-          contentBlocks: [],
+          content: "RELAUNCH-PERSIST-1",
+          contentBlocks: [
+            { type: "text" as const, id: "lost-ack:stream", text: "RELAUNCH-PERSIST-1" },
+            preservedSpawn,
+          ],
           producingRunId: run.runId,
           producingAttemptId: attempt.attemptId,
           createdAtMs: 11,
@@ -468,12 +491,13 @@ describe("kernel conversation journal", () => {
       producingRunId: run.runId,
       producingAttemptId: attempt.attemptId,
       disposition: "accept" as const,
-      content: "The canonical user and assistant turns.",
+      content: fullText,
       replaceContentBlocks: [{
         type: "text" as const,
         id: "lost-ack:assistant",
-        text: "The canonical user and assistant turns.",
+        text: fullText,
       }],
+      replaceResources: [terminalResource],
       nowMs: 12,
     };
     void terminalizeJournalTurn(store, terminalization); // terminal response lost after durable commit
@@ -484,25 +508,50 @@ describe("kernel conversation journal", () => {
     store.close();
 
     const relaunched = new SqliteAgentStore({ stateDir, reconcileOnOpen: false });
-    // `listJournalTurns` is an append-only revision replay (the streaming
-    // assistant revision is intentionally followed by its terminal revision).
-    // Durable logical rows live in `conversation_turns`; replay consumers
-    // upsert by turnId and therefore must still observe exactly one pair.
+    // Durable logical rows own canonical identity; revisions are deliberately
+    // append-only and must replay in sequence rather than through an ad hoc Map.
     expect(relaunched.allRows(
       "SELECT turn_id, role, status FROM conversation_turns WHERE conversation_id = ? ORDER BY turn_id",
       [fixture.conversationId],
     )).toEqual([
-      { turn_id: assistantTurnId, role: "assistant", status: "completed" },
       { turn_id: userTurnId, role: "user", status: "completed" },
+      { turn_id: assistantTurnId, role: "assistant", status: "completed" },
     ]);
     const replay = listJournalTurns(relaunched, {
       ownerId: fixture.ownerId,
       conversationId: fixture.conversationId,
     }).turns;
-    const canonicalReplay = new Map(replay.map((turn) => [turn.turnId, turn]));
-    expect(canonicalReplay.size).toBe(2);
-    expect(canonicalReplay.get(userTurnId)).toMatchObject({ role: "user", status: "completed" });
-    expect(canonicalReplay.get(assistantTurnId)).toMatchObject({ role: "assistant", status: "completed" });
+    expect(replay.map((turn) => [turn.turnId, turn.status])).toEqual([
+      [userTurnId, "completed"],
+      [assistantTurnId, "streaming"],
+      [assistantTurnId, "completed"],
+    ]);
+    const canonicalUser = relaunched.getRow(
+      "SELECT turn_id, role, status, content FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
+      [fixture.conversationId, userTurnId],
+    );
+    const canonicalAssistant = relaunched.getRow(
+      `SELECT turn_id, role, status, content, content_blocks_json, resources_json
+       FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?`,
+      [fixture.conversationId, assistantTurnId],
+    );
+    expect(canonicalUser).toMatchObject({
+      turn_id: userTurnId,
+      role: "user",
+      status: "completed",
+    });
+    expect(canonicalAssistant).toMatchObject({
+      turn_id: assistantTurnId,
+      role: "assistant",
+      status: "completed",
+      content: fullText,
+    });
+    expect(JSON.parse(String(canonicalAssistant.content_blocks_json))).toEqual([
+      { type: "text", id: "lost-ack:assistant", text: fullText },
+      preservedSpawn,
+    ]);
+    expect(JSON.parse(String(canonicalAssistant.resources_json))).toEqual([terminalResource]);
+    expect(String(canonicalAssistant.content)).not.toBe("RELAUNCH-PERSIST-1");
     relaunched.close();
   });
 
