@@ -296,7 +296,7 @@ struct SettingsContentView: View {
   @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
 
   // AI Chat settings
-  @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
+  @AppStorage("chatBridgeMode") var chatBridgeMode: String = "rx4"
   @AppStorage("realtimeOmniProvider") var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") var askModeEnabled = false
   @AppStorage("claudeMdEnabled") var claudeMdEnabled = true

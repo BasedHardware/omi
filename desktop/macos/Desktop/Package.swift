@@ -24,6 +24,10 @@ let package = Package(
     ),
   ],
   targets: [
+    .systemLibrary(
+      name: "omi_desktop_coreFFI",
+      path: "Generated/OmiDesktopCoreFFI"
+    ),
     .target(
       name: "ObjCExceptionCatcher",
       path: "ObjCExceptionCatcher",
@@ -68,6 +72,7 @@ let package = Package(
     .executableTarget(
       name: "Omi Computer",
       dependencies: [
+        "omi_desktop_coreFFI",
         "ObjCExceptionCatcher",
         "CWebP",
         "OmiSupport",
@@ -105,12 +110,16 @@ let package = Package(
       ],
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ],
+      linkerSettings: [
+        .unsafeFlags(["-L", "Generated/OmiDesktopCoreFFI", "-lomi_desktop_core"])
       ]
     ),
     .testTarget(
       name: "Omi ComputerTests",
       dependencies: [
         .target(name: "Omi Computer"),
+        "omi_desktop_coreFFI",
         "OmiSupport",
         "OmiTheme",
         "OmiWAL",
@@ -126,6 +135,9 @@ let package = Package(
       ],
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ],
+      linkerSettings: [
+        .unsafeFlags(["-L", "Generated/OmiDesktopCoreFFI", "-lomi_desktop_core"])
       ]
     ),
     .testTarget(
@@ -157,7 +169,7 @@ let package = Package(
       dependencies: [],
       path: "Tests/SemanticFeatureSentinels",
       swiftSettings: [
-        .unsafeFlags(["-strict-concurrency=complete"]),
+        .unsafeFlags(["-strict-concurrency=complete"])
       ]
     ),
   ],

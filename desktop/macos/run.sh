@@ -238,12 +238,6 @@ fi
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
-# Agent runtime source (staged into the app bundle at Resources/agent below).
-# Without this, `[ -d "$AGENT_DIR/dist" ]` tests an empty path and the agent
-# copy is silently skipped → app shows "AI components missing".
-AGENT_DIR="$SCRIPT_DIR/agent"
-AGENT_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/agent-node_modules"
-PI_MONO_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/pi-mono-extension-node_modules"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
@@ -442,6 +436,11 @@ sign_app_bundle() {
     fi
 
     substep "Using identity: $SIGN_IDENTITY"
+    local agent_runtime_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/omi-agent-runtime"
+    if [ -f "$agent_runtime_bin" ]; then
+        substep "Signing Rust agent runtime"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$agent_runtime_bin"
+    fi
     if [ "$sign_nested" = true ]; then
         if [ -d "$bundle/Contents/Frameworks/Sparkle.framework" ]; then
             substep "Signing Sparkle framework"
@@ -462,11 +461,6 @@ sign_app_bundle() {
         if [ -f "$bundle/Contents/Frameworks/libwebp.7.dylib" ]; then
             substep "Signing libwebp"
             codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
-        fi
-        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
-        if [ -f "$node_bin" ]; then
-            substep "Signing bundled node binary"
-            codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
         fi
     fi
 
@@ -903,9 +897,18 @@ else
     substep "Fast path: reusing installed bundle at $APP_PATH"
 fi
 
+step "Building Rust agent runtime..."
+cargo build --manifest-path "$SCRIPT_DIR/../Cargo.toml" -p omi-agent-runtime --locked
+AGENT_RUNTIME_BINARY="$SCRIPT_DIR/../target/debug/omi-agent-runtime"
+if [ ! -x "$AGENT_RUNTIME_BINARY" ]; then
+    echo "ERROR: Rust agent runtime missing at $AGENT_RUNTIME_BINARY" >&2
+    exit 1
+fi
+
 if [ "$FAST_BUNDLE" = "1" ]; then
+    "$SCRIPT_DIR/scripts/generate-desktop-core-bindings.sh"
     step "Building Swift app (swift build -c debug)..."
-    xcrun swift build -c debug --package-path Desktop
+    xcrun swift build -c debug --package-path Desktop -q
 
     step "Patching installed app executable..."
     PATCHED_BINARY="$(mktemp "$APP_PATH/Contents/MacOS/.omi-fast-executable.XXXXXX")"
@@ -914,6 +917,8 @@ if [ "$FAST_BUNDLE" = "1" ]; then
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$PATCHED_BINARY" 2>/dev/null || true
     rewrite_bundled_dylib_load_path "$PATCHED_BINARY" "libwebp.7.dylib"
     mv -f "$PATCHED_BINARY" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
+    cp -f "$AGENT_RUNTIME_BINARY" "$APP_PATH/Contents/Resources/Omi Computer_Omi Computer.bundle/omi-agent-runtime"
+    chmod +x "$APP_PATH/Contents/Resources/Omi Computer_Omi Computer.bundle/omi-agent-runtime"
     if [ "$LOCAL_PROFILE" = true ]; then
         EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
         omi_write_local_profile_env "$APP_PATH/Contents/Resources/.env"
@@ -926,37 +931,14 @@ if [ "$FAST_BUNDLE" = "1" ]; then
     sign_app_bundle "$APP_PATH" false
     reset_local_profile_keychain_state
 else
-step "Preparing agent runtime..."
-"$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
-
-step "Generating tool surfaces..."
-(
-  cd agent
-  NODE_BIN=""
-  for candidate in \
-    "../Desktop/Sources/Resources/node" \
-    "/opt/homebrew/opt/node@22/bin/node" \
-    "/usr/local/opt/node@22/bin/node" \
-    "$(command -v node 2>/dev/null || true)"; do
-    if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
-      NODE_BIN="$candidate"
-      break
-    fi
-  done
-  if [[ -z "$NODE_BIN" ]]; then
-    echo "ERROR: Node.js 22.6+ with --experimental-strip-types required for tool surface generation." >&2
-    exit 1
-  fi
-  "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs
-)
-
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then
     bash scripts/check_schema_docs.sh || substep "Schema docs check failed (non-fatal)"
 fi
 
+"$SCRIPT_DIR/scripts/generate-desktop-core-bindings.sh"
 step "Building Swift app (swift build -c debug)..."
-xcrun swift build -c debug --package-path Desktop
+xcrun swift build -c debug --package-path Desktop -q
 
 auth_debug "AFTER swift build: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
@@ -1042,43 +1024,10 @@ if [ -d "$RESOURCE_BUNDLE" ]; then
     macos_copy_tree "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
 fi
 
-substep "Copying agent"
-if [ -d "$AGENT_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
-    macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
-    cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
-    if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
-        echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
-        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
-        exit 1
-    fi
-    macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-    cp -f "$AGENT_DIR/src/runtime/node-tools.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-    cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-fi
-
-substep "Copying pi-mono-extension (for piMono harness)"
-PI_MONO_EXT_DIR="$(dirname "$0")/pi-mono-extension"
-if [ -d "$PI_MONO_EXT_DIR" ]; then
-    if [ ! -d "$PI_MONO_EXT_DIR/node_modules" ]; then
-        substep "Installing pi-mono-extension dependencies"
-        (cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)
-    fi
-    mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
-    cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
-        echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
-        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
-        exit 1
-    fi
-    macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
-else
-    echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
-fi
+substep "Copying Rust agent runtime"
+mkdir -p "$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle"
+cp -f "$AGENT_RUNTIME_BINARY" "$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/omi-agent-runtime"
+chmod +x "$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/omi-agent-runtime"
 
 substep "Copying .env.app"
 if [ "$LOCAL_PROFILE" = true ]; then

@@ -730,13 +730,13 @@ actor AgentBridge {
     }
   }
 
-  init(harnessMode: String = "piMono", runtime: AgentRuntimeProcess = .shared) {
+  init(harnessMode: String = "rx4", runtime: AgentRuntimeProcess = .shared) {
     self.harnessMode = harnessMode
     self.runtime = runtime
   }
 
-  private var isPiMonoHarness: Bool {
-    AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue
+  private var isManagedHarness: Bool {
+    AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.rx4.rawValue
   }
 
   private func captureAuthorization(
@@ -894,7 +894,7 @@ actor AgentBridge {
       authorizationSnapshot: authorizationSnapshot)
     let registeredThisCall = !registered || !processWasAlive
     let requiresManagedCredentials =
-      isPiMonoHarness
+      isManagedHarness
       && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
         requestedCredentials: requiresCredentials,
         isNonProduction: AppBuild.isNonProduction)
@@ -1012,7 +1012,7 @@ actor AgentBridge {
       authorizationSnapshot: authorizationSnapshot)
     await synchronizeRuntimeAuthority(
       authorizationSnapshot: authorizationSnapshot,
-      requiresCredentials: isPiMonoHarness)
+      requiresCredentials: isManagedHarness)
     try assertLifecycleFlightCurrent(
       id: flightID,
       generation: generation,
@@ -1026,7 +1026,7 @@ actor AgentBridge {
     guard
       status.isSynchronized(
         ownerID: ownerID,
-        requiresCredentials: isPiMonoHarness)
+        requiresCredentials: isManagedHarness)
     else {
       throw BridgeError.authMissing
     }
@@ -1174,7 +1174,7 @@ actor AgentBridge {
   ) async throws -> AgentDefaultExecutionProfile {
     let authorization = try captureAuthorization()
     try await start(authorizationSnapshot: authorization)
-    if adapterId == AgentAdapterId.piMono.rawValue {
+    if adapterId == AgentAdapterId.rx4.rawValue {
       ensureTokenRefreshTask(authorizationSnapshot: authorization)
       _ = try? await refreshAuthToken(authorizationSnapshot: authorization)
     }

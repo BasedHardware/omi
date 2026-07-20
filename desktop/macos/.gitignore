@@ -65,6 +65,8 @@ codex-proxy/target/
 local-asr-helper/target/
 local-asr-helper/Cargo.lock
 local-backend/target/
+Desktop/Generated/OmiDesktopCoreFFI/
+Desktop/Sources/Generated/OmiDesktopCore.swift
 
 # Generated browser snapshots (contain PII)
 *-snapshot.md

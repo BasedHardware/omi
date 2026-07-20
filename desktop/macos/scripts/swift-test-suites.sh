@@ -90,6 +90,7 @@ suite_count="${#suites[@]}"
 
 if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
   echo "Prebuilding Swift test bundle before parallel suite execution..."
+  "$SCRIPT_DIR/generate-desktop-core-bindings.sh"
   xcrun swift build --package-path "$PACKAGE_PATH" --build-tests
 fi
 

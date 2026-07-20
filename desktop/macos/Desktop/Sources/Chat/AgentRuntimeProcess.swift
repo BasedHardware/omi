@@ -2526,29 +2526,18 @@ actor AgentRuntimeProcess {
     negotiatedProtocolVersion = nil
     negotiatedRuntimeVersion = nil
 
-    guard let nodePath = findNodeBinary() else {
-      throw BridgeError.nodeNotFound
-    }
-    guard let bridgePath = findBridgeScript() else {
+    guard let runtimePath = findRuntimeBinary() else {
       throw BridgeError.bridgeScriptNotFound
     }
 
-    let nodeExists = FileManager.default.isExecutableFile(atPath: nodePath)
-    let bridgeExists = FileManager.default.fileExists(atPath: bridgePath)
-    let bridgeDir = (bridgePath as NSString).deletingLastPathComponent
-    let pkgJsonPath = ((bridgeDir as NSString).deletingLastPathComponent as NSString)
-      .appendingPathComponent("package.json")
-    let pkgJsonExists = FileManager.default.fileExists(atPath: pkgJsonPath)
     log(
-      "AgentRuntimeProcess: starting node=\(nodePath) (exists=\(nodeExists)), bridge=\(bridgePath) (exists=\(bridgeExists)), package.json=\(pkgJsonExists)"
+      "AgentRuntimeProcess: starting runtime=\(runtimePath) (executable=\(FileManager.default.isExecutableFile(atPath: runtimePath)))"
     )
 
     let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: nodePath)
-    proc.arguments = ["--max-old-space-size=256", "--max-semi-space-size=16", bridgePath]
+    proc.executableURL = URL(fileURLWithPath: runtimePath)
 
     var env = ProcessInfo.processInfo.environment
-    env["NODE_NO_WARNINGS"] = "1"
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env["OMI_AGENT_ARTIFACTS_DIR"] = Self.defaultArtifactsDirectory()
@@ -2559,7 +2548,6 @@ actor AgentRuntimeProcess {
     #endif
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
-    applyLocalAgentEnvironment(to: &env)
 
     let rustBase = await APIClient.shared.rustBackendURL
     try assertStartupAuthority(
@@ -2567,8 +2555,8 @@ actor AgentRuntimeProcess {
       expectedAuthorityEpoch: admissionAuthorityEpoch)
     if !rustBase.isEmpty {
       env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
-    } else if preferredAdapterId == .piMono {
-      log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
+    } else if preferredAdapterId == .rx4 {
+      log("AgentRuntimeProcess: rx4 start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
 
@@ -2588,18 +2576,18 @@ actor AgentRuntimeProcess {
           )
         }
       }
-      log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
+      log("AgentRuntimeProcess: rx4 BYOK active, forwarding \(byok.values.count) usable user keys")
     }
 
-    let requiresPiMonoCredentials =
-      preferredAdapterId == .piMono
+    let requiresManagedCredentials =
+      preferredAdapterId == .rx4
       && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
         requestedCredentials: requiresCredentials,
         isNonProduction: AppBuild.isNonProduction)
     let authService = await MainActor.run { AuthService.shared }
-    let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
+    let forceRefreshToken = preferredAdapterId == .rx4 && !DesktopLocalProfile.isEnabled
     let authHeader = try? await Self.startupAuthHeader(
-      requiresCredentials: requiresPiMonoCredentials,
+      requiresCredentials: requiresManagedCredentials,
       fetchAuthHeader: {
         try await authService.getAuthHeader(
           forceRefresh: forceRefreshToken,
@@ -2612,17 +2600,11 @@ actor AgentRuntimeProcess {
       let token = Self.bearerToken(from: authHeader)
     {
       env["OMI_AUTH_TOKEN"] = token
-    } else if requiresPiMonoCredentials {
-      log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
+    } else if requiresManagedCredentials {
+      log("AgentRuntimeProcess: rx4 start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
-    } else if preferredAdapterId == .piMono {
+    } else if preferredAdapterId == .rx4 {
       log("AgentRuntimeProcess: starting non-production control-only runtime without Firebase auth")
-    }
-
-    let nodeDir = (nodePath as NSString).deletingLastPathComponent
-    let existingPath = env["PATH"] ?? "/usr/bin:/bin"
-    if !existingPath.contains(nodeDir) {
-      env["PATH"] = "\(nodeDir):\(existingPath)"
     }
 
     let defaults = UserDefaults.standard
@@ -4158,95 +4140,18 @@ actor AgentRuntimeProcess {
     return candidates
   }
 
-  private func findNodeBinary() -> String? {
+  private func findRuntimeBinary() -> String? {
     let bundleURLs =
       [Bundle.main.bundleURL]
       + Bundle.allBundles.map(\.bundleURL)
       + Bundle.allFrameworks.map(\.bundleURL)
-    for bundledNode in Self.runtimeResourceExecutableCandidates(
-      named: "node",
+    for bundledRuntime in Self.runtimeResourceExecutableCandidates(
+      named: "omi-agent-runtime",
       bundleURLs: bundleURLs,
       executableURL: Bundle.main.executableURL
-    ) where FileManager.default.isExecutableFile(atPath: bundledNode) {
-      return bundledNode
+    ) where FileManager.default.isExecutableFile(atPath: bundledRuntime) {
+      return bundledRuntime
     }
-
-    let candidates = [
-      "/opt/homebrew/bin/node",
-      "/usr/local/bin/node",
-      "/usr/bin/node",
-    ]
-    for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
-      return path
-    }
-
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let nvmDir = (home as NSString).appendingPathComponent(".nvm/versions/node")
-    if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmDir) {
-      let sorted = versions.sorted { lhs, rhs in
-        lhs.compare(rhs, options: .numeric) == .orderedDescending
-      }
-      for version in sorted {
-        let nodePath = (nvmDir as NSString).appendingPathComponent("\(version)/bin/node")
-        if FileManager.default.isExecutableFile(atPath: nodePath) {
-          return nodePath
-        }
-      }
-    }
-
-    let whichProcess = Process()
-    whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-    whichProcess.arguments = ["node"]
-    let pipe = Pipe()
-    whichProcess.standardOutput = pipe
-    try? whichProcess.run()
-    whichProcess.waitUntilExit()
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-      !path.isEmpty,
-      FileManager.default.isExecutableFile(atPath: path)
-    {
-      return path
-    }
-
-    return nil
-  }
-
-  private func findBridgeScript() -> String? {
-    if let bundlePath = Bundle.main.resourcePath {
-      let bundledScript = (bundlePath as NSString).appendingPathComponent("agent/dist/index.js")
-      if FileManager.default.fileExists(atPath: bundledScript) {
-        return bundledScript
-      }
-    }
-
-    if let execDir = Bundle.main.executableURL?.deletingLastPathComponent() {
-      let devPaths = [
-        execDir.appendingPathComponent("../../../agent/dist/index.js").path,
-        execDir.appendingPathComponent("../../../../agent/dist/index.js").path,
-      ]
-      for path in devPaths {
-        let resolved = (path as NSString).standardizingPath
-        if FileManager.default.fileExists(atPath: resolved) {
-          return resolved
-        }
-      }
-    }
-
-    let cwdPath = FileManager.default.currentDirectoryPath
-    let cwdCandidates = [
-      "agent/dist/index.js",
-      "desktop/agent/dist/index.js",
-      "../desktop/agent/dist/index.js",
-    ]
-    for relativePath in cwdCandidates {
-      let candidate = (cwdPath as NSString).appendingPathComponent(relativePath)
-      let resolved = (candidate as NSString).standardizingPath
-      if FileManager.default.fileExists(atPath: resolved) {
-        return resolved
-      }
-    }
-
     return nil
   }
 }

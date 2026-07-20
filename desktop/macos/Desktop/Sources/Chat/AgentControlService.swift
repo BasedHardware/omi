@@ -72,8 +72,7 @@ final class AgentControlService {
   }
 
   static func currentHarnessMode() -> String {
-    let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-    return mode == "piMono" ? "piMono" : "acp"
+    AgentHarnessMode.rx4.rawValue
   }
 
   func logDetail(name: String, arguments: [String: Any]) -> String {

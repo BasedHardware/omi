@@ -589,23 +589,23 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(receipt?.payload["invalidatedBindingIds"] as? [String], ["binding-1"])
   }
 
-  func testRuntimeNodeResourceLookupSupportsAppAndSwiftPMTestLayoutsWithoutFatalAccessor() {
+  func testRuntimeBinaryResourceLookupSupportsAppAndSwiftPMTestLayoutsWithoutFatalAccessor() {
     let appBundle = URL(fileURLWithPath: "/Applications/omi-test.app")
     let testBundle = URL(fileURLWithPath: "/tmp/debug/Omi ComputerPackageTests.xctest")
     let executable =
       testBundle
       .appendingPathComponent("Contents/MacOS/Omi ComputerPackageTests")
     let candidates = AgentRuntimeProcess.runtimeResourceExecutableCandidates(
-      named: "node",
+      named: "omi-agent-runtime",
       bundleURLs: [appBundle, testBundle],
       executableURL: executable)
 
     XCTAssertTrue(
       candidates.contains(
-        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/node"))
+        "/Applications/omi-test.app/Contents/Resources/Omi Computer_Omi Computer.bundle/omi-agent-runtime"))
     XCTAssertTrue(
       candidates.contains(
-        "/tmp/debug/Omi Computer_Omi Computer.bundle/node"))
+        "/tmp/debug/Omi Computer_Omi Computer.bundle/omi-agent-runtime"))
     XCTAssertFalse(candidates.isEmpty)
   }
 

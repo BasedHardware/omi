@@ -333,15 +333,14 @@ enum TaskChatRuntime {
     runMode: String,
     workspacePath: String
   ) throws -> QueryRouting {
-    let preference = ChatProvider.BridgeMode(rawValue: bridgePreference ?? "piMono") ?? .piMono
+    let preference = ChatProvider.BridgeMode(rawValue: bridgePreference ?? "rx4") ?? .rx4
     let harness = ChatProvider.harnessMode(for: preference)
     guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(harness)")
     }
-    let usesNativeModelChoice = harness == "hermes" || harness == "openclaw"
     return QueryRouting(
       adapterId: adapterId,
-      modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+      modelProfile: ModelQoS.Claude.chat,
       workingDirectory: workspacePath.isEmpty
         ? AgentRuntimeProcess.defaultArtifactsDirectory()
         : workspacePath,
@@ -430,8 +429,8 @@ enum TaskChatRuntime {
   private static func sharedBridge() async throws -> AgentBridge {
     if let agentBridge { return agentBridge }
 
-    let mode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
-    let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
+    let mode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "rx4"
+    let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .rx4)
     let bridge = AgentClient.makeBridge(harnessMode: harness)
     agentBridge = bridge
     log("TaskChatRuntime: shared task-chat bridge initialized")

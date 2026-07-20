@@ -68,6 +68,7 @@ case "${1:-}" in
     select_toolchain
     cd "$MACOS_DIR"
     rm -rf Desktop/.build
+    ./scripts/generate-desktop-core-bindings.sh
     xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
     ;;
   *)

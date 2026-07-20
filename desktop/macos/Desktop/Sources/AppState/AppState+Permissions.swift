@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+@preconcurrency import ApplicationServices
 import Combine
 import SwiftUI
 @preconcurrency import UserNotifications

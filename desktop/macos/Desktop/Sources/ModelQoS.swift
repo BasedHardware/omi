@@ -35,27 +35,29 @@ struct ModelQoS {
 
   struct Claude {
     /// Main chat session model (user-facing conversations)
-    static var chat: String { "claude-sonnet-4-6" }
+    static var chat: String { modelIdFor(tier: activeTier.rawValue, workload: .claudeChat) }
 
     /// Floating bar responses
-    static var floatingBar: String { "claude-sonnet-4-6" }
+    static var floatingBar: String { modelIdFor(tier: activeTier.rawValue, workload: .claudeFloatingBar) }
 
     /// Synthesis extraction tasks (calendar, gmail, notes, memory import)
-    static var synthesis: String { "claude-haiku-4-5-20251001" }
+    static var synthesis: String { modelIdFor(tier: activeTier.rawValue, workload: .claudeSynthesis) }
 
     /// ChatLab test queries
-    static var chatLabQuery: String { "claude-sonnet-4-20250514" }
+    static var chatLabQuery: String { modelIdFor(tier: activeTier.rawValue, workload: .claudeChatLabQuery) }
 
     /// ChatLab grading (always cheap)
-    static var chatLabGrade: String { "claude-haiku-4-5-20251001" }
+    static var chatLabGrade: String { modelIdFor(tier: activeTier.rawValue, workload: .claudeChatLabGrade) }
 
     /// Available models shown in the UI picker
     static var availableModels: [(id: String, label: String)] {
-      [("claude-sonnet-4-6", "Sonnet")]
+      [(defaultSelection, "Sonnet")]
     }
 
     /// Default model for user selection (floating bar / shortcut picker)
-    static var defaultSelection: String { "claude-sonnet-4-6" }
+    static var defaultSelection: String {
+      modelIdFor(tier: activeTier.rawValue, workload: .claudeDefaultSelection)
+    }
 
     /// Sanitize a persisted model ID against the current tier's allowed list.
     /// Returns the saved model if it's still available, otherwise falls back to defaultSelection.
@@ -74,39 +76,27 @@ struct ModelQoS {
   struct Gemini {
     /// Proactive assistants (screenshot analysis, context detection)
     static var proactive: String {
-      switch activeTier {
-      case .premium: return "gemini-2.5-flash"
-      case .max: return "gemini-2.5-pro"
-      }
+      modelIdFor(tier: activeTier.rawValue, workload: .geminiProactive)
     }
 
     /// Task extraction
     static var taskExtraction: String {
-      switch activeTier {
-      case .premium: return "gemini-2.5-flash"
-      case .max: return "gemini-2.5-pro"
-      }
+      modelIdFor(tier: activeTier.rawValue, workload: .geminiTaskExtraction)
     }
 
     /// Insight generation
     static var insight: String {
-      switch activeTier {
-      case .premium: return "gemini-2.5-flash"
-      case .max: return "gemini-2.5-pro"
-      }
+      modelIdFor(tier: activeTier.rawValue, workload: .geminiInsight)
     }
 
     /// Embeddings (not tier-dependent, kept separate)
-    static var embedding: String { "gemini-embedding-001" }
+    static var embedding: String { modelIdFor(tier: activeTier.rawValue, workload: .geminiEmbedding) }
   }
 
   // MARK: - Tier Info (for UI / debugging)
 
   static var tierDescription: String {
-    switch activeTier {
-    case .premium: return "Premium (cost-optimized)"
-    case .max: return "Max (quality-optimized)"
-    }
+    tierDescriptionFor(tier: activeTier.rawValue)
   }
 }
 

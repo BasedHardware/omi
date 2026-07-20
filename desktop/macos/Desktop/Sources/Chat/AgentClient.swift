@@ -408,11 +408,11 @@ enum AgentClient {
     }
   }
 
-  static func makeSession(harnessMode: String = "piMono") -> Session {
+  static func makeSession(harnessMode: String = "rx4") -> Session {
     Session(harnessMode: harnessMode)
   }
 
-  static func makeBridge(harnessMode: String = "piMono") -> AgentBridge {
+  static func makeBridge(harnessMode: String = "rx4") -> AgentBridge {
     AgentBridge(harnessMode: harnessMode)
   }
 
@@ -421,7 +421,7 @@ enum AgentClient {
     prompt: String,
     model: String? = nil,
     systemPrompt: String = "You are a helpful assistant.",
-    harnessMode: String = "piMono",
+    harnessMode: String = "rx4",
     mode: String? = nil,
     cwd: String? = nil,
     onTextDelta: @escaping TextDeltaHandler = { _ in },

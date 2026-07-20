@@ -14,10 +14,33 @@ pub enum ModelTier {
     Max,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(any(target_os = "macos", target_os = "linux"), derive(eqswift::Enum))]
+pub enum ModelWorkload {
+    ClaudeChat,
+    ClaudeFloatingBar,
+    ClaudeSynthesis,
+    ClaudeChatLabGrade,
+    ClaudeChatLabQuery,
+    ClaudeDefaultSelection,
+    GeminiEmbedding,
+    GeminiProactive,
+    GeminiTaskExtraction,
+    GeminiInsight,
+}
+
 impl ModelTier {
     fn from_env() -> Self {
         match std::env::var("OMI_MODEL_TIER").as_deref() {
             Ok("max") => Self::Max,
+            _ => Self::Premium,
+        }
+    }
+
+    /// Resolves a persisted tier value, defaulting to the cost-optimized tier.
+    pub fn from_persisted(value: &str) -> Self {
+        match value {
+            "max" => Self::Max,
             _ => Self::Premium,
         }
     }
@@ -159,17 +182,42 @@ pub const fn daily_hard_limit() -> u32 {
 
 /// Returns the human-readable active tier description.
 pub fn tier_description() -> &'static str {
-    match active_tier() {
+    tier_description_for(active_tier())
+}
+
+/// Returns the human-readable description for a tier.
+pub const fn tier_description_for(tier: ModelTier) -> &'static str {
+    match tier {
         ModelTier::Premium => "Premium (cost-optimized)",
         ModelTier::Max => "Max (quality-optimized)",
+    }
+}
+
+/// Returns the stable model identifier for one product workload.
+pub const fn model_id_for(tier: ModelTier, workload: ModelWorkload) -> &'static str {
+    match workload {
+        ModelWorkload::ClaudeChat
+        | ModelWorkload::ClaudeFloatingBar
+        | ModelWorkload::ClaudeDefaultSelection => "claude-sonnet-4-6",
+        ModelWorkload::ClaudeSynthesis | ModelWorkload::ClaudeChatLabGrade => {
+            "claude-haiku-4-5-20251001"
+        }
+        ModelWorkload::ClaudeChatLabQuery => "claude-sonnet-4-20250514",
+        ModelWorkload::GeminiEmbedding => "gemini-embedding-001",
+        ModelWorkload::GeminiProactive
+        | ModelWorkload::GeminiTaskExtraction
+        | ModelWorkload::GeminiInsight => match tier {
+            ModelTier::Premium => "gemini-2.5-flash",
+            ModelTier::Max => "gemini-2.5-pro",
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        daily_hard_limit, daily_soft_limit_for, resolve_route, rewrite_preview_model,
-        BodyTransform, ModelTier, Provider, ResponseTransform,
+        daily_hard_limit, daily_soft_limit_for, model_id_for, resolve_route, rewrite_preview_model,
+        BodyTransform, ModelTier, ModelWorkload, Provider, ResponseTransform,
     };
 
     #[test]
@@ -201,5 +249,53 @@ mod tests {
     fn soft_limits_should_stay_below_the_hard_limit() {
         assert!(daily_soft_limit_for(ModelTier::Premium) < daily_hard_limit());
         assert!(daily_soft_limit_for(ModelTier::Max) < daily_hard_limit());
+    }
+
+    #[test]
+    fn model_ids_should_match_tier_and_workload_policy() {
+        assert_eq!(
+            model_id_for(ModelTier::Premium, ModelWorkload::ClaudeChat),
+            "claude-sonnet-4-6"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Premium, ModelWorkload::ClaudeFloatingBar),
+            "claude-sonnet-4-6"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Premium, ModelWorkload::ClaudeDefaultSelection),
+            "claude-sonnet-4-6"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Premium, ModelWorkload::ClaudeChatLabGrade),
+            "claude-haiku-4-5-20251001"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Premium, ModelWorkload::GeminiProactive),
+            "gemini-2.5-flash"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Premium, ModelWorkload::GeminiTaskExtraction),
+            "gemini-2.5-flash"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Premium, ModelWorkload::GeminiInsight),
+            "gemini-2.5-flash"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Max, ModelWorkload::GeminiProactive),
+            "gemini-2.5-pro"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Premium, ModelWorkload::GeminiEmbedding),
+            "gemini-embedding-001"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Max, ModelWorkload::ClaudeSynthesis),
+            "claude-haiku-4-5-20251001"
+        );
+        assert_eq!(
+            model_id_for(ModelTier::Max, ModelWorkload::ClaudeChatLabQuery),
+            "claude-sonnet-4-20250514"
+        );
     }
 }
