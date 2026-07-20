@@ -1,4 +1,5 @@
 use omi_agent_runtime::provider_policy::ManagedTransport;
+use omi_agent_runtime::tool_relay::ToolRelay;
 use omi_agent_runtime::{
     emit_line, parse_line, select_execution_mode, ExecutionMode, Message, PROTOCOL_VERSION,
 };
@@ -69,6 +70,7 @@ struct Runtime {
     owner_id: Option<String>,
     last_revocation: Option<OwnerRevocationReceipt>,
     journal: JournalStore,
+    tool_relay: ToolRelay,
     output: mpsc::UnboundedSender<Message>,
     completed: mpsc::UnboundedSender<String>,
 }
@@ -92,6 +94,7 @@ impl Runtime {
             owner_id: None,
             last_revocation: None,
             journal,
+            tool_relay: ToolRelay::new(),
             output,
             completed,
         }
@@ -128,6 +131,9 @@ impl Runtime {
             "journal_terminalize_turn" => self.journal_terminalize_turn(input.fields),
             "journal_list_turns" => self.journal_list_turns(input.fields),
             "journal_clear_turns" => self.journal_clear_turns(input.fields),
+            "authorized_tool_execution_result" => {
+                self.authorized_tool_execution_result(input.fields)
+            }
             "query" => self.query(input.fields),
             "interrupt" => self.interrupt(input.fields),
             "stop" => self.stop(),
@@ -690,6 +696,20 @@ impl Runtime {
         }
     }
 
+    fn authorized_tool_execution_result(&mut self, fields: Map<String, Value>) {
+        match self.tool_relay.complete(&fields) {
+            Ok((completion, duplicate)) => self.emit(
+                "authorized_tool_result",
+                envelope(
+                    None,
+                    None,
+                    json!({"invocationId": completion["invocationId"], "outcome": completion["outcome"], "result": completion["result"], "duplicate": duplicate}),
+                ),
+            ),
+            Err(error) => self.emit_error(None, None, "invalid_request", &error),
+        }
+    }
+
     fn emit_journal_result(
         &self,
         operation: &str,
@@ -1003,6 +1023,18 @@ impl Runtime {
                 "invalid_request",
                 "query requestId is already running",
             );
+            return;
+        }
+        let profile_generation = self
+            .sessions
+            .get(&session_id)
+            .filter(|session| session.owner_id == credentials.owner_id)
+            .map_or(1, |session| session.profile.generation);
+        if let Err(error) =
+            self.journal
+                .admit_run(&credentials.owner_id, &session_id, profile_generation)
+        {
+            self.emit_error(Some(request_id), Some(client_id), "runtime_state", &error);
             return;
         }
 
