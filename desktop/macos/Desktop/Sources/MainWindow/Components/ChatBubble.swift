@@ -1028,12 +1028,21 @@ enum ContentBlockGroup: Identifiable {
 
 // MARK: - Tool Calls Group
 
+/// Keeps streamed tool groups compact until the reader explicitly asks for the details.
+enum ToolCallsGroupExpansionPolicy {
+  static let defaultExpandRunning = false
+
+  static func initiallyExpanded(hasRunningTool: Bool, expandRunning: Bool = defaultExpandRunning) -> Bool {
+    expandRunning && hasRunningTool
+  }
+}
+
 /// Renders a group of consecutive tool calls as a single summary line with
 /// optional expanded per-step details.
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
   var compact: Bool = false
-  var expandRunning: Bool = true
+  var expandRunning: Bool = ToolCallsGroupExpansionPolicy.defaultExpandRunning
   /// `ChatProvider` wires this to `agentBridge.interrupt()` via the
   /// parent message view. If no action is available, the banner is hidden
   /// so the UI never presents a no-op Cancel button.
@@ -1058,7 +1067,12 @@ struct ToolCallsGroup: View {
     self.onCancel = onCancel
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
-    self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
+    self._isExpanded = State(
+      initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded(
+        hasRunningTool: Self.hasRunningTool(in: calls),
+        expandRunning: expandRunning
+      )
+    )
   }
 
   /// Whether any tool in the group is still running.
