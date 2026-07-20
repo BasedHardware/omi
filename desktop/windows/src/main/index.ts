@@ -134,6 +134,7 @@ import { scheduleStartupSteps } from './startupScheduler'
 // `import.meta.env.DEV`, so this module is tree-shaken out of packaged main.
 import * as devBench from './dev/bench'
 import { initSentry, captureMessage } from './sentry'
+import { initMainLog } from './mainLog'
 import { registerMicPermissionHandlers } from './ipc/micPermission'
 import { initCrashSentinel, crashDetectedOnBoot, markCleanExit } from './crashSentinel'
 import { isQuitting, quitApp } from './lifecycle'
@@ -381,6 +382,13 @@ if (import.meta.env.DEV) devBench.applySandboxUserDataOverride()
 // harness's --user-data-dir) each get their own lock instead of contending.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
+
+// Tee main-process console output to a bounded file under userData/logs so
+// packaged-build failures (agent spawns, provider errors, service crashes) are
+// diagnosable from an installed app, where stdout is invisible. Gated on the
+// lock so a throwaway second-launch process doesn't write; after the sandbox
+// override above so dev worktrees log to their own profile. See mainLog.ts.
+if (gotSingleInstanceLock) initMainLog(app.getPath('userData'))
 
 // Wipe stale Chromium GPU/shader caches for THIS profile before the GPU process
 // opens them — a force-killed dev build corrupts them and the corruption poisons
