@@ -511,7 +511,7 @@ class TestStreamingFactoryRouting:
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
-            service, lang, model = get_stt_service_for_language('en')
+            service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
             assert service == STTService.parakeet
             assert model == 'parakeet'
 

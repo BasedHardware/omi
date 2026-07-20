@@ -17,7 +17,7 @@ def test_streaming_ignores_a_stale_deepgram_model_configuration(monkeypatch):
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.internal')
 
-    service, language, model = streaming.get_stt_service_for_language('en')
+    service, language, model = streaming.get_stt_service_for_language('en', multi_lang_enabled=False)
 
     assert service == streaming.STTService.parakeet
     assert language == 'en'

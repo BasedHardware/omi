@@ -3,7 +3,7 @@ import asyncio
 import json
 import time
 from collections import deque
-from typing import Any, Coroutine, Dict, List, Optional, Set, TypedDict, cast
+from typing import Any, Dict, List, Optional, TypedDict, cast
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -25,7 +25,7 @@ from utils.conversations.finalizer import (
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
-from utils.executors import db_executor, storage_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
 from utils.async_tasks import (
     supervise_tasks,
     drain_tasks,
@@ -90,32 +90,6 @@ def pusher_session_outcome(close_code: int, *, application_failed: bool = False)
     return 'cancelled'
 
 
-# Claimed finalization jobs are durable work owned by the Firestore job ledger,
-# not connection-scoped I/O. They run detached from the session's cancellable
-# task set so the origin listen socket closing right after the opcode-104
-# handoff cannot cancel them mid-lease and strand the job leased until lease
-# expiry (#9995).
-_detached_finalization_tasks: Set[asyncio.Task[Any]] = set()
-
-
-def _spawn_detached_finalization(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
-    task = asyncio.create_task(coro)
-    _detached_finalization_tasks.add(task)
-    PUSHER_DETACHED_FINALIZATION_TASKS.set(len(_detached_finalization_tasks))
-
-    def on_done(t: asyncio.Task[Any]) -> None:
-        _detached_finalization_tasks.discard(t)
-        PUSHER_DETACHED_FINALIZATION_TASKS.set(len(_detached_finalization_tasks))
-        if t.cancelled():
-            return
-        exc = t.exception()
-        if exc:
-            logger.error(f"Unhandled exception in detached finalization task: {exc}")
-
-    task.add_done_callback(on_done)
-    return task
-
-
 class _SpeakerSampleRequest(TypedDict):
     person_id: str
     conversation_id: str
@@ -161,9 +135,12 @@ async def _process_conversation_task(
         set_byok_uid(uid)
 
     async def send_result(result: Dict[str, Any]) -> None:
-        # Best-effort: the origin session may close at any point after the
-        # opcode-104 handoff. The job ledger is the durable outcome; a later
-        # session's re-request observes it via claim status.
+        """Attempt the optional live acknowledgement after durable work.
+
+        The Firestore finalization transition is authoritative. A listener can
+        close after handing opcode 104 to pusher, so a failed result write must
+        never turn an already-completed durable job into a worker failure.
+        """
         if (
             websocket.client_state != WebSocketState.CONNECTED
             or websocket.application_state != WebSocketState.CONNECTED
@@ -174,9 +151,9 @@ async def _process_conversation_task(
         data.extend(bytes(json.dumps(result), "utf-8"))
         try:
             await websocket.send_bytes(bytes(data))
-        except Exception:
+        except (RuntimeError, WebSocketDisconnect):
             logger.info(
-                'pusher finalization result not delivered (session closed) uid=%s conversation=%s',
+                'pusher finalization result undeliverable after source close uid=%s conversation=%s',
                 uid,
                 conversation_id,
             )
@@ -229,6 +206,9 @@ async def _process_conversation_task(
             return False
         return False
 
+    # In-flight finalization jobs run at process scope, detached from any live
+    # session; the gauge makes work still owned after a source close visible.
+    PUSHER_DETACHED_FINALIZATION_TASKS.inc()
     try:
         if not finalization_job_id or dispatch_generation is None:
             # Every finalization request must be mediated by the Firestore
@@ -311,9 +291,9 @@ async def _process_conversation_task(
         record_capture_finalization_terminal('success', claim.get('created_at'))
         await send_result({'conversation_id': conversation_id, 'success': True})
     except asyncio.CancelledError:
-        # Detached tasks are only cancelled at process shutdown. Requeue a held
-        # lease now instead of leaving the job leased until lease expiry; the
-        # lease-epoch guard makes this a no-op after completion.
+        # Process-scoped tasks are only cancelled by the shutdown drain. Requeue
+        # a held lease now instead of leaving the job leased until lease expiry;
+        # the lease-epoch guard makes this a no-op after completion.
         if job_id is not None and generation is not None and lease_epoch is not None:
             try:
                 await asyncio.shield(
@@ -353,6 +333,8 @@ async def _process_conversation_task(
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed', 'terminal': terminal})
         except Exception:
             pass
+    finally:
+        PUSHER_DETACHED_FINALIZATION_TASKS.dec()
 
 
 async def _websocket_util_trigger(
@@ -713,9 +695,11 @@ async def _websocket_util_trigger(
                     dispatch_generation = res.get('dispatch_generation')
                     if conversation_id:
                         logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
-                        # Detached on purpose: session cleanup must not cancel a
-                        # claimed finalization job (#9995).
-                        _spawn_detached_finalization(
+                        # Durable finalization already has a Firestore owner. It
+                        # must survive an originating listen socket close after
+                        # this handoff, so pusher owns it at process scope. Its
+                        # lifespan drains tracked tasks on process shutdown.
+                        start_background_task(
                             _process_conversation_task(
                                 uid,
                                 conversation_id,
@@ -724,7 +708,8 @@ async def _websocket_util_trigger(
                                 byok_keys,
                                 finalization_job_id if isinstance(finalization_job_id, str) else None,
                                 dispatch_generation if isinstance(dispatch_generation, int) else None,
-                            )
+                            ),
+                            name=f'pusher_finalization:{uid}:{conversation_id}',
                         )
                     continue
 
@@ -898,7 +883,6 @@ async def _websocket_util_trigger(
         shutdown_event.set()
         websocket_active = False
 
-        # Detached finalization tasks are deliberately absent here (#9995).
         all_to_cancel = [t for t in bg_main_tasks if not t.done()]
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
 

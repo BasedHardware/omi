@@ -1,3 +1,0 @@
-{
-  "change": "Fixed WiFi audio sync silently dropping audio after the first partial packet by tracking block boundaries across the whole stream"
-}

@@ -95,10 +95,11 @@
         "region": "us-central1",
         "build_context": ".",
         "platforms": ["linux/amd64"],
-        "flags": [],
+        "flags": ["--ingress=internal-and-cloud-load-balancing"],
         "runtime_secrets": {
-          "OPENAI_API_KEY": "OPENAI_API_KEY:latest"
-        }
+          "PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY": "PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY:latest"
+        },
+        "remove_runtime_secrets": ["OPENAI_API_KEY"]
       },
       "canary_component": "web/frontend/src/components/public-build-canary.tsx",
       "inputs": [

@@ -58,7 +58,7 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
-for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
+for _journey in ('chat_response', 'pusher_session', 'live_transcription', 'capture_finalization'):
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey)
     for _outcome in ('success', 'failure', 'cancelled', 'stale'):
         OMI_JOURNEY_TERMINAL_TOTAL.labels(journey=_journey, outcome=_outcome)

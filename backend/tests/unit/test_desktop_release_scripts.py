@@ -265,6 +265,8 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
     assert "automatic:" in workflow
     assert "DESKTOP_AUTO_BETA_ENABLED" in workflow
     assert "newest is $LATEST_TAG" in workflow
+    assert "git for-each-ref --count=1 --sort=-v:refname" in workflow
+    assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in workflow
     assert automatic_gate < candidate_download
 
 

@@ -13,6 +13,7 @@ from jsonschema import validate as validate_json_schema
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, PrivateAttr, ValidationError
 
+from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
 from utils.llm.gateway_resilience import gateway_circuit, gateway_transport_timeout, observe_gateway_first_byte
 from utils.llm.usage_tracker import get_current_context
@@ -24,6 +25,8 @@ DEFAULT_LLM_GATEWAY_URL = 'http://127.0.0.1:9080'
 LLM_GATEWAY_AUTO_LANE_PREFIX = 'omi:auto:'
 CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
 CHAT_AGENT_AUTO_LANE_ID = 'omi:auto:chat-agent'
+PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE = 'public_shared_conversation_chat'
+PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID = 'omi:auto:public-shared-conversation-chat'
 LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION'
@@ -37,6 +40,12 @@ GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
 StructuredOutput = TypeVar('StructuredOutput', bound=BaseModel)
 JsonDict = dict[str, Any]
 JsonList = list[Any]
+
+
+class PublicSharedConversationChatGatewayUnavailable(Exception):
+    """The gateway-only public shared-chat lane could not produce an answer."""
+
+    pass
 
 
 class GatewayContextChatOpenAI(ChatOpenAI):
@@ -157,6 +166,7 @@ def invoke_chat_structured_gateway(
     if not gateway_circuit.allow_request():
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='circuit_open')
         return None
+
     gateway_started_at = time.monotonic()
     try:
         with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
@@ -209,6 +219,80 @@ def invoke_chat_structured_gateway(
     except Exception:
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='unexpected_error')
         return None
+
+
+async def invoke_public_shared_conversation_chat_gateway(messages: list[dict[str, str]]) -> str:
+    """Invoke the dedicated non-streaming public shared-conversation lane.
+
+    This surface is deliberately gateway-only. Every transport, status, or
+    response-shape fault becomes a typed unavailable result for the public API;
+    it never constructs or invokes a direct provider client.
+    """
+
+    started_at = time.monotonic()
+    if not gateway_circuit.allow_request():
+        record_gateway_request_result(
+            feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+            outcome='error',
+            reason='circuit_open',
+            mode='gateway',
+        )
+        raise PublicSharedConversationChatGatewayUnavailable()
+
+    try:
+        async with get_llm_gateway_semaphore():
+            response = await get_llm_gateway_client().post(
+                f'{get_llm_gateway_base_url()}/v1/chat/completions',
+                headers=_gateway_headers(feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE),
+                json={
+                    'model': PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID,
+                    'messages': messages,
+                    'stream': False,
+                    'max_completion_tokens': 600,
+                    'metadata': {
+                        'omi_feature': PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+                        'prompt_version': 'public_shared_conversation_chat.v1',
+                        'parser_version': 'plain_text.v1',
+                    },
+                },
+            )
+        response.raise_for_status()
+        content = _extract_choice_content(response.json())
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError('gateway returned empty public shared-chat content')
+    except PublicSharedConversationChatGatewayUnavailable:
+        raise
+    except Exception as exc:
+        if isinstance(exc, (httpx.RequestError, httpx.TimeoutException)) or (
+            isinstance(exc, httpx.HTTPStatusError) and is_gateway_transport_status_code(exc.response.status_code)
+        ):
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(
+                feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+                started_at=started_at,
+                outcome='transport_failure',
+            )
+        record_gateway_request_result(
+            feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+            outcome='error',
+            reason='gateway_unavailable',
+            mode='gateway',
+        )
+        raise PublicSharedConversationChatGatewayUnavailable() from exc
+
+    gateway_circuit.record_transport_success()
+    observe_gateway_first_byte(
+        feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+        started_at=started_at,
+        outcome='success',
+    )
+    record_gateway_request_result(
+        feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+        outcome='success',
+        reason='ok',
+        mode='gateway',
+    )
+    return content.strip()
 
 
 def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str, mode: str | None = None) -> None:

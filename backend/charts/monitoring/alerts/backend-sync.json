@@ -148,7 +148,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "34",
-      "threshold": "2"
+      "threshold": "2",
+      "summary": "Omi API alert: Backend-sync - 4XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
@@ -157,7 +162,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "alert_identity": "cew97rzyegdtsa",
+      "component": "api",
+      "impact": "product"
     }
   },
   {
@@ -309,11 +317,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "34",
-      "threshold": "2"
+      "threshold": "2",
+      "summary": "Omi API alert: Backend-sync - 5XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
       "instatus_component": "api",
-      "severity": "critical"
+      "severity": "critical",
+      "alert_identity": "cew97uqu791q8a",
+      "component": "api",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -466,7 +482,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "31",
-      "threshold": "5 RPS"
+      "threshold": "5 RPS",
+      "summary": "Omi API alert: Backend-sync RPS is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -475,7 +496,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "alert_identity": "cew97d5vd0ttse",
+      "component": "api",
+      "impact": "infrastructure"
     }
   },
   {
@@ -623,7 +647,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "36",
-      "threshold": "20 instances (80% of max)"
+      "threshold": "20 instances (80% of max)",
+      "summary": "Omi API alert: Backend-sync instance count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -632,7 +661,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "alert_identity": "cew97x299of7kb",
+      "component": "api",
+      "impact": "infrastructure"
     }
   },
   {
@@ -788,7 +820,12 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "32",
-      "threshold": "30"
+      "threshold": "30",
+      "summary": "Omi API alert: Backend-sync max concurrent requests are high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
@@ -797,7 +834,10 @@
     "record": null,
     "labels": {
       "severity": "ticket",
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "alert_identity": "dew97fqr33oxsd",
+      "component": "api",
+      "impact": "infrastructure"
     }
   },
   {
@@ -900,10 +940,14 @@
     "keep_firing_for": "0s",
     "annotations": {
       "runbook": "backend/docs/runbooks/sync-dispatch-fallback.md",
-      "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus \u2014 use Cloud Logging",
+      "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus — use Cloud Logging",
       "threshold": "0.2 (20% enqueue uncertainty)",
       "__dashboardUid__": "omi-resilience-fallbacks",
-      "__panelId__": "3"
+      "__panelId__": "3",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
@@ -912,7 +956,10 @@
     "record": null,
     "labels": {
       "severity": "warning",
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "alert_identity": "bfobs1syncenq01",
+      "component": "api",
+      "impact": "product"
     }
   }
 ]

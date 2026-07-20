@@ -120,11 +120,14 @@ class Stack:
         *,
         finalization_mode: str = 'inline',
         finalizer_failures: dict[str, int] | None = None,
+        hold_inline_finalization: bool = False,
         rest_finalization_race_uid: str | None = None,
         rest_finalization_race_parties: int = 0,
     ):
         if finalization_mode not in {'inline', 'cloud_tasks'}:
             raise ValueError(f'unsupported finalization mode: {finalization_mode}')
+        if hold_inline_finalization and finalization_mode != 'inline':
+            raise ValueError('inline finalization hold requires inline dispatch')
         if rest_finalization_race_parties and not rest_finalization_race_uid:
             raise ValueError('REST finalization race requires a target user')
         if rest_finalization_race_parties < 0:
@@ -135,6 +138,8 @@ class Stack:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.finalization_mode = finalization_mode
         self.finalizer_failures = finalizer_failures or {}
+        self.hold_inline_finalization = hold_inline_finalization
+        self.inline_finalization_release_file = self.state_dir / 'release-inline-finalization'
         self.rest_finalization_race_uid = rest_finalization_race_uid
         self.rest_finalization_race_parties = rest_finalization_race_parties
         self.rest_finalization_race_conversation_id = (
@@ -208,6 +213,8 @@ class Stack:
                     'OMI_STACK_FINALIZATION_FAILURES': json.dumps(self.finalizer_failures, sort_keys=True),
                 }
             )
+        if self.hold_inline_finalization:
+            env['OMI_STACK_INLINE_FINALIZATION_RELEASE_FILE'] = str(self.inline_finalization_release_file)
         if self.rest_finalization_race_uid is not None and self.rest_finalization_race_conversation_id is not None:
             env.update(
                 {
@@ -467,7 +474,10 @@ class Stack:
                 'language': 'en',
                 'private_cloud_sync_enabled': True,
                 'data_protection_level': 'standard',
-                'transcription_preferences': {'uses_custom_stt': False},
+                # This gauntlet exercises the English-only Parakeet stub. Make
+                # the user's single-language choice explicit so selection
+                # requests English rather than multi-language auto-detection.
+                'transcription_preferences': {'uses_custom_stt': False, 'single_language_mode': True},
             }
         )
 
@@ -492,6 +502,11 @@ class Stack:
         self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).update(
             {'finished_at': datetime.now(timezone.utc) - timedelta(seconds=121)}
         )
+
+    def release_inline_finalization(self) -> None:
+        if not self.hold_inline_finalization:
+            raise StackFailure('inline finalization hold was not configured')
+        self.inline_finalization_release_file.touch()
 
 
 def _one_job(stack: Stack, uid: str, conversation_id: str) -> dict[str, Any]:
@@ -680,6 +695,57 @@ async def _normal_and_terminal_reconnect(stack: Stack) -> None:
     jobs = stack.jobs_for(uid, session_id)
     if len(jobs) != 1 or jobs[0].get('id') != job.get('id'):
         raise StackFailure('terminal reconnect changed the original durable finalization job')
+
+
+async def _inline_finalization_survives_source_close(stack: Stack) -> None:
+    """#9995: closing listen after 104 cannot cancel pusher's durable owner."""
+    if not stack.hold_inline_finalization:
+        raise StackFailure('inline source-close recovery requires a held finalizer')
+
+    uid = 'stack-inline-source-close'
+    conversation_id = str(uuid.uuid4())
+    stack.seed_user(uid)
+    websocket, _ = await _connect(stack, uid, conversation_id)
+    await _record_audio(websocket)
+    stack.age_conversation(uid, conversation_id)
+
+    def pusher_received_finalization() -> bool:
+        return any(
+            event.get('event') == 'frame'
+            and event.get('direction') == 'in'
+            and event.get('opcode') == 104
+            and event.get('conversation_id') == conversation_id
+            for event in stack.pusher_events
+        )
+
+    _wait_until(pusher_received_finalization, label='inline finalization handoff')
+    _wait_until(
+        lambda: any(
+            event.get('event') == 'inline_finalization_hold_entered' and event.get('conversation_id') == conversation_id
+            for event in stack.pusher_events
+        ),
+        label='claimed inline finalization hold',
+    )
+    # The durable claim transitions the job to 'leased' (the only non-terminal
+    # processing state); 'processing' is a conversation status, not a job status.
+    claimed = _wait_for_job(stack, uid, conversation_id, 'leased')
+    if claimed.get('attempt_count') != 1:
+        raise StackFailure('source-close finalization was not claimed exactly once before disconnect')
+
+    await websocket.close(code=1000)
+    _wait_until(
+        lambda: any(event.get('event') == 'pusher_cleanup_completed' for event in stack.pusher_events),
+        label='source pusher cleanup',
+    )
+    stack.release_inline_finalization()
+
+    completed = _wait_for_job(stack, uid, conversation_id, 'completed')
+    conversation = stack.conversation(uid, conversation_id)
+    if completed.get('attempt_count') != 1 or completed.get('fanout_status') != 'completed':
+        raise StackFailure('source-close finalization did not complete the original durable job')
+    if not conversation or conversation.get('status') != 'completed':
+        raise StackFailure('source-close finalization did not complete its conversation without a later session')
+    _assert_local_provider_admission(stack, conversation_id)
 
 
 async def _empty_recording(stack: Stack) -> None:
@@ -1055,6 +1121,7 @@ def _run_stack_scenario(
     *,
     finalization_mode: str,
     finalizer_failures: dict[str, int] | None,
+    hold_inline_finalization: bool = False,
     rest_finalization_race_uid: str | None = None,
     rest_finalization_race_parties: int = 0,
     scenario: Callable[[Stack], Any],
@@ -1063,6 +1130,7 @@ def _run_stack_scenario(
         state_dir,
         finalization_mode=finalization_mode,
         finalizer_failures=finalizer_failures,
+        hold_inline_finalization=hold_inline_finalization,
         rest_finalization_race_uid=rest_finalization_race_uid,
         rest_finalization_race_parties=rest_finalization_race_parties,
     )
@@ -1088,6 +1156,13 @@ def main() -> int:
             finalization_mode='inline',
             finalizer_failures=None,
             scenario=run_inline_scenarios,
+        )
+        _run_stack_scenario(
+            state_dir / 'inline-source-close',
+            finalization_mode='inline',
+            finalizer_failures=None,
+            hold_inline_finalization=True,
+            scenario=_inline_finalization_survives_source_close,
         )
         _run_stack_scenario(
             state_dir / 'cloud-rest-restart',

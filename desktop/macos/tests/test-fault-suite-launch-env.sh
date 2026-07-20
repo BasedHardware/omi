@@ -109,6 +109,7 @@ expected = {
     "OMI_PYTHON_API_URL": fault_url,
     "OMI_DESKTOP_API_URL": fault_url,
     "OMI_AUTH_API_URL": fault_url,
+    "OMI_FAULT_MODEL_AUTH_TOKEN": "omi-fault-model-token",
 }
 for key, value in expected.items():
     assert captured.get(key) == value, (key, captured.get(key), value)

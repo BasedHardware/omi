@@ -15,10 +15,15 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 ## 1. Connection + Streaming + Transcription
 
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
-(e.g., `parakeet,modulate-velma-2`). The first provider supporting the
-requested language wins. Listen startup loads transcription preferences once and
-reuses the embedded user language for translation targeting, avoiding a second
-user-preference read on WebSocket startup. All providers implement the
+(e.g., `parakeet,modulate-velma-2`). The first provider whose deployed model
+supports the requested mode wins: Parakeet's live RNNT model is English-only,
+so multilingual sessions and non-English single-language sessions use Modulate.
+Listen startup loads transcription preferences once and uses its
+multi-language setting to request Modulate auto-detection, avoiding a second
+user-preference read on WebSocket startup. The separately deployed Parakeet
+batch model retains its multilingual capability. A client Parakeet preference
+can prioritize Parakeet only when that live-model capability matches; it never
+overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
@@ -156,10 +161,12 @@ This is the normal path when the client stays connected but stops speaking.
 **Key design rule (#6061):** Listen NEVER processes conversations locally.
 All conversation processing routes through pusher or the dedicated durable
 finalizer worker. Before either handoff, listen persists a Firestore
-finalization job. The legacy live pusher path claims that same job; when the
-durable dispatch flag is enabled, Cloud Tasks wakes the worker using only the
-opaque job id and generation. `pending_conversation_requests` remains a
-low-latency reconnect aid, not the durable source of truth.
+finalization job. The legacy live pusher path claims that same job and
+transfers it to pusher process-scoped ownership, so closing the originating
+listener after the opcode-104 handoff cannot cancel it. When the durable
+dispatch flag is enabled, Cloud Tasks wakes the worker using only the opaque
+job id and generation. `pending_conversation_requests` remains a low-latency
+reconnect aid, not the durable source of truth.
 
 Before a job can become `completed`, the finalizer atomically claims a durable
 fanout boundary with a persistent idempotency key. It passes that key to the

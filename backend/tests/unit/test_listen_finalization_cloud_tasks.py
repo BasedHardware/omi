@@ -660,6 +660,35 @@ async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery_fails(monkeypatch):
+    """#9995: source disconnect after 104 cannot reclassify durable success."""
+    websocket = _PusherWebSocket()
+
+    async def closed_send(_payload: bytes) -> None:
+        raise RuntimeError('Cannot call send once closed')
+
+    websocket.send_bytes = closed_send
+    completed = MagicMock(return_value=True)
+    retryable = MagicMock()
+    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1},
+    )
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', AsyncMock())
+
+    await pusher_router._process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
+    )
+
+    completed.assert_called_once_with('job-1', 3, 7)
+    retryable.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_pusher_closes_a_fenced_finalization_without_fanout(monkeypatch):
     websocket = _PusherWebSocket()
     monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
@@ -797,18 +826,29 @@ async def test_pusher_finalization_survives_session_close_after_handoff(monkeypa
 
     monkeypatch.setattr(pusher_router, 'supervise_tasks', supervisor)
 
+    spawned: list[asyncio.Task] = []
+    real_spawn = pusher_router.start_background_task
+
+    def recording_spawn(coro, *, name):
+        task = real_spawn(coro, name=name)
+        spawned.append(task)
+        return task
+
+    monkeypatch.setattr(pusher_router, 'start_background_task', recording_spawn)
+
+    gauge_baseline = pusher_router.PUSHER_DETACHED_FINALIZATION_TASKS._value.get()
     websocket = _CloseAfterHandoffWebSocket(_finalization_frame('conversation-1', 'job-1', 3))
     await pusher_router._websocket_util_trigger(websocket, 'uid-1')
 
-    detached = list(pusher_router._detached_finalization_tasks)
-    assert len(detached) == 1, 'finalization must keep running after session cleanup'
-    assert pusher_router.PUSHER_DETACHED_FINALIZATION_TASKS._value.get() == 1
+    assert len(spawned) == 1, 'finalization must be spawned at process scope'
+    assert not spawned[0].done(), 'finalization must keep running after session cleanup'
+    assert pusher_router.PUSHER_DETACHED_FINALIZATION_TASKS._value.get() == gauge_baseline + 1
     session_torn_down.set()
-    await asyncio.wait_for(detached[0], timeout=5)
+    await asyncio.wait_for(spawned[0], timeout=5)
 
     claim.assert_called_once()
     completed.assert_called_once_with('job-1', 3, 7)
-    assert pusher_router.PUSHER_DETACHED_FINALIZATION_TASKS._value.get() == 0
+    assert pusher_router.PUSHER_DETACHED_FINALIZATION_TASKS._value.get() == gauge_baseline
     # The origin socket is gone; the result frame is dropped, not raised.
     assert websocket.sent == []
 

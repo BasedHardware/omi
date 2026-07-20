@@ -277,39 +277,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
 
     // Request notification permission in parallel, but only for first-time users.
-    // This must enter UserNotifications through a nonisolated bridge: its callback
-    // queue is not main, and a closure lexically created here would inherit MainActor.
-    Self.queryStartupNotificationSettings(
-      query: Self.systemNotificationSettingsQuery,
-      handler: Self.handleStartupNotificationAuthorizationStatus
-    )
+    // The bridge owns the private-XPC callback registration and explicit main handoff.
+    UserNotificationCallbackBridge.authorizationStatus(handler: Self.handleStartupNotificationAuthorizationStatus)
 
     // Start monitoring immediately — don't wait for notification permission callback
     continueStartMonitoring(completion: completion)
-  }
-
-  /// The only production registration point for UserNotifications. It is
-  /// nonisolated so the system callback cannot inherit the class's MainActor.
-  nonisolated private static func systemNotificationSettingsQuery(
-    completion: @escaping @Sendable (UNAuthorizationStatus) -> Void
-  ) {
-    UNUserNotificationCenter.current().getNotificationSettings { settings in
-      completion(settings.authorizationStatus)
-    }
-  }
-
-  /// Registers the system callback outside MainActor, then hands only its
-  /// authorization status to a MainActor handler. `query` is injected so the
-  /// off-main callback contract is exercised without a system permission prompt.
-  nonisolated static func queryStartupNotificationSettings(
-    query: @escaping @Sendable (@escaping @Sendable (UNAuthorizationStatus) -> Void) -> Void,
-    handler: @escaping @MainActor @Sendable (UNAuthorizationStatus) -> Void
-  ) {
-    query { authorizationStatus in
-      Task { @MainActor in
-        handler(authorizationStatus)
-      }
-    }
   }
 
   @MainActor

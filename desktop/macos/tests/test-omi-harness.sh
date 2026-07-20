@@ -64,6 +64,14 @@ assert not module.expectation_matches({"result": {}}, {"result.id": {"exists": T
 assert module.expectation_matches({"result": {}}, {"result.id": {"exists": False}})
 assert not module.expectation_matches({"result": {"id": "memory-1"}}, {"result.id": {"exists": "yes"}})
 assert not module.expectation_matches({"result": {"id": 1}}, {"result.id": {"exists": True, "min": 1}})
+assert module.expectation_matches(
+    {"result": {"error_message": "backend request failed with HTTP 500"}},
+    {"result.error_message": {"contains": "HTTP 500"}},
+)
+assert not module.expectation_matches(
+    {"result": {"error_message": "bridge unavailable"}},
+    {"result.error_message": {"contains": "HTTP 500"}},
+)
 
 mismatch = module.expectation_mismatches(
     {"result": {"count": "1"}}, {"result.count": {"minimum": 1}}

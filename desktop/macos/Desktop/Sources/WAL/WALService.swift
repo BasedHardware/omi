@@ -1085,6 +1085,11 @@ final class WALService: ObservableObject {
       saveWals()
     }
 
+    // Reclaim already-synced audio past the retention window. Runs every sync
+    // pass (not just launch) so the wals directory + metadata don't grow without
+    // bound — cleanupOldWals was previously never invoked.
+    cleanupOldWals()
+
     // If jobs are still in-flight (.uploaded) after the immediate reconcile,
     // schedule a follow-up poll so queued/processing jobs eventually resolve.
     // Without this, a 202 + still-queued GET leaves WALs stuck in .uploaded.
@@ -1171,12 +1176,14 @@ final class WALService: ObservableObject {
 
   // MARK: - Cleanup
 
-  /// Remove synced WALs older than specified days
+  /// Remove synced WALs older than `olderThanDays` and delete their on-disk audio.
+  /// Runs at the end of each `syncToCloud` pass; uses the injected clock so the
+  /// retention window is deterministic in tests.
   func cleanupOldWals(olderThanDays: Int = 7) {
-    let cutoff = Date().addingTimeInterval(-Double(olderThanDays * 24 * 60 * 60))
-    let cutoffTimestamp = Int(cutoff.timeIntervalSince1970)
+    let cutoffTimestamp = timestampProvider() - olderThanDays * 24 * 60 * 60
 
-    let toRemove = wals.filter { $0.status == .synced && $0.timerStart < cutoffTimestamp }
+    let toRemove = WALCloudSyncLogic.cleanupCandidates(wals: wals, cutoffTimestamp: cutoffTimestamp)
+    guard !toRemove.isEmpty else { return }
 
     for wal in toRemove {
       // Delete file

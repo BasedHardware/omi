@@ -223,6 +223,47 @@ final class WALServiceUploadTests: XCTestCase {
     XCTAssertEqual(service.wals.first?.status, .miss)
   }
 
+  func testCleanupRemovesOldSyncedWalButKeepsYoungAndUnsynced() throws {
+    let now = 2_000_000_000
+    service = makeService(timestampProvider: { now })
+    let cutoff = now - 7 * 24 * 60 * 60
+
+    // Distinct (device, timerStart) per entry so WAL ids (device_timerStart) don't
+    // collide — cleanupOldWals removes by id, and a shared id would collaterally
+    // remove the wrong entry. Production reserves unique timerStarts.
+    func makeWal(device: String, timerStart: Int, status: WALStatus, file: String) throws -> WALEntry {
+      try Data([0x01]).write(to: walDir.appendingPathComponent(file))
+      return WALEntry(
+        timerStart: timerStart, codec: "opus", status: status, storage: .disk,
+        filePath: file, seconds: 60, device: device, deviceModel: "Omi")
+    }
+    let oldSynced = try makeWal(device: "dev1", timerStart: cutoff - 10, status: .synced, file: "audio_old.bin")
+    let youngSynced = try makeWal(
+      device: "dev1", timerStart: cutoff + 10, status: .synced, file: "audio_young.bin")
+    let oldMiss = try makeWal(device: "dev2", timerStart: cutoff - 10, status: .miss, file: "audio_miss.bin")
+    service.setWalsForTesting([oldSynced, youngSynced, oldMiss])
+    service.saveWals()
+
+    service.cleanupOldWals()
+    service.waitForWalMetadataWritesForTesting()
+
+    let fm = FileManager.default
+    XCTAssertFalse(
+      fm.fileExists(atPath: walDir.appendingPathComponent("audio_old.bin").path),
+      "an old synced WAL's audio file must be reclaimed")
+    XCTAssertTrue(fm.fileExists(atPath: walDir.appendingPathComponent("audio_young.bin").path))
+    XCTAssertTrue(
+      fm.fileExists(atPath: walDir.appendingPathComponent("audio_miss.bin").path),
+      "an unsynced (.miss) WAL must never be deleted, even when old")
+
+    XCTAssertEqual(Set(service.wals.map { $0.id }), [youngSynced.id, oldMiss.id])
+    let metadataURL = walDir.appendingPathComponent("wals.json")
+    let persisted = try JSONDecoder().decode(WALMetadata.self, from: Data(contentsOf: metadataURL))
+    XCTAssertEqual(
+      Set(persisted.wals.map { $0.id }), [youngSynced.id, oldMiss.id],
+      "persisted metadata must be pruned to the survivors")
+  }
+
   func testUploadMock202MarksUploadedNotSynced() async throws {
     let wal = try seedWalOnDisk()
     service.uploadLocalFilesHandler = { _ in .queued(jobId: "job-xyz") }

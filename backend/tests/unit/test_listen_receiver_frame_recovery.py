@@ -37,6 +37,7 @@ class _BrokenDecoder:
 )
 async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_transcript(codec, decoder_attribute):
     received_segments = []
+    live_transcription_starts = []
     websocket = _FramesWebSocket(
         [
             {'text': '{not valid json'},
@@ -70,6 +71,7 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
         use_custom_stt=True,
         audio_bytes_send=None,
         transcripts=SimpleNamespace(enqueue=received_segments.extend),
+        start_live_transcription=lambda: live_transcription_starts.append(True),
     )
     receiver = ListenReceiver(host, [], {})
     setattr(receiver, decoder_attribute, _BrokenDecoder())
@@ -77,6 +79,7 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
     await receiver.receive_data()
 
     assert received_segments == [{'id': 'recovered', 'text': 'Recovered transcript', 'stt_provider': 'test-provider'}]
+    assert live_transcription_starts == [True]
     assert host.state.close_code == 1000
 
 

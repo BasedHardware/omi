@@ -72,6 +72,7 @@ from routers import (
     memory_product,
     task_recommendations,
     conversation_finalization,
+    public_shared_conversation_chat,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -116,6 +117,7 @@ app.include_router(transcribe.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
+app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
 app.include_router(candidates.router)
 app.include_router(task_integrations.router)

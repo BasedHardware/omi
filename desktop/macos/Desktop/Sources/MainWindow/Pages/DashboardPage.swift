@@ -221,6 +221,7 @@ struct DashboardPage: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   var taskChatCoordinator: TaskChatCoordinator? = nil
   @ObservedObject private var deviceProvider = DeviceProvider.shared
+  @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
   @Binding var selectedIndex: Int
   @State private var citedConversation: ServerConversation? = nil
@@ -476,6 +477,7 @@ struct DashboardPage: View {
           }
         }
         Task { await homeStatusStore.refreshIfNeeded() }
+        Task { await homeSuggestionsStore.refreshIfNeeded() }
       }
       .onDisappear {
         intelligenceStore.setRecommendationActionHandler(nil)
@@ -486,6 +488,7 @@ struct DashboardPage: View {
         appState.checkAllPermissions()
         syncCaptureState()
         Task { await homeStatusStore.refreshIfNeeded() }
+        Task { await homeSuggestionsStore.refreshIfNeeded() }
       }
       .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
         syncCaptureState()
@@ -1029,13 +1032,10 @@ struct DashboardPage: View {
   }
 
   private var homeSuggestedQuestions: [String] {
-    let saved = PostOnboardingPromptSuggestions.suggestions()
-    let fallback = [
-      "What should I focus on today to achieve my goals?",
-      "What did I spend my time on this week?",
-      "What's the highest-leverage thing I can do next?",
-    ]
-    return Array((saved.isEmpty ? fallback : saved).prefix(3))
+    HomeSuggestionComposer.compose(
+      personalized: homeSuggestionsStore.personalizedQuestions,
+      onboarding: PostOnboardingPromptSuggestions.suggestions()
+    )
   }
 
   private var homeSuggestionList: some View {

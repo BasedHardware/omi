@@ -18,6 +18,7 @@ jobs:
       diff_base: ${{ steps.changed.outputs.diff_base }}
       should_run: ${{ steps.changed.outputs.should_run }}
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
+      should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -70,7 +71,13 @@ jobs:
             fi
           fi
           echo "should_release_compile=$SHOULD_RELEASE_COMPILE" >> "$GITHUB_OUTPUT"
-          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT package_resolved=$PACKAGE_RESOLVED should_run=$SHOULD_RUN should_release_compile=$SHOULD_RELEASE_COMPILE"
+
+          SHOULD_NOTIFICATION_RELEASE_REGRESSION=false
+          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*Notification.*[.]swift$|^desktop/macos/Desktop/Sources/AppState/AppState[+]Permissions[.]swift$|^desktop/macos/Desktop/Sources/OmiApp[.]swift$|^desktop/macos/Desktop/Sources/Providers/(ChatToolExecutor|DeviceProvider)[.]swift$|^desktop/macos/Desktop/Tests/.*Notification.*Tests[.]swift$'; then
+            SHOULD_NOTIFICATION_RELEASE_REGRESSION=true
+          fi
+          echo "should_notification_release_regression=$SHOULD_NOTIFICATION_RELEASE_REGRESSION" >> "$GITHUB_OUTPUT"
+          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT package_resolved=$PACKAGE_RESOLVED should_run=$SHOULD_RUN should_release_compile=$SHOULD_RELEASE_COMPILE should_notification_release_regression=$SHOULD_NOTIFICATION_RELEASE_REGRESSION"
 
   desktop-swift:
     name: Desktop Swift Build & Tests
@@ -127,6 +134,14 @@ jobs:
         env:
           OMI_SWIFT_TEST_SUITE_WORKERS: "4"
         run: ./scripts/run-swift-ci.sh --test
+
+      # This is part of the already-required Desktop Swift Build & Tests check,
+      # so the release planner cannot tag notification-boundary changes until
+      # the pinned release compiler has exercised the callback handoff.
+      - name: Test UserNotifications callback regression in release mode
+        if: needs.changes.outputs.should_notification_release_regression == 'true'
+        working-directory: desktop/macos
+        run: ./scripts/run-swift-ci.sh --release-notification-regression
 
       # SwiftPM validates cached incremental state before using it. Saving after
       # a failed test command makes the next diagnostic run reuse completed

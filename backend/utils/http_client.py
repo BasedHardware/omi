@@ -225,6 +225,10 @@ def get_tts_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('tts', 32)
 
 
+def get_llm_gateway_semaphore() -> asyncio.Semaphore:
+    return _get_semaphore('llm_gateway', 24)
+
+
 # ---------------------------------------------------------------------------
 # Shared httpx.AsyncClient instances
 # ---------------------------------------------------------------------------
@@ -235,6 +239,7 @@ _auth_client: httpx.AsyncClient | None = None
 _stt_client: httpx.AsyncClient | None = None
 _tts_client: httpx.AsyncClient | None = None
 _web_fetch_client: httpx.AsyncClient | None = None
+_llm_gateway_client: httpx.AsyncClient | None = None
 
 
 def get_webhook_client() -> httpx.AsyncClient:
@@ -330,10 +335,29 @@ def get_web_fetch_client() -> httpx.AsyncClient:
     return _web_fetch_client
 
 
+def get_llm_gateway_client() -> httpx.AsyncClient:
+    """Return the shared async client for the internal LLM gateway."""
+    global _llm_gateway_client
+    if _llm_gateway_client is None:
+        _llm_gateway_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(20.0, connect=3.0),
+            limits=httpx.Limits(max_connections=24, max_keepalive_connections=12),
+        )
+    return _llm_gateway_client
+
+
 async def close_all_clients():
     """Close all shared HTTP clients. Call at app shutdown."""
-    global _webhook_client, _maps_client, _auth_client, _stt_client, _tts_client, _web_fetch_client
-    for client in (_webhook_client, _maps_client, _auth_client, _stt_client, _tts_client, _web_fetch_client):
+    global _webhook_client, _maps_client, _auth_client, _stt_client, _tts_client, _web_fetch_client, _llm_gateway_client
+    for client in (
+        _webhook_client,
+        _maps_client,
+        _auth_client,
+        _stt_client,
+        _tts_client,
+        _web_fetch_client,
+        _llm_gateway_client,
+    ):
         if client is not None:
             try:
                 await client.aclose()
@@ -345,6 +369,7 @@ async def close_all_clients():
     _tts_client = None
     _stt_client = None
     _web_fetch_client = None
+    _llm_gateway_client = None
     # Reset stateful registries
     _semaphores.clear()
     _webhook_circuit_breakers.clear()

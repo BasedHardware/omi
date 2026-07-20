@@ -311,7 +311,14 @@ final class ConversationRepository {
         if !cached.isEmpty {
           let cachedCount = try? await local.count(query: query)
           guard generation == requestGeneration else { return }
-          conversations = cached
+          // Overlay in-flight optimistic mutations before publishing, mirroring
+          // the server merge path (mergeList → apply). Without this, a load()
+          // that races a pending star/title/folder edit (e.g. the user toggles a
+          // filter mid-mutation) paints the bare cached rows and visually reverts
+          // the edit until the remote call lands.
+          conversations = cached.map {
+            ConversationReconciliationPolicy.apply(mutation: pendingMutations[$0.id], to: $0)
+          }
           count = cachedCount
           emit(.cache)
         }
