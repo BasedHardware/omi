@@ -8,6 +8,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingKeyboardNavigationCoordinator.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingPromptSuggestions.swift
@@ -50,3 +51,7 @@ steps:
   - id: S4
     name: 2nd brain label has no background
     do: "On any split onboarding step with the graph pane, confirm 'This is your 2nd brain' has no pill fill and no bottom gradient behind the label."
+
+  - id: S5
+    name: Keyboard navigation is scoped to mounted onboarding
+    do: "On a skippable onboarding step, press bare Left and Right once each and confirm one step per press; hold Right and confirm repeats do not advance. Focus an editable control and confirm arrows move its caret. Dismiss onboarding through reset, sign-out, recovery, or window close, then confirm arrows elsewhere are not consumed."

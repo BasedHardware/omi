@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -411,6 +412,164 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 36, step: 5, furthestStep: 10))
   }
 
+  @MainActor
+  func testKeyboardNavigationOwnerInstallsOnceAndRoutesAcceptedArrowToMountedState() {
+    let monitor = OnboardingKeyboardMonitorSpy()
+    let owner = OnboardingKeyboardNavigationCoordinator(
+      installMonitor: monitor.install,
+      removeMonitor: monitor.remove
+    )
+    var currentStep = 10
+    var navigationCount = 0
+    let navigation = OnboardingKeyboardNavigationCoordinator.Navigation(
+      isActive: { true },
+      focusedControlOwnsArrows: { false },
+      currentStep: { currentStep },
+      furthestStep: { 15 },
+      apply: { action in
+        navigationCount += 1
+        guard case .jump(let target) = action else { return false }
+        currentStep = target
+        return true
+      }
+    )
+
+    owner.mount(navigation)
+    owner.mount(navigation)
+
+    XCTAssertEqual(monitor.installCount, 1, "repeated mount must retain one monitor token")
+    XCTAssertNil(monitor.dispatch(onboardingKeyEvent(keyCode: 124)))
+    XCTAssertEqual(navigationCount, 1, "the installed monitor must call the mounted navigation owner")
+    XCTAssertEqual(currentStep, 11)
+  }
+
+  @MainActor
+  func testKeyboardNavigationOwnerPreservesFocusedModifiedAndRepeatedArrows() {
+    let monitor = OnboardingKeyboardMonitorSpy()
+    let owner = OnboardingKeyboardNavigationCoordinator(
+      installMonitor: monitor.install,
+      removeMonitor: monitor.remove
+    )
+    var navigationCount = 0
+    let navigation = OnboardingKeyboardNavigationCoordinator.Navigation(
+      isActive: { true },
+      focusedControlOwnsArrows: { true },
+      currentStep: { 10 },
+      furthestStep: { 15 },
+      apply: { _ in
+        navigationCount += 1
+        return true
+      }
+    )
+
+    owner.mount(navigation)
+    let focusedArrow = onboardingKeyEvent(keyCode: 124)
+    XCTAssertTrue(monitor.dispatch(focusedArrow) === focusedArrow)
+
+    owner.mount(
+      OnboardingKeyboardNavigationCoordinator.Navigation(
+        isActive: { true },
+        focusedControlOwnsArrows: { false },
+        currentStep: { 10 },
+        furthestStep: { 15 },
+        apply: { _ in
+          navigationCount += 1
+          return true
+        }
+      ))
+    let modifiedArrow = onboardingKeyEvent(keyCode: 124, modifierFlags: [.command])
+    let repeatArrow = onboardingKeyEvent(keyCode: 124, isARepeat: true)
+    XCTAssertTrue(monitor.dispatch(modifiedArrow) === modifiedArrow)
+    XCTAssertTrue(monitor.dispatch(repeatArrow) === repeatArrow)
+    XCTAssertEqual(navigationCount, 0)
+    XCTAssertEqual(monitor.installCount, 1, "updating mounted state must not install a second monitor")
+  }
+
+  @MainActor
+  func testKeyboardNavigationOwnerInvokesRequiredStepDefaultActionOnce() {
+    let monitor = OnboardingKeyboardMonitorSpy()
+    let owner = OnboardingKeyboardNavigationCoordinator(
+      installMonitor: monitor.install,
+      removeMonitor: monitor.remove
+    )
+    var defaultActionCount = 0
+    owner.mount(
+      OnboardingKeyboardNavigationCoordinator.Navigation(
+        isActive: { true },
+        focusedControlOwnsArrows: { false },
+        currentStep: { 1 },
+        furthestStep: { 1 },
+        apply: { action in
+          guard case .forwardDefaultAction = action else { return false }
+          defaultActionCount += 1
+          return true
+        }
+      ))
+
+    XCTAssertNil(monitor.dispatch(onboardingKeyEvent(keyCode: 124)))
+    XCTAssertEqual(defaultActionCount, 1)
+  }
+
+  @MainActor
+  func testKeyboardNavigationOwnerRemovesExactlyOnceForEveryOnboardingExit() {
+    for exit in ["completion", "unmount", "sign-out", "recovery replacement", "window close"] {
+      let monitor = OnboardingKeyboardMonitorSpy()
+      let owner = OnboardingKeyboardNavigationCoordinator(
+        installMonitor: monitor.install,
+        removeMonitor: monitor.remove
+      )
+      var navigationCount = 0
+      owner.mount(
+        OnboardingKeyboardNavigationCoordinator.Navigation(
+          isActive: { true },
+          focusedControlOwnsArrows: { false },
+          currentStep: { 10 },
+          furthestStep: { 15 },
+          apply: { _ in
+            navigationCount += 1
+            return true
+          }
+        ))
+
+      owner.unmount()
+      owner.unmount()
+
+      XCTAssertEqual(monitor.removeCount, 1, "\(exit) must converge on one teardown")
+      let arrow = onboardingKeyEvent(keyCode: 124)
+      XCTAssertTrue(monitor.dispatch(arrow) === arrow, "\(exit) must leave arrows unconsumed")
+      XCTAssertEqual(navigationCount, 0, "\(exit) must detach mounted navigation")
+    }
+  }
+
+  @MainActor
+  func testKeyboardNavigationOwnerRemountsWithFreshTokenAndDeinitIsSafe() {
+    let monitor = OnboardingKeyboardMonitorSpy()
+    var owner: OnboardingKeyboardNavigationCoordinator? = OnboardingKeyboardNavigationCoordinator(
+      installMonitor: monitor.install,
+      removeMonitor: monitor.remove
+    )
+    weak let weakOwner = owner
+    let navigation = OnboardingKeyboardNavigationCoordinator.Navigation(
+      isActive: { true },
+      focusedControlOwnsArrows: { false },
+      currentStep: { 10 },
+      furthestStep: { 15 },
+      apply: { _ in true }
+    )
+
+    owner?.mount(navigation)
+    owner?.unmount()
+    owner?.mount(navigation)
+    XCTAssertEqual(monitor.installCount, 2)
+    XCTAssertEqual(monitor.removeCount, 1)
+    XCTAssertNotEqual(monitor.installedTokens[0], monitor.installedTokens[1])
+
+    owner = nil
+
+    XCTAssertNil(weakOwner)
+    XCTAssertEqual(monitor.removeCount, 2, "deinit must remove a mounted token safely")
+  }
+
   func testValidatedNavigationTargetPolicy() {
     // Backward always allowed, forward gated by canJump, range clamped.
     XCTAssertEqual(
@@ -447,5 +606,57 @@ final class OnboardingFlowTests: XCTestCase {
       .appendingPathComponent(name)
     // omi-test-quality: source-inspection -- static contract: forbids uncancellable deferred-advance patterns in step views
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  @MainActor
+  private func onboardingKeyEvent(
+    keyCode: UInt16,
+    modifierFlags: NSEvent.ModifierFlags = [],
+    isARepeat: Bool = false
+  ) -> NSEvent {
+    guard
+      let event = NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: modifierFlags,
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: 0,
+        context: nil,
+        characters: "",
+        charactersIgnoringModifiers: "",
+        isARepeat: isARepeat,
+        keyCode: keyCode
+      )
+    else {
+      fatalError("Unable to create a synthetic key event")
+    }
+    return event
+  }
+}
+
+@MainActor
+private final class OnboardingKeyboardMonitorSpy {
+  private var handler: ((NSEvent) -> NSEvent?)?
+  private var nextToken = 0
+  private(set) var installCount = 0
+  private(set) var removeCount = 0
+  private(set) var installedTokens: [Int] = []
+
+  func install(_ handler: @escaping (NSEvent) -> NSEvent?) -> Any? {
+    installCount += 1
+    nextToken += 1
+    installedTokens.append(nextToken)
+    self.handler = handler
+    return nextToken
+  }
+
+  func remove(_ token: Any) {
+    removeCount += 1
+    handler = nil
+  }
+
+  func dispatch(_ event: NSEvent) -> NSEvent? {
+    guard let handler else { return event }
+    return handler(event)
   }
 }

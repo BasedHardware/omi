@@ -37,12 +37,8 @@ struct OnboardingView: View {
   @AppStorage("onboardingBYOKStepRemoved") private var hasRemovedBYOKStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
+  @StateObject private var keyboardNavigationCoordinator = OnboardingKeyboardNavigationCoordinator()
   @FocusState private var contentFocused: Bool
-  /// Static, not @State: SwiftUI can recreate this view mid-flow (parent tree
-  /// identity changes), and a per-identity handle would leak the old monitor —
-  /// which keeps consuming arrow keys — while installing a second one. One
-  /// shared handle means re-install replaces instead of stacking.
-  private static var keyNavMonitor: Any?
 
   let steps = OnboardingFlow.steps
 
@@ -114,16 +110,10 @@ struct OnboardingView: View {
       hasInsertedBYOKStep = true
       hasRemovedBYOKStep = true
       introCoordinator.prepare(appState: appState)
-      installKeyNavigationMonitor()
+      mountKeyNavigation()
     }
     .onDisappear {
-      // Identity churn re-creates this view mid-flow, and the new identity's
-      // onAppear may run before this onDisappear — removing here would tear
-      // down the monitor it just installed. Only remove once onboarding is
-      // actually over; the handler also no-ops after completion.
-      if !isExportPreview, appState.hasCompletedOnboarding {
-        removeKeyNavigationMonitor()
-      }
+      keyboardNavigationCoordinator.unmount()
     }
     .task {
       guard !isExportPreview else { return }
@@ -138,16 +128,6 @@ struct OnboardingView: View {
       log("OnboardingView: resetOnboardingRequested — returning to the first onboarding step")
       currentStep = 0
       furthestStep = 0
-    }
-    .onReceive(
-      NotificationCenter.default.publisher(for: .onboardingStepNavigationRequested)
-    ) { note in
-      guard !isExportPreview, let requested = note.userInfo?["targetStep"] as? Int else { return }
-      guard
-        let target = OnboardingFlow.validatedNavigationTarget(
-          requested, currentStep: currentStep, furthestStep: furthestStep)
-      else { return }
-      currentStep = target
     }
   }
 
@@ -533,75 +513,61 @@ struct OnboardingView: View {
     currentStep = index
   }
 
-  /// Arrow-key navigation runs off a local `NSEvent` monitor rather than SwiftUI
-  /// `.onKeyPress`, because the "Ask a question" steps take key focus away from the
-  /// onboarding window (shortcut steps null the app menu + install their own key
-  /// monitor; demo steps hand focus to the floating Ask Omi panel). A monitor sees
-  /// the keystroke regardless of which of the app's windows is key.
-  private func installKeyNavigationMonitor() {
-    // The outer onAppear also runs on the already-completed branch — don't
-    // install an arrow monitor for a flow that isn't showing.
+  /// Arrow-key navigation uses one local monitor owned by this mounted view.
+  /// It deliberately stays connected to live `@AppStorage` bindings rather
+  /// than a copied view value or an app-global notification relay.
+  private func mountKeyNavigation() {
     guard !isExportPreview, !appState.hasCompletedOnboarding else { return }
-    removeKeyNavigationMonitor()
-    Self.keyNavMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-      handleArrowNavigation(event) ? nil : event
-    }
+    let currentStep = $currentStep
+    let furthestStep = $furthestStep
+    let appState = appState
+    keyboardNavigationCoordinator.mount(
+      .init(
+        isActive: { !appState.hasCompletedOnboarding },
+        focusedControlOwnsArrows: Self.focusedControlOwnsArrows,
+        currentStep: { currentStep.wrappedValue },
+        furthestStep: { furthestStep.wrappedValue },
+        apply: { action in
+          switch action {
+          case .jump(let target):
+            guard
+              let target = OnboardingFlow.validatedNavigationTarget(
+                target,
+                currentStep: currentStep.wrappedValue,
+                furthestStep: furthestStep.wrappedValue
+              )
+            else { return false }
+            currentStep.wrappedValue = target
+            return true
+          case .forwardDefaultAction:
+            return Self.handleForwardKey()
+          }
+        }
+      )
+    )
   }
 
-  private func removeKeyNavigationMonitor() {
-    if let monitor = Self.keyNavMonitor {
-      NSEvent.removeMonitor(monitor)
-      Self.keyNavMonitor = nil
+  private static func focusedControlOwnsArrows() -> Bool {
+    guard let keyWindow = NSApp.keyWindow else { return false }
+    if keyWindow is FloatingControlBarWindow { return true }
+
+    var responder: NSResponder? = keyWindow.firstResponder
+    while let current = responder {
+      if current is NSText || current is NSControl || current is NSTableView || current is NSOutlineView
+        || current is NSCollectionView
+      {
+        return true
+      }
+      responder = current.nextResponder
     }
-  }
-
-  /// Returns true when the event was consumed as a back/forward navigation.
-  /// Skips plain arrows while the user is typing (any text field, including the
-  /// floating Ask Omi bar) so the caret keeps moving instead of navigating.
-  ///
-  /// Runs inside the NSEvent monitor closure, which holds a detached copy of
-  /// this view. Mutating @AppStorage through that copy silently drops the write
-  /// on some macOS versions (it never reaches UserDefaults or the mounted
-  /// view), so this reads the persisted step state directly and posts the
-  /// target step for the mounted view's `.onReceive` to apply.
-  private func handleArrowNavigation(_ event: NSEvent) -> Bool {
-    guard !isExportPreview else { return false }
-    // The monitor may briefly outlive the flow (removal is deferred across
-    // identity churn); never swallow arrows once onboarding is done.
-    guard !UserDefaults.standard.bool(forKey: .hasCompletedOnboarding) else { return false }
-    // Only bare arrows navigate — leave shortcut chords (⌘/⌥/⌃/⇧) to their owners.
-    let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-    guard mods.subtracting([.function, .numericPad]).isEmpty else { return false }
-    // Typing in the floating bar or any text field owns the arrows.
-    if NSApp.keyWindow is FloatingControlBarWindow { return false }
-    if NSApp.keyWindow?.firstResponder is NSText { return false }
-
-    let defaults = UserDefaults.standard
-    let step = defaults.integer(forKey: .onboardingStep)
-    let frontier = defaults.integer(forKey: .onboardingFurthestStep)
-
-    switch OnboardingFlow.arrowNavigation(keyCode: event.keyCode, step: step, furthestStep: frontier)
-    {
-    case .jump(let target):
-      postStepNavigation(target)
-      return true
-    case .forwardDefaultAction:
-      return handleForwardKey() == .handled
-    case nil:
-      return false
-    }
-  }
-
-  private func postStepNavigation(_ target: Int) {
-    NotificationCenter.default.post(
-      name: .onboardingStepNavigationRequested, object: nil, userInfo: ["targetStep": target])
+    return false
   }
 
   /// Forward arrow == pressing the step's visible Continue button. Re-issuing the
   /// default-action key (Return) reuses each step's own gating (name/goal required,
   /// demo completion) instead of blindly advancing `currentStep`.
-  private func handleForwardKey() -> KeyPress.Result {
-    guard let window = NSApp.keyWindow else { return .ignored }
+  private static func handleForwardKey() -> Bool {
+    guard let window = NSApp.keyWindow else { return false }
     for phase in [NSEvent.EventType.keyDown, .keyUp] {
       guard
         let event = NSEvent.keyEvent(
@@ -613,12 +579,13 @@ struct OnboardingView: View {
       else { continue }
       window.postEvent(event, atStart: false)
     }
-    return .handled
+    return true
   }
 
   /// Complete onboarding — start all services and transition to the app
   private func handleOnboardingComplete() {
     log("OnboardingView: Onboarding complete")
+    keyboardNavigationCoordinator.unmount()
     AnalyticsManager.shared.onboardingCompleted()
 
     // Stop the AI if it's still running
