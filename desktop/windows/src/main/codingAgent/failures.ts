@@ -31,7 +31,61 @@ export function messageFrom(error: unknown): string {
   if (error instanceof AdapterRuntimeError) {
     return error.failure.userMessage
   }
+  const acpDetail = jsonRpcErrorDetail(error)
+  if (acpDetail) return acpDetail
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Pull a human-meaningful message out of a JSON-RPC error (the ACP bridge's
+ * `AcpError`: an Error carrying a numeric `code` and structured `data`). The
+ * bridge reports the real cause — e.g. "claude.exe ... failed to launch" or a
+ * provider 401 body — in `data`, while `.message` is often just the bare
+ * "Internal error" for a -32603. Surfacing only `.message` swallowed the cause,
+ * so every packaged spawn failure read as an unactionable "Internal error" in the
+ * pill and the logs. This folds the structured detail back into the message so it
+ * is always visible and never swallowed.
+ *
+ * Duck-typed rather than importing `AcpError` from ./acp, which imports this
+ * module (would be an import cycle). Returns undefined for anything that is not a
+ * JSON-RPC-shaped error, so plain Errors fall through to their `.message`.
+ */
+export function jsonRpcErrorDetail(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined
+  const candidate = error as Error & { code?: unknown; data?: unknown }
+  if (typeof candidate.code !== 'number') return undefined
+  const base = compactWhitespace(candidate.message ?? '')
+  // The bridge's `data` is provider-controlled and can embed a raw response
+  // body — redact token shapes before it reaches the pill or the logs.
+  const rawDetail = extractStructuredDetail(candidate.data)
+  const detail = rawDetail ? sanitizeProcessDiagnostic(rawDetail) : undefined
+  if (!detail) return base || undefined
+  // Cap so a huge provider body can't flood a pill; keep the informative head.
+  const cappedDetail = detail.length > 300 ? `${detail.slice(0, 300)}…` : detail
+  if (!base) return cappedDetail
+  // Avoid "Internal error: Internal error ..." when the detail repeats the base.
+  return base.toLowerCase().includes(cappedDetail.toLowerCase()) ? base : `${base}: ${cappedDetail}`
+}
+
+/** Best-effort extraction of a readable string from a JSON-RPC error `data` field. */
+function extractStructuredDetail(data: unknown): string | undefined {
+  if (data == null) return undefined
+  if (typeof data === 'string') return compactWhitespace(data) || undefined
+  if (typeof data !== 'object') return undefined
+  const obj = data as Record<string, unknown>
+  // Common shapes: { details: "..." }, { message: "..." }, { error: { message: "..." } }.
+  const stringField = (value: unknown): string | undefined =>
+    typeof value === 'string' && value ? value : undefined
+  const nestedError =
+    typeof obj.error === 'object' && obj.error ? (obj.error as Record<string, unknown>) : undefined
+  const direct =
+    stringField(obj.details) ?? stringField(obj.message) ?? stringField(nestedError?.message)
+  if (direct) return compactWhitespace(direct) || undefined
+  try {
+    return compactWhitespace(JSON.stringify(data)) || undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function failureFromError(

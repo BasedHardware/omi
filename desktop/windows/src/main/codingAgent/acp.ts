@@ -35,7 +35,12 @@ import type {
   ResumeBindingInput,
   RuntimeAdapter
 } from './interface'
-import { AdapterRuntimeError, failureFromProcessError, failureFromProcessExit } from './failures'
+import {
+  AdapterRuntimeError,
+  failureFromProcessError,
+  failureFromProcessExit,
+  messageFrom
+} from './failures'
 
 type ResponseHandler = {
   resolve: (result: unknown) => void
@@ -138,7 +143,18 @@ const RECOVERABLE_AUTH_ERROR_MARKERS = [
   'invalid authentication credentials',
   'oauth token has been revoked',
   'not logged in',
-  'please run /login'
+  'please run /login',
+  // Expired / rejected OAuth credentials: a refresh that fails returns the
+  // standard OAuth2 `invalid_grant`, and the SDK surfaces access-token expiry
+  // with these phrasings. All mean "re-authenticate", so route them to the
+  // reconnect flow instead of a terminal "Failed" pill. Kept unambiguously
+  // auth-only (no bare "unauthorized"/"session expired") so an unrelated internal
+  // error — or the bridge's non-auth "session has ended" — never opens a surprise
+  // login.
+  'invalid_grant',
+  'access token expired',
+  'oauth token expired',
+  'token has expired'
 ] as const
 
 /**
@@ -707,7 +723,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       // observable — otherwise a stalled spawn's failure is silent. The kernel
       // still records the failed run/attempt from the re-thrown error.
       this.log(
-        `${this.adapterId} ACP prompt turn failed (session=${adapterSessionId} ${Date.now() - startedAt}ms): ${error instanceof Error ? error.message : String(error)}`
+        `${this.adapterId} ACP prompt turn failed (session=${adapterSessionId} ${Date.now() - startedAt}ms): ${messageFrom(error)}`
       )
       throw error
     } finally {

@@ -34,6 +34,7 @@
 // spawn_*) fail cleanly until the chat-routing PR registers real adapters.
 
 import omiMcpEntry from './omi-mcp-entry.mjs?asset'
+import { asarUnpackedEntryPath } from '../codingAgent/asarUnpackedPath'
 import { AdapterRegistry } from './adapterRegistry'
 import { AgentRuntimeKernel } from './kernel'
 import { SqliteAgentStore } from './store'
@@ -126,7 +127,9 @@ function controlMcpServers(
     {
       name: 'omi',
       command: process.execPath,
-      args: [omiMcpEntry],
+      // Redirect the ?asset path out of app.asar so the plain-Node MCP child is a
+      // real file on disk (matches the ACP entry fix; see asarUnpackedEntryPath).
+      args: [asarUnpackedEntryPath(omiMcpEntry)],
       env: [
         { name: 'ELECTRON_RUN_AS_NODE', value: '1' },
         { name: 'OMI_BRIDGE_PIPE', value: pipePath },

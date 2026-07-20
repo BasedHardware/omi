@@ -42,6 +42,7 @@
     "test:e2e:token-pull": "node scripts/run-token-pull-e2e.mjs",
     "test:e2e:ptt": "node scripts/run-live-e2e.mjs src/main/ipc/pttTranscribe.e2e.test.ts",
     "test:e2e:agent": "node scripts/run-agent-e2e.mjs src/main/codingAgent/acp.e2e.test.ts",
+    "smoke:packaged-agent": "node scripts/run-packaged-agent-smoke.mjs",
     "test:e2e:conv-sync": "node scripts/run-live-e2e.mjs src/renderer/src/lib/sync/convSync.e2e.test.ts",
     "test:e2e:voice-smoke": "node scripts/run-voice-smoke.mjs",
     "gauntlet:voice": "node scripts/agent-voice-tool-gauntlet.mjs",
