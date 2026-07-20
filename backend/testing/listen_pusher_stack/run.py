@@ -726,8 +726,10 @@ async def _inline_finalization_survives_source_close(stack: Stack) -> None:
         ),
         label='claimed inline finalization hold',
     )
-    processing = _wait_for_job(stack, uid, conversation_id, 'processing')
-    if processing.get('attempt_count') != 1:
+    # The durable claim transitions the job to 'leased' (the only non-terminal
+    # processing state); 'processing' is a conversation status, not a job status.
+    claimed = _wait_for_job(stack, uid, conversation_id, 'leased')
+    if claimed.get('attempt_count') != 1:
         raise StackFailure('source-close finalization was not claimed exactly once before disconnect')
 
     await websocket.close(code=1000)
