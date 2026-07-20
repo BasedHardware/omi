@@ -1121,8 +1121,9 @@ class ChatProvider: ObservableObject {
   /// leaves a tool request active without making forward progress.
   private var sendToolStallAbortGeneration: Int?
 
-  private static let sendWatchdogNoProgressMs = 60_000
   private static let perToolStallAbortMs = 90_000
+  private static let genericWatchdogInactivityMs = 60_000
+  private static let genericWatchdogPollMs = 5_000
 
   /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
   var isOnboarding = false
@@ -3839,46 +3840,35 @@ class ChatProvider: ObservableObject {
       showOmiThresholdAlert = true
     }
 
-    // Stall detection is the authority for both watchdogs. A whole-turn
-    // watchdog must observe bridge activity rather than elapsed wall time:
-    // a long local write can legitimately run past 60 seconds while reporting
-    // progress, whereas a silent stale bridge must still recover promptly.
+    // The generic watchdog owns only a silent bridge with no active tool.
+    // Active tools must reach their 90s no-progress watchdog first so their
+    // terminal cause and correlation survive the bridge interruption.
     let turnStartMs = ChatProvider.monotonicNowMs()
-    let stallDetector = StallDetector(
-      thresholds: .v1Defaults,
-      startedAtMs: turnStartMs
-    )
-
-    // Safety-net watchdog: recover a bridge that has emitted nothing for 60
-    // seconds (commonly a stale ACP subprocess after laptop sleep emitting a
-    // stray turn_end that Swift's waitForMessage never sees). The generation
-    // check means it cannot affect a later healthy send.
+    let stallDetector = StallDetector(thresholds: .v1Defaults, startedAtMs: turnStartMs)
     let watchdogAIMessageId = Self.messageIds(forAttemptId: turnAttemptId).assistant
-    let sendWatchdogTask = Task { [weak self] in
+    let genericWatchdogTask = Task { [weak self] in
       while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        if Task.isCancelled { return }
-
-        let nowMs = ChatProvider.monotonicNowMs()
-        guard
-          await stallDetector.hasInterEventGapExceeding(
-            durationMs: Self.sendWatchdogNoProgressMs,
-            atMs: nowMs
-          )
-        else {
-          continue
+        do {
+          try await Task.sleep(nanoseconds: UInt64(Self.genericWatchdogPollMs) * 1_000_000)
+        } catch {
+          return
         }
-
-        guard let self else { return }
+        let nowMs = ChatProvider.monotonicNowMs()
+        let canFire = await stallDetector.isSilentWithoutActiveTools(
+          durationMs: Self.genericWatchdogInactivityMs,
+          atMs: nowMs
+        )
+        guard canFire, let self else { continue }
         let stillStuck = await MainActor.run { () -> Bool in
-          guard self.isSending, self.sendGeneration == sendGen else { return false }
-          log(
-            "ChatProvider: send no-progress watchdog fired at "
-              + "\(Self.sendWatchdogNoProgressMs / 1_000)s — bridge is stuck; force-resetting"
-          )
+          guard
+            self.isSending,
+            self.sendGeneration == sendGen,
+            self.activeBridgeSendGeneration == sendGen
+          else { return false }
+          log("ChatProvider: generic watchdog fired after 60s of silence — bridge is stuck; force-resetting")
           // Mark this generation before interrupting: interrupt() resumes the
-          // in-flight request with `.stopped`, which the catch turns into a
-          // visible timeout rather than a silent user stop.
+          // in-flight request with `.stopped`, and the catch below uses this
+          // marker to surface the timeout instead of silently dropping the turn.
           if turnLifecycle.revoke(.watchdogTimeout) {
             self.sendWatchdogFiredGeneration = sendGen
           } else if turnLifecycle.revocationReason == .toolStall {
@@ -3966,7 +3956,7 @@ class ChatProvider: ObservableObject {
         return
       }
     }
-    defer { sendWatchdogTask.cancel() }
+    defer { genericWatchdogTask.cancel() }
 
     // Wait for staged attachments to finish uploading so we can include their
     // server IDs in the saved-message metadata. The bubble shows immediately
@@ -4434,6 +4424,7 @@ class ChatProvider: ObservableObject {
         return nil
       }
 
+      _ = await stallDetector.step(kind: .other, atMs: ChatProvider.monotonicNowMs())
       activeBridgeSendGeneration = sendGen
       agentQueryStarted = true
       let queryResult: AgentClient.QueryResult

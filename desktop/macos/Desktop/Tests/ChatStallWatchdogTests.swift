@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// CHAT-02: a stalled agent must surface "Response took too long" within the 60s
-/// send watchdog, not vanish silently.
+/// CHAT-02: a silent bridge with no active tool must surface "Response took too
+/// long" after the 60s generic watchdog, not vanish silently.
 ///
 /// The bug: the watchdog's own `interrupt()` resumes the in-flight request with
 /// `BridgeError.stopped`, which the send-loop catch treated as a *user stop*
@@ -33,12 +33,12 @@ final class ChatStallWatchdogTests: XCTestCase {
       "A tool stopped reporting progress. Try again.")
   }
 
-  func testWholeTurnWatchdogUsesBridgeNoProgressRatherThanAbsoluteTurnAge() throws {
+  func testGenericWatchdogDefersToAnActiveTool() throws {
     let source = try chatProviderSource()
-    XCTAssertTrue(source.contains("sendWatchdogNoProgressMs = 60_000"))
+    XCTAssertTrue(source.contains("genericWatchdogInactivityMs = 60_000"))
     XCTAssertTrue(
-      source.contains("stallDetector.hasInterEventGapExceeding"),
-      "A healthy long-running tool must reset the whole-turn watchdog through bridge activity")
+      source.contains("stallDetector.isSilentWithoutActiveTools"),
+      "An active tool owns its no-progress timeout before the generic bridge watchdog can fire")
   }
 
   // MARK: - Source-invariant: the marker is set before interrupt() and consumed by the catch

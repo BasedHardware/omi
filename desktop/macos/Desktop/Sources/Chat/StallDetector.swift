@@ -112,12 +112,10 @@ actor StallDetector {
     }
   }
 
-  /// Whether the entire bridge has been silent for at least `durationMs`.
-  /// This is distinct from a tool's own no-progress budget: text, thinking,
-  /// and tool progress keep the turn alive, while a bridge that emits nothing
-  /// remains eligible for whole-turn recovery.
-  func hasInterEventGapExceeding(durationMs: Int, atMs: Int) -> Bool {
-    atMs - lastEventAtMs >= durationMs
+  /// A generic bridge timeout may fire only after a full quiet interval with
+  /// no tool in flight. Active tools have their own no-progress watchdog.
+  func isSilentWithoutActiveTools(durationMs: Int, atMs: Int) -> Bool {
+    toolStartedAtMs.isEmpty && atMs - lastEventAtMs >= durationMs
   }
 
   // MARK: - Observation

@@ -1,3 +1,3 @@
 {
-  "change": "Fixed Notch resizing across Spaces, kept completed tool progress visible in chat, recovered stuck chat requests sooner, and kept Push-to-Talk speaking when current-screen capture is temporarily unavailable."
+  "change": "Fixed Notch resizing across Spaces, kept completed tool progress visible in chat, let active tools reach their own progress timeout before recovering a silent chat bridge, and kept Push-to-Talk speaking when current-screen capture is temporarily unavailable."
 }
