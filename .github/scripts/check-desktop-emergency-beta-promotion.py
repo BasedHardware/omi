@@ -15,6 +15,7 @@ from desktop_release_metadata import fail, parse_metadata
 
 TAG_RE = re.compile(r"^v\d+\.\d+(?:\.\d+)?\+\d+-macos$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+OPERATOR_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
 APPROVAL_RE = re.compile(
     r"^Emergency beta promotion approval:\s*(?P<tag>\S+)\s+(?P<sha>[0-9a-f]{40})\s+(?P<expires>\S+)\s*$",
     re.IGNORECASE | re.MULTILINE,
@@ -97,6 +98,14 @@ def approval_identities(comments: list[dict], tag: str, source_sha: str, expires
     return approvers
 
 
+def incident_is_open(incident: dict, incident_id: str) -> bool:
+    """Accept GitHub's documented state spelling regardless of casing."""
+    return (
+        str(incident.get("state") or "").strip().lower() == "open"
+        and str(incident.get("number")) == str(incident_id)
+    )
+
+
 def validate(args: argparse.Namespace) -> dict:
     if args.confirm != "emergency-promote-beta":
         fail("confirm must equal emergency-promote-beta")
@@ -106,6 +115,9 @@ def validate(args: argparse.Namespace) -> dict:
         fail("source_sha must be a 40-character SHA")
     if not args.reason.strip():
         fail("an emergency rationale is required")
+    operator = args.operator.strip().lstrip("@")
+    if not OPERATOR_RE.fullmatch(operator):
+        fail("operator must be the GitHub login that started the protected workflow")
     now = datetime.now(timezone.utc) if args.now is None else datetime.fromisoformat(args.now.replace("Z", "+00:00"))
     expiry = parse_expiry(args.expires_at, now=now)
     behavioral_url = https_url(args.behavioral_evidence_url, "behavioral_evidence_url")
@@ -152,7 +164,7 @@ def validate(args: argparse.Namespace) -> dict:
     )
     if source_gate is None:
         fail("normal Desktop Swift Build & Tests source gate did not pass for the immutable source SHA")
-    if incident.get("state") != "open" or str(incident.get("number")) != str(args.incident_id):
+    if not incident_is_open(incident, args.incident_id):
         fail("incident must exist and remain open")
     approvers = approval_identities(comments, args.release_tag, args.source_sha.lower(), args.expires_at)
     signed_smoke_asset = release_asset(release, {"desktop-smoke-result.json"})
@@ -165,6 +177,7 @@ def validate(args: argparse.Namespace) -> dict:
         "source_sha": args.source_sha.lower(),
         "incident_id": str(args.incident_id),
         "reason": args.reason.strip(),
+        "operator": operator,
         "expires_at": expiry.isoformat().replace("+00:00", "Z"),
         "approvers": approvers,
         "evidence": {
@@ -194,6 +207,7 @@ def main() -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--incident-id", required=True)
     parser.add_argument("--reason", required=True)
+    parser.add_argument("--operator", required=True)
     parser.add_argument("--expires-at", required=True)
     parser.add_argument("--confirm", required=True)
     parser.add_argument("--now")
