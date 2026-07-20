@@ -46,6 +46,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
   private var _hasScreenRecordingPermission: Bool?  // Cached permission state
   private var currentApp: String?
+  private var currentAppBundleID: String?
   private var currentWindowID: CGWindowID?
   private var currentWindowTitle: String?
   private var lastStatus: FocusStatus?
@@ -163,6 +164,21 @@ public class ProactiveAssistantsPlugin: NSObject {
   private let capturePollInterval: TimeInterval = 1.0
   /// Preview similarity index threshold; similarity ≥ this skips the full capture.
   private let previewSimilarityThreshold = 0.92
+  /// Apps whose content changes slowly. The value is the heartbeat interval in seconds.
+  /// Uses bundle ID when available, falling back to localized app name.
+  private let appSpecificHeartbeatIntervals: [String: TimeInterval] = [
+    "com.apple.Music": 10,
+    "com.apple.Podcasts": 10,
+    "com.apple.TV": 30,
+    "com.apple.Photos": 10,
+    "com.apple.iBooks": 20,
+    "Music": 10,
+    "Podcasts": 10,
+    "TV": 30,
+    "Photos": 10,
+    "Books": 20,
+  ]
+  private var lastHeartbeatAppKey: String?
 
   // MARK: - Initialization
 
@@ -646,8 +662,10 @@ public class ProactiveAssistantsPlugin: NSObject {
   private func onAppActivated(appName: String) {
     guard appName != currentApp else { return }
     currentApp = appName
+    currentAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     currentWindowID = nil
     currentWindowTitle = nil  // Reset window title on app switch
+    applyHeartbeatForApp()
 
     // Update FocusStorage immediately with detected app (before analysis)
     FocusStorage.shared.updateDetectedApp(appName)
@@ -688,6 +706,16 @@ public class ProactiveAssistantsPlugin: NSObject {
       // immediately on every app-switch notification.
       captureTrigger.requestAppSwitchCapture(app: appName, at: Date())
     }
+  }
+
+  private func applyHeartbeatForApp() {
+    let key = currentAppBundleID ?? currentApp ?? ""
+    guard key != lastHeartbeatAppKey else { return }
+    lastHeartbeatAppKey = key
+    let base = RewindSettings.shared.effectiveCaptureInterval(
+      isOnBattery: PowerMonitor.shared.isOnBattery)
+    let interval = appSpecificHeartbeatIntervals[key] ?? base
+    captureTrigger.updateHeartbeatInterval(interval)
   }
 
   private func captureFrame() async {
@@ -812,6 +840,14 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Mutable because windowGone retry may re-resolve to a different app.
     var appName = realAppName ?? currentApp
 
+    // If the active window resolved to a different app, update tracking and
+    // apply any app-specific heartbeat profile.
+    if let resolvedApp = realAppName, resolvedApp != currentApp {
+      currentApp = resolvedApp
+      currentAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+      applyHeartbeatForApp()
+    }
+
     // Skip capturing excluded apps; the context switch has already been recorded
     // above so assistant state stays correct.
     if isRewindExcluded {
@@ -834,7 +870,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       // heartbeat. Older macOS falls through to full capture.
       if #available(macOS 14.0, *) {
         let previewResult = await screenCaptureService.captureWindowCGImage(
-          windowID: windowID, maxSize: 160)
+          windowID: windowID, maxSize: 80)
         if case .success(let previewImage) = previewResult {
           let previewHash = RewindOCRService.dHash(of: previewImage)
           let similarity = captureTrigger.previewSimilarity(to: previewHash)
