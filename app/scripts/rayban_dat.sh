@@ -207,14 +207,14 @@ restore_generated_file() {
   if [[ -f "$backup_file" && ! -e "$absent_marker" ]]; then
     cp -p "$backup_file" "$destination_file"
     cmp -s "$destination_file" "$backup_file"
-    return
+    return 0
   fi
   if [[ -f "$absent_marker" && ! -e "$backup_file" ]]; then
     rm -f "$destination_file"
-    return
+    return 0
   fi
   if [[ ! -e "$backup_file" && ! -e "$absent_marker" ]]; then
-    return
+    return 0
   fi
 
   echo "rayban-dat: invalid generated-file recovery state for $destination_file" >&2
