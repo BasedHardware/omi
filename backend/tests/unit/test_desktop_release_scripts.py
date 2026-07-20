@@ -6,6 +6,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / ".github" / "scripts"
 PROMOTE_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_beta.yml"
+QUALIFY_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_qualify_beta.yml"
 PROMOTE_PROD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml"
 
 
@@ -268,6 +269,13 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
     assert "git for-each-ref --count=1 --sort=-v:refname" in workflow
     assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in workflow
     assert automatic_gate < candidate_download
+
+
+def test_qualification_lookup_is_pipefail_safe():
+    workflow = QUALIFY_BETA_WORKFLOW.read_text()
+
+    assert "git for-each-ref --count=1 --sort=-v:refname" in workflow
+    assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in workflow
 
 
 def test_stable_promotion_remains_manual_only():
