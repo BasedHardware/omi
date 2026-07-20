@@ -9661,4 +9661,106 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get dataEncryptedBanner =>
       'I tuoi dati sono protetti per impostazione predefinita con una crittografia avanzata, e sei tu a controllare come vengono archiviati e utilizzati.';
+
+  @override
+  String get sttModelAccuracy => 'Accuracy';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Trascrizione cloud';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Delete Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloaded';
+
+  @override
+  String get sttModelFaster => 'Faster';
+
+  @override
+  String get sttFilterAuto => 'Auto';
+
+  @override
+  String get sttModelHigher => 'Higher';
+
+  @override
+  String get whisperModelSizeLarge => 'Large';
+
+  @override
+  String get sttModelLower => 'Lower';
+
+  @override
+  String get whisperModelSizeMedium => 'Medium';
+
+  @override
+  String get onDeviceModelDeleted => 'Model deleted';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model download failed';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get onDeviceModelSize => 'Model Size';
+
+  @override
+  String get sttNone => 'None';
+
+  @override
+  String get onDeviceTranscription => 'Trascrizione sul dispositivo';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'La trascrizione viene elaborata localmente sul tuo dispositivo';
+
+  @override
+  String get sttModelSlower => 'Slower';
+
+  @override
+  String get whisperModelSizeSmall => 'Small';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Provider speech-to-text';
+
+  @override
+  String get speechToTextProviderDesc => 'Seleziona il servizio utilizzato per la trascrizione';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Speed';
+
+  @override
+  String get whisperModelSizeTiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Lingua di trascrizione';
+
+  @override
+  String get transcriptionLanguageDesc => 'Seleziona la lingua per la trascrizione vocale';
+
+  @override
+  String get whisperModel => 'Modello Whisper';
+
+  @override
+  String get whisperModelDesc => 'Seleziona il modello per la trascrizione sul dispositivo';
 }

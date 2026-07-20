@@ -9616,4 +9616,106 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get dataEncryptedBanner =>
       'Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz.';
+
+  @override
+  String get sttModelAccuracy => 'Accuracy';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Bulut transkripsiyonu';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Delete Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloaded';
+
+  @override
+  String get sttModelFaster => 'Faster';
+
+  @override
+  String get sttFilterAuto => 'Auto';
+
+  @override
+  String get sttModelHigher => 'Higher';
+
+  @override
+  String get whisperModelSizeLarge => 'Large';
+
+  @override
+  String get sttModelLower => 'Lower';
+
+  @override
+  String get whisperModelSizeMedium => 'Medium';
+
+  @override
+  String get onDeviceModelDeleted => 'Model deleted';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model download failed';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get onDeviceModelSize => 'Model Size';
+
+  @override
+  String get sttNone => 'None';
+
+  @override
+  String get onDeviceTranscription => 'Cihaz üzerinde transkripsiyon';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripsiyon cihazınızda yerel olarak işlenir';
+
+  @override
+  String get sttModelSlower => 'Slower';
+
+  @override
+  String get whisperModelSizeSmall => 'Small';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Konuşmadan metne sağlayıcı';
+
+  @override
+  String get speechToTextProviderDesc => 'Transkripsiyon için kullanılan hizmeti seçin';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Speed';
+
+  @override
+  String get whisperModelSizeTiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Transkripsiyon dili';
+
+  @override
+  String get transcriptionLanguageDesc => 'Konuşma transkripsiyonu için dil seçin';
+
+  @override
+  String get whisperModel => 'Whisper modeli';
+
+  @override
+  String get whisperModelDesc => 'Cihaz üzerinde transkripsiyon için model seçin';
 }
