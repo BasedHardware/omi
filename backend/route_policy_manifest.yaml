@@ -1124,3 +1124,118 @@ routes:
       deprecation:
         state: active
       owner: backend
+  - route_type: http
+    method: DELETE
+    path: /v1/mcp/people/{person_id}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/mcp/people/by-name
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/mcp/people/{person_id}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: PATCH
+    path: /v1/mcp/people/{person_id}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/mcp/people
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - mcp_api_key
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: mcp
+      visibility: public_documented
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend

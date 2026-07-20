@@ -145,6 +145,7 @@ sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
 )
 sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
 sys.modules['utils.other.endpoints'].check_api_key_rate_limit = MagicMock()
+sys.modules['utils.other.endpoints'].timeit = lambda _fn: _fn
 sys.modules['utils.apps'].update_personas_async = MagicMock()
 sys.modules['utils.executors'].db_executor = MagicMock()
 sys.modules['utils.executors'].postprocess_executor = MagicMock()
@@ -494,6 +495,109 @@ class TestPeople:
         result = sse.execute_tool(UID, 'get_people', {})
         assert result['people'][0]['id'] == 'p1'
         assert 'speech_samples' not in result['people'][0]
+
+    # --- people management (#4862): get / find / create / update / delete ---
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_get_person(self, mock_db):
+        mock_db.get_person.return_value = self._person()
+        assert sse.execute_tool(UID, 'get_person', {'person_id': 'p1'})['person']['name'] == 'Bob'
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_get_person_not_found_is_32001(self, mock_db):
+        mock_db.get_person.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'get_person', {'person_id': 'nope'})
+        assert ei.value.code == -32001
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_find_person_by_name_hit_and_miss(self, mock_db):
+        mock_db.get_person_by_name.return_value = self._person()
+        assert sse.execute_tool(UID, 'find_person_by_name', {'name': 'Bob'})['person']['name'] == 'Bob'
+        mock_db.get_person_by_name.return_value = None
+        assert sse.execute_tool(UID, 'find_person_by_name', {'name': 'Ghost'})['person'] is None
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_create_person(self, mock_db):
+        mock_db.get_person_by_name.return_value = None
+        mock_db.create_person.side_effect = lambda uid, data: data
+        result = sse.execute_tool(UID, 'create_person', {'name': 'Priya'})
+        assert result['success'] is True and result['person']['name'] == 'Priya'
+        mock_db.create_person.assert_called_once()
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_create_person_idempotent_by_name(self, mock_db):
+        mock_db.get_person_by_name.return_value = self._person()
+        result = sse.execute_tool(UID, 'create_person', {'name': 'Bob'})
+        assert result['person']['name'] == 'Bob'
+        mock_db.create_person.assert_not_called()
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_create_person_blank_and_non_string_invalid(self, mock_db):
+        for bad in ['   ', 123]:
+            with pytest.raises(sse.ToolExecutionError) as ei:
+                sse.execute_tool(UID, 'create_person', {'name': bad})
+            assert ei.value.code == -32602
+        mock_db.create_person.assert_not_called()
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_update_person(self, mock_db):
+        mock_db.get_person.side_effect = [self._person(), {'id': 'p1', 'name': 'Bobby'}]
+        result = sse.execute_tool(UID, 'update_person', {'person_id': 'p1', 'name': 'Bobby'})
+        assert result['person']['name'] == 'Bobby'
+        mock_db.update_person.assert_called_once_with(UID, 'p1', 'Bobby')
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_update_person_not_found_is_32001(self, mock_db):
+        mock_db.get_person.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'update_person', {'person_id': 'x', 'name': 'New'})
+        assert ei.value.code == -32001
+        mock_db.update_person.assert_not_called()
+
+    @patch('utils.mcp_people.delete_user_person_speech_samples')
+    @patch('utils.mcp_people.users_db')
+    def test_tool_delete_person(self, mock_db, mock_cleanup):
+        mock_db.get_person.return_value = self._person()
+        assert sse.execute_tool(UID, 'delete_person', {'person_id': 'p1'})['success'] is True
+        mock_db.delete_person.assert_called_once_with(UID, 'p1')
+        # also cleans up the person's GCS speech-sample blobs, like the REST endpoint
+        mock_cleanup.assert_called_once_with(UID, 'p1')
+
+    @patch('utils.mcp_people.users_db')
+    def test_tool_delete_person_not_found_is_32001(self, mock_db):
+        mock_db.get_person.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'delete_person', {'person_id': 'x'})
+        assert ei.value.code == -32001
+        mock_db.delete_person.assert_not_called()
+
+    @patch('utils.mcp_people.users_db')
+    def test_rest_get_person_not_found_404(self, mock_db):
+        mock_db.get_person.return_value = None
+        with pytest.raises(rest.HTTPException) as ei:
+            rest.mcp_get_person('nope', uid=UID)
+        assert ei.value.status_code == 404
+
+    @patch('utils.mcp_people.users_db')
+    def test_rest_create_and_find(self, mock_db):
+        mock_db.get_person_by_name.return_value = None
+        mock_db.create_person.side_effect = lambda uid, data: data
+        assert rest.mcp_create_person(rest.McpCreatePerson(name='Dana'), uid=UID)['name'] == 'Dana'
+        mock_db.get_person_by_name.return_value = None
+        assert rest.mcp_find_person_by_name('Ghost', uid=UID)['person'] is None
+
+    @patch('utils.mcp_people.users_db')
+    def test_rest_update_person_not_found_404(self, mock_db):
+        mock_db.get_person.return_value = None
+        with pytest.raises(rest.HTTPException) as ei:
+            rest.mcp_update_person('x', rest.McpUpdatePerson(name='New'), uid=UID)
+        assert ei.value.status_code == 404
+
+    def test_people_write_tools_registered_and_scoped(self):
+        names = {t['name'] for t in sse.MCP_TOOLS}
+        assert {'get_person', 'find_person_by_name', 'create_person', 'update_person', 'delete_person'} <= names
+        assert 'people.write' in sse.MCP_SCOPES_SUPPORTED
 
 
 class TestScreenActivity:

@@ -49,6 +49,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
+import utils.mcp_people as mcp_people
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
@@ -745,6 +746,73 @@ class SimplePerson(BaseModel):
 def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     logger.info(f"get_people {uid}")
     return [clean_person(p) for p in users_db.get_people(uid)]
+
+
+# ---------------------------------------------------------------------------
+# People management: curate the people Omi identified from conversations (#4862)
+# ---------------------------------------------------------------------------
+
+
+class McpCreatePerson(BaseModel):
+    name: str
+
+
+class McpUpdatePerson(BaseModel):
+    name: str
+
+
+def _person_http_error(error: mcp_people.PersonError) -> HTTPException:
+    """Map a people orchestration error to the matching HTTP status."""
+    if isinstance(error, mcp_people.PersonNotFound):
+        return HTTPException(status_code=404, detail=str(error))
+    return HTTPException(status_code=400, detail=str(error))
+
+
+# Declared before /{person_id} so "by-name" is not captured as a person_id.
+class McpPersonByNameResponse(BaseModel):
+    person: Optional[SimplePerson] = None
+
+
+@router.get("/v1/mcp/people/by-name", response_model=McpPersonByNameResponse, tags=["mcp"])
+def mcp_find_person_by_name(name: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        person = mcp_people.find_person_by_name(uid, name)
+    except mcp_people.PersonError as e:
+        raise _person_http_error(e)
+    return {"person": clean_person(person) if person else None}
+
+
+@router.get("/v1/mcp/people/{person_id}", response_model=SimplePerson, tags=["mcp"])
+def mcp_get_person(person_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        return clean_person(mcp_people.get_person(uid, person_id))
+    except mcp_people.PersonError as e:
+        raise _person_http_error(e)
+
+
+@router.post("/v1/mcp/people", response_model=SimplePerson, tags=["mcp"])
+def mcp_create_person(request: McpCreatePerson, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        return clean_person(mcp_people.create_person(uid, request.name))
+    except mcp_people.PersonError as e:
+        raise _person_http_error(e)
+
+
+@router.patch("/v1/mcp/people/{person_id}", response_model=SimplePerson, tags=["mcp"])
+def mcp_update_person(person_id: str, request: McpUpdatePerson, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        return clean_person(mcp_people.update_person(uid, person_id, request.name))
+    except mcp_people.PersonError as e:
+        raise _person_http_error(e)
+
+
+@router.delete("/v1/mcp/people/{person_id}", response_model=McpStatusResponse, tags=["mcp"])
+def mcp_delete_person(person_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        mcp_people.delete_person(uid, person_id)
+    except mcp_people.PersonError as e:
+        raise _person_http_error(e)
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

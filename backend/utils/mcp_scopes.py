@@ -11,6 +11,7 @@ MCP_FULL_ACCESS_SCOPES = [
     "chat.read",
     "screen_activity.read",
     "people.read",
+    "people.write",
 ]
 MCP_MEMORY_GRANT_SCOPES = ["memories.read", "memories.write"]
 MCP_MEMORY_CONTROL_COLLECTION = "memory_control"
