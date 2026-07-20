@@ -16,7 +16,8 @@ import type {
   RewindSettings,
   InsightPayload,
   AutomationPlan,
-  StepResult
+  StepResult,
+  TranslationResult
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -150,6 +151,11 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
+  },
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, result: TranslationResult): void => cb(result)
+    ipcRenderer.on('omi-sign-update', listener)
+    return () => ipcRenderer.removeListener('omi-sign-update', listener)
   }
 }
 

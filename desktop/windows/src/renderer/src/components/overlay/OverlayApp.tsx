@@ -7,6 +7,7 @@ import { auth } from '../../lib/firebase'
 import { Waveform } from './Waveform'
 import { ChatMessages } from '../chat/ChatMessages'
 import './overlay.css'
+import { SignLanguageOverlay } from '../signLanguage/SignOverlay'
 
 /** Slim draggable strip with a centered grab handle. The whole strip is a drag
  *  region (-webkit-app-region: drag); the handle just signals that it's movable. */
@@ -367,6 +368,7 @@ export function OverlayApp(): React.JSX.Element {
   return (
     <div ref={setShellRef}>
       <div className="overlay-zoom">{content}</div>
+      <SignLanguageOverlay />
     </div>
   )
 }

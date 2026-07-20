@@ -6,6 +6,7 @@ import type {
   ListenMessage,
   ListenStartArgs
 } from '../../shared/types'
+import { translateToGlosses, defaultSignOpts } from '../integrations/signLanguage'
 
 function buildEndpoint(language: string): string {
   return (
@@ -25,6 +26,8 @@ type Session = {
   ownerId: number // webContents id for routing replies back
   source: 'mic' | 'system'
   closed: boolean
+  transcriptBuffer: string
+  lastTranslationTime: number
 }
 
 const sessions = new Map<string, Session>()
@@ -75,7 +78,14 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     headers: buildListenHeaders(args.token, args.deviceIdHash)
   })
   ws.binaryType = 'arraybuffer'
-  const session: Session = { ws, ownerId: owner.id, source: args.source, closed: false }
+  const session: Session = {
+    ws,
+    ownerId: owner.id,
+    source: args.source,
+    closed: false,
+    transcriptBuffer: '',
+    lastTranslationTime: 0
+  }
   sessions.set(args.sessionId, session)
 
   ws.on('open', () => {
@@ -93,11 +103,36 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
       return
     }
     if (Array.isArray(json)) {
+      const segments = json as BackendSegment[]
       emit(session.ownerId, {
         sessionId: args.sessionId,
         kind: 'segments',
-        segments: json as BackendSegment[]
+        segments
       })
+
+      // Live Sign Language translation: accumulate the latest segment text and
+      // translate (throttled) so the renderer can drive the sign avatar.
+      let textToTranslate = ''
+      segments.forEach((seg) => {
+        textToTranslate += (textToTranslate ? ' ' : '') + seg.text
+      })
+      if (textToTranslate) {
+        session.transcriptBuffer += (session.transcriptBuffer ? ' ' : '') + textToTranslate
+        const now = Date.now()
+        if (now - session.lastTranslationTime > 2000 || session.transcriptBuffer.length > 50) {
+          const limitedText = session.transcriptBuffer.slice(-256)
+          translateToGlosses(limitedText, 'en', 'ase', defaultSignOpts())
+            .then((result) => {
+              const wc = webContents.fromId(session.ownerId)
+              if (wc && !wc.isDestroyed()) wc.send('omi-sign-update', result)
+            })
+            .catch((e) => console.error('[omi-listen] live translation failed:', e))
+          session.lastTranslationTime = now
+        }
+        if (session.transcriptBuffer.length > 1000) {
+          session.transcriptBuffer = session.transcriptBuffer.slice(-500)
+        }
+      }
       return
     }
     if (json && typeof json === 'object' && 'type' in (json as object)) {
