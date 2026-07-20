@@ -9445,4 +9445,106 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dataEncryptedBanner => 'あなたのデータはデフォルトで強力な暗号化により保護されており、保存や利用の方法はあなたが管理できます。';
+
+  @override
+  String get sttModelAccuracy => '精度';
+
+  @override
+  String get whisperModelSizeBase => 'ベース';
+
+  @override
+  String get cloudTranscription => 'クラウド文字起こし';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'モデルを削除';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'このモデルを削除してもよろしいですか？';
+
+  @override
+  String get onDeviceModelDownloaded => 'ダウンロード済み';
+
+  @override
+  String get sttModelFaster => 'より速い';
+
+  @override
+  String get sttFilterAuto => '自動';
+
+  @override
+  String get sttModelHigher => 'より高い';
+
+  @override
+  String get whisperModelSizeLarge => '大';
+
+  @override
+  String get sttModelLower => 'より低い';
+
+  @override
+  String get whisperModelSizeMedium => '中';
+
+  @override
+  String get onDeviceModelDeleted => 'モデルが削除されました';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'モデルのダウンロードに失敗しました';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisperモデルのダウンロードに失敗しました。もう一度お試しください。';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'モデルがダウンロードされました';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisperモデルが正常にダウンロードされました';
+
+  @override
+  String get onDeviceModelSize => 'モデルサイズ';
+
+  @override
+  String get sttNone => 'なし';
+
+  @override
+  String get onDeviceTranscription => 'オンデバイス文字起こし';
+
+  @override
+  String get onDeviceTranscriptionDesc => '文字起こしはデバイス上でローカルに処理されます';
+
+  @override
+  String get sttModelSlower => 'より遅い';
+
+  @override
+  String get whisperModelSizeSmall => '小';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => '音声認識プロバイダー';
+
+  @override
+  String get speechToTextProviderDesc => '文字起こしに使用するサービスを選択してください';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => '速度';
+
+  @override
+  String get whisperModelSizeTiny => '極小';
+
+  @override
+  String get transcriptionLanguage => '文字起こし言語';
+
+  @override
+  String get transcriptionLanguageDesc => '音声文字起こしの言語を選択してください';
+
+  @override
+  String get whisperModel => 'Whisperモデル';
+
+  @override
+  String get whisperModelDesc => 'オンデバイス文字起こし用のモデルを選択してください';
 }
