@@ -273,7 +273,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // mode before publication. Run before installer, database, defaults, or
     // background-service startup so the probe has no product side effects.
     if AuthStorageCanary.runIfRequested() { return }
-
+    if UserNotificationCallbackBridge.runSignedSmokeIfRequested() { return }
     // Running from the mounted DMG / a translocated mount breaks TCC permissions
     // and Sparkle updates — install to /Applications and relaunch before any
     // services start. Returns true when this process is being replaced.

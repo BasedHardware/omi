@@ -2759,7 +2759,9 @@ workflows:
               --dmg "$DMG_PATH" \
               --tag "$CM_TAG" \
               --expected-channel beta \
+              --launch \
               --auth-storage-canary \
+              --notification-callback-canary \
               --result-json "$BUILD_DIR/desktop-smoke-result.json"
           fi
 
