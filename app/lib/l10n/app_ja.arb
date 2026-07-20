@@ -3151,5 +3151,20 @@
     "deviceStorageFree": "空き {free}",
     "deviceStorageNearlyFull": "デバイスの空き容量がわずかです — 同期して空き容量を確保してください。",
     "phoneMicOfflineFallbackMessage": "接続がありません — ローカルに録音しています。オンラインに戻ると文字起こしされます。",
-    "dataEncryptedBanner": "あなたのデータはデフォルトで強力な暗号化により保護されており、保存や利用の方法はあなたが管理できます。"
+    "dataEncryptedBanner": "あなたのデータはデフォルトで強力な暗号化により保護されており、保存や利用の方法はあなたが管理できます。",
+    "downgradeToFreemiumTitle": "フリーミアムにダウングレードしますか？",
+    "downgradeLimitationsHeading": "以下の制限が適用されます：",
+    "downgradeLimitBattery": "バッテリー消費が7倍",
+    "downgradeLimitQuality": "文字起こし品質が30%低下",
+    "downgradeLimitDelay": "5〜7秒の遅延",
+    "downgradeLimitSpeakers": "話者を識別できません",
+    "downgradeAnyway": "それでもダウングレード",
+    "googleCalendarNotConnected": "Google カレンダーが未接続です",
+    "googleCalendarConnectPrompt": "会話をカレンダーの予定に紐付けるには、Google カレンダーを接続してください。",
+    "linkedToEvent": "「{title}」に紐付けました",
+    "failedToLinkCalendarEvent": "カレンダーの予定への紐付けに失敗しました",
+    "thanksForYourFeedback": "フィードバックありがとうございます！",
+    "copyMessage": "メッセージをコピー",
+    "searchSettings": "設定を検索…",
+    "errorLoadingAudio": "音声の読み込みエラー"
 }

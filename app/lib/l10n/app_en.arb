@@ -11469,5 +11469,70 @@
     "whisperModelDesc": "Choose the model for on-device transcription",
     "@whisperModelDesc": {
         "description": "Description for the Whisper on-device transcription model selector"
+    },
+    "downgradeToFreemiumTitle": "Downgrade to Freemium?",
+    "@downgradeToFreemiumTitle": {
+        "description": "Title of the confirmation dialog before downgrading to the free plan"
+    },
+    "downgradeLimitationsHeading": "You will experience these limitations:",
+    "@downgradeLimitationsHeading": {
+        "description": "Heading shown above the list of free-plan limitations in the downgrade dialog"
+    },
+    "downgradeLimitBattery": "7x battery consumption",
+    "@downgradeLimitBattery": {
+        "description": "Free-plan limitation: 7x battery consumption"
+    },
+    "downgradeLimitQuality": "30% less transcription quality",
+    "@downgradeLimitQuality": {
+        "description": "Free-plan limitation: lower transcription quality"
+    },
+    "downgradeLimitDelay": "5-7 second delay",
+    "@downgradeLimitDelay": {
+        "description": "Free-plan limitation: noticeable transcription delay"
+    },
+    "downgradeLimitSpeakers": "Cannot identify speakers",
+    "@downgradeLimitSpeakers": {
+        "description": "Free-plan limitation: speaker identification disabled"
+    },
+    "downgradeAnyway": "Downgrade Anyway",
+    "@downgradeAnyway": {
+        "description": "Destructive confirm button on the downgrade dialog"
+    },
+    "googleCalendarNotConnected": "Google Calendar Not Connected",
+    "@googleCalendarNotConnected": {
+        "description": "Dialog title shown when trying to link a conversation to a calendar event without Google Calendar connected"
+    },
+    "googleCalendarConnectPrompt": "Connect your Google Calendar to link conversations to calendar events.",
+    "@googleCalendarConnectPrompt": {
+        "description": "Dialog body for the Google-Calendar-not-connected dialog"
+    },
+    "linkedToEvent": "Linked to \"{title}\"",
+    "@linkedToEvent": {
+        "description": "Snackbar shown after a conversation is linked to a calendar event",
+        "placeholders": {
+            "title": {
+                "type": "String"
+            }
+        }
+    },
+    "failedToLinkCalendarEvent": "Failed to link calendar event",
+    "@failedToLinkCalendarEvent": {
+        "description": "Snackbar shown when linking a conversation to a calendar event fails"
+    },
+    "thanksForYourFeedback": "Thanks for your feedback!",
+    "@thanksForYourFeedback": {
+        "description": "Snackbar shown after the user gives feedback on an AI chat message"
+    },
+    "copyMessage": "Copy message",
+    "@copyMessage": {
+        "description": "Label of the copy-message action on an AI chat message"
+    },
+    "searchSettings": "Search settings…",
+    "@searchSettings": {
+        "description": "Placeholder of the search input in the settings drawer"
+    },
+    "errorLoadingAudio": "Error loading audio",
+    "@errorLoadingAudio": {
+        "description": "Title shown when an audio recording fails to load in the conversation player"
     }
 }

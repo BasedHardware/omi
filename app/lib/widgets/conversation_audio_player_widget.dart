@@ -344,7 +344,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
           children: [
             const Icon(Icons.error_outline, color: Colors.red, size: 32),
             const SizedBox(height: 8),
-            const Text('Error loading audio', style: TextStyle(color: Colors.red)),
+            Text(context.l10n.errorLoadingAudio, style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 4),
             Text(
               _errorMessage!,

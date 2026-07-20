@@ -285,36 +285,36 @@ class _PlansSheetState extends State<PlansSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Downgrade to Freemium?',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.downgradeToFreemiumTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('You will experience these limitations:', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+            Text(context.l10n.downgradeLimitationsHeading, style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
             const SizedBox(height: 16),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.carBattery, '7x battery consumption'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.carBattery, context.l10n.downgradeLimitBattery),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.triangleExclamation, '30% less transcription quality'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.triangleExclamation, context.l10n.downgradeLimitQuality),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.clock, '5-7 second delay'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.clock, context.l10n.downgradeLimitDelay),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.userSlash, 'Cannot identify speakers'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.userSlash, context.l10n.downgradeLimitSpeakers),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            child: Text(
+              context.l10n.cancel,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Downgrade Anyway', style: TextStyle(color: Colors.red.shade400)),
+            child: Text(context.l10n.downgradeAnyway, style: TextStyle(color: Colors.red.shade400)),
           ),
         ],
       ),
@@ -1243,11 +1243,14 @@ class _PlansSheetState extends State<PlansSheet> {
                           const SizedBox(height: 16),
                           Column(
                             children: [
-                              _buildLimitationItem(icon: FontAwesomeIcons.carBattery, text: '7x battery consumption'),
+                              _buildLimitationItem(
+                                icon: FontAwesomeIcons.carBattery,
+                                text: context.l10n.downgradeLimitBattery,
+                              ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
                                 icon: FontAwesomeIcons.triangleExclamation,
-                                text: '30% less transcription quality',
+                                text: context.l10n.downgradeLimitQuality,
                               ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
@@ -1255,7 +1258,10 @@ class _PlansSheetState extends State<PlansSheet> {
                                 text: '5-7 second delay (not real-time)',
                               ),
                               const SizedBox(height: 12),
-                              _buildLimitationItem(icon: FontAwesomeIcons.userSlash, text: 'Cannot identify speakers'),
+                              _buildLimitationItem(
+                                icon: FontAwesomeIcons.userSlash,
+                                text: context.l10n.downgradeLimitSpeakers,
+                              ),
                             ],
                           ),
                         ],
@@ -1589,8 +1595,10 @@ class _PlansSheetState extends State<PlansSheet> {
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration:
-                              BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade800,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           child: Text(
                             context.l10n.savePercent(savePercent),
                             style: const TextStyle(
