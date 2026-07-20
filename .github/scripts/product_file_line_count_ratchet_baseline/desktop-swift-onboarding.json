@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2197,
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1714
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2198,
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1704
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Onboarding adopts the async-arriving auth name, cancels the local file import task in deinit, and carries the sharpened goal/task prompts on top of the terminal-scan-state helper."
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Added missing `import Combine` for `Timer.publish(...).autoconnect()` usage under Swift 6.4.",
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Adds a terminal-scan-state helper and failure status text so a failed or zero-file scan surfaces an error and Continue instead of a stuck spinner."
   },
   "threshold": 1500
 }
