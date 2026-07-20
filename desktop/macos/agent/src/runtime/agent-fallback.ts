@@ -9,10 +9,10 @@
  * testable without spawning real agents.
  */
 
-import type { RoutableAgentId } from "./agent-router.js";
+import type { AgentId } from "./agent-selector.js";
 
 export interface FallbackAttemptLog {
-  agent: RoutableAgentId;
+  agent: AgentId;
   ok: boolean;
   /** Why we moved on from this agent (only set when ok=false). */
   reason?: string;
@@ -23,7 +23,7 @@ export interface FallbackAttemptLog {
 export interface FallbackResult<T> {
   ok: boolean;
   /** The successful agent, if any. */
-  agent?: RoutableAgentId;
+  agent?: AgentId;
   /** The value returned by `runOne` on success. */
   value?: T;
   /** Per-agent trail, in the order attempted. */
@@ -34,9 +34,9 @@ export interface FallbackResult<T> {
 
 export interface FallbackOptions<T> {
   /** Execute one attempt against a single agent. Resolves on success, throws on failure. */
-  runOne: (agent: RoutableAgentId) => Promise<T>;
+  runOne: (agent: AgentId) => Promise<T>;
   /** Classify a thrown failure: true => try the next agent, false => stop and surface it. */
-  isRetryable: (error: unknown, agent: RoutableAgentId) => boolean;
+  isRetryable: (error: unknown, agent: AgentId) => boolean;
   /** Structured log sink; called once per attempt outcome. */
   log?: (message: string) => void;
 }
@@ -51,7 +51,7 @@ function messageOf(error: unknown): string {
  * occurs. Returns the outcome plus a full attempt trail.
  */
 export async function executeWithFallback<T>(
-  order: readonly RoutableAgentId[],
+  order: readonly AgentId[],
   { runOne, isRetryable, log }: FallbackOptions<T>
 ): Promise<FallbackResult<T>> {
   const attempts: FallbackAttemptLog[] = [];

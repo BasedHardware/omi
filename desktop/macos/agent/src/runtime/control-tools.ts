@@ -19,7 +19,7 @@ import { serializeArtifact } from "./artifact-serialization.js";
 import { defaultArtifactRoot } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
-import { resolveBestAgent, isAgentSignedIn } from "./agent-routing.js";
+import { selectAgent, type AgentId } from "./agent-selector.js";
 import type { McpServerBuildContext } from "./jsonl-transport.js";
 import {
   parseAgentSpawnProducerJournalDescriptor,
@@ -1205,14 +1205,15 @@ export async function handleAgentControlToolCall(
         let bestAgentReason: string | undefined;
         let resolvedBestAdapter: string | undefined;
         if (parsed.provider === "best") {
-          const resolved = resolveBestAgent({
-            connected: context.kernel.registeredAdapterIds(),
+          const resolved = selectAgent({
+            available: context.kernel.registeredAdapterIds(),
             taskText: parsed.objective,
-            preferred: spawnProfile.adapterId,
-            isReady: (id) => isAgentSignedIn(id),
+            userDefault: spawnProfile.adapterId as AgentId,
           });
-          bestAgentReason = resolved?.reason;
-          resolvedBestAdapter = resolved?.adapterId;
+          if (resolved.kind === "selected") {
+            bestAgentReason = resolved.reason;
+            resolvedBestAdapter = resolved.primary;
+          }
           parsed.provider =
             resolvedBestAdapter === "codex" || resolvedBestAdapter === "hermes" || resolvedBestAdapter === "openclaw"
               ? resolvedBestAdapter

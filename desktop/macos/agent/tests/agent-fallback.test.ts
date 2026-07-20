@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeWithFallback } from "../src/runtime/agent-fallback.js";
-import type { RoutableAgentId } from "../src/runtime/agent-router.js";
+import type { AgentId } from "../src/runtime/agent-router.js";
 
 const retryAll = () => true;
 
 describe("executeWithFallback", () => {
   it("returns the first agent that succeeds", async () => {
-    const order: RoutableAgentId[] = ["openclaw", "acp"];
+    const order: AgentId[] = ["openclaw", "acp"];
     const result = await executeWithFallback(order, {
       runOne: async (agent) => `ran ${agent}`,
       isRetryable: retryAll,
@@ -19,7 +19,7 @@ describe("executeWithFallback", () => {
 
   // Demo case d: primary fails -> fallback triggers and the next agent runs.
   it("advances to the next agent when the primary fails retryably", async () => {
-    const order: RoutableAgentId[] = ["openclaw", "hermes", "acp"];
+    const order: AgentId[] = ["openclaw", "hermes", "acp"];
     const log = vi.fn();
     const result = await executeWithFallback(order, {
       runOne: async (agent) => {
@@ -38,7 +38,7 @@ describe("executeWithFallback", () => {
   });
 
   it("stops immediately on a non-retryable failure", async () => {
-    const order: RoutableAgentId[] = ["openclaw", "acp"];
+    const order: AgentId[] = ["openclaw", "acp"];
     const result = await executeWithFallback(order, {
       runOne: async () => {
         throw new Error("bad request — user error");
@@ -51,7 +51,7 @@ describe("executeWithFallback", () => {
   });
 
   it("fails cleanly when every agent fails", async () => {
-    const order: RoutableAgentId[] = ["openclaw", "hermes"];
+    const order: AgentId[] = ["openclaw", "hermes"];
     const result = await executeWithFallback(order, {
       runOne: async (agent) => {
         throw new Error(`${agent} down`);
