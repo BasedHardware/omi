@@ -15,19 +15,22 @@ import 'package:omi/utils/notification_channel_strings.dart';
 class _BasicNotificationService implements NotificationInterface {
   _BasicNotificationService._();
 
-  final channel = NotificationChannel(
-    channelGroupKey: 'channel_group_key',
-    channelKey: 'channel',
-    channelName: NotificationChannelStrings.omiChannelName,
-    channelDescription: NotificationChannelStrings.omiChannelDescription,
-    defaultColor: const Color(0xFF9D50DD),
-    ledColor: Colors.white,
-  );
+  // Resolved in initialize() after NotificationChannelStrings.loadAppLocale().
+  late final NotificationChannel channel;
 
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
 
   @override
   Future<void> initialize() async {
+    await NotificationChannelStrings.loadAppLocale();
+    channel = NotificationChannel(
+      channelGroupKey: 'channel_group_key',
+      channelKey: 'channel',
+      channelName: NotificationChannelStrings.omiChannelName,
+      channelDescription: NotificationChannelStrings.omiChannelDescription,
+      defaultColor: const Color(0xFF9D50DD),
+      ledColor: Colors.white,
+    );
     await _initializeAwesomeNotifications();
     Logger.debug('Basic notification service initialized (Firebase Messaging not available on this platform)');
   }
