@@ -3,11 +3,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from collections.abc import Mapping
-from typing import Any, TypeAlias, cast
+from typing import Any, Iterable, TypeAlias, cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from llm_gateway.gateway.lane_catalog import (
+    LaneCatalog,
+    load_catalog,
+    validate_serving_config,
+)
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.model_config import (
@@ -36,7 +41,13 @@ class GatewayConfig(BaseModel):
     feature_bundles: dict[str, FeatureBundle]
 
 
-def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool | None = None) -> GatewayConfig:
+def load_gateway_config(
+    config_dir: str | Path | None = None,
+    *,
+    prod_mode: bool | None = None,
+    required_lane_ids: Iterable[str] | None = None,
+    catalog: "LaneCatalog | None" = None,
+) -> GatewayConfig:
     resolved_config_dir = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
     resolved_prod_mode = _resolve_prod_mode(prod_mode)
 
@@ -44,19 +55,44 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     artifact_items = _load_config_list(resolved_config_dir / 'route_artifacts.yaml', 'route_artifacts')
     bundle_items = _load_config_list(resolved_config_dir / 'feature_bundles.yaml', 'feature_bundles')
 
+    if catalog is None and (resolved_config_dir / 'lanes_catalog.yaml').exists():
+        catalog = load_catalog(resolved_config_dir / 'lanes_catalog.yaml')
+
     generated_route_overrides = load_generated_route_overrides(resolved_config_dir)
     generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items(
         generated_route_overrides
     )
+    if catalog is not None:
+        non_serving_lane_ids = {
+            entry.lane_id for entry in catalog.lanes if entry.provider_support_status.value != 'prod_ready'
+        }
+        generated_lane_items = [item for item in generated_lane_items if item['lane_id'] not in non_serving_lane_ids]
+        generated_artifact_items = [
+            item for item in generated_artifact_items if item['lane_id'] not in non_serving_lane_ids
+        ]
+        generated_bundle_items = [
+            item for item in generated_bundle_items if item['lane_id'] not in non_serving_lane_ids
+        ]
 
-    lanes = _parse_lanes([*generated_lane_items, *lane_items])
-    route_artifacts = _parse_route_artifacts([*generated_artifact_items, *artifact_items], prod_mode=resolved_prod_mode)
-    feature_bundles = _parse_feature_bundles([*generated_bundle_items, *bundle_items])
+    # Explicit YAML wins over generated feature routes on the same id.
+    lanes = _parse_lanes(generated_lane_items)
+    lanes.update(_parse_lanes(lane_items))
+    route_artifacts = _parse_route_artifacts(generated_artifact_items, prod_mode=resolved_prod_mode)
+    route_artifacts.update(_parse_route_artifacts(artifact_items, prod_mode=resolved_prod_mode))
+    feature_bundles = _parse_feature_bundles(generated_bundle_items)
+    feature_bundles.update(_parse_feature_bundles(bundle_items))
 
     _validate_lane_routes(lanes, route_artifacts)
     _validate_feature_bundles(feature_bundles, lanes)
+    if required_lane_ids is not None:
+        _validate_required_lane_ids(required_lane_ids, lanes)
 
-    return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
+    gateway_cfg = GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
+    if catalog is not None:
+        validate_serving_config(catalog, gateway_cfg)
+    elif (resolved_config_dir / 'lanes_catalog.yaml').exists():
+        validate_serving_config(load_catalog(resolved_config_dir / 'lanes_catalog.yaml'), gateway_cfg)
+    return gateway_cfg
 
 
 def load_generated_route_overrides(
@@ -90,7 +126,10 @@ def _load_config_list(path: Path, top_level_key: str) -> list[ConfigItem]:
         raise ConfigValidationError(f'missing gateway config file: {path}')
 
     with path.open('r', encoding='utf-8') as handle:
-        loaded = cast(object, yaml.safe_load(handle))
+        try:
+            loaded = cast(object, yaml.safe_load(handle))
+        except yaml.YAMLError as exc:
+            raise ConfigValidationError(f'invalid YAML in {path}: {exc}') from exc
 
     raw_items: object
     if loaded is None:
@@ -331,3 +370,15 @@ def _provider_model_name(provider: str, model: str) -> str:
     if provider == 'openrouter' and model.startswith('gemini'):
         return f'google/{model}'
     return model
+
+
+def _validate_required_lane_ids(
+    required_lane_ids: Iterable[str],
+    lanes: dict[str, LaneConfig],
+) -> None:
+    missing = sorted(set(required_lane_ids) - set(lanes.keys()))
+    if missing:
+        raise ConfigValidationError(
+            f'lanes.yaml is missing required lane ids: {missing}. '
+            f'Add them to lanes.yaml or remove them from the supported allowlist.'
+        )
