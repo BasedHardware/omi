@@ -56,11 +56,11 @@ jobs:
     # verifier additionally requires two distinct repository-member approvals.
     environment: prod
     runs-on: ubuntu-latest
-    outputs:
-      release_tag: ${{ steps.candidate.outputs.release_tag }}
-      incident_id: ${{ inputs.incident_id }}
-      approvers: ${{ steps.evidence.outputs.approvers }}
-      emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}
+    # Share the normal beta promotion lane only while either lane can mutate
+    # the pointer. Recovery and its hour-long monitor must not block it.
+    concurrency:
+      group: desktop-beta-promotion
+      cancel-in-progress: false
     steps:
       - name: Checkout protected promotion controls
         uses: actions/checkout@v7
@@ -257,19 +257,47 @@ jobs:
           PY
           cmp /tmp/desktop-emergency-beta/stable-appcast-before.xml /tmp/desktop-emergency-beta/stable-appcast-after.xml
 
+  reconcile:
+    # A committed backend transaction can outlive a failed promote job (for
+    # example, if response parsing or Stable proof fails). This job must run
+    # after that job settles, then decide from authoritative immutable state.
+    needs: promote
+    if: ${{ always() }}
+    environment: prod
+    runs-on: ubuntu-latest
+    outputs:
+      emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}
+      approvers: ${{ steps.reconcile.outputs.approvers }}
+    steps:
+      - name: Checkout protected promotion controls
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
       - name: Reconcile explicit emergency release metadata after beta pointer CAS
-        # This must reconcile metadata even when the CAS response parser or a
-        # later Stable-proof step fails after the backend transaction commits.
-        # The backend verifies the append-only emergency audit and immutable
-        # emergency decision for this exact tag/SHA; a matching beta pointer
-        # alone could have been written by a concurrent normal promotion.
+        # Do not infer this from the mutable beta pointer: normal promotion may
+        # race to the same tag. The backend proves the immutable emergency
+        # decision and append-only transaction audit for tag/SHA/incident.
         id: reconcile
-        if: always()
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-          SOURCE_SHA: ${{ steps.candidate.outputs.target_sha }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          INCIDENT_ID: ${{ inputs.incident_id }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -278,19 +306,37 @@ jobs:
             -H "secret-key: $ADMIN_KEY" \
             --data-urlencode "release_id=$RELEASE_TAG" \
             --data-urlencode "source_sha=$SOURCE_SHA" \
+            --data-urlencode "incident_id=$INCIDENT_ID" \
             https://api.omi.me/v2/desktop/channels/emergency-promote-beta/reconciliation)
-          RECONCILIATION="$RECONCILIATION" RELEASE_TAG="$RELEASE_TAG" SOURCE_SHA="$SOURCE_SHA" python3 - <<'PY'
+          RECONCILIATION="$RECONCILIATION" RELEASE_TAG="$RELEASE_TAG" SOURCE_SHA="$SOURCE_SHA" INCIDENT_ID="$INCIDENT_ID" \
+            python3 - <<'PY'
           import json
           import os
+          from pathlib import Path
 
           reconciliation = json.loads(os.environ['RECONCILIATION'])
+          evidence = reconciliation.get('emergency_evidence')
           if (
               reconciliation.get('success') is not True
               or reconciliation.get('emergency_reconciled') is not True
               or reconciliation.get('release_id') != os.environ['RELEASE_TAG']
               or reconciliation.get('source_sha') != os.environ['SOURCE_SHA']
+              or reconciliation.get('incident_id') != os.environ['INCIDENT_ID']
+              or not isinstance(evidence, dict)
+              or evidence.get('emergencyPromotion') is not True
+              or evidence.get('release_tag') != os.environ['RELEASE_TAG']
+              or evidence.get('source_sha') != os.environ['SOURCE_SHA']
+              or str(evidence.get('incident_id')) != os.environ['INCIDENT_ID']
+              or not isinstance(evidence.get('approvers'), list)
+              or len(evidence['approvers']) != 2
           ):
-              raise SystemExit('authoritative emergency transaction reconciliation did not verify this release identity')
+              raise SystemExit('authoritative emergency transaction reconciliation did not verify tag/SHA/incident')
+          Path('/tmp/desktop-emergency-beta').mkdir(parents=True, exist_ok=True)
+          Path('/tmp/desktop-emergency-beta/evidence.json').write_text(
+              json.dumps(evidence, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
+              output.write('approvers=' + ','.join(evidence['approvers']) + '\n')
           PY
           gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/desktop-emergency-beta/release-body.md
           python3 .github/scripts/mark-desktop-release-emergency-beta.py \
@@ -301,8 +347,8 @@ jobs:
           echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"
 
   notify:
-    needs: promote
-    if: ${{ always() && needs.promote.outputs.emergency_reconciled == 'true' }}
+    needs: reconcile
+    if: ${{ always() && needs.reconcile.outputs.emergency_reconciled == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Notify incident responders immediately
@@ -310,12 +356,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          gh issue comment "${{ needs.promote.outputs.incident_id }}" --repo "$REPO" --body \
-            "Emergency macOS beta promotion completed for ${{ needs.promote.outputs.release_tag }}. Approvers: ${{ needs.promote.outputs.approvers }}. The mandatory one-hour beta monitor is now running: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue comment "${{ inputs.incident_id }}" --repo "$REPO" --body \
+            "Emergency macOS beta promotion completed for ${{ inputs.release_tag }}. Approvers: ${{ needs.reconcile.outputs.approvers }}. The mandatory one-hour beta monitor is now running: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   monitor:
-    needs: promote
-    if: ${{ always() && needs.promote.outputs.emergency_reconciled == 'true' }}
+    needs: reconcile
+    if: ${{ always() && needs.reconcile.outputs.emergency_reconciled == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Monitor beta-only feed for one hour
@@ -324,7 +370,7 @@ jobs:
           set -euo pipefail
           for sample in $(seq 1 12); do
             feed=$(curl -fsS --max-time 20 'https://api.omi.me/v2/desktop/appcast.xml?platform=macos')
-            if ! printf '%s' "$feed" | grep -Fq '${{ needs.promote.outputs.release_tag }}'; then
+            if ! printf '%s' "$feed" | grep -Fq '${{ inputs.release_tag }}'; then
               echo "beta feed no longer resolves the emergency release at sample $sample" >&2
               exit 1
             fi
@@ -336,13 +382,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue comment '${{ needs.promote.outputs.incident_id }}' --repo '${{ github.repository }}' --body \
-            "The mandatory one-hour macOS beta health monitor completed without beta feed regression for ${{ needs.promote.outputs.release_tag }}."
+          gh issue comment '${{ inputs.incident_id }}' --repo '${{ github.repository }}' --body \
+            "The mandatory one-hour macOS beta health monitor completed without beta feed regression for ${{ inputs.release_tag }}."
 
       - name: Alert with rollback recommendation on regression
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue comment '${{ needs.promote.outputs.incident_id }}' --repo '${{ github.repository }}' --body \
-            "ALERT: the mandatory beta-only health monitor regressed after emergency promotion of ${{ needs.promote.outputs.release_tag }}. Recommend executing the audited macOS beta rollback endpoint to the prior verified beta immediately."
+          gh issue comment '${{ inputs.incident_id }}' --repo '${{ github.repository }}' --body \
+            "ALERT: the mandatory beta-only health monitor regressed after emergency promotion of ${{ inputs.release_tag }}. Recommend executing the audited macOS beta rollback endpoint to the prior verified beta immediately."

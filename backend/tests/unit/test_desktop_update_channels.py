@@ -38,7 +38,7 @@ def _manifest(**overrides):
     return data
 
 
-def _emergency_manifest(*, release_id, version, build_number, reason, expires_at, evidence):
+def _emergency_manifest(*, release_id, version, build_number, reason, expires_at, evidence, incident_id="10063"):
     return normalize_release_manifest(
         _manifest(
             release_id=release_id,
@@ -51,7 +51,7 @@ def _emergency_manifest(*, release_id, version, build_number, reason, expires_at
                     "emergencyPromotion": True,
                     "release_tag": release_id,
                     "source_sha": "a" * 40,
-                    "incident_id": "10063",
+                    "incident_id": incident_id,
                     "reason": reason,
                     "operator": "release-operator",
                     "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
@@ -526,6 +526,7 @@ class TestMacosBetaEmergencyReconciliation:
             "emergencyPromotion": True,
             "target_release_id": release_id,
             "source_sha": source_sha,
+            "incident_id": "10063",
             "previous_generation": 7,
             "generation": 8,
         }
@@ -541,15 +542,19 @@ class TestMacosBetaEmergencyReconciliation:
         result = verify_emergency_macos_beta_reconciliation(
             release_id,
             source_sha=source_sha,
+            incident_id="10063",
             firestore_client=client,
         )
 
+        emergency_evidence = manifest_snapshot.to_dict.return_value["qualification"]["emergency_evidence"]
         assert result == {
             "emergency_reconciled": True,
             "release_id": release_id,
             "source_sha": source_sha,
+            "incident_id": "10063",
             "audit_id": audit_id,
             "generation": 8,
+            "emergency_evidence": emergency_evidence,
         }
         manifests.document.assert_called_once_with(release_id)
         audits.document.assert_called_once_with(audit_id)
@@ -573,7 +578,61 @@ class TestMacosBetaEmergencyReconciliation:
             verify_emergency_macos_beta_reconciliation(
                 release_id,
                 source_sha="a" * 40,
+                incident_id="10063",
                 firestore_client=client,
             )
 
         assert client.collection.call_count == 1
+
+    def test_rejects_an_audit_bound_to_a_different_incident(self):
+        release_id = "v0.12.85+12085-macos"
+        source_sha = "a" * 40
+        audit_id = _emergency_promotion_audit_id(release_id, source_sha)
+        evidence = {
+            "signed_smoke_url": "https://example.test/smoke.json",
+            "signed_smoke_sha256": "d" * 64,
+            "behavioral_url": "https://example.test/behavior.json",
+            "behavioral_sha256": "e" * 64,
+            "source_gate_url": "https://example.test/check",
+            "zip_sha256": "b" * 64,
+            "dmg_sha256": "c" * 64,
+        }
+        manifest_snapshot = MagicMock(exists=True)
+        manifest_snapshot.to_dict.return_value = _emergency_manifest(
+            release_id=release_id,
+            version="0.12.85+12085",
+            build_number=12085,
+            reason="qualification runner is unavailable during an incident",
+            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
+            evidence=evidence,
+            incident_id="10063",
+        )
+        audit_snapshot = MagicMock(exists=True)
+        audit_snapshot.to_dict.return_value = {
+            "audit_id": audit_id,
+            "operation": "macos_beta_emergency_forward_promotion",
+            "platform": "macos",
+            "channel": "beta",
+            "emergencyPromotion": True,
+            "target_release_id": release_id,
+            "source_sha": source_sha,
+            "incident_id": "10064",
+            "previous_generation": 7,
+            "generation": 8,
+        }
+        manifest_ref, audit_ref = MagicMock(), MagicMock()
+        manifest_ref.get.return_value = manifest_snapshot
+        audit_ref.get.return_value = audit_snapshot
+        manifests, audits = MagicMock(), MagicMock()
+        manifests.document.return_value = manifest_ref
+        audits.document.return_value = audit_ref
+        client = MagicMock()
+        client.collection.side_effect = [manifests, audits]
+
+        with pytest.raises(ValueError, match="audit does not match.*incident"):
+            verify_emergency_macos_beta_reconciliation(
+                release_id,
+                source_sha=source_sha,
+                incident_id="10063",
+                firestore_client=client,
+            )

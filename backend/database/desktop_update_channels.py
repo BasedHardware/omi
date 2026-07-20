@@ -652,6 +652,7 @@ def verify_emergency_macos_beta_reconciliation(
     release_id: str,
     *,
     source_sha: str,
+    incident_id: str,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Prove the exact emergency transaction and immutable decision committed.
@@ -663,8 +664,9 @@ def verify_emergency_macos_beta_reconciliation(
     """
     release_id = release_id.strip()
     source_sha = source_sha.strip().lower()
-    if not release_id:
-        raise ValueError("release_id is required")
+    incident_id = incident_id.strip()
+    if not release_id or not incident_id:
+        raise ValueError("release_id and incident_id are required")
     if not SHA40_RE.fullmatch(source_sha):
         raise ValueError("source_sha has an invalid digest")
 
@@ -687,8 +689,9 @@ def verify_emergency_macos_beta_reconciliation(
         or decision.get("emergencyPromotion") is not True
         or decision.get("release_tag") != release_id
         or str(decision.get("source_sha", "")).lower() != source_sha
+        or str(decision.get("incident_id")) != incident_id
     ):
-        raise ValueError("immutable manifest does not contain the bound emergency decision")
+        raise ValueError("immutable manifest does not contain the bound emergency decision for this incident")
 
     audit_id = _emergency_promotion_audit_id(release_id, source_sha)
     audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
@@ -705,8 +708,9 @@ def verify_emergency_macos_beta_reconciliation(
         or audit.get("emergencyPromotion") is not True
         or audit.get("target_release_id") != release_id
         or str(audit.get("source_sha", "")).lower() != source_sha
+        or str(audit.get("incident_id")) != incident_id
     ):
-        raise ValueError("emergency promotion audit does not match the immutable release decision")
+        raise ValueError("emergency promotion audit does not match the immutable release decision for this incident")
 
     previous_generation = _generation(audit.get("previous_generation"))
     generation = _generation(audit.get("generation"))
@@ -717,8 +721,12 @@ def verify_emergency_macos_beta_reconciliation(
         "emergency_reconciled": True,
         "release_id": release_id,
         "source_sha": source_sha,
+        "incident_id": incident_id,
         "audit_id": audit_id,
         "generation": generation,
+        # Reconstruct GitHub release metadata only from this immutable decision,
+        # never from the mutable pointer or a failed promote-job workspace.
+        "emergency_evidence": dict(decision),
     }
 
 

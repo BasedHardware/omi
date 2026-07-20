@@ -1027,8 +1027,10 @@ class TestDesktopUpdateAdminEndpoints:
             "emergency_reconciled": True,
             "release_id": "v0.12.85+12085-macos",
             "source_sha": "a" * 40,
+            "incident_id": "10063",
             "audit_id": "b" * 64,
             "generation": 8,
+            "emergency_evidence": {"emergencyPromotion": True},
         }
         with (
             patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
@@ -1038,7 +1040,7 @@ class TestDesktopUpdateAdminEndpoints:
                 resp = await client.get(
                     "/v2/desktop/channels/emergency-promote-beta/reconciliation",
                     headers={"secret-key": "real-secret"},
-                    params={"release_id": "v0.12.85+12085-macos", "source_sha": "a" * 40},
+                    params={"release_id": "v0.12.85+12085-macos", "source_sha": "a" * 40, "incident_id": "10063"},
                 )
 
         assert resp.status_code == 200
@@ -1046,6 +1048,7 @@ class TestDesktopUpdateAdminEndpoints:
         verify.assert_called_once_with(
             "v0.12.85+12085-macos",
             source_sha="a" * 40,
+            incident_id="10063",
         )
 
     @pytest.mark.asyncio

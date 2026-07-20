@@ -325,35 +325,47 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
     assert automatic_gate < candidate_download
 
 
-def test_emergency_beta_runs_notification_and_monitor_only_after_authoritative_reconciliation():
-    """Static wiring contract: recover only from the bound emergency transaction."""
+def test_emergency_reconciliation_recovers_after_a_failed_promotion_before_notifying_or_monitoring():
+    """Static contract: downstream incident work cannot be skipped with promote."""
     workflow = EMERGENCY_BETA_WORKFLOW.read_text()
     pointer = workflow.index("      - name: Register manifest and compare-and-swap only macOS beta")
     stable_proof = workflow.index("      - name: Prove Stable pointer, release metadata, and appcast are unchanged")
+    promote_job = workflow.index("  promote:")
+    reconcile_job = workflow.index("  reconcile:")
     github_metadata = workflow.index(
         "      - name: Reconcile explicit emergency release metadata after beta pointer CAS"
     )
     notify_job = workflow.index("  notify:")
     notify = workflow.index("      - name: Notify incident responders immediately")
-    metadata_step = workflow[github_metadata:notify]
+    promote = workflow[promote_job:reconcile_job]
+    reconciliation = workflow[reconcile_job:notify_job]
 
-    assert pointer < stable_proof < github_metadata < notify_job < notify
+    assert pointer < stable_proof < reconcile_job < github_metadata < notify_job < notify
     assert "authoritative macOS beta pointer compare-and-swap did not succeed" in workflow
-    assert "if: always()" in metadata_step
-    assert "id: reconcile" in metadata_step
-    assert "emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}" in workflow
-    assert "emergency-promote-beta/reconciliation" in metadata_step
-    assert "source_sha=$SOURCE_SHA" in metadata_step
-    assert "authoritative emergency transaction reconciliation did not verify this release identity" in metadata_step
-    assert 'echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"' in metadata_step
+    assert "group: desktop-beta-promotion" in promote
+    assert "needs: promote" in reconciliation
+    assert "if: ${{ always() }}" in reconciliation
+    assert "environment: prod" in reconciliation
+    assert "id: reconcile" in reconciliation
+    assert "emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}" in reconciliation
+    assert "emergency-promote-beta/reconciliation" in reconciliation
+    assert "source_sha=$SOURCE_SHA" in reconciliation
+    assert "incident_id=$INCIDENT_ID" in reconciliation
+    assert "emergency_evidence" in reconciliation
+    assert "authoritative emergency transaction reconciliation did not verify tag/SHA/incident" in reconciliation
+    assert 'echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"' in reconciliation
     assert "gh api --paginate --slurp" in workflow
     assert "for comment in page" in workflow
 
     notification = workflow[notify_job : workflow.index("  monitor:")]
     monitor = workflow[workflow.index("  monitor:") :]
-    expected_condition = "if: ${{ always() && needs.promote.outputs.emergency_reconciled == 'true' }}"
+    expected_condition = "if: ${{ always() && needs.reconcile.outputs.emergency_reconciled == 'true' }}"
+    assert "needs: reconcile" in notification
+    assert "needs: reconcile" in monitor
     assert expected_condition in notification
     assert expected_condition in monitor
+    assert "needs: promote" not in notification
+    assert "needs: promote" not in monitor
     assert "environment: prod" not in notification
     assert "environment: prod" not in monitor
 

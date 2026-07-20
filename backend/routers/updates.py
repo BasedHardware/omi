@@ -987,6 +987,7 @@ async def emergency_promote_macos_beta_channel_endpoint(
 async def verify_emergency_macos_beta_reconciliation_endpoint(
     release_id: str = Query(min_length=1),
     source_sha: str = Query(pattern=r"^[0-9a-fA-F]{40}$"),
+    incident_id: str = Query(min_length=1),
     secret_key: str = Header(...),
 ):
     """Verify an emergency transaction before repairing GitHub release metadata."""
@@ -998,6 +999,7 @@ async def verify_emergency_macos_beta_reconciliation_endpoint(
             verify_emergency_macos_beta_reconciliation,
             release_id,
             source_sha=source_sha,
+            incident_id=incident_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
