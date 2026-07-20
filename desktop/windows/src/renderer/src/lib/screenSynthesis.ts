@@ -12,6 +12,7 @@ import {
 } from './screenSynthesisPrompt'
 import { SCREEN_TAG } from './screenTag'
 import { maybeBuildLocalGraph } from './kgSynthesis'
+import { screenSynth } from './native'
 import type { ScreenFrameLite } from '../../../shared/types'
 
 const MODEL = (import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.5-flash'
@@ -41,17 +42,17 @@ export async function runScreenSynthesisOnce(): Promise<number> {
   if (running) return 0
   running = true
   try {
-    const state = await window.omi.screenSynthGetState()
+    const state = await screenSynth.getState()
     if (!state.enabled) return 0
 
-    const frames = await window.omi.screenSynthFramesSince()
+    const frames = await screenSynth.framesSince()
     if (frames.length === 0) return 0
     const maxTs = frames[frames.length - 1].ts
 
     const allowed = filterFrames(frames)
     if (allowed.length === 0) {
       // Nothing synthesizable, but these frames are handled — advance past them.
-      await window.omi.screenSynthAdvanceWatermark(maxTs)
+      await screenSynth.advanceWatermark(maxTs)
       return 0
     }
 
@@ -59,7 +60,7 @@ export async function runScreenSynthesisOnce(): Promise<number> {
     const redacted = allowed.map((f) => ({ ...f, ocrText: redact(f.ocrText) }))
     const segments = budgetSegments(groupFrames(redacted), PROMPT_BUDGET_CHARS)
     if (segments.length === 0) {
-      await window.omi.screenSynthAdvanceWatermark(maxTs)
+      await screenSynth.advanceWatermark(maxTs)
       return 0
     }
 
@@ -87,8 +88,8 @@ export async function runScreenSynthesisOnce(): Promise<number> {
     }
 
     // Advance only after a successful batch (writes attempted).
-    await window.omi.screenSynthAdvanceWatermark(maxTs)
-    await window.omi.screenSynthRecordRun({ lastRunAt: Date.now(), lastCount: written })
+    await screenSynth.advanceWatermark(maxTs)
+    await screenSynth.recordRun({ lastRunAt: Date.now(), lastCount: written })
     if (written > 0) void maybeBuildLocalGraph() // debounced inside (staleness-gated)
     return written
   } catch (e) {

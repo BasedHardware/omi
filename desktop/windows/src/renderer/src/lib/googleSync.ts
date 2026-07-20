@@ -6,13 +6,14 @@ import { omiApi } from './apiClient'
 import { extractGmailMemories } from './gmailExtract'
 import { extractCalendarTasks } from './calendarExtract'
 import { normalize } from './memoryExtract'
+import { native } from './native'
 
 const GMAIL_TAG = 'gmail/import/note'
 
 export type SyncOutcome = { memoriesAdded: number; tasksAdded: number; errors: string[] }
 
 async function syncGmail(existingMemories: string[]): Promise<{ added: number; error?: string }> {
-  const res = await window.omi.googleGmailFetchNew()
+  const res = await native.googleGmailFetchNew()
   if (!res.ok) return res.error === 'not_connected' ? { added: 0 } : { added: 0, error: res.error }
   if (res.items.length === 0) return { added: 0 }
 
@@ -30,7 +31,7 @@ async function syncGmail(existingMemories: string[]): Promise<{ added: number; e
   // A write failure leaves the whole batch unprocessed so the next sync retries
   // it (the existing-memory dedup prevents re-adding the ones that did succeed).
   if (writeError) return { added, error: writeError }
-  await window.omi.googleMarkProcessed(
+  await native.googleMarkProcessed(
     'gmail',
     res.items.map((i) => i.id)
   )
@@ -49,7 +50,7 @@ async function openTaskDescriptions(): Promise<Set<string>> {
 }
 
 async function syncCalendar(): Promise<{ added: number; error?: string }> {
-  const res = await window.omi.googleCalendarFetchNew()
+  const res = await native.googleCalendarFetchNew()
   if (!res.ok) return res.error === 'not_connected' ? { added: 0 } : { added: 0, error: res.error }
   if (res.items.length === 0) return { added: 0 }
 
@@ -74,7 +75,7 @@ async function syncCalendar(): Promise<{ added: number; error?: string }> {
   // Leave the batch unprocessed on a write failure so it retries next sync (the
   // open-task dedup prevents duplicating the ones that did succeed).
   if (writeError) return { added, error: writeError }
-  await window.omi.googleMarkProcessed(
+  await native.googleMarkProcessed(
     'calendar',
     res.items.map((i) => i.id)
   )

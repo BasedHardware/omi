@@ -24,6 +24,8 @@ import { ContinuousRecordingHost } from './components/recording/ContinuousRecord
 import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
+import { native, overlay } from './lib/native'
+import { toast } from './lib/toast'
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -49,7 +51,7 @@ function AppShellInner(): React.JSX.Element {
   // than the lightweight Login screen. No-op on prod (perfMark is buffered).
   useEffect(() => {
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => window.omi?.perfMark('renderer:app-ready'))
+      requestAnimationFrame(() => undefined)
     })
     // Start the animation-jank probe (no-op unless OMI_ANIM_BENCH). Runs as the
     // entrance animations (sidebar slide, content fade) play.
@@ -59,7 +61,7 @@ function AppShellInner(): React.JSX.Element {
   // The overlay is a separate window with its own conversations cache, so when it
   // saves a chat it can't invalidate ours directly. Main rebroadcasts the change
   // here so this window's Conversations tab refreshes without a relaunch.
-  useEffect(() => window.omi.onConversationsChanged(() => invalidateConversationsCache()), [])
+  useEffect(() => native.onConversationsChanged(() => invalidateConversationsCache()), [])
 
   return (
     <div className="app-canvas flex h-full min-h-0">
@@ -110,7 +112,9 @@ function App(): React.JSX.Element {
   // shell mounts (a returning user always is). The onboarding flag lives in
   // origin-scoped localStorage, which the file:// bench profile can't inherit
   // from the dev session, so without this the bench would stall on the wizard.
-  const onboarded = useOnboardingComplete() || !!window.omi?.isBench
+  const onboarded = useOnboardingComplete() || import.meta.env.VITE_OMI_BENCH === '1'
+
+  useEffect(() => overlay.onError((message) => toast('Ask a question shortcut failed', { tone: 'error', body: message })), [])
 
   // Tell main whether the summon shortcut may open the overlay. Enabled once
   // onboarding is complete; during onboarding the shortcut-setup step enables it
@@ -118,7 +122,11 @@ function App(): React.JSX.Element {
   // effect never disables what that step turned on, since `onboarded` only
   // transitions false→true.
   useEffect(() => {
-    if (onboarded) window.omiOverlay?.setEnabled(true)
+    if (onboarded) {
+      void overlay.setEnabled(true).catch((error: Error) => {
+        toast('Could not enable the Ask a question shortcut', { tone: 'error', body: error.message })
+      })
+    }
   }, [onboarded])
 
   // Push the user's saved summon shortcut to main on startup so their choice
@@ -126,7 +134,11 @@ function App(): React.JSX.Element {
   // persisted accelerator once the renderer mounts).
   useEffect(() => {
     const accel = getPreferences().overlayShortcut
-    if (accel) void window.omiOverlay?.setAccelerator(accel)
+    if (accel) {
+      void overlay.setAccelerator(accel).catch((error: Error) => {
+        toast('Could not restore the Ask a question shortcut', { tone: 'error', body: error.message })
+      })
+    }
   }, [])
 
   if (loading) {

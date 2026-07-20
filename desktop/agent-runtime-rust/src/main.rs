@@ -3,7 +3,7 @@ use omi_agent_runtime::tool_relay::ToolRelay;
 use omi_agent_runtime::{
     emit_line, parse_line, select_execution_mode, ExecutionMode, Message, PROTOCOL_VERSION,
 };
-use rx4::{Agent, Event};
+use rx4::{Agent, Event, ToolContext, ToolDefinition, ToolEffect, ToolRegistry, ToolResult};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -39,6 +39,8 @@ struct ExecutionProfile {
 struct SurfaceSession {
     owner_id: String,
     surface_kind: String,
+    external_ref_kind: String,
+    external_ref_id: String,
     conversation_id: String,
     profile: ExecutionProfile,
 }
@@ -70,7 +72,9 @@ struct Runtime {
     owner_id: Option<String>,
     last_revocation: Option<OwnerRevocationReceipt>,
     journal: JournalStore,
-    tool_relay: ToolRelay,
+    tool_relay: Arc<Mutex<ToolRelay>>,
+    daemon_boot_epoch: String,
+    next_execution_generation: u64,
     output: mpsc::UnboundedSender<Message>,
     completed: mpsc::UnboundedSender<String>,
 }
@@ -94,7 +98,9 @@ impl Runtime {
             owner_id: None,
             last_revocation: None,
             journal,
-            tool_relay: ToolRelay::new(),
+            tool_relay: Arc::new(Mutex::new(ToolRelay::new())),
+            daemon_boot_epoch: uuid::Uuid::new_v4().to_string(),
+            next_execution_generation: 1,
             output,
             completed,
         }
@@ -137,7 +143,7 @@ impl Runtime {
             "query" => self.query(input.fields),
             "interrupt" => self.interrupt(input.fields),
             "stop" => self.stop(),
-            _ => {}
+            _ => self.invalid_request(&input.fields, "agent runtime message type is not supported"),
         }
     }
 
@@ -295,6 +301,8 @@ impl Runtime {
                 SurfaceSession {
                     owner_id: owner_id.clone(),
                     surface_kind: surface_kind.clone(),
+                    external_ref_kind: key.2.clone(),
+                    external_ref_id: key.3.clone(),
                     conversation_id,
                     profile,
                 },
@@ -516,7 +524,11 @@ impl Runtime {
             return;
         };
         let key = (owner_id, surface_kind, external_ref_kind, external_ref_id);
-        let _ = self.surfaces.get(&key);
+        if let Some(session_id) = self.surfaces.remove(&key) {
+            self.sessions.remove(&session_id);
+            self.context_sources
+                .retain(|(stored_session_id, _, _), _| stored_session_id != &session_id);
+        }
     }
 
     fn journal_record_turn(&mut self, fields: Map<String, Value>) {
@@ -697,7 +709,12 @@ impl Runtime {
     }
 
     fn authorized_tool_execution_result(&mut self, fields: Map<String, Value>) {
-        match self.tool_relay.complete(&fields) {
+        let result = self
+            .tool_relay
+            .lock()
+            .map_err(|_| "tool relay lock is unavailable".to_owned())
+            .and_then(|mut relay| relay.complete(&fields));
+        match result {
             Ok((completion, duplicate)) => self.emit(
                 "authorized_tool_result",
                 envelope(
@@ -818,9 +835,11 @@ impl Runtime {
 
     fn refresh_token(&mut self, fields: Map<String, Value>) {
         let Some(owner_id) = string_field(&fields, "ownerId") else {
+            self.invalid_request(&fields, "token refresh requires ownerId");
             return;
         };
         let Some(bearer_token) = string_field(&fields, "token") else {
+            self.invalid_request(&fields, "token refresh requires token");
             return;
         };
         if !self.establish_owner(&owner_id) {
@@ -835,6 +854,7 @@ impl Runtime {
 
     fn refresh_owner(&mut self, fields: Map<String, Value>) {
         let Some(owner_id) = string_field(&fields, "ownerId") else {
+            self.invalid_request(&fields, "owner refresh requires ownerId");
             return;
         };
         if self.establish_owner(&owner_id) {
@@ -1025,18 +1045,33 @@ impl Runtime {
             );
             return;
         }
-        let profile_generation = self
+        let Some(session) = self
             .sessions
             .get(&session_id)
             .filter(|session| session.owner_id == credentials.owner_id)
-            .map_or(1, |session| session.profile.generation);
-        if let Err(error) =
-            self.journal
-                .admit_run(&credentials.owner_id, &session_id, profile_generation)
-        {
-            self.emit_error(Some(request_id), Some(client_id), "runtime_state", &error);
+            .cloned()
+        else {
+            self.emit_error(
+                Some(request_id),
+                Some(client_id),
+                "invalid_request",
+                "query session is unavailable for the active runtime owner",
+            );
             return;
-        }
+        };
+        let run_identity = match self.journal.admit_run(
+            &credentials.owner_id,
+            &session_id,
+            session.profile.generation,
+        ) {
+            Ok(identity) => identity,
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "runtime_state", &error);
+                return;
+            }
+        };
+        let execution_generation = self.next_execution_generation;
+        self.next_execution_generation += 1;
 
         let requested_mode = fields
             .get("agentMode")
@@ -1049,13 +1084,15 @@ impl Runtime {
             });
         let execution_mode = select_execution_mode(&prompt, requested_mode);
         let model = string_field(&fields, "modelProfile").unwrap_or_else(|| match execution_mode {
-            ExecutionMode::Fast => "omi-fast".into(),
-            ExecutionMode::Deep => "omi-deep".into(),
+            ExecutionMode::Fast => "omi-sonnet".into(),
+            ExecutionMode::Deep => "omi-opus".into(),
         });
         let (cancel, mut cancelled) = watch::channel(false);
         self.running.insert(request_id.clone(), cancel);
         let output = self.output.clone();
         let completed = self.completed.clone();
+        let tool_relay = Arc::clone(&self.tool_relay);
+        let daemon_boot_epoch = self.daemon_boot_epoch.clone();
         tokio::spawn(async move {
             let transport = ManagedTransport::new(base_url, credentials.bearer_token);
             let Ok(transport) = transport else {
@@ -1072,6 +1109,25 @@ impl Runtime {
             let mut agent = Agent::new();
             agent.set_model(model);
             agent.set_provider(std::sync::Arc::new(transport.provider()));
+            agent.set_workspace_root(session.profile.working_directory.clone());
+            let tools = omi_relay_tools(
+                tool_relay,
+                output.clone(),
+                credentials.owner_id,
+                session_id.clone(),
+                run_identity.run_id,
+                run_identity.attempt_id,
+                session.profile.generation,
+                session.profile.working_directory,
+                daemon_boot_epoch,
+                execution_generation,
+                session.surface_kind,
+                session.external_ref_kind,
+                session.external_ref_id,
+                execution_mode,
+                cancelled.clone(),
+            );
+            agent.set_tools(tools);
             let events = output.clone();
             let event_request_id = request_id.clone();
             let event_client_id = client_id.clone();
@@ -1102,8 +1158,18 @@ impl Runtime {
                     Err(error) => send_error(&output, &request_id, &client_id, "transport_interruption", &error.to_string()),
                 },
                 changed = cancelled.changed() => {
-                    if changed.is_ok() && *cancelled.borrow() {
-                        send_result(&output, &request_id, &client_id, &session_id, "", "cancelled");
+                    match changed {
+                        Ok(()) if *cancelled.borrow() => {
+                            send_result(&output, &request_id, &client_id, &session_id, "", "cancelled");
+                        }
+                        Ok(()) => {}
+                        Err(_) => send_error(
+                            &output,
+                            &request_id,
+                            &client_id,
+                            "runtime_interruption",
+                            "agent runtime cancellation channel closed",
+                        ),
                     }
                 }
             }
@@ -1158,6 +1224,127 @@ impl Runtime {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn omi_relay_tools(
+    relay: Arc<Mutex<ToolRelay>>,
+    output: mpsc::UnboundedSender<Message>,
+    owner_id: String,
+    session_id: String,
+    run_id: String,
+    attempt_id: String,
+    profile_generation: u64,
+    workspace_root: String,
+    daemon_boot_epoch: String,
+    execution_generation: u64,
+    surface_kind: String,
+    external_ref_kind: String,
+    external_ref_id: String,
+    execution_mode: ExecutionMode,
+    cancelled: watch::Receiver<bool>,
+) -> ToolRegistry {
+    let mut tools = ToolRegistry::new();
+    tools.register(
+        ToolDefinition::new_boxed(
+            "omi",
+            "Execute an Omi-authorized tool action.",
+            r#"{"type":"object","additionalProperties":false,"required":["toolName","input"],"properties":{"toolName":{"type":"string"},"input":{"type":"object"}}}"#,
+            Box::new(move |_context: Arc<ToolContext>, arguments: String| {
+                let relay = Arc::clone(&relay);
+                let output = output.clone();
+                let owner_id = owner_id.clone();
+                let session_id = session_id.clone();
+                let run_id = run_id.clone();
+                let attempt_id = attempt_id.clone();
+                let workspace_root = workspace_root.clone();
+                let daemon_boot_epoch = daemon_boot_epoch.clone();
+                let surface_kind = surface_kind.clone();
+                let external_ref_kind = external_ref_kind.clone();
+                let external_ref_id = external_ref_id.clone();
+                let mut cancelled = cancelled.clone();
+                Box::pin(async move {
+                    let parsed = serde_json::from_str::<Map<String, Value>>(&arguments);
+                    let Ok(mut parsed) = parsed else {
+                        return ToolResult::err("omi", "Omi tool arguments must be JSON");
+                    };
+                    let tool_name = parsed.remove("toolName").and_then(|value| {
+                        value
+                            .as_str()
+                            .filter(|value| !value.is_empty())
+                            .map(ToOwned::to_owned)
+                    });
+                    let input = parsed.remove("input").and_then(|value| value.as_object().cloned());
+                    if !parsed.is_empty() || tool_name.is_none() || input.is_none() {
+                        return ToolResult::err(
+                            "omi",
+                            "Omi tool arguments require exactly toolName and input",
+                        );
+                    }
+                    let identity = omi_agent_runtime::tool_relay::Identity {
+                        invocation_id: uuid::Uuid::new_v4().to_string(),
+                        owner_id,
+                        session_id,
+                        run_id,
+                        attempt_id,
+                        profile_generation,
+                        daemon_boot_epoch,
+                        execution_generation,
+                    };
+                    let dispatch = relay
+                        .lock()
+                        .map_err(|_| "tool relay lock is unavailable".to_owned())
+                        .and_then(|mut relay| {
+                            relay.dispatch(
+                                identity,
+                                tool_name.unwrap_or_default(),
+                                input.unwrap_or_default(),
+                                workspace_root.into(),
+                                surface_kind,
+                                Some(external_ref_kind),
+                                Some(external_ref_id),
+                                match execution_mode {
+                                    ExecutionMode::Fast => "fast".into(),
+                                    ExecutionMode::Deep => "deep".into(),
+                                },
+                            )
+                        });
+                    let (authorization, completion) = match dispatch {
+                        Ok(dispatch) => dispatch,
+                        Err(error) => return ToolResult::err("omi", error),
+                    };
+                    let Some(mut fields) = authorization.as_object().cloned() else {
+                        return ToolResult::err("omi", "tool relay authorization is invalid");
+                    };
+                    let Some(Value::String(kind)) = fields.remove("type") else {
+                        return ToolResult::err("omi", "tool relay authorization is invalid");
+                    };
+                    if output.send(Message { kind, fields }).is_err() {
+                        return ToolResult::err("omi", "agent runtime event stream is unavailable");
+                    }
+                    tokio::select! {
+                        result = completion => match result {
+                        Ok(result) if result["outcome"] == "succeeded" => {
+                            ToolResult::ok("omi", result["result"].as_str().unwrap_or_default())
+                        }
+                        Ok(result) => ToolResult::err(
+                            "omi",
+                            result["result"].as_str().unwrap_or("authorized tool failed"),
+                        ),
+                        Err(_) => ToolResult::err("omi", "authorized tool result was not delivered"),
+                        },
+                        changed = cancelled.changed() => match changed {
+                            Ok(()) if *cancelled.borrow() => ToolResult::err("omi", "cancelled"),
+                            Ok(()) => ToolResult::err("omi", "invalid cancellation state"),
+                            Err(_) => ToolResult::err("omi", "agent runtime cancellation channel closed"),
+                        },
+                    }
+                })
+            }),
+        )
+        .with_effect(ToolEffect::Process),
+    );
+    tools
+}
+
 fn map_agent_event(event: &Event, request_id: &str, client_id: &str) -> Option<Message> {
     match event {
         Event::MessageDelta { delta } => Some(Message {
@@ -1165,8 +1352,19 @@ fn map_agent_event(event: &Event, request_id: &str, client_id: &str) -> Option<M
             fields: envelope(Some(request_id), Some(client_id), json!({"text": delta})),
         }),
         Event::ToolCall(call) => {
-            let input =
-                serde_json::from_str::<Map<String, Value>>(&call.arguments).unwrap_or_default();
+            let input = match serde_json::from_str::<Map<String, Value>>(&call.arguments) {
+                Ok(input) => input,
+                Err(_) => {
+                    return Some(Message {
+                        kind: "error".into(),
+                        fields: envelope(
+                            Some(request_id),
+                            Some(client_id),
+                            json!({"message": "agent runtime received malformed tool arguments", "failure": {"code": "invalid_tool_call", "failureCode": "invalid_tool_call", "userMessage": "Omi could not run a tool request. Please try again."}}),
+                        ),
+                    });
+                }
+            };
             Some(Message {
                 kind: "tool_use".into(),
                 fields: envelope(
@@ -1352,23 +1550,20 @@ fn hash_json(value: &Value) -> String {
     format!("sha256:{:x}", Sha256::digest(encoded))
 }
 
-#[tokio::main]
-async fn main() {
-    let (output, mut output_receiver) = mpsc::unbounded_channel();
+pub async fn run_in_process(
+    managed_base_url: Option<String>,
+    mut input_receiver: mpsc::UnboundedReceiver<Message>,
+    output: mpsc::UnboundedSender<Message>,
+) -> Result<(), String> {
     let (completed, mut completed_receiver) = mpsc::unbounded_channel();
     let journal = match JournalStore::open_default() {
         Ok(journal) => journal,
         Err(error) => {
-            eprintln!("unable to open Omi journal: {error}");
-            return;
+            send_error(&output, "", "", "runtime_startup_failed", &error);
+            return Err(error);
         }
     };
-    let mut runtime = Runtime::new(
-        env::var("OMI_API_BASE_URL").ok(),
-        journal,
-        output,
-        completed,
-    );
+    let mut runtime = Runtime::new(managed_base_url, journal, output, completed);
     runtime.emit(
         "init",
         envelope(
@@ -1377,6 +1572,31 @@ async fn main() {
             json!({"sessionId": "", "agentControlTools": [], "runtimeVersion": RUNTIME_VERSION, "runtimeCapabilities": ["journal_import_remote_turn", "runtime_adapter_availability"], "runtimeAdapterIds": ["rx4"]}),
         ),
     );
+    loop {
+        tokio::select! {
+            message = input_receiver.recv() => match message {
+                Some(message) => runtime.handle(message),
+                None => break,
+            },
+            request_id = completed_receiver.recv() => {
+                if let Some(request_id) = request_id {
+                    runtime.running.remove(&request_id);
+                }
+            },
+        }
+    }
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    let (input, input_receiver) = mpsc::unbounded_channel();
+    let (output, mut output_receiver) = mpsc::unbounded_channel();
+    let runtime = tokio::spawn(run_in_process(
+        env::var("OMI_API_BASE_URL").ok(),
+        input_receiver,
+        output,
+    ));
     let stdin = BufReader::new(tokio::io::stdin());
     let mut lines = stdin.lines();
     let mut stdout = tokio::io::stdout();
@@ -1385,14 +1605,11 @@ async fn main() {
             line = lines.next_line() => match line {
                 Ok(Some(line)) if !line.trim().is_empty() => {
                     if let Ok(message) = parse_line(&line) {
-                        runtime.handle(message);
+                        let _ = input.send(message);
                     }
                 }
                 Ok(Some(_)) => {}
                 Ok(None) | Err(_) => break,
-            },
-            Some(request_id) = completed_receiver.recv() => {
-                runtime.running.remove(&request_id);
             },
             Some(message) = output_receiver.recv() => {
                 if let Ok(line) = emit_line(&message) {
@@ -1403,6 +1620,8 @@ async fn main() {
             },
         }
     }
+    drop(input);
+    let _ = runtime.await;
 }
 
 #[cfg(test)]
@@ -1445,6 +1664,85 @@ mod tests {
         .expect("tool call must map");
         assert_eq!(tool.kind, "tool_use");
         assert_eq!(tool.fields["input"]["q"], "omi");
+
+        let malformed = map_agent_event(
+            &Event::ToolCall(rx4::ToolCall {
+                id: "tool".into(),
+                name: "search".into(),
+                arguments: "not json".into(),
+            }),
+            "request",
+            "client",
+        )
+        .expect("malformed tool call must be surfaced");
+        assert_eq!(malformed.kind, "error");
+        assert_eq!(
+            malformed.fields["failure"]["failureCode"],
+            "invalid_tool_call"
+        );
+    }
+
+    #[tokio::test]
+    async fn rx4_tool_execution_waits_for_the_exact_authorized_result() {
+        let relay = Arc::new(Mutex::new(ToolRelay::new()));
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (_cancel, cancelled) = watch::channel(false);
+        let tools = omi_relay_tools(
+            Arc::clone(&relay),
+            output,
+            "owner".into(),
+            "session".into(),
+            "run".into(),
+            "attempt".into(),
+            3,
+            "/tmp/omi".into(),
+            "boot".into(),
+            7,
+            "main_chat".into(),
+            "chat".into(),
+            "chat-1".into(),
+            ExecutionMode::Fast,
+            cancelled,
+        );
+        let task = tokio::spawn(async move {
+            tools
+                .execute(
+                    "omi",
+                    &Arc::new(ToolContext::new("/tmp/omi")),
+                    r#"{"toolName":"bash","input":{"command":"pwd"}}"#,
+                )
+                .await
+                .expect("Omi tool must be registered")
+        });
+        let authorization = receiver.recv().await.expect("tool must authorize");
+        assert_eq!(authorization.kind, "authorized_tool_execution");
+        assert_eq!(authorization.fields["runId"], "run");
+        assert_eq!(authorization.fields["attemptId"], "attempt");
+        assert_eq!(authorization.fields["manifestDigest"], "omi-rx4-tools@1");
+        let mut completion = authorization.fields;
+        completion.insert("outcome".into(), json!("succeeded"));
+        completion.insert("result".into(), json!("/tmp/omi"));
+        completion.remove("toolName");
+        completion.remove("input");
+        completion.remove("effectClass");
+        completion.remove("retryPolicy");
+        completion.remove("surfaceKind");
+        completion.remove("externalRefKind");
+        completion.remove("externalRefId");
+        completion.remove("originatingUserText");
+        completion.remove("precedingAssistantText");
+        completion.remove("runMode");
+        completion.remove("chatMode");
+        let completion_result = relay
+            .lock()
+            .expect("relay must be available")
+            .complete(&completion)
+            .expect("exact authorized result must complete");
+        assert!(!completion_result.1);
+        let result = task.await.expect("tool task must finish");
+        assert_eq!(result.id, "omi");
+        assert_eq!(result.content, "/tmp/omi");
+        assert!(!result.is_error);
     }
 
     #[tokio::test]
@@ -1539,6 +1837,15 @@ mod tests {
 
         runtime.handle(parse_line(r#"{"type":"invalidate_session","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("invalidation fixture must parse"));
         assert!(receiver.try_recv().is_err());
+
+        runtime.handle(parse_line(r#"{"type":"resolve_surface_session","requestId":"resolve-after-invalidation","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1"}"#).expect("surface fixture must parse"));
+        let recreated = receiver
+            .recv()
+            .await
+            .expect("invalidated surface must create a new session");
+        assert_eq!(recreated.kind, "surface_session_resolved");
+        assert_eq!(recreated.fields["created"], true);
+        assert_ne!(recreated.fields["sessionId"], session_id);
     }
 
     #[tokio::test]
@@ -1554,6 +1861,41 @@ mod tests {
         let error = receiver.recv().await.expect("invalid adapter must reject");
         assert_eq!(error.kind, "error");
         assert_eq!(error.fields["failure"]["failureCode"], "invalid_request");
+    }
+
+    #[tokio::test]
+    async fn rejects_unsupported_and_malformed_control_messages() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+
+        runtime.handle(
+            parse_line(r#"{"type":"unsupported","requestId":"unsupported","clientId":"client"}"#)
+                .expect("fixture must parse"),
+        );
+        let unsupported = receiver
+            .recv()
+            .await
+            .expect("unsupported command must reject");
+        assert_eq!(unsupported.kind, "error");
+        assert_eq!(
+            unsupported.fields["failure"]["failureCode"],
+            "invalid_request"
+        );
+
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","requestId":"owner","clientId":"client"}"#)
+                .expect("fixture must parse"),
+        );
+        let malformed = receiver
+            .recv()
+            .await
+            .expect("malformed owner refresh must reject");
+        assert_eq!(malformed.kind, "error");
+        assert_eq!(
+            malformed.fields["failure"]["failureCode"],
+            "invalid_request"
+        );
     }
 
     #[tokio::test]

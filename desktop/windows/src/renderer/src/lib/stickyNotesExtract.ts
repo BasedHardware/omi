@@ -1,12 +1,5 @@
-// Synthesize Windows Sticky Notes text into durable memories — the renderer half
-// of parity item 3e, mirroring macOS AppleNotesReaderService. Reuses the exact
-// transport used by memoryExtract.ts (desktopApi → POST /v2/chat/completions,
-// the Claude "synthesis" tier) plus its JSON-parse + dedupe helpers; only the
-// prompt is notes-specific.
-import { desktopApi } from './apiClient'
+import { callAgentLLM } from './agentLLM'
 import { extractJSONObject, normalize } from './memoryExtract'
-
-const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001'
 
 const SYSTEM_PROMPT =
   'You convert a person’s notes into concise durable user memories. Output only valid JSON.'
@@ -61,22 +54,7 @@ export async function extractNoteMemories(
   const trimmed = notesText.trim()
   if (!trimmed) return { memories: [], profile: '' }
 
-  const res = await desktopApi.post(
-    '/v2/chat/completions',
-    {
-      model: SYNTHESIS_MODEL,
-      stream: false,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildNotesPrompt(trimmed, existing) }
-      ]
-    },
-    { timeout: 60_000 }
-  )
-
-  const content: string =
-    (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-      ?.content ?? ''
+  const content = await callAgentLLM(`${SYSTEM_PROMPT}\n\n${buildNotesPrompt(trimmed, existing)}`)
   const parsed = JSON.parse(extractJSONObject(content)) as {
     memories?: unknown
     profile?: unknown

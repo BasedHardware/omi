@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { StepScaffold } from './StepScaffold'
 import { getPreferences } from '../../lib/preferences'
 import { DEFAULT_OVERLAY_ACCELERATOR, acceleratorToTokens } from '../../lib/overlayShortcut'
+import { overlay } from '../../lib/native'
 
 type VoiceIntroStepProps = {
   stepIndex: number
@@ -31,12 +32,12 @@ export function VoiceIntroStep({
 
   useEffect(() => {
     // The bar should already be enabled/warm from the shortcut step; ensure it.
-    window.omiOverlay?.setEnabled(true)
-    const offVis = window.omiOverlay?.onVisibilityChange((s) => setActive(s.active))
-    const offVoice = window.omiOverlay?.onVoiceCaptured(() => setCaptured(true))
+    void overlay.setEnabled(true)
+    const offVis = overlay.onVisibilityChange((s) => setActive(s.active))
+    const offVoice = overlay.onVoiceCaptured(() => setCaptured(true))
     return () => {
-      offVis?.()
-      offVoice?.()
+      offVis()
+      offVoice()
     }
   }, [])
 

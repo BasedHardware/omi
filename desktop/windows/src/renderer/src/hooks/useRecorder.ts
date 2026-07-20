@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useRecording } from './useRecording'
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
 import { invalidateConversationsCache, refreshCloudConversations } from '../lib/pageCache'
-import type { CaptureSource, TranscriptLine } from '../../../shared/types'
+import type { TranscriptLine } from '../../../shared/types'
+import { native } from '../lib/native'
 
 function linesToString(lines: TranscriptLine[], interim: string): string {
   const parts = lines.map((l) => (l.speaker ? `${l.speaker}: ${l.text}` : l.text))
@@ -46,7 +47,7 @@ export type UseRecorder = {
   videoRef: React.RefObject<HTMLVideoElement | null>
   /** Begin a recording session. Pass `system: true` to also transcribe loopback. */
   start: (opts?: { system?: boolean }) => Promise<void>
-  pickScreen: (s: CaptureSource) => Promise<void>
+  pickScreen: () => Promise<void>
   stopScreen: () => void
   stop: () => Promise<void>
 }
@@ -122,31 +123,21 @@ export function useRecorder(): UseRecorder {
       const hint =
         err.name === 'NotAllowedError'
           ? withSystem
-            ? '\n\nWindows blocked microphone or system-audio capture. Open Settings → Privacy & security → Microphone and allow this app.'
-            : '\n\nWindows blocked microphone access. Open Settings → Privacy & security → Microphone and allow this app.'
+            ? '\n\nThe system blocked microphone or system-audio capture. Allow this app to use the microphone in system settings.'
+            : '\n\nThe system blocked microphone access. Allow this app to use the microphone in system settings.'
           : ''
       alert(`Recording failed: ${err.message}${hint}`)
       stopSession()
     }
   }
 
-  const pickScreen = async (s: CaptureSource): Promise<void> => {
+  const pickScreen = async (): Promise<void> => {
     try {
-      const stream = await (
-        navigator.mediaDevices as unknown as {
-          getUserMedia: (c: unknown) => Promise<MediaStream>
-        }
-      ).getUserMedia({
+      const stream = await navigator.mediaDevices.getDisplayMedia({
         audio: false,
         video: {
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: s.id,
-            minWidth: 640,
-            maxWidth: 1920,
-            minHeight: 360,
-            maxHeight: 1080
-          }
+          width: { min: 640, max: 1920 },
+          height: { min: 360, max: 1080 }
         }
       })
       setScreenStream(stream)
@@ -154,7 +145,7 @@ export function useRecorder(): UseRecorder {
       const err = e as Error
       const hint =
         err.name === 'NotAllowedError'
-          ? '\n\nWindows blocked screen capture. Open Settings → Privacy & security and allow desktop apps to access screen recording.'
+          ? '\n\nThe system blocked screen capture. Allow this app to record the screen in system settings.'
           : ''
       alert(`Screen capture failed: ${err.message}${hint}`)
     }
@@ -197,7 +188,7 @@ export function useRecorder(): UseRecorder {
         systemLines,
         systemInterim
       })
-      await window.omi.insertLocalConversation({
+      await native.insertLocalConversation({
         id: session.conversationId,
         startedAt: session.startedAt,
         endedAt: session.endedAt,

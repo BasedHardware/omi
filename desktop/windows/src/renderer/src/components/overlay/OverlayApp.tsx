@@ -6,13 +6,14 @@ import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { auth } from '../../lib/firebase'
 import { Waveform } from './Waveform'
 import { ChatMessages } from '../chat/ChatMessages'
+import { overlay } from '../../lib/native'
 import './overlay.css'
 
 /** Slim draggable strip with a centered grab handle. The whole strip is a drag
  *  region (-webkit-app-region: drag); the handle just signals that it's movable. */
 function DragHandle(): React.JSX.Element {
   return (
-    <div className="overlay-drag flex h-6 items-center justify-center">
+    <div data-tauri-drag-region className="overlay-drag flex h-6 items-center justify-center">
       <div className="h-1 w-8 rounded-full bg-neutral-600/60" />
     </div>
   )
@@ -39,7 +40,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   const enqueueSend = useCallback((text: string): void => {
     // Single send choke-point (typed Enter + voice commit) — tell onboarding the
     // user asked something in the bar.
-    window.omiOverlay.notifyAsked()
+    void overlay.notifyAsked()
     sendChainRef.current = sendChainRef.current.then(() => sendRef.current(text)).catch(() => {})
   }, [])
 
@@ -61,7 +62,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
     // unavailable (quota/1008) or silent. Drives the onboarding voice step so a
     // no-quota account can finish onboarding instead of being stuck waiting for a
     // transcript that will never arrive.
-    onCaptureEnd: () => window.omiOverlay.notifyVoiceCaptured(),
+    onCaptureEnd: () => void overlay.notifyVoiceCaptured(),
     restoreDraft: (snapshot) => setDraft(snapshot),
     getDraft: () => draftRef.current
   })
@@ -106,7 +107,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // state from the close animation. The entrance fade itself is driven by the shell
   // in OverlayApp, so the history survives hide/show without a remount.
   useEffect(() => {
-    return window.omiOverlay.onShown(() => {
+    return overlay.onShown(() => {
       setLeaving(false)
       inputRef.current?.focus()
     })
@@ -114,7 +115,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
 
   const dismiss = (): void => {
     setLeaving(true)
-    window.setTimeout(() => window.omiOverlay.hide(), 140)
+    window.setTimeout(() => void overlay.hide(), 140)
   }
 
   // Esc: while recording OR finalizing, abort the capture (don't send). Otherwise
@@ -241,7 +242,7 @@ function SignedOutPanel(): React.JSX.Element {
       <div className="flex flex-col items-center gap-3 px-6 pb-6 pt-1 text-center">
         <div className="text-sm text-neutral-300">Sign in to Omi to chat.</div>
         <button
-          onClick={() => window.omiOverlay.focusMain()}
+          onClick={() => void overlay.focusMain()}
           className="overlay-no-drag rounded-xl bg-neutral-200 px-4 py-2 text-sm font-medium text-neutral-900"
         >
           Open Omi to sign in
@@ -267,12 +268,8 @@ export function OverlayApp(): React.JSX.Element {
   const [authReady, setAuthReady] = useState(false)
   const shellRef = useRef<HTMLDivElement | null>(null)
 
-  // Stage the shell hidden as early as possible — a ref callback runs during commit,
-  // before the first paint — so the window never flashes the fully-opaque panel
-  // before the entrance fade runs.
   const setShellRef = useCallback((node: HTMLDivElement | null) => {
     shellRef.current = node
-    if (node) node.style.opacity = '0'
   }, [])
 
   // Fade + scale the whole shell in. Driven imperatively (Web Animations API) so it
@@ -298,7 +295,11 @@ export function OverlayApp(): React.JSX.Element {
   // Transparent page background so the native window material shows through.
   useEffect(() => {
     document.body.classList.add('overlay-body')
-    return () => document.body.classList.remove('overlay-body')
+    if (navigator.userAgent.includes('Macintosh')) document.body.classList.add('overlay-macos')
+    return () => {
+      document.body.classList.remove('overlay-body')
+      document.body.classList.remove('overlay-macos')
+    }
   }, [])
 
   // Track window focus via main (reliable BrowserWindow focus/blur): when the
@@ -310,7 +311,7 @@ export function OverlayApp(): React.JSX.Element {
       document.body.classList.toggle('overlay-inactive', v)
     }
     setInactive(!document.hasFocus())
-    return window.omiOverlay.onActiveChange((active) => setInactive(!active))
+    return overlay.onActiveChange((active) => setInactive(!active))
   }, [])
 
   // Wait for Firebase to finish resolving persistence before deciding signed-in
@@ -336,7 +337,7 @@ export function OverlayApp(): React.JSX.Element {
     if (!ready) return
     const el = shellRef.current
     if (!el) return
-    const report = (): void => window.omiOverlay.setHeight(el.offsetHeight + 2)
+    const report = (): void => void overlay.setHeight(el.offsetHeight + 2)
     report()
     const ro = new ResizeObserver(report)
     ro.observe(el)
@@ -345,10 +346,10 @@ export function OverlayApp(): React.JSX.Element {
 
   // Play the entrance fade on each summon; pre-stage the shell hidden right before a
   // hide so the next summon fades in cleanly instead of flashing the opaque panel.
-  useEffect(() => window.omiOverlay.onShown(() => playEnter()), [playEnter])
+  useEffect(() => overlay.onShown(() => playEnter()), [playEnter])
   useEffect(
     () =>
-      window.omiOverlay.onWillHide(() => {
+      overlay.onWillHide(() => {
         const el = shellRef.current
         if (el) el.style.opacity = '0'
       }),

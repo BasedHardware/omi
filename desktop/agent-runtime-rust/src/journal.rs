@@ -64,7 +64,7 @@ impl JournalStore {
 
     fn from_connection(connection: Connection) -> Result<Self, String> {
         connection
-            .execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")
+            .execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|error| error.to_string())?;
         let store = Self { connection };
         store.migrate()?;

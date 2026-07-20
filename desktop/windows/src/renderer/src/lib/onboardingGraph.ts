@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { KnowledgeGraph } from '../../../shared/types'
-import { buildUserNode, buildLanguage, buildApps } from './onboardingGraphModel'
+import { buildUserNode, buildLanguage, buildApps, buildWorkspaceFolders } from './onboardingGraphModel'
+import { native } from './native'
 
 const EMPTY: KnowledgeGraph = { nodes: [], edges: [] }
 
@@ -21,26 +22,33 @@ export function subscribeOnboardingGraph(cb: (g: KnowledgeGraph) => void): () =>
 }
 
 export async function resetOnboardingGraph(): Promise<void> {
-  await window.omi.localGraphClear()
+  await native.localGraphClear()
   current = EMPTY
   emit()
 }
 
 export async function addUserNode(name: string): Promise<void> {
-  current = await window.omi.localGraphUpsert([buildUserNode(name)], [])
+  current = await native.localGraphUpsert([buildUserNode(name)], [])
   emit()
 }
 
 export async function addLanguageNode(code: string, label: string): Promise<void> {
   const { nodes, edges } = buildLanguage(code, label)
-  current = await window.omi.localGraphUpsert(nodes, edges)
+  current = await native.localGraphUpsert(nodes, edges)
   emit()
 }
 
 export async function addAppNodes(apps: { name: string }[]): Promise<void> {
   const { nodes, edges } = buildApps(apps)
   if (nodes.length === 0) return
-  current = await window.omi.localGraphUpsert(nodes, edges)
+  current = await native.localGraphUpsert(nodes, edges)
+  emit()
+}
+
+export async function addWorkspaceNodes(folders: string[]): Promise<void> {
+  const { nodes, edges } = buildWorkspaceFolders(folders)
+  if (nodes.length === 0) return
+  current = await native.localGraphUpsert(nodes, edges)
   emit()
 }
 

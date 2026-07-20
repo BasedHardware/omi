@@ -7,6 +7,7 @@ import {
 } from '../../../../shared/timelineGeometry'
 import { relativeTime, isSameDay } from '../../../../shared/relativeTime'
 import { parseWindowTitle } from '../../lib/windowTitle'
+import { rewind } from '../../lib/native'
 
 export function RewindPlayer({
   frames,
@@ -32,7 +33,7 @@ export function RewindPlayer({
       setSrc(null)
       return
     }
-    void window.omi.rewindFrameImage(frame.imagePath).then((dataUrl) => {
+    void rewind.frameImage(frame.imagePath).then((dataUrl) => {
       if (alive) setSrc(dataUrl)
     })
     return () => {

@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { auth } from './firebase'
 import { getWindowsDeviceIdHash } from './clientDevice'
+import { OMI_API_BASE, OMI_DESKTOP_API_BASE } from './omiEndpoints'
 
 // Retried statuses: 429 (rate limited) and 503 (transient). Anything else fails
 // fast as before.
@@ -50,5 +51,5 @@ function makeClient(baseURL: string): AxiosInstance {
   return client
 }
 
-export const omiApi = makeClient(import.meta.env.VITE_OMI_API_BASE as string)
-export const desktopApi = makeClient(import.meta.env.VITE_OMI_DESKTOP_API_BASE as string)
+export const omiApi = makeClient(OMI_API_BASE)
+export const desktopApi = makeClient(OMI_DESKTOP_API_BASE)

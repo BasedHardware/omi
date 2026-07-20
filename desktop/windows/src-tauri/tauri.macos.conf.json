@@ -1,0 +1,10 @@
+{
+  "productName": "Omi",
+  "identifier": "com.omi.computer-macos",
+  "bundle": {
+    "macOS": {
+      "infoPlist": "Info.plist",
+      "minimumSystemVersion": "14.0"
+    }
+  }
+}

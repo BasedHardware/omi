@@ -19,7 +19,7 @@ export function MicPermissionStep({
 }: MicPermissionStepProps): React.JSX.Element {
   // Trigger the real Windows microphone grant. getUserMedia surfaces the OS
   // prompt; we immediately release the device since we only needed the grant.
-  const requestAccess = async (): Promise<void> => {
+  const requestAccess = async (): Promise<boolean> => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       stream.getTracks().forEach((t) => t.stop())
@@ -28,6 +28,7 @@ export function MicPermissionStep({
       // One step, no separate continuous-recording screen; toggle it off anytime via
       // the sidebar mic switch or Settings.
       setPreferences({ continuousRecording: true })
+      return true
     } catch (e) {
       const err = e as Error
       const hint =
@@ -35,6 +36,7 @@ export function MicPermissionStep({
           ? '\n\nWindows blocked microphone access. Open Settings → Privacy & security → Microphone and allow this app.'
           : ''
       alert(`Microphone access failed: ${err.message}${hint}`)
+      return false
     }
   }
 
@@ -50,12 +52,12 @@ export function MicPermissionStep({
       cardLabel="Microphone"
       statusText={{
         idle: 'Not granted yet',
-        waiting: 'Waiting for Windows',
+        waiting: 'Waiting for permission',
         granted: 'Granted'
       }}
       buttonLabel={{
         idle: 'Microphone',
-        waiting: 'Waiting for Windows',
+        waiting: 'Waiting for permission',
         granted: 'Granted'
       }}
       onActivate={requestAccess}

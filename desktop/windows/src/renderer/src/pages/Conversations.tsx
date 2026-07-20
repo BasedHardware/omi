@@ -18,46 +18,12 @@ import {
   subscribeCloudRefresh,
   invalidateConversationsCache,
   getPendingConversations,
-  reconcilePending,
   type ConversationRow
 } from '../lib/pageCache'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
-import type { LocalConversation } from '../../../shared/types'
-import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
-
-function summarize(segments: { text: string }[] | undefined): string {
-  if (!segments || segments.length === 0) return ''
-  return segments
-    .map((s) => s.text)
-    .filter(Boolean)
-    .join(' ')
-}
-
-function localToRow(c: LocalConversation): ConversationRow {
-  const isChat = c.kind === 'chat'
-  const rawPreview = isChat
-    ? (c.messages?.find((m) => m.role === 'user')?.content ?? '')
-    : c.transcript
-  const preview = rawPreview
-    ? rawPreview.slice(0, 200) + (rawPreview.length > 200 ? '…' : '')
-    : isChat
-      ? '(empty chat)'
-      : '(empty transcript)'
-  return {
-    id: c.id,
-    title: c.title || (isChat ? 'Chat with Omi' : 'Local recording'),
-    subtitle: isChat
-      ? `${new Date(c.startedAt).toLocaleString()} · ${c.messages?.length ?? 0} messages`
-      : `${new Date(c.startedAt).toLocaleString()} · ${Math.round(
-          (c.endedAt - c.startedAt) / 1000
-        )}s`,
-    preview,
-    source: 'local',
-    localKind: isChat ? 'chat' : 'recording',
-    sortAt: c.createdAt
-  }
-}
+import { native } from '../lib/native'
+import { loadConversations, localToRow } from '../lib/conversationLoader'
 
 function ConversationSkeleton(): React.JSX.Element {
   return (
@@ -82,48 +48,15 @@ export function Conversations(): React.JSX.Element {
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(
+    null
+  )
   const pendingTimeoutRef = useRef<number | null>(null)
 
   const loadAll = useCallback(async (): Promise<void> => {
-    conversationsCache.error = null
-    setError(null)
-    const out: ConversationRow[] = []
-    try {
-      const r = await omiApi.get<CloudConversation[]>('/v1/conversations', {
-        params: { limit: 100, offset: 0 }
-      })
-      const list = Array.isArray(r.data) ? r.data : []
-      for (const c of list) {
-        const created = c.created_at ? new Date(c.created_at).getTime() : 0
-        out.push({
-          id: c.id,
-          title: c.structured?.title || 'Untitled conversation',
-          emoji: c.structured?.emoji || undefined,
-          subtitle: c.created_at ? new Date(c.created_at).toLocaleString() : '',
-          preview: c.structured?.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
-          source: 'cloud',
-          sortAt: created
-        })
-      }
-    } catch (e) {
-      const msg = (e as Error).message
-      conversationsCache.error = msg
-      setError(msg)
-    }
-    try {
-      const locals = await window.omi.listLocalConversations()
-      for (const c of locals) out.push(localToRow(c))
-    } catch (e) {
-      console.error('Failed to load local conversations:', e)
-    }
-    // Drop optimistic pendings the backend has now produced, then fold the rest in
-    // at the top so a just-finalized conversation shows instantly.
-    reconcilePending(out.filter((r) => r.source === 'cloud'))
-    const merged = [...getPendingConversations(), ...out].sort((a, b) => b.sortAt - a.sortAt)
-    conversationsCache.rows = merged
-    conversationsCache.loaded = true
-    setRows(merged)
+    const nextRows = await loadConversations(true)
+    setRows(nextRows)
+    setError(conversationsCache.error)
     setLoading(false)
   }, [])
 
@@ -147,7 +80,7 @@ export function Conversations(): React.JSX.Element {
   // real time without waiting for a remount.
   useEffect(() => {
     return subscribeConversations(() => {
-      window.omi
+      native
         .listLocalConversations()
         .then((locals) => {
           const localRows = locals.map(localToRow)
@@ -172,7 +105,9 @@ export function Conversations(): React.JSX.Element {
     if (filter === 'recording' && r.localKind !== 'recording') return false
     if (query.trim()) {
       const q = query.trim().toLowerCase()
-      return (r.title?.toLowerCase() ?? '').includes(q) || (r.preview?.toLowerCase() ?? '').includes(q)
+      return (
+        (r.title?.toLowerCase() ?? '').includes(q) || (r.preview?.toLowerCase() ?? '').includes(q)
+      )
     }
     return true
   })
@@ -184,7 +119,7 @@ export function Conversations(): React.JSX.Element {
       if (!row) continue
       try {
         if (row.source === 'local') {
-          await window.omi.deleteLocalConversation(id)
+          await native.deleteLocalConversation(id)
         } else {
           await omiApi.delete(`/v1/conversations/${id}`)
         }
@@ -238,7 +173,9 @@ export function Conversations(): React.JSX.Element {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Conversations"
-        subtitle={loading ? 'Loading…' : `${rows.length} conversation${rows.length === 1 ? '' : 's'}`}
+        subtitle={
+          loading ? 'Loading…' : `${rows.length} conversation${rows.length === 1 ? '' : 's'}`
+        }
         actions={
           <button
             onClick={() => navigate('/conversations/live')}
@@ -463,7 +400,8 @@ export function Conversations(): React.JSX.Element {
       {pendingDelete && (
         <div className="glass-strong mx-6 mb-4 flex items-center justify-between rounded-2xl px-4 py-3 lg:mx-10">
           <span className="text-sm text-white/80">
-            {pendingDelete.ids.length} conversation{pendingDelete.ids.length !== 1 ? 's' : ''} will be deleted in 5s
+            {pendingDelete.ids.length} conversation{pendingDelete.ids.length !== 1 ? 's' : ''} will
+            be deleted in 5s
           </span>
           <button
             onClick={undoDelete}

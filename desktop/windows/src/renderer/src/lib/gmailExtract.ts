@@ -1,11 +1,10 @@
 // Synthesize Gmail metadata (Subject/From/snippet — never bodies) into durable,
 // atomic memories. Reuses the memoryExtract transport + JSON/dedupe helpers; only
 // the prompt is Gmail-specific. Mirrors stickyNotesExtract.ts.
-import { desktopApi } from './apiClient'
+import { callAgentLLM } from './agentLLM'
 import { extractJSONObject, normalize } from './memoryExtract'
 import type { GmailItem } from '../../../shared/types'
 
-const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001'
 const SYSTEM_PROMPT =
   'You convert email metadata into concise durable user memories. Output only valid JSON.'
 
@@ -70,20 +69,6 @@ export async function extractGmailMemories(
   existing: string[] = []
 ): Promise<string[]> {
   if (items.length === 0) return []
-  const res = await desktopApi.post(
-    '/v2/chat/completions',
-    {
-      model: SYNTHESIS_MODEL,
-      stream: false,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildGmailPrompt(items, existing) }
-      ]
-    },
-    { timeout: 60_000 }
-  )
-  const content: string =
-    (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-      ?.content ?? ''
+  const content = await callAgentLLM(`${SYSTEM_PROMPT}\n\n${buildGmailPrompt(items, existing)}`)
   return parseGmailMemories(content, existing)
 }

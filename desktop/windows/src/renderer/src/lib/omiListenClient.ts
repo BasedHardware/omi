@@ -2,6 +2,7 @@ import { auth } from './firebase'
 import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
 import { getWindowsDeviceIdHash } from './clientDevice'
+import { native } from './native'
 
 export type OmiListenCallbacks = {
   /** Fires once when the v4/listen WS reaches OPEN. */
@@ -37,7 +38,7 @@ async function getSystemAudioStream(): Promise<MediaStream> {
     const err = e as Error
     if (/not supported/i.test(err.message)) {
       throw new Error(
-        'System-audio capture handler not active. Fully restart the app (stop and rerun `npm run dev`) so the main process reloads.'
+        'System-audio capture handler is not active. Fully restart the app so the native host reloads.'
       )
     }
     throw e
@@ -45,7 +46,7 @@ async function getSystemAudioStream(): Promise<MediaStream> {
   const audioTracks = display.getAudioTracks()
   display.getVideoTracks().forEach((t) => t.stop())
   if (audioTracks.length === 0) {
-    throw new Error('Windows returned no system-audio (loopback) track.')
+    throw new Error('The system returned no system-audio track.')
   }
   return new MediaStream(audioTracks)
 }
@@ -79,7 +80,7 @@ export async function startOmiListen(
   let stopped = false
   let connected = false
 
-  const unsub = window.omi.onListenMessage((msg) => {
+  const unsub = await native.onListenMessage((msg) => {
     if (msg.sessionId !== sessionId) return
     if (msg.kind === 'connected') {
       connected = true
@@ -106,7 +107,7 @@ export async function startOmiListen(
   })
 
   try {
-    await window.omi.listenStart({
+    await native.listenStart({
       sessionId,
       source,
       token,
@@ -147,7 +148,7 @@ export async function startOmiListen(
       i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
     }
     // Transfer the underlying buffer to keep IPC cheap.
-    window.omi.listenFeed(sessionId, i16.buffer)
+    void native.listenFeed(sessionId, new Uint8Array(i16.buffer))
   }
   processor.connect(audioCtx.destination)
 
@@ -175,7 +176,7 @@ export async function startOmiListen(
       } catch {
         /* ignore */
       }
-      void window.omi.listenStop(sessionId)
+      void native.listenStop(sessionId)
     }
   }
 }

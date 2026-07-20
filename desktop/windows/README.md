@@ -1,10 +1,7 @@
-# omi-windows
+# Omi Desktop
 
-Electron remains current host. `src-tauri/` is a Windows/Linux transition host;
-it shares this React renderer build but exposes no Electron compatibility shim.
-Port a native path to Rust before wiring it into the renderer.
-
-Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app.
+The Tauri host is the default macOS, Windows, and Linux desktop build. It shares the
+React renderer and Rust backend across all three platforms.
 
 ## Recommended IDE Setup
 
@@ -19,7 +16,7 @@ bun install
 # 2. Create your local env file (required — the app won't start without it)
 cp .env.example .env
 
-# 3. Start the app
+# 3. Start the Tauri app
 bun run dev
 ```
 
@@ -50,23 +47,18 @@ Everything below is blank in `.env.example` and safe to leave unset:
 ## Build
 
 ```bash
-# Windows
+# Windows (NSIS + MSI)
 bun run build:win
 
-# macOS
+# macOS (app + DMG)
 bun run build:mac
 
-# Linux
+# Linux (AppImage + DEB + RPM)
 bun run build:linux
 ```
 
-## Tauri transition builds
-
-```bash
-bun run tauri:dev
-bun run tauri:build:windows
-bun run tauri:build:linux
-```
+On macOS, smoke the generated `../target/release/bundle/macos/Omi Desktop.app`
+after `bun run build:mac`.
 
 Vite inlines the `.env` values at build time, so a packaged installer needs no `.env` —
 the config is compiled into the binary.

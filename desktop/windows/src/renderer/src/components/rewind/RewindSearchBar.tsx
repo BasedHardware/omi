@@ -1,7 +1,14 @@
 import { useState } from 'react'
 
-export function RewindSearchBar({ onSearch }: { onSearch: (q: string) => void }): React.JSX.Element {
+export function RewindSearchBar({
+  onSearch,
+  searching
+}: {
+  onSearch: (q: string) => void
+  searching: boolean
+}): React.JSX.Element {
   const [q, setQ] = useState('')
+  const query = q.trim()
   return (
     <form
       onSubmit={(e) => {
@@ -18,9 +25,10 @@ export function RewindSearchBar({ onSearch }: { onSearch: (q: string) => void })
       />
       <button
         type="submit"
-        className="rounded bg-[color:var(--accent)] px-3 py-2 text-sm text-white"
+        disabled={!query || searching}
+        className="rounded bg-[color:var(--accent)] px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
       >
-        Search
+        {searching ? 'Searching…' : 'Search'}
       </button>
     </form>
   )

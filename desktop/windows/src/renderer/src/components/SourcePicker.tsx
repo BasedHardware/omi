@@ -1,19 +1,10 @@
-import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
-import type { CaptureSource } from '../../../shared/types'
 
 export function SourcePicker(props: {
   open: boolean
   onClose: () => void
-  onPick: (s: CaptureSource) => void
+  onPick: () => Promise<void>
 }): React.JSX.Element | null {
-  const [sources, setSources] = useState<CaptureSource[]>([])
-
-  useEffect(() => {
-    if (!props.open) return
-    window.omi.getCaptureSources().then(setSources).catch(() => setSources([]))
-  }, [props.open])
-
   if (!props.open) return null
 
   return (
@@ -36,28 +27,14 @@ export function SourcePicker(props: {
             <X className="h-4 w-4" />
           </button>
         </div>
-        {sources.length === 0 && (
-          <div className="py-12 text-center text-sm text-text-tertiary">Loading sources…</div>
-        )}
-        <div className="grid grid-cols-3 gap-3">
-          {sources.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => {
-                props.onPick(s)
-                props.onClose()
-              }}
-              className="surface-card-interactive overflow-hidden p-2 text-left"
-            >
-              <img
-                src={s.thumbnailDataUrl}
-                alt={s.name}
-                className="w-full rounded-xl border border-white/10"
-              />
-              <div className="mt-2 truncate text-xs text-text-secondary">{s.name}</div>
-            </button>
-          ))}
-        </div>
+        <button
+          onClick={() => {
+            void props.onPick().finally(props.onClose)
+          }}
+          className="surface-card-interactive w-full p-4 text-left text-sm text-text-secondary"
+        >
+          Choose a window or screen
+        </button>
       </div>
     </div>
   )

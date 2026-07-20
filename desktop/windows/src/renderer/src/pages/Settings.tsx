@@ -10,6 +10,8 @@ import { RewindTab } from '../components/settings/tabs/RewindTab'
 import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
 import { AccountTab } from '../components/settings/tabs/AccountTab'
 import { AdvancedTab } from '../components/settings/tabs/AdvancedTab'
+import { IntegrationsTab } from '../components/settings/tabs/IntegrationsTab'
+import { AboutTab } from '../components/settings/tabs/AboutTab'
 import { Memories } from './Memories'
 
 // The Memories tab renders the full Memories page (its own layout, brain map and
@@ -19,8 +21,10 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   general: GeneralTab,
   rewind: RewindTab,
   privacy: PrivacyTab,
+  connections: IntegrationsTab,
   account: AccountTab,
-  advanced: AdvancedTab
+  advanced: AdvancedTab,
+  about: AboutTab
 }
 
 function SettingsInner(): React.JSX.Element {

@@ -4,6 +4,7 @@ import { planRetention, memoryJunkBreakdown, type SweepConvo } from './retention
 import { invalidateConversationsCache } from './pageCache'
 import { getPreferences } from './preferences'
 import type { CloudConversation } from './conversationTypes'
+import { native } from './native'
 
 const SWEEP_INTERVAL_MS = 30 * 60 * 1000
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -12,7 +13,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 async function loadConvos(): Promise<SweepConvo[]> {
   const out: SweepConvo[] = []
   try {
-    const locals = await window.omi.listLocalConversations()
+    const locals = await native.listLocalConversations()
     for (const c of locals) {
       out.push({ id: c.id, source: 'local', kind: c.kind, text: c.transcript ?? '' })
     }
@@ -42,7 +43,7 @@ async function deleteConvosPaced(localIds: string[], cloudIds: string[]): Promis
   let n = 0
   for (const id of localIds) {
     try {
-      await window.omi.deleteLocalConversation(id)
+      await native.deleteLocalConversation(id)
       n++
     } catch (e) {
       console.warn('[retention] local convo delete failed:', id, (e as Error).message)

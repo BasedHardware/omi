@@ -5,6 +5,7 @@ import { summarizeActivity } from './insightActivity'
 import { buildInsightPrompt, parseInsightResponse, INSIGHT_RESPONSE_SCHEMA } from './insightPrompt'
 import { selectInsight } from './insightGate'
 import type { RewindFrame } from '../../../shared/types'
+import { insights, rewind } from './native'
 
 const MODEL = (import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.5-flash'
 const LOOKBACK_MS = 60 * 60 * 1000
@@ -29,28 +30,28 @@ export async function runInsightOnce(): Promise<boolean> {
   if (running) return false
   running = true
   try {
-    const settings = await window.omi.insightGetSettings()
+    const settings = await insights.getSettings()
     if (!settings.enabled) return false
     // Only runs when Rewind is actually capturing (no frames otherwise).
-    const rewind = await window.omi.rewindGetSettings()
-    if (!rewind.captureEnabled) return false
+    const rewindSettings = await rewind.getSettings()
+    if (!rewindSettings.captureEnabled) return false
 
     const now = Date.now()
-    const frames = await window.omi.rewindFrames(now - LOOKBACK_MS, now)
+    const frames = await rewind.frames(now - LOOKBACK_MS, now)
     const allowed = filter(frames)
     if (allowed.length === 0) {
-      await window.omi.insightSetSettings({ lastRunAt: now })
+      await insights.setSettings({ lastRunAt: now })
       return false
     }
 
     const redacted = allowed.map(redactFrameFields)
     const summary = summarizeActivity(redacted, SUMMARY_BUDGET)
     if (!summary) {
-      await window.omi.insightSetSettings({ lastRunAt: now })
+      await insights.setSettings({ lastRunAt: now })
       return false
     }
 
-    const recent = await window.omi.insightRecent(RECENT_FOR_DEDUPE)
+    const recent = await insights.recent(RECENT_FOR_DEDUPE)
     const recentHeadlines = recent.map((r) => r.headline)
 
     const raw = await generate({
@@ -60,10 +61,10 @@ export async function runInsightOnce(): Promise<boolean> {
     })
     const insight = selectInsight(parseInsightResponse(raw), { threshold: THRESHOLD, recentHeadlines })
 
-    await window.omi.insightSetSettings({ lastRunAt: now })
+    await insights.setSettings({ lastRunAt: now })
     if (!insight) return false
-    await window.omi.insightAdd(insight)
-    window.omi.insightShow(insight)
+    await insights.add(insight)
+    await insights.show(insight)
     return true
   } catch (e) {
     console.warn('[insight] run failed', e)
@@ -85,7 +86,7 @@ export function maybeStartInsightEngine(): void {
     if (timer) clearTimeout(timer)
     timer = setTimeout(async () => {
       await runInsightOnce()
-      const s = await window.omi.insightGetSettings().catch(() => null)
+      const s = await insights.getSettings().catch(() => null)
       const intervalMs = Math.max(1, s?.intervalMin ?? 15) * 60 * 1000
       schedule(intervalMs)
     }, delayMs)

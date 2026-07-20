@@ -3,18 +3,32 @@ import {
   initializeAuth,
   getAuth,
   GoogleAuthProvider,
+  connectAuthEmulator,
+  signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithCustomToken,
   signOut,
   onAuthStateChanged,
   browserLocalPersistence,
   browserPopupRedirectResolver,
   type User
 } from 'firebase/auth'
+import { native } from './native'
 
 export const firebaseConfig = {
   apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string) || 'AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8',
   authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string) || 'based-hardware.firebaseapp.com',
   projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string) || 'based-hardware'
+}
+
+const localProfile = import.meta.env.VITE_OMI_DESKTOP_LOCAL_PROFILE === '1'
+const authEmulatorHost = (import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_HOST as string | undefined)?.trim()
+const localEmail = (import.meta.env.VITE_OMI_LOCAL_AUTH_EMAIL as string | undefined)?.trim()
+const localPassword = import.meta.env.VITE_OMI_LOCAL_AUTH_PASSWORD as string | undefined
+
+function emulatorUrl(host: string | undefined): string | null {
+  if (!host || !/^(?:127\.0\.0\.1|localhost):\d+$/.test(host)) return null
+  return `http://${host}`
 }
 
 const app = initializeApp(firebaseConfig)
@@ -38,9 +52,23 @@ export const auth = (() => {
   }
 })()
 
+const localAuthEmulator = emulatorUrl(authEmulatorHost)
+if (localProfile && localAuthEmulator) connectAuthEmulator(auth, localAuthEmulator, { disableWarnings: true })
+
 export async function signInWithGoogle(): Promise<User> {
   const provider = new GoogleAuthProvider()
   const result = await signInWithPopup(auth, provider)
+  return result.user
+}
+
+export async function signInWithDesktopGoogle(): Promise<User> {
+  if (localProfile) {
+    if (!localAuthEmulator) throw new Error('Local Firebase Auth requires a loopback VITE_FIREBASE_AUTH_EMULATOR_HOST.')
+    if (!localEmail || !localPassword) throw new Error('Local Firebase Auth requires seeded email and password credentials.')
+    const result = await signInWithEmailAndPassword(auth, localEmail, localPassword)
+    return result.user
+  }
+  const result = await signInWithCustomToken(auth, await native.authGoogleSignIn())
   return result.user
 }
 

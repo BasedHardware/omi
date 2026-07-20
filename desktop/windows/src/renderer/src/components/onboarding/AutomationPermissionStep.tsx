@@ -1,6 +1,7 @@
 import { Zap } from 'lucide-react'
 import { setPreferences } from '../../lib/preferences'
 import { PermissionStep } from './PermissionStep'
+import { native } from '../../lib/native'
 
 type AutomationPermissionStepProps = {
   stepIndex: number
@@ -21,8 +22,14 @@ export function AutomationPermissionStep({
   // records consent. useChat's action-planner pre-step gates on this preference
   // (alongside the OMI_AUTOMATION env kill-switch), so flipping it on here is what
   // actually lets Omi take real UI actions in your apps.
-  const enableAutomation = async (): Promise<void> => {
+  const enableAutomation = async (): Promise<boolean> => {
+    const capability = await native.automationCapabilities()
+    if (!capability.supported) {
+      alert(capability.reason ?? 'Desktop automation is unavailable on this platform.')
+      return false
+    }
     setPreferences({ automationConsentedAt: Date.now() })
+    return true
   }
 
   return (

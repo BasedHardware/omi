@@ -53,6 +53,24 @@ body.overlay-body.overlay-inactive {
   background: rgba(0, 0, 0, 0.62) !important;
 }
 
+body.overlay-body.overlay-macos,
+body.overlay-body.overlay-macos.overlay-inactive {
+  background: transparent !important;
+  min-height: auto;
+}
+
+body.overlay-macos .overlay-panel {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0 0 18px 18px;
+  background: rgba(16, 16, 16, 0.96);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+}
+
+body.overlay-macos .overlay-zoom {
+  zoom: 1;
+  width: 640px;
+}
+
 /* Drag / no-drag regions for the frameless-with-overlay window. The top strip is
    draggable; interactive controls must opt out so typing/clicking still work. */
 .overlay-drag {

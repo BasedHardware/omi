@@ -1,3 +1,5 @@
+extern crate self as omi_agent_runtime;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
@@ -11,6 +13,9 @@ use tokio::task::JoinHandle;
 
 pub mod safety;
 
+#[allow(dead_code)]
+#[path = "main.rs"]
+pub mod host;
 pub mod provider_policy;
 pub mod tool_relay;
 

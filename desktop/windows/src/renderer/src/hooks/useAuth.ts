@@ -17,7 +17,7 @@ const BENCH_USER = {
 } as unknown as User
 
 export function useAuth(): { user: User | null; loading: boolean } {
-  const isBench = !!window.omi?.isBench
+  const isBench = import.meta.env.VITE_OMI_BENCH === '1'
   const [user, setUser] = useState<User | null>(isBench ? BENCH_USER : null)
   const [loading, setLoading] = useState(!isBench)
 

@@ -10,8 +10,8 @@ export function GeneralTab(): React.JSX.Element {
     <SettingRow
       icon={MessagesSquare}
       title="Chat history"
-      subtitle="By default, one ongoing conversation (shared with the floating bar) that persists across launches — scroll up in chat to load older messages. Or start a fresh conversation each launch."
-      keywords="conversation thread floating bar history infinite"
+      subtitle="By default, one ongoing conversation (shared with the Notch) that persists across launches — scroll up in chat to load older messages. Or start a fresh conversation each launch."
+      keywords="conversation thread notch history infinite"
       control={
         <select
           value={chatHistoryMode}

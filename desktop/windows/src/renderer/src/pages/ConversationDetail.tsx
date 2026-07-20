@@ -8,6 +8,7 @@ import type { ChatMessage } from '../../../shared/types'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Spinner } from '../components/ui/Spinner'
 import type { Conversation as ServerConversation } from '../lib/omiApi.generated'
+import { native } from '../lib/native'
 
 type Display = {
   title: string
@@ -102,7 +103,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   const load = async (idStr: string, isLocal: boolean): Promise<void> => {
     try {
       if (isLocal) {
-        const c = await window.omi.getLocalConversation(idStr)
+        const c = await native.getLocalConversation(idStr)
         if (!c) {
           setError('Local conversation not found')
           return
@@ -199,7 +200,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     if (!id) return
     if (!confirm('Delete this local recording? This cannot be undone.')) return
     try {
-      await window.omi.deleteLocalConversation(id)
+      await native.deleteLocalConversation(id)
       invalidateConversationsCache()
       toast('Recording deleted', { tone: 'info' })
       navigate('/conversations')
@@ -214,7 +215,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     // Optimistic — update the heading immediately, revert if the write fails.
     setDisplay((d) => (d ? { ...d, title } : d))
     try {
-      await window.omi.updateLocalConversationTitle(id, title)
+      await native.updateLocalConversationTitle(id, title)
       invalidateConversationsCache()
     } catch (e) {
       setDisplay((d) => (d ? { ...d, title: prev } : d))

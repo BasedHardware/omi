@@ -7,6 +7,7 @@ import { runGoogleSync } from '../../../lib/googleSync'
 import { useMemories } from '../../../hooks/useMemories'
 import { SettingRow } from '../SettingRow'
 import type { GoogleStatus } from '../../../../../shared/types'
+import { native } from '../../../lib/native'
 
 const GOOGLE_ENABLED =
   import.meta.env.VITE_ENABLE_GOOGLE_INTEGRATION === '1' ||
@@ -30,7 +31,7 @@ export function IntegrationsTab(): React.JSX.Element {
     setStickyMemories(null)
     setStickyProfile('')
     try {
-      const result = await window.omi.readStickyNotes()
+      const result = await native.readStickyNotes()
       if (!result.available) {
         toast('No Sticky Notes found on this PC', { tone: 'warn' })
         return
@@ -100,7 +101,9 @@ export function IntegrationsTab(): React.JSX.Element {
 
   useEffect(() => {
     if (!GOOGLE_ENABLED) return
-    window.omi.googleStatus().then(setGoogleStatus).catch(() => {})
+    void native.googleStatus().then(setGoogleStatus).catch((error: Error) => {
+      toast('Could not load Google connection', { tone: 'error', body: error.message })
+    })
   }, [])
 
   const runSync = async (): Promise<void> => {
@@ -117,7 +120,7 @@ export function IntegrationsTab(): React.JSX.Element {
         )
       }
       if (out.memoriesAdded > 0) await refresh()
-      await window.omi.googleStatus().then(setGoogleStatus)
+      await native.googleStatus().then(setGoogleStatus)
     } catch (e) {
       toast('Google sync failed', { tone: 'error', body: (e as Error).message })
     } finally {
@@ -138,7 +141,7 @@ export function IntegrationsTab(): React.JSX.Element {
     if (googleBusy) return
     setGoogleBusy(true)
     try {
-      const status = await window.omi.googleConnect()
+      const status = await native.googleConnect()
       setGoogleStatus(status)
       if (status.connected) toast('Google connected', { tone: 'success', body: status.email })
     } catch (e) {
@@ -152,7 +155,7 @@ export function IntegrationsTab(): React.JSX.Element {
     if (googleBusy) return
     setGoogleBusy(true)
     try {
-      setGoogleStatus(await window.omi.googleDisconnect())
+      setGoogleStatus(await native.googleDisconnect())
       toast('Google disconnected', { tone: 'success' })
     } catch (e) {
       toast('Could not disconnect', { tone: 'error', body: (e as Error).message })

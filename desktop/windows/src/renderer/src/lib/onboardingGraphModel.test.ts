@@ -4,7 +4,8 @@ import {
   slugId,
   buildUserNode,
   buildLanguage,
-  buildApps
+  buildApps,
+  buildWorkspaceFolders
 } from './onboardingGraphModel'
 
 describe('onboardingGraphModel', () => {
@@ -43,5 +44,11 @@ describe('onboardingGraphModel', () => {
   it('skips apps with empty names', () => {
     const { nodes } = buildApps([{ name: '  ' }, { name: 'Figma' }])
     expect(nodes).toEqual([{ id: 'app_figma', label: 'Figma', nodeType: 'thing' }])
+  })
+
+  it('builds workspace nodes from indexed folders', () => {
+    const { nodes, edges } = buildWorkspaceFolders(['/Users/omi/Projects', '/Users/omi/Notes'])
+    expect(nodes.map((node) => node.label)).toEqual(['Projects', 'Notes'])
+    expect(edges.every((edge) => edge.label === 'works in')).toBe(true)
   })
 })

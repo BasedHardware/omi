@@ -2,14 +2,13 @@ import { deriveTechNodes, deriveAppNodes, deriveFolderNodes } from './kgTech'
 import { rankApps } from './appSelection'
 import { mergeGraph, parseGraphResponse } from './kgGraph'
 import { buildSynthesisPrompt, buildOverviewPrompt } from './kgSynthesisPrompt'
-import { desktopApi, omiApi } from './apiClient'
+import { omiApi } from './apiClient'
+import { callAgentLLM } from './agentLLM'
 import type { LocalKGNode, LocalKGStatus } from '../../../shared/types'
 import type { Memory } from '../hooks/useMemories'
+import { native } from './native'
 
-const SYNTH_MODEL = 'claude-haiku-4-5-20251001'
 const STALE_MS = 12 * 60 * 60 * 1000
-
-type ChatCompletion = { choices?: { message?: { content?: string } }[] }
 
 // Fetch up to 200 memory contents (best-effort). Memories are the macOS app's
 // primary MEANING source (they already absorb the Gmail/Notes/import facts).
@@ -18,7 +17,9 @@ async function fetchMemoryStrings(): Promise<string[]> {
     const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset: 0 } })
     const data = r.data as { memories?: Memory[] } | Memory[]
     const list = Array.isArray(data) ? data : (data.memories ?? [])
-    return list.map((m) => m.content).filter((c): c is string => typeof c === 'string' && !!c.trim())
+    return list
+      .map((m) => m.content)
+      .filter((c): c is string => typeof c === 'string' && !!c.trim())
   } catch {
     return []
   }
@@ -34,7 +35,7 @@ async function fetchMemoryStrings(): Promise<string[]> {
 export async function buildLocalGraph(): Promise<LocalKGStatus> {
   const now = Date.now()
   try {
-    const digest = await window.omi.kgFileIndexDigest()
+    const digest = await native.kgFileIndexDigest()
     if (digest.totalFiles === 0) return { nodeCount: 0, edgeCount: 0, lastBuiltAt: null }
 
     const tech = deriveTechNodes(digest.byExtension, now)
@@ -43,12 +44,12 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
     // Best-effort: an IPC failure just means no app nodes this build.
     let appNodes: ReturnType<typeof deriveAppNodes> = []
     try {
-      const appRecords = await window.omi.indexFilesApps(200)
+      const appRecords = await native.fileIndexApps(200)
       // Rank by REAL foreground time (live monitor + one-time UserAssist seed) and
       // keep ONLY apps with recorded usage (filterUnused) — onboarding shows the
       // handful the user actually uses (~9 on macOS), not 30 install-recency
       // guesses. With no usage data, rankApps falls back to denylist + mtime.
-      const usage = await window.omi.getAppUsage().catch(() => [])
+      const usage = await native.appUsageList().catch(() => [])
       appNodes = deriveAppNodes(
         rankApps(appRecords, 30, usage, { filterUnused: true }).map((a) => a.name),
         now
@@ -62,17 +63,7 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
 
     let parsed = { nodes: [], edges: [] } as ReturnType<typeof parseGraphResponse>
     try {
-      const res = await desktopApi.post(
-        '/v2/chat/completions',
-        {
-          model: SYNTH_MODEL,
-          stream: false,
-          messages: [{ role: 'user', content: buildSynthesisPrompt(digest, memories) }]
-        },
-        { timeout: 60_000 }
-      )
-      const content = (res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? ''
-      parsed = parseGraphResponse(content)
+      parsed = parseGraphResponse(await callAgentLLM(buildSynthesisPrompt(digest, memories)))
     } catch (e) {
       console.warn('[kg] synthesis LLM call failed; saving deterministic floor only', e)
     }
@@ -88,16 +79,7 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
       const entityNodes = graph.nodes.filter((n) =>
         ['project', 'person', 'org', 'interest', 'technology'].includes(n.nodeType)
       )
-      const res = await desktopApi.post(
-        '/v2/chat/completions',
-        {
-          model: SYNTH_MODEL,
-          stream: false,
-          messages: [{ role: 'user', content: buildOverviewPrompt(entityNodes, memories) }]
-        },
-        { timeout: 60_000 }
-      )
-      const text = ((res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? '').trim()
+      const text = (await callAgentLLM(buildOverviewPrompt(entityNodes, memories))).trim()
       if (text) {
         cardNode = {
           id: 'overview:card',
@@ -112,10 +94,8 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
       console.warn('[kg] overview card synthesis failed; saving graph without it', e)
     }
 
-    const finalGraph = cardNode
-      ? { nodes: [...graph.nodes, cardNode], edges: graph.edges }
-      : graph
-    await window.omi.kgSaveGraph(finalGraph)
+    const finalGraph = cardNode ? { nodes: [...graph.nodes, cardNode], edges: graph.edges } : graph
+    await native.kgSaveGraph(finalGraph)
     return {
       nodeCount: finalGraph.nodes.length,
       edgeCount: finalGraph.edges.length,
@@ -132,7 +112,7 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
 // STALE_MS — not on every launch. Fire-and-forget; never blocks chat.
 export async function maybeBuildLocalGraph(): Promise<void> {
   try {
-    const status = await window.omi.kgStatus()
+    const status = await native.kgStatus()
     const stale = !status.lastBuiltAt || Date.now() - status.lastBuiltAt > STALE_MS
     if (status.nodeCount === 0 || stale) void buildLocalGraph()
   } catch {

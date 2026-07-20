@@ -8,10 +8,10 @@ import { callAgentLLM } from '../lib/agentLLM'
 import type { AutomationPlan } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
+import { native } from '../lib/native'
+import { streamAgentResponse } from '../lib/agentRuntime'
 
 export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
-
-const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 
 export type UseChat = {
   history: ChatMsg[]
@@ -31,7 +31,7 @@ export type UseChat = {
 }
 
 /**
- * Omi chat backed by streaming `/v2/messages`. The thread is persisted as a
+ * Omi chat backed by the shared Rust agent runtime. The thread is persisted as a
  * local conversation (kind='chat') in real time — created the moment a message
  * is sent and upserted as the reply streams — so it shows up in the
  * Conversations list immediately. One conversation per hook lifetime (i.e. per
@@ -77,7 +77,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   useEffect(() => {
     if (mode !== 'infinite' || surface !== 'main' || !chatIdRef.current) return
     let cancelled = false
-    void window.omi
+    void native
       .getLocalConversation(chatIdRef.current)
       .then((c) => {
         // Skip if a send already started before this async load resolved —
@@ -120,7 +120,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     let toStore = thread
     if (mode === 'infinite') {
       try {
-        const existing = await window.omi.getLocalConversation(chatIdRef.current)
+        const existing = await native.getLocalConversation(chatIdRef.current)
         if (existing?.startedAt) startedAtRef.current = existing.startedAt
         toStore = mergeChatMessages(existing?.messages ?? [], thread)
       } catch {
@@ -132,7 +132,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       .map((m) => `${m.role === 'user' ? 'You' : 'Omi'}: ${m.content}`)
       .join('\n\n')
     try {
-      await window.omi.insertLocalConversation({
+      await native.insertLocalConversation({
         id: chatIdRef.current,
         startedAt: startedAtRef.current,
         endedAt: Date.now(),
@@ -142,9 +142,6 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         messages: toStore
       })
       invalidateConversationsCache() // this renderer's cache (immediate)
-      // …and tell every OTHER window (main ↔ overlay) to refresh too, since each
-      // renderer has its own per-process conversations cache.
-      window.omi.notifyConversationsChanged()
     } catch (e) {
       console.error('Failed to persist chat conversation:', e)
     }
@@ -168,13 +165,14 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     // unless OMI_AUTOMATION=0) and the user's onboarding opt-in. Until the user
     // grants the Automation step, every message falls straight through to normal
     // chat.
-    if (!window.omi.automationEnabled) return { kind: 'chat' }
+    const capabilities = await native.automationCapabilities().catch(() => ({ supported: false }))
+    if (!capabilities.supported) return { kind: 'chat' }
     if (!getPreferences().automationConsentedAt) return { kind: 'chat' }
     if (!looksLikeAction(text)) return { kind: 'chat' }
     try {
-      const handle = await window.omi.automationTargetWindow().catch(() => null)
+      const handle = await native.automationTargetWindow().catch(() => null)
       const result = await planActions(text, {
-        getSnapshot: () => window.omi.automationSnapshot(handle ?? undefined),
+        getSnapshot: () => native.automationSnapshot(handle ?? undefined),
         callLLM: callAgentLLM
       })
       if (result.ok) return { kind: 'planned', plan: result.plan }
@@ -200,7 +198,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // Consent + execution happen in a NATIVE Windows dialog (main process), so
       // this works the same from the main window and the floating overlay. We
       // don't stream a reply — just post the outcome.
-      const r = await window.omi.automationConfirmRun(verdict.plan)
+      const r = await native.automationConfirmRun(verdict.plan)
       const outMsg: ChatMsg = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -241,7 +239,9 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
 
     let assistantText = ''
     try {
-      const token = await auth.currentUser?.getIdToken()
+      const user = auth.currentUser
+      const token = await user?.getIdToken()
+      if (!user || !token) throw new Error('Sign in is required to chat with Omi.')
       // Hybrid pre-step: gather context to PREPEND to the text we send (not what we
       // persist). Both are best-effort ('' on failure) and run concurrently so the
       // send isn't serialized behind them:
@@ -258,63 +258,24 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
-      const res = await fetch(`${OMI_BASE}/v2/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ text: textToSend })
-      })
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
-
-      // Each SSE line arrives as `data: <chunk>` (with `done:` marking the end).
-      // Strip the field prefix before appending, otherwise the literal "data:"
-      // leaks into the rendered reply. The backend also (a) emits ephemeral
-      // "thinking" status events whose payload starts with `think:` ("Checking
-      // action items", "Searching memories") — those aren't part of the reply,
-      // so drop them — and (b) encodes reply newlines as the literal token
-      // `__CRLF__` so they survive single-line SSE framing; restore those.
-      const parseChunk = (line: string): string | null => {
-        if (!line || line.startsWith('done:')) return null
-        const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
-        if (content.startsWith('think:')) return null
-        return content.replace(/__CRLF__/g, '\n')
-      }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
-        for (const line of lines) {
-          const chunk = parseChunk(line)
-          if (chunk === null) continue
+      assistantText = await streamAgentResponse({
+        ownerId: user.uid,
+        token,
+        conversationId: chatIdRef.current ?? assistantId,
+        prompt: textToSend,
+        onDelta: (chunk) => {
           assistantText += chunk
           setHistory((h) => {
             const next = [...h]
             next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
             return next
           })
+          if (Date.now() - lastPersist > 1500) {
+            lastPersist = Date.now()
+            void persistChat(buildThread(assistantText))
+          }
         }
-        if (Date.now() - lastPersist > 1500) {
-          lastPersist = Date.now()
-          void persistChat(buildThread(assistantText))
-        }
-      }
-      const tail = parseChunk(buffer)
-      if (tail !== null) {
-        assistantText += tail
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
-      }
+      })
       // The conversational backend sometimes answers an action-intent message
       // with raw plan JSON (when it reached chat WITHOUT our planner — e.g. a
       // keyword-less follow-up like "again"). Don't render that raw in the thread.

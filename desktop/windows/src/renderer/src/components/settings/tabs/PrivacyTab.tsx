@@ -4,6 +4,7 @@ import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import type { UsageSettings } from '../../../../../shared/types'
+import { native } from '../../../lib/native'
 
 const RETENTION_OPTIONS: ReadonlyArray<{ days: number; label: string }> = [
   { days: 30, label: '30 days' },
@@ -16,10 +17,10 @@ const RETENTION_OPTIONS: ReadonlyArray<{ days: number; label: string }> = [
 export function PrivacyTab(): React.JSX.Element {
   const [usage, setUsage] = useState<UsageSettings | null>(null)
   useEffect(() => {
-    window.omi.usageGetSettings().then(setUsage).catch(() => setUsage(null))
+    native.usageGetSettings().then(setUsage).catch(() => setUsage(null))
   }, [])
   const saveUsage = async (next: UsageSettings): Promise<void> => {
-    setUsage(await window.omi.usageSetSettings(next))
+    setUsage(await native.usageSetSettings(next))
   }
 
   // Desktop-automation opt-in. The toggle writes the same `automationConsentedAt`
@@ -27,8 +28,11 @@ export function PrivacyTab(): React.JSX.Element {
   // planner on it. `OMI_AUTOMATION=0` is a hard build kill-switch (exposed as
   // automationEnabled) — when off, the feature can't run, so the toggle is shown
   // disabled regardless of consent.
-  const automationAvailable = window.omi.automationEnabled
+  const [automationAvailable, setAutomationAvailable] = useState(false)
   const [autoConsent, setAutoConsent] = useState<boolean>(!!getPreferences().automationConsentedAt)
+  useEffect(() => {
+    native.automationCapabilities().then((capabilities) => setAutomationAvailable(capabilities.supported)).catch(() => setAutomationAvailable(false))
+  }, [])
   const toggleAutomation = (on: boolean): void => {
     setAutoConsent(on)
     setPreferences({ automationConsentedAt: on ? Date.now() : undefined })

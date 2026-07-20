@@ -1,11 +1,10 @@
 // Synthesize upcoming Calendar events into actionable tasks. Reuses the
 // memoryExtract transport + extractJSONObject helper. parseCalendarTasks is
 // split out (pure) so the JSON handling is unit-tested without the network.
-import { desktopApi } from './apiClient'
+import { callAgentLLM } from './agentLLM'
 import { extractJSONObject } from './memoryExtract'
 import type { CalendarItem } from '../../../shared/types'
 
-const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001'
 const SYSTEM_PROMPT =
   'You convert upcoming calendar events into concise actionable to-do items. Output only valid JSON.'
 
@@ -61,20 +60,6 @@ export function parseCalendarTasks(content: string): SynthesizedTask[] {
 
 export async function extractCalendarTasks(items: CalendarItem[]): Promise<SynthesizedTask[]> {
   if (items.length === 0) return []
-  const res = await desktopApi.post(
-    '/v2/chat/completions',
-    {
-      model: SYNTHESIS_MODEL,
-      stream: false,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildCalendarPrompt(items) }
-      ]
-    },
-    { timeout: 60_000 }
-  )
-  const content: string =
-    (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-      ?.content ?? ''
+  const content = await callAgentLLM(`${SYSTEM_PROMPT}\n\n${buildCalendarPrompt(items)}`)
   return parseCalendarTasks(content)
 }

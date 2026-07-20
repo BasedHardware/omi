@@ -1,12 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildGmailPrompt, parseGmailMemories } from './gmailExtract'
+import { buildGmailPrompt, extractGmailMemories, parseGmailMemories } from './gmailExtract'
 import type { GmailItem } from '../../../shared/types'
 
-vi.mock('./apiClient', () => ({
-  desktopApi: {
-    post: vi.fn()
-  }
-}))
+const { callAgentLLM } = vi.hoisted(() => ({ callAgentLLM: vi.fn() }))
+vi.mock('./agentLLM', () => ({ callAgentLLM }))
 
 const item = (over: Partial<GmailItem>): GmailItem => ({
   id: 'm1',
@@ -42,4 +39,10 @@ describe('parseGmailMemories', () => {
     expect(parseGmailMemories('```json\n{"memories":[]}\n```', [])).toEqual([])
     expect(parseGmailMemories('not json at all', [])).toEqual([])
   })
+})
+
+it('routes synthesis through the shared agent runtime', async () => {
+  callAgentLLM.mockResolvedValueOnce('{"memories":["Has a dog"]}')
+  await expect(extractGmailMemories([item({})])).resolves.toEqual(['Has a dog'])
+  expect(callAgentLLM).toHaveBeenCalledWith(expect.stringContaining('email metadata'))
 })
