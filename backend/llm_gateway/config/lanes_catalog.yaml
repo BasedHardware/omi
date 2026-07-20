@@ -1,0 +1,203 @@
+# Lanes catalog — the registry of ALL lanes (serving + planned).
+#
+# The serving config (lanes.yaml + route_artifacts.yaml) is a subset of
+# this catalog — only entries with provider_support_status: prod_ready.
+# Per David's 2026-07-02 feedback:
+#   - "Serving config should only include lanes the gateway can actually execute today"
+#   - "If a lane doesn't have the real surface / provider support / eval yet,
+#     keep it catalog-only"
+#   - "No prod-loadable placeholder route artifacts"
+#
+# Schema per entry:
+#   lane_id: omi:auto:<capability>
+#   description: human-readable
+#   surface: openai.chat_completions (the gateway-supported surface; or
+#            "unknown" for lanes whose surface isn't yet supported)
+#   provider: openai / anthropic / tbd
+#   model: model name / tbd
+#   provider_support_status: planned | dev_only | prod_ready
+#   eval_suite: path to internal eval set, or null
+#   notes: human-readable context (incl. TODOs and eval-suite plans)
+#   promoted_at: ISO timestamp when a lane moved to prod_ready (absent
+#                for dev_only and planned)
+#
+# Promotion path: dev_only → internal eval gate → promotion PR → prod_ready
+# (in this catalog) → serving artifact added (in route_artifacts.yaml)
+# → human review + merge. Cron proposes the PR; humans merge.
+# (R4's cron uses the catalog to find lanes ready for promotion; the cron
+# does NOT directly mutate the serving config.)
+lanes:
+  # ---------------------------------------------------------------------------
+  # prod_ready (1): chat-structured is the R0 pilot. Real provider, real
+  # feature_bundle with an eval_suite. This is the FIRST real cutover per
+  # David's "first real cutover should be chat-structured / extraction-style".
+  # ---------------------------------------------------------------------------
+  - lane_id: omi:auto:chat-structured
+    description: Chat structured extraction (pilot)
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-4.1-mini
+    provider_support_status: prod_ready
+    eval_suite: backend/llm_gateway/eval/chat_structured.v1.json
+    notes: R0 pilot. Real provider, real feature_bundle, real eval.
+    promoted_at: '2026-07-01T00:00:00Z'
+
+  # ---------------------------------------------------------------------------
+  # dev_only (12): have real surface + provider, but NO internal eval yet.
+  # Per David's "internal eval set is required for promotion", these stay
+  # catalog-only until the eval set is built. R3.2 promotes them one by
+  # one as the eval suites land.
+  # ---------------------------------------------------------------------------
+  - lane_id: omi:auto:chat-extraction
+    description: Chat extraction for structured data
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-4.1-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Same model/provider as chat-structured. Needs internal eval
+      suite (R3.2 will build it). Distinct lane id from chat-structured
+      because the feature scope is different (general extraction vs.
+      requires_context variant).
+
+  - lane_id: omi:auto:daily-summary
+    description: Daily summary of conversations
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-5.4-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite.
+
+  - lane_id: omi:auto:memories-extraction
+    description: Memory extraction
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-4.1-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite.
+
+  - lane_id: omi:auto:memory-graph
+    description: Memory graph (knowledge graph)
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-4.1-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite.
+
+  - lane_id: omi:auto:conv-action-items
+    description: Conversation action items
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-5.4-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite.
+
+  - lane_id: omi:auto:conv-structure
+    description: Conversation structure
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-5.4-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite.
+
+  - lane_id: omi:auto:general-assistant
+    description: General assistant chat
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-5.4-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite. Multi-capability (streaming, tools,
+      json_object).
+
+  - lane_id: omi:auto:reasoning
+    description: Reasoning-heavy queries
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-5.4-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite.
+
+  - lane_id: omi:auto:realtime-ptt
+    description: Real-time push-to-talk (Claude)
+    surface: openai.chat_completions
+    provider: anthropic
+    model: claude-sonnet-4-6
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: |
+      Anthropic provider is not yet registered in the gateway's
+      ProviderRegistry (which only supports openai). TODO(R3): register
+      AnthropicCompatibleChatCompletionProvider. Until then, this lane
+      CANNOT be promoted to serving (the gateway can't serve it).
+      Stays catalog-only with status dev_only.
+
+  - lane_id: omi:auto:persona-chat
+    description: Persona clone chat
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-4.1-nano
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite.
+
+  - lane_id: omi:auto:notification-classifier
+    description: Notification intent classifier
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-5.4-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite.
+
+  - lane_id: omi:auto:screenshot-understanding
+    description: Screenshot visual understanding
+    surface: openai.chat_completions
+    provider: openai
+    model: gpt-4.1-mini
+    provider_support_status: dev_only
+    eval_suite: null
+    notes: Needs internal eval suite. Distinct from screenshot-embedding
+      (which is an embedding surface, planned).
+
+  # ---------------------------------------------------------------------------
+  # planned (3): the 3 R0 placeholders. They have no real surface, no
+  # real provider, no internal eval. Per David's "No prod-loadable
+  # placeholder route artifacts", they CANNOT be in the serving config
+  # even in dev mode. They stay catalog-only as 'planned'.
+  # ---------------------------------------------------------------------------
+  - lane_id: omi:auto:stt-realtime
+    description: Speech-to-text (real-time)
+    surface: unknown
+    provider: tbd
+    model: tbd
+    provider_support_status: planned
+    eval_suite: null
+    notes: |
+      Audio surface — the gateway doesn't have an STT endpoint yet.
+      Stays in the catalog only with status 'planned'. R3+ scope: build
+      the audio surface, register the audio provider.
+
+  - lane_id: omi:auto:transcription
+    description: Audio transcription
+    surface: unknown
+    provider: tbd
+    model: tbd
+    provider_support_status: planned
+    eval_suite: null
+    notes: Audio surface. Catalog only.
+
+  - lane_id: omi:auto:screenshot-embedding
+    description: Screenshot embedding
+    surface: unknown
+    provider: tbd
+    model: tbd
+    provider_support_status: planned
+    eval_suite: null
+    notes: Embedding surface. Catalog only.

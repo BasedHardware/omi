@@ -126,8 +126,18 @@ class Evidence(StrictBaseModel):
     eval_report: str = Field(min_length=1)
     benchmark_source: BenchmarkSource
     dev_only: bool = False
+    # `placeholder: true` marks an artifact as a stop-gap that future promotion
+    # logic (R1 emitter, R4 cron) should replace before promoting to active.
+    # Distinct from `dev_only` (which excludes the artifact from production
+    # loading entirely). A placeholder is fully servable — it just shouldn't
+    # be the long-term primary. See R0 spec + PR #8739 review (cubic P1).
+    placeholder: bool = False
 
     def is_prod_eligible(self) -> bool:
+        # NOTE: `placeholder` does NOT affect prod eligibility. A placeholder
+        # artifact is loadable in any prod_mode (preserving the day-one
+        # shadow-mode contract). Future promotion logic reads `evidence.placeholder`
+        # separately to decide whether to replace it.
         return not self.dev_only and self.benchmark_source not in {
             BenchmarkSource.MOCK,
             BenchmarkSource.DEV_FIXTURE,
