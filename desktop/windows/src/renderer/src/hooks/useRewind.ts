@@ -127,6 +127,13 @@ export function useRewind({ active = true }: { active?: boolean } = {}): RewindS
     // Immediate resample ONLY when the panel just became visible (catch up on
     // frames captured while hidden). Not on the first mount — loadDay already
     // fetched — and not on a day change, which loadDay owns.
+    //
+    // Trade-off when Rewind is the LANDING view: it mounts with active=false (the
+    // observer reports visibility a frame late), loadDay fetches once, then the
+    // observer flips active→true and this fires one more resample — two fetches on
+    // first open. Accepted deliberately: it keeps the common case (Home is the
+    // landing view, Rewind hidden) doing zero refresh work, and the extra fetch is
+    // a cheap, deduped (sameFrameIds) same-day sample.
     if (becameVisible) void resample()
     const id = setInterval(() => void resample(), TODAY_REFRESH_MS)
     return () => {

@@ -23,6 +23,10 @@ export function useIsVisible(ref: React.RefObject<Element | null>): boolean {
   // synchronous cascading render.
   const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
   useEffect(() => {
+    // Observes ref.current as it is at mount (refs are attached before effects run,
+    // so it is non-null here for a rendered element). Keyed on the ref OBJECT, whose
+    // identity is stable, so it does NOT re-observe if the underlying element is
+    // later swapped — fine for a stable page root, which is the only intended use.
     const el = ref.current
     if (!el || typeof IntersectionObserver === 'undefined') return
     const io = new IntersectionObserver((entries) => {
