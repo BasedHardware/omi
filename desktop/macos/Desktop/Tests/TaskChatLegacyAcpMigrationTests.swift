@@ -165,7 +165,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
         source: "adapter_process",
         adapterId: "openclaw",
         provider: "openai",
-        retryable: true
+        retryable: true,
+        phase: nil
       ),
       updatedAt: Date(),
       completedAt: Date(),

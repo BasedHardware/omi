@@ -2291,7 +2291,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// Called when monitors are connected/disconnected. Re-center if the bar is no longer
   /// fully visible on any screen.
   private func scheduleStartupDisplayRevalidation() {
-    startupDisplayRevalidationWorkItems.forEach { $0.cancel() }
+    for workItem in startupDisplayRevalidationWorkItems {
+      workItem.cancel()
+    }
     startupDisplayRevalidationWorkItems = Self.startupDisplayRevalidationDelays.map { delay in
       let workItem = DispatchWorkItem { [weak self] in
         Task { @MainActor in

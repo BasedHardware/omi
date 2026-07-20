@@ -457,6 +457,65 @@ describe("external realtime surface authority", () => {
       toolInput: { objective: "Review the release notes", provider: "hermes" },
       recoveredFromDelegation: false,
     });
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Refactor this file" },
+      originatingPrompt: "Use the best agent to refactor this file.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Refactor this file" },
+      recoveredFromDelegation: false,
+    });
+
+    // "any agent" is the same route-it-for-me intent as "best" and is what the
+    // spawn_agent guidance tells the model to send provider='best' for.
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Refactor this file", provider: "best" },
+      originatingPrompt: "Use any agent to refactor this file.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Refactor this file", provider: "best" },
+      recoveredFromDelegation: false,
+    });
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Do the task", provider: "best" },
+      originatingPrompt: "Have an agent do the task.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Do the task", provider: "best" },
+      recoveredFromDelegation: false,
+    });
+
+    // "best agent" / "any agent" as task content (not a directive) must NOT
+    // select a provider.
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Write a blog post about the best agent in the NBA" },
+      originatingPrompt: "Write a blog post about the best agent in the NBA.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Write a blog post about the best agent in the NBA" },
+      recoveredFromDelegation: false,
+    });
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Write a blog post about any agent in the NBA", provider: "best" },
+      originatingPrompt: "Write a blog post about any agent in the NBA.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Write a blog post about any agent in the NBA", provider: "best" },
+      recoveredFromDelegation: false,
+    });
   });
 
   it("applies semantic safety policy from the persisted external run prompt", () => {
@@ -1273,6 +1332,141 @@ describe("external realtime surface authority", () => {
         message: "Managed Omi agents can only use Omi cloud routing.",
       },
     });
+    store.close();
+  });
+
+  it.skip("runs an explicitly requested Codex child to completion through a real ACP subprocess", async () => {
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join: pathJoin } = await import("node:path");
+    const fakeCodex = pathJoin(dirname(fileURLToPath(import.meta.url)), "fixtures", "fake-codex-acp.mjs");
+    const root = newRoot();
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    const piMono = new FakeRuntimeAdapter("pi-mono");
+    registry.register("pi-mono", () => piMono);
+    const { CodexRuntimeAdapter } = await import("../src/adapters/codex.js");
+    process.env.OPENAI_API_KEY = "sk-omi-live-test";
+    process.env.NO_BROWSER = "1";
+    process.env.INITIAL_AGENT_MODE = "agent-full-access";
+    registry.register("codex", () => new CodexRuntimeAdapter({
+      command: `node ${fakeCodex}`,
+    }));
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const session = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    const run = kernel.beginExternalSurfaceRun({
+      ...beginInput(session.agentSessionId),
+      prompt: "Ask Codex to fix the failing tests in the background",
+    });
+    const routed = kernel.routeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: session.agentSessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "realtime-codex-spawn",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Fix the failing tests", provider: "codex", brief: "Fixing failing tests" },
+    });
+    const producerJournal = parseAgentSpawnProducerJournalDescriptor(
+      ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
+    );
+
+    const started = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: session.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+      authorizedProducerJournal: producerJournal,
+      authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-codex-spawn",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
+      getOwnerId: () => "owner",
+    }, "spawn_agent", routed.toolInput)) as Record<string, any>;
+
+    expect(started).toMatchObject({
+      ok: true,
+      session: {
+        defaultAdapterId: "codex",
+        providerBoundary: "local_user:codex",
+      },
+    });
+    const child = started.run as { runId: string };
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [child.runId]);
+      return row?.status === "succeeded" || row?.status === "failed";
+    });
+    const finished = store.getRow("SELECT status, final_text, error_message FROM runs WHERE run_id = ?", [child.runId]);
+    expect(finished.status).toBe("succeeded");
+    expect(String(finished.final_text ?? "")).toMatch(/CODEX_LIVE_OK|codex finished|Fix the failing tests/i);
+    expect(piMono.executed).toHaveLength(0);
+    store.close();
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.NO_BROWSER;
+    delete process.env.INITIAL_AGENT_MODE;
+  });
+
+  it("returns setup instructions when an uninstalled Codex is explicitly requested", async () => {
+    const root = newRoot();
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    registry.register("pi-mono", () => new FakeRuntimeAdapter("pi-mono"));
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const session = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "pi-mono",
+    }, () => 1);
+    const run = kernel.beginExternalSurfaceRun({
+      ...beginInput(session.agentSessionId),
+      prompt: "Ask Codex to fix the failing unit tests",
+    });
+    const routed = kernel.routeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: session.agentSessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "realtime-codex-unavailable",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Fix the failing unit tests", provider: "codex" },
+    });
+    const producerJournal = parseAgentSpawnProducerJournalDescriptor(
+      ((routed.toolInput.metadata as Record<string, unknown>).producerJournal),
+    );
+
+    const rejected = JSON.parse(await handleAgentControlToolCall({
+      kernel,
+      callerSessionId: session.agentSessionId,
+      executionRole: "coordinator",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+      authorizedProducerJournal: producerJournal,
+      authorizedCallerRunId: run.runId,
+      authorizedToolInvocation: {
+        invocationId: "realtime-codex-unavailable",
+        runId: run.runId,
+        attemptId: run.attemptId,
+        toolName: "spawn_agent",
+      },
+      getOwnerId: () => "owner",
+    }, "spawn_agent", routed.toolInput));
+
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: {
+        code: "provider_setup_needed",
+        provider: "codex",
+        retryable: true,
+      },
+    });
+    expect(rejected.error.message).toContain("Codex needs setup");
     store.close();
   });
 

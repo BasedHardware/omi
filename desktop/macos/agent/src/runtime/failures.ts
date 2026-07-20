@@ -215,6 +215,8 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
         return "OpenAI";
       }
       return "ACP";
+    case "codex":
+      return "Codex";
   }
 }
 

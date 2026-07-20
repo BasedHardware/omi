@@ -443,10 +443,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                planLabel,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              Text(planLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               if (isPaid)
                 GestureDetector(
                   onTap: _isUpgrading ? null : _showPlansSheet,

@@ -228,10 +228,33 @@ class ChatToolExecutor {
         toolCall.arguments,
         expectedOwnerID: expectedOwnerID)
 
-    case .deleteTask:
-      return await executeDeleteTask(
+    case "manage_agent_pills":
+      return await executeManageAgentPills(toolCall.arguments)
+
+    case "setup_agent_provider":
+      return await executeSetupAgentProvider(
         toolCall.arguments,
-        expectedOwnerID: expectedOwnerID)
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
+
+    case "execute_sql":
+      return await executeSQL(toolCall.arguments)
+
+    case "semantic_search", "search_screen_history":
+      return await executeSemanticSearch(toolCall.arguments)
+
+    case "get_daily_recap":
+      return await executeDailyRecap(toolCall.arguments)
+
+    case "search_tasks":
+      return await executeSearchTasks(toolCall.arguments)
+
+    case "complete_task":
+      return await executeCompleteTask(toolCall.arguments)
+
+    case "delete_task":
+      return await executeDeleteTask(toolCall.arguments)
 
     // Onboarding tools
     case .requestPermission:
@@ -1011,7 +1034,85 @@ class ChatToolExecutor {
       await retryUnsyncedTasks()
       guard ownerIsCurrent(expectedOwnerID) else { return false }
     }
-    return true
+    if originatingClientScope == AgentLegacyClientScope.floatingPill {
+      return
+        "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
+    }
+    let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !brief.isEmpty else {
+      return "Error: Missing brief. Pass a clear, self-contained task brief."
+    }
+    let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let providerName = ((args["provider"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: " ", with: "")
+    let requestedProvider: AgentPillsManager.DirectedProvider?
+    switch providerName {
+    case "openclaw": requestedProvider = .openclaw
+    case "hermes": requestedProvider = .hermes
+    case "codex": requestedProvider = .codex
+    case "", "auto", "best", "any": requestedProvider = nil
+    default:
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
+    }
+    let resolution = await LocalAgentProviderRouting.resolveSpawnWithAutoInstall(
+      brief: brief,
+      requestedProvider: requestedProvider,
+      userRequestText: nil,
+      title: title,
+      treatRequestedAsExplicit: requestedProvider != nil
+    )
+    switch resolution {
+    case .setupRequired(_, let setupPrompt, _):
+      return "Error: \(setupPrompt)"
+    case .spawn(let plan):
+      let model =
+        ShortcutSettings.shared.selectedModel.isEmpty
+        ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+      let pill = AgentPillsManager.shared.spawnFromUserQuery(
+        brief,
+        model: model,
+        fromVoice: false,
+        preFetchedTitle: plan.title,
+        preFetchedAck: plan.ack,
+        bridgeHarnessOverride: plan.harnessOverride,
+        spawnContext: plan.context
+      )
+      await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+      // Startup-class failures (provider not running / not signed in) surface
+      // within ~1.5s — wait briefly so the model reports the truth instead of
+      // claiming a dead agent is running.
+      try? await Task.sleep(nanoseconds: 1_800_000_000)
+      await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+      let startupFailure = await MainActor.run { () -> String? in
+        guard let live = AgentPillsManager.shared.pills.first(where: { $0.id == pill.id }),
+          case .failed(let errorText) = live.status
+        else { return nil }
+        return errorText
+      }
+      if let startupFailure {
+        return """
+          Error: agent FAILED to start: \(startupFailure)
+          Relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead.
+          """
+      }
+      return """
+        Agent started as a floating agent pill.
+        id: \(pill.id.uuidString)
+        title: \(pill.title)
+        status: running
+        If the user later asks about this agent's status or results, check get_task_agent_status first — never answer from memory.
+        """
+    }
+  }
+
+  private static func executeManageAgentPills(_ args: [String: Any]) async -> String {
+    let action = ((args["action"] as? String) ?? "list")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let agentId = (args["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return AgentPillsManager.shared.manage(action: action, agentId: agentId)
   }
 
   // MARK: - Local Status

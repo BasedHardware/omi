@@ -1,0 +1,3 @@
+{
+  "change": "Added guided agent setup: health-gated detection (ready/needsSetup/missing), 2-layer consent installer, auto-install for Codex, and a visible Agents settings panel with connection status."
+}

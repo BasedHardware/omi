@@ -318,6 +318,12 @@ extension RealtimeHubController {
             expectedTurnEpoch: expectedTurnEpoch)
         else { return }
         let inputHash = try AuthorizedToolExecution.inputHash(for: arguments)
+        // Derive the scalar before handing the non-Sendable tool payload to
+        // the runtime actor.  Strict concurrency correctly treats the actor
+        // call as a potential transfer of `arguments`.
+        let requestedProvider = (arguments["provider"] as? String)?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+          .lowercased()
         let invocation = RealtimeAuthorizedToolInvocation(
           invocationID: invocationID,
           binding: binding,
@@ -383,6 +389,19 @@ extension RealtimeHubController {
             log(
               "RealtimeHub[\(self.providerTag)]: accepted spawn receipt; preserving native provider continuation"
             )
+            if let failedProvider = self.spawnFailureContinuationPolicy.takeFailedProvider(
+              turnID: turnID.rawValue)
+            {
+              // A same-turn retry after a failed directed spawn landed on a
+              // different provider: a provider change the user still hears
+              // about, but ops must see it too.
+              DesktopDiagnosticsManager.shared.recordFallback(
+                area: "realtime_hub",
+                from: failedProvider,
+                to: receipt.pillProjection?.provider ?? requestedProvider ?? "default",
+                reason: "spawn_failed",
+                outcome: .recovered)
+            }
             if let pill = receipt.pillProjection {
               AgentPillsManager.shared.upsertSpawnedPill(
                 id: pill.pillID,
@@ -396,29 +415,49 @@ extension RealtimeHubController {
             }
           case .setupNeeded(let provider):
             self.lastExternalToolErrorCode = "provider_setup_needed"
+            let continueTurn = self.spawnFailureContinuationPolicy.beginContinuationIfAllowed(
+              turnID: turnID.rawValue,
+              failedProvider: provider.rawValue)
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
               name: name,
               output: RealtimeProviderToolResultPolicy.rejectedOutput(
                 code: "provider_setup_needed",
-                message: provider.setupNeededStatus,
+                message: LocalAgentProviderAvailability(provider: provider, status: .missing)
+                  .setupPrompt,
                 preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
-            VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+            guard continueTurn else {
+              VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+              return
+            }
+            // The turn stays open so the model can relay the setup
+            // instructions aloud (and, for a provider it picked itself,
+            // retry once with a different installed agent).
             return
           case .accepted, .rejected:
             log("RealtimeHub[\(self.providerTag)]: spawn_agent rejected without a canonical child receipt")
+            let continueTurn =
+              requestedProvider != nil
+              && self.spawnFailureContinuationPolicy.beginContinuationIfAllowed(
+                turnID: turnID.rawValue,
+                failedProvider: requestedProvider)
             self.sendToolResultIfCurrent(
               source: source,
               callId: callId,
               name: name,
               output: RealtimeProviderToolResultPolicy.rejectedOutput(
                 code: "realtime_spawn_rejected",
-                message: "The background agent could not start. Please try again.",
+                message: continueTurn
+                  ? "The \(requestedProvider ?? "requested") agent could not start. You may retry once with a different installed agent, or without a provider for Omi's default agent — or tell the user it failed."
+                  : "The background agent could not start. Please try again.",
                 preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
-            VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+            guard continueTurn else {
+              VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
+              return
+            }
             return
           }
         }

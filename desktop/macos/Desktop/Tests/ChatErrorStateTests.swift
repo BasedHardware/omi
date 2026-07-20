@@ -139,7 +139,8 @@ final class ChatErrorStateTests: XCTestCase {
             source: "adapter_process",
             adapterId: "openclaw",
             provider: nil,
-            retryable: false
+            retryable: false,
+            phase: nil
           )
         )
       )
@@ -155,7 +156,8 @@ final class ChatErrorStateTests: XCTestCase {
         source: "adapter_process",
         adapterId: "openclaw",
         provider: nil,
-        retryable: false
+        retryable: false,
+        phase: nil
       )
     )
 

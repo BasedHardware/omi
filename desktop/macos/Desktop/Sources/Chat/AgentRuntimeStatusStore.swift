@@ -254,7 +254,8 @@ final class AgentRuntimeStatusStore: ObservableObject {
       source: "runtime",
       adapterId: nil,
       provider: nil,
-      retryable: nil
+      retryable: nil,
+      phase: nil
     )
     update(surface: surface, status: .failed, statusText: nil, errorMessage: error, failure: failure, terminal: true)
   }

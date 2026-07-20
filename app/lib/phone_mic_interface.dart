@@ -16,13 +16,7 @@ import 'package:pigeon/pigeon.dart';
 )
 
 /// Native capture state machine, mirrored to Dart on every transition.
-enum PhoneMicCaptureState {
-  idle,
-  starting,
-  running,
-  interrupted,
-  rebuilding,
-}
+enum PhoneMicCaptureState { idle, starting, running, interrupted, rebuilding }
 
 /// Capture sink selector, chosen once per session at start().
 ///
@@ -31,10 +25,7 @@ enum PhoneMicCaptureState {
 /// - batch: converted PCM16 chunks are opus-encoded natively and written to
 ///   WAL-compatible .bin files on disk; nothing is sent to Dart except state and
 ///   onBatchProgress. Used for "transcribe later" offline capture.
-enum PhoneMicCaptureMode {
-  stream,
-  batch,
-}
+enum PhoneMicCaptureMode { stream, batch }
 
 /// Dart -> native. start(mode) resolves once the engine is running, or throws a
 /// PlatformException with one of: permission_denied, session_config_failed,

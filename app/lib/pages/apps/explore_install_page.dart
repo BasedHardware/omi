@@ -554,11 +554,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               }
                                               provider.applyFilters();
                                             },
-                                            icon: const Icon(
-                                              Icons.search,
-                                              color: Colors.white60,
-                                              size: 20,
-                                            ),
+                                            icon: const Icon(Icons.search, color: Colors.white60, size: 20),
                                             padding: EdgeInsets.zero,
                                           ),
                                         ),
@@ -572,11 +568,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                 hintText: context.l10n.searchAppsPlaceholder,
                                                 leading: const Padding(
                                                   padding: EdgeInsets.only(left: 6.0),
-                                                  child: Icon(
-                                                    Icons.search,
-                                                    color: Colors.white60,
-                                                    size: 20,
-                                                  ),
+                                                  child: Icon(Icons.search, color: Colors.white60, size: 20),
                                                 ),
                                                 backgroundColor: WidgetStateProperty.all(
                                                   AppStyles.backgroundSecondary,

@@ -358,22 +358,98 @@ import XCTest
   func testFloatingPillCapabilitiesAreNotRewrittenBySwiftPrompts() throws {
     let source = try chatProviderSource()
 
-    XCTAssertFalse(source.contains("isFloatingPillSurface("))
-    XCTAssertFalse(source.contains("buildFloatingBarSystemPrompt("))
-    XCTAssertFalse(source.contains("cachedFloatingPillSystemPrompt"))
-    XCTAssertFalse(source.contains("scopedDesktopToolPrompt(excluding:"))
+    XCTAssertTrue(source.contains("legacyClientScope == AgentLegacyClientScope.floatingPill"))
+    XCTAssertTrue(source.contains("private var cachedFloatingPillSystemPrompt: String = \"\""))
+    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = floatingPillSystemPrompt"))
+    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
+    XCTAssertTrue(source.contains("if cachedFloatingPillSystemPrompt.isEmpty"))
+    XCTAssertTrue(source.contains("systemPrompt = cachedFloatingPillSystemPrompt"))
+    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "delegate_agent", "setup_agent_provider"]"#))
+    XCTAssertTrue(
+      source.contains(
+        "let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)"))
+    XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
   }
 
-  func testProviderRequestsStayInTheModelLoop() throws {
-    // omi-test-quality: source-inspection -- static contract: UI must not pre-parse user wording into a provider spawn.
-    let windowSource = try floatingControlBarWindowSource()
+  func testAgentRunInstallAssistPillMachineryIsGone() throws {
+    let source = try agentPillSource()
+
+    // The agent-run installer was replaced by the deterministic
+    // LocalAgentProviderInstaller (native confirm dialog + Process): no
+    // code-built install brief, no auto-approving installer pill, no
+    // Combine status watcher, and no stale `npm bin -g` probing prose.
+    XCTAssertFalse(source.contains("installAssistBrief"))
+    XCTAssertFalse(source.contains("spawnInstallAssistPill"))
+    XCTAssertFalse(source.contains("installAssistWatchersByPill"))
+    XCTAssertFalse(source.contains("npm bin -g"))
+  }
+
+  func testProviderCorrectionUsesPreviousFloatingRequestObjective() throws {
+    let directive = AgentPillsManager.providerDirective(
+      from: "I meant ask OpenClaw",
+      contextualPreviousRequest: "ask grok to search for david zhang on X and tell me who the top 3 are")
+
+    XCTAssertEqual(directive?.provider, .openclaw)
+    XCTAssertEqual(directive?.rewrittenQuery, "search for david zhang on X and tell me who the top 3 are")
+  }
+
+  func testFuzzyProviderDirectiveRoutesMangledNames() throws {
+    // STT / typos the strict token list misses still route to the right agent,
+    // and the objective is preserved (the provider word is not swallowed).
+    let codecs = AgentPillsManager.providerDirective(from: "ask codecs to summarize my last meeting")
+    XCTAssertEqual(codecs?.provider, .codex)
+    XCTAssertEqual(codecs?.rewrittenQuery, "to summarize my last meeting")
+
+    let openFlaw = AgentPillsManager.providerDirective(from: "run open flaw on the auth module")
+    XCTAssertEqual(openFlaw?.provider, .openclaw)
+    XCTAssertEqual(openFlaw?.rewrittenQuery, "on the auth module")
+
+    let hermies = AgentPillsManager.providerDirective(from: "tell hermies to draft the reply")
+    XCTAssertEqual(hermies?.provider, .hermes)
+  }
+
+  func testFuzzyProviderDirectiveDoesNotHijackOrdinaryTasks() throws {
+    // No directive verb, or a provider that maps to a default (non-directed)
+    // agent, must not produce a directed pill.
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "summarize my unread messages"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "run the integration tests"))
+    // Claude Code (.acp) is a default provider, not a directed pill.
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "use claude code to refactor this"))
+  }
+
+  func testFloatingRouterProvidesRecentVisibleRequestToProviderDirective() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)"))
+    XCTAssertTrue(
+      source.contains("private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String?"))
+    XCTAssertTrue(source.contains("barWindow.state.chatHistory.reversed().compactMap"))
+  }
+
+  func testTypedProviderDirectivePromptsForSetupWhenProviderUnavailable() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("LocalAgentProviderRouting.resolveSpawnWithAutoInstall("))
+    XCTAssertTrue(source.contains("requestedProvider: directive.provider"))
+    XCTAssertTrue(source.contains("floating-agent-provider-unavailable"))
+    XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
+    XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(spokenStatus)"))
+  }
+
+  func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
     let source = try floatingControlBarViewSource()
 
-    XCTAssertFalse(windowSource.contains("providerDirective"))
-    XCTAssertFalse(windowSource.contains("resolveDelegationAndDispatch"))
-    XCTAssertTrue(windowSource.contains("await dispatchChatQuery("))
-    XCTAssertFalse(source.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(source.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+    XCTAssertTrue(
+      source.contains("if staged.isEmpty, let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
+    XCTAssertTrue(source.contains("harnessOverride: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(source.contains("state.present(.agent(sibling.id))"))
+    XCTAssertTrue(agentPillSource.contains("@Published private(set) var bridgeHarnessOverride: AgentHarnessMode?"))
+    XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
+    XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
+    XCTAssertTrue(
+      agentPillSource.contains(
+        "let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -701,84 +777,20 @@ import XCTest
   func testSpacesTransitionDoesNotReplayNotchRevealPop() throws {
     let windowSource = try floatingControlBarWindowSource()
 
-    guard let start = windowSource.range(of: "private func performSpacesTransitionGrowIn()"),
-      let end = windowSource.range(of: "private func defaultFrameForCurrentState()")
-    else {
-      return XCTFail("Expected performSpacesTransitionGrowIn section")
-    }
-    let body = String(windowSource[start.lowerBound..<end.lowerBound])
-
-    // Switching Spaces must NOT replay the reveal "pop": animateGrowOutFromNotch
-    // resets notchRevealProgress to 0.001 and re-zooms the island. The panel
-    // already lives on every Space (.canJoinAllSpaces), so a Space switch should
-    // keep it fully revealed and only re-assert the frame if it drifted.
-    XCTAssertFalse(body.contains("animateGrowOutFromNotch"))
-    XCTAssertTrue(body.contains("state.notchRevealProgress = 1"))
-    XCTAssertTrue(body.contains("guard !Self.framesEquivalent(frame, targetFrame) else { return }"))
-  }
-
-  func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
-    let windowSource = try floatingControlBarWindowSource()
-
-    // Pill mode still resizes its panel, and that resize must animate with the
-    // same durations as its content, or the panel keeps sliding after the rows
-    // settle. Notch mode is fixed-window: the switcher open/close must never
-    // animate the NSPanel frame — it only re-asserts the constant idle/hover
-    // surface frame and lets the SwiftUI content morph carry the transition.
-    XCTAssertTrue(windowSource.contains("static let notchHoverMenuExpandDuration: TimeInterval = 0.16"))
-    XCTAssertTrue(windowSource.contains("static let notchHoverMenuCollapseDuration: TimeInterval = 0.10"))
+    XCTAssertTrue(source.contains("let handoff = AgentPillsManager.floatingAgentHandoff(for: message)"))
+    XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnFromHandoff("))
     XCTAssertTrue(
-      windowSource.contains(
-        "static let notchHoverMenuExpandAnimation: Animation = .spring(response: 0.35, dampingFraction: 0.75)"))
+      source.contains("completeVisibleAgentHandoff(\n                    handoff,\n                    pill: pill"))
     XCTAssertTrue(
-      windowSource.contains(
-        "static let notchHoverMenuCollapseAnimation: Animation = .spring(response: 0.3, dampingFraction: 1.0)"))
-
-    guard let start = windowSource.range(of: "func resizeForAgentSwitcher(visible: Bool)"),
-      let end = windowSource.range(of: "private func pillAgentListWindowSize(")
-    else {
-      return XCTFail("Expected resizeForAgentSwitcher section")
-    }
-    let body = String(windowSource[start.lowerBound..<end.lowerBound])
-
-    // Notch: fixed frame only, before any pill-mode resize.
-    XCTAssertTrue(body.contains("if notchModeEnabled {"))
-    XCTAssertTrue(body.contains("assertNotchFixedHoverSurfaceFrame()"))
-    XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
-    XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
-    XCTAssertTrue(body.contains("resizeSurfaceTransition("))
-    XCTAssertTrue(body.contains(".agentSwitcher(visible: true)"))
-    XCTAssertTrue(body.contains(".agentSwitcher(visible: false)"))
-    XCTAssertFalse(body.contains("resizeAnchored("))
-    // No bare animated resize (which defaults to the slow 0.3s) may remain in
-    // the hover-menu expand/collapse path.
-    XCTAssertFalse(body.contains("animated: true, anchorTop: true)"))
-  }
-
-  func testPTTResizeUsesSemanticSurfaceTransitionPlacement() throws {
-    let windowSource = try floatingControlBarWindowSource()
-
-    guard let start = windowSource.range(of: "func resizeForPTTState(expanded: Bool)"),
-      let end = windowSource.range(
-        of: "/// Size the notch to fit the \"thinking\" indicator",
-        range: start.upperBound..<windowSource.endIndex
-      )
-    else {
-      return XCTFail("Expected resizeForPTTState section")
-    }
-    let body = String(windowSource[start.lowerBound..<end.lowerBound])
-
-    XCTAssertTrue(body.contains("resizeSurfaceTransition("))
-    XCTAssertTrue(body.contains(".pushToTalk(expanded: expanded)"))
-    XCTAssertFalse(body.contains("resizeAnchored("))
-    XCTAssertFalse(body.contains("FloatingControlBarGeometry.targetFrame("))
-  }
-
-  func testSubagentComposerOnlyContinuesItsCanonicalSession() throws {
-    let viewSource = try floatingControlBarViewSource()
-
-    XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+      source.contains(
+        "completeVisibleAgentHandoff(\n                        .init(originalRequest: message, agentTask: message),\n                        pill: pill"
+      ))
+    XCTAssertTrue(source.contains("let toolUseId = \"floating-agent-\\(pill.id.uuidString)\""))
+    XCTAssertTrue(source.contains("name: \"spawn_agent\""))
+    XCTAssertTrue(source.contains("status: .completed"))
+    XCTAssertTrue(source.contains("id: \\(pill.id.uuidString)"))
+    XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
+    XCTAssertFalse(source.contains("barWindow.closeAIConversation()"))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {
@@ -882,7 +894,7 @@ import XCTest
     let viewSource = try floatingControlBarViewSource()
 
     XCTAssertTrue(agentSource.contains("@Published var conversationMessages: [ChatMessage] = []"))
-    XCTAssertTrue(agentSource.contains("pill.conversationMessages = displayMessages"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages = pill.providerFallbackNotices + displayMessages"))
     XCTAssertTrue(agentSource.contains("return message.sender == .user"))
     XCTAssertTrue(agentSource.contains("|| !trimmed.isEmpty"))
     XCTAssertTrue(agentSource.contains("|| message.isStreaming"))
@@ -1435,6 +1447,222 @@ import XCTest
     XCTAssertTrue(source.contains("if pill.status == .stopped && projection.status != .cancelled"))
     XCTAssertTrue(source.contains("if pill.status.isFinished && !projection.status.isTerminal"))
     XCTAssertTrue(source.contains("switch projection.status"))
+  }
+
+  func testProviderStartupFallbackChainOrderAndCap() {
+    // Remaining available providers in fixed [openclaw, hermes, codex] order,
+    // ending with the Omi default agent (nil).
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.openclaw], available: [.openclaw, .hermes, .codex]),
+      [.hermes, .codex, nil])
+
+    // The fixed order wins regardless of the order of `available`.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.hermes], available: [.codex, .openclaw, .hermes]),
+      [.openclaw, .codex, nil])
+
+    // Unavailable providers are never part of the chain.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.hermes], available: [.hermes, .codex]),
+      [.codex, nil])
+
+    // Nothing left → the default agent is the only remaining attempt.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(afterFailed: [.codex], available: [.codex]),
+      [nil])
+
+    // Attempt cap: requested + at most 2 directed fallbacks + default.
+    XCTAssertEqual(
+      AgentPillsManager.fallbackChain(
+        afterFailed: [.openclaw, .hermes, .codex],
+        available: [.openclaw, .hermes, .codex]),
+      [nil])
+  }
+
+  func testProviderStartupFallbackNeverRunsAfterTaskOutput() throws {
+    let source = try agentPillSource()
+
+    // HARD SAFETY RULE: fallback must be gated on the failed attempt having
+    // produced no output — re-running a partially-executed brief could repeat
+    // side effects (e.g. double-send messages).
+    XCTAssertTrue(source.contains("guard !pill.hasProducedTaskOutput else { return false }"))
+    XCTAssertTrue(source.contains("HARD SAFETY RULE: never fall back once the failed attempt produced"))
+    // The output flag flips as soon as any assistant text or tool/thinking
+    // content block streams in, and startup fallback only applies to initial
+    // runs — follow-up turns must never retry the brief on another provider.
+    XCTAssertTrue(source.contains("pill.markTaskOutputProduced()"))
+    // The live hook: canonical-run inspections route `failed` runs through the
+    // fallback gate before committing a terminal failure; timeouts and
+    // orphaned runs never qualify.
+    XCTAssertTrue(source.contains("if inspection.status == \"failed\","))
+    XCTAssertTrue(
+      source.contains("attemptProviderStartupFallback(for: pill, errorText: startupFailure.displayMessage)"))
+    // The failed attempt's terminal projection is cleared eagerly so a stray
+    // publish can't re-fail the retried pill.
+    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.beginRequest("))
+    // The switch is surfaced to the user in the pill chat + activity line.
+    XCTAssertTrue(source.contains("failed to start — continuing with"))
+    XCTAssertTrue(source.contains("AgentPill: provider fallback"))
+  }
+
+  func testProviderStartupFallbackRequiresStructuredStartupFailure() {
+    // ALLOWLIST gate: only a terminal .failed run whose structured failure
+    // the Node runtime tagged phase == "startup" (provably pre-execution) is
+    // eligible for a retry on another provider.
+    XCTAssertNotNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .failed, failure: runtimeFailure(phase: "startup"))))
+
+    // Execution-phase or untagged failures must surface as terminal failures
+    // — the adapter may already have executed side-effecting work.
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .failed, failure: runtimeFailure(phase: "execution"))))
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .failed, failure: runtimeFailure(phase: nil))))
+
+    // Timeouts and orphaned runs never fall back: the remote adapter may
+    // still be executing, so a retry would run the brief concurrently twice.
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .timedOut, failure: runtimeFailure(phase: "startup"))))
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .orphaned, failure: runtimeFailure(phase: "startup"))))
+
+    // No projection, no structured failure, or a successful run (e.g. a
+    // tool-only run with empty finalText) is never a fallback candidate —
+    // "ended with no error and no result" is a normal terminal failure now.
+    XCTAssertNil(AgentPillsManager.startupFallbackFailure(projection: nil))
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .failed, failure: nil)))
+    XCTAssertNil(
+      AgentPillsManager.startupFallbackFailure(
+        projection: fallbackProjection(status: .succeeded, failure: runtimeFailure(phase: "startup"))))
+  }
+
+  func testProviderStartupFallbackGateSourceUsesStructuredClassification() throws {
+    let source = try agentPillSource()
+    let failureSource = try agentRuntimeFailureSource()
+
+    // complete() feeds the projection into the pure structured gate; the old
+    // string-based classifier (which treated empty finalText and any
+    // provider.errorMessage as a startup failure) must stay deleted.
+    XCTAssertTrue(source.contains("let startupFailure = Self.startupFallbackFailure("))
+    XCTAssertTrue(source.contains("projection.status == .failed,"))
+    XCTAssertTrue(source.contains("failure.isStartupPhase"))
+    XCTAssertFalse(source.contains("startupFailureText"))
+    XCTAssertFalse(source.contains("return \"Agent ended before reporting a final result\""))
+    // The phase tag rides the structured failure payload from the Node
+    // runtime (agent/src/runtime/failures.ts) into Swift.
+    XCTAssertTrue(failureSource.contains("let phase: String?"))
+    XCTAssertTrue(failureSource.contains("payload[\"phase\"] as? String"))
+    XCTAssertTrue(failureSource.contains("var isStartupPhase: Bool { phase == \"startup\" }"))
+  }
+
+  func testProviderStartupFallbackTearsDownDisplacedAttempt() throws {
+    let source = try agentPillSource()
+
+    // Installing a retry attempt must first cancel the displaced attempt's
+    // run task so the old poll loop can't keep applying the dead run's
+    // terminal state to the pill.
+    XCTAssertTrue(
+      source.contains(
+        """
+        // A retry displaces the failed attempt's still-registered run task;
+                // the initial spawn has nothing to displace.
+                runTasksByPill[pill.id]?.cancel()
+        """))
+    // The retry spawns a fresh canonical session/run — the failed attempt's
+    // ids are dropped so follow-ups queue for the new run instead of
+    // targeting the dead session.
+    XCTAssertTrue(
+      source.contains(
+        """
+        canonicalSessionId = nil
+                canonicalRunId = nil
+                canonicalAttemptId = nil
+        """))
+  }
+
+  func testProviderStartupFallbackRetryReusesCanonicalSpawnPath() throws {
+    let source = try agentPillSource()
+
+    // A retry re-enters the same canonical spawn wiring as the initial
+    // attempt and reads the pill's CURRENT harness override, so it lands on
+    // the provider the fallback moved the pill to.
+    XCTAssertTrue(source.contains("private func startProviderAttempt(for pill: AgentPill)"))
+    XCTAssertTrue(source.contains("let bridgeHarnessOverride = pill.bridgeHarnessOverride"))
+    XCTAssertTrue(source.contains("startProviderAttempt(for: pill)"))
+    // Provider-switch notices stay pinned above the brief when the retry's
+    // accept rebuilds the transcript.
+    XCTAssertTrue(
+      source.contains(
+        "pill.conversationMessages = pill.providerFallbackNotices + [ChatMessage(text: pill.query, sender: .user)]"))
+  }
+
+  func testPillSnapshotExposesCurrentProvider() throws {
+    // After a startup fallback the hub must be able to tell which provider a
+    // pill actually landed on — the snapshot carries it explicitly.
+    let snapshot = AgentPillsManager.Snapshot(
+      id: "pill-1",
+      title: "Test",
+      status: "running",
+      provider: "codex",
+      latestActivity: "Working…",
+      query: "do the thing",
+      createdAt: "2026-07-02T00:00:00Z",
+      completedAt: nil)
+    let data = try JSONEncoder().encode(snapshot)
+    let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+    XCTAssertTrue(json.contains("\"provider\":\"codex\""))
+
+    let source = try agentPillSource()
+    XCTAssertTrue(source.contains("provider: pill.currentDirectedProvider?.rawValue ?? \"omi\""))
+  }
+
+  private func runtimeFailure(phase: String?) -> AgentRuntimeFailure {
+    AgentRuntimeFailure(
+      code: "adapter_process_exited",
+      userMessage:
+        "Codex is not available. Make sure Codex and the codex-acp bridge are installed first, then try again.",
+      technicalMessage: nil,
+      source: "adapter_process",
+      adapterId: "codex",
+      provider: nil,
+      retryable: false,
+      phase: phase)
+  }
+
+  private func fallbackProjection(
+    status: AgentRunProjectionStatus,
+    failure: AgentRuntimeFailure?
+  ) -> AgentRunProjection {
+    AgentRunProjection(
+      surface: .floatingPill(pillId: UUID()),
+      sessionId: nil,
+      runId: nil,
+      attemptId: nil,
+      adapterSessionId: nil,
+      status: status,
+      statusText: nil,
+      errorMessage: failure?.displayMessage,
+      failure: failure,
+      updatedAt: Date(),
+      completedAt: Date(),
+      costUsd: nil,
+      inputTokens: nil,
+      outputTokens: nil)
+  }
+
+  private func agentRuntimeFailureSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeFailure.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {

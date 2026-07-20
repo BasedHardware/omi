@@ -636,6 +636,33 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       ),
     },
   },
+  spawn_agent: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Spawn Background Agent",
+      "Start a canonical Omi background agent with floating-bar pill UI.",
+      ["Requires Swift AgentBridge/floating pill support."],
+    ),
+    executor: { kind: "swiftTool" },
+  },
+  manage_agent_pills: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Manage Agent Pills",
+      "List, dismiss, or clear completed floating agent pills.",
+      ["Requires Swift floating agent pill registry."],
+    ),
+    executor: { kind: "swiftTool" },
+  },
+  setup_agent_provider: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Setup Agent Provider",
+      "Install a missing local agent provider (OpenClaw, Hermes, or Codex) with native consent dialog.",
+      ["Requires Swift LocalAgentProviderInstaller."],
+    ),
+    executor: { kind: "swiftTool" },
+  },
 };
 
 const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
@@ -1379,7 +1406,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
     schemaOverride: schema(
       {
         objective: { type: "string", description: "Self-contained background-agent objective." },
-        provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent." },
+        provider: { type: "string", enum: ["openclaw", "hermes", "codex"], description: "Optional local provider override when the current user explicitly names it; omit for a regular Omi agent." },
         parent_run_id: { type: "string", description: "Optional parent run to link via delegation." },
         visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
         title: { type: "string", description: "Optional visible session title." },

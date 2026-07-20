@@ -1589,8 +1589,10 @@ class _PlansSheetState extends State<PlansSheet> {
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration:
-                              BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade800,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           child: Text(
                             context.l10n.savePercent(savePercent),
                             style: const TextStyle(

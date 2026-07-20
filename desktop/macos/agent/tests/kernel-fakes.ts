@@ -242,10 +242,10 @@ export const baseRunInput = {
   cwd: "/tmp/work",
 } as const;
 
-export async function waitUntil(predicate: () => boolean): Promise<void> {
+export async function waitUntil(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
   const started = Date.now();
   while (!predicate()) {
-    if (Date.now() - started > 1000) {
+    if (Date.now() - started > timeoutMs) {
       throw new Error("Timed out waiting for predicate");
     }
     await new Promise((resolve) => setTimeout(resolve, 1));

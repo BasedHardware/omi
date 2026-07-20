@@ -541,20 +541,8 @@ download_node_archive() {
   fi
 
   log "Downloading Node $NODE_VERSION darwin-$arch"
-  temp="$(mktemp "${cache_path}.tmp.XXXXXX")"
-  if ! curl -L --fail --show-error -o "$temp" "$url"; then
-    rm -f "$temp"
-    arc_release_lock "$cache_lock"
-    return 1
-  fi
-  if ! verify_sha256 "$temp" "$sha"; then
-    rm -f "$temp"
-    arc_release_lock "$cache_lock"
-    return 1
-  fi
-  mv -f "$temp" "$cache_path"
-  cp -f "$cache_path" "$out"
-  arc_release_lock "$cache_lock"
+  curl -L --fail --show-error --retry 8 --retry-all-errors --retry-delay 2 --connect-timeout 20 -o "$out" "$url"
+  verify_sha256 "$out" "$sha"
 }
 
 stage_universal_node() {
