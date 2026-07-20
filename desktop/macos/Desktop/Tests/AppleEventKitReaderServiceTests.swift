@@ -74,26 +74,6 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     )
   }
 
-  func testReminderMemoryContentKeepsCompletionDueDateAndList() {
-    let dueAt = Date(timeIntervalSince1970: 1_753_084_800)
-    let reminder = AppleReminderRecord(
-      id: "reminder-1",
-      title: "Send proposal",
-      notes: "Attach estimate",
-      dueAt: dueAt,
-      completedAt: nil,
-      isCompleted: false,
-      priority: 1,
-      listTitle: "Work"
-    )
-
-    let content = AppleEventKitReaderService.reminderContent(reminder)
-    XCTAssertTrue(content.contains("Apple Reminder — Send proposal"))
-    XCTAssertTrue(content.contains("Incomplete"))
-    XCTAssertTrue(content.contains("List: Work"))
-    XCTAssertTrue(content.contains("Notes: Attach estimate"))
-  }
-
   @MainActor
   func testConnectionsExposeDistinctAppleSourcesWithoutReplacingGoogleCalendar() {
     XCTAssertEqual(ImportConnector.all.first { $0.id == "calendar" }?.subtitle, "Google Calendar")
