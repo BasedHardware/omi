@@ -261,6 +261,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     SingleInstanceGuard.enforceSingleInstanceOrExit(
       launchMode: OMIApp.launchMode,
       isExporting: ViewExporter.shouldExport())
+
+    // Register the bundled Geist / Geist Mono fonts before any view renders.
+    OmiFontRegistration.registerAll()
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {

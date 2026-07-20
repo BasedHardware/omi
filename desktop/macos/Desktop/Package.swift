@@ -97,7 +97,8 @@ let package = Package(
       ],
       resources: [
         .process("GoogleService-Info.plist"),
-        // Bundles everything under Resources/ (incl. *_logo.png brand marks).
+        // Bundles everything under Resources/ (incl. *_logo.png brand marks and
+        // Resources/Fonts/*.ttf — the Geist / Geist Mono variable fonts).
         // NOTE: SwiftPM caches the resource manifest, so new files added to
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.
