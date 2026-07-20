@@ -39,7 +39,7 @@ final class BrowserGoogleSessionTests: XCTestCase {
       ])
   }
 
-  func testConfigsOnlyReadKeychainForRecentMainProfilesWithGoogleSessions() throws {
+  func testConfigsPrioritizeRecentProfilesAndFallbackToNewestStaleSession() throws {
     let now = Date(timeIntervalSince1970: 1_784_563_200)
     let chrome = try target("com.google.Chrome")
     let chromeRoot = chrome.profileRoot(homeDirectory: tempRoot)
@@ -52,7 +52,10 @@ final class BrowserGoogleSessionTests: XCTestCase {
       profile: [
         "last_used": "Profile 2",
         "info_cache": [
-          "Default": ["active_time": now.timeIntervalSince1970, "gaia_id": "default-account"],
+          "Default": [
+            "active_time": now.addingTimeInterval(-120).timeIntervalSince1970,
+            "gaia_id": "default-account",
+          ],
           "Profile 2": [
             "active_time": (now.timeIntervalSince1970 + 11_644_473_600) * 1_000_000,
             "gaia_id": "main-account",
@@ -83,7 +86,11 @@ final class BrowserGoogleSessionTests: XCTestCase {
     let vivaldiRoot = vivaldi.profileRoot(homeDirectory: tempRoot)
     let vivaldiCookie = try makeCookieDatabase(
       in: vivaldiRoot, profile: "Default", host: "mail.gmail.com", name: "__Secure-1PSID")
-    try FileManager.default.setAttributes([.modificationDate: now], ofItemAtPath: vivaldiCookie.path)
+    try FileManager.default.setAttributes(
+      [.modificationDate: now.addingTimeInterval(-60)], ofItemAtPath: vivaldiCookie.path)
+    try FileManager.default.createSymbolicLink(
+      atPath: vivaldiRoot.appendingPathComponent("SingletonLock").path,
+      withDestinationPath: "host-1234")
 
     var keychainReads: [String] = []
     let configs = BrowserGoogleSession.configsForPython(
@@ -96,9 +103,20 @@ final class BrowserGoogleSessionTests: XCTestCase {
       return "password"
     }
 
-    XCTAssertEqual(keychainReads, ["Chrome Safe Storage", "Vivaldi Safe Storage"])
-    XCTAssertEqual(configs.map { $0["db_path"] }, [chromeMain.path, vivaldiCookie.path])
-    XCTAssertFalse(configs.contains { $0["db_path"] == chromeDefault.path })
+    XCTAssertEqual(
+      keychainReads,
+      ["Vivaldi Safe Storage", "Chrome Safe Storage", "Chrome Safe Storage"])
+    XCTAssertEqual(
+      configs.map { $0["db_path"] },
+      [vivaldiCookie.path, chromeMain.path, chromeDefault.path])
+
+    let fallbackConfigs = BrowserGoogleSession.configsForPython(
+      logPrefix: "test",
+      targets: [chrome, brave, arc, vivaldi],
+      homeDirectory: tempRoot,
+      now: now.addingTimeInterval(31 * 86_400)
+    ) { _, _ in "password" }
+    XCTAssertEqual(fallbackConfigs.map { $0["db_path"] }, [chromeMain.path])
   }
 
   func testSafeStorageIdentitiesMatchBrowserItems() throws {

@@ -131,28 +131,40 @@ struct BrowserGoogleSession: Equatable {
     now: Date = Date(),
     maxAge: TimeInterval = recentBrowserMaxAge
   ) -> [BrowserGoogleSession] {
-    return targets.flatMap { target in
-      guard let keychainIdentity = keychainIdentity(for: target) else {
-        return [BrowserGoogleSession]()
-      }
+    let browsers: [(running: Bool, profiles: [(session: BrowserGoogleSession, activity: Date)])] = targets.compactMap {
+      target in
+      guard let keychainIdentity = keychainIdentity(for: target) else { return nil }
       let userDataRoot = target.profileRoot(homeDirectory: homeDirectory)
-      guard
-        let profile = mainProfile(in: userDataRoot, now: now),
-        browserIsRunning(at: userDataRoot)
-          || profile.activity >= now.addingTimeInterval(-maxAge),
-        profile.hasGoogleAccount || hasGoogleAuthCookie(at: profile.cookieURL)
-      else { return [] }
-
-      let browserName = profile.name == "Default" ? target.name : "\(target.name) (\(profile.name))"
-      return [
-        BrowserGoogleSession(
-          browserName: browserName,
-          keychainService: keychainIdentity.service,
-          keychainAccount: keychainIdentity.account,
-          cookiePath: profile.cookieURL.path
+      let profiles = eligibleProfiles(in: userDataRoot, now: now)
+      guard !profiles.isEmpty else { return nil }
+      let sessions = profiles.map { profile in
+        let browserName = profile.name == "Default" ? target.name : "\(target.name) (\(profile.name))"
+        return (
+          BrowserGoogleSession(
+            browserName: browserName,
+            keychainService: keychainIdentity.service,
+            keychainAccount: keychainIdentity.account,
+            cookiePath: profile.cookieURL.path
+          ),
+          profile.activity
         )
-      ]
+      }
+      return (browserIsRunning(at: userDataRoot), sessions)
     }
+
+    let cutoff = now.addingTimeInterval(-maxAge)
+    let recentBrowsers: [(running: Bool, activity: Date, sessions: [BrowserGoogleSession])] = browsers.compactMap {
+      browser in
+      let profiles = browser.profiles.filter { $0.activity >= cutoff }
+      guard !profiles.isEmpty else { return nil }
+      return (browser.running, profiles.map(\.activity).max() ?? .distantPast, profiles.map(\.session))
+    }
+    if recentBrowsers.isEmpty {
+      return browsers.flatMap(\.profiles).max { $0.activity < $1.activity }.map { [$0.session] } ?? []
+    }
+    return recentBrowsers.sorted { lhs, rhs in
+      lhs.running == rhs.running ? lhs.activity > rhs.activity : lhs.running
+    }.flatMap(\.sessions)
   }
 
   static func configsForPython(
@@ -179,9 +191,9 @@ struct BrowserGoogleSession: Equatable {
     }
   }
 
-  private static func mainProfile(in userDataRoot: URL, now: Date) -> (
-    name: String, cookieURL: URL, activity: Date, hasGoogleAccount: Bool
-  )? {
+  private static func eligibleProfiles(in userDataRoot: URL, now: Date) -> [(
+    name: String, cookieURL: URL, activity: Date
+  )] {
     let localState = localState(in: userDataRoot)
     let profileState = localState?["profile"] as? [String: Any]
     let infoCache = profileState?["info_cache"] as? [String: Any] ?? [:]
@@ -193,31 +205,22 @@ struct BrowserGoogleSession: Equatable {
         : cookieURL.deletingLastPathComponent()
       return (profileURL.lastPathComponent, cookieURL)
     }
-    guard !cookieProfiles.isEmpty else { return nil }
-
     let preferredNames =
-      [profileState?["last_used"] as? String]
-      + (profileState?["last_active_profiles"] as? [String] ?? []).map(Optional.some)
-    let preferred = preferredNames.compactMap { $0 }.first { name in
-      cookieProfiles.contains { $0.0 == name }
-    }
-    let selected =
-      preferred.flatMap { name in cookieProfiles.first { $0.0 == name } }
-      ?? cookieProfiles.max { lhs, rhs in
-        profileActivity(
-          profileName: lhs.0, cookieURL: lhs.1, infoCache: infoCache, now: now)
-          < profileActivity(
-            profileName: rhs.0, cookieURL: rhs.1, infoCache: infoCache, now: now)
-      }
-    guard let selected else { return nil }
+      ([profileState?["last_used"] as? String]
+      + (profileState?["last_active_profiles"] as? [String] ?? []).map(Optional.some))
+      .compactMap { $0 }
 
-    let info = infoCache[selected.0] as? [String: Any]
-    return (
-      selected.0,
-      selected.1,
-      profileActivity(profileName: selected.0, cookieURL: selected.1, infoCache: infoCache, now: now),
-      !(info?["gaia_id"] as? String ?? "").isEmpty
-    )
+    return cookieProfiles.compactMap { name, cookieURL in
+      let activity = profileActivity(profileName: name, cookieURL: cookieURL, infoCache: infoCache, now: now)
+      let info = infoCache[name] as? [String: Any]
+      guard !(info?["gaia_id"] as? String ?? "").isEmpty || hasGoogleAuthCookie(at: cookieURL)
+      else { return nil }
+      return (name, cookieURL, activity)
+    }.sorted { lhs, rhs in
+      let lhsPriority = preferredNames.firstIndex(of: lhs.name) ?? Int.max
+      let rhsPriority = preferredNames.firstIndex(of: rhs.name) ?? Int.max
+      return lhsPriority == rhsPriority ? lhs.activity > rhs.activity : lhsPriority < rhsPriority
+    }
   }
 
   private static func localState(in userDataRoot: URL) -> [String: Any]? {
