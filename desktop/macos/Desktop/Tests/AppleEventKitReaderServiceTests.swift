@@ -23,6 +23,39 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     )
   }
 
+  @MainActor
+  func testCalendarReadMapsEventKitEvent() async throws {
+    let store = AppleEventKitStoreStub(authorizationStatus: .fullAccess)
+    let event = EKEvent(eventStore: EKEventStore())
+    event.title = "Design review"
+    event.startDate = Date(timeIntervalSince1970: 1_753_084_800)
+    event.endDate = Date(timeIntervalSince1970: 1_753_088_400)
+    event.location = "Studio"
+    event.notes = "Bring mockups"
+    store.events = [event]
+
+    let events = try await AppleEventKitReaderService(eventStore: store).readCalendarEvents(requestAccess: false)
+
+    XCTAssertEqual(events.count, 1)
+    XCTAssertEqual(events[0].summary, "Design review")
+    XCTAssertEqual(events[0].location, "Studio")
+    XCTAssertEqual(events[0].description, "Bring mockups")
+  }
+
+  @MainActor
+  func testCalendarReadReportsDeniedAccess() async {
+    let store = AppleEventKitStoreStub(authorizationStatus: .notDetermined)
+    store.grantsCalendarAccess = false
+
+    do {
+      _ = try await AppleEventKitReaderService(eventStore: store).readCalendarEvents()
+      XCTFail("Expected denied access")
+    } catch {
+      XCTAssertEqual(error as? AppleEventKitReaderError, .accessDenied(.calendar))
+      XCTAssertEqual(store.calendarAccessRequests, 1)
+    }
+  }
+
   func testCalendarMemoryContentKeepsRelevantFields() {
     let event = CalendarEvent(
       id: "event-1",
@@ -68,4 +101,41 @@ final class AppleEventKitReaderServiceTests: XCTestCase {
     XCTAssertEqual(ImportConnector.all.first { $0.id == "apple-reminders" }?.title, "Apple Reminders")
     XCTAssertEqual(ImportConnector.all.first { $0.id == "apple-notes" }?.title, "Apple Notes")
   }
+}
+
+@MainActor
+private final class AppleEventKitStoreStub: AppleEventKitStore {
+  let authorizationStatus: EKAuthorizationStatus
+  var events: [EKEvent] = []
+  var grantsCalendarAccess = true
+  var calendarAccessRequests = 0
+
+  init(authorizationStatus: EKAuthorizationStatus) {
+    self.authorizationStatus = authorizationStatus
+  }
+
+  func authorizationStatus(for source: AppleEventKitSource) -> EKAuthorizationStatus {
+    authorizationStatus
+  }
+
+  func requestFullAccessToEvents() async throws -> Bool {
+    calendarAccessRequests += 1
+    return grantsCalendarAccess
+  }
+
+  func requestFullAccessToReminders() async throws -> Bool { true }
+
+  func calendarEvents(start: Date, end: Date) -> [EKEvent] { events }
+
+  func reminders() async -> [EKReminder] { [] }
+
+  func newReminder() -> EKReminder { EKReminder(eventStore: EKEventStore()) }
+
+  func calendarItem(withIdentifier identifier: String) -> EKCalendarItem? { nil }
+
+  func defaultCalendarForNewReminders() -> EKCalendar? { nil }
+
+  func save(_ reminder: EKReminder, commit: Bool) throws {}
+
+  func commit() throws {}
 }
