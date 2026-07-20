@@ -1,3 +1,0 @@
-{
-  "change": "Improved reliability of macOS beta qualification retries by starting each run with a clean synthetic profile"
-}

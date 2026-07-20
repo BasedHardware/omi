@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a startup crash that could occur while checking notification permissions"
-}
