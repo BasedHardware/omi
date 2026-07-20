@@ -1013,16 +1013,6 @@ final class ScreenCaptureService: Sendable {
     return await captureWindowCGImage(windowID: windowID)
   }
 
-  /// Capture a small, cheap preview of the active window for change detection.
-  /// The low-resolution output is meant only for hashing, not for storage or OCR.
-  func captureActiveWindowPreviewCGImage(maxSize: CGFloat = 160) async -> WindowCaptureResult {
-    let (_, _, windowID) = await Self.getActiveWindowInfoAsync()
-    guard let windowID else {
-      return .windowGone
-    }
-    return await captureWindowCGImage(windowID: windowID, maxSize: maxSize)
-  }
-
   /// Encode a CGImage to JPEG data. Public wrapper for use by callers that need JPEG once.
   /// Wrapped in autoreleasepool because callers often run this in detached Tasks
   /// on the cooperative thread pool, which doesn't drain autorelease pools.
