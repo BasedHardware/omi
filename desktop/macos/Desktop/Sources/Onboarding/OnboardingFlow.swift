@@ -141,4 +141,45 @@ enum OnboardingFlow {
   ) -> Bool {
     observedShortcutPress && (voiceTurnPhase == nil || voiceTurnPhase?.isTerminal == true)
   }
+
+  /// Account-scoped onboarding UserDefaults keys, cleared on both sign-out
+  /// (`AuthService.signOut`) and onboarding reset
+  /// (`AppState.resetOnboardingAndRestart`) via `clearPersistedState`. Any new
+  /// persisted onboarding key MUST be added here so it can't be forgotten at
+  /// one clearing site and leak across accounts on the same Mac.
+  ///
+  /// Deliberately excluded:
+  /// - "hasCompletedOnboarding": @AppStorage on AppState (an ObservableObject)
+  ///   caches internally and writes back after removeObject(); it is reset via
+  ///   the `.userDidSignOut` / `.resetOnboardingRequested` handlers in
+  ///   DesktopHomeView (plus a belt-and-suspenders removeObject at the reset
+  ///   site, which restarts the app anyway).
+  /// - "screenAnalysisEnabled": SettingsSyncManager overwrites it from the
+  ///   server within ~200ms of sign-in; onboarding force-starts monitoring
+  ///   regardless of this setting.
+  /// - onboarding chat keys (mid-onboarding/exploration state, legacy
+  ///   "onboardingChatMessages"/"onboardingACPSessionId"): owned by
+  ///   `OnboardingChatPersistence.clear()`, which both sites call.
+  static let persistedStateKeys: [String] = [
+    "onboardingStep",
+    "onboardingJustCompleted",
+    "hasSeenRewindIntro",
+    "hasTriggeredNotification",
+    "hasTriggeredAutomation",
+    "hasTriggeredScreenRecording",
+    "hasTriggeredMicrophone",
+    "hasTriggeredSystemAudio",
+    "hasTriggeredAccessibility",
+    "hasTriggeredBluetooth",
+  ]
+
+  /// Remove every account-scoped onboarding key. Mounted-@AppStorage values
+  /// that need a live reset (e.g. `onboardingStep` while OnboardingView is
+  /// showing) are handled by the notification handlers; this clears the
+  /// persisted backing store.
+  static func clearPersistedState(in defaults: UserDefaults = .standard) {
+    for key in persistedStateKeys {
+      defaults.removeObject(forKey: key)
+    }
+  }
 }

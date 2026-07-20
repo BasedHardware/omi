@@ -82,12 +82,15 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     let signOutTail = authSource[signOutRange!.lowerBound...]
     let signOutEnd = signOutTail.range(of: "// MARK: - Helper Methods")?.lowerBound ?? signOutTail.endIndex
     let signOutSnippet = String(signOutTail[..<signOutEnd])
-    XCTAssertTrue(signOutSnippet.contains("onboardingStep"))
+    // Onboarding wipe now routes through the shared clearing helpers
+    // (OnboardingFlow.persistedStateKeys), not a hand-rolled key list.
+    XCTAssertTrue(signOutSnippet.contains("OnboardingFlow.clearPersistedState()"))
     XCTAssertTrue(signOutSnippet.contains("userDidSignOut"))
 
     let invalidateRange = authSource.range(of: "func performLightSessionInvalidation()")
     XCTAssertNotNil(invalidateRange)
     let invalidateSnippet = String(authSource[invalidateRange!.lowerBound...]).prefix(500)
+    XCTAssertFalse(invalidateSnippet.contains("clearPersistedState"))
     XCTAssertFalse(invalidateSnippet.contains("onboardingStep"))
     XCTAssertFalse(invalidateSnippet.contains("userDidSignOut"))
     XCTAssertFalse(invalidateSnippet.contains("stopTranscription"))

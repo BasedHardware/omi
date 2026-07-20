@@ -153,23 +153,14 @@ extension AppState {
       DispatchQueue.main.sync(execute: postResetNotification)
     }
 
-    // Clear onboarding-related UserDefaults keys (thread-safe, after live state)
-    let onboardingKeys = [
-      "hasCompletedOnboarding",
-      "onboardingStep",
-      "hasSeenRewindIntro",
-      "hasTriggeredNotification",
-      "hasTriggeredAutomation",
-      "hasTriggeredScreenRecording",
-      "hasTriggeredMicrophone",
-      "hasTriggeredSystemAudio",
-      "hasTriggeredAccessibility",
-      "hasTriggeredBluetooth",
-      "onboardingJustCompleted",
-    ]
-    for key in onboardingKeys {
-      UserDefaults.standard.removeObject(forKey: key)
-    }
+    // Clear onboarding-related UserDefaults keys (thread-safe, after live state).
+    // Shared list with AuthService.signOut so a new onboarding key can't be
+    // forgotten at one site.
+    OnboardingFlow.clearPersistedState()
+    // hasCompletedOnboarding lives on AppState (@AppStorage on an
+    // ObservableObject); the .resetOnboardingRequested handler above set it to
+    // false, this drops the persisted key before the restart.
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding)
     UserDefaults.standard.synchronize()
     log("Cleared onboarding UserDefaults keys")
 
