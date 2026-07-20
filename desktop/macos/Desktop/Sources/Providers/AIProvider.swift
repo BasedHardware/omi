@@ -64,8 +64,8 @@ struct AIProvider: Identifiable {
   static let codex = AIProvider(
     id: "codex",
     displayName: "Codex",
-    tagline: "OpenAI Codex CLI via ACP",
-    attributionURL: nil,
+    tagline: "Local OpenAI Codex CLI",
+    attributionURL: URL(string: "https://developers.openai.com/codex/cli"),
     sfSymbol: "",
     logoResource: nil,
     bridgeModeRawValue: "codex"

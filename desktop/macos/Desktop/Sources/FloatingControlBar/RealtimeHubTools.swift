@@ -76,65 +76,21 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
-  /// One health probe per built artifact (instruction text or tool schema) so
-  /// each is internally consistent. Instructions and schema are constructed at
-  /// different moments by design; the authoritative gate is the dispatch-time
-  /// health preflight, so a stale snapshot can only yield a stale offer.
-  static func providerHealthSnapshot() -> [AgentProviderHealthReport] {
-    [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
-      .map { AgentProviderHealth.report(for: $0) }
+  private static func localAgentProviderInstruction() -> String {
+    let names = AgentPillsManager.DirectedProvider.allCases
+      .map { "\($0.displayName) (\"\($0.rawValue)\")" }
+      .joined(separator: ", ")
+    // Always route a named agent through spawn_agent, even when it is not installed: the spawn
+    // handler runs it if connected or shows deterministic install help if not. This keeps the
+    // "name an agent that isn't connected -> help install it" behavior from depending on the
+    // model reciting setup text.
+    return "If the user asks to use or ask a specific coding agent — \(names) — call spawn_agent with `provider` set to its value. Always pass the named provider: Omi runs it when it's connected, or tells the user how to install it when it isn't, so you never need to check availability yourself."
   }
 
-  private static func localAgentProviderInstruction(
-    reports: [AgentProviderHealthReport] = providerHealthSnapshot()
-  ) -> String {
-    let available = reports.filter { $0.readiness == .ready }.map(\.provider)
-    let unavailable = reports.filter { $0.readiness != .ready }
-
-    let autoInstruction =
-      available.isEmpty
-      ? ""
-      : " If the user asks for an agent without naming one (e.g. \"have an agent do this\", \"use the best agent\"), call spawn_agent with provider set to \"auto\" — Omi picks the best installed agent for the task and falls back to the others automatically."
-
-    if unavailable.isEmpty {
-      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect." + autoInstruction
-    }
-
-    var parts: [String] = []
-    if !available.isEmpty {
-      let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
-      parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
-      let strengthsText = available
-        .map { "\($0.displayName): \($0.strengths)" }
-        .joined(separator: "; ")
-      parts.append("When the user does not name an agent, pick the provider whose strengths clearly match the task — \(strengthsText) — otherwise omit provider to use Omi's default agent. When the user names an agent, always use that one.")
-    }
-    if unavailable.isEmpty {
-      parts.append("Treat those as available local providers, not as sessions to inspect.")
-    } else {
-      // Compact instruction fragments only — the full user-facing setup
-      // prompt (install command + docs URL) stays on UI/toolError surfaces.
-      let missingText = unavailable
-        .map { "\($0.provider.displayName): not installed — offer to set it up via setup_agent_provider after explicit consent." }
-        .joined(separator: " ")
-      parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and offer to install it: \(missingText) \(LocalAgentProviderInstaller.consentRule)")
-    }
-    let missingText = unavailable
-      .map { "\($0.provider.displayName): \($0.detail)" }
-      .joined(separator: " ")
-    parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
-    parts.append(
-      "Then OFFER to set it up for them. If — and only if — the user agrees, call setup_agent_provider with that provider and their original task as brief; Omi installs it with live progress and runs the task once it's ready.")
-    if !autoInstruction.isEmpty {
-      parts.append(autoInstruction.trimmingCharacters(in: .whitespaces))
-    }
-    return parts.joined(separator: " ")
-  }
-
-  private static func availableDirectedProviderRawValues(
-    reports: [AgentProviderHealthReport] = providerHealthSnapshot()
-  ) -> [String] {
-    reports.filter { $0.readiness == .ready }.map(\.provider.rawValue)
+  private static func availableDirectedProviderRawValues() -> [String] {
+    // List ALL local agents (installed or not) so the model can request one by name even when it
+    // isn't connected; the spawn handler then either runs it or shows deterministic install help.
+    AgentPillsManager.DirectedProvider.allCases.map(\.rawValue)
   }
 
   private static func currentCalendarContext(now: Date = Date(), timeZone: TimeZone = .current) -> String {

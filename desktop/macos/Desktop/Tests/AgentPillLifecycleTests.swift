@@ -393,6 +393,30 @@ import XCTest
     XCTAssertEqual(directive?.rewrittenQuery, "search for david zhang on X and tell me who the top 3 are")
   }
 
+  func testFuzzyProviderDirectiveRoutesMangledNames() throws {
+    // STT / typos the strict token list misses still route to the right agent,
+    // and the objective is preserved (the provider word is not swallowed).
+    let codecs = AgentPillsManager.providerDirective(from: "ask codecs to summarize my last meeting")
+    XCTAssertEqual(codecs?.provider, .codex)
+    XCTAssertEqual(codecs?.rewrittenQuery, "to summarize my last meeting")
+
+    let openFlaw = AgentPillsManager.providerDirective(from: "run open flaw on the auth module")
+    XCTAssertEqual(openFlaw?.provider, .openclaw)
+    XCTAssertEqual(openFlaw?.rewrittenQuery, "on the auth module")
+
+    let hermies = AgentPillsManager.providerDirective(from: "tell hermies to draft the reply")
+    XCTAssertEqual(hermies?.provider, .hermes)
+  }
+
+  func testFuzzyProviderDirectiveDoesNotHijackOrdinaryTasks() throws {
+    // No directive verb, or a provider that maps to a default (non-directed)
+    // agent, must not produce a directed pill.
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "summarize my unread messages"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "run the integration tests"))
+    // Claude Code (.acp) is a default provider, not a directed pill.
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "use claude code to refactor this"))
+  }
+
   func testFloatingRouterProvidesRecentVisibleRequestToProviderDirective() throws {
     let source = try floatingControlBarWindowSource()
 

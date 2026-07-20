@@ -2738,8 +2738,8 @@ actor AgentRuntimeProcess {
 
   private func applyLocalAgentEnvironment(to env: inout [String: String]) {
     // Seed auto-discovered commands for every local adapter so the shared Node
-    // process can route to Hermes or OpenClaw even when it was launched for a
-    // different adapter. registerClient returns early once the reducer is
+    // process can route to Hermes, OpenClaw, or Codex even when it was launched
+    // for a different adapter. registerClient returns early once isRunning, so the
     // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
     if env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
@@ -2802,17 +2802,12 @@ actor AgentRuntimeProcess {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
 
-    // Codex CLI has no native ACP mode; the zed-industries codex-acp bridge
-    // (installed alongside the codex CLI) speaks ACP over stdio and reuses
-    // the user's `codex login` credentials from ~/.codex. Omi's permission
-    // policy auto-denies external-adapter approval requests, so Codex must
-    // run approval-free inside its own workspace-write sandbox instead of
-    // escalating through Omi.
+    // Codex is an exec-style one-shot adapter: seed just the binary path; the
+    // Node CodexRuntimeAdapter appends `exec --full-auto <prompt>` itself.
     if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let codexAcp = firstExecutable(named: "codex-acp", in: adapterSearchDirs)
+      let codex = firstExecutable(named: "codex", in: adapterSearchDirs)
     {
-      env["OMI_CODEX_ADAPTER_COMMAND"] =
-        "\(Self.shellQuote(codexAcp)) -c approval_policy=never -c sandbox_mode=workspace-write"
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.shellQuote(codex)
     }
   }
 

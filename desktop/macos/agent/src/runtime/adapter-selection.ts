@@ -2,6 +2,7 @@ import { AcpRuntimeAdapter } from "../adapters/acp.js";
 import { CodexRuntimeAdapter } from "../adapters/codex.js";
 import { HermesRuntimeAdapter } from "../adapters/hermes.js";
 import { OpenClawRuntimeAdapter } from "../adapters/openclaw.js";
+import { CodexRuntimeAdapter } from "../adapters/codex.js";
 import { adapterCapabilitiesFor, type AdapterCapabilities, type ProductionAdapterId, type RuntimeAdapter } from "../adapters/interface.js";
 import type { AdapterRegistry } from "./adapter-registry.js";
 
@@ -103,7 +104,13 @@ export function adapterActivationError(adapterId: ProductionAdapterId): string |
   const envName = adapterActivationEnv(adapterId);
   if (!envName) return undefined;
   const label =
-    adapterId === "pi-mono" ? "pi-mono" : adapterId === "openclaw" ? "OpenClaw" : adapterId === "codex" ? "Codex" : "Hermes";
+    adapterId === "pi-mono"
+      ? "pi-mono"
+      : adapterId === "openclaw"
+        ? "OpenClaw"
+        : adapterId === "codex"
+          ? "Codex"
+          : "Hermes";
   if (adapterId === "hermes" || adapterId === "openclaw" || adapterId === "codex") {
     return `${label} is not available. Make sure ${label} is installed first, then try again.`;
   }

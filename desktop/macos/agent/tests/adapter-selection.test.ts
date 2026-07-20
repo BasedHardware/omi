@@ -34,7 +34,7 @@ describe("adapter selection and activation", () => {
     expect(adapterIsActivated("hermes", { OMI_HERMES_ADAPTER_COMMAND: "hermes-adapter" })).toBe(true);
     expect(adapterIsActivated("openclaw", { OMI_OPENCLAW_ADAPTER_COMMAND: "openclaw-adapter" })).toBe(true);
     expect(adapterIsActivated("codex", {})).toBe(false);
-    expect(adapterIsActivated("codex", { OMI_CODEX_ADAPTER_COMMAND: "codex-acp" })).toBe(true);
+    expect(adapterIsActivated("codex", { OMI_CODEX_ADAPTER_COMMAND: "codex" })).toBe(true);
   });
 
   it("centralizes production adapter profiles and capabilities", () => {
@@ -53,6 +53,15 @@ describe("adapter selection and activation", () => {
       activationEnv: "OMI_OPENCLAW_ADAPTER_COMMAND",
       capabilities: { supportsTools: false, supportsModelSwitching: false },
     });
+    expect(adapterProfile("codex")).toMatchObject({
+      adapterId: "codex",
+      activationEnv: "OMI_CODEX_ADAPTER_COMMAND",
+      capabilities: { supportsTools: false, supportsModelSwitching: false, supportsNativeResume: false },
+    });
+    expect(adapterActivationError("codex")).toBe(
+      "Codex is not available. Make sure Codex is installed first, then try again."
+    );
+    expect(adapterActivationError("codex")).not.toContain("OMI_CODEX_ADAPTER_COMMAND");
     expect(adapterActivationError("hermes")).toBe(
       "Hermes is not available. Make sure Hermes is installed first, then try again."
     );

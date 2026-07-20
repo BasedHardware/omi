@@ -272,18 +272,17 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   codex: {
     adapterId: "codex",
     productionAdapter: true,
+    // Codex runs one-shot `codex exec` invocations: stateless per attempt, no
+    // resumable native session, model chosen per invocation.
     expectations: {
-      // Codex ACP sessions live in the codex-acp bridge process and are only
-      // valid for that process; after a restart old session ids are stale, so
-      // bindings must not be marked as native-resumable.
-      nativeResume: unsupported("Codex ACP session ids are process-local and are stale after adapter process restart."),
-      cancellationDispatch: required("Codex ACP accepts cancellation through the shared ACP interrupt path."),
-      cancellationAck: knownLimitation("Codex cancellation resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
-      pinnedWorker: required("Codex keeps session state in the codex-acp bridge process and must stay worker-pinned while active."),
-      modelSwitching: unsupported("Codex ACP does not expose session/set_model; model selection is configured through the Codex CLI."),
-      artifactEmission: unsupported("Codex ACP adapter does not emit artifact references yet."),
-      toolSupport: required("Codex projects tool calls through canonical adapter tool events."),
-      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks process-local Codex bindings stale."),
+      nativeResume: unsupported("Codex runs one-shot `codex exec` invocations with no resumable native session id."),
+      cancellationDispatch: required("Codex attempts are cancellable by terminating the active `codex exec` subprocess."),
+      cancellationAck: knownLimitation("Codex cancellation terminates the subprocess without an independent terminal ack.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: unsupported("Codex exec is stateless per attempt and keeps no process-local session state between attempts."),
+      modelSwitching: unsupported("Codex model is selected per invocation via --model; there is no in-session set_model."),
+      artifactEmission: unsupported("Codex adapter does not emit artifact references yet."),
+      toolSupport: unsupported("Codex exec does not consume the per-session Omi MCP tool relay; tools are configured in the Codex environment."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active Codex attempts; one-shot bindings carry no resumable state."),
     },
   },
   a2a: {

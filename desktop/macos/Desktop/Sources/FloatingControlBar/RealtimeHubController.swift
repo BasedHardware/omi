@@ -2281,24 +2281,38 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
-      let setupBrief = (arguments["brief"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard let setupProvider = AgentPillsManager.DirectedProvider(rawValue: setupProviderName) else {
-        sendToolResultIfCurrent(
-          source: source, callId: callId, name: name,
-          output: "Unknown provider '\(setupProviderName)'. Use 'codex', 'openclaw', or 'hermes'.",
-          expectedTurnEpoch: toolTurnEpoch)
+      // Resolve a (possibly STT-mangled) spoken agent name to a harness across ALL agents
+      // (Claude Code, Codex, Hermes, OpenClaw, Omi AI). Empty provider = the user didn't name
+      // one -> best-fit selection below.
+      let requestedHarness: AgentHarnessMode?
+      if providerName.isEmpty {
+        requestedHarness = nil
+      } else if let match = AgentSpeechMatcher.resolve(providerName) {
+        requestedHarness = match.harness
+      } else {
+        session?.sendToolResult(
+          callId: callId, name: name,
+          output:
+            "I couldn't tell which agent you meant by '\(providerName)'. Try Claude Code, Codex, Hermes, OpenClaw, or Omi.")
         return
       }
-      let health = AgentProviderHealth.report(for: setupProvider)
-      if health.readiness == .ready {
-        if let setupBrief, !setupBrief.isEmpty {
-          let model = ShortcutSettings.shared.selectedModel.isEmpty
-            ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
-          let pill = AgentPillsManager.shared.spawnFromUserQuery(
-            setupBrief, model: model, fromVoice: false,
-            preFetchedTitle: setupProvider.displayName,
-            bridgeHarnessOverride: setupProvider.harnessMode)
-          pill.fallbackProviders = [nil]
+      // If the requested agent is an installable local provider that isn't connected, help install it.
+      let requestedProvider = requestedHarness.flatMap { AgentPillsManager.DirectedProvider(harness: $0) }
+      if let requestedProvider {
+        let availability = LocalAgentProviderDetector.availability(for: requestedProvider)
+        guard availability.isAvailable else {
+          let setupPrompt = availability.setupPrompt
+          assistantText = setupPrompt
+          barState?.isVoiceResponseActive = true
+          if !audioReceivedThisTurn {
+            speak(requestedProvider.setupNeededStatus)
+          }
+          suppressAssistantOutputForCurrentTurn = true
+          log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(requestedProvider.rawValue) unavailable")
+          sendToolResultIfCurrent(
+            source: source, callId: callId, name: name,
+            output: availability.toolError)
+          return
         }
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,
@@ -2306,11 +2320,36 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           expectedTurnEpoch: toolTurnEpoch)
         return
       }
-      let setupPill = AgentPillsManager.shared.spawnProviderSetup(
-        provider: setupProvider, thenBrief: setupBrief)
-      log("RealtimeHub[\(providerTag)]: tool setup_agent_provider → \(setupProvider.rawValue) (\(health.detail)) pill=\(setupPill.id)")
+      let model = ShortcutSettings.shared.selectedModel.isEmpty
+        ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
+      // Non-blocking: spawn renders its own pill and runs on its own ChatProvider/AgentBridge.
+      // fromVoice:false — the hub model speaks its own natural acknowledgment.
+      // Harness: a named agent wins; otherwise pick the best CONNECTED agent for the task and
+      // fall back through the ranked chain. nil keeps the Omi AI default.
+      let selectedHarness: AgentHarnessMode?
+      if let requestedHarness {
+        selectedHarness = (requestedHarness == .piMono) ? nil : requestedHarness
+      } else {
+        let chain = AgentSelector.rank(brief: brief, available: AgentRuntimeRouting.connectedHarnesses())
+        selectedHarness = chain.first.flatMap { $0 == .piMono ? nil : $0 }
+      }
+      let pill = AgentPillsManager.shared.spawnFromUserQuery(
+        brief, model: model, fromVoice: false,
+        preFetchedTitle: (title?.isEmpty == false) ? title : requestedProvider?.displayName,
+        bridgeHarnessOverride: selectedHarness)
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(requestedHarness?.rawValue ?? selectedHarness?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
       if !audioReceivedThisTurn {
-        let ack = "Setting up \(setupProvider.displayName) now. I'll start your task once it's ready."
+        let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Name the chosen agent out loud so the routing decision is transparent
+        // ("Starting Codex.") when the hub model did not speak its own ack.
+        let agentName: String? = {
+          guard let harness = selectedHarness else { return nil }
+          if let provider = AgentPillsManager.DirectedProvider(harness: harness) { return provider.displayName }
+          return harness == .acp ? "Claude Code" : nil
+        }()
+        let ack =
+          !existingAck.isEmpty
+          ? existingAck : (agentName.map { "Starting \($0)." } ?? "Starting a background agent.")
         assistantText = ack
         barState?.isVoiceResponseActive = true
         FloatingBarVoicePlaybackService.shared.speakOneShot(ack)

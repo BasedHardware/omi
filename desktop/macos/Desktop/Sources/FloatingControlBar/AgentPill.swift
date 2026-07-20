@@ -489,7 +489,7 @@ final class AgentPillsManager: ObservableObject {
       }
     }
 
-    enum DirectedProvider: String, Equatable {
+    enum DirectedProvider: String, Equatable, CaseIterable {
         case hermes
         case openclaw
         case codex
@@ -523,6 +523,43 @@ final class AgentPillsManager: ObservableObject {
             case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
             case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
             case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
+            }
+        }
+
+        /// Shell command that installs this agent's CLI on macOS. Surfaced by the
+        /// install helper so a user can connect a named-but-missing agent in one tap.
+        var installCommand: String {
+            switch self {
+            case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
+            case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash"
+            case .codex: return "npm install -g @openai/codex"
+            }
+        }
+
+        var docsURL: String {
+            switch self {
+            case .hermes: return "https://hermes-agent.nousresearch.com"
+            case .openclaw: return "https://docs.openclaw.ai/install"
+            case .codex: return "https://developers.openai.com/codex/cli"
+            }
+        }
+
+        /// Spoken/typed forms that select this agent by name in a voice/chat request.
+        var aliases: [String] {
+            switch self {
+            case .hermes: return ["hermes", "nous"]
+            case .openclaw: return ["openclaw", "open claw"]
+            case .codex: return ["codex"]
+            }
+        }
+
+        /// The installable local provider matching a harness, if any (Claude Code / Omi AI have none).
+        init?(harness: AgentHarnessMode) {
+            switch harness {
+            case .hermes: self = .hermes
+            case .openclaw: self = .openclaw
+            case .codex: self = .codex
+            case .acp, .piMono: return nil
             }
         }
 
@@ -860,7 +897,50 @@ final class AgentPillsManager: ObservableObject {
             )
         }
 
-        return nil
+        return fuzzyProviderDirective(from: trimmed, contextualPreviousRequest: contextualPreviousRequest)
+    }
+
+    /// Fallback for the strict provider pattern above: catches STT mishears and
+    /// typos ("ask codecs ...", "run open flaw ...", "tell hermies ...") that the
+    /// exact token list misses. Only fires on an explicit directive shape (a lead
+    /// verb) and only when the leading word(s) resolve confidently to an installable
+    /// directed provider, so it never hijacks an ordinary task like "run tests".
+    private nonisolated static func fuzzyProviderDirective(
+        from trimmed: String,
+        contextualPreviousRequest: String?
+    ) -> ProviderDirective? {
+        let verbPattern =
+            #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+(.+)$"#
+        guard let regex = try? NSRegularExpression(pattern: verbPattern) else { return nil }
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        guard let match = regex.firstMatch(in: trimmed, range: range),
+            match.numberOfRanges > 1,
+            let remainderRange = Range(match.range(at: 1), in: trimmed)
+        else { return nil }
+
+        let remainder = String(trimmed[remainderRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = remainder.split(separator: " ").map(String.init)
+        guard let (harness, consumed) = AgentSpeechMatcher.resolveLeadingProvider(words),
+            let provider = DirectedProvider(harness: harness)
+        else { return nil }
+
+        let rest = words.dropFirst(consumed).joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let contextualObjective = contextualPreviousRequest
+            .flatMap { providerObjective(from: $0) }?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let objective: String
+        if rest.isEmpty, isProviderCorrection(trimmed), contextualObjective?.isEmpty == false {
+            objective = contextualObjective!
+        } else {
+            objective = rest.isEmpty ? "Say how it's going." : rest
+        }
+        return ProviderDirective(
+            provider: provider,
+            rewrittenQuery: objective,
+            title: provider.displayName,
+            ack: "Asking \(provider.displayName)."
+        )
     }
 
     nonisolated static func providerObjective(from text: String) -> String {
