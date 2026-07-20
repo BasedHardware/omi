@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
+    claim_emergency_macos_beta_reconciliation_side_effects,
     emergency_promote_macos_beta_channel,
     promote_channel,
     register_release_manifest,
@@ -116,6 +117,15 @@ class DesktopBetaEmergencyPromotionRequest(BaseModel):
     source_gate_url: str = Field(min_length=1)
     zip_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
     dmg_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+
+
+class DesktopBetaEmergencyReconciliationClaimRequest(BaseModel):
+    """Bound operation identity for the one-time incident-side-effect claim."""
+
+    release_id: str = Field(min_length=1)
+    source_sha: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
+    incident_id: str = Field(min_length=1)
+    operation_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class DesktopPreviewPublishRequest(BaseModel):
@@ -1004,6 +1014,27 @@ async def verify_emergency_macos_beta_reconciliation_endpoint(
             source_sha=source_sha,
             incident_id=incident_id,
             operation_id=operation_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, **result}
+
+
+@router.post("/v2/desktop/channels/emergency-promote-beta/reconciliation/side-effect-claim")
+async def claim_emergency_macos_beta_reconciliation_side_effects_endpoint(
+    request: DesktopBetaEmergencyReconciliationClaimRequest, secret_key: str = Header(...)
+):
+    """Atomically elect one reconciler to notify and monitor a committed emergency operation."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    try:
+        result = await run_blocking(
+            db_executor,
+            claim_emergency_macos_beta_reconciliation_side_effects,
+            request.release_id,
+            source_sha=request.source_sha,
+            incident_id=request.incident_id,
+            operation_id=request.operation_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

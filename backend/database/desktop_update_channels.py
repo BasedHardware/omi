@@ -15,6 +15,7 @@ CHANNELS_COLLECTION = "desktop_update_channels"
 MANIFESTS_COLLECTION = "desktop_release_manifests"
 ROLLBACK_AUDITS_COLLECTION = "desktop_update_channel_rollback_audits"
 EMERGENCY_PROMOTION_AUDITS_COLLECTION = "desktop_update_channel_emergency_promotion_audits"
+EMERGENCY_PROMOTION_SIDE_EFFECT_CLAIMS_COLLECTION = "desktop_update_channel_emergency_promotion_side_effect_claims"
 VALID_CHANNELS = frozenset({"stable", "beta"})
 VALID_PLATFORMS = frozenset({"macos", "windows", "linux"})
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
@@ -668,22 +669,12 @@ def emergency_promote_macos_beta_channel(
     )
 
 
-def verify_emergency_macos_beta_reconciliation(
+def _normalize_emergency_reconciliation_identity(
     release_id: str,
-    *,
     source_sha: str,
     incident_id: str,
     operation_id: str,
-    firestore_client: Any = None,
-) -> dict[str, Any]:
-    """Prove the exact emergency transaction and immutable decision committed.
-
-    This intentionally does not infer an emergency promotion from the mutable
-    beta pointer. A normal promotion can update that pointer concurrently; only
-    the deterministic, append-only emergency audit plus the immutable manifest
-    decision and retry-stable operation audit prove that this break-glass
-    transaction committed.
-    """
+) -> tuple[str, str, str, str]:
     release_id = release_id.strip()
     source_sha = source_sha.strip().lower()
     incident_id = incident_id.strip()
@@ -694,10 +685,18 @@ def verify_emergency_macos_beta_reconciliation(
     operation_id = _require_emergency_operation_id(
         operation_id, release_id=release_id, source_sha=source_sha, incident_id=incident_id
     )
+    return release_id, source_sha, incident_id, operation_id
 
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
-    manifest_snapshot = manifest_ref.get()
+
+def _verified_emergency_macos_beta_manifest_decision(
+    manifest_snapshot: Any,
+    *,
+    release_id: str,
+    source_sha: str,
+    incident_id: str,
+    operation_id: str,
+) -> dict[str, Any]:
+    """Validate the immutable decision before touching the matching audit."""
     if not getattr(manifest_snapshot, "exists", False):
         raise ValueError("emergency reconciliation target release manifest does not exist")
     raw_manifest: object = manifest_snapshot.to_dict()
@@ -719,9 +718,31 @@ def verify_emergency_macos_beta_reconciliation(
     ):
         raise ValueError("immutable manifest does not contain the bound emergency decision for this operation")
 
+    return dict(decision)
+
+
+def _verified_emergency_macos_beta_reconciliation(
+    manifest_snapshot: Any,
+    audit_snapshot: Any,
+    *,
+    release_id: str,
+    source_sha: str,
+    incident_id: str,
+    operation_id: str,
+    emergency_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate the immutable decision and audit shared by read and claim paths."""
+    decision = emergency_evidence
+    if decision is None:
+        decision = _verified_emergency_macos_beta_manifest_decision(
+            manifest_snapshot,
+            release_id=release_id,
+            source_sha=source_sha,
+            incident_id=incident_id,
+            operation_id=operation_id,
+        )
+
     audit_id = operation_id
-    audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
-    audit_snapshot = audit_ref.get()
     if not getattr(audit_snapshot, "exists", False):
         raise ValueError("emergency promotion audit does not exist")
     raw_audit: object = audit_snapshot.to_dict()
@@ -754,8 +775,135 @@ def verify_emergency_macos_beta_reconciliation(
         "generation": generation,
         # Reconstruct GitHub release metadata only from this immutable decision,
         # never from the mutable pointer or a failed promote-job workspace.
-        "emergency_evidence": dict(decision),
+        "emergency_evidence": decision,
     }
+
+
+def verify_emergency_macos_beta_reconciliation(
+    release_id: str,
+    *,
+    source_sha: str,
+    incident_id: str,
+    operation_id: str,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Prove the exact emergency transaction and immutable decision committed.
+
+    This intentionally does not infer an emergency promotion from the mutable
+    beta pointer. A normal promotion can update that pointer concurrently; only
+    the deterministic, append-only emergency audit plus the immutable manifest
+    decision and retry-stable operation audit prove that this break-glass
+    transaction committed.
+    """
+    release_id, source_sha, incident_id, operation_id = _normalize_emergency_reconciliation_identity(
+        release_id, source_sha, incident_id, operation_id
+    )
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
+    manifest_snapshot = manifest_ref.get()
+    emergency_evidence = _verified_emergency_macos_beta_manifest_decision(
+        manifest_snapshot,
+        release_id=release_id,
+        source_sha=source_sha,
+        incident_id=incident_id,
+        operation_id=operation_id,
+    )
+    audit_id = operation_id
+    audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
+    audit_snapshot = audit_ref.get()
+    return _verified_emergency_macos_beta_reconciliation(
+        manifest_snapshot,
+        audit_snapshot,
+        release_id=release_id,
+        source_sha=source_sha,
+        incident_id=incident_id,
+        operation_id=operation_id,
+        emergency_evidence=emergency_evidence,
+    )
+
+
+@transactional
+def _claim_emergency_macos_beta_reconciliation_side_effects_transaction(
+    transaction: Any,
+    manifest_ref: Any,
+    audit_ref: Any,
+    side_effect_claim_ref: Any,
+    *,
+    release_id: str,
+    source_sha: str,
+    incident_id: str,
+    operation_id: str,
+    claimed_at: datetime,
+) -> dict[str, Any]:
+    """Elect one reconciler to perform the operation's external side effects."""
+    manifest_snapshot = manifest_ref.get(transaction=transaction)
+    audit_snapshot = audit_ref.get(transaction=transaction)
+    claim_snapshot = side_effect_claim_ref.get(transaction=transaction)
+    reconciliation = _verified_emergency_macos_beta_reconciliation(
+        manifest_snapshot,
+        audit_snapshot,
+        release_id=release_id,
+        source_sha=source_sha,
+        incident_id=incident_id,
+        operation_id=operation_id,
+    )
+
+    if getattr(claim_snapshot, "exists", False):
+        raw_claim: object = claim_snapshot.to_dict()
+        claim = cast(dict[str, Any], raw_claim) if isinstance(raw_claim, dict) else {}
+        if (
+            claim.get("operation") != "macos_beta_emergency_promotion_side_effects"
+            or claim.get("operation_id") != operation_id
+            or claim.get("audit_id") != operation_id
+            or not isinstance(claim.get("claimed_at"), datetime)
+        ):
+            raise ValueError("emergency promotion side-effect claim is malformed")
+        return {**reconciliation, "emergency_side_effects_claimed": False}
+
+    # This create-only claim shares the deterministic operation ID with the
+    # append-only promotion audit. Firestore retries a concurrent transaction,
+    # so every contender after the winner reads this claim and returns false.
+    transaction.create(
+        side_effect_claim_ref,
+        {
+            "operation": "macos_beta_emergency_promotion_side_effects",
+            "operation_id": operation_id,
+            "audit_id": operation_id,
+            "claimed_at": claimed_at,
+        },
+    )
+    return {**reconciliation, "emergency_side_effects_claimed": True}
+
+
+def claim_emergency_macos_beta_reconciliation_side_effects(
+    release_id: str,
+    *,
+    source_sha: str,
+    incident_id: str,
+    operation_id: str,
+    firestore_client: Any = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Claim incident notification and monitoring once for a committed emergency operation."""
+    release_id, source_sha, incident_id, operation_id = _normalize_emergency_reconciliation_identity(
+        release_id, source_sha, incident_id, operation_id
+    )
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
+    audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(operation_id)
+    side_effect_claim_ref = client.collection(EMERGENCY_PROMOTION_SIDE_EFFECT_CLAIMS_COLLECTION).document(operation_id)
+    return _claim_emergency_macos_beta_reconciliation_side_effects_transaction(
+        client.transaction(),
+        manifest_ref,
+        audit_ref,
+        side_effect_claim_ref,
+        release_id=release_id,
+        source_sha=source_sha,
+        incident_id=incident_id,
+        operation_id=operation_id,
+        claimed_at=now or datetime.now(timezone.utc),
+    )
 
 
 def get_channel_release(platform: str, channel: str, *, firestore_client: Any = None) -> dict[str, Any] | None:

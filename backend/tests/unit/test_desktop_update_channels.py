@@ -6,6 +6,7 @@ import pytest
 from database.desktop_update_channels import (
     _build_channel_pointer,
     _build_beta_rollback_pointer,
+    _claim_emergency_macos_beta_reconciliation_side_effects_transaction,
     _emergency_promotion_operation_id,
     _rollback_macos_beta_transaction,
     _emergency_promote_macos_beta_transaction,
@@ -587,6 +588,95 @@ class TestMacosBetaEmergencyReconciliation:
         }
         manifests.document.assert_called_once_with(release_id)
         audits.document.assert_called_once_with(audit_id)
+
+    def test_transactionally_claims_emergency_side_effects_once_per_operation(self):
+        """A retry observes the committed claim and cannot re-run notify or monitor."""
+        release_id = "v0.12.85+12085-macos"
+        source_sha = "a" * 40
+        operation_id = _emergency_promotion_operation_id(release_id, source_sha, "10063")
+        claimed_at = datetime(2026, 7, 19, 12, 30, tzinfo=timezone.utc)
+        evidence = {
+            "signed_smoke_url": "https://example.test/smoke.json",
+            "signed_smoke_sha256": "d" * 64,
+            "behavioral_url": "https://example.test/behavior.json",
+            "behavioral_sha256": "e" * 64,
+            "source_gate_url": "https://example.test/check",
+            "zip_sha256": "b" * 64,
+            "dmg_sha256": "c" * 64,
+        }
+        manifest_snapshot = MagicMock(exists=True)
+        manifest_snapshot.to_dict.return_value = _emergency_manifest(
+            release_id=release_id,
+            version="0.12.85+12085",
+            build_number=12085,
+            reason="qualification runner is unavailable during an incident",
+            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
+            evidence=evidence,
+        )
+        audit_snapshot = MagicMock(exists=True)
+        audit_snapshot.to_dict.return_value = {
+            "audit_id": operation_id,
+            "operation": "macos_beta_emergency_forward_promotion",
+            "platform": "macos",
+            "channel": "beta",
+            "emergencyPromotion": True,
+            "target_release_id": release_id,
+            "source_sha": source_sha,
+            "incident_id": "10063",
+            "operation_id": operation_id,
+            "previous_generation": 7,
+            "generation": 8,
+        }
+        manifest_ref, audit_ref, side_effect_claim_ref = MagicMock(), MagicMock(), MagicMock()
+        manifest_ref.get.return_value = manifest_snapshot
+        audit_ref.get.return_value = audit_snapshot
+        missing_claim_snapshot = MagicMock(exists=False)
+        side_effect_claim_ref.get.return_value = missing_claim_snapshot
+        winner_transaction = MagicMock()
+
+        winner = _claim_emergency_macos_beta_reconciliation_side_effects_transaction.to_wrap(
+            winner_transaction,
+            manifest_ref,
+            audit_ref,
+            side_effect_claim_ref,
+            release_id=release_id,
+            source_sha=source_sha,
+            incident_id="10063",
+            operation_id=operation_id,
+            claimed_at=claimed_at,
+        )
+
+        assert winner["emergency_reconciled"] is True
+        assert winner["emergency_side_effects_claimed"] is True
+        winner_transaction.create.assert_called_once_with(
+            side_effect_claim_ref,
+            {
+                "operation": "macos_beta_emergency_promotion_side_effects",
+                "operation_id": operation_id,
+                "audit_id": operation_id,
+                "claimed_at": claimed_at,
+            },
+        )
+
+        claimed_snapshot = MagicMock(exists=True)
+        claimed_snapshot.to_dict.return_value = winner_transaction.create.call_args.args[1]
+        side_effect_claim_ref.get.return_value = claimed_snapshot
+        retry_transaction = MagicMock()
+        retry = _claim_emergency_macos_beta_reconciliation_side_effects_transaction.to_wrap(
+            retry_transaction,
+            manifest_ref,
+            audit_ref,
+            side_effect_claim_ref,
+            release_id=release_id,
+            source_sha=source_sha,
+            incident_id="10063",
+            operation_id=operation_id,
+            claimed_at=claimed_at + timedelta(minutes=1),
+        )
+
+        assert retry["emergency_reconciled"] is True
+        assert retry["emergency_side_effects_claimed"] is False
+        retry_transaction.create.assert_not_called()
 
     def test_rejects_a_normal_manifest_even_when_its_release_identity_matches(self):
         release_id = "v0.12.85+12085-macos"

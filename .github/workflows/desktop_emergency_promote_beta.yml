@@ -267,6 +267,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}
+      emergency_side_effects_claimed: ${{ steps.claim_side_effects.outputs.emergency_side_effects_claimed }}
       approvers: ${{ steps.reconcile.outputs.approvers }}
     steps:
       - name: Checkout protected promotion controls
@@ -354,6 +355,7 @@ jobs:
           )
           with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
               output.write('approvers=' + ','.join(evidence['approvers']) + '\n')
+              output.write('operation_id=' + os.environ['OPERATION_ID'] + '\n')
           PY
           gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/desktop-emergency-beta/release-body.md
           python3 .github/scripts/mark-desktop-release-emergency-beta.py \
@@ -363,9 +365,62 @@ jobs:
           gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/desktop-emergency-beta/release-body-emergency.md
           echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"
 
+      - name: Claim emergency incident side effects exactly once
+        # The first reconciler to create this deterministic operation claim runs
+        # both external side effects. A failed promote job remains recoverable:
+        # any later reconciler can verify its committed audit and claim it.
+        id: claim_side_effects
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          INCIDENT_ID: ${{ inputs.incident_id }}
+          OPERATION_ID: ${{ steps.reconcile.outputs.operation_id }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
+          python3 - <<'PY' > /tmp/desktop-emergency-beta/side-effect-claim.json
+          import json
+          import os
+
+          print(json.dumps({
+              'release_id': os.environ['RELEASE_TAG'],
+              'source_sha': os.environ['SOURCE_SHA'],
+              'incident_id': os.environ['INCIDENT_ID'],
+              'operation_id': os.environ['OPERATION_ID'],
+          }))
+          PY
+          SIDE_EFFECT_CLAIM=$(curl -fsS -X POST -H 'Content-Type: application/json' -H "secret-key: $ADMIN_KEY" \
+            --data-binary @/tmp/desktop-emergency-beta/side-effect-claim.json \
+            https://api.omi.me/v2/desktop/channels/emergency-promote-beta/reconciliation/side-effect-claim)
+          SIDE_EFFECT_CLAIM="$SIDE_EFFECT_CLAIM" RELEASE_TAG="$RELEASE_TAG" SOURCE_SHA="$SOURCE_SHA" \
+            INCIDENT_ID="$INCIDENT_ID" OPERATION_ID="$OPERATION_ID" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          claim = json.loads(os.environ['SIDE_EFFECT_CLAIM'])
+          if (
+              claim.get('success') is not True
+              or claim.get('emergency_reconciled') is not True
+              or claim.get('release_id') != os.environ['RELEASE_TAG']
+              or claim.get('source_sha') != os.environ['SOURCE_SHA']
+              or claim.get('incident_id') != os.environ['INCIDENT_ID']
+              or claim.get('operation_id') != os.environ['OPERATION_ID']
+              or not isinstance(claim.get('emergency_side_effects_claimed'), bool)
+          ):
+              raise SystemExit('authoritative emergency side-effect claim did not verify the operation')
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
+              output.write(
+                  'emergency_side_effects_claimed='
+                  + ('true' if claim['emergency_side_effects_claimed'] else 'false')
+                  + '\n'
+              )
+          PY
+
   notify:
     needs: reconcile
-    if: ${{ always() && needs.reconcile.outputs.emergency_reconciled == 'true' }}
+    if: ${{ always() && needs.reconcile.outputs.emergency_side_effects_claimed == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Notify incident responders immediately
@@ -378,7 +433,7 @@ jobs:
 
   monitor:
     needs: reconcile
-    if: ${{ always() && needs.reconcile.outputs.emergency_reconciled == 'true' }}
+    if: ${{ always() && needs.reconcile.outputs.emergency_side_effects_claimed == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Monitor beta-only feed for one hour

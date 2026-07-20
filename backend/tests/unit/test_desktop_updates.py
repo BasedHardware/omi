@@ -1060,6 +1060,47 @@ class TestDesktopUpdateAdminEndpoints:
         )
 
     @pytest.mark.asyncio
+    async def test_emergency_reconciliation_side_effect_claim_returns_the_authoritative_one_time_gate(self):
+        result = {
+            "emergency_reconciled": True,
+            "emergency_side_effects_claimed": True,
+            "release_id": "v0.12.85+12085-macos",
+            "source_sha": "a" * 40,
+            "incident_id": "10063",
+            "operation_id": "f" * 64,
+            "audit_id": "f" * 64,
+            "generation": 8,
+            "emergency_evidence": {"emergencyPromotion": True},
+        }
+        payload = {
+            "release_id": "v0.12.85+12085-macos",
+            "source_sha": "a" * 40,
+            "incident_id": "10063",
+            "operation_id": "f" * 64,
+        }
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch(
+                "routers.updates.claim_emergency_macos_beta_reconciliation_side_effects", return_value=result
+            ) as claim,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/v2/desktop/channels/emergency-promote-beta/reconciliation/side-effect-claim",
+                    headers={"secret-key": "real-secret"},
+                    json=payload,
+                )
+
+        assert resp.status_code == 200
+        assert resp.json() == {"success": True, **result}
+        claim.assert_called_once_with(
+            "v0.12.85+12085-macos",
+            source_sha="a" * 40,
+            incident_id="10063",
+            operation_id="f" * 64,
+        )
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(("platform", "channel"), [("macos", "stable"), ("windows", "beta")])
     async def test_emergency_promotion_rejects_stable_or_other_platform(self, platform, channel):
         async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:

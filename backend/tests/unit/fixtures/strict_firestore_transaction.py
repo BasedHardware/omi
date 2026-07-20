@@ -1,7 +1,7 @@
 """Narrow Firestore transaction fixture for ordering-sensitive unit tests.
 
 This fixture models document-reference ``get(transaction=...)`` plus transaction
-``set`` and ``update``. It enforces Firestore's rule that every transactional
+``set``, ``update``, and ``create``. It enforces Firestore's rule that every transactional
 read must occur before the first transactional write.
 
 It deliberately does not model queries, deletes, commit/rollback visibility,
@@ -32,7 +32,7 @@ class UnsupportedFirestoreOperationError(NotImplementedError):
     """Raised for a Firestore operation this narrow fixture does not model."""
 
 
-_SUPPORTED_OPERATIONS = 'transaction-bound document get, transaction set, and transaction update'
+_SUPPORTED_OPERATIONS = 'transaction-bound document get, transaction set, transaction update, and transaction create'
 
 
 class StrictFirestoreSnapshot:
@@ -110,10 +110,14 @@ class StrictFirestoreTransaction:
         self.updates.append((ref.path, payload))
         self._database.rows[ref.path].update(payload)
 
-    def delete(self, *args: Any, **kwargs: Any) -> None:
-        raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+    def create(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        if ref.path in self._database.rows:
+            raise RuntimeError('row already exists')
+        self._database.rows[ref.path] = deepcopy(data)
 
-    def create(self, *args: Any, **kwargs: Any) -> None:
+    def delete(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
 
     def get(self, *args: Any, **kwargs: Any) -> None:
