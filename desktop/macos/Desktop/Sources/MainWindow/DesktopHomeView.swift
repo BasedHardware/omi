@@ -45,6 +45,8 @@ struct DesktopHomeView: View {
   @State private var showTryAskingPopup = false
   /// Second Brain persistent ask-bar text.
   @State private var sbAskText = ""
+  /// ⌘K command palette visibility.
+  @State private var showSBPalette = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -1124,10 +1126,26 @@ struct DesktopHomeView: View {
       onSubmitAsk: submitSBAsk,
       onOpenChats: { selectedIndex = SidebarNavItem.chat.rawValue },
       onVoice: { FloatingControlBarManager.shared.toggleAIInput() },
-      onOpenPalette: {}
+      onOpenPalette: { showSBPalette = true }
     ) {
       secondBrainPageBody
     }
+    .overlay {
+      if showSBPalette {
+        SBPalette(
+          appState: appState,
+          tasks: viewModelContainer.tasksStore,
+          onClose: { showSBPalette = false },
+          onOpenConversation: { _ in selectedIndex = SidebarNavItem.conversations.rawValue },
+          onNavigate: { idx in selectedIndex = idx }
+        )
+      }
+    }
+    .background(
+      Button("") { showSBPalette.toggle() }
+        .keyboardShortcut("k", modifiers: .command)
+        .opacity(0)
+    )
   }
 
   /// Today is Second-Brain-native; other content pages render inside the shell frame
@@ -1147,6 +1165,14 @@ struct DesktopHomeView: View {
       SBFollowUpsContainer(
         onOpenSettings: { selectedIndex = SidebarNavItem.settings.rawValue }
       )
+    } else if selectedIndex == SidebarNavItem.chat.rawValue {
+      SBAskView(chat: viewModelContainer.chatProvider)
+    } else if selectedIndex == SidebarNavItem.memories.rawValue {
+      SBMemoriesContainer(memoriesViewModel: viewModelContainer.memoriesViewModel)
+    } else if selectedIndex == SidebarNavItem.permissions.rawValue {
+      SBPermissionsPage(appState: appState)
+    } else if selectedIndex == SidebarNavItem.apps.rawValue {
+      SBAppsContainer(appProvider: viewModelContainer.appProvider)
     } else {
       PageContentView(
         selectedIndex: selectedIndex,
