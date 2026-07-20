@@ -959,6 +959,95 @@ class TestDesktopUpdateAdminEndpoints:
 
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_emergency_promotion_is_beta_only_and_clears_only_beta_cache(self):
+        result = {
+            "pointer": {"platform": "macos", "channel": "beta", "release_id": "v0.12.85+12085-macos"},
+            "audit": {"operation": "macos_beta_emergency_forward_promotion", "emergencyPromotion": True},
+        }
+        payload = {
+            "platform": "macos",
+            "channel": "beta",
+            "release_id": "v0.12.85+12085-macos",
+            "source_sha": "a" * 40,
+            "expected_current_release_id": "v0.12.84+12084-macos",
+            "expected_generation": 7,
+            "incident_id": "10063",
+            "reason": "qualification runner is unavailable during an incident",
+            "expires_at": "2026-07-19T13:00:00Z",
+            "approvers": ["alice", "bob"],
+            "signed_smoke_url": "https://example.test/smoke.json",
+            "signed_smoke_sha256": "d" * 64,
+            "behavioral_url": "https://example.test/behavior.json",
+            "behavioral_sha256": "e" * 64,
+            "source_gate_url": "https://example.test/check",
+            "zip_sha256": "b" * 64,
+            "dmg_sha256": "c" * 64,
+        }
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.emergency_promote_macos_beta_channel", return_value=result) as emergency_promote,
+            patch("routers.updates.delete_generic_cache") as delete_cache,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/v2/desktop/channels/emergency-promote-beta",
+                    headers={"secret-key": "real-secret"},
+                    json=payload,
+                )
+
+        assert resp.status_code == 200
+        assert resp.json()["audit"] == result["audit"]
+        emergency_promote.assert_called_once_with(
+            payload["release_id"],
+            source_sha=payload["source_sha"],
+            expected_current_release_id=payload["expected_current_release_id"],
+            expected_generation=7,
+            incident_id="10063",
+            reason=payload["reason"],
+            expires_at=payload["expires_at"],
+            approvers=["alice", "bob"],
+            evidence={
+                "signed_smoke_url": payload["signed_smoke_url"],
+                "signed_smoke_sha256": payload["signed_smoke_sha256"],
+                "behavioral_url": payload["behavioral_url"],
+                "behavioral_sha256": payload["behavioral_sha256"],
+                "source_gate_url": payload["source_gate_url"],
+                "zip_sha256": payload["zip_sha256"],
+                "dmg_sha256": payload["dmg_sha256"],
+            },
+        )
+        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("platform", "channel"), [("macos", "stable"), ("windows", "beta")])
+    async def test_emergency_promotion_rejects_stable_or_other_platform(self, platform, channel):
+        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+            resp = await client.post(
+                "/v2/desktop/channels/emergency-promote-beta",
+                headers={"secret-key": "any-secret"},
+                json={
+                    "platform": platform,
+                    "channel": channel,
+                    "release_id": "v0.12.85+12085-macos",
+                    "source_sha": "a" * 40,
+                    "expected_current_release_id": "v0.12.84+12084-macos",
+                    "expected_generation": 7,
+                    "incident_id": "10063",
+                    "reason": "runner unavailable",
+                    "expires_at": "2026-07-19T13:00:00Z",
+                    "approvers": ["alice", "bob"],
+                    "signed_smoke_url": "https://example.test/smoke.json",
+                    "signed_smoke_sha256": "d" * 64,
+                    "behavioral_url": "https://example.test/behavior.json",
+                    "behavioral_sha256": "e" * 64,
+                    "source_gate_url": "https://example.test/check",
+                    "zip_sha256": "b" * 64,
+                    "dmg_sha256": "c" * 64,
+                },
+            )
+        assert resp.status_code == 422
+
 
 # --- Update policy endpoint ---
 

@@ -46,6 +46,18 @@ Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environmen
 
 `POST /v2/desktop/channels/rollback` is the only non-monotonic pointer operation. It is authenticated with `ADMIN_KEY` and accepts literal `platform: macos` and `channel: beta` values only. The request must include the target `release_id` plus the exact `expected_current_release_id` and `expected_generation`; all three are compared inside the Firestore transaction before either write occurs. The target must already be a registered macOS manifest with passed T2 qualification and an earlier build than the current beta pointer. The transaction creates an append-only immutable audit record and then advances only `desktop_update_channels/macos-beta`; it cannot write Stable, production, another channel, or another platform. The response returns that immutable audit payload and the new beta pointer. Normal `/v2/desktop/channels/promote` remains roll-forward only.
 
+### Emergency macOS beta forward promotion
+
+`desktop_emergency_promote_beta.yml` is a deliberately separate, manual break-glass lane for an already published signed macOS candidate when ordinary exact-candidate qualification is unavailable. It never accepts Stable or another platform, and it does not add a qualification bypass to normal promotion. Before the only pointer mutation it verifies the exact tag/SHA, a passing `Desktop Swift Build & Tests` source gate, published release state, signed-smoke evidence, freshly recomputed ZIP/DMG hashes, and a supplied incident-specific behavioral evidence attachment. The incident must remain open and contain exactly two distinct `MEMBER`/`OWNER` comments in this exact form:
+
+```text
+Emergency beta promotion approval: vX.Y.Z+BUILD-macos <40-char-source-sha> <expiry-ISO-8601>
+```
+
+The expiry must be within four hours. The workflow records `emergencyPromotion`, the incident, rationale, expiry, approvers, and evidence URLs/digests in the GitHub release metadata, then calls only `POST /v2/desktop/channels/emergency-promote-beta`. That API performs the expected-current-release and generation CAS inside its Firestore transaction and creates the immutable audit record before advancing `macos-beta`. It rejects an expired authorization, a non-macOS/beta request, missing artifacts/digests, fewer than two distinct approvers, a stale pointer, or a non-forward release.
+
+The workflow snapshots and compares the Stable Firestore pointer, Stable release metadata, and Stable appcast entries before and after the mutation. It comments on the incident immediately, then holds a mandatory one-hour beta-only feed monitor. A regression posts a rollback recommendation pointing operators to the independently audited beta rollback endpoint; Stable is never altered.
+
 After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
 
 ## Advisory release doctor
