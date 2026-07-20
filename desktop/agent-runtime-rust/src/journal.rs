@@ -5,6 +5,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct Surface {
@@ -26,6 +27,12 @@ pub struct ResultPage {
 
 pub struct JournalStore {
     connection: Connection,
+}
+
+#[derive(Clone)]
+pub struct RunIdentity {
+    pub run_id: String,
+    pub attempt_id: String,
 }
 
 impl JournalStore {
@@ -105,11 +112,33 @@ impl JournalStore {
                  UNIQUE (conversation_id, producer_id)
              );
              CREATE INDEX IF NOT EXISTS rx4_journal_turns_seq_idx
-                 ON rx4_journal_turns(conversation_id, turn_seq);",
+                 ON rx4_journal_turns(conversation_id, turn_seq);
+             CREATE TABLE IF NOT EXISTS rx4_runtime_runs (
+                 run_id TEXT PRIMARY KEY,
+                 attempt_id TEXT NOT NULL UNIQUE,
+                 owner_id TEXT NOT NULL,
+                 session_id TEXT NOT NULL,
+                 profile_generation INTEGER NOT NULL,
+                 created_at_ms INTEGER NOT NULL
+             );",
             )
             .map_err(|error| error.to_string())?;
         self.migrate_node_journal()?;
         Ok(())
+    }
+
+    pub fn admit_run(
+        &mut self,
+        owner_id: &str,
+        session_id: &str,
+        profile_generation: u64,
+    ) -> Result<RunIdentity, String> {
+        let identity = RunIdentity {
+            run_id: Uuid::new_v4().to_string(),
+            attempt_id: Uuid::new_v4().to_string(),
+        };
+        self.connection.execute("INSERT INTO rx4_runtime_runs(run_id, attempt_id, owner_id, session_id, profile_generation, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)", params![identity.run_id, identity.attempt_id, owner_id, session_id, profile_generation, now_ms()]).map_err(|error| error.to_string())?;
+        Ok(identity)
     }
 
     fn migrate_node_journal(&self) -> Result<(), String> {
