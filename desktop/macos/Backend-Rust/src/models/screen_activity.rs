@@ -22,9 +22,10 @@ impl ScreenActivityRow {
     /// SQLite IDs are per-installation, so canonical device identity is part of
     /// the cross-device storage key. Legacy rows preserve their historical key.
     pub fn storage_id(&self) -> String {
-        self.client_device_id
-            .as_ref()
-            .map_or_else(|| self.id.to_string(), |device_id| format!("{}-{}", device_id, self.id))
+        self.client_device_id.as_ref().map_or_else(
+            || self.id.to_string(),
+            |device_id| format!("{}-{}", device_id, self.id),
+        )
     }
 }
 

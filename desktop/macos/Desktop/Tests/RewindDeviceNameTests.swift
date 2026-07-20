@@ -17,7 +17,8 @@ final class RewindDeviceNameTests: XCTestCase {
 
     let appSupport = FileManager.default
       .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    userDir = appSupport
+    userDir =
+      appSupport
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -30,33 +31,47 @@ final class RewindDeviceNameTests: XCTestCase {
     try await super.tearDown()
   }
 
-  func testScreenshotsMigrationAddsNullableDeviceNameColumnAndPersistsValue() async throws {
+  func testScreenshotsMigrationAddsNullableCaptureProvenanceColumnsAndPersistsValues() async throws {
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
       return XCTFail("database should be initialized")
     }
 
     let column = try await dbQueue.read { db in
-      try Row.fetchOne(db, sql: "SELECT type, \"notnull\" FROM pragma_table_info('screenshots') WHERE name = 'deviceName'")
+      try Row.fetchOne(
+        db, sql: "SELECT type, \"notnull\" FROM pragma_table_info('screenshots') WHERE name = 'deviceName'")
     }
     XCTAssertEqual(column?["type"] as? String, "TEXT")
     XCTAssertEqual(column?["notnull"] as? Int64, 0)
 
-    _ = try await RewindDatabase.shared.insertScreenshot(
-      Screenshot(appName: "MigrationTest", isIndexed: true, deviceName: "Mac Studio"))
+    let clientDeviceColumn = try await dbQueue.read { db in
+      try Row.fetchOne(
+        db, sql: "SELECT type, \"notnull\" FROM pragma_table_info('screenshots') WHERE name = 'clientDeviceId'")
+    }
+    XCTAssertEqual(clientDeviceColumn?["type"] as? String, "TEXT")
+    XCTAssertEqual(clientDeviceColumn?["notnull"] as? Int64, 0)
 
-    let storedDeviceName = try await dbQueue.read { db in
-      try String.fetchOne(
+    _ = try await RewindDatabase.shared.insertScreenshot(
+      Screenshot(
+        appName: "MigrationTest",
+        isIndexed: true,
+        deviceName: "Mac Studio",
+        clientDeviceId: "macos_test123"))
+
+    let storedProvenance = try await dbQueue.read { db in
+      try Row.fetchOne(
         db,
-        sql: "SELECT deviceName FROM screenshots WHERE appName = ?",
+        sql: "SELECT deviceName, clientDeviceId FROM screenshots WHERE appName = ?",
         arguments: ["MigrationTest"])
     }
-    XCTAssertEqual(storedDeviceName, "Mac Studio")
+    XCTAssertEqual(storedProvenance?["deviceName"] as? String, "Mac Studio")
+    XCTAssertEqual(storedProvenance?["clientDeviceId"] as? String, "macos_test123")
   }
 
   func testSyncPayloadIncludesDeviceNameWhenPresent() throws {
-    let payload = try payloadRow(deviceName: "Mac Studio")
+    let payload = try payloadRow(deviceName: "Mac Studio", clientDeviceId: "macos_test123")
 
     XCTAssertEqual(payload["deviceName"] as? String, "Mac Studio")
+    XCTAssertEqual(payload["clientDeviceId"] as? String, "macos_test123")
     XCTAssertEqual(payload["appName"] as? String, "Safari")
     XCTAssertEqual(payload["windowTitle"] as? String, "GitHub")
     XCTAssertEqual(payload["ocrText"] as? String, "review thread")
@@ -64,12 +79,13 @@ final class RewindDeviceNameTests: XCTestCase {
   }
 
   func testSyncPayloadOmitsDeviceNameWhenUnknown() throws {
-    let payload = try payloadRow(deviceName: nil)
+    let payload = try payloadRow(deviceName: nil, clientDeviceId: nil)
 
     XCTAssertNil(payload["deviceName"])
+    XCTAssertNil(payload["clientDeviceId"])
   }
 
-  private func payloadRow(deviceName: String?) throws -> [String: Any] {
+  private func payloadRow(deviceName: String?, clientDeviceId: String?) throws -> [String: Any] {
     let dbQueue = try DatabaseQueue()
     let embedding = [Float(1.25), Float(-2.5)].withUnsafeBytes { Data($0) }
 
@@ -82,18 +98,20 @@ final class RewindDeviceNameTests: XCTestCase {
         t.column("ocrText", .text)
         t.column("embedding", .blob)
         t.column("deviceName", .text)
+        t.column("clientDeviceId", .text)
       }
 
       try db.execute(
         sql: """
-          INSERT INTO sync_rows (timestamp, appName, windowTitle, ocrText, embedding, deviceName)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO sync_rows (timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           """,
-        arguments: ["2026-06-26T20:00:00Z", "Safari", "GitHub", "review thread", embedding, deviceName])
+        arguments: ["2026-06-26T20:00:00Z", "Safari", "GitHub", "review thread", embedding, deviceName, clientDeviceId])
 
       let row = try Row.fetchOne(
         db,
-        sql: "SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName FROM sync_rows")!
+        sql: "SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId FROM sync_rows"
+      )!
       guard let payload = ScreenActivitySyncService.payloadRow(from: row) else {
         throw RewindDeviceNameTestError.missingPayload
       }
