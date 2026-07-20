@@ -106,6 +106,7 @@ class ForegroundUtil {
     Logger.debug('initializeForegroundService');
 
     try {
+      await NotificationChannelStrings.loadAppLocale();
       FlutterForegroundTask.init(
         androidNotificationOptions: AndroidNotificationOptions(
           channelId: 'foreground_service',

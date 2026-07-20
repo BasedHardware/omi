@@ -86,6 +86,7 @@ import 'package:omi/utils/notification_channel_strings.dart';
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  await NotificationChannelStrings.loadAppLocale();
 
   await AwesomeNotifications().initialize(null, [
     NotificationChannel(
@@ -145,6 +146,7 @@ Future _init() async {
   }
 
   await PlatformManager.initializeServices();
+  await NotificationChannelStrings.loadAppLocale();
   await NotificationService.instance.initialize();
 
   // Register FCM background message handler
