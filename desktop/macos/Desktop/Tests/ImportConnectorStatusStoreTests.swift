@@ -100,11 +100,11 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     XCTAssertEqual(snapshot.actionTitle, "Connect")
   }
 
-  func testEventKitAccessProbePreservesImportedMetrics() {
+  func testEventKitAccessProbePreservesImportedMetrics() throws {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let connector = ImportConnector.all.first { $0.id == "apple-calendar" }!
+    let connector = try XCTUnwrap(ImportConnector.all.first { $0.id == "apple-calendar" })
     let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
 
     store.markSynced(connectorID: connector.id, sourceCount: 500, memoryCount: 500)
