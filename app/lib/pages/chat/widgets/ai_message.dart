@@ -1140,9 +1140,9 @@ class _MessageActionBarState extends State<MessageActionBar> {
         // Show confirmation snackbar
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Thanks for your feedback!', style: TextStyle(color: Colors.white)),
-              duration: Duration(seconds: 2),
+            SnackBar(
+              content: Text(context.l10n.thanksForYourFeedback, style: const TextStyle(color: Colors.white)),
+              duration: const Duration(seconds: 2),
             ),
           );
         }
@@ -1290,7 +1290,7 @@ class CopyButton extends StatelessWidget {
               padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
               child: Icon(Icons.content_copy, color: Theme.of(context).textTheme.bodySmall!.color, size: 10.0),
             ),
-            Text('Copy message', style: Theme.of(context).textTheme.bodySmall),
+            Text(context.l10n.copyMessage, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(width: 8),
           ],
         ),

@@ -897,7 +897,10 @@ actor AgentBridge {
       isPiMonoHarness
       && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
         requestedCredentials: requiresCredentials,
-        isNonProduction: AppBuild.isNonProduction)
+        isNonProduction: AppBuild.isNonProduction,
+        hermeticFaultModelToken: AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+          isNonProduction: AppBuild.isNonProduction,
+          bundleIdentifier: AppBuild.bundleIdentifier))
     var acquiredRegistration = false
     do {
       if registeredThisCall {

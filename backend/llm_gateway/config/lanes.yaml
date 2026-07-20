@@ -1,4 +1,29 @@
 lanes:
+  - lane_id: omi:auto:public-shared-conversation-chat
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    objective:
+      quality: 0.20
+      latency: 0.30
+      cost: 0.50
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes: []
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.public_shared_conversation_chat.2026_07_19.001
+    last_known_good: route.public_shared_conversation_chat.2026_07_19.001
   - lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     capabilities:

@@ -178,6 +178,8 @@ def _make_chat_client():
     sync_files.decode_files_to_wav = MagicMock(return_value=[])
     stt_streaming = _install_module('utils.stt.streaming', ModuleType('utils.stt.streaming'))
     stt_streaming.STTService = MagicMock()
+    stt_streaming.connect_stt_socket_with_fallback = MagicMock()
+    stt_streaming.drain_stt_socket = AsyncMock()
     stt_streaming.get_stt_service_for_language = MagicMock()
     stt_streaming.process_audio_modulate = MagicMock()
     stt_streaming.process_audio_parakeet = MagicMock()

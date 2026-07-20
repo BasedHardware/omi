@@ -48,7 +48,11 @@ jobs:
             echo "Automatic desktop beta promotion is paused by DESKTOP_AUTO_BETA_ENABLED=false." >&2
             exit 1
           fi
-          LATEST_TAG=$(git tag -l 'v*-macos' --sort=-v:refname | head -1)
+          LATEST_TAG=$(git for-each-ref --count=1 --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v*-macos')
+          if [[ -z "$LATEST_TAG" ]]; then
+            echo "Automatic beta promotion requires at least one macOS candidate tag." >&2
+            exit 1
+          fi
           if [[ "$RELEASE_TAG" != "$LATEST_TAG" ]]; then
             echo "Automatic beta promotion refuses stale tag $RELEASE_TAG; newest is $LATEST_TAG." >&2
             exit 1

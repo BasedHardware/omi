@@ -130,6 +130,8 @@ Keep it a separate service entrypoint. Do not place a parallel `utils/auto_route
 
 Implemented internal service auth uses `Authorization: Bearer <LLM_GATEWAY_SERVICE_TOKEN>` plus `X-Omi-Service-Caller`. The default allowlist is low-cardinality service names `backend` and `pusher`; optional `X-Omi-User-Uid` and `X-Omi-Tenant-Id` populate request context only. `/health` remains unauthenticated. `/ready` and `/v1/chat/completions` depend on these helpers instead of Firebase user auth.
 
+`POST /v1/conversations/shared/chat` is a backend-owned public-content surface, not a public gateway surface. Before Redis, Firestore, or gateway work, it requires a Google OIDC token scoped to `PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE`, the exact `PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA`, and `X-Omi-Public-Chat-Subject` as a 64-character lowercase hex HMAC-SHA-256 derived by that trusted frontend service. The backend never derives identity from `X-Forwarded-For`. Until the frontend has that service-auth facility, its action explicitly returns unavailable and sends no request.
+
 Credential context is request-level metadata. It records credential mode, caller, and provider-key presence or approved key references without exposing raw key material in model dumps or repr output. BYOK credential failures such as missing key, invalid auth, quota, rate-limit, and unsupported provider are visible errors and are not fallback-eligible by default.
 
 ## Deployment Shape
@@ -187,6 +189,7 @@ Backend-listen env:
 | `OMI_LLM_GATEWAY_URL` | Internal service URL above |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | `gateway` routes non-BYOK `get_llm` traffic through per-feature `omi:auto:*` lanes |
+| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Independent `off` or `gateway` switch, default and checked-in value `off`; gateway mode has no direct-provider fallback |
 | `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE` | Required and set to `true` on prod callers; prevents an accidental production route flip without an explicit checked-in enablement |
 | `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | When `true`, acknowledged direct surfaces (BYOK, agentic, file chat, omni realtime) stay on providers |
 | `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Broad dev shadow kill switch; keep `false` while feature mode is serving |

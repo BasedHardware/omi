@@ -1,4 +1,57 @@
 route_artifacts:
+  - route_artifact_id: route.public_shared_conversation_chat.2026_07_19.001
+    artifact_digest: sha256:2b001db329d1ade5f0ce65a11271e4fbe29b2acf815cb32e5a2a13302b793b31
+    lane_id: omi:auto:public-shared-conversation-chat
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-5-nano
+    fallbacks: []
+    provider_options:
+      reasoning_effort: minimal
+    output_budget:
+      experiment: public_shared_conversation_chat
+      max_completion_tokens: 600
+    timeouts:
+      request_ms: 20000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    evidence:
+      benchmark_snapshot: contract.public_shared_conversation_chat.2026_07_19
+      eval_report: backend.tests.unit.test_public_shared_conversation_chat
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: active
+      percent: 100
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes: []
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    fallback_policy:
+      fallback_on: []
+      never_fallback_on:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+
   - route_artifact_id: route.chat_structured.2026_06_27.001
     artifact_digest: sha256:d9ab75d4eb53c029028c7a2ebccee8d273d043d6d7553a8e8c9f9897d28bfb6a
     lane_id: omi:auto:chat-structured

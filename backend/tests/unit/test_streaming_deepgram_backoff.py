@@ -1040,7 +1040,8 @@ class TestGetSttServiceForLanguage:
         ):
             service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
 
-        assert (service, lang, model) == (STTService.parakeet, 'en', 'parakeet')
+        # After #10048 fix: Deepgram retirement is subtractive; Modulate is the safe primary
+        assert (service, lang, model) == (STTService.modulate, 'en', 'velma-2')
 
     def test_unsupported_language_fails_closed(self):
         with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2']):
