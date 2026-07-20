@@ -167,9 +167,18 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
     # Find target folder
     target_folder_id: Optional[str] = move_to_folder_id
     if not target_folder_id:
-        # Find the default folder (usually 'Other')
-        folders = get_folders(uid)
-        default_folder = next((f for f in folders if f.get('is_default')), None)
+        # Find the default folder. Never the folder being deleted — moving conversations
+        # into it would leave them orphaned once it is removed below.
+        candidates = [f for f in get_folders(uid) if str(f.get('id')) != folder_id]
+        default_folder = next((f for f in candidates if f.get('is_default')), None)
+        if not default_folder:
+            # Folders provisioned before is_default was computed correctly have the flag
+            # unset, so fall back to the folder the 'other' category maps to.
+            fallback_mapping = CATEGORY_TO_FOLDER_MAPPING['other']
+            default_folder = next(
+                (f for f in candidates if f.get('category_mapping') == fallback_mapping),
+                None,
+            )
         if default_folder:
             target_folder_id = str(default_folder['id'])
 
@@ -240,7 +249,11 @@ def initialize_system_folders(uid: str) -> List[Dict[str, Any]]:
             'created_at': now,
             'updated_at': now,
             'order': i,
-            'is_default': folder_config['category_mapping'] == 'other',
+            # The folder the catch-all 'other' category lands in is the default
+            # destination. Comparing against the literal 'other' never matched, because
+            # no SYSTEM_FOLDERS entry uses that category_mapping — so no folder was ever
+            # marked default and delete_folder had nowhere to move conversations.
+            'is_default': folder_config['category_mapping'] == CATEGORY_TO_FOLDER_MAPPING['other'],
             'is_system': True,
             'category_mapping': folder_config['category_mapping'],
             'conversation_count': 0,
