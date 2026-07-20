@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 7302,
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2950
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2951
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Threads the Codex bridge mode through native-model-choice and provider-identity paths so Codex runs like the other local agents.",
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Adds a shared rowInt helper so GRDB Int64 aggregate columns decode instead of silently returning nil from an always-failing Int64 as? Int cast."
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Consolidation threads spawn-agent routing through ChatToolExecutor without changing tool ownership."
   },
   "threshold": 1500
 }

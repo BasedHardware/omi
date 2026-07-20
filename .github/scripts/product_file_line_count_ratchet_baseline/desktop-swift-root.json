@@ -2,13 +2,13 @@
   "files": {
     "desktop/macos/Desktop/Sources/AuthService.swift": 3303,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4272,
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4274,
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1578,
     "desktop/macos/Desktop/Sources/OmiApp.swift": 1634
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Consolidation exposes agent routing helpers on the automation bridge without changing auth ownership.",
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
     "desktop/macos/Desktop/Sources/OmiApp.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
   },

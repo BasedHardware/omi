@@ -14,6 +14,7 @@ import 'package:pigeon/pigeon.dart';
     dartPackageName: 'omi_phone_mic',
   ),
 )
+
 /// Native capture state machine, mirrored to Dart on every transition.
 enum PhoneMicCaptureState { idle, starting, running, interrupted, rebuilding }
 
