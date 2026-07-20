@@ -783,11 +783,13 @@ class AppProvider extends BaseProvider {
     }
   }
 
-  Future<void> toggleApp(String appId, bool isEnabled, int? idx) async {
+  /// Enable/disable [appId] server-side, keeping prefs, local app state, and
+  /// failure UX (error dialog) in one owner. Returns whether the toggle stuck.
+  Future<bool> toggleApp(String appId, bool isEnabled, int? idx) async {
     int loadingIndex = -1;
     if (idx != null && idx >= 0 && idx < appLoading.length) {
       loadingIndex = idx;
-      if (appLoading[loadingIndex]) return;
+      if (appLoading[loadingIndex]) return false;
       appLoading[loadingIndex] = true;
       notifyListeners();
     } else if (idx != null) {
@@ -866,6 +868,7 @@ class AppProvider extends BaseProvider {
     }
 
     notifyListeners();
+    return success;
   }
 
   // Performance optimization: Dispose method to clean up resources

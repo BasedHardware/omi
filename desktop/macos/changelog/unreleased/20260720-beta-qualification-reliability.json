@@ -1,3 +1,0 @@
-{
-  "change": "Improved reliability of macOS beta update qualification so a temporary release-service outage does not create duplicate checks or silently promote an unqualified build."
-}

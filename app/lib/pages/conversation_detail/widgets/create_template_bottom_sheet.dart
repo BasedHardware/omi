@@ -162,10 +162,11 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
             _statusMessage = context.l10n.installingApp;
           });
 
-          // Enable/install the app for the user
-          final success = await enableAppServer(createdApp.id);
+          // Enable/install through the provider: it owns prefs, app-list
+          // state, and the failure dialog, so a failed install can no longer
+          // be reported as success (#10074 follow-up).
+          final success = await context.read<AppProvider>().toggleApp(createdApp.id, true, null);
           if (success) {
-            SharedPreferencesUtil().enableApp(createdApp.id);
             createdApp.enabled = true;
 
             // Update the conversation detail provider's cached apps
@@ -178,15 +179,21 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
           if (mounted) {
             // Close the create template bottom sheet
             Navigator.pop(context);
-            AppSnackbar.showSnackbarSuccess(context.l10n.appCreatedAndInstalled);
+            if (success) {
+              AppSnackbar.showSnackbarSuccess(context.l10n.appCreatedAndInstalled);
 
-            // Show the summarized apps sheet so user can use the new app
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) => const SummarizedAppsBottomSheet(),
-            );
+              // Show the summarized apps sheet so user can use the new app
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (context) => const SummarizedAppsBottomSheet(),
+              );
+            } else {
+              // The provider already showed the failure dialog; tell the user
+              // what state they are actually in.
+              AppSnackbar.showSnackbarError(context.l10n.failedToInstallApp(createdApp.name));
+            }
           }
         } else if (mounted) {
           Navigator.pop(context);
