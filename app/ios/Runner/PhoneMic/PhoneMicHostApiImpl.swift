@@ -10,8 +10,8 @@ final class PhoneMicHostApiImpl: PhoneMicHostApi {
         self.controller = controller
     }
 
-    func start(mode: PhoneMicCaptureMode, completion: @escaping (Result<Void, Error>) -> Void) {
-        controller.start(mode: mode, completion: completion)
+    func start(mode: PhoneMicCaptureMode, sessionId: Int64, completion: @escaping (Result<Void, Error>) -> Void) {
+        controller.start(mode: mode, sessionId: sessionId, completion: completion)
     }
 
     func stop(completion: @escaping (Result<Void, Error>) -> Void) {

@@ -6,8 +6,8 @@ package com.friend.ios.phonemic
  * callbacks itself (the Kotlin peer of iOS `PhoneMicHostApiImpl`).
  */
 class PhoneMicHostApiImpl(private val controller: PhoneMicController) : PhoneMicHostApi {
-    override fun start(mode: PhoneMicCaptureMode, callback: (Result<Unit>) -> Unit) =
-        controller.start(mode, callback)
+    override fun start(mode: PhoneMicCaptureMode, sessionId: Long, callback: (Result<Unit>) -> Unit) =
+        controller.start(mode, sessionId, callback)
 
     override fun stop(callback: (Result<Unit>) -> Unit) =
         controller.stop(callback)

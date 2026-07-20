@@ -118,19 +118,31 @@ private open class PhoneMicPigeonPigeonCodec : StandardMessageCodec() {
 
 
 /**
- * Dart -> native. start(mode) resolves once the engine is running, or throws a
- * PlatformException with one of: permission_denied, session_config_failed,
- * format_invalid, converter_init_failed, engine_start_failed. In batch mode it
- * may additionally throw opus_init_failed (the native opus encoder could not be
- * created) or batch_dir_unavailable (flutter.batchAudioDir is unset/empty).
+ * Dart -> native. start(mode, sessionId) resolves once the engine is running, or
+ * throws a PlatformException with one of: permission_denied,
+ * session_config_failed, format_invalid, converter_init_failed,
+ * engine_start_failed. In batch mode it may additionally throw opus_init_failed
+ * (the native opus encoder could not be created) or batch_dir_unavailable
+ * (flutter.batchAudioDir is unset/empty).
+ *
+ * `sessionId` is a Dart-minted, monotonically increasing identity for this
+ * capture session. Every FlutterApi event carries the id of the session it
+ * belongs to; Dart drops any event whose id does not match its current session.
+ * A start() arriving while a native session is already live ADOPTS the new id
+ * (all future events for that live session carry it) and immediately re-emits the
+ * current state under it — so the caller always converges to the real state even
+ * after a de-sync. The session's mode is fixed at its original start and a late
+ * start() cannot re-select it.
+ *
  * stop() resolves only after teardown is fully drained — no frames or events
  * arrive after it, and in batch mode the current .bin file is finalized (fsynced
- * + atomically promoted, so it is ingestable) before stop() resolves.
+ * + atomically promoted, so it is ingestable) before stop() resolves. stop() is
+ * safe to call regardless of session state (it resolves harmlessly when idle).
  *
  * Generated interface from Pigeon that represents a handler of messages from Flutter.
  */
 interface PhoneMicHostApi {
-  fun start(mode: PhoneMicCaptureMode, callback: (Result<Unit>) -> Unit)
+  fun start(mode: PhoneMicCaptureMode, sessionId: Long, callback: (Result<Unit>) -> Unit)
   fun stop(callback: (Result<Unit>) -> Unit)
   fun isRecording(): Boolean
 
@@ -149,7 +161,8 @@ interface PhoneMicHostApi {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
             val modeArg = args[0] as PhoneMicCaptureMode
-            api.start(modeArg) { result: Result<Unit> ->
+            val sessionIdArg = args[1] as Long
+            api.start(modeArg, sessionIdArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(PhoneMicPigeonPigeonUtils.wrapError(error))
@@ -198,7 +211,8 @@ interface PhoneMicHostApi {
   }
 }
 /**
- * Native -> Dart.
+ * Native -> Dart. Every method carries the `sessionId` of the session the event
+ * belongs to; Dart drops any event whose id does not match its current session.
  *
  * Generated class from Pigeon that represents Flutter messages that can be called from Kotlin.
  */
@@ -211,14 +225,15 @@ class PhoneMicFlutterApi(private val binaryMessenger: BinaryMessenger, private v
   }
   /**
    * PCM16 little-endian mono @16kHz. Chunk sizes vary with the input route.
-   * Stream mode only; batch mode never emits frames.
+   * Stream mode only; batch mode never emits frames. A frame belongs to the
+   * session that was current when its capture epoch was built.
    */
-  fun onAudioFrame(pcm16leMono16kArg: ByteArray, callback: (Result<Unit>) -> Unit)
+  fun onAudioFrame(pcm16leMono16kArg: ByteArray, sessionIdArg: Long, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onAudioFrame$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-    channel.send(listOf(pcm16leMono16kArg)) {
+    channel.send(listOf(pcm16leMono16kArg, sessionIdArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(PhoneMicPigeonError(it[0] as String, it[1] as String, it[2] as String?)))
@@ -230,12 +245,12 @@ class PhoneMicFlutterApi(private val binaryMessenger: BinaryMessenger, private v
       }
     }
   }
-  fun onStateChanged(stateArg: PhoneMicCaptureState, callback: (Result<Unit>) -> Unit)
+  fun onStateChanged(stateArg: PhoneMicCaptureState, sessionIdArg: Long, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onStateChanged$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-    channel.send(listOf(stateArg)) {
+    channel.send(listOf(stateArg, sessionIdArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(PhoneMicPigeonError(it[0] as String, it[1] as String, it[2] as String?)))
@@ -251,12 +266,12 @@ class PhoneMicFlutterApi(private val binaryMessenger: BinaryMessenger, private v
    * Non-fatal runtime failures (capture self-heals): converter_failed,
    * rebuild_failed, resume_failed, media_services_reset, batch_storage_full.
    */
-  fun onCaptureError(codeArg: String, messageArg: String, callback: (Result<Unit>) -> Unit)
+  fun onCaptureError(codeArg: String, messageArg: String, sessionIdArg: Long, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onCaptureError$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-    channel.send(listOf(codeArg, messageArg)) {
+    channel.send(listOf(codeArg, messageArg, sessionIdArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(PhoneMicPigeonError(it[0] as String, it[1] as String, it[2] as String?)))
@@ -274,12 +289,12 @@ class PhoneMicFlutterApi(private val binaryMessenger: BinaryMessenger, private v
    * actually written to disk, so mutes and interruptions freeze it while the
    * event keeps arriving.
    */
-  fun onBatchProgress(capturedSecondsArg: Double, callback: (Result<Unit>) -> Unit)
+  fun onBatchProgress(capturedSecondsArg: Double, sessionIdArg: Long, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-    channel.send(listOf(capturedSecondsArg)) {
+    channel.send(listOf(capturedSecondsArg, sessionIdArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(PhoneMicPigeonError(it[0] as String, it[1] as String, it[2] as String?)))

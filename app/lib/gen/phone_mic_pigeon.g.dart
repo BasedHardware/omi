@@ -80,14 +80,26 @@ class _PigeonCodec extends StandardMessageCodec {
   }
 }
 
-/// Dart -> native. start(mode) resolves once the engine is running, or throws a
-/// PlatformException with one of: permission_denied, session_config_failed,
-/// format_invalid, converter_init_failed, engine_start_failed. In batch mode it
-/// may additionally throw opus_init_failed (the native opus encoder could not be
-/// created) or batch_dir_unavailable (flutter.batchAudioDir is unset/empty).
+/// Dart -> native. start(mode, sessionId) resolves once the engine is running, or
+/// throws a PlatformException with one of: permission_denied,
+/// session_config_failed, format_invalid, converter_init_failed,
+/// engine_start_failed. In batch mode it may additionally throw opus_init_failed
+/// (the native opus encoder could not be created) or batch_dir_unavailable
+/// (flutter.batchAudioDir is unset/empty).
+///
+/// `sessionId` is a Dart-minted, monotonically increasing identity for this
+/// capture session. Every FlutterApi event carries the id of the session it
+/// belongs to; Dart drops any event whose id does not match its current session.
+/// A start() arriving while a native session is already live ADOPTS the new id
+/// (all future events for that live session carry it) and immediately re-emits the
+/// current state under it — so the caller always converges to the real state even
+/// after a de-sync. The session's mode is fixed at its original start and a late
+/// start() cannot re-select it.
+///
 /// stop() resolves only after teardown is fully drained — no frames or events
 /// arrive after it, and in batch mode the current .bin file is finalized (fsynced
-/// + atomically promoted, so it is ingestable) before stop() resolves.
+/// + atomically promoted, so it is ingestable) before stop() resolves. stop() is
+/// safe to call regardless of session state (it resolves harmlessly when idle).
 class PhoneMicHostApi {
   /// Constructor for [PhoneMicHostApi].  The [binaryMessenger] named argument is
   /// available for dependency injection.  If it is left null, the default
@@ -101,14 +113,14 @@ class PhoneMicHostApi {
 
   final String pigeonVar_messageChannelSuffix;
 
-  Future<void> start(PhoneMicCaptureMode mode) async {
+  Future<void> start(PhoneMicCaptureMode mode, int sessionId) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.start$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[mode]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[mode, sessionId]);
     final List<Object?>? pigeonVar_replyList =
         await pigeonVar_sendFuture as List<Object?>?;
     if (pigeonVar_replyList == null) {
@@ -176,25 +188,27 @@ class PhoneMicHostApi {
   }
 }
 
-/// Native -> Dart.
+/// Native -> Dart. Every method carries the `sessionId` of the session the event
+/// belongs to; Dart drops any event whose id does not match its current session.
 abstract class PhoneMicFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
   /// PCM16 little-endian mono @16kHz. Chunk sizes vary with the input route.
-  /// Stream mode only; batch mode never emits frames.
-  void onAudioFrame(Uint8List pcm16leMono16k);
+  /// Stream mode only; batch mode never emits frames. A frame belongs to the
+  /// session that was current when its capture epoch was built.
+  void onAudioFrame(Uint8List pcm16leMono16k, int sessionId);
 
-  void onStateChanged(PhoneMicCaptureState state);
+  void onStateChanged(PhoneMicCaptureState state, int sessionId);
 
   /// Non-fatal runtime failures (capture self-heals): converter_failed,
   /// rebuild_failed, resume_failed, media_services_reset, batch_storage_full.
-  void onCaptureError(String code, String message);
+  void onCaptureError(String code, String message, int sessionId);
 
   /// Emitted at 1Hz while batch capture runs. Its arrival is the liveness signal
   /// for the Dart batch watchdog; the value is derived from the number of frames
   /// actually written to disk, so mutes and interruptions freeze it while the
   /// event keeps arriving.
-  void onBatchProgress(double capturedSeconds);
+  void onBatchProgress(double capturedSeconds, int sessionId);
 
   static void setUp(PhoneMicFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -212,8 +226,11 @@ abstract class PhoneMicFlutterApi {
           final Uint8List? arg_pcm16leMono16k = (args[0] as Uint8List?);
           assert(arg_pcm16leMono16k != null,
               'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onAudioFrame was null, expected non-null Uint8List.');
+          final int? arg_sessionId = (args[1] as int?);
+          assert(arg_sessionId != null,
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onAudioFrame was null, expected non-null int.');
           try {
-            api.onAudioFrame(arg_pcm16leMono16k!);
+            api.onAudioFrame(arg_pcm16leMono16k!, arg_sessionId!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -237,8 +254,11 @@ abstract class PhoneMicFlutterApi {
           final PhoneMicCaptureState? arg_state = (args[0] as PhoneMicCaptureState?);
           assert(arg_state != null,
               'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onStateChanged was null, expected non-null PhoneMicCaptureState.');
+          final int? arg_sessionId = (args[1] as int?);
+          assert(arg_sessionId != null,
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onStateChanged was null, expected non-null int.');
           try {
-            api.onStateChanged(arg_state!);
+            api.onStateChanged(arg_state!, arg_sessionId!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -265,8 +285,11 @@ abstract class PhoneMicFlutterApi {
           final String? arg_message = (args[1] as String?);
           assert(arg_message != null,
               'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onCaptureError was null, expected non-null String.');
+          final int? arg_sessionId = (args[2] as int?);
+          assert(arg_sessionId != null,
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onCaptureError was null, expected non-null int.');
           try {
-            api.onCaptureError(arg_code!, arg_message!);
+            api.onCaptureError(arg_code!, arg_message!, arg_sessionId!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -290,8 +313,11 @@ abstract class PhoneMicFlutterApi {
           final double? arg_capturedSeconds = (args[0] as double?);
           assert(arg_capturedSeconds != null,
               'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress was null, expected non-null double.');
+          final int? arg_sessionId = (args[1] as int?);
+          assert(arg_sessionId != null,
+              'Argument for dev.flutter.pigeon.omi_phone_mic.PhoneMicFlutterApi.onBatchProgress was null, expected non-null int.');
           try {
-            api.onBatchProgress(arg_capturedSeconds!);
+            api.onBatchProgress(arg_capturedSeconds!, arg_sessionId!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

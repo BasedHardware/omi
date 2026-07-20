@@ -71,6 +71,10 @@ class PhoneMicController private constructor(private val application: Applicatio
     // ── Control state (MAIN thread only) ──
     private var state: PhoneMicCaptureState = PhoneMicCaptureState.IDLE
     private var mode: PhoneMicCaptureMode = PhoneMicCaptureMode.STREAM
+    // Dart-minted identity for the live session (main only). Every emitted event
+    // carries it; a start() onto a live session adopts the new caller's id so future
+    // events converge to that caller's Dart session.
+    private var currentSessionId: Long = 0L
     private var pendingStop = false
 
     // Dart's stop() is fire-and-forget (IMicRecorderService.stop is void), so a start()
@@ -82,6 +86,7 @@ class PhoneMicController private constructor(private val application: Applicatio
     // the dying session.
     private var stopDrainInFlight = false
     private var restartModeAfterStop: PhoneMicCaptureMode? = null
+    private var restartSessionIdAfterStop: Long = 0L
     private val pendingStartCallbacks = mutableListOf<(Result<Unit>) -> Unit>()
     private val pendingStopCallbacks = mutableListOf<(Result<Unit>) -> Unit>()
     private var startRetriesUsed = 0
@@ -147,8 +152,8 @@ class PhoneMicController private constructor(private val application: Applicatio
         emitter.unbind()
     }
 
-    fun start(mode: PhoneMicCaptureMode, callback: (Result<Unit>) -> Unit) = runOnMain {
-        handleStart(mode, callback)
+    fun start(mode: PhoneMicCaptureMode, sessionId: Long, callback: (Result<Unit>) -> Unit) = runOnMain {
+        handleStart(mode, sessionId, callback)
     }
 
     fun stop(callback: (Result<Unit>) -> Unit) = runOnMain {
@@ -162,28 +167,45 @@ class PhoneMicController private constructor(private val application: Applicatio
 
     // MARK: - Command handling (main)
 
-    private fun handleStart(mode: PhoneMicCaptureMode, callback: (Result<Unit>) -> Unit) {
+    private fun handleStart(mode: PhoneMicCaptureMode, sessionId: Long, callback: (Result<Unit>) -> Unit) {
         if (stopDrainInFlight) {
-            // See [stopDrainInFlight]: queue a fresh session for after the drain.
+            // See [stopDrainInFlight]: queue a fresh session (with its id) for after
+            // the drain, so the queued start comes up under the right identity.
             restartModeAfterStop = mode
+            restartSessionIdAfterStop = sessionId
             pendingStartCallbacks.add(callback)
             return
         }
         when (state) {
-            PhoneMicCaptureState.RUNNING ->
-                // Already live: piggyback on the running session and resolve now. A late
-                // start() cannot re-select the mode — the session keeps its original one.
+            PhoneMicCaptureState.RUNNING -> {
+                // Already live (a de-synced Dart restart): adopt the new id so all
+                // future events carry it, re-emit RUNNING now so the caller's fresh Dart
+                // session converges, and resolve. A late start() cannot re-select the
+                // mode — the session keeps its original one.
+                currentSessionId = sessionId
+                emitter.emitState(PhoneMicCaptureState.RUNNING, sessionId)
                 callback(Result.success(Unit))
+            }
 
             PhoneMicCaptureState.STARTING,
             PhoneMicCaptureState.REBUILDING,
-            PhoneMicCaptureState.INTERRUPTED ->
-                // Bring-up / recovery already in flight (can't happen through the Dart
-                // arbiter); resolve together with it, keeping the in-flight mode.
+            PhoneMicCaptureState.INTERRUPTED -> {
+                // Bring-up / recovery already in flight; adopt the new id so the eventual
+                // transition emission carries it, and resolve together with it (keeping the
+                // in-flight mode).
+                currentSessionId = sessionId
                 pendingStartCallbacks.add(callback)
+                // INTERRUPTED has no imminent transition to piggyback the emission on, so
+                // re-emit it now: the new Dart session shows the right state while the
+                // resume ticker keeps probing.
+                if (state == PhoneMicCaptureState.INTERRUPTED) {
+                    emitter.emitState(PhoneMicCaptureState.INTERRUPTED, sessionId)
+                }
+            }
 
             PhoneMicCaptureState.IDLE -> {
                 this.mode = mode
+                currentSessionId = sessionId
                 startRetriesUsed = 0
                 pendingStop = false
                 silenced = false
@@ -253,6 +275,7 @@ class PhoneMicController private constructor(private val application: Applicatio
             emitter.emitError(
                 "foreground_service_failed",
                 "foreground service promotion was rejected; capturing foreground-only",
+                currentSessionId,
             )
         }
 
@@ -290,8 +313,11 @@ class PhoneMicController private constructor(private val application: Applicatio
      */
     private fun attemptBringUp(): String? {
         val epoch = emitter.generation.advance()
+        // Capture the session id alongside the epoch: a frame belongs to the session
+        // that was current when this engine (its epoch) was built.
+        val sid = currentSessionId
         val newEngine = PhoneMicCaptureEngine(
-            onChunk = { chunk -> audioExecutor.execute { handleChunkOnAudio(chunk, epoch) } },
+            onChunk = { chunk -> audioExecutor.execute { handleChunkOnAudio(chunk, epoch, sid) } },
             onReadError = { code -> mainHandler.post { handleReadError(code) } },
         )
         try {
@@ -353,7 +379,7 @@ class PhoneMicController private constructor(private val application: Applicatio
             }
         }
         PhoneMicForegroundService.stop(application)
-        emitter.emitState(PhoneMicCaptureState.IDLE)
+        emitter.emitState(PhoneMicCaptureState.IDLE, currentSessionId)
     }
 
     // MARK: - Stop
@@ -392,12 +418,14 @@ class PhoneMicController private constructor(private val application: Applicatio
                 Log.i(TAG, "stopped")
                 resolvePendingStops(Result.success(Unit))
                 val restartMode = restartModeAfterStop
+                val restartSessionId = restartSessionIdAfterStop
                 restartModeAfterStop = null
                 if (restartMode != null) {
-                    // Starts queued during the drain are one fresh session (latest mode won).
+                    // Starts queued during the drain are one fresh session (latest mode +
+                    // id won), so it comes up under the queued id.
                     val queued = pendingStartCallbacks.toList()
                     pendingStartCallbacks.clear()
-                    handleStart(restartMode) { result -> queued.forEach { it(result) } }
+                    handleStart(restartMode, restartSessionId) { result -> queued.forEach { it(result) } }
                 } else {
                     resolvePendingStarts(Result.failure(PhoneMicPigeonError("start_aborted", "capture stopped", null)))
                 }
@@ -407,11 +435,11 @@ class PhoneMicController private constructor(private val application: Applicatio
 
     // MARK: - Chunk fan-out (audioExecutor)
 
-    private fun handleChunkOnAudio(chunk: ByteArray, epoch: Long) {
+    private fun handleChunkOnAudio(chunk: ByteArray, epoch: Long, sessionId: Long) {
         if (emissionGated) return // drop the zeros a silenced mic delivers
         when (mode) {
             PhoneMicCaptureMode.STREAM ->
-                emitter.emitFrame(chunk, epoch) // frame gate re-checked on main (iOS parity)
+                emitter.emitFrame(chunk, epoch, sessionId) // frame gate re-checked on main (iOS parity)
 
             PhoneMicCaptureMode.BATCH -> {
                 val enc = encoder ?: return
@@ -474,13 +502,14 @@ class PhoneMicController private constructor(private val application: Applicatio
         // Rule 3 (batch progress + storage-full edge): async double-hop, never blocks main.
         if (mode == PhoneMicCaptureMode.BATCH && state != PhoneMicCaptureState.IDLE) {
             val w = writer ?: return
+            val sid = currentSessionId // read on main before the executor hop
             audioExecutor.execute {
                 val frames = w.sessionFramesWritten
                 val edge = w.consumeStorageFullTransition()
                 mainHandler.post {
-                    if (edge) emitter.emitError("batch_storage_full", "free space below the batch writer minimum")
+                    if (edge) emitter.emitError("batch_storage_full", "free space below the batch writer minimum", sid)
                     // 320 samples per opus frame @16kHz == 20ms == 0.02s.
-                    emitter.emitBatchProgress(frames * 0.02)
+                    emitter.emitBatchProgress(frames * 0.02, sid)
                 }
             }
         }
@@ -636,7 +665,7 @@ class PhoneMicController private constructor(private val application: Applicatio
             // Give up self-heal; fall to INTERRUPTED and let the 3s resume ticker probe
             // forever. Never terminally gives up.
             enterInterrupted(Cause.REBUILD)
-            emitter.emitError("rebuild_failed", "capture rebuild failed repeatedly; probing to recover in the background")
+            emitter.emitError("rebuild_failed", "capture rebuild failed repeatedly; probing to recover in the background", currentSessionId)
             armResumeTicker()
         } else {
             scheduleRebuild()
@@ -730,7 +759,7 @@ class PhoneMicController private constructor(private val application: Applicatio
 
     private fun enterState(newState: PhoneMicCaptureState) {
         state = newState
-        emitter.emitState(newState)
+        emitter.emitState(newState, currentSessionId)
     }
 
     private fun runOnMain(block: () -> Unit) {

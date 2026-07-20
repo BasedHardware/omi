@@ -69,22 +69,22 @@ class PhoneMicEventEmitter(private val mainHandler: Handler) {
         this.api = null
     }
 
-    fun emitFrame(data: ByteArray, epoch: Long) {
+    fun emitFrame(data: ByteArray, epoch: Long, sessionId: Long) {
         mainHandler.post {
             if (!generation.matches(epoch)) return@post
-            api?.onAudioFrame(data) {}
+            api?.onAudioFrame(data, sessionId) {}
         }
     }
 
-    fun emitState(state: PhoneMicCaptureState) {
-        mainHandler.post { api?.onStateChanged(state) {} }
+    fun emitState(state: PhoneMicCaptureState, sessionId: Long) {
+        mainHandler.post { api?.onStateChanged(state, sessionId) {} }
     }
 
-    fun emitError(code: String, message: String) {
-        mainHandler.post { api?.onCaptureError(code, message) {} }
+    fun emitError(code: String, message: String, sessionId: Long) {
+        mainHandler.post { api?.onCaptureError(code, message, sessionId) {} }
     }
 
-    fun emitBatchProgress(seconds: Double) {
-        mainHandler.post { api?.onBatchProgress(seconds) {} }
+    fun emitBatchProgress(seconds: Double, sessionId: Long) {
+        mainHandler.post { api?.onBatchProgress(seconds, sessionId) {} }
     }
 }
