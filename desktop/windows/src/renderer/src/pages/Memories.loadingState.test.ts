@@ -15,22 +15,22 @@ describe('Memories brain-map loading state', () => {
     expect(source).toMatch(/graphReady\s*\?\s*'pointer-events-none opacity-0'\s*:\s*'opacity-100'/)
   })
 
-  it('fades the canvas in once BrainGraph reports it is ready', () => {
-    expect(source).toContain('onReady={() => setCanvasLive(true)}')
-    expect(source).toMatch(/graphReady\s*\?\s*'opacity-100'\s*:\s*'opacity-0'/)
-  })
-
-  it('gates the reveal on BOTH a live canvas AND settled data (not canvas creation alone)', () => {
-    expect(source).toMatch(/const normalReady = canvasLive && settled/)
-    expect(source).toMatch(/const graphReady = normalReady \|\| revealForced/)
+  it('reveals on a PAINTED CONTENT FRAME (onPresentable), not on canvas creation', () => {
+    // The load-bearing fix: gate the crossfade on BrainGraph having actually
+    // painted the laid-out graph (onPresentable), not on the WebGL context merely
+    // existing. Revealing on canvas creation uncovered the raw warmup (placeholder
+    // dot, blank card, fly-in's first frames) — Chris's "dot → blackout → fly-in".
+    expect(source).toMatch(/onPresentable={\(\) => setPresentable\(true\)}/)
+    expect(source).toMatch(/const graphReady = presentable \|\| revealForced/)
   })
 
   it('bounds the placeholder with a FULL reveal so a chunk/canvas failure cannot hang it forever', () => {
-    // Must force the whole reveal (revealForced feeds graphReady), not just the
-    // data-`settled` axis: if the lazy 3D chunk fails, onReady never fires and
-    // canvasLive would stay false, leaving the placeholder on top of the fallback.
+    // Must force the whole reveal (revealForced feeds graphReady): if the lazy 3D
+    // chunk / GPU is dead there is no content frame to fire onPresentable, so a
+    // timer forces the reveal (and BrainGraph's fallback paths fire onPresentable
+    // directly). Long delay so a slow-but-succeeding load is never pre-empted.
     expect(source).toMatch(/setTimeout\(\(\) => setRevealForced\(true\)/)
-    expect(source).toMatch(/const graphReady = normalReady \|\| revealForced/)
+    expect(source).toMatch(/const graphReady = presentable \|\| revealForced/)
   })
 
   it('keeps the placeholder off-brand-color free', () => {

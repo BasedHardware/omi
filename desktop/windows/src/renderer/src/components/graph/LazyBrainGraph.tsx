@@ -18,7 +18,18 @@ const BrainGraphImpl = lazy(() => import('./BrainGraph').then((m) => ({ default:
 // mark rather than a blank pane, so the screen never shows an empty black hole.
 export function BrainGraph(props: BrainGraphProps): React.JSX.Element {
   return (
-    <ErrorBoundary label="LazyBrainGraph" fallback={<BrainGraphFallback />}>
+    <ErrorBoundary
+      label="LazyBrainGraph"
+      fallback={<BrainGraphFallback />}
+      // A failed chunk load renders the static fallback but mounts no Canvas, so
+      // the inner BrainGraph's onReady/onPresentable never fire. Signal both here
+      // so a caller gating its loading placeholder on them (Memories) reveals this
+      // fallback instead of spinning until its bounded timeout.
+      onError={() => {
+        props.onReady?.()
+        props.onPresentable?.()
+      }}
+    >
       <Suspense fallback={<div className="h-full w-full" aria-hidden />}>
         <BrainGraphImpl {...props} />
       </Suspense>

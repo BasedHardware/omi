@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -41,9 +42,18 @@ vi.mock('../hooks/useMemoryGraph', () => ({
 }))
 
 // Capture the props the preview passes; render a probe node so hasGraph is true.
+// Also expose the latest onPresentable so a test can simulate "a content frame
+// painted" (the real signal comes from a WebGL frame, which can't mount in jsdom).
+let lastOnPresentable: (() => void) | undefined
 vi.mock('../components/graph/LazyBrainGraph', () => ({
-  BrainGraph: (props: { graph: KnowledgeGraph; labelMode?: string; interactive?: boolean }) => {
+  BrainGraph: (props: {
+    graph: KnowledgeGraph
+    labelMode?: string
+    interactive?: boolean
+    onPresentable?: () => void
+  }) => {
     brainGraphProps.push(props)
+    lastOnPresentable = props.onPresentable
     return (
       <div
         data-testid="preview-graph"
@@ -105,6 +115,7 @@ beforeEach(() => {
   graph = bigGraph
   graphLoading = false
   brainGraphProps.length = 0
+  lastOnPresentable = undefined
 })
 
 afterEach(() => {
@@ -162,11 +173,22 @@ describe('Memories brain-map preview — reveal gate', () => {
     expect(el.getAttribute('data-node-count')).toBe(String(DEFAULT_NODE_CAP))
   })
 
-  it('feeds the settled capped graph once the data has loaded', async () => {
+  it('keeps the loader up even after data settles, until BrainGraph paints content (onPresentable)', async () => {
+    // The load-bearing regression guard: settled data + a mounted, capped-graph
+    // canvas is NOT enough to reveal — the WebGL scene has drawn nothing yet, so
+    // revealing now would expose the raw warmup (dot / blank / fly-in start). The
+    // graph layer must stay faded out until onPresentable fires.
     graphLoading = false
     await renderPage()
-    expect(screen.getByTestId('preview-graph').getAttribute('data-node-count')).toBe(
-      String(DEFAULT_NODE_CAP)
-    )
+    const el = screen.getByTestId('preview-graph')
+    // Data is settled and the capped graph is already fed…
+    expect(el.getAttribute('data-node-count')).toBe(String(DEFAULT_NODE_CAP))
+    // …yet the graph layer is still hidden (no content frame reported).
+    expect(el.parentElement?.className).toMatch(/opacity-0(?!\d)/)
+    // Simulate BrainGraph painting its first real content frame.
+    expect(lastOnPresentable).toBeTypeOf('function')
+    act(() => lastOnPresentable!())
+    // Now — and only now — the graph layer is revealed.
+    expect(screen.getByTestId('preview-graph').parentElement?.className).toMatch(/opacity-100/)
   })
 })
