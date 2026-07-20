@@ -31,6 +31,24 @@ final class HomeValueSnapshotTests: XCTestCase {
     XCTAssertEqual(HomeValueSnapshot.metricValue(for: 0), "0")
   }
 
+  func testLocalFallbackDistinguishesUnknownFromKnownEmpty() {
+    let unknownCount = HomeValueSnapshot.resolvedMetricCount(
+      authoritativeCount: nil,
+      localCount: 0,
+      hasLoadedLocalCount: false
+    )
+    let knownEmptyCount = HomeValueSnapshot.resolvedMetricCount(
+      authoritativeCount: nil,
+      localCount: 0,
+      hasLoadedLocalCount: true
+    )
+
+    XCTAssertNil(unknownCount)
+    XCTAssertEqual(HomeValueSnapshot.metricValue(for: unknownCount), "—")
+    XCTAssertEqual(knownEmptyCount, 0)
+    XCTAssertEqual(HomeValueSnapshot.metricValue(for: knownEmptyCount), "0")
+  }
+
   func testSmallAmountOfContextUsesBuildingExperience() {
     let snapshot = HomeValueSnapshot.make(
       conversationCount: 1,

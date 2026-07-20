@@ -22,6 +22,14 @@ struct HomeValueSnapshot: Equatable, Sendable {
     count?.formatted() ?? "—"
   }
 
+  static func resolvedMetricCount(
+    authoritativeCount: Int?,
+    localCount: Int,
+    hasLoadedLocalCount: Bool
+  ) -> Int? {
+    authoritativeCount ?? (hasLoadedLocalCount ? localCount : nil)
+  }
+
   static func make(
     conversationCount: Int?,
     memoryCount: Int?,

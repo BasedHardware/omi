@@ -169,6 +169,7 @@ class TasksStore: ObservableObject {
     overdueTasks = []
     todaysTasks = []
     tasksWithoutDueDate = []
+    hasLoadedDashboardTasks = false
     isLoadingIncomplete = false
     isLoadingCompleted = false
     isLoadingDeleted = false
@@ -276,14 +277,11 @@ class TasksStore: ObservableObject {
     return a.createdAt > b.createdAt
   }
 
-  /// Overdue tasks (due date in the past but within 7 days) — loaded from SQLite
+  // Dashboard task lists loaded from SQLite.
   @Published var overdueTasks: [TaskActionItem] = []
-
-  /// Today's tasks (due today) — loaded from SQLite
   @Published var todaysTasks: [TaskActionItem] = []
-
-  /// Tasks without due date (created within last 7 days) — loaded from SQLite
   @Published var tasksWithoutDueDate: [TaskActionItem] = []
+  @Published private(set) var hasLoadedDashboardTasks = false
 
   /// Load dashboard task lists directly from SQLite (avoids pagination issues)
   func loadDashboardTasks(
@@ -344,6 +342,7 @@ class TasksStore: ObservableObject {
       if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
       if todaysTasks != sortedToday { todaysTasks = sortedToday }
       if tasksWithoutDueDate != sortedNoDueDate { tasksWithoutDueDate = sortedNoDueDate }
+      hasLoadedDashboardTasks = true
       log(
         "TasksStore: Dashboard loaded from SQLite - overdue: \(snapshot.overdue.count), today: \(snapshot.today.count), noDeadline: \(snapshot.noDueDate.count)"
       )

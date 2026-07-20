@@ -19,10 +19,10 @@ class DashboardViewModel: ObservableObject {
   private var cancellables = Set<AnyCancellable>()
   private var lastGoalRefreshTime: Date = .distantPast
 
-  // Computed properties that delegate to TasksStore
   var overdueTasks: [TaskActionItem] { tasksStore.overdueTasks }
   var todaysTasks: [TaskActionItem] { tasksStore.todaysTasks }
   var recentTasks: [TaskActionItem] { tasksStore.tasksWithoutDueDate }
+  var hasLoadedDashboardTasks: Bool { tasksStore.hasLoadedDashboardTasks }
 
   init() {
     // Forward TasksStore changes to trigger view updates
@@ -1493,12 +1493,16 @@ struct DashboardPage: View {
     HomeValueSnapshot.metricValue(for: conversationContextCount)
   }
 
-  private var taskMetricCount: Int {
-    homeStatusStore.taskCount ?? incompleteTaskCount
+  private var taskMetricCount: Int? {
+    HomeValueSnapshot.resolvedMetricCount(
+      authoritativeCount: homeStatusStore.taskCount,
+      localCount: incompleteTaskCount,
+      hasLoadedLocalCount: viewModel.hasLoadedDashboardTasks
+    )
   }
 
   private var taskMetricValue: String {
-    formattedCount(taskMetricCount)
+    HomeValueSnapshot.metricValue(for: taskMetricCount)
   }
 
   private var memoryContextCount: Int? {
@@ -1694,10 +1698,6 @@ struct DashboardPage: View {
     ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
     screenAnalysisEnabled = AssistantSettings.shared.screenAnalysisEnabled
     isCaptureMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
-  }
-
-  private func formattedCount(_ count: Int) -> String {
-    count.formatted()
   }
 
   /// Welcome message shown when there are no chat messages yet.

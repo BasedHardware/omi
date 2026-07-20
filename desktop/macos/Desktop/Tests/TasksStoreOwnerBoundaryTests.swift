@@ -42,6 +42,23 @@ private final class TasksStoreOperationProbe {
 }
 
 final class TasksStoreOwnerBoundaryTests: XCTestCase {
+  @MainActor
+  func testDashboardLoadPublishesKnownEmptyState() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    XCTAssertFalse(store.hasLoadedDashboardTasks)
+
+    await store.loadDashboardTasks {
+      TasksStore.DashboardTaskSnapshot(overdue: [], today: [], noDueDate: [])
+    }
+
+    XCTAssertTrue(store.hasLoadedDashboardTasks)
+    XCTAssertTrue(store.overdueTasks.isEmpty)
+    XCTAssertTrue(store.todaysTasks.isEmpty)
+    XCTAssertTrue(store.tasksWithoutDueDate.isEmpty)
+  }
+
   func testStaticGuardTasksStoreHasNoUnrestrictedSQLiteMutationCallSites() throws {
     let lines = try productionSource("Stores/TasksStore.swift")
       .components(separatedBy: .newlines)
