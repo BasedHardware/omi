@@ -2,16 +2,29 @@ import type { ProductionAdapterId } from "../adapters/interface.js";
 
 export type RuntimeFailureSource = "adapter_process" | "adapter_execution" | "runtime";
 
-/**
- * Lifecycle phase of a failure. `"startup"` is only set at sites where the
- * runtime can PROVE the adapter never began executing the prompt (activation
- * gate, adapter registration, session binding — all strictly before
- * `executeAttempt` dispatch). Swift's agent-pill startup fallback keys off
- * this to decide whether re-running the brief on another provider is safe
- * (no risk of duplicated side effects). Never tag a failure `"startup"` if
- * execution may have started.
- */
-export type RuntimeFailurePhase = "startup" | "execution";
+/** Closed cross-surface taxonomy; detailed legacy codes remain diagnostic-only. */
+export const RUNTIME_FAILURE_CODES = [
+  "authentication",
+  "quota_exceeded",
+  "invalid_request",
+  "timeout",
+  "transport_interruption",
+  "adapter_unavailable",
+  "adapter_incompatible",
+  "bridge_start_failed",
+  "provider_setup_needed",
+  "malformed_or_oversized_tool_result",
+  "cancelled",
+  "stale_owner",
+  "policy_denied",
+  "unknown",
+] as const;
+
+export type RuntimeFailureCode = (typeof RUNTIME_FAILURE_CODES)[number];
+
+export function isRuntimeFailureCode(value: unknown): value is RuntimeFailureCode {
+  return typeof value === "string" && (RUNTIME_FAILURE_CODES as readonly string[]).includes(value);
+}
 
 export interface RuntimeFailure {
   /** Detailed local code retained for logs and backward-compatible UI copy. */
@@ -24,7 +37,6 @@ export interface RuntimeFailure {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
-  phase?: RuntimeFailurePhase;
 }
 
 export class AdapterRuntimeError extends Error {
@@ -194,21 +206,17 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
   switch (adapterId) {
     case "openclaw":
       return "OpenClaw";
-    case "codex":
-      return "Codex";
     case "hermes":
       return "Hermes";
-    case "codex":
-      return "Codex";
     case "pi-mono":
       return "pi-mono";
-    case "codex":
-      return "Codex";
     case "acp":
       if (provider === "openai") {
         return "OpenAI";
       }
       return "ACP";
+    case "codex":
+      return "Codex";
   }
 }
 

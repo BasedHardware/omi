@@ -19,7 +19,6 @@ import { serializeArtifact } from "./artifact-serialization.js";
 import { defaultArtifactRoot } from "./artifact-storage.js";
 import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
-import { selectAgent, type AgentId } from "./agent-selector.js";
 import type { McpServerBuildContext } from "./jsonl-transport.js";
 import {
   parseAgentSpawnProducerJournalDescriptor,
@@ -324,7 +323,7 @@ const spawnAgentPublicShape = {
   // not fail before the child-admission boundary.
   brief: z.string().min(1).optional(),
   requestedAgentCount: z.coerce.number().int().min(1).max(8).default(1),
-  provider: z.enum(["openclaw", "hermes", "codex", "best"]).optional(),
+  provider: z.enum(["openclaw", "hermes"]).optional(),
   parentRunId: z.string().min(1).optional(),
   visible: z.boolean().default(true),
   title: z.string().min(1).optional(),
@@ -679,7 +678,7 @@ function assertAdapterAllowedForControlRun(context: AgentControlToolContext, ada
 function assertAdapterAllowedForTopLevelLocalProviderSpawn(
   context: AgentControlToolContext,
   adapterId: string,
-  directedProvider?: "hermes" | "openclaw" | "codex",
+  directedProvider?: "hermes" | "openclaw",
 ): void {
   const hasDirectedLocalProvider = directedProvider === adapterId;
   if (!context.trustedUserControl && !hasDirectedLocalProvider) {
@@ -1198,37 +1197,12 @@ export async function handleAgentControlToolCall(
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const spawnProfile = controlSpawnProfile(context, ownerId);
         const requestId = parsed.requestId ?? `spawn-agent-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        // "best" resolves to a connected agent by the constraint-and-preference
-        // router. A resolved local provider flows on as if the user named it; a
-        // resolved Omi/Claude default (acp) or no connected agent clears so the
-        // spawn falls back to the owner's usual adapter.
-        let bestAgentReason: string | undefined;
-        let resolvedBestAdapter: string | undefined;
-        if (parsed.provider === "best") {
-          const resolved = selectAgent({
-            available: context.kernel.registeredAdapterIds(),
-            taskText: parsed.objective,
-            userDefault: spawnProfile.adapterId as AgentId,
-          });
-          if (resolved.kind === "selected") {
-            bestAgentReason = resolved.reason;
-            resolvedBestAdapter = resolved.primary;
-          }
-          parsed.provider =
-            resolvedBestAdapter === "codex" || resolvedBestAdapter === "hermes" || resolvedBestAdapter === "openclaw"
-              ? resolvedBestAdapter
-              : undefined;
-          if (bestAgentReason && !parsed.brief) {
-            parsed.brief = `Best agent: ${bestAgentReason}`;
-          }
-        }
         if (parsed.provider && parsed.adapterId && parsed.provider !== parsed.adapterId) {
           throw new Error("provider and adapterId must match when both are supplied");
         }
         const adapterId =
           parsed.adapterId ??
-          parsed.provider ??
-          resolvedBestAdapter ??
+          (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
           (parentRunId
             ? context.kernel.defaultAdapterIdForRun(parentRunId)
             : spawnProfile.adapterId);
@@ -1858,7 +1832,7 @@ export async function handleAgentControlToolCall(
       // routing failure. Keep this translation at the control-tool boundary so
       // every surface (including PTT) receives the same bounded recovery state.
       const requestedDirectedProvider = name === "spawn_agent"
-        && (input.provider === "hermes" || input.provider === "openclaw" || input.provider === "codex")
+        && (input.provider === "hermes" || input.provider === "openclaw")
         ? input.provider
         : undefined;
       const isProviderSetupNeeded = (rawCode === "provider_unavailable" || routeReasonCode === "provider_unavailable")
@@ -1881,7 +1855,7 @@ export async function handleAgentControlToolCall(
           message: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
             ? "The requested agent could not be started. Try again."
             : isProviderSetupNeeded
-              ? `${requestedDirectedProvider === "hermes" ? "Hermes" : requestedDirectedProvider === "codex" ? "Codex" : "OpenClaw"} needs setup before it can run an agent.`
+              ? `${requestedDirectedProvider === "hermes" ? "Hermes" : "OpenClaw"} needs setup before it can run an agent.`
             : error instanceof Error ? error.message : String(error),
           ...(isProviderSetupNeeded ? { provider: requestedDirectedProvider } : {}),
           ...(isAuthorizedExternalSpawnAdmission ? { retryable: true } : {}),
@@ -1890,32 +1864,6 @@ export async function handleAgentControlToolCall(
       }, "failed");
     }
   });
-}
-
-export function directedProviderDisplayName(provider: "hermes" | "openclaw" | "codex"): string {
-  switch (provider) {
-    case "hermes":
-      return "Hermes";
-    case "openclaw":
-      return "OpenClaw";
-    case "codex":
-      return "Codex";
-  }
-}
-
-/**
- * One-line, speakable setup instruction per directed local provider. Surfaces
- * relay this to the user when they ask for a provider that is not installed.
- */
-export function directedProviderInstallHint(provider: "hermes" | "openclaw" | "codex"): string {
-  switch (provider) {
-    case "hermes":
-      return "Install it by running: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash — then ask again.";
-    case "openclaw":
-      return "Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then ask again.";
-    case "codex":
-      return "Install it by running: npm install -g @openai/codex @agentclientprotocol/codex-acp — then sign in with `codex login` and ask again.";
-  }
 }
 
 function buildControlRunMcpServers(
@@ -2681,13 +2629,12 @@ function serializeFloatingPillSnapshot(summary: {
     runId ||
     sessionId;
   const adapterId = session.defaultAdapterId;
-  const authoritativeProvider = adapterId === "openclaw" || adapterId === "hermes" || adapterId === "codex"
+  const authoritativeProvider = adapterId === "openclaw" || adapterId === "hermes"
     ? adapterId
     : null;
-  const legacyProvider =
-    metadata.provider === "openclaw" || metadata.provider === "hermes" || metadata.provider === "codex"
-      ? metadata.provider
-      : null;
+  const legacyProvider = metadata.provider === "openclaw" || metadata.provider === "hermes"
+    ? metadata.provider
+    : null;
   return {
     id: pillId,
     runId,

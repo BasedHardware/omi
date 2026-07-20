@@ -447,11 +447,6 @@ export class AgentRuntimeKernel extends KernelSessions {
     return { executionRole, surfaceKind };
   }
 
-  /// Adapter ids currently registered (i.e. connected/activated) in this runtime.
-  registeredAdapterIds(): string[] {
-    return this.registry.adapterIds();
-  }
-
   private desktopIntentAuthority(
     ownerId: string,
     callerExecutionRole: "coordinator" | "leaf",

@@ -19,8 +19,7 @@ export interface OneShotCliRuntimeAdapterOptions {
   envCommandName: string;
   command?: string;
   fixedArgs?: string[];
-  /** Flag placed before the prompt (e.g. "--prompt"). Omit to pass the prompt as the trailing positional arg (e.g. `codex exec "<prompt>"`). */
-  promptFlag?: string;
+  promptFlag: string;
   sessionKeyFlag?: string;
   parseJsonPayload?: boolean;
   log?: (message: string) => void;
@@ -33,7 +32,7 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
   private readonly envCommandName: string;
   private readonly commandOverride?: string;
   private readonly fixedArgs: string[];
-  private readonly promptFlag?: string;
+  private readonly promptFlag: string;
   private readonly sessionKeyFlag?: string;
   private readonly parseJsonPayload: boolean;
   private readonly log: (message: string) => void;
@@ -126,7 +125,7 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
       ...this.fixedArgs,
       ...(this.sessionKeyFlag ? [this.sessionKeyFlag, shellQuote(this.sessionKey(context))] : []),
       ...(context.model ? ["--model", shellQuote(context.model)] : []),
-      ...(this.promptFlag ? [this.promptFlag] : []),
+      this.promptFlag,
       shellQuote(prompt),
     ].join(" ");
     const fullCommand = `${command} ${args}`.trim();

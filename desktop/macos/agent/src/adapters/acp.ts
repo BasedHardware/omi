@@ -69,31 +69,7 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   // the Node bridge; forwarding it lets the spawned `hermes acp` subprocess
   // locate its config/state instead of falling back to defaults.
   "HERMES_HOME",
-  // Codex resolves auth/config from CODEX_HOME (default ~/.codex); forward an
-  // explicit override so a spawned Codex ACP bridge sees the same account.
-  "CODEX_HOME",
 ] as const;
-
-/**
- * Additional env vars forwarded to a specific external adapter only. Kept out
- * of the shared allowlist so provider credentials (e.g. OPENAI_API_KEY) are not
- * leaked to unrelated third-party adapters spawned with `shell: true`.
- */
-const ADAPTER_EXTRA_ENV_ALLOWLIST: Partial<Record<string, readonly string[]>> = {
-  // codex-acp authenticates + configures itself entirely through the
-  // environment. Without these the subprocess can't reach OpenAI and falls
-  // back to a browser ChatGPT login (which hangs a headless run).
-  codex: [
-    "CODEX_API_KEY",
-    "OPENAI_API_KEY",
-    "NO_BROWSER",
-    "INITIAL_AGENT_MODE",
-    "CODEX_HOME",
-    "CODEX_PATH",
-    "CODEX_CONFIG",
-    "MODEL_PROVIDER",
-  ],
-};
 
 /**
  * Proxy environment variable names that may carry embedded credentials
@@ -191,11 +167,11 @@ function externalTerminalHttpFailure(
   adapterId: ProductionAdapterId,
   text: string,
 ): RuntimeFailure | undefined {
-  if (adapterId !== "hermes" && adapterId !== "openclaw" && adapterId !== "codex") return undefined;
+  if (adapterId !== "hermes" && adapterId !== "openclaw") return undefined;
   const match = EXTERNAL_TERMINAL_HTTP_FAILURE.exec(text);
   if (!match) return undefined;
   const statusCode = Number(match[1]);
-  const label = adapterId === "hermes" ? "Hermes" : adapterId === "codex" ? "Codex" : "OpenClaw";
+  const label = adapterId === "hermes" ? "Hermes" : "OpenClaw";
   return normalizeRuntimeFailure({
     code: "adapter_terminal_http_failure",
     source: "adapter_execution",
@@ -230,10 +206,6 @@ export interface AcpRuntimeAdapterOptions {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS = 150_000;
-// Codex runs (build/refactor tasks via codex-acp) routinely go quiet for long
-// stretches while a single tool call executes, so it gets a more generous
-// idle-cancel budget than the other external adapters.
-const DEFAULT_CODEX_NO_PROGRESS_TIMEOUT_MS = 300_000;
 
 function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -273,11 +245,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.envCommandName = options.envCommandName;
     this.sessionMcpServersMode = options.sessionMcpServersMode ?? "passthrough";
     this.supportsSessionSetModel = options.supportsSessionSetModel ?? this.capabilities.supportsModelSwitching;
-    // External command-based adapters (those activated via an env command) get
-    // a progress watchdog by default; the bundled Claude adapter does not.
     this.noProgressTimeoutMs = options.noProgressTimeoutMs
       ?? parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS)
-      ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" || this.adapterId === "codex" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
+      ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
   }
 
   async start(): Promise<void> {
@@ -303,11 +273,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const externalEnv: NodeJS.ProcessEnv = {
         OMI_ADAPTER_ID: this.adapterId,
       };
-      const allowlist = [
-        ...EXTERNAL_ADAPTER_ENV_ALLOWLIST,
-        ...(ADAPTER_EXTRA_ENV_ALLOWLIST[this.adapterId] ?? []),
-      ];
-      for (const key of allowlist) {
+      for (const key of EXTERNAL_ADAPTER_ENV_ALLOWLIST) {
         if (process.env[key] !== undefined) {
           // Proxy URLs may carry embedded credentials (user:pass@host).
           // Strip them before forwarding to untrusted subprocesses.
@@ -852,17 +818,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         return emitted;
       }
 
-      case "available_commands_update": {
+      case "available_commands_update":
+      case "usage_update": {
         return false;
       }
-
-      // codex-acp extension updates: thread metadata and streaming token
-      // counts. No Omi event to emit, but they ARE liveness signals — counting
-      // them as progress keeps the no-progress idle-cancel from killing a
-      // healthy Codex turn that is quiet apart from these.
-      case "session_info_update":
-      case "usage_update":
-        return true;
 
       default:
         this.log(`Unknown session update type: ${sessionUpdate}`);
