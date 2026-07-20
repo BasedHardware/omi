@@ -292,3 +292,120 @@ struct ProactiveFrameDistributionGate {
     lastDistributionTime = time
   }
 }
+
+/// Gating policy for the screen-capture loop. The goal is to avoid taking a
+/// full screenshot on a fixed cadence when nothing has changed. Instead, the
+/// loop polls cheap signals (idle time, active app/window) at a fast rate and
+/// only proceeds to a full capture when the user context changes or a heartbeat
+/// interval elapses. For heartbeat ticks it can request a cheap preview capture
+/// whose hash is compared to the last preview, so static screens are skipped.
+struct ProactiveCaptureTrigger {
+  enum Decision: Equatable {
+    /// Do not capture this tick.
+    case skip
+    /// Capture a small preview and only proceed if its hash differs.
+    case preview
+    /// Perform a full capture immediately.
+    case capture
+  }
+
+  private let idleThreshold: TimeInterval
+  private var heartbeatInterval: TimeInterval
+  private let appSwitchDebounce: TimeInterval
+
+  private var lastApp: String?
+  private var lastWindowTitle: String?
+  private var lastCaptureTime: Date = .distantPast
+  private var lastPreviewHash: UInt64?
+  private var appSwitchRequest: (app: String, title: String?, time: Date)?
+
+  init(
+    idleThreshold: TimeInterval,
+    heartbeatInterval: TimeInterval,
+    appSwitchDebounce: TimeInterval = 0.5
+  ) {
+    self.idleThreshold = idleThreshold
+    self.heartbeatInterval = heartbeatInterval
+    self.appSwitchDebounce = appSwitchDebounce
+  }
+
+  mutating func reset() {
+    lastApp = nil
+    lastWindowTitle = nil
+    lastCaptureTime = .distantPast
+    lastPreviewHash = nil
+    appSwitchRequest = nil
+  }
+
+  /// Record that an app-switch notification fired. The trigger debounces rapid
+  /// switches and evaluates the next poll as a capture candidate.
+  mutating func requestAppSwitchCapture(app: String, at time: Date) {
+    appSwitchRequest = (app, nil, time)
+  }
+
+  /// Decide whether the next poll should skip, preview, or capture.
+  mutating func nextDecision(
+    app: String,
+    windowTitle: String?,
+    idleSeconds: TimeInterval,
+    now: Date
+  ) -> Decision {
+    if idleSeconds >= idleThreshold {
+      // User is idle: keep last context but do not capture.
+      return .skip
+    }
+
+    // A pending app-switch request suppresses capture until its debounce passes,
+    // then the normal context-change/heartbeat logic takes over.
+    if let request = appSwitchRequest {
+      if now.timeIntervalSince(request.time) < appSwitchDebounce {
+        return .skip
+      }
+      appSwitchRequest = nil
+    }
+
+    // If the active context changed, capture immediately.
+    if ContextDetection.didContextChange(
+      fromApp: lastApp, fromWindowTitle: lastWindowTitle, toApp: app, toWindowTitle: windowTitle
+    ) {
+      lastApp = app
+      lastWindowTitle = windowTitle
+      lastCaptureTime = now
+      return .capture
+    }
+
+    // Same context: only sample on heartbeat.
+    if now.timeIntervalSince(lastCaptureTime) >= heartbeatInterval {
+      return .preview
+    }
+
+    return .skip
+  }
+
+  mutating func updateHeartbeatInterval(_ interval: TimeInterval) {
+    heartbeatInterval = interval
+  }
+
+  mutating func markCaptured(
+    app: String,
+    windowTitle: String?,
+    at time: Date,
+    previewHash: UInt64? = nil
+  ) {
+    lastApp = app
+    lastWindowTitle = windowTitle
+    lastCaptureTime = time
+    if let previewHash = previewHash {
+      lastPreviewHash = previewHash
+    }
+  }
+
+  mutating func markPreviewHash(_ hash: UInt64) {
+    lastPreviewHash = hash
+  }
+
+  func isPreviewUnchanged(_ hash: UInt64, threshold: Int) -> Bool {
+    guard let last = lastPreviewHash else { return false }
+    return (hash ^ last).nonzeroBitCount <= threshold
+  }
+}
