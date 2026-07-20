@@ -622,11 +622,13 @@ actor ActionItemStorage {
     }
 
     if skipped > 0 || adopted > 0 {
-      log(
-        "ActionItemStorage: Synced \(items.count) task action items from backend (skipped \(skipped) newer local, adopted \(adopted) orphans)"
+      HomeKnowledgeCountInvalidation.post(
+        logMessage:
+          "ActionItemStorage: Synced \(items.count) task action items from backend (skipped \(skipped) newer local, adopted \(adopted) orphans)"
       )
     } else {
-      log("ActionItemStorage: Synced \(items.count) task action items from backend")
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: Synced \(items.count) task action items from backend")
     }
   }
 
@@ -698,7 +700,9 @@ actor ActionItemStorage {
     }
 
     if reconciled > 0 {
-      log("ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend")
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend"
+      )
     }
     return reconciled
   }
@@ -743,7 +747,9 @@ actor ActionItemStorage {
     }
 
     if deleted > 0 {
-      log("ActionItemStorage: Hard-deleted \(deleted) absent tasks during full sync")
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: Hard-deleted \(deleted) absent tasks during full sync"
+      )
     }
   }
 
@@ -796,7 +802,7 @@ actor ActionItemStorage {
     }
 
     if deleted > 0 {
-      log("ActionItemStorage: hard-deleted \(deleted) absent tasks")
+      HomeKnowledgeCountInvalidation.post(logMessage: "ActionItemStorage: hard-deleted \(deleted) absent tasks")
     }
 
     return deleted
@@ -833,7 +839,8 @@ actor ActionItemStorage {
       }
     }
 
-    log("ActionItemStorage: Hard deleted action item with backendId \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Hard deleted action item with backendId \(backendId)")
   }
 
   // MARK: - Local Extraction Operations
@@ -880,7 +887,8 @@ actor ActionItemStorage {
         }
       }
     }
-    log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
     return inserted
   }
 
@@ -983,7 +991,8 @@ actor ActionItemStorage {
       }
     }
 
-    log("ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
   }
 
   /// Optimistically update task fields locally (before API call)
@@ -1115,7 +1124,8 @@ actor ActionItemStorage {
       }
     }
 
-    log("ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
   }
 
   // MARK: - FTS5 Search & Context Methods

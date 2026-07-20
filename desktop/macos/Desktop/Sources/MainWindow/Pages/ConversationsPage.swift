@@ -396,6 +396,17 @@ struct ConversationsPage: View {
             appState: appState
           )
 
+          if appState.canLoadMoreConversations {
+            Button("Load older conversations") {
+              Task {
+                await appState.loadMoreConversations()
+              }
+            }
+            .buttonStyle(.bordered)
+            .padding(.bottom, OmiSpacing.md)
+            .accessibilityIdentifier("conversations-load-more")
+          }
+
           // Floating merge action bar
           if isMultiSelectMode && !selectedConversationIds.isEmpty {
             mergeActionBar

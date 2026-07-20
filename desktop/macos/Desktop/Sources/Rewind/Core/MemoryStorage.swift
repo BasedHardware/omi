@@ -507,6 +507,7 @@ actor MemoryStorage {
     } else {
       log("MemoryStorage: Synced \(memories.count) memories from backend")
     }
+    HomeKnowledgeCountInvalidation.post()
   }
 
   /// Upsert a server snapshot, then tombstone synced locals whose backendId is absent.
@@ -546,6 +547,7 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Inserted local memory (id: \(inserted.id ?? -1))")
+    HomeKnowledgeCountInvalidation.post()
     return inserted
   }
 
@@ -693,6 +695,7 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Soft deleted memory \(id)")
+    HomeKnowledgeCountInvalidation.post()
   }
 
   /// Soft-delete synced memories tied to a deleted conversation (local cache hygiene).
@@ -700,13 +703,17 @@ actor MemoryStorage {
   func softDeleteMemoriesByConversationId(_ conversationId: String) async throws -> Int {
     let db = try await ensureInitialized()
 
-    return try await db.write { database -> Int in
+    let deleted = try await db.write { database -> Int in
       try database.execute(
         sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE deleted = 0 AND conversationId = ?",
         arguments: [Date(), conversationId]
       )
       return database.changesCount
     }
+    if deleted > 0 {
+      HomeKnowledgeCountInvalidation.post()
+    }
+    return deleted
   }
 
   /// Soft delete a memory by backend ID
@@ -721,6 +728,7 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
+    HomeKnowledgeCountInvalidation.post()
   }
 
   /// Restore a soft-deleted memory by backend ID. Used by undo/delete-failure paths;
@@ -736,6 +744,7 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Restored memory with backendId \(backendId)")
+    HomeKnowledgeCountInvalidation.post()
   }
 
   /// Soft-delete synced memories whose backendId is no longer present on the
@@ -749,7 +758,7 @@ actor MemoryStorage {
   ) async throws -> Int {
     let db = try await ensureInitialized()
 
-    return try await db.write { database -> Int in
+    let removed = try await db.write { database -> Int in
       var query =
         MemoryRecord
         .filter(Column("backendId") != nil)
@@ -768,6 +777,10 @@ actor MemoryStorage {
       }
       return removed
     }
+    if removed > 0 {
+      HomeKnowledgeCountInvalidation.post()
+    }
+    return removed
   }
 
   /// Soft delete memories within a tier scope.
@@ -788,6 +801,7 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Soft deleted memories for scope \(scope.sqlTierRawValues)")
+    HomeKnowledgeCountInvalidation.post()
   }
 
   /// Update content by backend ID

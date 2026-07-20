@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Home memory and task totals not refreshing after changes, and added a way to load older conversations"
+}
