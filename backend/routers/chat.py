@@ -44,6 +44,7 @@ from models.chat import (
     RateMessageRequest,
     ShareChatMessagesRequest,
 )
+from models.reply_draft import ReplyDraftRequest, ReplyDraftResponse
 from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
@@ -63,6 +64,7 @@ from config.stt_provider_policy import STTServingSurface
 from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
+from utils.llm.reply_draft import create_reply_draft
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
@@ -254,6 +256,22 @@ def _build_quota_exceeded_reply(
     )
     chat_db.add_message(uid, ai_msg.model_dump())
     return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
+
+
+@router.post('/v1/reply-drafts', tags=['chat'], response_model=ReplyDraftResponse)
+def draft_reply(
+    data: ReplyDraftRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:reply_draft")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
+    enforce_chat_quota(uid, platform=x_app_platform)
+    try:
+        return create_reply_draft(uid, data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error('reply_draft_failed uid=%s error=%s', uid, e)
+        raise HTTPException(status_code=500, detail='Failed to draft reply')
 
 
 def _record_chat_quota_question_safe(

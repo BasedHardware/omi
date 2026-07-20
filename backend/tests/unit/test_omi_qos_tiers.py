@@ -1078,6 +1078,7 @@ class TestStructuredOutputFeatureTracking:
             'external_structure',
             'trends',
             'what_matters_now',
+            'reply_draft',
         }
         assert _STRUCTURED_OUTPUT_FEATURES == expected
 

@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
+import 'package:omi/pages/chat/reply_draft_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
@@ -1293,6 +1294,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       centerTitle: true,
       actions: [
+        Container(
+          width: 36,
+          height: 36,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            tooltip: 'Draft reply',
+            icon: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 20),
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              FocusScope.of(context).unfocus();
+              routeToPage(context, const ReplyDraftPage());
+            },
+          ),
+        ),
         Container(
           width: 36,
           height: 36,

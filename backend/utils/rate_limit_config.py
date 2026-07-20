@@ -46,6 +46,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Chat — 2-6 LLM calls per message
     "chat:send_message": (120, 3600),
     "chat:initial": (60, 3600),
+    "chat:reply_draft": (60, 3600),
     # Voice — Deepgram + LLM
     "voice:transcribe": (60, 3600),
     "voice:transcribe_stream": (60, 3600),

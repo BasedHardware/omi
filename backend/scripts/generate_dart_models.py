@@ -58,6 +58,14 @@ SCHEMA_GROUPS = {
             'VoiceMessageTranscriptionResponse',
         ),
     },
+    'reply_drafts': {
+        'output': DEFAULT_OUTPUT_DIR / 'reply_drafts_wire.g.dart',
+        'schemas': (
+            'ReplyDraftRequest',
+            'ReplyDraftResponse',
+            'ReplyDraftContextSummary',
+        ),
+    },
     'action_items_folders': {
         'output': DEFAULT_OUTPUT_DIR / 'action_items_folders_wire.g.dart',
         'schemas': (

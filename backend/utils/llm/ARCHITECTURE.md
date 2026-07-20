@@ -37,6 +37,7 @@ The shared plumbing every feature call goes through.
   matching, discard detection, summarization).
 - `conversation_folder.py` — conversation → folder assignment.
 - `followup.py` — follow-up question generation.
+- `reply_draft.py` — review-first reply drafts; returns `needs_review` drafts and never sends.
 - `persona.py` — persona chat, memory condensation for personas.
 - `openglass.py` — vision (image description) model calls.
 
