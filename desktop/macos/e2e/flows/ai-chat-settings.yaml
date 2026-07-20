@@ -23,6 +23,13 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowBorderView.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowDemoWindow.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowEdgeWindow.swift
+  - desktop/macos/Desktop/Sources/LocalAgentProviderInstaller.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/AgentsSettingsView.swift
+  - desktop/macos/Desktop/Sources/Providers/AgentProviderHealth.swift
+  - desktop/macos/Desktop/Sources/Providers/AgentProviderInstaller.swift
+  - desktop/macos/Desktop/Sources/Providers/AgentProviderRouter.swift
+  - desktop/macos/Desktop/Sources/Providers/AgentSelector.swift
+  - desktop/macos/Desktop/Sources/Providers/AgentSpeechMatcher.swift
 preconditions:
   - automation_bridge_ready
 

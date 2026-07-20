@@ -2163,7 +2163,8 @@ final class DesktopAutomationActionRegistry {
             return ["error": "Error: \(health.detail)"]
           }
         }
-        let model = ShortcutSettings.shared.selectedModel.isEmpty
+        let model =
+          ShortcutSettings.shared.selectedModel.isEmpty
           ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
         let pill = AgentPillsManager.shared.spawnFromUserQuery(
           brief,
@@ -2207,7 +2208,8 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "setup_agent_provider",
-      summary: "Run the deterministic install/repair recipe for a local agent provider as a setup pill; optionally dispatch a task to it after success",
+      summary:
+        "Run the deterministic install/repair recipe for a local agent provider as a setup pill; optionally dispatch a task to it after success",
       params: ["provider", "brief"]
     ) { params in
       let providerName = (params["provider"] ?? "")

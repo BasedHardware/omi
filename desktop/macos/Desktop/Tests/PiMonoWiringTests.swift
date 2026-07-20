@@ -166,11 +166,19 @@ final class PiMonoWiringTests: XCTestCase {
     }
     // Runtime's own taxonomy wins over the display text:
     // process-level + pre-execution codes → safe to retry on another agent…
-    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_process_error", source: "adapter_process")))
-    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_process_exited", source: "adapter_process")))
+    XCTAssertTrue(
+      AgentPillsManager.isStartupClassFailure(
+        "anything", failure: failure(code: "adapter_process_error", source: "adapter_process")))
+    XCTAssertTrue(
+      AgentPillsManager.isStartupClassFailure(
+        "anything", failure: failure(code: "adapter_process_exited", source: "adapter_process")))
     XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "binding_failed")))
-    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_not_registered", source: "runtime")))
-    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_config_invalid", source: "adapter_process")))
+    XCTAssertTrue(
+      AgentPillsManager.isStartupClassFailure(
+        "anything", failure: failure(code: "adapter_not_registered", source: "runtime")))
+    XCTAssertTrue(
+      AgentPillsManager.isStartupClassFailure(
+        "anything", failure: failure(code: "adapter_config_invalid", source: "adapter_process")))
     // …but a failure during execution must never re-run, even if the display
     // text happens to contain a startup marker.
     XCTAssertFalse(

@@ -2189,11 +2189,13 @@ enum BridgeError: LocalizedError {
     let lower = msg.lowercased()
     // Codex auth errors mention codex/OPENAI_API_KEY — sign-in guidance, not the generic "update the app".
     if lower.contains("codex") {
-      return "Codex isn't signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again."
+      return
+        "Codex isn't signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again."
     }
     // OpenClaw's `acp` bridge failing to connect means its gateway daemon isn't running.
     if lower.contains("openclaw"), lower.contains("econnrefused") || lower.contains("bridge failed") {
-      return "OpenClaw is installed but not running. Start OpenClaw (run `openclaw gateway` or open the OpenClaw app), then try again."
+      return
+        "OpenClaw is installed but not running. Start OpenClaw (run `openclaw gateway` or open the OpenClaw app), then try again."
     }
     if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
       || lower.contains("unauthorized") || lower.contains("permission denied")

@@ -1068,7 +1068,8 @@ class ChatToolExecutor {
     case .setupRequired(_, let setupPrompt, _):
       return "Error: \(setupPrompt)"
     case .spawn(let plan):
-      let model = ShortcutSettings.shared.selectedModel.isEmpty
+      let model =
+        ShortcutSettings.shared.selectedModel.isEmpty
         ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
       let pill = AgentPillsManager.shared.spawnFromUserQuery(
         brief,
@@ -1093,18 +1094,18 @@ class ChatToolExecutor {
       }
       if let startupFailure {
         return """
-        Error: agent FAILED to start: \(startupFailure)
-        Relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead.
-        """
+          Error: agent FAILED to start: \(startupFailure)
+          Relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead.
+          """
       }
       return """
-      Agent started as a floating agent pill.
-      id: \(pillId.uuidString)
-      runId: \(accepted.runId)
-      title: \(accepted.title)
-      status: running
-      If the user later asks about this agent's status or results, check get_task_agent_status first — never answer from memory.
-      """
+        Agent started as a floating agent pill.
+        id: \(pillId.uuidString)
+        runId: \(accepted.runId)
+        title: \(accepted.title)
+        status: running
+        If the user later asks about this agent's status or results, check get_task_agent_status first — never answer from memory.
+        """
     }
   }
 

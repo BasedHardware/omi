@@ -779,8 +779,12 @@ import XCTest
 
     XCTAssertTrue(source.contains("let handoff = AgentPillsManager.floatingAgentHandoff(for: message)"))
     XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnFromHandoff("))
-    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                    handoff,\n                    pill: pill"))
-    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                        .init(originalRequest: message, agentTask: message),\n                        pill: pill"))
+    XCTAssertTrue(
+      source.contains("completeVisibleAgentHandoff(\n                    handoff,\n                    pill: pill"))
+    XCTAssertTrue(
+      source.contains(
+        "completeVisibleAgentHandoff(\n                        .init(originalRequest: message, agentTask: message),\n                        pill: pill"
+      ))
     XCTAssertTrue(source.contains("let toolUseId = \"floating-agent-\\(pill.id.uuidString)\""))
     XCTAssertTrue(source.contains("name: \"spawn_agent\""))
     XCTAssertTrue(source.contains("status: .completed"))

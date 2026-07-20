@@ -34,7 +34,8 @@ final class AgentProviderRouterTests: XCTestCase {
   }
 
   func testComputerUseTaskPrefersOpenClawWhenEverythingInstalled() {
-    let decision = AgentProviderRouter.route(task: "open the browser and click the first result", availability: allAvailable)
+    let decision = AgentProviderRouter.route(
+      task: "open the browser and click the first result", availability: allAvailable)
     XCTAssertEqual(decision.primary, .openclaw)
     XCTAssertEqual(decision.fallbacks, [.hermes, .codex, nil])
   }
@@ -77,25 +78,29 @@ final class AgentProviderRouterTests: XCTestCase {
   }
 
   func testDispatchAutoRoutes() {
-    let d = AgentProviderRouter.dispatchDecision(providerName: "auto", brief: "write a python script", availability: allAvailable)
+    let d = AgentProviderRouter.dispatchDecision(
+      providerName: "auto", brief: "write a python script", availability: allAvailable)
     XCTAssertEqual(d?.primary, .codex)
   }
 
   func testDispatchUnnamedCodingTaskRoutesToBestReadyProvider() {
-    let d = AgentProviderRouter.dispatchDecision(providerName: "", brief: "write a python script", availability: allAvailable)
+    let d = AgentProviderRouter.dispatchDecision(
+      providerName: "", brief: "write a python script", availability: allAvailable)
     XCTAssertEqual(d?.primary, .codex)
     XCTAssertEqual(d?.fallbacks, [.hermes, .openclaw, nil])
   }
 
   func testDispatchUnnamedGeneralTaskStaysOnDefaultOrchestrator() {
-    let d = AgentProviderRouter.dispatchDecision(providerName: "", brief: "plan a birthday dinner", availability: allAvailable)
+    let d = AgentProviderRouter.dispatchDecision(
+      providerName: "", brief: "plan a birthday dinner", availability: allAvailable)
     XCTAssertNotNil(d)
     XCTAssertNil(d?.primary)
     XCTAssertEqual(d?.fallbacks.isEmpty, true)
   }
 
   func testDispatchUnnamedCodingTaskWithNoReadyProvidersStaysDefault() {
-    let d = AgentProviderRouter.dispatchDecision(providerName: "", brief: "write a python script", availability: noneAvailable(_:))
+    let d = AgentProviderRouter.dispatchDecision(
+      providerName: "", brief: "write a python script", availability: noneAvailable(_:))
     XCTAssertNotNil(d)
     XCTAssertNil(d?.primary)
   }

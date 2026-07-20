@@ -618,22 +618,6 @@ final class ChatDiscoverabilityTests: XCTestCase {
                 ChatPrompts.tableAnnotations[table],
                 "Missing tableAnnotation for \(table)")
         }
-      })
-  }
-
-  // MARK: - Table Annotations Completeness
-
-  func testTableAnnotationsIncludeAllExpectedTables() {
-    let expected = [
-      "screenshots", "action_items", "transcription_sessions", "transcription_segments",
-      "focus_sessions", "live_notes", "memories", "ai_user_profiles", "indexed_files",
-      "goals", "staged_tasks", "observations", "task_chat_messages",
-      "local_kg_nodes", "local_kg_edges",
-    ]
-    for table in expected {
-      XCTAssertNotNil(
-        ChatPrompts.tableAnnotations[table],
-        "Missing tableAnnotation for \(table)")
     }
   }
 }

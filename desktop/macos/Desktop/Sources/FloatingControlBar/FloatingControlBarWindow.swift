@@ -3038,23 +3038,7 @@ class FloatingControlBarManager {
                     FloatingBarVoicePlaybackService.shared.speakOneShot(spokenStatus)
                 }
                 return
-            case .spawn(let plan):
-                let pill = AgentPillsManager.shared.spawnFromUserQuery(
-                    directive.rewrittenQuery,
-                    model: selectedFloatingModel,
-                    fromVoice: presentation.fromVoice,
-                    preFetchedTitle: plan.title,
-                    preFetchedAck: plan.ack,
-                    bridgeHarnessOverride: plan.harnessOverride,
-                    spawnContext: plan.context
-                )
-            case .voiceOnly:
-                barWindow.state.currentQueryFromVoice = false
-                barWindow.state.clearVoiceResponseState()
-                FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
             }
-            return
-        }
         // Only router-selected providers arm the startup-failure fallback chain;
         // an explicitly directed provider must never be silently substituted.
         if decision.directedProvider == nil, directedProvider != nil {

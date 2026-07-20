@@ -1015,9 +1015,12 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
     XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
-    XCTAssertTrue(source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
+    XCTAssertTrue(
+      source.contains("let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled"))
     XCTAssertTrue(source.contains("getIdToken(forceRefresh: forceRefreshToken)"))
-    XCTAssertFalse(source.contains("log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
+    XCTAssertFalse(
+      source.contains(
+        "log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
     XCTAssertTrue(source.contains("forwarding \\(byok.values.count) usable user keys"))
   }
 

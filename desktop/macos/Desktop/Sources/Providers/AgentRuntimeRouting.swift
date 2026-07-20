@@ -176,18 +176,6 @@ enum LocalAgentProviderDetector {
         }
     }
 
-    if let path = firstExecutable(
-      named: provider.executableName,
-      fileManager: fileManager,
-      environment: environment,
-      homeDirectory: homeDirectory
-    ) {
-      return LocalAgentProviderAvailability(provider: provider, status: .available(command: path))
-    }
-
-    return LocalAgentProviderAvailability(provider: provider, status: .missing)
-  }
-
     static func firstExecutable(
         named name: String,
         fileManager: FileManager,

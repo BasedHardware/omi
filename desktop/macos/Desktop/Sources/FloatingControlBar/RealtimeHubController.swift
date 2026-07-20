@@ -2330,7 +2330,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             output: "Error: \(setupPrompt)")
           return
         case .spawn(let plan):
-          let model = ShortcutSettings.shared.selectedModel.isEmpty
+          let model =
+            ShortcutSettings.shared.selectedModel.isEmpty
             ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
           let pill = AgentPillsManager.shared.spawnFromUserQuery(
             brief, model: model, fromVoice: false,
@@ -2338,7 +2339,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             preFetchedAck: plan.ack,
             bridgeHarnessOverride: plan.harnessOverride,
             spawnContext: plan.context)
-          log("RealtimeHub[\(self.providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(plan.selectedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false) fallback=\(plan.usedFallback)")
+          log(
+            "RealtimeHub[\(self.providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(plan.selectedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false) fallback=\(plan.usedFallback)"
+          )
           if !self.audioReceivedThisTurn {
             let existingAck = self.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
             let ack = existingAck.isEmpty ? plan.ack : existingAck
@@ -2359,7 +2362,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,
-          output: "\(setupProvider.displayName) is already set up. \(setupBrief?.isEmpty == false ? "Task started." : "")",
+          output:
+            "\(setupProvider.displayName) is already set up. \(setupBrief?.isEmpty == false ? "Task started." : "")",
           expectedTurnEpoch: toolTurnEpoch)
         return
       }
@@ -2459,7 +2463,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           FloatingBarVoicePlaybackService.shared.speakOneShot(directedProvider.setupNeededStatus)
         }
         suppressAssistantOutputForCurrentTurn = true
-        log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) not ready (\(health.readiness.rawValue))")
+        log(
+          "RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) not ready (\(health.readiness.rawValue))"
+        )
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,
           output: "Error: \(health.detail)"
@@ -2495,7 +2501,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
 
     pill.fallbackProviders = routedFallbacks
-    log("RealtimeHub[\(providerTag)]: tool spawn_agent → canonical pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") fallbacks=\(routedFallbacks.count) titled=\(title?.isEmpty == false)")
+    log(
+      "RealtimeHub[\(providerTag)]: tool spawn_agent → canonical pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") fallbacks=\(routedFallbacks.count) titled=\(title?.isEmpty == false)"
+    )
     let shouldAllowNativePostSpawnAck = !audioReceivedThisTurn
     if !audioReceivedThisTurn {
       let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)

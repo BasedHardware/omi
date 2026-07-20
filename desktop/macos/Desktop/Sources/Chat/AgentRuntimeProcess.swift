@@ -2806,43 +2806,6 @@ actor AgentRuntimeProcess {
       env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexPath: codex)
     }
   }
-
-    // Codex is bridged by the standalone `codex-acp` binary, which speaks ACP
-    // directly on stdio (no `acp` subcommand).
-    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      case .available(command: let codexAcp) = LocalAgentProviderDetector.availability(
-        for: .codex,
-        environment: env,
-        homeDirectory: home
-      ).status
-    {
-      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.shellQuote(codexAcp)
-    }
-  }
-
-    // Codex runs through the codex-acp stdio bridge. It is a plain stdio ACP
-    // server (no `acp` subcommand). When present, launch it non-interactively:
-    // NO_BROWSER stops it from trying to open a ChatGPT login in a headless run,
-    // and agent-full-access sets approvalPolicy=never so codex-acp never emits
-    // the permission requests that the constrained external policy would reject.
-    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let codexAcp = firstExecutable(named: "codex-acp", in: adapterSearchDirs)
-    {
-      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.shellQuote(codexAcp)
-      if env["NO_BROWSER"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
-        env["NO_BROWSER"] = "1"
-      }
-      if env["INITIAL_AGENT_MODE"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
-        env["INITIAL_AGENT_MODE"] = "agent-full-access"
-      }
-    }
-  }
-
-    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let codex = firstExecutable(named: "codex", in: adapterSearchDirs)
-    {
-      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexPath: codex)
-    }
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
