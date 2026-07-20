@@ -734,7 +734,7 @@ describe("adapter capability matrix", () => {
       requiresPinnedWorker: true,
       supportsModelSwitching: false,
       supportsArtifactEmission: false,
-      supportsTools: false,
+      supportsTools: true,
       restartBehavior: "process_local_bindings_stale",
     });
   });
