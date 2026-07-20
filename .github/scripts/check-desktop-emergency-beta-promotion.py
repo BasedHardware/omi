@@ -80,14 +80,10 @@ def parse_expiry(value: str, *, now: datetime) -> datetime:
     return expires_at
 
 
-def workflow_run_identity(run_id: str, run_attempt: str) -> tuple[int, int]:
-    values = {"workflow_run_id": run_id, "workflow_run_attempt": run_attempt}
-    parsed: dict[str, int] = {}
-    for field, value in values.items():
-        if not re.fullmatch(r"[1-9][0-9]*", value):
-            fail(f"{field} must be a positive GitHub Actions integer")
-        parsed[field] = int(value)
-    return parsed["workflow_run_id"], parsed["workflow_run_attempt"]
+def emergency_operation_id(release_tag: str, source_sha: str, incident_id: str) -> str:
+    """Derive the durable operation identity shared by retries and reconciliation."""
+    binding = f"macos-beta-emergency-forward-promotion:{release_tag}:{source_sha.lower()}:{incident_id.strip()}"
+    return hashlib.sha256(binding.encode("utf-8")).hexdigest()
 
 
 def approval_identities(comments: list[dict], tag: str, source_sha: str, expires_at: str) -> list[str]:
@@ -130,7 +126,9 @@ def validate(args: argparse.Namespace) -> dict:
         fail("operator must be the GitHub login that started the protected workflow")
     now = datetime.now(timezone.utc) if args.now is None else datetime.fromisoformat(args.now.replace("Z", "+00:00"))
     expiry = parse_expiry(args.expires_at, now=now)
-    workflow_run_id, workflow_run_attempt = workflow_run_identity(args.workflow_run_id, args.workflow_run_attempt)
+    incident_id = args.incident_id.strip()
+    if not incident_id:
+        fail("incident_id is required")
     behavioral_url = https_url(args.behavioral_evidence_url, "behavioral_evidence_url")
     behavioral_digest = sha256_file(args.behavioral_evidence_file)
 
@@ -175,7 +173,7 @@ def validate(args: argparse.Namespace) -> dict:
     )
     if source_gate is None:
         fail("normal Desktop Swift Build & Tests source gate did not pass for the immutable source SHA")
-    if not incident_is_open(incident, args.incident_id):
+    if not incident_is_open(incident, incident_id):
         fail("incident must exist and remain open")
     approvers = approval_identities(comments, args.release_tag, args.source_sha.lower(), args.expires_at)
     signed_smoke_asset = release_asset(release, {"desktop-smoke-result.json"})
@@ -186,12 +184,11 @@ def validate(args: argparse.Namespace) -> dict:
         "emergencyPromotion": True,
         "release_tag": args.release_tag,
         "source_sha": args.source_sha.lower(),
-        "incident_id": str(args.incident_id),
+        "incident_id": incident_id,
         "reason": args.reason.strip(),
         "operator": operator,
         "expires_at": expiry.isoformat().replace("+00:00", "Z"),
-        "workflow_run_id": workflow_run_id,
-        "workflow_run_attempt": workflow_run_attempt,
+        "operation_id": emergency_operation_id(args.release_tag, args.source_sha, incident_id),
         "approvers": approvers,
         "evidence": {
             "signed_smoke_url": signed_smoke_url,
@@ -222,8 +219,6 @@ def main() -> int:
     parser.add_argument("--reason", required=True)
     parser.add_argument("--operator", required=True)
     parser.add_argument("--expires-at", required=True)
-    parser.add_argument("--workflow-run-id", required=True)
-    parser.add_argument("--workflow-run-attempt", required=True)
     parser.add_argument("--confirm", required=True)
     parser.add_argument("--now")
     parser.add_argument("--output", required=True)

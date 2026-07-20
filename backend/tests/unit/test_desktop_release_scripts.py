@@ -74,6 +74,7 @@ def test_emergency_metadata_records_two_bound_approvals_without_making_the_relea
             "reason": "qualification runner unavailable",
             "operator": "release-operator",
             "expires_at": "2026-07-19T13:00:00Z",
+            "operation_id": "d" * 64,
             "approvers": ["alice", "bob"],
             "evidence": {"behavioral_url": "https://example.test/behavior.json"},
         },
@@ -81,6 +82,7 @@ def test_emergency_metadata_records_two_bound_approvals_without_making_the_relea
     assert "emergencyPromotion: true" in result
     assert "emergencyPromotionApprovers: alice,bob" in result
     assert "emergencyPromotionOperator: release-operator" in result
+    assert "emergencyPromotionOperationId: " + "d" * 64 in result
     assert "channel: beta" in result
     assert "channel: stable" not in result
 
@@ -105,6 +107,13 @@ def test_emergency_approval_parser_requires_two_distinct_authorized_commenters_b
     comments[1]["author_association"] = "CONTRIBUTOR"
     with pytest.raises(SystemExit, match="exactly two"):
         emergency_promotion.approval_identities(comments, "v0.12.64+12064-macos", "a" * 40, "2026-07-19T13:00:00Z")
+
+
+def test_emergency_operation_id_is_stable_across_github_retries():
+    operation_id = emergency_promotion.emergency_operation_id("v0.12.64+12064-macos", "a" * 40, "10063")
+
+    assert operation_id == emergency_promotion.emergency_operation_id("v0.12.64+12064-macos", "a" * 40, "10063")
+    assert operation_id != emergency_promotion.emergency_operation_id("v0.12.64+12064-macos", "a" * 40, "10064")
 
 
 def test_emergency_incident_state_normalizes_github_open_casing():
@@ -342,7 +351,13 @@ def test_emergency_reconciliation_recovers_after_a_failed_promotion_before_notif
 
     assert pointer < stable_proof < reconcile_job < github_metadata < notify_job < notify
     assert "authoritative macOS beta pointer compare-and-swap did not succeed" in workflow
-    assert "group: desktop-beta-promotion" in promote
+    workflow_concurrency = workflow[workflow.index("concurrency:") : workflow.index("jobs:")]
+    emergency_group = "group: desktop-emergency-beta-promotion-${{ github.run_id }}-${{ github.run_attempt }}"
+    assert emergency_group in workflow_concurrency
+    assert "cancel-in-progress: false" in workflow_concurrency
+    assert "group: desktop-beta-promotion" not in promote
+    assert "--workflow-run-id" not in promote
+    assert "--workflow-run-attempt" not in promote
     assert "needs: promote" in reconciliation
     assert "if: ${{ always() }}" in reconciliation
     assert "environment: prod" in reconciliation
@@ -351,8 +366,11 @@ def test_emergency_reconciliation_recovers_after_a_failed_promotion_before_notif
     assert "emergency-promote-beta/reconciliation" in reconciliation
     assert "source_sha=$SOURCE_SHA" in reconciliation
     assert "incident_id=$INCIDENT_ID" in reconciliation
+    assert "operation_id=$OPERATION_ID" in reconciliation
     assert "emergency_evidence" in reconciliation
-    assert "authoritative emergency transaction reconciliation did not verify tag/SHA/incident" in reconciliation
+    reconciliation_error = "authoritative emergency transaction reconciliation did not verify"
+    reconciliation_error += " tag/SHA/incident/operation"
+    assert reconciliation_error in reconciliation
     assert 'echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"' in reconciliation
     assert "gh api --paginate --slurp" in workflow
     assert "for comment in page" in workflow

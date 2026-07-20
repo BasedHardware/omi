@@ -90,12 +90,19 @@ def _emergency_expiry(value: str, *, now: datetime) -> datetime:
     return expires_at
 
 
-def _github_workflow_identity(workflow_run_id: object, workflow_run_attempt: object) -> tuple[int, int]:
-    if type(workflow_run_id) is not int or workflow_run_id <= 0:
-        raise ValueError("workflow_run_id must be a positive GitHub Actions integer")
-    if type(workflow_run_attempt) is not int or workflow_run_attempt <= 0:
-        raise ValueError("workflow_run_attempt must be a positive GitHub Actions integer")
-    return workflow_run_id, workflow_run_attempt
+def _emergency_promotion_operation_id(release_id: str, source_sha: str, incident_id: str) -> str:
+    """Derive the retry-stable identity for one immutable emergency decision."""
+    binding = f"macos-beta-emergency-forward-promotion:{release_id}:{source_sha.lower()}:{incident_id.strip()}"
+    return hashlib.sha256(binding.encode("utf-8")).hexdigest()
+
+
+def _require_emergency_operation_id(operation_id: object, *, release_id: str, source_sha: str, incident_id: str) -> str:
+    if not isinstance(operation_id, str) or not SHA256_RE.fullmatch(operation_id):
+        raise ValueError("operation_id must be a SHA-256 digest")
+    expected = _emergency_promotion_operation_id(release_id, source_sha, incident_id)
+    if operation_id != expected:
+        raise ValueError("operation_id does not bind the immutable emergency decision")
+    return operation_id
 
 
 def _digest(data: dict[str, Any], key: str, pattern: re.Pattern[str], *, required: bool) -> str | None:
@@ -448,17 +455,6 @@ def _build_emergency_macos_beta_pointer(
     }
 
 
-def _emergency_promotion_audit_id(
-    release_id: str, source_sha: str, *, workflow_run_id: int, workflow_run_attempt: int
-) -> str:
-    """Derive an append-only audit ID bound to one GitHub Actions workflow attempt."""
-    workflow_run_id, workflow_run_attempt = _github_workflow_identity(workflow_run_id, workflow_run_attempt)
-    binding = (
-        f"macos-beta-emergency-forward-promotion:{release_id}:{source_sha}:{workflow_run_id}:{workflow_run_attempt}"
-    ).encode("utf-8")
-    return hashlib.sha256(binding).hexdigest()
-
-
 def _require_bound_emergency_manifest_decision(
     manifest: dict[str, Any],
     *,
@@ -468,8 +464,7 @@ def _require_bound_emergency_manifest_decision(
     reason: str,
     operator: str,
     expires_at: datetime,
-    workflow_run_id: int,
-    workflow_run_attempt: int,
+    operation_id: str,
     approvers: list[str],
     evidence: dict[str, str],
     occurred_at: datetime,
@@ -487,11 +482,8 @@ def _require_bound_emergency_manifest_decision(
         raise ValueError("emergency decision does not match the incident and reason")
     if str(decision.get("operator", "")).lstrip("@") != operator:
         raise ValueError("emergency decision does not match the operator")
-    if (
-        decision.get("workflow_run_id") != workflow_run_id
-        or decision.get("workflow_run_attempt") != workflow_run_attempt
-    ):
-        raise ValueError("emergency decision does not match this GitHub Actions workflow attempt")
+    if decision.get("operation_id") != operation_id:
+        raise ValueError("emergency decision does not match the durable promotion operation")
     decision_expiry = _emergency_expiry(_required_string(cast(dict[str, Any], decision), "expires_at"), now=occurred_at)
     if decision_expiry != expires_at:
         raise ValueError("emergency decision does not match the authorization expiry")
@@ -518,8 +510,7 @@ def _emergency_promote_macos_beta_transaction(
     reason: str,
     operator: str,
     expires_at: datetime,
-    workflow_run_id: int,
-    workflow_run_attempt: int,
+    operation_id: str,
     approvers: list[str],
     evidence: dict[str, str],
     audit_id: str,
@@ -539,8 +530,7 @@ def _emergency_promote_macos_beta_transaction(
         reason=reason,
         operator=operator,
         expires_at=expires_at,
-        workflow_run_id=workflow_run_id,
-        workflow_run_attempt=workflow_run_attempt,
+        operation_id=operation_id,
         approvers=approvers,
         evidence=evidence,
         occurred_at=occurred_at,
@@ -576,8 +566,7 @@ def _emergency_promote_macos_beta_transaction(
         "reason": reason,
         "operator": operator,
         "expires_at": expires_at,
-        "workflow_run_id": workflow_run_id,
-        "workflow_run_attempt": workflow_run_attempt,
+        "operation_id": operation_id,
         "approvers": approvers,
         "evidence": evidence,
         "occurred_at": occurred_at,
@@ -599,8 +588,7 @@ def emergency_promote_macos_beta_channel(
     reason: str,
     operator: str,
     expires_at: str,
-    workflow_run_id: int,
-    workflow_run_attempt: int,
+    operation_id: str,
     approvers: list[str],
     evidence: dict[str, str],
     firestore_client: Any = None,
@@ -620,7 +608,9 @@ def emergency_promote_macos_beta_channel(
         raise ValueError("operator must be a GitHub login")
     if not SHA40_RE.fullmatch(source_sha):
         raise ValueError("source_sha has an invalid digest")
-    workflow_run_id, workflow_run_attempt = _github_workflow_identity(workflow_run_id, workflow_run_attempt)
+    operation_id = _require_emergency_operation_id(
+        operation_id, release_id=release_id, source_sha=source_sha, incident_id=incident_id
+    )
     if expected_generation < 0:
         raise ValueError("expected_generation must be a non-negative integer")
     normalized_approvers = [approver.strip().lstrip("@") for approver in approvers if approver.strip()]
@@ -653,15 +643,9 @@ def emergency_promote_macos_beta_channel(
     manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
     # The reconciler must be able to prove this exact transaction committed
     # even if the workflow loses or cannot parse its POST response. The ID is
-    # bound to the immutable release identity and exact GitHub workflow attempt,
-    # and Firestore's transaction atomically creates this audit with the
-    # beta-pointer write.
-    audit_id = _emergency_promotion_audit_id(
-        release_id,
-        source_sha,
-        workflow_run_id=workflow_run_id,
-        workflow_run_attempt=workflow_run_attempt,
-    )
+    # bound to the retry-stable immutable decision, and Firestore's transaction
+    # atomically creates this audit with the beta-pointer write.
+    audit_id = operation_id
     audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
     return _emergency_promote_macos_beta_transaction(
         client.transaction(),
@@ -676,8 +660,7 @@ def emergency_promote_macos_beta_channel(
         reason=reason,
         operator=operator,
         expires_at=expiry,
-        workflow_run_id=workflow_run_id,
-        workflow_run_attempt=workflow_run_attempt,
+        operation_id=operation_id,
         approvers=normalized_approvers,
         evidence=normalized_evidence,
         audit_id=audit_id,
@@ -690,8 +673,7 @@ def verify_emergency_macos_beta_reconciliation(
     *,
     source_sha: str,
     incident_id: str,
-    workflow_run_id: int,
-    workflow_run_attempt: int,
+    operation_id: str,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Prove the exact emergency transaction and immutable decision committed.
@@ -699,8 +681,8 @@ def verify_emergency_macos_beta_reconciliation(
     This intentionally does not infer an emergency promotion from the mutable
     beta pointer. A normal promotion can update that pointer concurrently; only
     the deterministic, append-only emergency audit plus the immutable manifest
-    decision for this exact GitHub Actions run and attempt proves that this
-    break-glass transaction committed.
+    decision and retry-stable operation audit prove that this break-glass
+    transaction committed.
     """
     release_id = release_id.strip()
     source_sha = source_sha.strip().lower()
@@ -709,7 +691,9 @@ def verify_emergency_macos_beta_reconciliation(
         raise ValueError("release_id and incident_id are required")
     if not SHA40_RE.fullmatch(source_sha):
         raise ValueError("source_sha has an invalid digest")
-    workflow_run_id, workflow_run_attempt = _github_workflow_identity(workflow_run_id, workflow_run_attempt)
+    operation_id = _require_emergency_operation_id(
+        operation_id, release_id=release_id, source_sha=source_sha, incident_id=incident_id
+    )
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
@@ -731,17 +715,11 @@ def verify_emergency_macos_beta_reconciliation(
         or decision.get("release_tag") != release_id
         or str(decision.get("source_sha", "")).lower() != source_sha
         or str(decision.get("incident_id")) != incident_id
-        or decision.get("workflow_run_id") != workflow_run_id
-        or decision.get("workflow_run_attempt") != workflow_run_attempt
+        or decision.get("operation_id") != operation_id
     ):
-        raise ValueError("immutable manifest does not contain the bound emergency decision for this workflow attempt")
+        raise ValueError("immutable manifest does not contain the bound emergency decision for this operation")
 
-    audit_id = _emergency_promotion_audit_id(
-        release_id,
-        source_sha,
-        workflow_run_id=workflow_run_id,
-        workflow_run_attempt=workflow_run_attempt,
-    )
+    audit_id = operation_id
     audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
     audit_snapshot = audit_ref.get()
     if not getattr(audit_snapshot, "exists", False):
@@ -757,12 +735,9 @@ def verify_emergency_macos_beta_reconciliation(
         or audit.get("target_release_id") != release_id
         or str(audit.get("source_sha", "")).lower() != source_sha
         or str(audit.get("incident_id")) != incident_id
-        or audit.get("workflow_run_id") != workflow_run_id
-        or audit.get("workflow_run_attempt") != workflow_run_attempt
+        or audit.get("operation_id") != operation_id
     ):
-        raise ValueError(
-            "emergency promotion audit does not match the immutable release decision for this workflow attempt"
-        )
+        raise ValueError("emergency promotion audit does not match the immutable release decision for this operation")
 
     previous_generation = _generation(audit.get("previous_generation"))
     generation = _generation(audit.get("generation"))
@@ -774,8 +749,7 @@ def verify_emergency_macos_beta_reconciliation(
         "release_id": release_id,
         "source_sha": source_sha,
         "incident_id": incident_id,
-        "workflow_run_id": workflow_run_id,
-        "workflow_run_attempt": workflow_run_attempt,
+        "operation_id": operation_id,
         "audit_id": audit_id,
         "generation": generation,
         # Reconstruct GitHub release metadata only from this immutable decision,

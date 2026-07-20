@@ -973,6 +973,7 @@ class TestDesktopUpdateAdminEndpoints:
             "expected_current_release_id": "v0.12.84+12084-macos",
             "expected_generation": 7,
             "incident_id": "10063",
+            "operation_id": "f" * 64,
             "reason": "qualification runner is unavailable during an incident",
             "operator": "release-operator",
             "expires_at": "2026-07-19T13:00:00Z",
@@ -1005,6 +1006,7 @@ class TestDesktopUpdateAdminEndpoints:
             expected_current_release_id=payload["expected_current_release_id"],
             expected_generation=7,
             incident_id="10063",
+            operation_id=payload["operation_id"],
             reason=payload["reason"],
             operator=payload["operator"],
             expires_at=payload["expires_at"],
@@ -1040,7 +1042,12 @@ class TestDesktopUpdateAdminEndpoints:
                 resp = await client.get(
                     "/v2/desktop/channels/emergency-promote-beta/reconciliation",
                     headers={"secret-key": "real-secret"},
-                    params={"release_id": "v0.12.85+12085-macos", "source_sha": "a" * 40, "incident_id": "10063"},
+                    params={
+                        "release_id": "v0.12.85+12085-macos",
+                        "source_sha": "a" * 40,
+                        "incident_id": "10063",
+                        "operation_id": "f" * 64,
+                    },
                 )
 
         assert resp.status_code == 200
@@ -1049,6 +1056,7 @@ class TestDesktopUpdateAdminEndpoints:
             "v0.12.85+12085-macos",
             source_sha="a" * 40,
             incident_id="10063",
+            operation_id="f" * 64,
         )
 
     @pytest.mark.asyncio
