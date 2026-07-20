@@ -83,16 +83,21 @@ final class ActivationProgressStore: ObservableObject {
   }
 
   /// Lifetime counts arrived — a history of captured conversations means this
-  /// account activated long ago (possibly on another machine).
+  /// account activated long ago (possibly on another machine). Only accounts
+  /// whose history predates first-win graduate silently; once first-win has
+  /// shown, a rising count is this user's FIRST conversation landing and must
+  /// complete that step normally (keeping the ask step and celebration).
   func applyLifetimeCounts(conversations: Int?, memories: Int?) {
     guard !automationForcedFirstWin else { return }
     guard !isActivated else { return }
     if let conversations, conversations > 0 {
-      mutate {
-        $0.conversationCaptured = true
-        // An account with real conversation history is past first-win even if
-        // this machine never saw a query.
-        $0.graduated = true
+      if progress.firstWinFirstShownAt == nil {
+        mutate {
+          $0.conversationCaptured = true
+          $0.graduated = true
+        }
+      } else {
+        markConversationCaptured(title: nil)
       }
     }
     _ = memories  // memory counts alone don't graduate: onboarding import seeds them

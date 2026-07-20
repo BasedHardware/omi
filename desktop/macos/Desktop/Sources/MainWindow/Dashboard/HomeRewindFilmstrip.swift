@@ -108,7 +108,14 @@ private struct HomeFilmstripFrame: View {
     do {
       let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
       guard !Task.isCancelled else { return }
-      thumbnail = Self.downscale(image, maxHeight: HomeRewindFilmstrip.frameHeight * 2)
+      // Force the full-resolution decode + draw off the main thread — ten
+      // frames decode at once when Home appears.
+      let targetHeight = HomeRewindFilmstrip.frameHeight * 2
+      let scaled = await Task.detached(priority: .utility) {
+        Self.downscale(image, maxHeight: targetHeight)
+      }.value
+      guard !Task.isCancelled else { return }
+      thumbnail = scaled
     } catch {
       // Pruned frames are expected occasionally; keep the neutral tile but
       // leave a trace for diagnosis.
@@ -116,7 +123,7 @@ private struct HomeFilmstripFrame: View {
     }
   }
 
-  private static func downscale(_ image: NSImage, maxHeight: CGFloat) -> NSImage {
+  private nonisolated static func downscale(_ image: NSImage, maxHeight: CGFloat) -> NSImage {
     let size = image.size
     guard size.height > maxHeight, size.height > 0 else { return image }
     let scale = maxHeight / size.height

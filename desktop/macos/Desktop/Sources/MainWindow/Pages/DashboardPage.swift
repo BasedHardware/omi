@@ -499,6 +499,14 @@ struct DashboardPage: View {
         activationStore.applyLifetimeCounts(
           conversations: conversations, memories: homeStatusStore.memoryCount)
       }
+      // The first-win surface can appear only after counts finish loading —
+      // load its hero data and start its time-box at that moment, not just on
+      // the (earlier) page appear.
+      .onChange(of: showFirstWinSurface) { wasShowing, isShowing in
+        guard !wasShowing, isShowing else { return }
+        activationStore.noteFirstWinShown()
+        Task { await homeTodayStore.refresh(includeFirstWin: true) }
+      }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         viewModel.refreshGoals()
         Task { await intelligenceStore.load() }

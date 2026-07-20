@@ -97,6 +97,7 @@ final class HomeTodayStore: ObservableObject {
   private let loader: Loader
   private let now: () -> Date
   private var refreshTask: Task<Void, Never>?
+  private var refreshTaskID: UUID?
 
   init(loader: Loader = .live, now: @escaping () -> Date = Date.init) {
     self.loader = loader
@@ -104,17 +105,24 @@ final class HomeTodayStore: ObservableObject {
   }
 
   func refresh(includeFirstWin: Bool) async {
+    // Wait out an in-flight refresh but still run our own pass — the caller's
+    // includeFirstWin may differ (e.g. the first-win surface appearing right
+    // after a plain refresh started), and its data must not be skipped.
     if let refreshTask {
       await refreshTask.value
-      return
     }
+    let taskID = UUID()
     let task = Task { [weak self] in
       guard let self else { return }
       await self.performRefresh(includeFirstWin: includeFirstWin)
     }
     refreshTask = task
+    refreshTaskID = taskID
     await task.value
-    refreshTask = nil
+    if refreshTaskID == taskID {
+      refreshTask = nil
+      refreshTaskID = nil
+    }
   }
 
   func dismissInsight(_ item: InsightItem) async {
@@ -125,6 +133,7 @@ final class HomeTodayStore: ObservableObject {
   func resetSessionState() {
     refreshTask?.cancel()
     refreshTask = nil
+    refreshTaskID = nil
     content = Content()
   }
 

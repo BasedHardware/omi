@@ -59,6 +59,25 @@ final class ActivationProgressStoreTests: XCTestCase {
     XCTAssertFalse(store.celebrationPending)
   }
 
+  func testFirstConversationDuringFirstWinCompletesStepWithoutGraduating() {
+    let store = makeStore()
+
+    // First-win is on screen; the user's FIRST conversation lands and the
+    // count refresh reports it. That completes the capture step but must not
+    // skip the ask step (no silent graduation).
+    store.noteFirstWinShown()
+    store.applyLifetimeCounts(conversations: 1, memories: 45)
+    XCTAssertTrue(store.progress.conversationCaptured)
+    XCTAssertFalse(store.progress.graduated)
+    XCTAssertFalse(store.isActivated)
+    XCTAssertTrue(store.shouldShowFirstWin(countsKnown: true))
+
+    // The ask step still completes the flow — with the celebration.
+    store.markAskedOmi()
+    XCTAssertTrue(store.isActivated)
+    XCTAssertTrue(store.celebrationPending)
+  }
+
   func testMemoriesAloneDoNotGraduate() {
     let store = makeStore()
 
