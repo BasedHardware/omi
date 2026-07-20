@@ -30,7 +30,15 @@ final class ChatStallWatchdogTests: XCTestCase {
   func testToolStallStopSurfacesToolTimeoutMessage() {
     XCTAssertEqual(
       ChatProvider.stoppedTurnErrorMessage(watchdogFired: false, toolStallAbortFired: true),
-      "A tool took too long. Try again.")
+      "A tool stopped reporting progress. Try again.")
+  }
+
+  func testWholeTurnWatchdogUsesBridgeNoProgressRatherThanAbsoluteTurnAge() throws {
+    let source = try chatProviderSource()
+    XCTAssertTrue(source.contains("sendWatchdogNoProgressMs = 60_000"))
+    XCTAssertTrue(
+      source.contains("stallDetector.hasInterEventGapExceeding"),
+      "A healthy long-running tool must reset the whole-turn watchdog through bridge activity")
   }
 
   // MARK: - Source-invariant: the marker is set before interrupt() and consumed by the catch

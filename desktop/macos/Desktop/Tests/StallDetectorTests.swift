@@ -172,16 +172,52 @@ final class StallDetectorTests: XCTestCase {
     )
   }
 
-  func testToolIdsExceedingReportsOnlyOverdueInFlightTools() async {
+  func testToolProgressResetsOnlyItsNoProgressClock() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 0)
+
+    // Progress immediately before the hard no-progress budget expires must
+    // keep the tool eligible to continue without redefining its start time.
+    _ = await detector.step(kind: .toolProgress(id: "t1"), atMs: 89_999)
+
+    let overdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
+    XCTAssertFalse(overdue.contains("t1"))
+
+    let eventuallyOverdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 180_000)
+    XCTAssertEqual(eventuallyOverdue, ["t1"])
+  }
+
+  func testToolProgressAlsoResetsTheWholeTurnNoProgressClock() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 0)
+    _ = await detector.step(kind: .toolProgress(id: "t1"), atMs: 59_999)
+
+    let stillActive = await detector.hasInterEventGapExceeding(durationMs: 60_000, atMs: 60_000)
+    XCTAssertFalse(stillActive, "Recent tool progress keeps a long-running write alive")
+
+    let silentTooLong = await detector.hasInterEventGapExceeding(durationMs: 60_000, atMs: 119_999)
+    XCTAssertTrue(silentTooLong, "The global watchdog still recovers a bridge that becomes silent")
+  }
+
+  func testDuplicateToolStartDoesNotManufactureProgress() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 89_999)
+
+    let overdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
+    XCTAssertEqual(overdue, ["t1"])
+  }
+
+  func testToolIdsWithoutProgressReportsOnlyOverdueInFlightTools() async {
     let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
     _ = await detector.step(kind: .toolStarted(id: "slow"), atMs: 0)
     _ = await detector.step(kind: .toolStarted(id: "fresh"), atMs: 50_000)
 
-    let firstOverdue = await detector.toolIdsExceeding(durationMs: 90_000, atMs: 90_000)
+    let firstOverdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
     XCTAssertEqual(firstOverdue, ["slow"])
 
     _ = await detector.step(kind: .toolCompleted(id: "slow"), atMs: 90_001)
-    let remainingOverdue = await detector.toolIdsExceeding(durationMs: 90_000, atMs: 200_000)
+    let remainingOverdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 200_000)
     XCTAssertTrue(remainingOverdue.contains("fresh"))
     XCTAssertFalse(remainingOverdue.contains("slow"))
   }

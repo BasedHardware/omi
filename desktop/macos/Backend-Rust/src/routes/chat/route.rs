@@ -58,11 +58,58 @@ pub(super) fn chat_metering_response(decision: &RateDecision) -> Option<Response
 /// cap, which covers all realistic floating-bar sessions. History trimming
 /// is tracked separately as the longer-term fix.
 const CHAT_COMPLETIONS_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
+
+const OMI_REQUEST_ID_HEADER: &str = "x-omi-request-id";
+const RESPONSE_REQUEST_ID_HEADER: &str = "x-request-id";
+
+fn inbound_request_id(headers: &HeaderMap) -> String {
+    headers
+        .get(OMI_REQUEST_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 128
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        })
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| ulid::Ulid::new().to_string())
+}
+
+fn attach_request_id(response: &mut Response, request_id: &str) {
+    if let Ok(value) = request_id.parse() {
+        response
+            .headers_mut()
+            .insert(RESPONSE_REQUEST_ID_HEADER, value);
+    }
+}
+
 async fn chat_completions(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
     headers: HeaderMap,
     Json(req): Json<ChatCompletionRequest>,
+) -> Result<Response, StatusCode> {
+    let request_id = inbound_request_id(&headers);
+    tracing::info!(
+        event = "chat_completion_request",
+        request_id = %request_id,
+        streaming = req.stream,
+        "chat completion received"
+    );
+    let response = chat_completions_inner(state, user, headers, req).await;
+    response.map(|mut response| {
+        attach_request_id(&mut response, &request_id);
+        response
+    })
+}
+
+async fn chat_completions_inner(
+    state: AppState,
+    user: PaywalledAuthUser,
+    headers: HeaderMap,
+    req: ChatCompletionRequest,
 ) -> Result<Response, StatusCode> {
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
@@ -206,4 +253,45 @@ pub(crate) fn chat_completions_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/chat/completions", post(chat_completions))
         .layer(DefaultBodyLimit::max(CHAT_COMPLETIONS_MAX_BODY_SIZE))
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{
+        body::Body,
+        http::{HeaderMap, HeaderValue},
+        response::Response,
+    };
+
+    use super::{attach_request_id, inbound_request_id};
+
+    #[test]
+    fn preserves_a_valid_opaque_request_id() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-omi-request-id", HeaderValue::from_static("req_01AB-cd"));
+
+        assert_eq!(inbound_request_id(&headers), "req_01AB-cd");
+    }
+
+    #[test]
+    fn replaces_invalid_request_ids_without_echoing_them() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-omi-request-id",
+            HeaderValue::from_static("request id with spaces"),
+        );
+
+        let request_id = inbound_request_id(&headers);
+        assert_ne!(request_id, "request id with spaces");
+        assert!(request_id.parse::<ulid::Ulid>().is_ok());
+    }
+
+    #[test]
+    fn echoes_the_resolved_request_id_on_the_response() {
+        let mut response = Response::new(Body::empty());
+
+        attach_request_id(&mut response, "req_01AB-cd");
+
+        assert_eq!(response.headers()["x-request-id"], "req_01AB-cd");
+    }
 }

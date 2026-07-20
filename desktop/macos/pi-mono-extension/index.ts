@@ -41,6 +41,34 @@ import {
   type OmiToolManifestEntry,
 } from "../agent/src/runtime/omi-tool-manifest.ts";
 
+/**
+ * Opaque, request-scoped correlation ids are the only context forwarded to
+ * the desktop backend. Keep the header bounded and printable so it is safe to
+ * log, and never relay prompt text, account ids, or tool arguments.
+ */
+const OMI_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+export function omiRequestIdFromRelayContext(raw: string): string | undefined {
+  try {
+    const parsed = JSON.parse(raw) as { requestId?: unknown };
+    return typeof parsed.requestId === "string" && OMI_REQUEST_ID_PATTERN.test(parsed.requestId)
+      ? parsed.requestId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function omiRequestIdFromRelayFile(): Promise<string | undefined> {
+  const contextFile = process.env.OMI_CONTEXT_FILE;
+  if (!contextFile) return undefined;
+  try {
+    return omiRequestIdFromRelayContext(await readFile(contextFile, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Denylist patterns
 // ---------------------------------------------------------------------------
@@ -764,6 +792,13 @@ export default function omiProvider(pi: ExtensionAPI): void {
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       },
     ],
+  });
+
+  // Pi asks for headers once per provider request and keeps them for retries,
+  // which preserves one safe correlation id across an upstream retry chain.
+  pi.on("before_provider_headers", async (event) => {
+    const requestId = await omiRequestIdFromRelayFile();
+    if (requestId) event.headers["x-omi-request-id"] = requestId;
   });
 
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
