@@ -11,6 +11,7 @@ from llm_gateway.gateway.providers import (
     OpenAICompatibleChatCompletionProvider,
     ProviderFailure,
 )
+from llm_gateway.gateway import providers as providers_mod
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 
 
@@ -363,3 +364,33 @@ async def test_anthropic_response_is_wrapped_in_an_openai_envelope(monkeypatch):
     assert response['id'] == 'msg_test'
     assert response['model'] == 'claude-sonnet-4-6'
     assert response['choices'][0]['message']['content'] == 'ok'
+
+
+@pytest.mark.asyncio
+async def test_anthropic_response_created_tracks_the_clock(monkeypatch):
+    """`created` must be the time the completion was produced, not a fixed constant.
+
+    The Anthropic normalizer returned a hardcoded 1782522000 — the same literal used by
+    the in-module test double fake_success_response — so every completion served by
+    AnthropicMessagesProvider carried an identical, permanently stale timestamp. The
+    sibling Vertex normalizer already used int(time.time()).
+    """
+    monkeypatch.setattr(providers_mod.time, 'time', lambda: 1_800_000_123.9)
+
+    response = await _normalize_anthropic(monkeypatch)
+
+    assert response['created'] == 1_800_000_123
+
+
+@pytest.mark.asyncio
+async def test_anthropic_created_advances_between_calls(monkeypatch):
+    now = {'value': 1_800_000_000.0}
+    monkeypatch.setattr(providers_mod.time, 'time', lambda: now['value'])
+
+    first = await _normalize_anthropic(monkeypatch)
+    now['value'] = 1_800_000_600.0
+    second = await _normalize_anthropic(monkeypatch)
+
+    assert first['created'] == 1_800_000_000
+    assert second['created'] == 1_800_000_600
+    assert second['created'] > first['created']
