@@ -22,6 +22,7 @@ struct SecondBrainShell<Content: View>: View {
   var onOpenChats: () -> Void
   var onVoice: () -> Void
   var onOpenPalette: () -> Void
+  var onOpenSettings: () -> Void
 
   @ViewBuilder var content: () -> Content
 
@@ -43,7 +44,6 @@ struct SecondBrainShell<Content: View>: View {
       ("Insights", SidebarNavItem.insight.rawValue),
       ("Apps", SidebarNavItem.apps.rawValue),
       ("Permissions", SidebarNavItem.permissions.rawValue),
-      ("Settings", SidebarNavItem.settings.rawValue),
     ]
   }
 
@@ -110,7 +110,7 @@ struct SecondBrainShell<Content: View>: View {
       overflowMenu
 
       Button {
-        navigate(to: SidebarNavItem.settings.rawValue)
+        onOpenSettings()
       } label: {
         HStack(spacing: 6) {
           Image(systemName: "gearshape").font(.system(size: 13))
@@ -134,6 +134,8 @@ struct SecondBrainShell<Content: View>: View {
       ForEach(overflow, id: \.index) { item in
         Button(item.title) { navigate(to: item.index) }
       }
+      Divider()
+      Button("Settings") { onOpenSettings() }
     } label: {
       Text("···")
         .geist(size: 15, weight: .semibold)

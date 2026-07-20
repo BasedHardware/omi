@@ -47,6 +47,8 @@ struct DesktopHomeView: View {
   @State private var sbAskText = ""
   /// ⌘K command palette visibility.
   @State private var showSBPalette = false
+  /// Second Brain settings landing (redesigned entry point) visibility.
+  @State private var sbSettingsLanding = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -1088,6 +1090,8 @@ struct DesktopHomeView: View {
       }
       // Only auto-refresh stores when their pages are visible
       updateStoreActivity(for: newValue)
+      // Any navigation dismisses the Second Brain settings landing.
+      sbSettingsLanding = false
       // Shell tabs/overflow expose every page; enforce tier gating on navigation
       // (the legacy sidebar filtered these; redirect keeps locked pages unreachable).
       redirectIfPageHidden()
@@ -1126,7 +1130,8 @@ struct DesktopHomeView: View {
       onSubmitAsk: submitSBAsk,
       onOpenChats: { selectedIndex = SidebarNavItem.chat.rawValue },
       onVoice: { FloatingControlBarManager.shared.toggleAIInput() },
-      onOpenPalette: { showSBPalette = true }
+      onOpenPalette: { showSBPalette = true },
+      onOpenSettings: { sbSettingsLanding = true }
     ) {
       secondBrainPageBody
     }
@@ -1151,7 +1156,24 @@ struct DesktopHomeView: View {
   /// Today is Second-Brain-native; other content pages render inside the shell frame
   /// (rebuilt in later phases). Settings never reaches here — it keeps its two-pane.
   @ViewBuilder private var secondBrainPageBody: some View {
-    if selectedIndex == SidebarNavItem.dashboard.rawValue {
+    if sbSettingsLanding {
+      SBSettingsLanding(
+        appState: appState,
+        onOpenSection: { section in
+          selectedSettingsSection = section
+          sbSettingsLanding = false
+          selectedIndex = SidebarNavItem.settings.rawValue
+        },
+        onNavigate: { idx in
+          sbSettingsLanding = false
+          selectedIndex = idx
+        },
+        onReplayOnboarding: {
+          sbSettingsLanding = false
+          appState.hasCompletedOnboarding = false
+        }
+      )
+    } else if selectedIndex == SidebarNavItem.dashboard.rawValue {
       SBTodayContainer(
         appState: appState,
         dashboardViewModel: viewModelContainer.dashboardViewModel,
