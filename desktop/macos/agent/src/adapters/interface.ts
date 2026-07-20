@@ -272,15 +272,16 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   codex: {
     adapterId: "codex",
     productionAdapter: true,
+    // Codex drives a local ACP agent; session state is process-local like Hermes.
     expectations: {
-      nativeResume: required("Codex ACP exposes native sessions through the Gateway-backed ACP bridge."),
-      cancellationDispatch: required("Codex ACP accepts cancellation through the shared ACP interrupt path."),
-      cancellationAck: knownLimitation("Codex cancellation resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
-      pinnedWorker: unsupported("Codex ACP sessions are native and do not require process-local pinned workers."),
-      modelSwitching: unsupported("Codex ACP does not currently expose session/set_model; model selection is configured in the Codex gateway/agent."),
+      nativeResume: unsupported("Codex ACP session ids are process-local and are stale after adapter process restart."),
+      cancellationDispatch: required("Codex supports cancellation dispatch for active attempts."),
+      cancellationAck: knownLimitation("Codex cancellation is dispatchable but no terminal adapter ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: required("Codex keeps session state in the adapter process and must stay worker-pinned while active."),
+      modelSwitching: unsupported("Codex model selection is configured in the Codex agent, not via session/set_model."),
       artifactEmission: unsupported("Codex ACP adapter does not emit artifact references yet."),
-      toolSupport: unsupported("Codex ACP rejects per-session MCP servers; Omi tools are unavailable until configured through the Codex gateway/agent."),
-      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable Codex bindings."),
+      toolSupport: required("Codex projects tool calls through canonical adapter tool events."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks process-local Codex bindings stale."),
     },
   },
   a2a: {

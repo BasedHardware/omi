@@ -1050,10 +1050,10 @@ class ChatToolExecutor {
       .replacingOccurrences(of: " ", with: "")
     let requestedProvider: AgentPillsManager.DirectedProvider?
     switch providerName {
-    case "openclaw": requestedProvider = .openclaw
-    case "hermes": requestedProvider = .hermes
-    case "codex": requestedProvider = .codex
-    case "": requestedProvider = nil
+    case "openclaw": directedProvider = .openclaw
+    case "hermes": directedProvider = .hermes
+    case "codex": directedProvider = .codex
+    case "": directedProvider = nil
     default:
       return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
     }

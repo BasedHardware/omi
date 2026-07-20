@@ -124,9 +124,9 @@ struct LocalAgentProviderAvailability: Equatable {
         case .hermes:
             return "I don't see Hermes installed. Install it from github.com/NousResearch/hermes-agent with `pip install -e '.[acp]'` (or `uvx --from 'hermes-agent[acp]'`), then run `hermes model` to configure a provider, and try again."
         case .openclaw:
-            return "I don't see OpenClaw installed. Install OpenClaw on your PATH, or set the OMI_OPENCLAW_ADAPTER_COMMAND environment variable to point Omi at your OpenClaw binary, then try again."
+            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
         case .codex:
-            return "I don't see Codex installed. Run `npm install -g @openai/codex` in your terminal, then run `codex` to sign in, and try again."
+            return "I don't see Codex CLI installed. Run 'npm install -g @openai/codex' and set your OPENAI_API_KEY, then try again."
         }
     }
   }

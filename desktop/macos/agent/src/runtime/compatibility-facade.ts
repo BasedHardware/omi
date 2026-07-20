@@ -56,23 +56,29 @@ export interface CompatibilityFacadeOptions {
   maxRecoverableRetries?: number;
 }
 
+/** Options for handleQuery. Defaults preserve the original (emit-on-failure) behavior. */
 export interface HandleQueryOptions {
   /**
-   * When true, a terminal run failure is returned to the caller instead of being
-   * emitted as an `error` message. This lets the caller try another adapter
-   * (failover) before the user ever sees an error.
+   * When true, a terminal run failure is NOT sent to the client as an error
+   * event; the outcome is returned instead so the caller can try another agent.
    */
-  suppressTerminalError?: boolean;
+  suppressFailureEmit?: boolean;
 }
 
-export interface HandleQueryOutcome {
-  /** Whether the run ended in a terminal failure. */
-  failed: boolean;
-  /**
-   * The correlated error the facade emitted (or would have emitted, when
-   * suppressed). Present only when `failed` is true.
-   */
-  errorMessage?: ErrorMessage;
+/** Result of handleQuery, used by the live dispatcher to drive cross-agent fallback. */
+export type QueryOutcome =
+  | { ok: true }
+  | { ok: false; failure?: RuntimeFailure; message: string; retryable: boolean };
+
+function isRetryableQueryException(
+  error: unknown,
+  isRecoverableError?: RecoverableErrorPredicate
+): boolean {
+  try {
+    return isRecoverableError?.(error) ?? false;
+  } catch {
+    return false;
+  }
 }
 
 interface ActiveRequestContext {
@@ -220,7 +226,7 @@ export class JsonlCompatibilityFacade {
     }
   }
 
-  async handleQuery(message: QueryMessage, options?: HandleQueryOptions): Promise<HandleQueryOutcome> {
+  async handleQuery(message: QueryMessage, options: HandleQueryOptions = {}): Promise<QueryOutcome> {
     const input = this.buildRunInput(message);
     const key = this.activeRequestKey(input.requestId, input.clientId);
     if (this.activeByRequest.has(key)) {
@@ -247,12 +253,18 @@ export class JsonlCompatibilityFacade {
       if (result.terminalStatus === "failed") {
         const failure = failureFromResultJson(result.run.resultJson);
         const message = failure?.userMessage ?? result.run.errorMessage ?? "Agent run failed";
-        const errorMessage = this.withCorrelation({ type: "error", message, failure } as ErrorMessage, context);
-        if (options?.suppressTerminalError) {
-          return { failed: true, errorMessage };
+        // Default: emit the error (legacy behavior). When the caller drives
+        // cross-agent fallback it suppresses the emit and inspects the outcome,
+        // so a non-final failure never sends a terminal error before the retry.
+        if (!options.suppressFailureEmit) {
+          const errorMessage: ErrorMessage = {
+            type: "error",
+            message,
+            failure,
+          };
+          this.send(this.withCorrelation(errorMessage, context));
         }
-        this.send(errorMessage);
-        return { failed: true, errorMessage };
+        return { ok: false, failure, message, retryable: failure?.retryable ?? true };
       }
 
       const resultMessage: ResultMessage = {
@@ -270,16 +282,19 @@ export class JsonlCompatibilityFacade {
         artifacts: result.artifacts.map(serializeArtifact),
       };
       this.send(this.withCorrelation(resultMessage, context));
-      return { failed: false };
+      return { ok: true };
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
       this.log(`Compatibility query error: ${messageText}`);
-      const errorMessage = this.withCorrelation({ type: "error", message: messageText } as ErrorMessage, context);
-      if (options?.suppressTerminalError) {
-        return { failed: true, errorMessage };
+      if (!options.suppressFailureEmit) {
+        const errorMessage: ErrorMessage = { type: "error", message: messageText };
+        this.send(this.withCorrelation(errorMessage, context));
       }
-      this.send(errorMessage);
-      return { failed: true, errorMessage };
+      return {
+        ok: false,
+        message: messageText,
+        retryable: isRetryableQueryException(error, this.isRecoverableError),
+      };
     } finally {
       this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {

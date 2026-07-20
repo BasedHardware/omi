@@ -2023,10 +2023,11 @@ class ChatProvider: ObservableObject {
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
             cachedFloatingPillSystemPrompt = floatingPillSystemPrompt
-            // Hermes and OpenClaw ignore Omi's Claude model aliases, so leave
-            // the model hint nil to avoid recording a model ID in binding metadata
-            // that could trigger spurious context-changed sessions later.
-            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw" || activeBridgeHarness == "codex"
+            // Hermes, OpenClaw, and Codex ignore Omi's Claude model aliases, so
+            // leave the model hint nil to avoid recording a model ID in binding
+            // metadata that could trigger spurious context-changed sessions later.
+            let usesNativeModelChoice =
+                activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw" || activeBridgeHarness == "codex"
             let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
             let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
             await agentBridge.warmupSession(cwd: effectiveAgentWorkingDirectory(), sessions: [

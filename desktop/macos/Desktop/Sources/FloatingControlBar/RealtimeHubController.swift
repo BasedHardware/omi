@@ -2392,10 +2392,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     expectedTurnEpoch: Int
   ) async {
     let userText = turnTranscript
-    guard let dispatch = AgentProviderRouter.dispatchDecision(providerName: providerName, brief: brief) else {
+    var directedProvider: AgentPillsManager.DirectedProvider?
+    switch providerName {
+    case "openclaw": directedProvider = .openclaw
+    case "hermes": directedProvider = .hermes
+    case "codex": directedProvider = .codex
+    case "": directedProvider = nil
+    default:
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
-        output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', 'codex', or 'auto'.",
+        output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', or 'codex'.",
         expectedTurnEpoch: expectedTurnEpoch)
       return
     }
