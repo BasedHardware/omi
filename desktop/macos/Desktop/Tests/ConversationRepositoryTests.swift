@@ -100,6 +100,27 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(remote.listRequests.map(\.limit), [50, 50])
   }
 
+  func testLoadMoreRemainsAvailableWhenServerCountFailsOverCachedCount() async {
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
+    }
+    let second = makeConversation(id: "second", title: "Older", revision: 1)
+    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .failure(TestFailure.offline))
+    let repository = ConversationRepository(
+      remote: remote,
+      local: FakeConversationLocal(listResult: firstPage, count: 50)
+    )
+
+    await repository.load(query: .all)
+    XCTAssertTrue(repository.hasMore)
+
+    remote.listResult = .success([second])
+    await repository.loadMore()
+
+    XCTAssertEqual(repository.conversations.map(\.id), firstPage.map(\.id) + ["second"])
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 50])
+  }
+
   func testDetailPaintsCachedTranscriptThenRevalidatesServerOwnedFields() async throws {
     let seed = makeConversation(title: "List title", overview: "List summary", revision: 1)
     let cachedDetail = makeConversation(

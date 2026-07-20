@@ -260,6 +260,7 @@ final class ConversationRepository {
 
   private(set) var conversations: [ServerConversation] = []
   private(set) var count: Int?
+  private var isCountAuthoritative = false
   private(set) var hasMore = false
   private(set) var isLoading = false
   private(set) var error: String?
@@ -308,6 +309,9 @@ final class ConversationRepository {
     currentQuery = query
     isLoading = true
     error = nil
+    // A cached count is useful for display but must never suppress a full
+    // server page when the authoritative count request is unavailable.
+    isCountAuthoritative = false
     if queryChanged {
       conversations = []
       count = nil
@@ -358,12 +362,15 @@ final class ConversationRepository {
       pendingMutations = result.pendingMutations
       mutationBaselines = mutationBaselines.filter { pendingMutations[$0.key] != nil }
       conversations = result.conversations
-      count = serverCount ?? count
+      if let serverCount {
+        count = serverCount
+        isCountAuthoritative = true
+      }
       nextPageOffset = server.count
       hasMore = Self.hasMorePages(
         loaded: nextPageOffset,
         pageSize: Self.pageSize,
-        totalCount: count,
+        totalCount: isCountAuthoritative ? count : nil,
         received: server.count
       )
       isLoading = false
@@ -415,7 +422,7 @@ final class ConversationRepository {
       hasMore = Self.hasMorePages(
         loaded: nextPageOffset,
         pageSize: Self.pageSize,
-        totalCount: count,
+        totalCount: isCountAuthoritative ? count : nil,
         received: server.count
       )
       emit(.server)
@@ -545,6 +552,7 @@ final class ConversationRepository {
     deletionTokens = [:]
     conversations = []
     count = nil
+    isCountAuthoritative = false
     nextPageOffset = 0
     hasMore = false
     isLoadingMore = false

@@ -138,6 +138,7 @@ final class HomeStatusStore: ObservableObject {
       .store(in: &cancellables)
 
     NotificationCenter.default.publisher(for: .homeKnowledgeCountsDidChange)
+      .receive(on: DispatchQueue.main)
       .sink { [weak self] _ in
         self?.refreshKnowledgeCountsAfterImport()
       }

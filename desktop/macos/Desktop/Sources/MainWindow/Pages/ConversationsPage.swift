@@ -396,7 +396,7 @@ struct ConversationsPage: View {
             appState: appState
           )
 
-          if appState.canLoadMoreConversations {
+          if appState.canLoadMoreConversations && !(isMultiSelectMode && !selectedConversationIds.isEmpty) {
             Button("Load older conversations") {
               Task {
                 await appState.loadMoreConversations()

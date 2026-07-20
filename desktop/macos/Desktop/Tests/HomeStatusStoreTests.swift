@@ -444,7 +444,9 @@ final class HomeStatusStoreTests: XCTestCase {
     )
 
     await store.refreshIfNeeded(now: Date(timeIntervalSince1970: 40_000))
-    NotificationCenter.default.post(name: .homeKnowledgeCountsDidChange, object: nil)
+    await Task.detached {
+      NotificationCenter.default.post(name: .homeKnowledgeCountsDidChange, object: nil)
+    }.value
     for _ in 0..<100 where knowledgeLoads < 2 {
       await Task.yield()
     }

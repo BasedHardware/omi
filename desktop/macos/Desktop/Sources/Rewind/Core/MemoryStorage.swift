@@ -449,9 +449,10 @@ actor MemoryStorage {
   func syncServerMemories(_ memories: [ServerMemory]) async throws {
     let db = try await ensureInitialized()
 
-    let (skipped, adopted) = try await db.write { database -> (Int, Int) in
+    let (skipped, adopted, inserted) = try await db.write { database -> (Int, Int, Int) in
       var skipped = 0
       var adopted = 0
+      var inserted = 0
       for memory in memories {
         if var existingRecord =
           try MemoryRecord
@@ -488,6 +489,7 @@ actor MemoryStorage {
         } else {
           do {
             _ = try MemoryRecord.from(memory).inserted(database)
+            inserted += 1
           } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
             // Race: record already exists — update instead
             if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
@@ -497,7 +499,7 @@ actor MemoryStorage {
           }
         }
       }
-      return (skipped, adopted)
+      return (skipped, adopted, inserted)
     }
 
     if skipped > 0 || adopted > 0 {
@@ -507,7 +509,9 @@ actor MemoryStorage {
     } else {
       log("MemoryStorage: Synced \(memories.count) memories from backend")
     }
-    HomeKnowledgeCountInvalidation.post()
+    if inserted > 0 {
+      HomeKnowledgeCountInvalidation.post()
+    }
   }
 
   /// Upsert a server snapshot, then tombstone synced locals whose backendId is absent.
