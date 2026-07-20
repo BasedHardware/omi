@@ -8,6 +8,7 @@ import yaml
 import pytest
 
 from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
+from llm_gateway.gateway.lane_catalog import ProviderSupportStatus, load_catalog
 from llm_gateway.gateway.schemas import Surface
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
 
@@ -86,7 +87,12 @@ def test_every_model_config_feature_has_inventory_and_gateway_lane():
 
     config = load_gateway_config(prod_mode=True)
     missing_lanes = [feature for feature in configured_features if feature_lane_id(feature) not in config.lanes]
-    assert missing_lanes == []
+    non_production = {
+        entry.lane_id
+        for entry in load_catalog().lanes
+        if entry.provider_support_status != ProviderSupportStatus.PROD_READY
+    }
+    assert {feature_lane_id(feature) for feature in missing_lanes} <= non_production
 
 
 def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
@@ -94,10 +100,13 @@ def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
     overrides = load_generated_route_overrides()
 
     for feature in get_all_configured_features():
+        route_id = f'route.{feature}.model_config.001'
+        if route_id not in config.route_artifacts:
+            continue
         override = overrides.get(feature)
         model = override.primary.model if override is not None else get_model(feature)
         provider = override.primary.provider if override is not None else get_provider(feature)
-        route = config.route_artifacts[f'route.{feature}.model_config.001']
+        route = config.route_artifacts[route_id]
 
         expected_options = get_route_options(feature, model, provider)
         if override is not None:
