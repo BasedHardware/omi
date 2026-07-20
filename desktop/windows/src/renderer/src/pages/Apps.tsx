@@ -107,7 +107,7 @@ const AppCard = memo(function AppCard({
           onOpen(app)
         }
       }}
-      className="surface-card-flat flex cursor-pointer flex-col p-5 animate-fade-in text-left"
+      className="surface-card-flat flex cursor-pointer flex-col p-5 text-left"
     >
       <div className="mb-3 flex items-start gap-3">
         {app.image ? (

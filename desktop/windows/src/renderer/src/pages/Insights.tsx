@@ -130,7 +130,7 @@ export function Insights(): React.JSX.Element {
   const renderRow = (i: InsightRecord): React.JSX.Element => {
     const expanded = expandedId === i.id
     return (
-      <li key={i.id} className="surface-card animate-fade-in overflow-hidden">
+      <li key={i.id} className="surface-card overflow-hidden">
         <button
           onClick={() => setExpandedId(expanded ? null : i.id)}
           className="flex w-full items-start gap-3 p-4 text-left"

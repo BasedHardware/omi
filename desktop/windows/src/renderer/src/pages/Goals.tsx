@@ -359,7 +359,7 @@ export function Goals(): React.JSX.Element {
     const done = isCompleted(g)
     const pct = progressPct(g)
     return (
-      <li key={g.id} className="surface-card group p-4 animate-fade-in">
+      <li key={g.id} className="surface-card group p-4">
         <div className="flex items-start gap-3">
           <button
             onClick={() => void toggleComplete(g)}
@@ -527,7 +527,7 @@ export function Goals(): React.JSX.Element {
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
         {candidate && (
           <div className="mx-auto mb-5 max-w-3xl">
-            <div className="surface-card animate-fade-in border border-white/10 p-4">
+            <div className="surface-card border border-white/10 p-4">
               <div className="flex items-start gap-3">
                 <div className="glass-subtle mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl">
                   <Sparkles className="h-4 w-4 text-white/70" />
@@ -588,7 +588,7 @@ export function Goals(): React.JSX.Element {
         )}
         {composing && (
           <div className="mx-auto mb-5 max-w-3xl">
-            <div className="surface-card animate-fade-in p-4">
+            <div className="surface-card p-4">
               <input
                 autoFocus
                 value={draftTitle}

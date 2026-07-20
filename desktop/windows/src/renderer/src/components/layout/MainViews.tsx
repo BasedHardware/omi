@@ -10,7 +10,13 @@ import { PanelErrorFallback } from '../ui/PanelErrorFallback'
 // add routes: add a page by appending a RouteEntry to the manifest.
 
 function panelClass(active: boolean): string {
-  return active ? 'flex h-full min-h-0 flex-col' : 'hidden'
+  // The active panel fades in over 80ms (.page-enter) so a tab switch reads as a
+  // crisp macOS-style crossfade (matching Mac's easeOut(0.08) pageNavigationAnimation)
+  // instead of a hard cut. The kept-mounted panels hide via display:none, so the
+  // display:none→flex reveal restarts the fade on each switch. That same
+  // reveal-restart is why the per-card 400ms entry fades were removed from the list
+  // pages — they replayed on every visit and read as a hard-coded delay.
+  return active ? 'page-enter flex h-full min-h-0 flex-col' : 'hidden'
 }
 
 export function MainViews(): React.JSX.Element {

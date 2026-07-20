@@ -57,6 +57,8 @@ const renderAt = (path: string, to = '/tasks'): ReturnType<typeof render> =>
 
 const panel = (name: string): HTMLElement | null => document.querySelector(`[data-page="${name}"]`)
 const isHidden = (name: string): boolean => !!panel(name)?.closest('div.hidden')
+// The active panel carries `.page-enter` (the 80ms opacity crossfade); hidden ones don't.
+const hasPageEnter = (name: string): boolean => !!panel(name)?.closest('div.page-enter')
 
 // Inactive panels are deliberately NOT mounted during the startup entrance
 // animations — mounting all of them (incl. the R3F brain map) up front stalled the
@@ -111,6 +113,25 @@ describe('MainViews mount semantics', () => {
     renderAt('/home')
     expect(panel('home')).not.toBeNull()
     expect(isHidden('home')).toBe(false)
+  })
+
+  it('applies the .page-enter fade to the ACTIVE panel only, and moves it on navigation', () => {
+    // The route-switch transition is a single 80ms opacity crossfade on the active
+    // panel (.page-enter, matching macOS's easeOut(0.08)), replacing the per-card
+    // 400ms fade that replayed on every visit. It must ride the ACTIVE panel and
+    // move with it on navigation — never linger on a now-hidden one.
+    vi.useFakeTimers()
+    const { getByText } = renderAt('/home', '/tasks')
+    hydrate()
+
+    expect(hasPageEnter('home')).toBe(true) // active panel fades in
+    expect(hasPageEnter('tasks')).toBe(false) // hidden panel does not
+
+    fireEvent.click(getByText('navigate'))
+
+    expect(hasPageEnter('tasks')).toBe(true) // fade moves to the newly-active panel
+    expect(hasPageEnter('home')).toBe(false) // and leaves the now-hidden one
+    vi.useRealTimers()
   })
 
   it('renders an exclusive route full-screen INSTEAD of the panel grid', () => {

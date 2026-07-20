@@ -508,7 +508,7 @@ export function Tasks(): React.JSX.Element {
         key={t.id}
         data-task-id={t.id}
         data-selected={isSelected ? 'true' : undefined}
-        className={`surface-card group flex items-start gap-3 p-4 animate-fade-in ${
+        className={`surface-card group flex items-start gap-3 p-4 ${
           isSelected ? 'ring-1 ring-white/40' : ''
         }`}
       >
@@ -671,7 +671,7 @@ export function Tasks(): React.JSX.Element {
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
         {composing && (
           <div className="mx-auto mb-5 max-w-3xl">
-            <div className="surface-card animate-fade-in p-4">
+            <div className="surface-card p-4">
               <input
                 autoFocus
                 value={draft}
