@@ -18,6 +18,10 @@ struct HomeValueSnapshot: Equatable, Sendable {
   let askPlaceholder: String
   let availableContextSourceCount: Int
 
+  static func metricValue(for count: Int?) -> String {
+    count?.formatted() ?? "—"
+  }
+
   static func make(
     conversationCount: Int?,
     memoryCount: Int?,

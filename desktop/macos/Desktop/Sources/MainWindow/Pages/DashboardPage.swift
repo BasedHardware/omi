@@ -1024,7 +1024,7 @@ struct DashboardPage: View {
       onSend: sendFromHomeAskBar,
       onStop: { chatProvider.stopAgent(owner: .mainChat) },
       onConnect: {
-        trackHomeValueAction("connect")
+        trackHomeValueAction(homeMode == .connect ? "connect_closed" : "connect_opened")
         toggleHomeConnectPanel()
       },
       onActivate: { openHomeChat() }
@@ -1483,10 +1483,6 @@ struct DashboardPage: View {
     }
   }
 
-  private var conversationMetricCount: Int {
-    homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
-  }
-
   private var conversationContextCount: Int? {
     homeStatusStore.conversationCount
       ?? appState.totalConversationsCount
@@ -1494,7 +1490,7 @@ struct DashboardPage: View {
   }
 
   private var conversationMetricValue: String {
-    formattedCount(conversationMetricCount)
+    HomeValueSnapshot.metricValue(for: conversationContextCount)
   }
 
   private var taskMetricCount: Int {
@@ -1505,13 +1501,6 @@ struct DashboardPage: View {
     formattedCount(taskMetricCount)
   }
 
-  private var memoryMetricCount: Int {
-    homeStatusStore.memoryCount
-      ?? (memoriesViewModel.totalMemoriesCount > 0
-        ? memoriesViewModel.totalMemoriesCount
-        : memoriesViewModel.memories.count)
-  }
-
   private var memoryContextCount: Int? {
     homeStatusStore.memoryCount
       ?? (memoriesViewModel.totalMemoriesCount > 0
@@ -1520,11 +1509,11 @@ struct DashboardPage: View {
   }
 
   private var memoryMetricValue: String {
-    formattedCount(memoryMetricCount)
+    HomeValueSnapshot.metricValue(for: memoryContextCount)
   }
 
   private var screenshotMetricValue: String {
-    homeStatusStore.screenshotCount.map(formattedCount) ?? "—"
+    HomeValueSnapshot.metricValue(for: homeStatusStore.screenshotCount)
   }
 
   private var homeValueSnapshot: HomeValueSnapshot {

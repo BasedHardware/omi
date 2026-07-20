@@ -14,6 +14,7 @@ final class HomeValueSnapshotTests: XCTestCase {
     XCTAssertEqual(snapshot.availableContextSourceCount, 0)
     XCTAssertFalse(snapshot.title.contains("already"))
     XCTAssertEqual(snapshot.askPlaceholder, "Ask about your work or life")
+    XCTAssertEqual(HomeValueSnapshot.metricValue(for: nil), "—")
   }
 
   func testNewAccountGetsImmediateActionWithoutFabricatedHistory() {
@@ -27,6 +28,7 @@ final class HomeValueSnapshotTests: XCTestCase {
     XCTAssertEqual(snapshot.availableContextSourceCount, 0)
     XCTAssertEqual(snapshot.title, "Ask one question only your Omi could answer.")
     XCTAssertEqual(snapshot.askPlaceholder, "What on my screen matters most right now?")
+    XCTAssertEqual(HomeValueSnapshot.metricValue(for: 0), "0")
   }
 
   func testSmallAmountOfContextUsesBuildingExperience() {

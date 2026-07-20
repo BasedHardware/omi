@@ -2,7 +2,7 @@
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1939,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3643,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4442,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4431,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3298,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5518,
     "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1570
