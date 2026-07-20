@@ -23,7 +23,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -88,7 +87,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -175,7 +173,6 @@ workflows:
 
           flutter build ipa \
             --release \
-            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
@@ -242,7 +239,6 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -338,7 +334,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -416,7 +411,6 @@ workflows:
 
           flutter build appbundle \
             --release \
-            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
@@ -464,7 +458,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -533,7 +526,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -567,7 +559,6 @@ workflows:
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build ipa \
             --release \
-            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
@@ -713,7 +704,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -843,7 +833,6 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -952,7 +941,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -971,7 +959,6 @@ workflows:
           BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
           flutter build appbundle \
             --release \
-            --dart-define=OMI_BETA_RELEASE_RING=true \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
@@ -1018,7 +1005,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1094,7 +1080,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -1207,7 +1192,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
           echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
       - name: Extract version (from tag or auto-increment)
@@ -1758,7 +1742,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        STAGING_API_URL: "https://api-beta.omi.me/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -1874,7 +1857,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -2940,14 +2922,11 @@ workflows:
             exit 0
           fi
           set -euo pipefail
-          dispatch_key="codemagic:${CM_TAG}"
-          # The GitHub Actions workflow owns every release-body transition.
-          # Its per-candidate concurrency group is the authoritative atomic
-          # serialiser for claim/running/complete state; Codemagic must never
-          # replay a stale queued body over a runner-owned transition.
+          # Per-tag GitHub concurrency and immutable qualification evidence own
+          # duplicate dispatches; this bounded retry only handles dispatch I/O.
           for attempt in 1 2 3; do
             if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-              -f release_tag="$CM_TAG" -f dispatch_key="$dispatch_key"; then
+              -f release_tag="$CM_TAG"; then
               echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
               exit 0
             fi

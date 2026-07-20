@@ -23,31 +23,6 @@ abstract class Env {
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
 
-  /// Staging API URL from STAGING_API_URL env var. Null when not configured.
-  static String? get stagingApiUrl {
-    final url = _instance.stagingApiUrl;
-    if (url == null || url.isEmpty) return null;
-    return url;
-  }
-
-  /// Whether STAGING_API_URL is configured in the environment.
-  static bool get isStagingConfigured => stagingApiUrl != null;
-
-  static bool get isUsingStagingApi {
-    final effective = apiBaseUrl;
-    final staging = stagingApiUrl;
-    if (effective == null || staging == null) return false;
-    return _normalizeUrl(effective) == _normalizeUrl(staging);
-  }
-
-  static String _normalizeUrl(String url) {
-    var s = url.trim().toLowerCase();
-    while (s.endsWith('/')) {
-      s = s.substring(0, s.length - 1);
-    }
-    return s;
-  }
-
   /// WebSocket URL for the agent proxy service.
   /// Derives from apiBaseUrl: api.omi.me → agent.omi.me, api.omiapi.com → agent.omiapi.com.
   /// Can be overridden via Env.overrideAgentProxyWsUrl() for local testing.
@@ -97,6 +72,4 @@ abstract class EnvFields {
   bool? get useWebAuth;
 
   bool? get useAuthCustomToken;
-
-  String? get stagingApiUrl;
 }

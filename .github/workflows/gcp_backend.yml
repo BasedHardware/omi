@@ -143,11 +143,6 @@ jobs:
             echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'."
             exit 1
           fi
-          if [[ "$DEPLOY_ENVIRONMENT" == "prod" ]]; then
-            echo "Production artifact deploys are release-record-only; use deploy-release-ring.yml with ring=prod." >&2
-            exit 1
-          fi
-
       - name: Require read-only Firestore credentials
         env:
           GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}

@@ -6,9 +6,6 @@ import 'package:omi/env/env.dart';
 /// we test with a single init and exercise the override/flag mechanisms.
 class _TestEnvFields implements EnvFields {
   @override
-  String? get stagingApiUrl => null; // STAGING_API_URL not configured
-
-  @override
   String? get openAIAPIKey => null;
   @override
   String? get posthogApiKey => null;
@@ -38,30 +35,6 @@ void main() {
     Env.init(_TestEnvFields());
   });
 
-  group('Env.stagingApiUrl', () {
-    test('returns null when STAGING_API_URL is not configured', () {
-      expect(Env.stagingApiUrl, isNull);
-    });
-  });
-
-  group('Env.isStagingConfigured', () {
-    test('false when STAGING_API_URL is not set', () {
-      expect(Env.isStagingConfigured, isFalse);
-    });
-  });
-
-  group('Env.isUsingStagingApi', () {
-    test('false when staging is not configured', () {
-      Env.overrideApiBaseUrl('https://api.omiapi.com/');
-      expect(Env.isUsingStagingApi, isFalse);
-    });
-
-    test('false when override points to non-staging URL', () {
-      Env.overrideApiBaseUrl('https://api.prod.example.com/');
-      expect(Env.isUsingStagingApi, isFalse);
-    });
-  });
-
   group('Env.isTestFlight', () {
     test('can be set to false', () {
       Env.isTestFlight = false;
@@ -80,6 +53,16 @@ void main() {
     test('returns override when set', () {
       Env.overrideApiBaseUrl('https://override.example.com/');
       expect(Env.apiBaseUrl, 'https://override.example.com/');
+    });
+
+    test('TestFlight remains on the production backend', () {
+      Env.overrideApiBaseUrl('https://api.omi.me/');
+      Env.isTestFlight = true;
+
+      expect(Env.apiBaseUrl, 'https://api.omi.me/');
+      expect(Env.agentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
+
+      Env.isTestFlight = false;
     });
   });
 }

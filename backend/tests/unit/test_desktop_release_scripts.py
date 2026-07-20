@@ -7,7 +7,6 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / ".github" / "scripts"
 PROMOTE_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_beta.yml"
 PROMOTE_PROD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml"
-EMERGENCY_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_emergency_promote_beta.yml"
 QUALIFY_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_qualify_beta.yml"
 CODEMAGIC_CONFIG = REPO_ROOT / "codemagic.yaml"
 
@@ -22,9 +21,7 @@ def _load(name: str, filename: str):
 
 mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
-nominate_stable = _load("nominate_desktop_stable_candidate", "nominate-desktop-stable-candidate.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
-qualification_dispatch = _load("desktop_qualification_dispatch", "desktop_qualification_dispatch.py")
 
 
 def _release(body: str | None = None):
@@ -187,70 +184,6 @@ def test_prepare_manifest_rejects_unqualified_candidate():
         )
 
 
-def test_qualified_beta_can_be_nominated_as_stable_candidate():
-    release = _release()
-    release["body"] = (
-        release["body"].replace("isLive: false", "isLive: true").replace("channel: candidate", "channel: beta")
-    )
-    body = nominate_stable.nominate(
-        release,
-        release_tag="v0.12.64+12064-macos",
-        target_sha="a" * 40,
-        beta_release_id="v0.12.64+12064-macos",
-        beta_source_sha="a" * 40,
-        nominator="release-operator",
-        rationale="soak gates passed",
-        soak_review="24h reviewed",
-        telemetry_review="crash telemetry reviewed",
-        release_notes_review="stable notes reviewed",
-        nominated_at="2026-07-10T12:00:00Z",
-    )
-    assert "stableCandidate: true" in body
-    assert "stableCandidateQualificationEvidence: qualification-evidence.json" in body
-
-
-def test_stable_nomination_rejects_non_current_beta():
-    release = _release()
-    release["body"] = (
-        release["body"].replace("isLive: false", "isLive: true").replace("channel: candidate", "channel: beta")
-    )
-    with pytest.raises(SystemExit, match="beta pointer"):
-        nominate_stable.nominate(
-            release,
-            release_tag="v0.12.64+12064-macos",
-            target_sha="a" * 40,
-            beta_release_id="v0.12.63+12063-macos",
-            beta_source_sha="a" * 40,
-            nominator="release-operator",
-            rationale="soak gates passed",
-            soak_review="24h reviewed",
-            telemetry_review="crash telemetry reviewed",
-            release_notes_review="stable notes reviewed",
-            nominated_at="2026-07-10T12:00:00Z",
-        )
-
-
-def test_stable_nomination_rejects_beta_manifest_from_another_sha():
-    release = _release()
-    release["body"] = (
-        release["body"].replace("isLive: false", "isLive: true").replace("channel: candidate", "channel: beta")
-    )
-    with pytest.raises(SystemExit, match="beta manifest source SHA"):
-        nominate_stable.nominate(
-            release,
-            release_tag="v0.12.64+12064-macos",
-            target_sha="a" * 40,
-            beta_release_id="v0.12.64+12064-macos",
-            beta_source_sha="b" * 40,
-            nominator="release-operator",
-            rationale="soak gates passed",
-            soak_review="24h reviewed",
-            telemetry_review="crash telemetry reviewed",
-            release_notes_review="stable notes reviewed",
-            nominated_at="2026-07-10T12:00:00Z",
-        )
-
-
 def test_beta_pointer_advances_before_legacy_visibility():
     workflow = PROMOTE_BETA_WORKFLOW.read_text()
     manifest = workflow.index("      - name: Register immutable release manifest")
@@ -274,48 +207,18 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
     assert automatic_gate < candidate_download
 
 
-def test_qualification_claims_are_serialized_by_the_trusted_runner_only():
+def test_qualification_is_serialized_by_tag_and_retried_without_release_body_state():
     codemagic = CODEMAGIC_CONFIG.read_text()
     dispatch = codemagic[codemagic.index("      - name: Dispatch trusted macOS beta qualification") :]
     qualification = QUALIFY_BETA_WORKFLOW.read_text()
 
-    assert "authoritative atomic" in dispatch
+    assert "duplicate dispatches" in dispatch
     assert 'gh release edit "$CM_TAG"' not in dispatch
     assert "group: desktop-beta-qualification-${{ inputs.release_tag }}" in qualification
     assert "cancel-in-progress: false" in qualification
-    assert "desktop_qualification_dispatch.py claim" in qualification
-    assert "desktop_qualification_dispatch.py complete" in qualification
-
-
-def test_qualified_dispatch_retry_skips_runner_but_requests_promotion():
-    body = """<!-- KEY_VALUE_START
-qualificationDispatchState: qualified
-qualificationDispatchKey: codemagic:v0.12.64+12064-macos
-qualificationDispatchAttempt: 1
-qualificationDispatchUpdatedAt: 2026-07-09T12:00:00Z
-qualificationDispatchDiagnostic: trusted qualification completed
-KEY_VALUE_END -->"""
-
-    result, should_run, should_promote, reason = qualification_dispatch.claim(
-        body,
-        key="codemagic:v0.12.64+12064-macos",
-        updated_at="2026-07-09T12:05:00Z",
-        run_id="12345",
-        run_url="https://github.com/BasedHardware/omi/actions/runs/12345",
-        allow_retry=False,
-    )
-
-    assert result == body
-    assert should_run is False
-    assert should_promote is True
-    assert reason == "dispatch key already qualified"
-
-
-def test_qualification_workflow_promotes_already_qualified_claims():
-    qualification = QUALIFY_BETA_WORKFLOW.read_text()
-
-    assert "should_promote=" in qualification
-    assert "steps.claim.outputs.should_promote == 'true'" in qualification
+    assert "for attempt in 1 2 3" in dispatch
+    assert "desktop_qualification_dispatch.py" not in qualification
+    assert "steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'" in qualification
 
 
 def test_stable_promotion_remains_manual_only():
@@ -333,13 +236,17 @@ def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
     workflow = PROMOTE_PROD_WORKFLOW.read_text()
 
     immutable_repair = workflow.index("      - name: Publish immutable stable repair installer")
-    legacy_bridge = workflow.index("      - name: Promote Firestore release stable")
     pointer = workflow.index("      - name: Advance explicit stable pointer")
+    legacy_bridge = workflow.index("      - name: Bridge stable for legacy desktop clients")
     latest_route = workflow.index("      - name: Publish latest stable repair route")
 
-    assert immutable_repair < legacy_bridge < pointer < latest_route
+    assert immutable_repair < pointer < legacy_bridge < latest_route
     assert "--json tagName,body,isDraft,isPrerelease,publishedAt,assets" in workflow
     assert "--pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg'" in workflow
     assert "--pattern '*.dmg'" not in workflow
     assert "Expected exactly one qualified Omi.dmg or omi.dmg release asset." in workflow
     assert "--if-generation-match=0" in workflow
+    assert '"$BASE/macos-beta"' in workflow
+    assert "expected_current_release_id:" in workflow
+    assert "expected_generation:" in workflow
+    assert "gcloud run deploy" not in workflow

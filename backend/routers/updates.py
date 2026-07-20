@@ -15,7 +15,6 @@ from database.desktop_previews import delist_preview, get_current_preview, get_p
 from database.desktop_update_channels import (
     promote_channel,
     register_release_manifest,
-    rollback_macos_beta_channel,
 )
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
@@ -81,19 +80,7 @@ class DesktopChannelPromotionRequest(BaseModel):
     release_id: str
     expected_generation: Optional[int] = Field(default=None, ge=0)
     expected_current_release_id: Optional[str] = None
-    #: Beta-only break-glass: skip the T2 qualification gate. Requires both
-    #: compare-and-swap fields above so the bypass cannot race normal promotion.
-    emergency: bool = False
-
-
-class DesktopBetaRollbackRequest(BaseModel):
-    """Emergency-only rollback request; the literal fields prevent cross-channel reuse."""
-
-    platform: Literal["macos"]
-    channel: Literal["beta"]
-    release_id: str = Field(min_length=1)
-    expected_current_release_id: str = Field(min_length=1)
-    expected_generation: int = Field(ge=0)
+    operation: Literal["promote", "repoint"] = "promote"
 
 
 class DesktopPreviewPublishRequest(BaseModel):
@@ -995,13 +982,7 @@ async def register_desktop_release(request: DesktopReleaseManifestRequest, secre
 
 @router.post("/v2/desktop/channels/promote")
 async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secret_key: str = Header(...)):
-    """Atomically advance one explicit channel pointer to a registered release.
-
-    ``emergency`` is the beta-only break-glass path: it skips the T2
-    qualification gate and requires an explicit compare-and-swap on both the
-    current release id and generation, so a concurrent normal promotion cannot
-    be silently clobbered.
-    """
+    """Atomically advance or repoint one explicit qualified channel pointer."""
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
@@ -1013,7 +994,7 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
             request.release_id,
             expected_generation=request.expected_generation,
             expected_current_release_id=request.expected_current_release_id,
-            emergency=request.emergency,
+            operation=request.operation,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1023,22 +1004,3 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
         live_cache_key(request.platform, request.channel),
     )
     return {"success": True, "pointer": pointer}
-
-
-@router.post("/v2/desktop/channels/rollback")
-async def rollback_macos_beta_channel_endpoint(request: DesktopBetaRollbackRequest, secret_key: str = Header(...)):
-    """Emergency-only, compare-and-swap rollback for the macOS beta pointer."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    try:
-        result = await run_blocking(
-            db_executor,
-            rollback_macos_beta_channel,
-            request.release_id,
-            expected_current_release_id=request.expected_current_release_id,
-            expected_generation=request.expected_generation,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
-    return {"success": True, **result}

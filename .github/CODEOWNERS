@@ -1,7 +1,0 @@
-# Release-ring deployment code is production authority. Branch protection must
-# require this owner plus the release-ring guard check before merging changes.
-/.github/workflows/** @Git-on-my-level
-/.github/scripts/check_release_rings.py @Git-on-my-level
-/backend/scripts/release_rings.py @Git-on-my-level
-/backend/scripts/render_release_ring_config.py @Git-on-my-level
-/backend/charts/backend-secrets/** @Git-on-my-level

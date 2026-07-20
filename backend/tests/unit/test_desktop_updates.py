@@ -872,109 +872,17 @@ class TestDesktopUpdateAdminEndpoints:
             "v1.0.0+200-macos",
             expected_generation=1,
             expected_current_release_id=None,
-            emergency=False,
+            operation="promote",
         )
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
 
     @pytest.mark.asyncio
-    async def test_rolls_back_macos_beta_with_auditable_response(self):
-        result = {
-            "pointer": {
-                "platform": "macos",
-                "channel": "beta",
-                "release_id": "v0.12.73+12073-macos",
-                "generation": 8,
-            },
-            "audit": {
-                "audit_id": "immutable-audit-id",
-                "operation": "macos_beta_rollback",
-                "platform": "macos",
-                "channel": "beta",
-                "previous_release_id": "v0.12.84+12084-macos",
-                "previous_generation": 7,
-                "target_release_id": "v0.12.73+12073-macos",
-                "generation": 8,
-            },
-        }
-        with (
-            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
-            patch("routers.updates.rollback_macos_beta_channel", return_value=result) as rollback,
-            patch("routers.updates.delete_generic_cache") as delete_cache,
-        ):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                resp = await client.post(
-                    "/v2/desktop/channels/rollback",
-                    headers={"secret-key": "real-secret"},
-                    json={
-                        "platform": "macos",
-                        "channel": "beta",
-                        "release_id": "v0.12.73+12073-macos",
-                        "expected_current_release_id": "v0.12.84+12084-macos",
-                        "expected_generation": 7,
-                    },
-                )
-
-        assert resp.status_code == 200
-        assert resp.json()["audit"] == result["audit"]
-        rollback.assert_called_once_with(
-            "v0.12.73+12073-macos",
-            expected_current_release_id="v0.12.84+12084-macos",
-            expected_generation=7,
-        )
-        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
-
-    @pytest.mark.asyncio
-    async def test_rollback_reports_stale_compare_and_swap(self):
-        with (
-            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
-            patch(
-                "routers.updates.rollback_macos_beta_channel",
-                side_effect=ValueError("current release mismatch: expected old, current newer"),
-            ),
-        ):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                resp = await client.post(
-                    "/v2/desktop/channels/rollback",
-                    headers={"secret-key": "real-secret"},
-                    json={
-                        "platform": "macos",
-                        "channel": "beta",
-                        "release_id": "v0.12.73+12073-macos",
-                        "expected_current_release_id": "v0.12.84+12084-macos",
-                        "expected_generation": 7,
-                    },
-                )
-
-        assert resp.status_code == 409
-        assert "current release mismatch" in resp.json()["detail"]
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(("platform", "channel"), [("macos", "stable"), ("windows", "beta")])
-    async def test_rollback_rejects_stable_or_other_platform(self, platform, channel):
-        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-            resp = await client.post(
-                "/v2/desktop/channels/rollback",
-                headers={"secret-key": "any-secret"},
-                json={
-                    "platform": platform,
-                    "channel": channel,
-                    "release_id": "v0.12.73+12073-macos",
-                    "expected_current_release_id": "v0.12.84+12084-macos",
-                    "expected_generation": 7,
-                },
-            )
-
-        assert resp.status_code == 422
-
-    @pytest.mark.asyncio
-    async def test_emergency_flag_routes_through_promote_and_clears_only_beta_cache(self):
-        """Break-glass promotion is the normal endpoint with `emergency: true`."""
+    async def test_repoint_routes_through_the_shared_pointer_authority(self):
         pointer = {
             "platform": "macos",
-            "channel": "beta",
-            "release_id": "v0.12.87+12087-macos",
+            "channel": "stable",
+            "release_id": "v0.12.73+12073-macos",
             "generation": 10,
-            "emergency": True,
         }
         with (
             patch("routers.updates.os.getenv", return_value="real-secret"),
@@ -987,25 +895,25 @@ class TestDesktopUpdateAdminEndpoints:
                     headers={"secret-key": "real-secret"},
                     json={
                         "platform": "macos",
-                        "channel": "beta",
-                        "release_id": "v0.12.87+12087-macos",
+                        "channel": "stable",
+                        "release_id": "v0.12.73+12073-macos",
                         "expected_current_release_id": "v0.12.86+12086-macos",
                         "expected_generation": 9,
-                        "emergency": True,
+                        "operation": "repoint",
                     },
                 )
 
         assert resp.status_code == 200
-        assert resp.json()["pointer"]["emergency"] is True
+        assert resp.json()["pointer"]["release_id"] == pointer["release_id"]
         promote.assert_called_once_with(
             "macos",
-            "beta",
-            "v0.12.87+12087-macos",
+            "stable",
+            "v0.12.73+12073-macos",
             expected_generation=9,
             expected_current_release_id="v0.12.86+12086-macos",
-            emergency=True,
+            operation="repoint",
         )
-        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
+        delete_cache.assert_called_once_with("desktop_update_pointer:macos:stable")
 
 
 # --- Update policy endpoint ---
