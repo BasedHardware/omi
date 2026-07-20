@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Search, Maximize2 } from 'lucide-react'
-import type { KnowledgeGraph } from '../../../shared/types'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -28,13 +27,6 @@ import { auth } from '../lib/firebase'
 // filtering/selection still operate on the full (filtered) set, not just what's
 // rendered.
 const RENDER_CAP = 400
-
-// Stable empty graph fed to the preview until its data has settled, so BrainGraph
-// runs exactly ONE layout pass — of the final merged graph — instead of laying out
-// each intermediate (floor-only, then floor+server-KG) as they load. A module-level
-// constant keeps the reference stable across renders (a fresh {} each render would
-// re-trigger the sim's setGraph every time).
-const EMPTY_GRAPH: KnowledgeGraph = { nodes: [], edges: [] }
 
 const emptyCategorySet = (): Set<MemoryCategory> => new Set<MemoryCategory>()
 
@@ -78,10 +70,12 @@ export function Memories(): React.JSX.Element {
   //    on screen (Chris: "no loader → dot → flashes → blackout → then the fly-in").
   //    Gating on the first CONTENT frame means the first thing ever visible is the
   //    graph doing its entry animation, nothing before it.
-  //  - showFinalGraph gates what we FEED the canvas: an empty graph until the data
-  //    has settled (memory list + onboarding floor + server KG, via
-  //    useMemoryGraph.loading), then the final merged graph — so the sim lays out
-  //    (and flies in) the final node set exactly once, never an intermediate.
+  //  - showFinalGraph gates whether the canvas is MOUNTED AT ALL: no BrainGraph
+  //    until the data has settled (memory list + onboarding floor + server KG, via
+  //    useMemoryGraph.loading). So there is no live WebGL context during the loader
+  //    phase — nothing to throw transiently on a flaky GPU and force a reveal over a
+  //    black canvas — and the sim lays out (and flies in) the final set exactly
+  //    once, never an intermediate.
   //
   // revealForced is the bounded fallback so the loader can't latch forever: if the
   // lazy 3D chunk fails to load, or the GPU can't make a context, there is no
@@ -109,9 +103,9 @@ export function Memories(): React.JSX.Element {
     return () => clearTimeout(t)
   }, [presentable, revealForced, hasGraph, settled])
   const graphReady = presentable || revealForced
-  // Feed the settled graph once we're ready to show it (data settled, or the
-  // fallback forced the reveal); until then EMPTY so the sim lays the final set
-  // out exactly once.
+  // Mount the canvas (and feed the final graph) once we're ready to show it — data
+  // settled, or the fallback forced the reveal. Before that the canvas isn't mounted
+  // at all (see above), so the loader has no live GL context behind it.
   const showFinalGraph = settled || revealForced
 
   // Mount the preview's WebGL canvas for as long as the Memories route is active,
@@ -144,9 +138,9 @@ export function Memories(): React.JSX.Element {
   // not-yet-painted canvas (stale presentable=true → the exact blank flash this
   // fix removes). The cleanup runs on the unmount transition; body sets no state.
   useEffect(() => {
-    if (!(mountPreview && hasGraph)) return
+    if (!(mountPreview && showFinalGraph)) return
     return () => setPresentable(false)
-  }, [mountPreview, hasGraph])
+  }, [mountPreview, showFinalGraph])
 
   // Revalidate when the window regains focus, so memories the backend distilled
   // from new conversations during the session show up on return without an app
@@ -554,13 +548,17 @@ export function Memories(): React.JSX.Element {
               <div
                 className={`h-full w-full transition-opacity duration-500 ${graphReady ? 'opacity-100' : 'opacity-0'}`}
               >
-                {mountPreview && (
+                {mountPreview && showFinalGraph && (
                   <BrainGraph
-                    // Feed the final graph only once we're ready to show it; until
-                    // then an empty graph, so the sim lays out the final node set
-                    // exactly once (and flies it in once) at reveal, rather than
-                    // laying out each intermediate as floor/server-KG load in.
-                    graph={showFinalGraph ? previewGraph : EMPTY_GRAPH}
+                    // Mount the canvas ONLY once the data is ready to show, and feed
+                    // it the final graph directly. Mounting an empty canvas earlier
+                    // (to pre-warm it during the fetch) meant a live WebGL context
+                    // existed all through the loader phase — and under a flaky GPU
+                    // its creation can throw, whose failure path would crossfade the
+                    // loader away over a black, still-recovering canvas. No canvas
+                    // before there's real content to lay out = no such blackout, and
+                    // the sim still lays the final set out (and flies it in) once.
+                    graph={previewGraph}
                     centerNodeId={centerNodeId}
                     interactive={false}
                     labelMode="declutter"

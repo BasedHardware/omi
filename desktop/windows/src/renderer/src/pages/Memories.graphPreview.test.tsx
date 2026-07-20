@@ -146,24 +146,20 @@ describe('Memories brain-map preview', () => {
 // The reveal must wait until the graph's data has SETTLED, so the user sees the
 // loading indicator until the final graph is ready — never an intermediate frame
 // (floor-only, then floor+server-KG) laid out and shown as it loads in. While the
-// data is still loading the preview feeds BrainGraph an EMPTY graph (no node frame
-// rendered before settle) and keeps the "Building your memory map…" indicator up.
+// data is still loading the preview does not mount BrainGraph at all (no live WebGL
+// context behind the loader) and keeps the "Building your memory map…" indicator up.
 describe('Memories brain-map preview — reveal gate', () => {
-  it('holds the loader and renders NO graph nodes while the graph data is still loading', async () => {
+  it('does NOT mount the canvas while the graph data is still loading (loader only)', async () => {
     graphLoading = true
     await renderPage()
     // The loading indicator's text is always in the DOM (only its opacity toggles),
-    // so assert the actual VISIBLE state: the loader layer is opaque and the graph
-    // layer (BrainGraph's wrapper) is faded out.
+    // so assert the actual VISIBLE state: the loader layer is opaque…
     const loader = screen.getByText(/Building your memory map/i).closest('div[aria-hidden]')
     expect(loader?.className).toMatch(/opacity-100/)
-    const el = screen.getByTestId('preview-graph')
-    const graphLayer = el.parentElement
-    expect(graphLayer?.className).toMatch(/opacity-0(?!\d)/)
-    // …and BrainGraph has been fed the empty graph, so no capped/settled frame has
-    // rendered yet (the "no graph frame before the settle signal" guarantee).
-    expect(el.getAttribute('data-node-count')).toBe('0')
-    expect(brainGraphProps.every((p) => (p.graph?.nodes.length ?? 0) === 0)).toBe(true)
+    // …and BrainGraph is not mounted at all pre-settle — no canvas to warm up (and
+    // thus nothing to throw and force a reveal) while the loader is showing.
+    expect(screen.queryByTestId('preview-graph')).toBeNull()
+    expect(brainGraphProps.length).toBe(0)
   })
 
   it('feeds the settled capped graph once the data has loaded', async () => {
