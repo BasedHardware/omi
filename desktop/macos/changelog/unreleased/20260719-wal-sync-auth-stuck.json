@@ -1,3 +1,0 @@
-{
-  "change": "Fixed device recordings occasionally getting stuck and never finishing sync after an authentication hiccup"
-}
