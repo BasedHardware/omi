@@ -60,6 +60,22 @@ mod tests {
         assert!(legacy.client_device_id.is_none());
         assert_eq!(legacy.storage_id(), "43");
     }
+
+    #[test]
+    fn storage_ids_are_device_scoped_for_matching_local_ids() {
+        let row = |client_device_id: &str| ScreenActivityRow {
+            id: 1,
+            timestamp: "2026-07-20T12:00:00Z".to_owned(),
+            app_name: "Safari".to_owned(),
+            window_title: "Omi".to_owned(),
+            ocr_text: "screen context".to_owned(),
+            device_name: None,
+            client_device_id: Some(client_device_id.to_owned()),
+            embedding: None,
+        };
+
+        assert_ne!(row("macos_a").storage_id(), row("macos_b").storage_id());
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
