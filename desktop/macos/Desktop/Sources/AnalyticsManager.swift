@@ -461,35 +461,6 @@ class AnalyticsManager {
       messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
   }
 
-  // MARK: - Home Value Events
-
-  func homeValueViewed(
-    experience: String,
-    availableContextSources: Int,
-    hasPersonalizedSuggestions: Bool,
-    isPostOnboarding: Bool
-  ) {
-    PostHogManager.shared.track(
-      "Home Value Viewed",
-      properties: [
-        "experience": experience,
-        "available_context_sources": availableContextSources,
-        "has_personalized_suggestions": hasPersonalizedSuggestions,
-        "is_post_onboarding": isPostOnboarding,
-      ]
-    )
-  }
-
-  func homeValueActionSelected(action: String, experience: String) {
-    PostHogManager.shared.track(
-      "Home Value Action Selected",
-      properties: [
-        "action": action,
-        "experience": experience,
-      ]
-    )
-  }
-
   // MARK: - Search Events
 
   func searchQueryEntered(query: String) {

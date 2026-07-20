@@ -58,11 +58,9 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat"))
     XCTAssertTrue(source.contains("(text as NSString).size(withAttributes: attributes).width"))
     XCTAssertTrue(source.contains("private func homeHubStage(askBarWidth: CGFloat, stageHeight: CGFloat) -> some View"))
-    XCTAssertTrue(source.contains("HomeValueHero(snapshot: homeValueSnapshot)"))
-    XCTAssertTrue(source.contains("ScrollView {"))
-    XCTAssertTrue(source.contains("static let stageGlow = Color.white"))
-    XCTAssertTrue(source.contains("placeholder: homeValueSnapshot.askPlaceholder"))
-    XCTAssertFalse(source.contains("private var homeHubWordmark: some View"))
+    XCTAssertTrue(source.contains("private var homeHubWordmark: some View"))
+    XCTAssertTrue(source.contains("private struct HomeStatRibbon: View"))
+    XCTAssertTrue(source.contains(".frame(height: 76)"))
     XCTAssertFalse(source.contains(".frame(width: 304)"))
     XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeAskBarMaxWidth)"))
     XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeStagePanelMaxWidth)"))
@@ -76,16 +74,6 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("await Task.yield()"))
     XCTAssertTrue(source.contains("homeAskFieldFocused = true"))
     XCTAssertTrue(source.contains("openHomeChat(focusInput: false)"))
-  }
-
-  func testHomeStageCollapseSuppressesFocusDrivenChatReactivation() throws {
-    let source = try dashboardSource()
-
-    XCTAssertTrue(source.contains("@State private var homeAskFocusSuppressionID: UUID?"))
-    XCTAssertTrue(source.contains("&& homeAskFocusSuppressionID == nil"))
-    XCTAssertTrue(source.contains("private func suppressHomeAskFocusDuringStageTransition()"))
-    XCTAssertTrue(source.contains("try? await Task.sleep(for: .milliseconds(500))"))
-    XCTAssertTrue(source.contains("homeAskFocusSuppressionID = nil"))
   }
 
   func testSecondaryHomePagesReturnHomeOnEscape() throws {
