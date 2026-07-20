@@ -40,10 +40,10 @@
         "origin": "https://omi.me"
       },
       "eas": {
-        "projectId": "644b0f50-a968-4d70-bbf7-904cd4d59ec7"
+        "projectId": "74c774a0-31e3-4486-bef9-0b93935549d5"
       }
     },
-    "owner": "frontforumfocuss-team",
+    "owner": "georgesg",
     "assetBundlePatterns": [
       "assets/images/*"
     ],
