@@ -47,6 +47,7 @@ import {
 } from '../../ptt/systemAudioMute'
 import type { VoiceHubBarState } from '../../../../../shared/types'
 import type { HubController, HubControllerEvents } from '../hub/hubController'
+import { beginRealtimeAudible, endRealtimeAudible } from '../audibleOutputArbiter'
 import { VoiceOutputCoordinator } from './voiceOutputCoordinator'
 import { selectPttRoute, VoiceTurnHost, type VoiceTurnHostDeps } from './voiceTurnHost'
 import { VoiceTurnCoordinator, type VoiceTurnDeadlineScheduling } from './voiceTurnCoordinator'
@@ -198,6 +199,12 @@ export class VoiceHubTurnDriver {
    *  replaces it. Guards the entry points so a stale IPC listener or late
    *  callback can never resurrect a disposed stack's capture or socket. */
   private disposed = false
+  /** The single-audible-owner token (audibleOutputArbiter) held while this hub
+   *  turn's realtime reply is audibly playing, so a concurrent `fromVoice`
+   *  cascade reply is denied and any in-flight cascade is preempted the instant
+   *  the provider speaks. Cleared on speaking-end, every terminal, and dispose so
+   *  it can never leak (a leaked token would deny all future TTS). */
+  private realtimeAudibleToken: symbol | null = null
 
   // Projection state ----------------------------------------------------------
   private lastProjection: VoiceTurnUIProjection = IDLE_PROJECTION
@@ -271,6 +278,21 @@ export class VoiceHubTurnDriver {
     })
     this.coordinator.setEffectHandler(this.host.effectHandler)
     this.coordinator.configure(this.host.presenter)
+    // Release the audible-owner token the moment the COORDINATOR reaches a terminal
+    // turn, by ANY path — critically including reducer DEADLINE terminals
+    // (playbackDrain → playbackFailed, pendingTools → toolTimeout) that fire through
+    // the coordinator's own timer via `coordinator.send`, NOT this driver's
+    // `dispatch()`, so `dispatch()`'s reconciliation never sees them. Without this,
+    // a hub reply that started speaking and then hit a deadline terminal would leave
+    // the token claimed forever → every future cascade reply silently suppressed
+    // (a permanent mute, worse than the overlap it guards). Fires on every reducer
+    // transition; the guard makes it a no-op except on the leak edge, and release is
+    // idempotent with the paired speaking-end / dispatch / begin / dispose releases.
+    this.coordinator.setSnapshotHandler(() => {
+      if (this.realtimeAudibleToken !== null && this.coordinator.activeTurnID === null) {
+        this.releaseRealtimeAudible()
+      }
+    })
   }
 
   /** Eagerly open the warm socket (bar summon / hover). Idempotent; a no-op when
@@ -320,6 +342,9 @@ export class VoiceHubTurnDriver {
       hadTurn: this.turnID !== null,
       route: this.route.kind
     })
+    // This driver is dead — drop any audible-owner token it still holds so a fresh
+    // driver's TTS is never denied by a zombie realtime-audible marker.
+    this.releaseRealtimeAudible()
     const turnID = this.turnID
     this.watchdog?.cancel()
     this.watchdog = null
@@ -381,6 +406,13 @@ export class VoiceHubTurnDriver {
     // a new hold cuts off a still-playing cascade/TTS reply. Safe no-op when idle.
     // Hub playback is instead cancelled by the superseding `beginTurn(interrupting)`.
     this.deps.interruptPlayback(null)
+    // A prior hub reply's audible ownership ends the instant a new hold barges in:
+    // the superseding `start` terminates that turn via the coordinator directly (not
+    // this driver's `dispatch`, so its terminal reconciliation does not run), and its
+    // `cancelHub` effect clears the hub player. Release the token here so the barged
+    // turn can never keep the realtime lane marked audible. The new turn re-claims on
+    // its own speaking-start.
+    this.releaseRealtimeAudible()
 
     const superseding = this.turnID !== null
 
@@ -669,6 +701,10 @@ export class VoiceHubTurnDriver {
           sessionID: this.sessionID,
           responseID: null
         })
+        // The provider is now audibly speaking: become the single audible owner so
+        // a concurrent/late `fromVoice` cascade reply is denied and any in-flight
+        // cascade TTS is preempted (Mac's shared-lease exclusion; audibleOutputArbiter).
+        this.claimRealtimeAudible()
         const decision = this.output.acquire('nativeRealtime', turnID)
         if (decision.kind === 'acquired') {
           this.dispatch({ type: 'playbackStarted', turnID, lease: decision.lease })
@@ -677,6 +713,7 @@ export class VoiceHubTurnDriver {
       onSpeakingEnd: () => {
         const turnID = this.turnID
         if (turnID === null) return
+        this.releaseRealtimeAudible()
         const lease = this.output.snapshot().activeLease
         if (lease !== null) {
           this.dispatch({ type: 'playbackDrained', turnID, leaseID: lease.id })
@@ -810,7 +847,10 @@ export class VoiceHubTurnDriver {
         this.recordTurnIfUnrecorded(false)
       }
       // Clear the driver's per-turn state and tell the bar to drop back to its
-      // local orb (`active:false`).
+      // local orb (`active:false`). Release the audible-owner token here too: a
+      // barge-in / cancel terminal clears the hub player without a speaking-end
+      // edge, so this is the fence that keeps the token from leaking.
+      this.releaseRealtimeAudible()
       this.watchdog?.cancel()
       this.watchdog = null
       this.turnID = null
@@ -843,6 +883,10 @@ export class VoiceHubTurnDriver {
    *  and is deliberately left alone (a long spoken reply must never be cut). */
   private fireReleaseWatchdog(armedTurnID: VoiceTurnID): void {
     if (this.turnID !== armedTurnID) return
+    // Belt-and-suspenders: drop any audible-owner token BEFORE the phase early-returns
+    // below, so a wedged turn can never keep the realtime lane marked audible (which
+    // would deny all future TTS). Idempotent; the normal terminal paths already release.
+    this.releaseRealtimeAudible()
     const turn = this.coordinator.model.turn
     const phase = turn?.phase.kind
     const desynced = turn === null || turn.id !== armedTurnID
@@ -888,6 +932,7 @@ export class VoiceHubTurnDriver {
     } catch {
       /* keep going */
     }
+    this.releaseRealtimeAudible()
     if (this.turnID === armedTurnID) {
       // The dispatch above could not reconcile — force the driver idle by hand.
       this.turnID = null
@@ -937,6 +982,20 @@ export class VoiceHubTurnDriver {
    *  turns (macOS refreshes the seed via a full reconnect when stale). */
   refreshSeedContext(): void {
     this.hub.refreshSeedContext()
+  }
+
+  /** Become the single audible owner for this hub reply. Idempotent within a turn
+   *  (re-claiming after a still-held token first releases it, so repeated
+   *  speaking-start edges never leak). */
+  private claimRealtimeAudible(): void {
+    endRealtimeAudible(this.realtimeAudibleToken)
+    this.realtimeAudibleToken = beginRealtimeAudible()
+  }
+
+  /** Drop this turn's audible-owner token. Idempotent. */
+  private releaseRealtimeAudible(): void {
+    endRealtimeAudible(this.realtimeAudibleToken)
+    this.realtimeAudibleToken = null
   }
 
   private onProjection(projection: VoiceTurnUIProjection): void {
