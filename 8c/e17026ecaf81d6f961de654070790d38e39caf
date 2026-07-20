@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SecondBrainShell.swift
+  s_2204722b151ea4::t_cef1c5d3bd4ad0 78-83
+desktop/macos/Desktop/Sources/SignInView.swift
+  s_2204722b151ea4::t_ac2b62a6f84066 1,7-17,21-29,32-63,66-68,74-75,78-79,81-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "8ce17026ecaf81d6f961de654070790d38e39caf",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
