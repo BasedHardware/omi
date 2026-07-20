@@ -56,10 +56,11 @@ extension APIClient {
   }
 
   func syncAppleReminders(_ updates: [AppleRemindersSyncUpdate]) async throws {
-    guard !updates.isEmpty else { return }
     struct Request: Encodable { let items: [AppleRemindersSyncUpdate] }
     struct Response: Decodable { let status: String }
-    let _: Response = try await patch("v1/action-items/sync-batch", body: Request(items: updates))
+    for chunk in updates.chunked(maxSize: 100) {
+      let _: Response = try await patch("v1/action-items/sync-batch", body: Request(items: chunk))
+    }
   }
 
   /// Fetch action items through an immutable owner-bound request. Callers that

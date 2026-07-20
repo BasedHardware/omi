@@ -238,7 +238,7 @@ enum ConnectorImportOperations {
       let result = try await AppleEventKitReaderService.shared.syncReminders()
       let changed = result.exported + result.updated + result.deleted
       return .success(
-        SyncResult(sourceCount: changed, memoryCount: nil, newItems: result.exported),
+        SyncResult(sourceCount: result.total, memoryCount: nil, newItems: result.exported),
         message: "Synced \(changed.formatted()) Omi tasks with Apple Reminders."
       )
     } catch {
