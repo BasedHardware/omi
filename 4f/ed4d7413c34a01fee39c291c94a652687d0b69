@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBAsk.swift
+  s_2204722b151ea4::t_448e87851920ad 1-182
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBOverflowPages.swift
+  s_2204722b151ea4::t_01aa56dad261c9 1-151
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_2204722b151ea4::t_3f1fcc6680d2da 1168-1175
+  s_2204722b151ea4::t_5dba0219b91523 48-49
+  s_2204722b151ea4::t_0b4b9b9fd01e22 1129,1133-1148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "4fed4d7413c34a01fee39c291c94a652687d0b69",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
