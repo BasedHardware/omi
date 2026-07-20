@@ -1,0 +1,3 @@
+{
+  "change": "Optimized Rewind capture policy with per-app heartbeat profiles, preview similarity skip, lazy JPEG encoding for assistants, and screen lock/sleep pause handling"
+}
