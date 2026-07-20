@@ -15,6 +15,10 @@ from ._client import db
 
 logger = logging.getLogger(__name__)
 
+# A distraction that was recorded but never measured still represents lost focus, so it is
+# charged this much rather than being ignored. Applies only to an unknown duration.
+DEFAULT_DISTRACTED_SECONDS = 60
+
 
 def _user_col(uid: str, collection: str) -> Any:
     """Shorthand for users/{uid}/{collection}."""
@@ -83,10 +87,11 @@ def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
             total_focus_seconds += s.get('duration_seconds') or 0
         elif s.get('status') == 'distracted':
             distracted_count += 1
-            total_distracted_seconds += s.get('duration_seconds') or 60
+            distracted_seconds = s.get('duration_seconds') or DEFAULT_DISTRACTED_SECONDS
+            total_distracted_seconds += distracted_seconds
             app = str(s.get('app_or_site', 'Unknown'))
             entry = distractions.setdefault(app, {'total_seconds': 0, 'count': 0})
-            entry['total_seconds'] += s.get('duration_seconds') or 60
+            entry['total_seconds'] += distracted_seconds
             entry['count'] += 1
 
     top = sorted(distractions.items(), key=lambda x: x[1]['total_seconds'], reverse=True)[:5]
