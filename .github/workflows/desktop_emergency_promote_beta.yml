@@ -257,12 +257,52 @@ jobs:
           cmp /tmp/desktop-emergency-beta/stable-appcast-before.xml /tmp/desktop-emergency-beta/stable-appcast-after.xml
 
       - name: Record explicit emergency release metadata after beta pointer CAS
+        # This must reconcile metadata even when the CAS response parser or a
+        # later Stable-proof step fails after the backend transaction commits.
+        # Firestore is authoritative: a failed or superseded CAS never makes a
+        # GitHub release live.
+        if: always()
         env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_GENERATION: ${{ inputs.expected_generation }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          FIRESTORE_TOKEN=$(gcloud auth print-access-token)
+          FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_update_channels/macos-beta"
+          curl -fsS -H "Authorization: Bearer $FIRESTORE_TOKEN" "$FIRESTORE_URL" \
+            > /tmp/desktop-emergency-beta/beta-pointer-after.json
+          RELEASE_TAG="$RELEASE_TAG" EXPECTED_GENERATION="$EXPECTED_GENERATION" python3 - <<'PY'
+          import json
+          import os
+
+          document = json.load(open('/tmp/desktop-emergency-beta/beta-pointer-after.json'))
+          fields = document.get('fields')
+          if not isinstance(fields, dict):
+              raise SystemExit('authoritative macOS beta pointer is missing fields')
+
+          def string_field(name):
+              field = fields.get(name)
+              return field.get('stringValue') if isinstance(field, dict) else None
+
+          def integer_field(name):
+              field = fields.get(name)
+              try:
+                  return int(field.get('integerValue')) if isinstance(field, dict) else None
+              except (TypeError, ValueError):
+                  return None
+
+          expected_generation = int(os.environ['EXPECTED_GENERATION']) + 1
+          if (
+              string_field('platform') != 'macos'
+              or string_field('channel') != 'beta'
+              or string_field('release_id') != os.environ['RELEASE_TAG']
+              or integer_field('generation') != expected_generation
+          ):
+              raise SystemExit('authoritative macOS beta pointer does not match the committed emergency CAS')
+          PY
           gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/desktop-emergency-beta/release-body.md
           python3 .github/scripts/mark-desktop-release-emergency-beta.py \
             --input /tmp/desktop-emergency-beta/release-body.md \

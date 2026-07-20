@@ -324,13 +324,19 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
 
 
 def test_emergency_beta_marks_github_live_only_after_authoritative_pointer_cas():
+    """Static wiring contract: reconcile after failures only with the live beta pointer."""
     workflow = EMERGENCY_BETA_WORKFLOW.read_text()
     pointer = workflow.index("      - name: Register manifest and compare-and-swap only macOS beta")
     stable_proof = workflow.index("      - name: Prove Stable pointer, release metadata, and appcast are unchanged")
     github_metadata = workflow.index("      - name: Record explicit emergency release metadata after beta pointer CAS")
+    notify = workflow.index("      - name: Notify incident responders immediately")
+    metadata_step = workflow[github_metadata:notify]
 
     assert pointer < stable_proof < github_metadata
     assert "authoritative macOS beta pointer compare-and-swap did not succeed" in workflow
+    assert "if: always()" in metadata_step
+    assert "desktop_update_channels/macos-beta" in metadata_step
+    assert "authoritative macOS beta pointer does not match the committed emergency CAS" in metadata_step
     assert "gh api --paginate --slurp" in workflow
     assert "for comment in page" in workflow
 
