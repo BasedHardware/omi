@@ -1,0 +1,33 @@
+desktop/macos/Desktop/Package.swift
+  s_2204722b151ea4::t_f50febf0e76635 100-101
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_2204722b151ea4::t_1ef3f0cea93ed8 264-266
+desktop/macos/Desktop/Sources/Theme/OmiFont.swift
+  s_2204722b151ea4::t_edaff50bd1a0a4 3,6-38,42-43,45-98
+  s_2204722b151ea4::t_c57c2fc3da3f51 39-41,44
+  s_2204722b151ea4::t_7a06639c2a29e9 99
+desktop/macos/Desktop/Sources/Theme/SecondBrainTokens.swift
+  s_2204722b151ea4::t_b88758c057a407 2-182
+  s_2204722b151ea4::t_503ddb942c25c4 1
+  s_2204722b151ea4::t_5c9ae8c17db0ba 183
+desktop/macos/Desktop/Sources/Startup/OmiFontRegistration.swift
+  s_2204722b151ea4::t_087da2ee1cf23c 1-40
+desktop/macos/Desktop/Sources/Resources/Fonts/OFL.txt
+  s_2204722b151ea4::t_2fad58a239e6cd 1-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "dc08afa264ca2b798d8453ecba9aec60a5fe1c61",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
