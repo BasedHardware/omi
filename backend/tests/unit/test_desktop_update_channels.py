@@ -6,12 +6,14 @@ import pytest
 from database.desktop_update_channels import (
     _build_channel_pointer,
     _build_beta_rollback_pointer,
+    _emergency_promotion_audit_id,
     _rollback_macos_beta_transaction,
     _emergency_promote_macos_beta_transaction,
     emergency_promote_macos_beta_channel,
     get_channel_release,
     normalize_release_manifest,
     register_release_manifest,
+    verify_emergency_macos_beta_reconciliation,
 )
 
 
@@ -490,3 +492,88 @@ class TestMacosBetaEmergencyPromotionRules:
                 expected_current_release_id=current["release_id"],
                 expected_generation=7,
             )
+
+
+class TestMacosBetaEmergencyReconciliation:
+    def test_verifies_the_immutable_emergency_decision_and_append_only_audit(self):
+        release_id = "v0.12.85+12085-macos"
+        source_sha = "a" * 40
+        audit_id = _emergency_promotion_audit_id(release_id, source_sha)
+        evidence = {
+            "signed_smoke_url": "https://example.test/smoke.json",
+            "signed_smoke_sha256": "d" * 64,
+            "behavioral_url": "https://example.test/behavior.json",
+            "behavioral_sha256": "e" * 64,
+            "source_gate_url": "https://example.test/check",
+            "zip_sha256": "b" * 64,
+            "dmg_sha256": "c" * 64,
+        }
+        manifest_snapshot = MagicMock(exists=True)
+        manifest_snapshot.to_dict.return_value = _emergency_manifest(
+            release_id=release_id,
+            version="0.12.85+12085",
+            build_number=12085,
+            reason="qualification runner is unavailable during an incident",
+            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
+            evidence=evidence,
+        )
+        audit_snapshot = MagicMock(exists=True)
+        audit_snapshot.to_dict.return_value = {
+            "audit_id": audit_id,
+            "operation": "macos_beta_emergency_forward_promotion",
+            "platform": "macos",
+            "channel": "beta",
+            "emergencyPromotion": True,
+            "target_release_id": release_id,
+            "source_sha": source_sha,
+            "previous_generation": 7,
+            "generation": 8,
+        }
+        manifest_ref, audit_ref = MagicMock(), MagicMock()
+        manifest_ref.get.return_value = manifest_snapshot
+        audit_ref.get.return_value = audit_snapshot
+        manifests, audits = MagicMock(), MagicMock()
+        manifests.document.return_value = manifest_ref
+        audits.document.return_value = audit_ref
+        client = MagicMock()
+        client.collection.side_effect = [manifests, audits]
+
+        result = verify_emergency_macos_beta_reconciliation(
+            release_id,
+            source_sha=source_sha,
+            firestore_client=client,
+        )
+
+        assert result == {
+            "emergency_reconciled": True,
+            "release_id": release_id,
+            "source_sha": source_sha,
+            "audit_id": audit_id,
+            "generation": 8,
+        }
+        manifests.document.assert_called_once_with(release_id)
+        audits.document.assert_called_once_with(audit_id)
+
+    def test_rejects_a_normal_manifest_even_when_its_release_identity_matches(self):
+        release_id = "v0.12.85+12085-macos"
+        manifest_snapshot = MagicMock(exists=True)
+        manifest_snapshot.to_dict.return_value = _manifest(
+            release_id=release_id,
+            version="0.12.85+12085",
+            build_number=12085,
+        )
+        manifest_ref = MagicMock()
+        manifest_ref.get.return_value = manifest_snapshot
+        manifests = MagicMock()
+        manifests.document.return_value = manifest_ref
+        client = MagicMock()
+        client.collection.return_value = manifests
+
+        with pytest.raises(ValueError, match="immutable manifest"):
+            verify_emergency_macos_beta_reconciliation(
+                release_id,
+                source_sha="a" * 40,
+                firestore_client=client,
+            )
+
+        assert client.collection.call_count == 1

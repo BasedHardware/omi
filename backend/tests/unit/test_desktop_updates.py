@@ -1022,6 +1022,33 @@ class TestDesktopUpdateAdminEndpoints:
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
 
     @pytest.mark.asyncio
+    async def test_emergency_reconciliation_requires_the_authoritative_audit_and_manifest_verifier(self):
+        result = {
+            "emergency_reconciled": True,
+            "release_id": "v0.12.85+12085-macos",
+            "source_sha": "a" * 40,
+            "audit_id": "b" * 64,
+            "generation": 8,
+        }
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.verify_emergency_macos_beta_reconciliation", return_value=result) as verify,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get(
+                    "/v2/desktop/channels/emergency-promote-beta/reconciliation",
+                    headers={"secret-key": "real-secret"},
+                    params={"release_id": "v0.12.85+12085-macos", "source_sha": "a" * 40},
+                )
+
+        assert resp.status_code == 200
+        assert resp.json() == {"success": True, **result}
+        verify.assert_called_once_with(
+            "v0.12.85+12085-macos",
+            source_sha="a" * 40,
+        )
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(("platform", "channel"), [("macos", "stable"), ("windows", "beta")])
     async def test_emergency_promotion_rejects_stable_or_other_platform(self, platform, channel):
         async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:

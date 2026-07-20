@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import re
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -439,6 +440,12 @@ def _build_emergency_macos_beta_pointer(
     }
 
 
+def _emergency_promotion_audit_id(release_id: str, source_sha: str) -> str:
+    """Derive the single append-only audit ID for an emergency release decision."""
+    binding = f"macos-beta-emergency-forward-promotion:{release_id}:{source_sha}".encode("utf-8")
+    return hashlib.sha256(binding).hexdigest()
+
+
 def _require_bound_emergency_manifest_decision(
     manifest: dict[str, Any],
     *,
@@ -615,7 +622,11 @@ def emergency_promote_macos_beta_channel(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     pointer_ref = client.collection(CHANNELS_COLLECTION).document("macos-beta")
     manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
-    audit_id = uuid4().hex
+    # The reconciler must be able to prove this exact transaction committed
+    # even if the workflow loses or cannot parse its POST response. The ID is
+    # bound to the immutable release identity, and Firestore's transaction
+    # atomically creates this audit with the beta-pointer write.
+    audit_id = _emergency_promotion_audit_id(release_id, source_sha)
     audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
     return _emergency_promote_macos_beta_transaction(
         client.transaction(),
@@ -635,6 +646,80 @@ def emergency_promote_macos_beta_channel(
         audit_id=audit_id,
         occurred_at=occurred_at,
     )
+
+
+def verify_emergency_macos_beta_reconciliation(
+    release_id: str,
+    *,
+    source_sha: str,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Prove the exact emergency transaction and immutable decision committed.
+
+    This intentionally does not infer an emergency promotion from the mutable
+    beta pointer. A normal promotion can update that pointer concurrently; only
+    the deterministic, append-only emergency audit plus the immutable manifest
+    decision proves that this break-glass transaction committed.
+    """
+    release_id = release_id.strip()
+    source_sha = source_sha.strip().lower()
+    if not release_id:
+        raise ValueError("release_id is required")
+    if not SHA40_RE.fullmatch(source_sha):
+        raise ValueError("source_sha has an invalid digest")
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
+    manifest_snapshot = manifest_ref.get()
+    if not getattr(manifest_snapshot, "exists", False):
+        raise ValueError("emergency reconciliation target release manifest does not exist")
+    raw_manifest: object = manifest_snapshot.to_dict()
+    manifest_data = cast(dict[str, Any], raw_manifest) if isinstance(raw_manifest, dict) else {}
+    manifest = normalize_release_manifest(manifest_data)
+    qualification = cast(dict[str, Any], manifest["qualification"])
+    decision = qualification.get("emergency_evidence")
+    if (
+        manifest["release_id"] != release_id
+        or manifest["source_sha"] != source_sha
+        or qualification.get("passed") is not False
+        or qualification.get("tier") != "emergency"
+        or not isinstance(decision, dict)
+        or decision.get("emergencyPromotion") is not True
+        or decision.get("release_tag") != release_id
+        or str(decision.get("source_sha", "")).lower() != source_sha
+    ):
+        raise ValueError("immutable manifest does not contain the bound emergency decision")
+
+    audit_id = _emergency_promotion_audit_id(release_id, source_sha)
+    audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
+    audit_snapshot = audit_ref.get()
+    if not getattr(audit_snapshot, "exists", False):
+        raise ValueError("emergency promotion audit does not exist")
+    raw_audit: object = audit_snapshot.to_dict()
+    audit = cast(dict[str, Any], raw_audit) if isinstance(raw_audit, dict) else {}
+    if (
+        audit.get("audit_id") != audit_id
+        or audit.get("operation") != "macos_beta_emergency_forward_promotion"
+        or audit.get("platform") != "macos"
+        or audit.get("channel") != "beta"
+        or audit.get("emergencyPromotion") is not True
+        or audit.get("target_release_id") != release_id
+        or str(audit.get("source_sha", "")).lower() != source_sha
+    ):
+        raise ValueError("emergency promotion audit does not match the immutable release decision")
+
+    previous_generation = _generation(audit.get("previous_generation"))
+    generation = _generation(audit.get("generation"))
+    if generation != previous_generation + 1:
+        raise ValueError("emergency promotion audit has an invalid generation transition")
+
+    return {
+        "emergency_reconciled": True,
+        "release_id": release_id,
+        "source_sha": source_sha,
+        "audit_id": audit_id,
+        "generation": generation,
+    }
 
 
 def get_channel_release(platform: str, channel: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
