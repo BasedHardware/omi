@@ -41,6 +41,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Validate trusted frontend service identity contract
+        env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
+          PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
+        run: |
+          test -n "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA"
+          test -n "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE"
+
       - name: Deploy checked public-build candidate
         id: public-build-deploy
         uses: ./.github/actions/deploy-public-build
@@ -49,6 +57,8 @@ jobs:
           environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          service_account: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
+          runtime_env_vars: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE=${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
 
       - name: Verify Cloud Run rollout
         run: |
