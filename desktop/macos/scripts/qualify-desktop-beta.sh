@@ -234,25 +234,6 @@ PY
   return 1
 }
 
-prepare_qualification_defaults() {
-  local bundle_id="$1" bundle_name="$2"
-  case "$bundle_name" in
-    omi-qualification-*) ;;
-    *) echo "refusing to reset non-qualification profile: $bundle_name" >&2; return 1 ;;
-  esac
-  # Qualification is a fresh, synthetic profile. Never inherit stale onboarding,
-  # capture, or shortcut state from this bundle's previous run or from Omi Dev.
-  rm -rf "$HOME/Library/Application Support/$bundle_name" "$HOME/Library/Caches/$bundle_name"
-  defaults delete "$bundle_id" >/dev/null 2>&1 || true
-  defaults write "$bundle_id" hasCompletedOnboarding -bool true
-  defaults write "$bundle_id" devLazyPermissionsEnabled -bool true
-  defaults write "$bundle_id" screenAnalysisEnabled -bool false
-  defaults write "$bundle_id" transcriptionEnabled -bool false
-  defaults write "$bundle_id" systemAudioCaptureMode -string never
-  defaults write "$bundle_id" screenAnalysisAutoStartFixed_v2 -bool true
-  defaults write "$bundle_id" shortcut_floatingBarTypedQuestionVoiceAnswersEnabled -bool false
-}
-
 cleanup() {
   local exit_code=$?
   if [[ -n "$BUNDLE" ]]; then
@@ -271,9 +252,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-QUALIFICATION_BUNDLE_ID="$(derive_bundle_id "$BUNDLE")"
 terminate_qualification_desktop "$BUNDLE"
-prepare_qualification_defaults "$QUALIFICATION_BUNDLE_ID" "$BUNDLE"
+"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"
 
 (
   cd "$WORKTREE"
