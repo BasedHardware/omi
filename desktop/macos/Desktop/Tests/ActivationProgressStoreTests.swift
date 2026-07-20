@@ -4,19 +4,14 @@ import XCTest
 
 @MainActor
 final class ActivationProgressStoreTests: XCTestCase {
-  private var suiteName: String!
-  private var defaults: UserDefaults!
-
-  override func setUp() async throws {
-    try await super.setUp()
-    suiteName = "ActivationProgressStoreTests.\(UUID().uuidString)"
-    defaults = UserDefaults(suiteName: suiteName)!
-  }
-
-  override func tearDown() async throws {
-    defaults.removePersistentDomain(forName: suiteName)
-    try await super.tearDown()
-  }
+  private lazy var defaults: UserDefaults = {
+    let suiteName = "ActivationProgressStoreTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+    addTeardownBlock {
+      UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    }
+    return defaults
+  }()
 
   private func makeStore(
     ownerID: @escaping () -> String? = { "user-a" },

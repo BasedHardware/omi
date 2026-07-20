@@ -2,14 +2,14 @@
   "files": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2375,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2928,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4846,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4848,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2423,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1621
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Agent completion presentation now follows the canonical terminal lifecycle used by PTT and chat.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "Onboarding bar glow, the reach-error card (Retry/Skip), and the notch hover/voice surface-state boundary render on the shared bar surface.",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Reach-error state lives with the owning manager; savePreChatCenterIfNeeded snaps to the full stored restore frame so the pill no longer drifts per re-open cycle.",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": "Two one-line product-side activation marks adjacent to the existing query-submit telemetry sites (marks must not live inside AnalyticsManager).",
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior."
   },
