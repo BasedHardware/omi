@@ -585,7 +585,7 @@ final class OnboardingFlowTests: XCTestCase {
       installMonitor: monitor.install,
       removeMonitor: monitor.remove
     )
-    weak let weakOwner = owner
+    let weakOwner = OnboardingWeakReference(owner)
     let navigation = OnboardingKeyboardNavigationCoordinator.Navigation(
       isActive: { true },
       focusedControlOwnsArrows: { false },
@@ -603,7 +603,7 @@ final class OnboardingFlowTests: XCTestCase {
 
     owner = nil
 
-    XCTAssertNil(weakOwner)
+    XCTAssertNil(weakOwner.value)
     XCTAssertEqual(monitor.removeCount, 2, "deinit must remove a mounted token safely")
   }
 
@@ -713,5 +713,13 @@ private final class OnboardingDefaultActionRecordingWindow: NSWindow {
 
   override func postEvent(_ event: NSEvent, atStart flag: Bool) {
     postedEvents.append(event)
+  }
+}
+
+private final class OnboardingWeakReference<Value: AnyObject> {
+  weak var value: Value?
+
+  init(_ value: Value?) {
+    self.value = value
   }
 }
