@@ -129,7 +129,6 @@ jobs:
     permissions:
       actions: 'read'
       contents: 'read'
-      issues: 'write'
     runs-on: ubuntu-latest-m
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
@@ -212,30 +211,6 @@ jobs:
           fi
           printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Record that the eligibility proof was bypassed
-        if: ${{ steps.admitted_source.outputs.break_glass == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          DEPLOY_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
-          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
-          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
-        run: |
-          set -euo pipefail
-          gh issue create --repo "$REPO" \
-            --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
-            --label release-gate-failure \
-            --body "$(printf '%s\n' \
-              "Backend deploy ran without a Release Eligibility proof." \
-              "" \
-              "- SHA: \`${DEPLOY_SHA}\` (verified ancestor of main)" \
-              "- Environment: ${DEPLOY_ENVIRONMENT}" \
-              "- Operator: @${GITHUB_ACTOR}" \
-              "- Reason: ${BREAK_GLASS_REASON}" \
-              "- Run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}" \
-              "" \
-              "The gate being unusable is the defect. Fix the gate, then close this.")"
-
       - name: Checkout admitted Firestore source
         uses: actions/checkout@v7
         with:
@@ -285,6 +260,40 @@ jobs:
           path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
           if-no-files-found: error
           retention-days: 1
+
+  # Kept out of firestore_readiness on purpose: that job is a least-privilege
+  # release-proof boundary limited to actions:read/contents:read, so the audit
+  # side effect gets its own job rather than widening it.
+  record_break_glass:
+    needs: firestore_readiness
+    if: ${{ needs.firestore_readiness.outputs.break_glass == 'true' }}
+    permissions:
+      contents: 'read'
+      issues: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record that the eligibility proof was bypassed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEPLOY_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
+        run: |
+          set -euo pipefail
+          gh issue create --repo "$REPO" \
+            --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
+            --label release-gate-failure \
+            --body "$(printf '%s\n' \
+              "Backend deploy ran without a Release Eligibility proof." \
+              "" \
+              "- SHA: \`${DEPLOY_SHA}\` (verified ancestor of main)" \
+              "- Environment: ${DEPLOY_ENVIRONMENT}" \
+              "- Operator: @${GITHUB_ACTOR}" \
+              "- Reason: ${BREAK_GLASS_REASON}" \
+              "- Run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}" \
+              "" \
+              "The gate being unusable is the defect. Fix the gate, then close this.")"
 
   deploy:
     needs: firestore_readiness
