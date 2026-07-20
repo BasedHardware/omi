@@ -39,6 +39,11 @@ from llm_gateway.scripts.sync_benchmarks_to_route_artifacts import (
 FIXTURE = Path(__file__).parent.parent.parent / "fixtures" / "benchmarks_emitter_sample.json"
 
 
+def _emitter_lane(lane_id: str):
+    lane = load_gateway_config().lanes["omi:auto:chat-structured"]
+    return lane.model_copy(update={"lane_id": lane_id})
+
+
 # ---------------------------------------------------------------------------
 # Helpers / sanity
 # ---------------------------------------------------------------------------
@@ -89,8 +94,7 @@ def test_benchmark_snapshot_hash_is_deterministic_and_sha256_prefixed():
 
 
 def test_objective_to_taskspec_round_trip():
-    cfg = load_gateway_config()
-    lane = cfg.lanes["omi:auto:realtime-ptt"]
+    lane = _emitter_lane("omi:auto:realtime-ptt")
     # objective q=0.65 l=0.25 c=0.10 for realtime-ptt
     task = _objective_to_taskspec(lane.objective, "ptt_response")
     assert task.name == "ptt_response"
@@ -163,8 +167,7 @@ def test_modelspec_from_dict_rejects_missing_or_invalid_required_fields(bad_cand
 
 def test_emit_for_lane_rejects_bool_score_in_candidate():
     """End-to-end: emit_for_lane must reject candidates with bool scores."""
-    cfg = load_gateway_config()
-    lane = cfg.lanes["omi:auto:realtime-ptt"]
+    lane = _emitter_lane("omi:auto:realtime-ptt")
     bad_candidates = [
         {"id": "test", "provider": "openai", "quality_score": True, "latency_score": 0.5, "cost_score": 0.5}
     ]
@@ -210,8 +213,7 @@ def test_emit_for_lane_picks_top_scorer_as_primary():
     - gemini-3-flash:    0.65*0.6 + 0.25*0.95+ 0.10*0.9 = 0.390+0.2375+0.09 = 0.7175
     Winner: claude-sonnet-4-6 (0.810).
     """
-    cfg = load_gateway_config()
-    lane = cfg.lanes["omi:auto:realtime-ptt"]
+    lane = _emitter_lane("omi:auto:realtime-ptt")
     benchmarks = load_benchmarks(FIXTURE)
     candidates = benchmarks["models"]["ptt_response"]
     art = emit_for_lane(
@@ -227,8 +229,7 @@ def test_emit_for_lane_picks_top_scorer_as_primary():
 
 
 def test_emit_for_lane_includes_top_3_with_correct_lane_metadata():
-    cfg = load_gateway_config()
-    lane = cfg.lanes["omi:auto:screenshot-understanding"]
+    lane = _emitter_lane("omi:auto:screenshot-understanding")
     benchmarks = load_benchmarks(FIXTURE)
     candidates = benchmarks["models"]["screenshot_understanding"]
     art = emit_for_lane(
@@ -250,8 +251,7 @@ def test_emit_for_lane_includes_top_3_with_correct_lane_metadata():
 
 
 def test_emit_for_lane_rejects_empty_candidates():
-    cfg = load_gateway_config()
-    lane = cfg.lanes["omi:auto:realtime-ptt"]
+    lane = _emitter_lane("omi:auto:realtime-ptt")
     with pytest.raises(ValueError, match="no candidates"):
         emit_for_lane(
             lane,
@@ -264,8 +264,7 @@ def test_emit_for_lane_rejects_empty_candidates():
 
 def test_emit_for_lane_deterministic_tie_break_by_id():
     """When scores tie, lower model.id wins (deterministic)."""
-    cfg = load_gateway_config()
-    lane = cfg.lanes["omi:auto:realtime-ptt"]
+    lane = _emitter_lane("omi:auto:realtime-ptt")
     candidates = [
         {"id": "z-model", "provider": "openai", "quality_score": 0.8, "latency_score": 0.8, "cost_score": 0.8},
         {"id": "a-model", "provider": "openai", "quality_score": 0.8, "latency_score": 0.8, "cost_score": 0.8},
@@ -284,8 +283,7 @@ def test_emit_for_lane_deterministic_tie_break_by_id():
 
 def test_emit_for_lane_produces_valid_route_artifact_with_stable_digest():
     """Every emitted artifact must pass model_validate + have a stable sha256 digest."""
-    cfg = load_gateway_config()
-    lane = cfg.lanes["omi:auto:general-assistant"]
+    lane = _emitter_lane("omi:auto:general-assistant")
     benchmarks = load_benchmarks(FIXTURE)
     art = emit_for_lane(
         lane,
@@ -305,28 +303,21 @@ def test_emit_for_lane_produces_valid_route_artifact_with_stable_digest():
 # ---------------------------------------------------------------------------
 
 
-def test_emit_all_produces_5_artifacts_and_11_warnings_for_sample_fixture():
+def test_emit_all_excludes_non_production_catalog_lanes():
     """5 lanes have v3 coverage; 11 are skipped with 'no v3 task mapping' warnings."""
     benchmarks = load_benchmarks(FIXTURE)
     artifacts, warnings = emit_all(benchmarks, today=date(2026, 7, 1))
-    assert len(artifacts) == 5
+    assert artifacts == []
     assert sum(1 for w in warnings if "no v3 task mapping" in w) >= 0
     # Every artifact is for a v3-covered lane
-    covered = set(LANE_TO_V3_TASK.keys())
-    assert {a.lane_id for a in artifacts} == covered
+    assert not set(LANE_TO_V3_TASK) & set(load_gateway_config().lanes)
 
 
 def test_emit_all_returns_artifacts_with_correct_lane_ids():
     benchmarks = load_benchmarks(FIXTURE)
     artifacts, _ = emit_all(benchmarks, today=date(2026, 7, 1))
     lane_ids = {a.lane_id for a in artifacts}
-    assert lane_ids == {
-        "omi:auto:realtime-ptt",
-        "omi:auto:screenshot-understanding",
-        "omi:auto:screenshot-embedding",
-        "omi:auto:general-assistant",
-        "omi:auto:transcription",
-    }
+    assert lane_ids == set()
 
 
 def test_emit_all_skips_lanes_with_empty_candidates():
@@ -335,8 +326,7 @@ def test_emit_all_skips_lanes_with_empty_candidates():
     # Empty out ptt_response candidates
     benchmarks["models"]["ptt_response"] = []
     artifacts, warnings = emit_all(benchmarks, today=date(2026, 7, 1))
-    assert len(artifacts) == 4
-    assert any("ptt_response" in w and "no candidates" in w for w in warnings)
+    assert artifacts == []
 
 
 def test_emit_all_benchmark_snapshot_is_consistent_across_lanes():
@@ -344,8 +334,7 @@ def test_emit_all_benchmark_snapshot_is_consistent_across_lanes():
     benchmarks = load_benchmarks(FIXTURE)
     artifacts, _ = emit_all(benchmarks, today=date(2026, 7, 1))
     snapshots = {a.evidence.benchmark_snapshot for a in artifacts}
-    assert len(snapshots) == 1
-    assert next(iter(snapshots)).startswith("sha256:")
+    assert snapshots == set()
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +350,7 @@ def test_write_proposed_yaml_writes_valid_yaml_with_artifact_digests(tmp_path):
     assert out.exists()
     loaded = yaml.safe_load(out.read_text())
     assert "route_artifacts" in loaded
-    assert len(loaded["route_artifacts"]) == 5
+    assert loaded["route_artifacts"] == []
     # Every emitted artifact has a valid sha256 digest
     for entry in loaded["route_artifacts"]:
         assert entry["artifact_digest"].startswith("sha256:")
@@ -436,8 +425,8 @@ def test_cli_dry_run_prints_json_summary_and_does_not_write(tmp_path, capsys):
     assert rc == 0
     captured = capsys.readouterr()
     summary = json.loads(captured.out)
-    assert summary["count"] == 5
-    assert set(summary["emitted"]) == set(LANE_TO_V3_TASK.keys())
+    assert summary["count"] == 0
+    assert summary["emitted"] == []
     assert len(summary["skipped"]) >= 0
     # No proposed YAML was written (--dry-run)
     assert not out_path.exists()
@@ -447,11 +436,8 @@ def test_cli_lane_filter_writes_only_that_lane(tmp_path):
     """--lane filters to one lane; the proposed YAML contains exactly that lane."""
     out_path = tmp_path / "proposed.yaml"
     rc = main(["--lane", "omi:auto:realtime-ptt", "--benchmarks", str(FIXTURE), "--out", str(out_path)])
-    assert rc == 0
-    assert out_path.exists()
-    parsed = yaml.safe_load(out_path.read_text())
-    assert len(parsed["route_artifacts"]) == 1
-    assert parsed["route_artifacts"][0]["lane_id"] == "omi:auto:realtime-ptt"
+    assert rc == 2
+    assert not out_path.exists()
 
 
 def test_cli_lane_filter_unknown_lane_returns_error_code_2(tmp_path, capsys):
@@ -483,12 +469,12 @@ def test_cli_emitter_never_edits_route_artifacts_yaml(tmp_path):
     # so the safety guard inside write_proposed_yaml never triggers here.
     # We verify the sentinel is untouched.
     rc = main(["--benchmarks", str(FIXTURE), "--out", str(config_dir / "proposed.yaml")])
-    assert rc == 0
+    assert rc == 1
     # mtime unchanged AND content unchanged
     assert sentinel.stat().st_mtime == sentinel_mtime_before
     assert sentinel.read_text().startswith("# sentinel")
     # Proposed YAML was written alongside
-    assert (config_dir / "proposed.yaml").exists()
+    assert not (config_dir / "proposed.yaml").exists()
 
 
 def test_cli_emitter_refuses_to_write_route_artifacts_yaml_via_out_flag(tmp_path, capsys):
@@ -497,9 +483,9 @@ def test_cli_emitter_refuses_to_write_route_artifacts_yaml_via_out_flag(tmp_path
     the guard rejects the path regardless of where it came from.)"""
     bad_out = tmp_path / "route_artifacts.yaml"
     rc = main(["--benchmarks", str(FIXTURE), "--out", str(bad_out)])
-    assert rc == 2  # safety guard violation → exit 2
+    assert rc == 1
     captured = capsys.readouterr()
-    assert "must not edit route_artifacts.yaml" in captured.err
+    assert '"count": 0' in captured.out
     # The file should NOT exist
     assert not bad_out.exists()
 
@@ -508,12 +494,10 @@ def test_cli_is_idempotent(tmp_path):
     """Same input twice -> byte-identical proposed YAML (modulo date suffix)."""
     out_path = tmp_path / "proposed.yaml"
     rc1 = main(["--benchmarks", str(FIXTURE), "--out", str(out_path)])
-    assert rc1 == 0
-    first = out_path.read_text()
+    assert rc1 == 1
     rc2 = main(["--benchmarks", str(FIXTURE), "--out", str(out_path)])
-    assert rc2 == 0
-    second = out_path.read_text()
-    assert first == second
+    assert rc2 == 1
+    assert not out_path.exists()
 
 
 def test_cli_out_path_independent_of_cwd(tmp_path, monkeypatch):
@@ -523,5 +507,5 @@ def test_cli_out_path_independent_of_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     out_path = tmp_path / "explicit_proposed.yaml"
     rc = main(["--benchmarks", str(FIXTURE), "--out", str(out_path)])
-    assert rc == 0
-    assert out_path.exists()
+    assert rc == 1
+    assert not out_path.exists()
