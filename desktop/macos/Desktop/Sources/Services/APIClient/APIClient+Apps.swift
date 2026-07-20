@@ -422,7 +422,10 @@ extension APIClient {
       if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
         return json["is_setup_completed"] as? Bool ?? false
       }
-    } catch {}
+      log("APIClient: app setup status response was not JSON for \(fullUrl.absoluteString)")
+    } catch {
+      logError("APIClient: failed to check app setup status", error: error)
+    }
     return false
   }
 

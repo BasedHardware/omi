@@ -492,7 +492,13 @@ async fn auth_token(
     if form.use_custom_token {
         match generate_custom_token(&state, &credentials).await {
             Ok(token) => response.custom_token = Some(token),
-            Err(e) => tracing::warn!("Failed to generate custom token: {}", e),
+            Err(e) => {
+                tracing::error!("Failed to generate custom token: {}", e);
+                return Err(ErrorResponse {
+                    error: "custom_token_unavailable".to_string(),
+                    message: e.to_string(),
+                });
+            }
         }
     }
 
@@ -774,14 +780,14 @@ async fn generate_custom_token(
 
     tracing::info!("Firebase sign-in successful, UID: {}", firebase_uid);
 
-    // For custom token generation, we need Firebase Admin SDK
-    // In Rust, we'd need to use the service account to create a custom token
-    // For now, return an error indicating this needs server-side implementation
-    // The Python version uses firebase_admin.auth.create_custom_token()
-
-    // TODO: Implement custom token generation using service account
-    // This requires signing a JWT with the service account private key
-    Err("Custom token generation requires Firebase Admin SDK - not yet implemented in Rust".into())
+    // Custom-token minting needs Firebase Admin JWT signing with the service
+    // account private key (Python: firebase_admin.auth.create_custom_token).
+    // Do not fail open with a partial token response — callers that set
+    // use_custom_token=true require the custom token or a hard error.
+    Err(format!(
+        "custom token minting is not implemented for uid {firebase_uid}; use id_token exchange instead"
+    )
+    .into())
 }
 
 /// Escape a value for safe interpolation into a double-quoted JavaScript string

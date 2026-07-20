@@ -522,12 +522,6 @@ def add_evidence(uid: str, memory_id: str, evidence: Dict[str, Any], *, firestor
     memory_ref.update(update_payload)
 
 
-def recompute_evidence(uid: str, memory_id: str, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
-    """Placeholder hook for later veracity/tombstone recomputation tickets."""
-    memory = get_memory(uid, memory_id, firestore_client=firestore_client)
-    return (memory or {}).get('evidence', [])
-
-
 def edit_memory(uid: str, memory_id: str, value: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)

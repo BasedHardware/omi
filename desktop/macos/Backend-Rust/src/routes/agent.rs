@@ -340,31 +340,47 @@ async fn get_agent_status(
                                 "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
                                 project, zone, vm_name
                             );
-                            if let Ok(resp) = firestore
-                                .build_compute_request(reqwest::Method::GET, &instance_url)
-                                .await
-                            {
-                                if let Ok(resp) = resp.send().await {
-                                    if let Ok(instance) = resp.json::<serde_json::Value>().await {
-                                        let ip = instance["networkInterfaces"][0]["accessConfigs"]
-                                            [0]["natIP"]
-                                            .as_str()
-                                            .unwrap_or("unknown")
-                                            .to_string();
-                                        let now = chrono::Utc::now().to_rfc3339();
-                                        let _ = firestore
-                                            .set_agent_vm(
-                                                &uid,
-                                                &vm_name,
-                                                &zone,
-                                                Some(&ip),
-                                                AgentVmStatus::Ready,
-                                                &auth_token,
-                                                &now,
-                                            )
-                                            .await;
-                                        tracing::info!("VM {} recovered — ip={}", vm_name, ip);
-                                    }
+                            let recovery = async {
+                                let response = firestore
+                                    .build_compute_request(reqwest::Method::GET, &instance_url)
+                                    .await
+                                    .map_err(|error| error.to_string())?;
+                                let instance = response
+                                    .send()
+                                    .await
+                                    .map_err(|error| error.to_string())?
+                                    .error_for_status()
+                                    .map_err(|error| error.to_string())?
+                                    .json::<serde_json::Value>()
+                                    .await
+                                    .map_err(|error| error.to_string())?;
+                                let ip = instance["networkInterfaces"][0]["accessConfigs"][0]
+                                    ["natIP"]
+                                    .as_str()
+                                    .filter(|ip| !ip.is_empty())
+                                    .ok_or_else(|| {
+                                        "recovered VM response has no external IP".to_owned()
+                                    })?;
+                                let now = chrono::Utc::now().to_rfc3339();
+                                firestore
+                                    .set_agent_vm(
+                                        &uid,
+                                        &vm_name,
+                                        &zone,
+                                        Some(ip),
+                                        AgentVmStatus::Ready,
+                                        &auth_token,
+                                        &now,
+                                    )
+                                    .await
+                                    .map_err(|error| error.to_string())?;
+                                Ok::<_, String>(())
+                            }
+                            .await;
+                            match recovery {
+                                Ok(()) => tracing::info!("VM {} recovered", vm_name),
+                                Err(error) => {
+                                    tracing::error!("Failed to recover VM {}: {}", vm_name, error)
                                 }
                             }
                         });
