@@ -16,6 +16,7 @@ regex.workspace = true
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt-multi-thread", "sync"] }
+uuid = { version = "1", features = ["v4"] }
 
 [lints.clippy]
 unwrap_used = "deny"
