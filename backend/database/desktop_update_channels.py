@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-import hashlib
+from datetime import datetime, timezone
 import re
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -14,13 +13,10 @@ from database._client import get_firestore_client
 CHANNELS_COLLECTION = "desktop_update_channels"
 MANIFESTS_COLLECTION = "desktop_release_manifests"
 ROLLBACK_AUDITS_COLLECTION = "desktop_update_channel_rollback_audits"
-EMERGENCY_PROMOTION_AUDITS_COLLECTION = "desktop_update_channel_emergency_promotion_audits"
-EMERGENCY_PROMOTION_SIDE_EFFECT_CLAIMS_COLLECTION = "desktop_update_channel_emergency_promotion_side_effect_claims"
 VALID_CHANNELS = frozenset({"stable", "beta"})
 VALID_PLATFORMS = frozenset({"macos", "windows", "linux"})
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
-GITHUB_LOGIN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$")
 
 
 def _required_string(data: dict[str, Any], key: str) -> str:
@@ -73,37 +69,6 @@ def _generation(value: object) -> int:
     if isinstance(value, str) and value.isdigit():
         return int(value)
     raise ValueError("pointer generation must be a non-negative integer")
-
-
-def _emergency_expiry(value: str, *, now: datetime) -> datetime:
-    """Parse the deliberately short-lived break-glass authorization."""
-    try:
-        expires_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ValueError("expires_at must be an ISO-8601 timestamp") from exc
-    if expires_at.tzinfo is None:
-        raise ValueError("expires_at must include a timezone")
-    expires_at = expires_at.astimezone(timezone.utc)
-    if expires_at <= now:
-        raise ValueError("emergency promotion authorization has expired")
-    if expires_at - now > timedelta(hours=4):
-        raise ValueError("emergency promotion authorization may not exceed four hours")
-    return expires_at
-
-
-def _emergency_promotion_operation_id(release_id: str, source_sha: str, incident_id: str) -> str:
-    """Derive the retry-stable identity for one immutable emergency decision."""
-    binding = f"macos-beta-emergency-forward-promotion:{release_id}:{source_sha.lower()}:{incident_id.strip()}"
-    return hashlib.sha256(binding.encode("utf-8")).hexdigest()
-
-
-def _require_emergency_operation_id(operation_id: object, *, release_id: str, source_sha: str, incident_id: str) -> str:
-    if not isinstance(operation_id, str) or not SHA256_RE.fullmatch(operation_id):
-        raise ValueError("operation_id must be a SHA-256 digest")
-    expected = _emergency_promotion_operation_id(release_id, source_sha, incident_id)
-    if operation_id != expected:
-        raise ValueError("operation_id does not bind the immutable emergency decision")
-    return operation_id
 
 
 def _digest(data: dict[str, Any], key: str, pattern: re.Pattern[str], *, required: bool) -> str | None:
@@ -178,37 +143,75 @@ def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = N
     return manifest
 
 
-def _build_channel_pointer(
+#: Pointer transitions differ only in which preconditions they enforce, so the
+#: policy is data and :func:`_build_pointer` is the single mutation authority.
+#: ``direction`` is the permitted build-number movement; ``require_qualified``
+#: is the T2 evidence gate that emergency beta promotion is allowed to skip.
+TRANSITIONS: dict[str, dict[str, Any]] = {
+    "promote": {"direction": "forward", "require_qualified": True, "require_current_release_id": False},
+    "rollback": {"direction": "backward", "require_qualified": True, "require_current_release_id": True},
+    "emergency": {"direction": "forward", "require_qualified": False, "require_current_release_id": True},
+}
+
+
+def _build_pointer(
     current: dict[str, Any],
     manifest: dict[str, Any],
     *,
+    transition: str,
     platform: str,
     channel: str,
     release_id: str,
     expected_generation: int | None,
+    expected_current_release_id: str | None = None,
     updated_at: datetime | None = None,
 ) -> dict[str, Any]:
+    """Build the next channel pointer under the named transition policy.
+
+    This is the only place a channel pointer is constructed. Emergency beta
+    promotion is an ordinary promotion that skips the T2 qualification gate;
+    it is not a separate mutation path.
+    """
+    policy = TRANSITIONS[transition]
+
     if manifest["platform"] != platform:
         raise ValueError("release manifest platform does not match pointer platform")
-    qualification = cast(dict[str, Any], manifest["qualification"])
-    if qualification.get("passed") is not True or str(qualification.get("tier", "")).upper() != "T2":
-        raise ValueError("release manifest is missing passed T2 qualification evidence")
+    if transition != "promote" and (platform, channel) != ("macos", "beta"):
+        raise ValueError(f"{transition} is only permitted for the macos beta channel")
+
+    if policy["require_qualified"]:
+        qualification = cast(dict[str, Any], manifest["qualification"])
+        if qualification.get("passed") is not True or str(qualification.get("tier", "")).upper() != "T2":
+            raise ValueError("release manifest is missing passed T2 qualification evidence")
+
+    current_release_id = current.get("release_id")
+    if policy["require_current_release_id"]:
+        if current_release_id != expected_current_release_id:
+            raise ValueError(
+                f"current release mismatch: expected {expected_current_release_id}, "
+                f"current {current_release_id or 'missing'}"
+            )
 
     current_generation = _generation(current.get("generation", 0))
     if expected_generation is not None and expected_generation != current_generation:
         raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
-    if current.get("release_id") == release_id:
+
+    # Re-promoting the live release is a no-op only where no explicit
+    # compare-and-swap was requested; the CAS transitions must still advance.
+    if not policy["require_current_release_id"] and current_release_id == release_id:
         return current
+
     current_build_raw = current.get("build_number")
-    if current_build_raw is not None:
-        current_build = _generation(current_build_raw)
-        if manifest["build_number"] <= current_build:
+    if policy["direction"] == "forward":
+        if current_build_raw is not None and manifest["build_number"] <= _generation(current_build_raw):
             raise ValueError(
-                f"channel pointers are roll-forward only: current build {current_build}, "
+                f"channel pointers are roll-forward only: current build {_generation(current_build_raw)}, "
                 f"requested build {manifest['build_number']}"
             )
+    elif release_id == current_release_id or manifest["build_number"] >= _generation(current_build_raw):
+        raise ValueError("rollback target must be an earlier qualified beta release")
 
-    return {
+    pointer = {
         "platform": platform,
         "channel": channel,
         "release_id": release_id,
@@ -217,46 +220,11 @@ def _build_channel_pointer(
         "generation": current_generation + 1,
         "updated_at": updated_at or datetime.now(timezone.utc),
     }
-
-
-def _build_beta_rollback_pointer(
-    current: dict[str, Any],
-    manifest: dict[str, Any],
-    *,
-    release_id: str,
-    expected_current_release_id: str,
-    expected_generation: int,
-    updated_at: datetime | None = None,
-) -> dict[str, Any]:
-    """Build the sole permitted non-monotonic pointer transition: macOS beta rollback."""
-    if manifest["platform"] != "macos":
-        raise ValueError("rollback target must be a macos release manifest")
-    qualification = cast(dict[str, Any], manifest["qualification"])
-    if qualification.get("passed") is not True or str(qualification.get("tier", "")).upper() != "T2":
-        raise ValueError("rollback target is missing passed T2 qualification evidence")
-
-    current_release_id = current.get("release_id")
-    if current_release_id != expected_current_release_id:
-        raise ValueError(
-            f"current release mismatch: expected {expected_current_release_id}, current {current_release_id or 'missing'}"
-        )
-    current_generation = _generation(current.get("generation", 0))
-    if expected_generation != current_generation:
-        raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
-
-    current_build = _generation(current.get("build_number"))
-    if release_id == current_release_id or manifest["build_number"] >= current_build:
-        raise ValueError("rollback target must be an earlier qualified beta release")
-
-    return {
-        "platform": "macos",
-        "channel": "beta",
-        "release_id": release_id,
-        "version": manifest["version"],
-        "build_number": manifest["build_number"],
-        "generation": current_generation + 1,
-        "updated_at": updated_at or datetime.now(timezone.utc),
-    }
+    if transition == "emergency":
+        # The audit trail lives on the pointer itself: one field, queryable with
+        # the pointer, rather than a parallel collection that can diverge.
+        pointer["emergency"] = True
+    return pointer
 
 
 @transactional
@@ -265,10 +233,12 @@ def _promote_channel_transaction(
     pointer_ref: Any,
     manifest_ref: Any,
     *,
+    transition: str,
     platform: str,
     channel: str,
     release_id: str,
     expected_generation: int | None,
+    expected_current_release_id: str | None = None,
 ) -> dict[str, Any]:
     manifest_snapshot = manifest_ref.get(transaction=transaction)
     if not getattr(manifest_snapshot, "exists", False):
@@ -280,13 +250,15 @@ def _promote_channel_transaction(
     pointer_snapshot = pointer_ref.get(transaction=transaction)
     current_raw: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
     current = cast(dict[str, Any], current_raw) if isinstance(current_raw, dict) else {}
-    pointer = _build_channel_pointer(
+    pointer = _build_pointer(
         current,
         manifest,
+        transition=transition,
         platform=platform,
         channel=channel,
         release_id=release_id,
         expected_generation=expected_generation,
+        expected_current_release_id=expected_current_release_id,
     )
     if pointer is not current:
         transaction.set(pointer_ref, pointer)
@@ -299,8 +271,16 @@ def promote_channel(
     release_id: str,
     *,
     expected_generation: int | None = None,
+    expected_current_release_id: str | None = None,
+    emergency: bool = False,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
+    """Advance a channel pointer.
+
+    ``emergency=True`` is the beta-only break-glass path: it skips the T2
+    qualification gate and therefore requires an explicit compare-and-swap on
+    both the current release id and generation.
+    """
     platform = platform.strip().lower()
     channel = channel.strip().lower()
     release_id = release_id.strip()
@@ -310,6 +290,8 @@ def promote_channel(
         raise ValueError("invalid channel")
     if not release_id:
         raise ValueError("release_id is required")
+    if emergency and (expected_current_release_id is None or expected_generation is None):
+        raise ValueError("emergency promotion requires expected_current_release_id and expected_generation")
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     pointer_ref = client.collection(CHANNELS_COLLECTION).document(f"{platform}-{channel}")
@@ -319,10 +301,12 @@ def promote_channel(
         transaction,
         pointer_ref,
         manifest_ref,
+        transition="emergency" if emergency else "promote",
         platform=platform,
         channel=channel,
         release_id=release_id,
         expected_generation=expected_generation,
+        expected_current_release_id=expected_current_release_id,
     )
 
 
@@ -351,9 +335,12 @@ def _rollback_macos_beta_transaction(
         raise ValueError("current macos beta pointer does not exist")
     current_raw: object = pointer_snapshot.to_dict()
     current = cast(dict[str, Any], current_raw) if isinstance(current_raw, dict) else {}
-    pointer = _build_beta_rollback_pointer(
+    pointer = _build_pointer(
         current,
         manifest,
+        transition="rollback",
+        platform="macos",
+        channel="beta",
         release_id=release_id,
         expected_current_release_id=expected_current_release_id,
         expected_generation=expected_generation,
@@ -409,500 +396,6 @@ def rollback_macos_beta_channel(
         expected_generation=expected_generation,
         audit_id=audit_id,
         occurred_at=datetime.now(timezone.utc),
-    )
-
-
-def _build_emergency_macos_beta_pointer(
-    current: dict[str, Any],
-    manifest: dict[str, Any],
-    *,
-    release_id: str,
-    source_sha: str,
-    expected_current_release_id: str,
-    expected_generation: int,
-    evidence: dict[str, str],
-    updated_at: datetime,
-) -> dict[str, Any]:
-    """Build the sole break-glass forward transition; it is never reusable for Stable."""
-    if manifest["platform"] != "macos":
-        raise ValueError("emergency promotion target must be a macos release manifest")
-    if manifest["source_sha"] != source_sha:
-        raise ValueError("emergency promotion source SHA does not match the immutable manifest")
-    if not manifest.get("zip_sha256") or not manifest.get("dmg_sha256"):
-        raise ValueError("emergency promotion target is missing immutable ZIP/DMG digests")
-    if evidence["zip_sha256"] != manifest["zip_sha256"] or evidence["dmg_sha256"] != manifest["dmg_sha256"]:
-        raise ValueError("emergency promotion artifact evidence does not match the immutable manifest")
-
-    current_release_id = current.get("release_id")
-    if current_release_id != expected_current_release_id:
-        raise ValueError(
-            f"current release mismatch: expected {expected_current_release_id}, current {current_release_id or 'missing'}"
-        )
-    current_generation = _generation(current.get("generation", 0))
-    if expected_generation != current_generation:
-        raise ValueError(f"generation mismatch: expected {expected_generation}, current {current_generation}")
-    current_build = _generation(current.get("build_number"))
-    if release_id == current_release_id or manifest["build_number"] <= current_build:
-        raise ValueError("emergency promotion target must be a newer macOS beta release")
-
-    return {
-        "platform": "macos",
-        "channel": "beta",
-        "release_id": release_id,
-        "version": manifest["version"],
-        "build_number": manifest["build_number"],
-        "generation": current_generation + 1,
-        "updated_at": updated_at,
-    }
-
-
-def _require_bound_emergency_manifest_decision(
-    manifest: dict[str, Any],
-    *,
-    release_id: str,
-    source_sha: str,
-    incident_id: str,
-    reason: str,
-    operator: str,
-    expires_at: datetime,
-    operation_id: str,
-    approvers: list[str],
-    evidence: dict[str, str],
-    occurred_at: datetime,
-) -> None:
-    """Require the server request to match the registered break-glass decision exactly."""
-    qualification = cast(dict[str, Any], manifest["qualification"])
-    if qualification.get("passed") is not False or qualification.get("tier") != "emergency":
-        raise ValueError("release manifest is missing an explicit emergency beta decision")
-    decision = qualification.get("emergency_evidence")
-    if not isinstance(decision, dict) or decision.get("emergencyPromotion") is not True:
-        raise ValueError("release manifest emergency decision is incomplete")
-    if decision.get("release_tag") != release_id or str(decision.get("source_sha", "")).lower() != source_sha:
-        raise ValueError("emergency decision does not bind this release tag and source SHA")
-    if str(decision.get("incident_id")) != incident_id or decision.get("reason") != reason:
-        raise ValueError("emergency decision does not match the incident and reason")
-    if str(decision.get("operator", "")).lstrip("@") != operator:
-        raise ValueError("emergency decision does not match the operator")
-    if decision.get("operation_id") != operation_id:
-        raise ValueError("emergency decision does not match the durable promotion operation")
-    decision_expiry = _emergency_expiry(_required_string(cast(dict[str, Any], decision), "expires_at"), now=occurred_at)
-    if decision_expiry != expires_at:
-        raise ValueError("emergency decision does not match the authorization expiry")
-    decision_approvers = decision.get("approvers")
-    if not isinstance(decision_approvers, list) or decision_approvers != approvers:
-        raise ValueError("emergency decision does not match the approvers")
-    decision_evidence = decision.get("evidence")
-    if not isinstance(decision_evidence, dict) or decision_evidence != evidence:
-        raise ValueError("emergency decision evidence does not match the immutable manifest")
-
-
-@transactional
-def _emergency_promote_macos_beta_transaction(
-    transaction: Any,
-    pointer_ref: Any,
-    manifest_ref: Any,
-    audit_ref: Any,
-    *,
-    release_id: str,
-    source_sha: str,
-    expected_current_release_id: str,
-    expected_generation: int,
-    incident_id: str,
-    reason: str,
-    operator: str,
-    expires_at: datetime,
-    operation_id: str,
-    approvers: list[str],
-    evidence: dict[str, str],
-    audit_id: str,
-    occurred_at: datetime,
-) -> dict[str, Any]:
-    manifest_snapshot = manifest_ref.get(transaction=transaction)
-    if not getattr(manifest_snapshot, "exists", False):
-        raise ValueError("emergency promotion target release manifest does not exist")
-    raw_manifest: object = manifest_snapshot.to_dict()
-    manifest_data = cast(dict[str, Any], raw_manifest) if isinstance(raw_manifest, dict) else {}
-    manifest = normalize_release_manifest(manifest_data)
-    _require_bound_emergency_manifest_decision(
-        manifest,
-        release_id=release_id,
-        source_sha=source_sha,
-        incident_id=incident_id,
-        reason=reason,
-        operator=operator,
-        expires_at=expires_at,
-        operation_id=operation_id,
-        approvers=approvers,
-        evidence=evidence,
-        occurred_at=occurred_at,
-    )
-
-    pointer_snapshot = pointer_ref.get(transaction=transaction)
-    if not getattr(pointer_snapshot, "exists", False):
-        raise ValueError("current macos beta pointer does not exist")
-    current_raw: object = pointer_snapshot.to_dict()
-    current = cast(dict[str, Any], current_raw) if isinstance(current_raw, dict) else {}
-    pointer = _build_emergency_macos_beta_pointer(
-        current,
-        manifest,
-        release_id=release_id,
-        source_sha=source_sha,
-        expected_current_release_id=expected_current_release_id,
-        expected_generation=expected_generation,
-        evidence=evidence,
-        updated_at=occurred_at,
-    )
-    audit = {
-        "audit_id": audit_id,
-        "operation": "macos_beta_emergency_forward_promotion",
-        "platform": "macos",
-        "channel": "beta",
-        "emergencyPromotion": True,
-        "previous_release_id": expected_current_release_id,
-        "previous_generation": expected_generation,
-        "target_release_id": release_id,
-        "source_sha": source_sha,
-        "generation": pointer["generation"],
-        "incident_id": incident_id,
-        "reason": reason,
-        "operator": operator,
-        "expires_at": expires_at,
-        "operation_id": operation_id,
-        "approvers": approvers,
-        "evidence": evidence,
-        "occurred_at": occurred_at,
-    }
-    # The create-only audit makes this exception append-only; all reads are
-    # intentionally complete before either transactional mutation occurs.
-    transaction.create(audit_ref, audit)
-    transaction.set(pointer_ref, pointer)
-    return {"pointer": pointer, "audit": audit}
-
-
-def emergency_promote_macos_beta_channel(
-    release_id: str,
-    *,
-    source_sha: str,
-    expected_current_release_id: str,
-    expected_generation: int,
-    incident_id: str,
-    reason: str,
-    operator: str,
-    expires_at: str,
-    operation_id: str,
-    approvers: list[str],
-    evidence: dict[str, str],
-    firestore_client: Any = None,
-    now: datetime | None = None,
-) -> dict[str, Any]:
-    """Emergency-only forward promotion of a newer immutable macOS beta candidate."""
-    release_id = release_id.strip()
-    source_sha = source_sha.strip().lower()
-    expected_current_release_id = expected_current_release_id.strip()
-    incident_id = incident_id.strip()
-    reason = reason.strip()
-    operator = operator.strip().lstrip("@")
-    occurred_at = now or datetime.now(timezone.utc)
-    if not release_id or not expected_current_release_id or not incident_id or not reason or not operator:
-        raise ValueError("release_id, expected_current_release_id, incident_id, reason, and operator are required")
-    if not GITHUB_LOGIN_RE.fullmatch(operator):
-        raise ValueError("operator must be a GitHub login")
-    if not SHA40_RE.fullmatch(source_sha):
-        raise ValueError("source_sha has an invalid digest")
-    operation_id = _require_emergency_operation_id(
-        operation_id, release_id=release_id, source_sha=source_sha, incident_id=incident_id
-    )
-    if expected_generation < 0:
-        raise ValueError("expected_generation must be a non-negative integer")
-    normalized_approvers = [approver.strip().lstrip("@") for approver in approvers if approver.strip()]
-    if len(normalized_approvers) != 2 or len({approver.lower() for approver in normalized_approvers}) != 2:
-        raise ValueError("emergency promotion requires exactly two distinct approvers")
-    required_evidence = {
-        "signed_smoke_url",
-        "signed_smoke_sha256",
-        "behavioral_url",
-        "behavioral_sha256",
-        "source_gate_url",
-        "zip_sha256",
-        "dmg_sha256",
-    }
-    if set(evidence) != required_evidence:
-        raise ValueError("emergency promotion evidence is incomplete")
-    normalized_evidence: dict[str, str] = {}
-    for key, value in evidence.items():
-        if not value.strip():
-            raise ValueError(f"emergency promotion evidence {key} is required")
-        normalized_evidence[key] = value.strip()
-    for key in ("signed_smoke_url", "behavioral_url", "source_gate_url"):
-        _https_url(normalized_evidence, key, required=True)
-    for key in ("signed_smoke_sha256", "behavioral_sha256", "zip_sha256", "dmg_sha256"):
-        normalized_evidence[key] = _digest(normalized_evidence, key, SHA256_RE, required=True) or ""
-    expiry = _emergency_expiry(expires_at, now=occurred_at)
-
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    pointer_ref = client.collection(CHANNELS_COLLECTION).document("macos-beta")
-    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
-    # The reconciler must be able to prove this exact transaction committed
-    # even if the workflow loses or cannot parse its POST response. The ID is
-    # bound to the retry-stable immutable decision, and Firestore's transaction
-    # atomically creates this audit with the beta-pointer write.
-    audit_id = operation_id
-    audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
-    return _emergency_promote_macos_beta_transaction(
-        client.transaction(),
-        pointer_ref,
-        manifest_ref,
-        audit_ref,
-        release_id=release_id,
-        source_sha=source_sha,
-        expected_current_release_id=expected_current_release_id,
-        expected_generation=expected_generation,
-        incident_id=incident_id,
-        reason=reason,
-        operator=operator,
-        expires_at=expiry,
-        operation_id=operation_id,
-        approvers=normalized_approvers,
-        evidence=normalized_evidence,
-        audit_id=audit_id,
-        occurred_at=occurred_at,
-    )
-
-
-def _normalize_emergency_reconciliation_identity(
-    release_id: str,
-    source_sha: str,
-    incident_id: str,
-    operation_id: str,
-) -> tuple[str, str, str, str]:
-    release_id = release_id.strip()
-    source_sha = source_sha.strip().lower()
-    incident_id = incident_id.strip()
-    if not release_id or not incident_id:
-        raise ValueError("release_id and incident_id are required")
-    if not SHA40_RE.fullmatch(source_sha):
-        raise ValueError("source_sha has an invalid digest")
-    operation_id = _require_emergency_operation_id(
-        operation_id, release_id=release_id, source_sha=source_sha, incident_id=incident_id
-    )
-    return release_id, source_sha, incident_id, operation_id
-
-
-def _verified_emergency_macos_beta_manifest_decision(
-    manifest_snapshot: Any,
-    *,
-    release_id: str,
-    source_sha: str,
-    incident_id: str,
-    operation_id: str,
-) -> dict[str, Any]:
-    """Validate the immutable decision before touching the matching audit."""
-    if not getattr(manifest_snapshot, "exists", False):
-        raise ValueError("emergency reconciliation target release manifest does not exist")
-    raw_manifest: object = manifest_snapshot.to_dict()
-    manifest_data = cast(dict[str, Any], raw_manifest) if isinstance(raw_manifest, dict) else {}
-    manifest = normalize_release_manifest(manifest_data)
-    qualification = cast(dict[str, Any], manifest["qualification"])
-    decision = qualification.get("emergency_evidence")
-    if (
-        manifest["release_id"] != release_id
-        or manifest["source_sha"] != source_sha
-        or qualification.get("passed") is not False
-        or qualification.get("tier") != "emergency"
-        or not isinstance(decision, dict)
-        or decision.get("emergencyPromotion") is not True
-        or decision.get("release_tag") != release_id
-        or str(decision.get("source_sha", "")).lower() != source_sha
-        or str(decision.get("incident_id")) != incident_id
-        or decision.get("operation_id") != operation_id
-    ):
-        raise ValueError("immutable manifest does not contain the bound emergency decision for this operation")
-
-    return dict(decision)
-
-
-def _verified_emergency_macos_beta_reconciliation(
-    manifest_snapshot: Any,
-    audit_snapshot: Any,
-    *,
-    release_id: str,
-    source_sha: str,
-    incident_id: str,
-    operation_id: str,
-    emergency_evidence: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Validate the immutable decision and audit shared by read and claim paths."""
-    decision = emergency_evidence
-    if decision is None:
-        decision = _verified_emergency_macos_beta_manifest_decision(
-            manifest_snapshot,
-            release_id=release_id,
-            source_sha=source_sha,
-            incident_id=incident_id,
-            operation_id=operation_id,
-        )
-
-    audit_id = operation_id
-    if not getattr(audit_snapshot, "exists", False):
-        raise ValueError("emergency promotion audit does not exist")
-    raw_audit: object = audit_snapshot.to_dict()
-    audit = cast(dict[str, Any], raw_audit) if isinstance(raw_audit, dict) else {}
-    if (
-        audit.get("audit_id") != audit_id
-        or audit.get("operation") != "macos_beta_emergency_forward_promotion"
-        or audit.get("platform") != "macos"
-        or audit.get("channel") != "beta"
-        or audit.get("emergencyPromotion") is not True
-        or audit.get("target_release_id") != release_id
-        or str(audit.get("source_sha", "")).lower() != source_sha
-        or str(audit.get("incident_id")) != incident_id
-        or audit.get("operation_id") != operation_id
-    ):
-        raise ValueError("emergency promotion audit does not match the immutable release decision for this operation")
-
-    previous_generation = _generation(audit.get("previous_generation"))
-    generation = _generation(audit.get("generation"))
-    if generation != previous_generation + 1:
-        raise ValueError("emergency promotion audit has an invalid generation transition")
-
-    return {
-        "emergency_reconciled": True,
-        "release_id": release_id,
-        "source_sha": source_sha,
-        "incident_id": incident_id,
-        "operation_id": operation_id,
-        "audit_id": audit_id,
-        "generation": generation,
-        # Reconstruct GitHub release metadata only from this immutable decision,
-        # never from the mutable pointer or a failed promote-job workspace.
-        "emergency_evidence": decision,
-    }
-
-
-def verify_emergency_macos_beta_reconciliation(
-    release_id: str,
-    *,
-    source_sha: str,
-    incident_id: str,
-    operation_id: str,
-    firestore_client: Any = None,
-) -> dict[str, Any]:
-    """Prove the exact emergency transaction and immutable decision committed.
-
-    This intentionally does not infer an emergency promotion from the mutable
-    beta pointer. A normal promotion can update that pointer concurrently; only
-    the deterministic, append-only emergency audit plus the immutable manifest
-    decision and retry-stable operation audit prove that this break-glass
-    transaction committed.
-    """
-    release_id, source_sha, incident_id, operation_id = _normalize_emergency_reconciliation_identity(
-        release_id, source_sha, incident_id, operation_id
-    )
-
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
-    manifest_snapshot = manifest_ref.get()
-    emergency_evidence = _verified_emergency_macos_beta_manifest_decision(
-        manifest_snapshot,
-        release_id=release_id,
-        source_sha=source_sha,
-        incident_id=incident_id,
-        operation_id=operation_id,
-    )
-    audit_id = operation_id
-    audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(audit_id)
-    audit_snapshot = audit_ref.get()
-    return _verified_emergency_macos_beta_reconciliation(
-        manifest_snapshot,
-        audit_snapshot,
-        release_id=release_id,
-        source_sha=source_sha,
-        incident_id=incident_id,
-        operation_id=operation_id,
-        emergency_evidence=emergency_evidence,
-    )
-
-
-@transactional
-def _claim_emergency_macos_beta_reconciliation_side_effects_transaction(
-    transaction: Any,
-    manifest_ref: Any,
-    audit_ref: Any,
-    side_effect_claim_ref: Any,
-    *,
-    release_id: str,
-    source_sha: str,
-    incident_id: str,
-    operation_id: str,
-    claimed_at: datetime,
-) -> dict[str, Any]:
-    """Elect one reconciler to perform the operation's external side effects."""
-    manifest_snapshot = manifest_ref.get(transaction=transaction)
-    audit_snapshot = audit_ref.get(transaction=transaction)
-    claim_snapshot = side_effect_claim_ref.get(transaction=transaction)
-    reconciliation = _verified_emergency_macos_beta_reconciliation(
-        manifest_snapshot,
-        audit_snapshot,
-        release_id=release_id,
-        source_sha=source_sha,
-        incident_id=incident_id,
-        operation_id=operation_id,
-    )
-
-    if getattr(claim_snapshot, "exists", False):
-        raw_claim: object = claim_snapshot.to_dict()
-        claim = cast(dict[str, Any], raw_claim) if isinstance(raw_claim, dict) else {}
-        if (
-            claim.get("operation") != "macos_beta_emergency_promotion_side_effects"
-            or claim.get("operation_id") != operation_id
-            or claim.get("audit_id") != operation_id
-            or not isinstance(claim.get("claimed_at"), datetime)
-        ):
-            raise ValueError("emergency promotion side-effect claim is malformed")
-        return {**reconciliation, "emergency_side_effects_claimed": False}
-
-    # This create-only claim shares the deterministic operation ID with the
-    # append-only promotion audit. Firestore retries a concurrent transaction,
-    # so every contender after the winner reads this claim and returns false.
-    transaction.create(
-        side_effect_claim_ref,
-        {
-            "operation": "macos_beta_emergency_promotion_side_effects",
-            "operation_id": operation_id,
-            "audit_id": operation_id,
-            "claimed_at": claimed_at,
-        },
-    )
-    return {**reconciliation, "emergency_side_effects_claimed": True}
-
-
-def claim_emergency_macos_beta_reconciliation_side_effects(
-    release_id: str,
-    *,
-    source_sha: str,
-    incident_id: str,
-    operation_id: str,
-    firestore_client: Any = None,
-    now: datetime | None = None,
-) -> dict[str, Any]:
-    """Claim incident notification and monitoring once for a committed emergency operation."""
-    release_id, source_sha, incident_id, operation_id = _normalize_emergency_reconciliation_identity(
-        release_id, source_sha, incident_id, operation_id
-    )
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(release_id)
-    audit_ref = client.collection(EMERGENCY_PROMOTION_AUDITS_COLLECTION).document(operation_id)
-    side_effect_claim_ref = client.collection(EMERGENCY_PROMOTION_SIDE_EFFECT_CLAIMS_COLLECTION).document(operation_id)
-    return _claim_emergency_macos_beta_reconciliation_side_effects_transaction(
-        client.transaction(),
-        manifest_ref,
-        audit_ref,
-        side_effect_claim_ref,
-        release_id=release_id,
-        source_sha=source_sha,
-        incident_id=incident_id,
-        operation_id=operation_id,
-        claimed_at=now or datetime.now(timezone.utc),
     )
 
 

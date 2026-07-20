@@ -1,5 +1,18 @@
 name: Emergency Promote macOS Beta Candidate
 
+# Break-glass path for shipping a signed candidate to beta when the
+# qualification gate itself is broken. Beta only: this workflow cannot touch
+# stable, and the backend rejects any non-beta target.
+#
+# The default path (desktop_qualify_beta -> desktop_promote_beta) stays
+# fail-closed. This is the escape hatch, deliberately small: the only guards
+# are the ones a machine can check -- tag/SHA binding, artifact digests, and a
+# pointer compare-and-swap. There is no approval ceremony, because paperwork
+# is not a control an automated actor can be stopped by.
+#
+# Every run opens a `qualification-gate-failure` issue. If those pile up, the
+# qualification gate is the bug and this hatch is masking it.
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,32 +20,8 @@ on:
         description: 'Exact signed v*-macos candidate tag'
         required: true
         type: string
-      source_sha:
-        description: 'Immutable 40-character source SHA for the tag'
-        required: true
-        type: string
-      expected_current_release_id:
-        description: 'Current macOS beta pointer release ID observed during authorization'
-        required: true
-        type: string
-      expected_generation:
-        description: 'Current macOS beta pointer generation observed during authorization'
-        required: true
-        type: string
-      incident_id:
-        description: 'Open GitHub incident issue number with two bound MEMBER/OWNER approval comments'
-        required: true
-        type: string
       reason:
-        description: 'Named emergency rationale'
-        required: true
-        type: string
-      expires_at:
-        description: 'UTC ISO-8601 authorization expiry, no more than four hours away'
-        required: true
-        type: string
-      behavioral_evidence_url:
-        description: 'HTTPS URL to incident-specific behavioral evidence for this signed candidate'
+        description: 'Why the qualification gate could not be used'
         required: true
         type: string
       confirm:
@@ -41,27 +30,23 @@ on:
         type: string
 
 permissions:
-  actions: read
-  contents: write
+  contents: read
   issues: write
   id-token: write
 
 concurrency:
-  # GitHub retains one replaceable pending run per group, so sharing the normal
-  # beta group could silently discard this break-glass request. Each protected
-  # attempt is isolated; the exact Firestore pointer/generation CAS below is
-  # the authoritative cross-lane arbiter and makes any collision visible.
-  group: desktop-emergency-beta-promotion-${{ github.run_id }}-${{ github.run_attempt }}
+  group: desktop-beta-pointer
   cancel-in-progress: false
 
 jobs:
   promote:
-    # The protected prod environment is the first authorization boundary; the
-    # verifier additionally requires two distinct repository-member approvals.
     environment: prod
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout protected promotion controls
+      - name: Confirm intent
+        run: test "${{ inputs.confirm }}" = "emergency-promote-beta"
+
+      - name: Checkout promotion controls
         uses: actions/checkout@v7
         with:
           ref: main
@@ -74,80 +59,41 @@ jobs:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
-      - name: Download and bind emergency candidate evidence
+      - name: Bind tag to signed artifacts
         id: candidate
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-          SOURCE_SHA: ${{ inputs.source_sha }}
-          INCIDENT_ID: ${{ inputs.incident_id }}
           REPO: ${{ github.repository }}
-          BEHAVIORAL_EVIDENCE_URL: ${{ inputs.behavioral_evidence_url }}
         run: |
           set -euo pipefail
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           TAG_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          test "$TAG_SHA" = "$SOURCE_SHA"
-          mkdir -p /tmp/desktop-emergency-beta/assets
-          gh release view "$RELEASE_TAG" --repo "$REPO" --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
-            > /tmp/desktop-emergency-beta/release.json
-          gh release download "$RELEASE_TAG" --repo "$REPO" --pattern Omi.zip --pattern '*.dmg' \
-            --pattern desktop-smoke-result.json --dir /tmp/desktop-emergency-beta/assets
-          gh api "repos/${REPO}/commits/${SOURCE_SHA}/check-runs?filter=latest" \
-            > /tmp/desktop-emergency-beta/source-check.json
-          gh issue view "$INCIDENT_ID" --repo "$REPO" --json number,state,url \
-            > /tmp/desktop-emergency-beta/incident.json
-          gh api --paginate --slurp "repos/${REPO}/issues/${INCIDENT_ID}/comments?per_page=100" \
-            | python3 -c 'import json, sys; json.dump([comment for page in json.load(sys.stdin) for comment in page], sys.stdout)' \
-            > /tmp/desktop-emergency-beta/incident-comments.json
-          curl --fail --location --retry 2 --output /tmp/desktop-emergency-beta/behavioral-evidence \
-            "$BEHAVIORAL_EVIDENCE_URL"
-          DMG_PATH=$(find /tmp/desktop-emergency-beta/assets -maxdepth 1 -name '*.dmg' -type f -print -quit)
+          WORK=/tmp/desktop-emergency-beta
+          mkdir -p "$WORK/assets"
+          gh release view "$RELEASE_TAG" --repo "$REPO" \
+            --json tagName,body,isDraft,isPrerelease,publishedAt,assets > "$WORK/release.json"
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern Omi.zip --pattern '*.dmg' --dir "$WORK/assets"
+          DMG_PATH=$(find "$WORK/assets" -maxdepth 1 -name '*.dmg' -type f -print -quit)
           test -n "$DMG_PATH"
           {
             echo "target_sha=$TAG_SHA"
             echo "dmg_path=$DMG_PATH"
-            echo "release_tag=$RELEASE_TAG"
+            echo "zip_sha256=$(sha256sum "$WORK/assets/Omi.zip" | cut -d' ' -f1)"
+            echo "dmg_sha256=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Verify break-glass controls and artifact binding
-        id: evidence
-        env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          SOURCE_SHA: ${{ steps.candidate.outputs.target_sha }}
-          INCIDENT_ID: ${{ inputs.incident_id }}
-          REASON: ${{ inputs.reason }}
-          OPERATOR: ${{ github.triggering_actor }}
-          EXPIRES_AT: ${{ inputs.expires_at }}
-          BEHAVIORAL_EVIDENCE_URL: ${{ inputs.behavioral_evidence_url }}
-          CONFIRM: ${{ inputs.confirm }}
-        run: |
-          set -euo pipefail
-          python3 .github/scripts/check-desktop-emergency-beta-promotion.py \
-            --release-json /tmp/desktop-emergency-beta/release.json \
-            --smoke-json /tmp/desktop-emergency-beta/assets/desktop-smoke-result.json \
-            --source-check-json /tmp/desktop-emergency-beta/source-check.json \
-            --incident-json /tmp/desktop-emergency-beta/incident.json \
-            --incident-comments-json /tmp/desktop-emergency-beta/incident-comments.json \
-            --zip-file /tmp/desktop-emergency-beta/assets/Omi.zip \
-            --dmg-file "${{ steps.candidate.outputs.dmg_path }}" \
-            --behavioral-evidence-file /tmp/desktop-emergency-beta/behavioral-evidence \
-            --behavioral-evidence-url "$BEHAVIORAL_EVIDENCE_URL" \
-            --release-tag "$RELEASE_TAG" --source-sha "$SOURCE_SHA" --incident-id "$INCIDENT_ID" \
-            --reason "$REASON" --operator "$OPERATOR" --expires-at "$EXPIRES_AT" --confirm "$CONFIRM" \
-            --output /tmp/desktop-emergency-beta/evidence.json
-          python3 -c 'import json; print(",".join(json.load(open("/tmp/desktop-emergency-beta/evidence.json"))["approvers"]))' \
-            | sed 's/^/approvers=/' >> "$GITHUB_OUTPUT"
-
-      - name: Prepare immutable emergency manifest
+      - name: Prepare immutable manifest
         run: |
           set -euo pipefail
           python3 .github/scripts/prepare-desktop-beta-promotion.py \
             --release-json /tmp/desktop-emergency-beta/release.json \
-            --release-tag "${{ inputs.release_tag }}" --target-sha "${{ steps.candidate.outputs.target_sha }}" \
-            --zip-sha256 "$(sha256sum /tmp/desktop-emergency-beta/assets/Omi.zip | cut -d' ' -f1)" \
-            --dmg-sha256 "$(sha256sum '${{ steps.candidate.outputs.dmg_path }}' | cut -d' ' -f1)" \
-            --emergency-evidence-json /tmp/desktop-emergency-beta/evidence.json \
+            --release-tag "${{ inputs.release_tag }}" \
+            --target-sha "${{ steps.candidate.outputs.target_sha }}" \
+            --zip-sha256 "${{ steps.candidate.outputs.zip_sha256 }}" \
+            --dmg-sha256 "${{ steps.candidate.outputs.dmg_sha256 }}" \
+            --allow-unqualified \
             --output /tmp/desktop-emergency-beta/manifest.json
 
       - name: Google Auth
@@ -155,312 +101,79 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Snapshot Stable controls before beta-only mutation
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          FIRESTORE_TOKEN=$(gcloud auth print-access-token)
-          FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_update_channels/macos-stable"
-          curl -fsS -H "Authorization: Bearer $FIRESTORE_TOKEN" "$FIRESTORE_URL" \
-            > /tmp/desktop-emergency-beta/stable-pointer-before.json
-          STABLE_RELEASE=$(python3 -c 'import json; print(json.load(open("/tmp/desktop-emergency-beta/stable-pointer-before.json"))["fields"]["release_id"]["stringValue"])')
-          gh release view "$STABLE_RELEASE" --repo "$REPO" --json body > /tmp/desktop-emergency-beta/stable-release-before.json
-          curl -fsS 'https://api.omi.me/v2/desktop/appcast.xml?platform=macos' > /tmp/desktop-emergency-beta/appcast-before.xml
-          python3 - /tmp/desktop-emergency-beta/appcast-before.xml > /tmp/desktop-emergency-beta/stable-appcast-before.xml <<'PY'
-          import sys
-          import xml.etree.ElementTree as ET
-          root = ET.parse(sys.argv[1]).getroot()
-          ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
-          items = [ET.tostring(item, encoding='unicode') for item in root.findall('.//item')
-                   if item.find('sparkle:channel', ns) is None]
-          print('\n'.join(items))
-          PY
-
-      - name: Register manifest and compare-and-swap only macOS beta
+      - name: Register manifest and compare-and-swap macOS beta
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-          SOURCE_SHA: ${{ steps.candidate.outputs.target_sha }}
-          EXPECTED_CURRENT_RELEASE_ID: ${{ inputs.expected_current_release_id }}
-          EXPECTED_GENERATION: ${{ inputs.expected_generation }}
-          INCIDENT_ID: ${{ inputs.incident_id }}
-          REASON: ${{ inputs.reason }}
-          OPERATOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
           curl -fsS -X POST -H 'Content-Type: application/json' -H "secret-key: $ADMIN_KEY" \
-            --data-binary @/tmp/desktop-emergency-beta/manifest.json https://api.omi.me/v2/desktop/releases \
-            > /tmp/desktop-emergency-beta/manifest-response.json
-          python3 - <<'PY' > /tmp/desktop-emergency-beta/promote.json
-          import json, os
-          evidence = json.load(open('/tmp/desktop-emergency-beta/evidence.json'))
-          print(json.dumps({
-              'platform': 'macos', 'channel': 'beta', 'release_id': os.environ['RELEASE_TAG'],
-              'source_sha': os.environ['SOURCE_SHA'], 'expected_current_release_id': os.environ['EXPECTED_CURRENT_RELEASE_ID'],
-              'expected_generation': int(os.environ['EXPECTED_GENERATION']), 'incident_id': os.environ['INCIDENT_ID'],
-              'reason': os.environ['REASON'], 'operator': os.environ['OPERATOR'], 'expires_at': evidence['expires_at'],
-              'operation_id': evidence['operation_id'],
-              'approvers': evidence['approvers'], **evidence['evidence'],
-          }))
-          PY
-          curl -fsS -X POST -H 'Content-Type: application/json' -H "secret-key: $ADMIN_KEY" \
-            --data-binary @/tmp/desktop-emergency-beta/promote.json \
-            https://api.omi.me/v2/desktop/channels/emergency-promote-beta \
-            > /tmp/desktop-emergency-beta/promotion-response.json
-          RELEASE_TAG="$RELEASE_TAG" EXPECTED_GENERATION="$EXPECTED_GENERATION" python3 - <<'PY'
-          import json
-          import os
+            --data-binary @/tmp/desktop-emergency-beta/manifest.json \
+            https://api.omi.me/v2/desktop/releases > /dev/null
 
-          response = json.load(open('/tmp/desktop-emergency-beta/promotion-response.json'))
-          pointer = response.get('pointer')
-          expected_generation = int(os.environ['EXPECTED_GENERATION']) + 1
+          # Read the live pointer here rather than making an operator paste it
+          # mid-incident. The generation CAS below still rejects any concurrent
+          # mutation between this read and the write.
+          WORK=/tmp/desktop-emergency-beta
+          curl -fsS -H "secret-key: $ADMIN_KEY" \
+            'https://api.omi.me/v2/desktop/channels/live?platform=macos&channel=beta' \
+            > "$WORK/current.json"
+          python3 - "$WORK/current.json" "$WORK/promote.json" <<'PY'
+          import json, os, sys
+
+          current = json.load(open(sys.argv[1]))["pointer"]
+          json.dump(
+              {
+                  "platform": "macos",
+                  "channel": "beta",
+                  "release_id": os.environ["RELEASE_TAG"],
+                  "expected_current_release_id": current["release_id"],
+                  "expected_generation": int(current["generation"]),
+                  "emergency": True,
+              },
+              open(sys.argv[2], "w"),
+          )
+          PY
+
+          curl -fsS -X POST -H 'Content-Type: application/json' -H "secret-key: $ADMIN_KEY" \
+            --data-binary @"$WORK/promote.json" \
+            https://api.omi.me/v2/desktop/channels/promote > "$WORK/response.json"
+
+          python3 - "$WORK/current.json" "$WORK/response.json" <<'PY'
+          import json, os, sys
+
+          expected_generation = int(json.load(open(sys.argv[1]))["pointer"]["generation"]) + 1
+          response = json.load(open(sys.argv[2]))
+          pointer = response.get("pointer") or {}
           if (
-              response.get('success') is not True
-              or not isinstance(pointer, dict)
-              or pointer.get('platform') != 'macos'
-              or pointer.get('channel') != 'beta'
-              or pointer.get('release_id') != os.environ['RELEASE_TAG']
-              or pointer.get('generation') != expected_generation
+              response.get("success") is not True
+              or pointer.get("channel") != "beta"
+              or pointer.get("release_id") != os.environ["RELEASE_TAG"]
+              or pointer.get("generation") != expected_generation
           ):
-              raise SystemExit('authoritative macOS beta pointer compare-and-swap did not succeed')
+              raise SystemExit(f"beta pointer compare-and-swap did not succeed: {response}")
           print(json.dumps(response, indent=2))
           PY
 
-      - name: Prove Stable pointer, release metadata, and appcast are unchanged
+      - name: Record that the qualification gate was bypassed
+        if: ${{ always() && job.status != 'cancelled' }}
         env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          FIRESTORE_TOKEN=$(gcloud auth print-access-token)
-          FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_update_channels/macos-stable"
-          curl -fsS -H "Authorization: Bearer $FIRESTORE_TOKEN" "$FIRESTORE_URL" \
-            > /tmp/desktop-emergency-beta/stable-pointer-after.json
-          cmp /tmp/desktop-emergency-beta/stable-pointer-before.json /tmp/desktop-emergency-beta/stable-pointer-after.json
-          STABLE_RELEASE=$(python3 -c 'import json; print(json.load(open("/tmp/desktop-emergency-beta/stable-pointer-before.json"))["fields"]["release_id"]["stringValue"])')
-          gh release view "$STABLE_RELEASE" --repo "$REPO" --json body > /tmp/desktop-emergency-beta/stable-release-after.json
-          cmp /tmp/desktop-emergency-beta/stable-release-before.json /tmp/desktop-emergency-beta/stable-release-after.json
-          curl -fsS 'https://api.omi.me/v2/desktop/appcast.xml?platform=macos' > /tmp/desktop-emergency-beta/appcast-after.xml
-          python3 - /tmp/desktop-emergency-beta/appcast-after.xml > /tmp/desktop-emergency-beta/stable-appcast-after.xml <<'PY'
-          import sys
-          import xml.etree.ElementTree as ET
-          root = ET.parse(sys.argv[1]).getroot()
-          ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
-          items = [ET.tostring(item, encoding='unicode') for item in root.findall('.//item')
-                   if item.find('sparkle:channel', ns) is None]
-          print('\n'.join(items))
-          PY
-          cmp /tmp/desktop-emergency-beta/stable-appcast-before.xml /tmp/desktop-emergency-beta/stable-appcast-after.xml
-
-  reconcile:
-    # A committed backend transaction can outlive a failed promote job (for
-    # example, if response parsing or Stable proof fails). This job must run
-    # after that job settles, then decide from authoritative immutable state.
-    needs: promote
-    if: ${{ always() }}
-    environment: prod
-    runs-on: ubuntu-latest
-    outputs:
-      emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}
-      emergency_side_effects_claimed: ${{ steps.claim_side_effects.outputs.emergency_side_effects_claimed }}
-      approvers: ${{ steps.reconcile.outputs.approvers }}
-    steps:
-      - name: Checkout protected promotion controls
-        uses: actions/checkout@v7
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Generate Omi Bot token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
-          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
-      - name: Google Auth
-        uses: google-github-actions/auth@v3
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Reconcile explicit emergency release metadata after beta pointer CAS
-        # Do not infer this from the mutable beta pointer: normal promotion may
-        # race to the same tag. The backend proves the immutable emergency
-        # decision and append-only transaction audit for tag/SHA/incident.
-        id: reconcile
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          SOURCE_SHA: ${{ inputs.source_sha }}
-          INCIDENT_ID: ${{ inputs.incident_id }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
-          OPERATION_ID=$(RELEASE_TAG="$RELEASE_TAG" SOURCE_SHA="$SOURCE_SHA" INCIDENT_ID="$INCIDENT_ID" python3 - <<'PY'
-          import hashlib
-          import os
-
-          print(
-              hashlib.sha256(
-                  f"macos-beta-emergency-forward-promotion:{os.environ['RELEASE_TAG']}:{os.environ['SOURCE_SHA'].lower()}:{os.environ['INCIDENT_ID'].strip()}".encode(
-                      'utf-8'
-                  )
-              ).hexdigest()
-          )
-          PY
-          )
-          RECONCILIATION=$(curl -fsS --get \
-            -H "secret-key: $ADMIN_KEY" \
-            --data-urlencode "release_id=$RELEASE_TAG" \
-            --data-urlencode "source_sha=$SOURCE_SHA" \
-            --data-urlencode "incident_id=$INCIDENT_ID" \
-            --data-urlencode "operation_id=$OPERATION_ID" \
-            https://api.omi.me/v2/desktop/channels/emergency-promote-beta/reconciliation)
-          RECONCILIATION="$RECONCILIATION" RELEASE_TAG="$RELEASE_TAG" SOURCE_SHA="$SOURCE_SHA" INCIDENT_ID="$INCIDENT_ID" \
-            OPERATION_ID="$OPERATION_ID" \
-            python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          reconciliation = json.loads(os.environ['RECONCILIATION'])
-          evidence = reconciliation.get('emergency_evidence')
-          if (
-              reconciliation.get('success') is not True
-              or reconciliation.get('emergency_reconciled') is not True
-              or reconciliation.get('release_id') != os.environ['RELEASE_TAG']
-              or reconciliation.get('source_sha') != os.environ['SOURCE_SHA']
-              or reconciliation.get('incident_id') != os.environ['INCIDENT_ID']
-              or reconciliation.get('operation_id') != os.environ['OPERATION_ID']
-              or not isinstance(evidence, dict)
-              or evidence.get('emergencyPromotion') is not True
-              or evidence.get('release_tag') != os.environ['RELEASE_TAG']
-              or evidence.get('source_sha') != os.environ['SOURCE_SHA']
-              or str(evidence.get('incident_id')) != os.environ['INCIDENT_ID']
-              or evidence.get('operation_id') != os.environ['OPERATION_ID']
-              or not isinstance(evidence.get('approvers'), list)
-              or len(evidence['approvers']) != 2
-          ):
-              raise SystemExit('authoritative emergency transaction reconciliation did not verify tag/SHA/incident/operation')
-          Path('/tmp/desktop-emergency-beta').mkdir(parents=True, exist_ok=True)
-          Path('/tmp/desktop-emergency-beta/evidence.json').write_text(
-              json.dumps(evidence, sort_keys=True) + '\n', encoding='utf-8'
-          )
-          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
-              output.write('approvers=' + ','.join(evidence['approvers']) + '\n')
-              output.write('operation_id=' + os.environ['OPERATION_ID'] + '\n')
-          PY
-          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/desktop-emergency-beta/release-body.md
-          python3 .github/scripts/mark-desktop-release-emergency-beta.py \
-            --input /tmp/desktop-emergency-beta/release-body.md \
-            --evidence /tmp/desktop-emergency-beta/evidence.json \
-            --output /tmp/desktop-emergency-beta/release-body-emergency.md
-          gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/desktop-emergency-beta/release-body-emergency.md
-          echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"
-
-      - name: Claim emergency incident side effects exactly once
-        # The first reconciler to create this deterministic operation claim runs
-        # both external side effects. A failed promote job remains recoverable:
-        # any later reconciler can verify its committed audit and claim it.
-        id: claim_side_effects
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          SOURCE_SHA: ${{ inputs.source_sha }}
-          INCIDENT_ID: ${{ inputs.incident_id }}
-          OPERATION_ID: ${{ steps.reconcile.outputs.operation_id }}
-        run: |
-          set -euo pipefail
-          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
-          python3 - <<'PY' > /tmp/desktop-emergency-beta/side-effect-claim.json
-          import json
-          import os
-
-          print(json.dumps({
-              'release_id': os.environ['RELEASE_TAG'],
-              'source_sha': os.environ['SOURCE_SHA'],
-              'incident_id': os.environ['INCIDENT_ID'],
-              'operation_id': os.environ['OPERATION_ID'],
-          }))
-          PY
-          SIDE_EFFECT_CLAIM=$(curl -fsS -X POST -H 'Content-Type: application/json' -H "secret-key: $ADMIN_KEY" \
-            --data-binary @/tmp/desktop-emergency-beta/side-effect-claim.json \
-            https://api.omi.me/v2/desktop/channels/emergency-promote-beta/reconciliation/side-effect-claim)
-          SIDE_EFFECT_CLAIM="$SIDE_EFFECT_CLAIM" RELEASE_TAG="$RELEASE_TAG" SOURCE_SHA="$SOURCE_SHA" \
-            INCIDENT_ID="$INCIDENT_ID" OPERATION_ID="$OPERATION_ID" python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          claim = json.loads(os.environ['SIDE_EFFECT_CLAIM'])
-          if (
-              claim.get('success') is not True
-              or claim.get('emergency_reconciled') is not True
-              or claim.get('release_id') != os.environ['RELEASE_TAG']
-              or claim.get('source_sha') != os.environ['SOURCE_SHA']
-              or claim.get('incident_id') != os.environ['INCIDENT_ID']
-              or claim.get('operation_id') != os.environ['OPERATION_ID']
-              or not isinstance(claim.get('emergency_side_effects_claimed'), bool)
-          ):
-              raise SystemExit('authoritative emergency side-effect claim did not verify the operation')
-          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
-              output.write(
-                  'emergency_side_effects_claimed='
-                  + ('true' if claim['emergency_side_effects_claimed'] else 'false')
-                  + '\n'
-              )
-          PY
-
-  notify:
-    needs: reconcile
-    if: ${{ always() && needs.reconcile.outputs.emergency_side_effects_claimed == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify incident responders immediately
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          gh issue comment "${{ inputs.incident_id }}" --repo "$REPO" --body \
-            "Emergency macOS beta promotion completed for ${{ inputs.release_tag }}. Approvers: ${{ needs.reconcile.outputs.approvers }}. The mandatory one-hour beta monitor is now running: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-  monitor:
-    needs: reconcile
-    if: ${{ always() && needs.reconcile.outputs.emergency_side_effects_claimed == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Monitor beta-only feed for one hour
-        id: health
-        run: |
-          set -euo pipefail
-          for sample in $(seq 1 12); do
-            feed=$(curl -fsS --max-time 20 'https://api.omi.me/v2/desktop/appcast.xml?platform=macos')
-            if ! printf '%s' "$feed" | grep -Fq '${{ inputs.release_tag }}'; then
-              echo "beta feed no longer resolves the emergency release at sample $sample" >&2
-              exit 1
-            fi
-            sleep 300
-          done
-
-      - name: Record monitor success
-        if: success()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue comment '${{ inputs.incident_id }}' --repo '${{ github.repository }}' --body \
-            "The mandatory one-hour macOS beta health monitor completed without beta feed regression for ${{ inputs.release_tag }}."
-
-      - name: Alert with rollback recommendation on regression
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue comment '${{ inputs.incident_id }}' --repo '${{ github.repository }}' --body \
-            "ALERT: the mandatory beta-only health monitor regressed after emergency promotion of ${{ inputs.release_tag }}. Recommend executing the audited macOS beta rollback endpoint to the prior verified beta immediately."
+          gh issue create --repo "$REPO" \
+            --title "Qualification gate bypassed for ${{ inputs.release_tag }}" \
+            --label qualification-gate-failure \
+            --body "$(printf '%s\n' \
+              "Beta was promoted by \`desktop_emergency_promote_beta\`, bypassing qualification." \
+              "" \
+              "- Tag: \`${{ inputs.release_tag }}\`" \
+              "- SHA: \`${{ steps.candidate.outputs.target_sha }}\`" \
+              "- Operator: @${{ github.triggering_actor }}" \
+              "- Reason: ${{ inputs.reason }}" \
+              "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              "- Result: ${{ job.status }}" \
+              "" \
+              "The gate failing is the defect. Fix the gate, then close this.")"

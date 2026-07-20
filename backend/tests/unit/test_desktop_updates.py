@@ -866,7 +866,14 @@ class TestDesktopUpdateAdminEndpoints:
                 )
 
         assert resp.status_code == 200
-        promote.assert_called_once_with("macos", "beta", "v1.0.0+200-macos", expected_generation=1)
+        promote.assert_called_once_with(
+            "macos",
+            "beta",
+            "v1.0.0+200-macos",
+            expected_generation=1,
+            expected_current_release_id=None,
+            emergency=False,
+        )
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
 
     @pytest.mark.asyncio
@@ -960,175 +967,45 @@ class TestDesktopUpdateAdminEndpoints:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_emergency_promotion_is_beta_only_and_clears_only_beta_cache(self):
-        result = {
-            "pointer": {"platform": "macos", "channel": "beta", "release_id": "v0.12.85+12085-macos"},
-            "audit": {"operation": "macos_beta_emergency_forward_promotion", "emergencyPromotion": True},
-        }
-        payload = {
+    async def test_emergency_flag_routes_through_promote_and_clears_only_beta_cache(self):
+        """Break-glass promotion is the normal endpoint with `emergency: true`."""
+        pointer = {
             "platform": "macos",
             "channel": "beta",
-            "release_id": "v0.12.85+12085-macos",
-            "source_sha": "a" * 40,
-            "expected_current_release_id": "v0.12.84+12084-macos",
-            "expected_generation": 7,
-            "incident_id": "10063",
-            "operation_id": "f" * 64,
-            "reason": "qualification runner is unavailable during an incident",
-            "operator": "release-operator",
-            "expires_at": "2026-07-19T13:00:00Z",
-            "approvers": ["alice", "bob"],
-            "signed_smoke_url": "https://example.test/smoke.json",
-            "signed_smoke_sha256": "d" * 64,
-            "behavioral_url": "https://example.test/behavior.json",
-            "behavioral_sha256": "e" * 64,
-            "source_gate_url": "https://example.test/check",
-            "zip_sha256": "b" * 64,
-            "dmg_sha256": "c" * 64,
+            "release_id": "v0.12.87+12087-macos",
+            "generation": 10,
+            "emergency": True,
         }
         with (
-            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
-            patch("routers.updates.emergency_promote_macos_beta_channel", return_value=result) as emergency_promote,
+            patch("routers.updates.os.getenv", return_value="real-secret"),
+            patch("routers.updates.promote_channel", return_value=pointer) as promote,
             patch("routers.updates.delete_generic_cache") as delete_cache,
         ):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.post(
-                    "/v2/desktop/channels/emergency-promote-beta",
+                    "/v2/desktop/channels/promote",
                     headers={"secret-key": "real-secret"},
-                    json=payload,
-                )
-
-        assert resp.status_code == 200
-        assert resp.json()["audit"] == result["audit"]
-        emergency_promote.assert_called_once_with(
-            payload["release_id"],
-            source_sha=payload["source_sha"],
-            expected_current_release_id=payload["expected_current_release_id"],
-            expected_generation=7,
-            incident_id="10063",
-            operation_id=payload["operation_id"],
-            reason=payload["reason"],
-            operator=payload["operator"],
-            expires_at=payload["expires_at"],
-            approvers=["alice", "bob"],
-            evidence={
-                "signed_smoke_url": payload["signed_smoke_url"],
-                "signed_smoke_sha256": payload["signed_smoke_sha256"],
-                "behavioral_url": payload["behavioral_url"],
-                "behavioral_sha256": payload["behavioral_sha256"],
-                "source_gate_url": payload["source_gate_url"],
-                "zip_sha256": payload["zip_sha256"],
-                "dmg_sha256": payload["dmg_sha256"],
-            },
-        )
-        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
-
-    @pytest.mark.asyncio
-    async def test_emergency_reconciliation_requires_the_authoritative_audit_and_manifest_verifier(self):
-        result = {
-            "emergency_reconciled": True,
-            "release_id": "v0.12.85+12085-macos",
-            "source_sha": "a" * 40,
-            "incident_id": "10063",
-            "audit_id": "b" * 64,
-            "generation": 8,
-            "emergency_evidence": {"emergencyPromotion": True},
-        }
-        with (
-            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
-            patch("routers.updates.verify_emergency_macos_beta_reconciliation", return_value=result) as verify,
-        ):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                resp = await client.get(
-                    "/v2/desktop/channels/emergency-promote-beta/reconciliation",
-                    headers={"secret-key": "real-secret"},
-                    params={
-                        "release_id": "v0.12.85+12085-macos",
-                        "source_sha": "a" * 40,
-                        "incident_id": "10063",
-                        "operation_id": "f" * 64,
+                    json={
+                        "platform": "macos",
+                        "channel": "beta",
+                        "release_id": "v0.12.87+12087-macos",
+                        "expected_current_release_id": "v0.12.86+12086-macos",
+                        "expected_generation": 9,
+                        "emergency": True,
                     },
                 )
 
         assert resp.status_code == 200
-        assert resp.json() == {"success": True, **result}
-        verify.assert_called_once_with(
-            "v0.12.85+12085-macos",
-            source_sha="a" * 40,
-            incident_id="10063",
-            operation_id="f" * 64,
+        assert resp.json()["pointer"]["emergency"] is True
+        promote.assert_called_once_with(
+            "macos",
+            "beta",
+            "v0.12.87+12087-macos",
+            expected_generation=9,
+            expected_current_release_id="v0.12.86+12086-macos",
+            emergency=True,
         )
-
-    @pytest.mark.asyncio
-    async def test_emergency_reconciliation_side_effect_claim_returns_the_authoritative_one_time_gate(self):
-        result = {
-            "emergency_reconciled": True,
-            "emergency_side_effects_claimed": True,
-            "release_id": "v0.12.85+12085-macos",
-            "source_sha": "a" * 40,
-            "incident_id": "10063",
-            "operation_id": "f" * 64,
-            "audit_id": "f" * 64,
-            "generation": 8,
-            "emergency_evidence": {"emergencyPromotion": True},
-        }
-        payload = {
-            "release_id": "v0.12.85+12085-macos",
-            "source_sha": "a" * 40,
-            "incident_id": "10063",
-            "operation_id": "f" * 64,
-        }
-        with (
-            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
-            patch(
-                "routers.updates.claim_emergency_macos_beta_reconciliation_side_effects", return_value=result
-            ) as claim,
-        ):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                resp = await client.post(
-                    "/v2/desktop/channels/emergency-promote-beta/reconciliation/side-effect-claim",
-                    headers={"secret-key": "real-secret"},
-                    json=payload,
-                )
-
-        assert resp.status_code == 200
-        assert resp.json() == {"success": True, **result}
-        claim.assert_called_once_with(
-            "v0.12.85+12085-macos",
-            source_sha="a" * 40,
-            incident_id="10063",
-            operation_id="f" * 64,
-        )
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(("platform", "channel"), [("macos", "stable"), ("windows", "beta")])
-    async def test_emergency_promotion_rejects_stable_or_other_platform(self, platform, channel):
-        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-            resp = await client.post(
-                "/v2/desktop/channels/emergency-promote-beta",
-                headers={"secret-key": "any-secret"},
-                json={
-                    "platform": platform,
-                    "channel": channel,
-                    "release_id": "v0.12.85+12085-macos",
-                    "source_sha": "a" * 40,
-                    "expected_current_release_id": "v0.12.84+12084-macos",
-                    "expected_generation": 7,
-                    "incident_id": "10063",
-                    "reason": "runner unavailable",
-                    "operator": "release-operator",
-                    "expires_at": "2026-07-19T13:00:00Z",
-                    "approvers": ["alice", "bob"],
-                    "signed_smoke_url": "https://example.test/smoke.json",
-                    "signed_smoke_sha256": "d" * 64,
-                    "behavioral_url": "https://example.test/behavior.json",
-                    "behavioral_sha256": "e" * 64,
-                    "source_gate_url": "https://example.test/check",
-                    "zip_sha256": "b" * 64,
-                    "dmg_sha256": "c" * 64,
-                },
-            )
-        assert resp.status_code == 422
+        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
 
 
 # --- Update policy endpoint ---

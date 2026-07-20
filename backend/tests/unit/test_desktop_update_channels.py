@@ -4,17 +4,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from database.desktop_update_channels import (
-    _build_channel_pointer,
-    _build_beta_rollback_pointer,
-    _claim_emergency_macos_beta_reconciliation_side_effects_transaction,
-    _emergency_promotion_operation_id,
+    _build_pointer,
     _rollback_macos_beta_transaction,
-    _emergency_promote_macos_beta_transaction,
-    emergency_promote_macos_beta_channel,
     get_channel_release,
     normalize_release_manifest,
     register_release_manifest,
-    verify_emergency_macos_beta_reconciliation,
 )
 
 
@@ -37,44 +31,6 @@ def _manifest(**overrides):
     }
     data.update(overrides)
     return data
-
-
-def _emergency_manifest(
-    *,
-    release_id,
-    version,
-    build_number,
-    reason,
-    expires_at,
-    evidence,
-    incident_id="10063",
-    operation_id=None,
-):
-    if operation_id is None:
-        operation_id = _emergency_promotion_operation_id(release_id, "a" * 40, incident_id)
-    return normalize_release_manifest(
-        _manifest(
-            release_id=release_id,
-            version=version,
-            build_number=build_number,
-            qualification={
-                "tier": "emergency",
-                "passed": False,
-                "emergency_evidence": {
-                    "emergencyPromotion": True,
-                    "release_tag": release_id,
-                    "source_sha": "a" * 40,
-                    "incident_id": incident_id,
-                    "reason": reason,
-                    "operator": "release-operator",
-                    "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
-                    "operation_id": operation_id,
-                    "approvers": ["alice", "bob"],
-                    "evidence": evidence,
-                },
-            },
-        )
-    )
 
 
 class TestNormalizeReleaseManifest:
@@ -151,9 +107,10 @@ class TestReleaseManifestPersistence:
 
 class TestChannelPromotionRules:
     def test_first_qualified_promotion_sets_generation_and_build(self):
-        pointer = _build_channel_pointer(
+        pointer = _build_pointer(
             {},
             normalize_release_manifest(_manifest()),
+            transition="promote",
             platform="macos",
             channel="beta",
             release_id=_manifest()["release_id"],
@@ -171,9 +128,10 @@ class TestChannelPromotionRules:
             "build_number": 12064,
             "generation": 4,
         }
-        pointer = _build_channel_pointer(
+        pointer = _build_pointer(
             current,
             normalize_release_manifest(_manifest()),
+            transition="promote",
             platform="macos",
             channel="beta",
             release_id=_manifest()["release_id"],
@@ -185,9 +143,10 @@ class TestChannelPromotionRules:
     def test_rejects_rollback(self):
         current = {"release_id": "newer", "build_number": 13000, "generation": 2}
         with pytest.raises(ValueError, match="roll-forward only"):
-            _build_channel_pointer(
+            _build_pointer(
                 current,
                 normalize_release_manifest(_manifest()),
+                transition="promote",
                 platform="macos",
                 channel="beta",
                 release_id=_manifest()["release_id"],
@@ -197,9 +156,10 @@ class TestChannelPromotionRules:
     def test_rejects_unqualified_release(self):
         manifest = normalize_release_manifest(_manifest(qualification={"passed": False, "tier": "T2"}))
         with pytest.raises(ValueError, match="qualification"):
-            _build_channel_pointer(
+            _build_pointer(
                 {},
                 manifest,
+                transition="promote",
                 platform="macos",
                 channel="beta",
                 release_id=manifest["release_id"],
@@ -220,9 +180,12 @@ class TestMacosBetaRollbackRules:
         target = normalize_release_manifest(
             _manifest(release_id="v0.12.73+12073-macos", version="0.12.73+12073", build_number=12073)
         )
-        pointer = _build_beta_rollback_pointer(
+        pointer = _build_pointer(
             current,
             target,
+            transition="rollback",
+            platform="macos",
+            channel="beta",
             release_id=target["release_id"],
             expected_current_release_id=current["release_id"],
             expected_generation=7,
@@ -274,17 +237,23 @@ class TestMacosBetaRollbackRules:
         )
 
         with pytest.raises(ValueError, match="current release mismatch"):
-            _build_beta_rollback_pointer(
+            _build_pointer(
                 current,
                 target,
+                transition="rollback",
+                platform="macos",
+                channel="beta",
                 release_id=target["release_id"],
                 expected_current_release_id="v0.12.83+12083-macos",
                 expected_generation=7,
             )
         with pytest.raises(ValueError, match="generation mismatch"):
-            _build_beta_rollback_pointer(
+            _build_pointer(
                 current,
                 target,
+                transition="rollback",
+                platform="macos",
+                channel="beta",
                 release_id=target["release_id"],
                 expected_current_release_id=current["release_id"],
                 expected_generation=6,
@@ -301,500 +270,121 @@ class TestMacosBetaRollbackRules:
             )
         )
         with pytest.raises(ValueError, match="qualification"):
-            _build_beta_rollback_pointer(
+            _build_pointer(
                 current,
                 unqualified,
+                transition="rollback",
+                platform="macos",
+                channel="beta",
                 release_id=unqualified["release_id"],
                 expected_current_release_id=current["release_id"],
                 expected_generation=7,
             )
 
 
-class TestMacosBetaEmergencyPromotionRules:
-    def test_advances_only_newer_beta_and_creates_append_only_audit(self):
-        current = {
-            "platform": "macos",
-            "channel": "beta",
-            "release_id": "v0.12.84+12084-macos",
-            "version": "0.12.84+12084",
-            "build_number": 12084,
-            "generation": 7,
-        }
-        occurred_at = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
-        expires_at = occurred_at + timedelta(hours=1)
-        pointer_snapshot = MagicMock(exists=True)
-        pointer_snapshot.to_dict.return_value = current
-        evidence = {
-            "signed_smoke_url": "https://example.test/smoke.json",
-            "signed_smoke_sha256": "d" * 64,
-            "behavioral_url": "https://example.test/behavior.json",
-            "behavioral_sha256": "e" * 64,
-            "source_gate_url": "https://example.test/check",
-            "zip_sha256": "b" * 64,
-            "dmg_sha256": "c" * 64,
-        }
-        target = _emergency_manifest(
-            release_id="v0.12.85+12085-macos",
-            version="0.12.85+12085",
-            build_number=12085,
-            reason="qualification runner is unavailable during an incident",
-            expires_at=expires_at,
-            evidence=evidence,
-        )
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = target
-        pointer_ref = MagicMock()
-        pointer_ref.get.return_value = pointer_snapshot
-        manifest_ref = MagicMock()
-        manifest_ref.get.return_value = manifest_snapshot
-        audit_ref = MagicMock()
-        transaction = MagicMock()
+class TestEmergencyBetaPromotionRules:
+    """Emergency promotion is ordinary promotion with the T2 gate relaxed.
 
-        result = _emergency_promote_macos_beta_transaction.to_wrap(
-            transaction,
-            pointer_ref,
-            manifest_ref,
-            audit_ref,
-            release_id=target["release_id"],
-            source_sha=target["source_sha"],
-            expected_current_release_id=current["release_id"],
-            expected_generation=7,
-            incident_id="10063",
-            reason="qualification runner is unavailable during an incident",
-            operator="release-operator",
-            expires_at=expires_at,
-            operation_id=_emergency_promotion_operation_id(target["release_id"], target["source_sha"], "10063"),
-            approvers=["alice", "bob"],
-            evidence=evidence,
-            audit_id="audit-123",
-            occurred_at=occurred_at,
-        )
+    These cover the break-glass contract: it may ship unqualified builds to
+    beta, it must still compare-and-swap, and it must never reach stable.
+    """
 
-        assert result["pointer"] == {
-            "platform": "macos",
-            "channel": "beta",
-            "release_id": target["release_id"],
-            "version": target["version"],
-            "build_number": 12085,
-            "generation": 8,
-            "updated_at": occurred_at,
-        }
-        assert result["audit"]["emergencyPromotion"] is True
-        assert result["audit"]["platform"] == "macos"
-        assert result["audit"]["channel"] == "beta"
-        assert result["audit"]["approvers"] == ["alice", "bob"]
-        assert result["audit"]["operator"] == "release-operator"
-        assert result["audit"]["operation_id"] == _emergency_promotion_operation_id(
-            target["release_id"], target["source_sha"], "10063"
-        )
-        transaction.create.assert_called_once_with(audit_ref, result["audit"])
-        transaction.set.assert_called_once_with(pointer_ref, result["pointer"])
-
-    def test_rejects_altered_artifact_evidence_before_the_pointer_write(self):
-        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
-        pointer_snapshot = MagicMock(exists=True)
-        pointer_snapshot.to_dict.return_value = current
-        evidence = {
-            "signed_smoke_url": "https://example.test/smoke.json",
-            "signed_smoke_sha256": "d" * 64,
-            "behavioral_url": "https://example.test/behavior.json",
-            "behavioral_sha256": "e" * 64,
-            "source_gate_url": "https://example.test/check",
-            "zip_sha256": "f" * 64,
-            "dmg_sha256": "c" * 64,
-        }
-        target = _emergency_manifest(
-            release_id="v0.12.85+12085-macos",
-            version="0.12.85+12085",
-            build_number=12085,
-            reason="runner unavailable",
-            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
-            evidence={**evidence, "zip_sha256": "b" * 64},
-        )
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = target
-        pointer_ref, manifest_ref, audit_ref, transaction = MagicMock(), MagicMock(), MagicMock(), MagicMock()
-        pointer_ref.get.return_value = pointer_snapshot
-        manifest_ref.get.return_value = manifest_snapshot
-        with pytest.raises(ValueError, match="does not match the immutable manifest"):
-            _emergency_promote_macos_beta_transaction.to_wrap(
-                transaction,
-                pointer_ref,
-                manifest_ref,
-                audit_ref,
-                release_id=target["release_id"],
-                source_sha=target["source_sha"],
-                expected_current_release_id=current["release_id"],
-                expected_generation=7,
-                incident_id="10063",
-                reason="runner unavailable",
-                operator="release-operator",
-                expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
-                operation_id=_emergency_promotion_operation_id(target["release_id"], target["source_sha"], "10063"),
-                approvers=["alice", "bob"],
-                evidence=evidence,
-                audit_id="audit-123",
-                occurred_at=datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc),
+    def _unqualified(self):
+        return normalize_release_manifest(
+            _manifest(
+                release_id="v0.12.87+12087-macos",
+                version="0.12.87+12087",
+                build_number=12087,
+                qualification={"tier": "T2", "passed": False},
             )
-        transaction.create.assert_not_called()
-        transaction.set.assert_not_called()
+        )
+
+    def _current(self):
+        return {"release_id": "v0.12.86+12086-macos", "build_number": 12086, "generation": 9}
+
+    def test_promotes_an_unqualified_build_and_marks_the_pointer_emergency(self):
+        current = self._current()
+        target = self._unqualified()
+        pointer = _build_pointer(
+            current,
+            target,
+            transition="emergency",
+            platform="macos",
+            channel="beta",
+            release_id=target["release_id"],
+            expected_current_release_id=current["release_id"],
+            expected_generation=9,
+        )
+        assert pointer["release_id"] == target["release_id"]
+        assert pointer["generation"] == 10
+        assert pointer["emergency"] is True
+
+    def test_normal_promotion_still_rejects_the_same_unqualified_build(self):
+        with pytest.raises(ValueError, match="qualification"):
+            _build_pointer(
+                self._current(),
+                self._unqualified(),
+                transition="promote",
+                platform="macos",
+                channel="beta",
+                release_id="v0.12.87+12087-macos",
+                expected_generation=9,
+            )
 
     @pytest.mark.parametrize(
-        ("approvers", "expires_at", "evidence", "message"),
+        "expected_release_id, expected_generation, message",
         [
-            (["alice"], "2026-07-19T13:00:00Z", None, "exactly two"),
-            (["alice", "alice"], "2026-07-19T13:00:00Z", None, "exactly two"),
-            (["alice", "bob"], "2026-07-19T11:59:00Z", None, "expired"),
-            (["alice", "bob"], "2026-07-19T17:00:01Z", None, "may not exceed"),
-            (["alice", "bob"], "2026-07-19T13:00:00Z", {}, "evidence is incomplete"),
+            ("v0.12.99+12099-macos", 9, "current release mismatch"),
+            ("v0.12.86+12086-macos", 3, "generation mismatch"),
         ],
     )
-    def test_rejects_invalid_or_expired_break_glass_authorization(self, approvers, expires_at, evidence, message):
-        now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
-        valid_evidence = {
-            "signed_smoke_url": "https://example.test/smoke.json",
-            "signed_smoke_sha256": "d" * 64,
-            "behavioral_url": "https://example.test/behavior.json",
-            "behavioral_sha256": "e" * 64,
-            "source_gate_url": "https://example.test/check",
-            "zip_sha256": "b" * 64,
-            "dmg_sha256": "c" * 64,
-        }
+    def test_rejects_a_stale_compare_and_swap(self, expected_release_id, expected_generation, message):
         with pytest.raises(ValueError, match=message):
-            emergency_promote_macos_beta_channel(
-                "v0.12.85+12085-macos",
-                source_sha="a" * 40,
-                expected_current_release_id="v0.12.84+12084-macos",
-                expected_generation=7,
-                incident_id="10063",
-                reason="runner unavailable",
-                operator="release-operator",
-                expires_at=expires_at,
-                operation_id=_emergency_promotion_operation_id("v0.12.85+12085-macos", "a" * 40, "10063"),
-                approvers=approvers,
-                evidence=valid_evidence if evidence is None else evidence,
-                firestore_client=MagicMock(),
-                now=now,
+            _build_pointer(
+                self._current(),
+                self._unqualified(),
+                transition="emergency",
+                platform="macos",
+                channel="beta",
+                release_id="v0.12.87+12087-macos",
+                expected_current_release_id=expected_release_id,
+                expected_generation=expected_generation,
             )
 
-        with pytest.raises(ValueError, match="operator"):
-            emergency_promote_macos_beta_channel(
-                "v0.12.85+12085-macos",
-                source_sha="a" * 40,
-                expected_current_release_id="v0.12.84+12084-macos",
-                expected_generation=7,
-                incident_id="10063",
-                reason="runner unavailable",
-                operator="not a github login",
-                expires_at="2026-07-19T13:00:00Z",
-                operation_id=_emergency_promotion_operation_id("v0.12.85+12085-macos", "a" * 40, "10063"),
-                approvers=["alice", "bob"],
-                evidence=valid_evidence,
-                firestore_client=MagicMock(),
-                now=now,
-            )
-
-    def test_beta_rollback_rejects_non_macos_target(self):
-        current = normalize_release_manifest(_manifest())
-        windows = normalize_release_manifest(
+    def test_is_roll_forward_only(self):
+        current = {"release_id": "v0.12.86+12086-macos", "build_number": 12086, "generation": 9}
+        older = normalize_release_manifest(
             _manifest(
-                release_id="v0.12.73+12073-windows",
-                platform="windows",
-                version="0.12.73+12073",
-                build_number=12073,
-                dmg_url=None,
+                release_id="v0.12.80+12080-macos",
+                version="0.12.80+12080",
+                build_number=12080,
+                qualification={"tier": "T2", "passed": False},
             )
         )
-        with pytest.raises(ValueError, match="macos"):
-            _build_beta_rollback_pointer(
+        with pytest.raises(ValueError, match="roll-forward only"):
+            _build_pointer(
                 current,
-                windows,
-                release_id=windows["release_id"],
+                older,
+                transition="emergency",
+                platform="macos",
+                channel="beta",
+                release_id=older["release_id"],
                 expected_current_release_id=current["release_id"],
-                expected_generation=7,
+                expected_generation=9,
             )
 
-
-class TestMacosBetaEmergencyReconciliation:
-    def test_operation_id_is_stable_for_the_immutable_emergency_decision(self):
-        assert _emergency_promotion_operation_id("v0.12.85+12085-macos", "a" * 40, "10063") == (
-            _emergency_promotion_operation_id("v0.12.85+12085-macos", "a" * 40, "10063")
-        )
-
-    def test_verifies_the_immutable_emergency_decision_and_append_only_audit(self):
-        release_id = "v0.12.85+12085-macos"
-        source_sha = "a" * 40
-        operation_id = _emergency_promotion_operation_id(release_id, source_sha, "10063")
-        audit_id = operation_id
-        evidence = {
-            "signed_smoke_url": "https://example.test/smoke.json",
-            "signed_smoke_sha256": "d" * 64,
-            "behavioral_url": "https://example.test/behavior.json",
-            "behavioral_sha256": "e" * 64,
-            "source_gate_url": "https://example.test/check",
-            "zip_sha256": "b" * 64,
-            "dmg_sha256": "c" * 64,
-        }
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = _emergency_manifest(
-            release_id=release_id,
-            version="0.12.85+12085",
-            build_number=12085,
-            reason="qualification runner is unavailable during an incident",
-            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
-            evidence=evidence,
-        )
-        audit_snapshot = MagicMock(exists=True)
-        audit_snapshot.to_dict.return_value = {
-            "audit_id": audit_id,
-            "operation": "macos_beta_emergency_forward_promotion",
-            "platform": "macos",
-            "channel": "beta",
-            "emergencyPromotion": True,
-            "target_release_id": release_id,
-            "source_sha": source_sha,
-            "incident_id": "10063",
-            "operation_id": operation_id,
-            "previous_generation": 7,
-            "generation": 8,
-        }
-        manifest_ref, audit_ref = MagicMock(), MagicMock()
-        manifest_ref.get.return_value = manifest_snapshot
-        audit_ref.get.return_value = audit_snapshot
-        manifests, audits = MagicMock(), MagicMock()
-        manifests.document.return_value = manifest_ref
-        audits.document.return_value = audit_ref
-        client = MagicMock()
-        client.collection.side_effect = [manifests, audits]
-
-        result = verify_emergency_macos_beta_reconciliation(
-            release_id,
-            source_sha=source_sha,
-            incident_id="10063",
-            operation_id=operation_id,
-            firestore_client=client,
-        )
-
-        emergency_evidence = manifest_snapshot.to_dict.return_value["qualification"]["emergency_evidence"]
-        assert result == {
-            "emergency_reconciled": True,
-            "release_id": release_id,
-            "source_sha": source_sha,
-            "incident_id": "10063",
-            "operation_id": operation_id,
-            "audit_id": audit_id,
-            "generation": 8,
-            "emergency_evidence": emergency_evidence,
-        }
-        manifests.document.assert_called_once_with(release_id)
-        audits.document.assert_called_once_with(audit_id)
-
-    def test_transactionally_claims_emergency_side_effects_once_per_operation(self):
-        """A retry observes the committed claim and cannot re-run notify or monitor."""
-        release_id = "v0.12.85+12085-macos"
-        source_sha = "a" * 40
-        operation_id = _emergency_promotion_operation_id(release_id, source_sha, "10063")
-        claimed_at = datetime(2026, 7, 19, 12, 30, tzinfo=timezone.utc)
-        evidence = {
-            "signed_smoke_url": "https://example.test/smoke.json",
-            "signed_smoke_sha256": "d" * 64,
-            "behavioral_url": "https://example.test/behavior.json",
-            "behavioral_sha256": "e" * 64,
-            "source_gate_url": "https://example.test/check",
-            "zip_sha256": "b" * 64,
-            "dmg_sha256": "c" * 64,
-        }
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = _emergency_manifest(
-            release_id=release_id,
-            version="0.12.85+12085",
-            build_number=12085,
-            reason="qualification runner is unavailable during an incident",
-            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
-            evidence=evidence,
-        )
-        audit_snapshot = MagicMock(exists=True)
-        audit_snapshot.to_dict.return_value = {
-            "audit_id": operation_id,
-            "operation": "macos_beta_emergency_forward_promotion",
-            "platform": "macos",
-            "channel": "beta",
-            "emergencyPromotion": True,
-            "target_release_id": release_id,
-            "source_sha": source_sha,
-            "incident_id": "10063",
-            "operation_id": operation_id,
-            "previous_generation": 7,
-            "generation": 8,
-        }
-        manifest_ref, audit_ref, side_effect_claim_ref = MagicMock(), MagicMock(), MagicMock()
-        manifest_ref.get.return_value = manifest_snapshot
-        audit_ref.get.return_value = audit_snapshot
-        missing_claim_snapshot = MagicMock(exists=False)
-        side_effect_claim_ref.get.return_value = missing_claim_snapshot
-        winner_transaction = MagicMock()
-
-        winner = _claim_emergency_macos_beta_reconciliation_side_effects_transaction.to_wrap(
-            winner_transaction,
-            manifest_ref,
-            audit_ref,
-            side_effect_claim_ref,
-            release_id=release_id,
-            source_sha=source_sha,
-            incident_id="10063",
-            operation_id=operation_id,
-            claimed_at=claimed_at,
-        )
-
-        assert winner["emergency_reconciled"] is True
-        assert winner["emergency_side_effects_claimed"] is True
-        winner_transaction.create.assert_called_once_with(
-            side_effect_claim_ref,
-            {
-                "operation": "macos_beta_emergency_promotion_side_effects",
-                "operation_id": operation_id,
-                "audit_id": operation_id,
-                "claimed_at": claimed_at,
-            },
-        )
-
-        claimed_snapshot = MagicMock(exists=True)
-        claimed_snapshot.to_dict.return_value = winner_transaction.create.call_args.args[1]
-        side_effect_claim_ref.get.return_value = claimed_snapshot
-        retry_transaction = MagicMock()
-        retry = _claim_emergency_macos_beta_reconciliation_side_effects_transaction.to_wrap(
-            retry_transaction,
-            manifest_ref,
-            audit_ref,
-            side_effect_claim_ref,
-            release_id=release_id,
-            source_sha=source_sha,
-            incident_id="10063",
-            operation_id=operation_id,
-            claimed_at=claimed_at + timedelta(minutes=1),
-        )
-
-        assert retry["emergency_reconciled"] is True
-        assert retry["emergency_side_effects_claimed"] is False
-        retry_transaction.create.assert_not_called()
-
-    def test_rejects_a_normal_manifest_even_when_its_release_identity_matches(self):
-        release_id = "v0.12.85+12085-macos"
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = _manifest(
-            release_id=release_id,
-            version="0.12.85+12085",
-            build_number=12085,
-        )
-        manifest_ref = MagicMock()
-        manifest_ref.get.return_value = manifest_snapshot
-        manifests = MagicMock()
-        manifests.document.return_value = manifest_ref
-        client = MagicMock()
-        client.collection.return_value = manifests
-
-        with pytest.raises(ValueError, match="immutable manifest"):
-            verify_emergency_macos_beta_reconciliation(
-                release_id,
-                source_sha="a" * 40,
-                incident_id="10063",
-                operation_id=_emergency_promotion_operation_id(release_id, "a" * 40, "10063"),
-                firestore_client=client,
-            )
-
-        assert client.collection.call_count == 1
-
-    def test_rejects_a_manifest_bound_to_another_operation(self):
-        release_id = "v0.12.85+12085-macos"
-        source_sha = "a" * 40
-        evidence = {
-            "signed_smoke_url": "https://example.test/smoke.json",
-            "signed_smoke_sha256": "d" * 64,
-            "behavioral_url": "https://example.test/behavior.json",
-            "behavioral_sha256": "e" * 64,
-            "source_gate_url": "https://example.test/check",
-            "zip_sha256": "b" * 64,
-            "dmg_sha256": "c" * 64,
-        }
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = _emergency_manifest(
-            release_id=release_id,
-            version="0.12.85+12085",
-            build_number=12085,
-            reason="qualification runner is unavailable during an incident",
-            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
-            evidence=evidence,
-            operation_id="f" * 64,
-        )
-        manifest_ref = MagicMock()
-        manifest_ref.get.return_value = manifest_snapshot
-        manifests = MagicMock()
-        manifests.document.return_value = manifest_ref
-        client = MagicMock()
-        client.collection.return_value = manifests
-
-        with pytest.raises(ValueError, match="bound emergency decision for this operation"):
-            verify_emergency_macos_beta_reconciliation(
-                release_id,
-                source_sha=source_sha,
-                incident_id="10063",
-                operation_id=_emergency_promotion_operation_id(release_id, source_sha, "10063"),
-                firestore_client=client,
-            )
-
-        assert client.collection.call_count == 1
-
-    def test_rejects_an_audit_bound_to_a_different_operation(self):
-        release_id = "v0.12.85+12085-macos"
-        source_sha = "a" * 40
-        audit_id = _emergency_promotion_operation_id(release_id, source_sha, "10063")
-        evidence = {
-            "signed_smoke_url": "https://example.test/smoke.json",
-            "signed_smoke_sha256": "d" * 64,
-            "behavioral_url": "https://example.test/behavior.json",
-            "behavioral_sha256": "e" * 64,
-            "source_gate_url": "https://example.test/check",
-            "zip_sha256": "b" * 64,
-            "dmg_sha256": "c" * 64,
-        }
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = _emergency_manifest(
-            release_id=release_id,
-            version="0.12.85+12085",
-            build_number=12085,
-            reason="qualification runner is unavailable during an incident",
-            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
-            evidence=evidence,
-            incident_id="10063",
-        )
-        audit_snapshot = MagicMock(exists=True)
-        audit_snapshot.to_dict.return_value = {
-            "audit_id": audit_id,
-            "operation": "macos_beta_emergency_forward_promotion",
-            "platform": "macos",
-            "channel": "beta",
-            "emergencyPromotion": True,
-            "target_release_id": release_id,
-            "source_sha": source_sha,
-            "incident_id": "10063",
-            "operation_id": "f" * 64,
-            "previous_generation": 7,
-            "generation": 8,
-        }
-        manifest_ref, audit_ref = MagicMock(), MagicMock()
-        manifest_ref.get.return_value = manifest_snapshot
-        audit_ref.get.return_value = audit_snapshot
-        manifests, audits = MagicMock(), MagicMock()
-        manifests.document.return_value = manifest_ref
-        audits.document.return_value = audit_ref
-        client = MagicMock()
-        client.collection.side_effect = [manifests, audits]
-
-        with pytest.raises(ValueError, match="audit does not match.*operation"):
-            verify_emergency_macos_beta_reconciliation(
-                release_id,
-                source_sha=source_sha,
-                incident_id="10063",
-                operation_id=audit_id,
-                firestore_client=client,
+    @pytest.mark.parametrize("channel", ["stable"])
+    def test_never_reaches_stable(self, channel):
+        current = self._current()
+        target = self._unqualified()
+        with pytest.raises(ValueError, match="only permitted for the macos beta channel"):
+            _build_pointer(
+                current,
+                target,
+                transition="emergency",
+                platform="macos",
+                channel=channel,
+                release_id=target["release_id"],
+                expected_current_release_id=current["release_id"],
+                expected_generation=9,
             )

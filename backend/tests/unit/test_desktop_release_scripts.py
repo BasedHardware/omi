@@ -21,8 +21,6 @@ def _load(name: str, filename: str):
 
 
 mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
-mark_emergency_beta = _load("mark_desktop_release_emergency_beta", "mark-desktop-release-emergency-beta.py")
-emergency_promotion = _load("check_desktop_emergency_beta_promotion", "check-desktop-emergency-beta-promotion.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 nominate_stable = _load("nominate_desktop_stable_candidate", "nominate-desktop-stable-candidate.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
@@ -61,65 +59,6 @@ def test_mark_beta_changes_only_visibility_fields():
     assert "isLive: true" in result
     assert "channel: beta" in result
     assert "qualifiedBetaSha: " + "a" * 40 in result
-
-
-def test_emergency_metadata_records_two_bound_approvals_without_making_the_release_stable():
-    result = mark_emergency_beta.mark_emergency_beta(
-        _release()["body"],
-        {
-            "emergencyPromotion": True,
-            "release_tag": "v0.12.64+12064-macos",
-            "source_sha": "a" * 40,
-            "incident_id": "10063",
-            "reason": "qualification runner unavailable",
-            "operator": "release-operator",
-            "expires_at": "2026-07-19T13:00:00Z",
-            "operation_id": "d" * 64,
-            "approvers": ["alice", "bob"],
-            "evidence": {"behavioral_url": "https://example.test/behavior.json"},
-        },
-    )
-    assert "emergencyPromotion: true" in result
-    assert "emergencyPromotionApprovers: alice,bob" in result
-    assert "emergencyPromotionOperator: release-operator" in result
-    assert "emergencyPromotionOperationId: " + "d" * 64 in result
-    assert "channel: beta" in result
-    assert "channel: stable" not in result
-
-
-def test_emergency_approval_parser_requires_two_distinct_authorized_commenters_bound_to_the_candidate():
-    comments = [
-        {
-            "body": f"Emergency beta promotion approval: v0.12.64+12064-macos {'a' * 40} 2026-07-19T13:00:00Z",
-            "author_association": "MEMBER",
-            "user": {"login": "alice"},
-        },
-        {
-            "body": f"Emergency beta promotion approval: v0.12.64+12064-macos {'a' * 40} 2026-07-19T13:00:00Z",
-            "author_association": "OWNER",
-            "user": {"login": "bob"},
-        },
-    ]
-    assert emergency_promotion.approval_identities(
-        comments, "v0.12.64+12064-macos", "a" * 40, "2026-07-19T13:00:00Z"
-    ) == ["alice", "bob"]
-
-    comments[1]["author_association"] = "CONTRIBUTOR"
-    with pytest.raises(SystemExit, match="exactly two"):
-        emergency_promotion.approval_identities(comments, "v0.12.64+12064-macos", "a" * 40, "2026-07-19T13:00:00Z")
-
-
-def test_emergency_operation_id_is_stable_across_github_retries():
-    operation_id = emergency_promotion.emergency_operation_id("v0.12.64+12064-macos", "a" * 40, "10063")
-
-    assert operation_id == emergency_promotion.emergency_operation_id("v0.12.64+12064-macos", "a" * 40, "10063")
-    assert operation_id != emergency_promotion.emergency_operation_id("v0.12.64+12064-macos", "a" * 40, "10064")
-
-
-def test_emergency_incident_state_normalizes_github_open_casing():
-    assert emergency_promotion.incident_is_open({"number": 10063, "state": "OPEN"}, "10063")
-    assert emergency_promotion.incident_is_open({"number": "10063", "state": "open"}, "10063")
-    assert not emergency_promotion.incident_is_open({"number": 10063, "state": "closed"}, "10063")
 
 
 def test_prepare_manifest_requires_exact_qualification_and_assets():
@@ -332,72 +271,6 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
     assert "git for-each-ref --count=1 --sort=-v:refname" in workflow
     assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in workflow
     assert automatic_gate < candidate_download
-
-
-def test_emergency_reconciliation_recovers_after_a_failed_promotion_before_notifying_or_monitoring():
-    """Static contract: downstream incident work cannot be skipped with promote."""
-    workflow = EMERGENCY_BETA_WORKFLOW.read_text()
-    pointer = workflow.index("      - name: Register manifest and compare-and-swap only macOS beta")
-    stable_proof = workflow.index("      - name: Prove Stable pointer, release metadata, and appcast are unchanged")
-    promote_job = workflow.index("  promote:")
-    reconcile_job = workflow.index("  reconcile:")
-    github_metadata = workflow.index(
-        "      - name: Reconcile explicit emergency release metadata after beta pointer CAS"
-    )
-    side_effect_claim = workflow.index("      - name: Claim emergency incident side effects exactly once")
-    notify_job = workflow.index("  notify:")
-    notify = workflow.index("      - name: Notify incident responders immediately")
-    promote = workflow[promote_job:reconcile_job]
-    reconciliation = workflow[reconcile_job:notify_job]
-
-    assert pointer < stable_proof < reconcile_job < github_metadata < side_effect_claim < notify_job < notify
-    assert "authoritative macOS beta pointer compare-and-swap did not succeed" in workflow
-    workflow_concurrency = workflow[workflow.index("concurrency:") : workflow.index("jobs:")]
-    emergency_group = "group: desktop-emergency-beta-promotion-${{ github.run_id }}-${{ github.run_attempt }}"
-    assert emergency_group in workflow_concurrency
-    assert "cancel-in-progress: false" in workflow_concurrency
-    assert "group: desktop-beta-promotion" not in promote
-    assert "--workflow-run-id" not in promote
-    assert "--workflow-run-attempt" not in promote
-    assert "needs: promote" in reconciliation
-    assert "if: ${{ always() }}" in reconciliation
-    assert "environment: prod" in reconciliation
-    assert "id: reconcile" in reconciliation
-    assert "emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}" in reconciliation
-    assert (
-        "emergency_side_effects_claimed: ${{ steps.claim_side_effects.outputs.emergency_side_effects_claimed }}"
-        in reconciliation
-    )
-    assert "emergency-promote-beta/reconciliation" in reconciliation
-    assert "emergency-promote-beta/reconciliation/side-effect-claim" in reconciliation
-    assert "source_sha=$SOURCE_SHA" in reconciliation
-    assert "incident_id=$INCIDENT_ID" in reconciliation
-    assert "operation_id=$OPERATION_ID" in reconciliation
-    assert "emergency_evidence" in reconciliation
-    reconciliation_error = "authoritative emergency transaction reconciliation did not verify"
-    reconciliation_error += " tag/SHA/incident/operation"
-    assert reconciliation_error in reconciliation
-    assert 'echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"' in reconciliation
-    assert "id: claim_side_effects" in reconciliation
-    assert "operation_id=$OPERATION_ID" in reconciliation
-    assert "emergency_side_effects_claimed" in reconciliation
-    assert "authoritative emergency side-effect claim did not verify the operation" in reconciliation
-    assert "gh api --paginate --slurp" in workflow
-    assert "for comment in page" in workflow
-
-    notification = workflow[notify_job : workflow.index("  monitor:")]
-    monitor = workflow[workflow.index("  monitor:") :]
-    expected_condition = "if: ${{ always() && needs.reconcile.outputs.emergency_side_effects_claimed == 'true' }}"
-    assert "needs: reconcile" in notification
-    assert "needs: reconcile" in monitor
-    assert expected_condition in notification
-    assert expected_condition in monitor
-    assert "needs.reconcile.outputs.emergency_reconciled == 'true'" not in notification
-    assert "needs.reconcile.outputs.emergency_reconciled == 'true'" not in monitor
-    assert "needs: promote" not in notification
-    assert "needs: promote" not in monitor
-    assert "environment: prod" not in notification
-    assert "environment: prod" not in monitor
 
 
 def test_qualification_claims_are_serialized_by_the_trusted_runner_only():

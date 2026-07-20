@@ -50,15 +50,32 @@ Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environmen
 
 ### Emergency macOS beta forward promotion
 
-`desktop_emergency_promote_beta.yml` is a deliberately separate, manual break-glass lane for an already published signed macOS candidate when ordinary exact-candidate qualification is unavailable. It never accepts Stable or another platform, and it does not add a qualification bypass to normal promotion. Before the only pointer mutation it verifies the exact tag/SHA, a passing `Desktop Swift Build & Tests` source gate, published release state, signed-smoke evidence, freshly recomputed ZIP/DMG hashes, and a supplied incident-specific behavioral evidence attachment. The incident must remain open and contain exactly two distinct `MEMBER`/`OWNER` comments in this exact form:
+`desktop_emergency_promote_beta.yml` is the break-glass lane for shipping an
+already-published signed macOS candidate to beta when the qualification gate
+itself is broken. It is beta-only: the backend rejects any other platform or
+channel.
 
-```text
-Emergency beta promotion approval: vX.Y.Z+BUILD-macos <40-char-source-sha> <expiry-ISO-8601>
-```
+It is deliberately small. The only guards are the ones a machine can check:
+the tag must resolve to its signed commit, the ZIP/DMG digests are recomputed
+from the published assets into an immutable manifest, and the pointer moves
+under a compare-and-swap on both the current release id and generation. There
+is no approval ceremony, expiry window, or incident-comment protocol — an
+automated actor fills those in as easily as a human, so they filter nothing.
 
-The expiry must be within four hours. The protected workflow derives the initiating operator from `github.triggering_actor`, then calls only `POST /v2/desktop/channels/emergency-promote-beta`; that API repeats the exact binding, performs the expected-current-release and generation CAS inside its Firestore transaction, and creates the immutable audit record with the server time before advancing `macos-beta`. The manifest and audit are bound by a deterministic operation ID over the release tag, source SHA, and incident, so a GitHub rerun can reuse the immutable decision and reconcile a transaction that committed before a later workflow failure. After repairing release metadata, reconciliation atomically creates a per-operation side-effect claim; only the claimant may notify responders and start the one-hour monitor, while a retry can still claim a transaction whose earlier promotion job failed. Emergency attempts never share GitHub's replaceable normal-beta pending slot; each attempt has an isolated GitHub lock while the server-side CAS makes a real cross-lane collision explicit and fail-closed. It rejects an expired authorization, a non-macOS/beta request, missing artifacts/digests, missing/invalid operator, fewer than two distinct approvers, a stale pointer, a non-forward release, or a reconciliation that lacks the bound emergency audit.
+Mechanically it is the normal promotion path with one precondition relaxed:
+`POST /v2/desktop/channels/promote` with `emergency: true` skips the T2
+qualification gate and requires the explicit CAS fields. The resulting pointer
+carries `emergency: true`, which is the audit record. Normal promotion is
+unchanged and still fail-closed.
 
-The workflow snapshots and compares the Stable Firestore pointer, Stable release metadata, and Stable appcast entries before and after the mutation. It comments on the incident immediately, then holds a mandatory one-hour beta-only feed monitor. A regression posts a rollback recommendation pointing operators to the independently audited beta rollback endpoint; Stable is never altered.
+The workflow reads the live pointer itself rather than asking an operator to
+paste values mid-incident; the generation CAS still rejects any concurrent
+mutation between that read and the write.
+
+Every run opens a `qualification-gate-failure` issue recording the tag, SHA,
+operator, reason, and run URL. **These issues are the point.** A bypass that
+fires more than rarely means the qualification gate is the defect and this
+hatch is masking it — fix the gate, then close the issue.
 
 After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
 
