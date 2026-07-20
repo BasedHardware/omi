@@ -464,13 +464,7 @@ struct DashboardPage: View {
   private func applyHomeLifecycle<Content: View>(to content: Content) -> some View {
     content
       .onAppear {
-        // First-win owns the fresh-user moment; the Try-Asking popup would
-        // fight it for the same screen and duplicates its ask affordance.
-        if PostOnboardingPromptSuggestions.shouldShowPopup && !postOnboardingSuggestions.isEmpty
-          && !showFirstWinSurface
-        {
-          NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
-        }
+        maybeShowTryAskingPopup()
         if showFirstWinSurface {
           activationStore.noteFirstWinShown()
         }
@@ -498,13 +492,18 @@ struct DashboardPage: View {
       .onReceive(homeStatusStore.$conversationCount) { conversations in
         activationStore.applyLifetimeCounts(
           conversations: conversations, memories: homeStatusStore.memoryCount)
+        // Counts just became known — this is the earliest moment the
+        // popup-vs-first-win decision can be made correctly.
+        maybeShowTryAskingPopup()
       }
       // The first-win surface can appear only after counts finish loading —
       // load its hero data and start its time-box at that moment, not just on
-      // the (earlier) page appear.
+      // the (earlier) page appear. It also owns the fresh-user moment: a
+      // Try-Asking popup that raced ahead of the counts must yield.
       .onChange(of: showFirstWinSurface) { wasShowing, isShowing in
         guard !wasShowing, isShowing else { return }
         activationStore.noteFirstWinShown()
+        NotificationCenter.default.post(name: .hideTryAskingPopup, object: nil)
         Task { await homeTodayStore.refresh(includeFirstWin: true) }
       }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -771,14 +770,14 @@ struct DashboardPage: View {
           memories: homeTodayStore.content.firstWinMemories,
           memoryCount: homeTodayStore.content.firstWinMemoryCount,
           shortcutTokens: shortcutSettings.askOmiShortcut.displayTokens,
-          conversationCaptured: activationStore.progress.conversationCaptured,
+          conversationState: firstWinConversationState,
           firstConversationTitle: activationStore.progress.firstConversationTitle,
-          hasMicrophonePermission: appState.hasMicrophonePermission,
-          hasScreenRecordingPermission: appState.hasScreenRecordingPermission,
-          isTranscribing: appState.isTranscribing,
+          screenState: firstWinScreenState,
           screenshotsToday: homeStatusStore.screenshotCountToday,
           onOpenMemories: { navigate(to: .memories) },
           onFixPermissions: { navigate(to: .permissions) },
+          onResumeListening: { toggleListening() },
+          onResumeCapture: { toggleCapture() },
           onOpenConversations: { navigate(to: .conversations) }
         )
         .frame(width: min(sectionWidth, 640))
@@ -905,6 +904,23 @@ struct DashboardPage: View {
       && activationStore.shouldShowFirstWin(countsKnown: homeStatusStore.knowledgeCountsKnown)
   }
 
+  /// Honest first-win pipeline states — permission granted is not the same
+  /// as capture running (paused capture renders a truthful resume action).
+  private var firstWinConversationState: HomeFirstWinSection.PipelineState {
+    if activationStore.progress.conversationCaptured { return .done }
+    if !appState.hasMicrophonePermission { return .blocked }
+    if !transcriptionEnabled || appState.transcriptionServiceError != nil { return .paused }
+    return appState.isTranscribing ? .live : .waiting
+  }
+
+  private var firstWinScreenState: HomeFirstWinSection.PipelineState {
+    switch captureStatus {
+    case .blocked: return .blocked
+    case .inactive: return .paused
+    case .active: return .live
+    }
+  }
+
   private func openGreetingDestination(_ destination: HomeGreetingComposer.SegmentDestination) {
     switch destination {
     case .conversations: navigate(to: .conversations)
@@ -919,6 +935,18 @@ struct DashboardPage: View {
       RewindSeekRequestStore.shared.request(timestamp)
     }
     navigate(to: .rewind)
+  }
+
+  /// Posts the Try-Asking popup only once the popup-vs-first-win decision can
+  /// be made correctly: never while lifetime counts are still unknown (the
+  /// first post-onboarding appearance — exactly when first-win must win).
+  private func maybeShowTryAskingPopup() {
+    guard PostOnboardingPromptSuggestions.shouldShowPopup,
+      !postOnboardingSuggestions.isEmpty,
+      homeStatusStore.knowledgeCountsKnown,
+      !showFirstWinSurface
+    else { return }
+    NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
   }
 
   /// Panel layout (chat / connect): the surface fills the height with the ask

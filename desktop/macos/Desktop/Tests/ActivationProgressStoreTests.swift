@@ -101,13 +101,18 @@ final class ActivationProgressStoreTests: XCTestCase {
     XCTAssertFalse(store.shouldShowFirstWin(countsKnown: true))
   }
 
-  func testVisitCapGraduates() {
-    let store = makeStore()
+  func testSameDayRevisitsNeverGraduate() {
+    var currentTime = Date(timeIntervalSince1970: 1_000_000)
+    let store = makeStore(now: { currentTime })
 
-    for _ in 0..<(ActivationProgressStore.firstWinMaxVisits + 1) {
+    // Six Home visits within one session/day: one distinct-day visit, no
+    // graduation — the surface must survive normal tab switching.
+    for _ in 0..<6 {
       store.noteFirstWinShown()
+      currentTime = currentTime.addingTimeInterval(60)
     }
-    XCTAssertTrue(store.isActivated)
+    XCTAssertFalse(store.isActivated)
+    XCTAssertEqual(store.progress.firstWinVisits, 1)
   }
 
   func testCelebrationFiresOnceOnRealActivation() {

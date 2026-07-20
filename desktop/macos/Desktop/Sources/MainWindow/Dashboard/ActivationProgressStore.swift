@@ -23,15 +23,17 @@ final class ActivationProgressStore: ObservableObject {
     var conversationCaptured = false
     var firstConversationTitle: String?
     var firstWinFirstShownAt: Date?
+    /// Distinct calendar days the first-win surface was seen (same-day tab
+    /// switches must not burn the window down).
     var firstWinVisits = 0
+    var lastFirstWinDayStamp: String?
     /// Set once the user leaves first-win for good (completed or timed out).
     var graduated = false
   }
 
-  /// First-win stops insisting after this window or visit count — a user who
-  /// skipped microphone/screen permissions must not live on a stale checklist.
+  /// First-win stops insisting after this window — a user who skipped
+  /// microphone/screen permissions must not live on a stale checklist.
   static let firstWinMaxAge: TimeInterval = 48 * 60 * 60
-  static let firstWinMaxVisits = 5
 
   @Published private(set) var progress = Progress()
 
@@ -117,22 +119,35 @@ final class ActivationProgressStore: ObservableObject {
   }
 
   /// Called when the first-win surface renders; applies the time-box so
-  /// permission-skippers eventually land on the Today hub anyway.
+  /// permission-skippers eventually land on the Today hub anyway. Visits are
+  /// counted per distinct calendar day — navigating to Home six times in one
+  /// session is one visit, not a graduation.
   func noteFirstWinShown() {
     let currentTime = now()
+    let dayStamp = Self.dayStampFormatter.string(from: currentTime)
     mutate {
       if $0.firstWinFirstShownAt == nil {
         $0.firstWinFirstShownAt = currentTime
       }
-      $0.firstWinVisits += 1
+      if $0.lastFirstWinDayStamp != dayStamp {
+        $0.lastFirstWinDayStamp = dayStamp
+        $0.firstWinVisits += 1
+      }
       if let firstShown = $0.firstWinFirstShownAt,
         currentTime.timeIntervalSince(firstShown) > Self.firstWinMaxAge
-          || $0.firstWinVisits > Self.firstWinMaxVisits
       {
         $0.graduated = true
       }
     }
   }
+
+  private static let dayStampFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+  }()
 
   // MARK: - Persistence
 

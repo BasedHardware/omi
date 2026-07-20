@@ -59,6 +59,40 @@ final class HomeTodayStoreTests: XCTestCase {
     XCTAssertEqual(dismissedIDs, [3])
   }
 
+  func testAppActivationSpamIsThrottled() async {
+    var loads = 0
+    var currentTime = Date(timeIntervalSince1970: 1_000_000)
+    let store = HomeTodayStore(
+      loader: HomeTodayStore.Loader(
+        loadTodayInsights: { _ in
+          loads += 1
+          return []
+        },
+        loadFilmstrip: { _ in [] },
+        loadFirstWinMemories: { ([], 0) },
+        dismissInsight: { _ in }
+      ),
+      now: { currentTime }
+    )
+
+    await store.refresh(includeFirstWin: false)
+    XCTAssertEqual(loads, 1)
+
+    // A cmd-tab five seconds later must not resample the filmstrip.
+    currentTime = currentTime.addingTimeInterval(5)
+    await store.refresh(includeFirstWin: false)
+    XCTAssertEqual(loads, 1)
+
+    // Upgrading to the first-win pass always runs.
+    await store.refresh(includeFirstWin: true)
+    XCTAssertEqual(loads, 2)
+
+    // And the cooldown expiring allows a fresh pass.
+    currentTime = currentTime.addingTimeInterval(PollingConfig.activationCooldown)
+    await store.refresh(includeFirstWin: true)
+    XCTAssertEqual(loads, 3)
+  }
+
   func testResetClearsContent() async {
     let store = HomeTodayStore(
       loader: HomeTodayStore.Loader(

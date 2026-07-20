@@ -1020,6 +1020,11 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
       showTryAskingPopup = true
     }
+    .onReceive(NotificationCenter.default.publisher(for: .hideTryAskingPopup)) { _ in
+      // First-win won the fresh-user moment — hide without marking dismissed
+      // so the suggestions can still surface after activation.
+      showTryAskingPopup = false
+    }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
       // Set the section directly and navigate to settings
       selectedSettingsSection = .rewind

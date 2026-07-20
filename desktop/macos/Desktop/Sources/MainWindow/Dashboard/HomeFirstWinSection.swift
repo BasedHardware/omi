@@ -11,17 +11,28 @@ import SwiftUI
 /// ask bar rendered underneath by `DashboardPage` is the single ask
 /// affordance; the keycap row teaches the floating-bar shortcut.
 struct HomeFirstWinSection: View {
+  /// Honest pipeline state per capture lane. Permission granted is NOT the
+  /// same as capture running — `paused` renders the truthful resume
+  /// affordance instead of a fake pulsing dot.
+  enum PipelineState: Equatable {
+    case blocked
+    case paused
+    case waiting
+    case live
+    case done
+  }
+
   let memories: [String]
   let memoryCount: Int
   let shortcutTokens: [String]
-  let conversationCaptured: Bool
+  let conversationState: PipelineState
   let firstConversationTitle: String?
-  let hasMicrophonePermission: Bool
-  let hasScreenRecordingPermission: Bool
-  let isTranscribing: Bool
+  let screenState: PipelineState
   let screenshotsToday: Int?
   let onOpenMemories: () -> Void
   let onFixPermissions: () -> Void
+  let onResumeListening: () -> Void
+  let onResumeCapture: () -> Void
   let onOpenConversations: () -> Void
 
   var body: some View {
@@ -85,7 +96,8 @@ struct HomeFirstWinSection: View {
 
   @ViewBuilder
   private var conversationPill: some View {
-    if conversationCaptured {
+    switch conversationState {
+    case .done:
       HomeFirstWinPill(
         state: .done,
         text: firstConversationTitle.map { "First conversation: \($0)" }
@@ -93,19 +105,31 @@ struct HomeFirstWinSection: View {
         actionLabel: nil,
         action: onOpenConversations
       )
-    } else if !hasMicrophonePermission {
+    case .blocked:
       HomeFirstWinPill(
         state: .blocked,
         text: "First conversation",
         actionLabel: "Enable microphone →",
         action: onFixPermissions
       )
-    } else {
+    case .paused:
       HomeFirstWinPill(
-        state: .active(pulsing: isTranscribing),
-        text: isTranscribing
-          ? "Listening — your first conversation lands here"
-          : "First conversation — start talking or join a meeting",
+        state: .blocked,
+        text: "Listening is off",
+        actionLabel: "Turn on →",
+        action: onResumeListening
+      )
+    case .live:
+      HomeFirstWinPill(
+        state: .active(pulsing: true),
+        text: "Listening — your first conversation lands here",
+        actionLabel: nil,
+        action: nil
+      )
+    case .waiting:
+      HomeFirstWinPill(
+        state: .active(pulsing: false),
+        text: "First conversation — start talking or join a meeting",
         actionLabel: nil,
         action: nil
       )
@@ -114,14 +138,22 @@ struct HomeFirstWinSection: View {
 
   @ViewBuilder
   private var screenPill: some View {
-    if !hasScreenRecordingPermission {
+    switch screenState {
+    case .blocked:
       HomeFirstWinPill(
         state: .blocked,
         text: "Screen memory",
         actionLabel: "Turn on →",
         action: onFixPermissions
       )
-    } else {
+    case .paused:
+      HomeFirstWinPill(
+        state: .blocked,
+        text: "Screen memory is paused",
+        actionLabel: "Resume →",
+        action: onResumeCapture
+      )
+    case .live, .waiting, .done:
       HomeFirstWinPill(
         state: .active(pulsing: true),
         text: screenshotsToday.map { $0 > 0 ? "Screen memory — \($0) screens so far" : "Screen memory — capturing" }

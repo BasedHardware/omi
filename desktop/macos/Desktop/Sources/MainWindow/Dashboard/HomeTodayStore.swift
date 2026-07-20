@@ -98,6 +98,11 @@ final class HomeTodayStore: ObservableObject {
   private let now: () -> Date
   private var refreshTask: Task<Void, Never>?
   private var refreshTaskID: UUID?
+  /// Bumped on session reset; an in-flight refresh spawned before the bump
+  /// may finish but must never publish into the next owner's content.
+  private var refreshGeneration = 0
+  private var lastRefreshAt = Date.distantPast
+  private var lastRefreshIncludedFirstWin = false
 
   init(loader: Loader = .live, now: @escaping () -> Date = Date.init) {
     self.loader = loader
@@ -105,16 +110,29 @@ final class HomeTodayStore: ObservableObject {
   }
 
   func refresh(includeFirstWin: Bool) async {
-    // Wait out an in-flight refresh but still run our own pass — the caller's
-    // includeFirstWin may differ (e.g. the first-win surface appearing right
-    // after a plain refresh started), and its data must not be skipped.
+    // Wait out an in-flight refresh but still evaluate our own pass — the
+    // caller's includeFirstWin may differ (e.g. the first-win surface
+    // appearing right after a plain refresh started).
     if let refreshTask {
       await refreshTask.value
     }
+    // Cooldown: app-activation spam must not resample the filmstrip (up to
+    // ten video-chunk decodes per pass). A pass that upgrades to first-win
+    // data always runs.
+    let currentTime = now()
+    let upgradesToFirstWin = includeFirstWin && !lastRefreshIncludedFirstWin
+    guard
+      upgradesToFirstWin
+        || PollingConfig.shouldAllowActivationRefresh(now: currentTime, lastRefresh: lastRefreshAt)
+    else { return }
+    lastRefreshAt = currentTime
+    lastRefreshIncludedFirstWin = includeFirstWin
+
     let taskID = UUID()
+    let generation = refreshGeneration
     let task = Task { [weak self] in
       guard let self else { return }
-      await self.performRefresh(includeFirstWin: includeFirstWin)
+      await self.performRefresh(includeFirstWin: includeFirstWin, generation: generation)
     }
     refreshTask = task
     refreshTaskID = taskID
@@ -131,13 +149,16 @@ final class HomeTodayStore: ObservableObject {
   }
 
   func resetSessionState() {
+    refreshGeneration += 1
     refreshTask?.cancel()
     refreshTask = nil
     refreshTaskID = nil
+    lastRefreshAt = .distantPast
+    lastRefreshIncludedFirstWin = false
     content = Content()
   }
 
-  private func performRefresh(includeFirstWin: Bool) async {
+  private func performRefresh(includeFirstWin: Bool, generation: Int) async {
     let startOfDay = Calendar.current.startOfDay(for: now())
     async let insights = loader.loadTodayInsights(startOfDay)
     async let filmstrip = loader.loadFilmstrip(startOfDay)
@@ -151,7 +172,9 @@ final class HomeTodayStore: ObservableObject {
       updated.firstWinMemories = memories
       updated.firstWinMemoryCount = total
     }
-    guard !Task.isCancelled else { return }
+    // Owner fencing: a reset (account switch) invalidates this pass even if
+    // the task was not cancelled in time.
+    guard !Task.isCancelled, generation == refreshGeneration else { return }
     content = updated
   }
 }

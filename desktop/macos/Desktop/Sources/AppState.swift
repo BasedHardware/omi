@@ -799,6 +799,8 @@ extension Notification.Name {
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
   /// Posted to show the "Try asking" popup centered over the full window
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
+  /// Posted to hide that popup without dismissing it (first-win owns the moment)
+  static let hideTryAskingPopup = Notification.Name("hideTryAskingPopup")
   /// Posted (automation bridge) to open the inline chat on the redesigned Home
   static let homeStageOpenChat = Notification.Name("homeStageOpenChat")
   /// Posted (automation bridge) to toggle the Connect tray on the redesigned Home
