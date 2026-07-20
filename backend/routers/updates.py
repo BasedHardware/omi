@@ -17,6 +17,7 @@ from database.desktop_update_channels import (
     promote_channel,
     register_release_manifest,
     rollback_macos_beta_channel,
+    verify_emergency_macos_beta_reconciliation,
 )
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
@@ -104,6 +105,7 @@ class DesktopBetaEmergencyPromotionRequest(BaseModel):
     expected_generation: int = Field(ge=0)
     incident_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
+    operator: str = Field(min_length=1, max_length=39, pattern=r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$")
     expires_at: str = Field(min_length=1)
     approvers: List[str] = Field(min_length=2, max_length=2)
     signed_smoke_url: str = Field(min_length=1)
@@ -970,6 +972,7 @@ async def emergency_promote_macos_beta_channel_endpoint(
             expected_generation=request.expected_generation,
             incident_id=request.incident_id,
             reason=request.reason,
+            operator=request.operator,
             expires_at=request.expires_at,
             approvers=request.approvers,
             evidence=evidence,
@@ -977,4 +980,25 @@ async def emergency_promote_macos_beta_channel_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    return {"success": True, **result}
+
+
+@router.get("/v2/desktop/channels/emergency-promote-beta/reconciliation")
+async def verify_emergency_macos_beta_reconciliation_endpoint(
+    release_id: str = Query(min_length=1),
+    source_sha: str = Query(pattern=r"^[0-9a-fA-F]{40}$"),
+    secret_key: str = Header(...),
+):
+    """Verify an emergency transaction before repairing GitHub release metadata."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    try:
+        result = await run_blocking(
+            db_executor,
+            verify_emergency_macos_beta_reconciliation,
+            release_id,
+            source_sha=source_sha,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"success": True, **result}

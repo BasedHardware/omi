@@ -2867,19 +2867,21 @@ workflows:
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
 
-          # Safe re-run: delete existing release if it exists
-          gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
-            gh release delete "$CM_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null || true
-
-          gh release create "$CM_TAG" \
-            --repo "$GITHUB_REPO" \
-            --title "Omi Desktop v${VERSION} (candidate)" \
-            --notes "$RELEASE_NOTES" \
-            "$SPARKLE_ZIP_PATH" \
-            "$DMG_PATH" \
-            "$BUILD_DIR/desktop-smoke-result.json"
-
-          echo "GitHub release candidate created: $CM_TAG"
+          # A candidate is the evidence container. Once published, preserve its
+          # signed artifacts and every qualification observation; retries only
+          # resume the dispatch handoff below.
+          if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
+            echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
+          else
+            gh release create "$CM_TAG" \
+              --repo "$GITHUB_REPO" \
+              --title "Omi Desktop v${VERSION} (candidate)" \
+              --notes "$RELEASE_NOTES" \
+              "$SPARKLE_ZIP_PATH" \
+              "$DMG_PATH" \
+              "$BUILD_DIR/desktop-smoke-result.json"
+            echo "GitHub release candidate created: $CM_TAG"
+          fi
 
       - name: Dispatch trusted macOS beta qualification
         script: |
@@ -2891,11 +2893,23 @@ workflows:
             echo "Automatic desktop beta qualification paused by DESKTOP_AUTO_BETA_ENABLED=false; candidate remains non-live."
             exit 0
           fi
-          if ! gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-            -f release_tag="$CM_TAG"; then
-            echo "WARNING: qualification dispatch failed; candidate remains non-live."
-            echo "Retry desktop_qualify_beta.yml for $CM_TAG after GitHub Actions recovers."
-          fi
+          set -euo pipefail
+          dispatch_key="codemagic:${CM_TAG}"
+          # The GitHub Actions workflow owns every release-body transition.
+          # Its per-candidate concurrency group is the authoritative atomic
+          # serialiser for claim/running/complete state; Codemagic must never
+          # replay a stale queued body over a runner-owned transition.
+          for attempt in 1 2 3; do
+            if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
+              -f release_tag="$CM_TAG" -f dispatch_key="$dispatch_key"; then
+              echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep "$((attempt * 2))"
+            fi
+          done
+          echo "WARNING: qualification dispatch was not confirmed after bounded retry; candidate remains non-live."
 
     artifacts:
       - build/*.app

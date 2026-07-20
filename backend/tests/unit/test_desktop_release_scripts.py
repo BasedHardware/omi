@@ -7,6 +7,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / ".github" / "scripts"
 PROMOTE_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_beta.yml"
 PROMOTE_PROD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml"
+EMERGENCY_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_emergency_promote_beta.yml"
+QUALIFY_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_qualify_beta.yml"
+CODEMAGIC_CONFIG = REPO_ROOT / "codemagic.yaml"
 
 
 def _load(name: str, filename: str):
@@ -69,6 +72,7 @@ def test_emergency_metadata_records_two_bound_approvals_without_making_the_relea
             "source_sha": "a" * 40,
             "incident_id": "10063",
             "reason": "qualification runner unavailable",
+            "operator": "release-operator",
             "expires_at": "2026-07-19T13:00:00Z",
             "approvers": ["alice", "bob"],
             "evidence": {"behavioral_url": "https://example.test/behavior.json"},
@@ -76,6 +80,7 @@ def test_emergency_metadata_records_two_bound_approvals_without_making_the_relea
     )
     assert "emergencyPromotion: true" in result
     assert "emergencyPromotionApprovers: alice,bob" in result
+    assert "emergencyPromotionOperator: release-operator" in result
     assert "channel: beta" in result
     assert "channel: stable" not in result
 
@@ -100,6 +105,12 @@ def test_emergency_approval_parser_requires_two_distinct_authorized_commenters_b
     comments[1]["author_association"] = "CONTRIBUTOR"
     with pytest.raises(SystemExit, match="exactly two"):
         emergency_promotion.approval_identities(comments, "v0.12.64+12064-macos", "a" * 40, "2026-07-19T13:00:00Z")
+
+
+def test_emergency_incident_state_normalizes_github_open_casing():
+    assert emergency_promotion.incident_is_open({"number": 10063, "state": "OPEN"}, "10063")
+    assert emergency_promotion.incident_is_open({"number": "10063", "state": "open"}, "10063")
+    assert not emergency_promotion.incident_is_open({"number": 10063, "state": "closed"}, "10063")
 
 
 def test_prepare_manifest_requires_exact_qualification_and_assets():
@@ -312,6 +323,52 @@ def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
     assert "git for-each-ref --count=1 --sort=-v:refname" in workflow
     assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in workflow
     assert automatic_gate < candidate_download
+
+
+def test_emergency_beta_runs_notification_and_monitor_only_after_authoritative_reconciliation():
+    """Static wiring contract: recover only from the bound emergency transaction."""
+    workflow = EMERGENCY_BETA_WORKFLOW.read_text()
+    pointer = workflow.index("      - name: Register manifest and compare-and-swap only macOS beta")
+    stable_proof = workflow.index("      - name: Prove Stable pointer, release metadata, and appcast are unchanged")
+    github_metadata = workflow.index(
+        "      - name: Reconcile explicit emergency release metadata after beta pointer CAS"
+    )
+    notify_job = workflow.index("  notify:")
+    notify = workflow.index("      - name: Notify incident responders immediately")
+    metadata_step = workflow[github_metadata:notify]
+
+    assert pointer < stable_proof < github_metadata < notify_job < notify
+    assert "authoritative macOS beta pointer compare-and-swap did not succeed" in workflow
+    assert "if: always()" in metadata_step
+    assert "id: reconcile" in metadata_step
+    assert "emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}" in workflow
+    assert "emergency-promote-beta/reconciliation" in metadata_step
+    assert "source_sha=$SOURCE_SHA" in metadata_step
+    assert "authoritative emergency transaction reconciliation did not verify this release identity" in metadata_step
+    assert 'echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"' in metadata_step
+    assert "gh api --paginate --slurp" in workflow
+    assert "for comment in page" in workflow
+
+    notification = workflow[notify_job : workflow.index("  monitor:")]
+    monitor = workflow[workflow.index("  monitor:") :]
+    expected_condition = "if: ${{ always() && needs.promote.outputs.emergency_reconciled == 'true' }}"
+    assert expected_condition in notification
+    assert expected_condition in monitor
+    assert "environment: prod" not in notification
+    assert "environment: prod" not in monitor
+
+
+def test_qualification_claims_are_serialized_by_the_trusted_runner_only():
+    codemagic = CODEMAGIC_CONFIG.read_text()
+    dispatch = codemagic[codemagic.index("      - name: Dispatch trusted macOS beta qualification") :]
+    qualification = QUALIFY_BETA_WORKFLOW.read_text()
+
+    assert "authoritative atomic" in dispatch
+    assert 'gh release edit "$CM_TAG"' not in dispatch
+    assert "group: desktop-beta-qualification-${{ inputs.release_tag }}" in qualification
+    assert "cancel-in-progress: false" in qualification
+    assert "desktop_qualification_dispatch.py claim" in qualification
+    assert "desktop_qualification_dispatch.py complete" in qualification
 
 
 def test_stable_promotion_remains_manual_only():

@@ -60,6 +60,7 @@ jobs:
       release_tag: ${{ steps.candidate.outputs.release_tag }}
       incident_id: ${{ inputs.incident_id }}
       approvers: ${{ steps.evidence.outputs.approvers }}
+      emergency_reconciled: ${{ steps.reconcile.outputs.emergency_reconciled }}
     steps:
       - name: Checkout protected promotion controls
         uses: actions/checkout@v7
@@ -97,7 +98,8 @@ jobs:
             > /tmp/desktop-emergency-beta/source-check.json
           gh issue view "$INCIDENT_ID" --repo "$REPO" --json number,state,url \
             > /tmp/desktop-emergency-beta/incident.json
-          gh api "repos/${REPO}/issues/${INCIDENT_ID}/comments?per_page=100" \
+          gh api --paginate --slurp "repos/${REPO}/issues/${INCIDENT_ID}/comments?per_page=100" \
+            | python3 -c 'import json, sys; json.dump([comment for page in json.load(sys.stdin) for comment in page], sys.stdout)' \
             > /tmp/desktop-emergency-beta/incident-comments.json
           curl --fail --location --retry 2 --output /tmp/desktop-emergency-beta/behavioral-evidence \
             "$BEHAVIORAL_EVIDENCE_URL"
@@ -116,6 +118,7 @@ jobs:
           SOURCE_SHA: ${{ steps.candidate.outputs.target_sha }}
           INCIDENT_ID: ${{ inputs.incident_id }}
           REASON: ${{ inputs.reason }}
+          OPERATOR: ${{ github.triggering_actor }}
           EXPIRES_AT: ${{ inputs.expires_at }}
           BEHAVIORAL_EVIDENCE_URL: ${{ inputs.behavioral_evidence_url }}
           CONFIRM: ${{ inputs.confirm }}
@@ -132,24 +135,10 @@ jobs:
             --behavioral-evidence-file /tmp/desktop-emergency-beta/behavioral-evidence \
             --behavioral-evidence-url "$BEHAVIORAL_EVIDENCE_URL" \
             --release-tag "$RELEASE_TAG" --source-sha "$SOURCE_SHA" --incident-id "$INCIDENT_ID" \
-            --reason "$REASON" --expires-at "$EXPIRES_AT" --confirm "$CONFIRM" \
+            --reason "$REASON" --operator "$OPERATOR" --expires-at "$EXPIRES_AT" --confirm "$CONFIRM" \
             --output /tmp/desktop-emergency-beta/evidence.json
           python3 -c 'import json; print(",".join(json.load(open("/tmp/desktop-emergency-beta/evidence.json"))["approvers"]))' \
             | sed 's/^/approvers=/' >> "$GITHUB_OUTPUT"
-
-      - name: Record explicit emergency release metadata
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/desktop-emergency-beta/release-body.md
-          python3 .github/scripts/mark-desktop-release-emergency-beta.py \
-            --input /tmp/desktop-emergency-beta/release-body.md \
-            --evidence /tmp/desktop-emergency-beta/evidence.json \
-            --output /tmp/desktop-emergency-beta/release-body-emergency.md
-          gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/desktop-emergency-beta/release-body-emergency.md
 
       - name: Prepare immutable emergency manifest
         run: |
@@ -200,7 +189,7 @@ jobs:
           EXPECTED_GENERATION: ${{ inputs.expected_generation }}
           INCIDENT_ID: ${{ inputs.incident_id }}
           REASON: ${{ inputs.reason }}
-          EXPIRES_AT: ${{ inputs.expires_at }}
+          OPERATOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
@@ -214,7 +203,7 @@ jobs:
               'platform': 'macos', 'channel': 'beta', 'release_id': os.environ['RELEASE_TAG'],
               'source_sha': os.environ['SOURCE_SHA'], 'expected_current_release_id': os.environ['EXPECTED_CURRENT_RELEASE_ID'],
               'expected_generation': int(os.environ['EXPECTED_GENERATION']), 'incident_id': os.environ['INCIDENT_ID'],
-              'reason': os.environ['REASON'], 'expires_at': os.environ['EXPIRES_AT'],
+              'reason': os.environ['REASON'], 'operator': os.environ['OPERATOR'], 'expires_at': evidence['expires_at'],
               'approvers': evidence['approvers'], **evidence['evidence'],
           }))
           PY
@@ -222,7 +211,24 @@ jobs:
             --data-binary @/tmp/desktop-emergency-beta/promote.json \
             https://api.omi.me/v2/desktop/channels/emergency-promote-beta \
             > /tmp/desktop-emergency-beta/promotion-response.json
-          python3 -m json.tool /tmp/desktop-emergency-beta/promotion-response.json
+          RELEASE_TAG="$RELEASE_TAG" EXPECTED_GENERATION="$EXPECTED_GENERATION" python3 - <<'PY'
+          import json
+          import os
+
+          response = json.load(open('/tmp/desktop-emergency-beta/promotion-response.json'))
+          pointer = response.get('pointer')
+          expected_generation = int(os.environ['EXPECTED_GENERATION']) + 1
+          if (
+              response.get('success') is not True
+              or not isinstance(pointer, dict)
+              or pointer.get('platform') != 'macos'
+              or pointer.get('channel') != 'beta'
+              or pointer.get('release_id') != os.environ['RELEASE_TAG']
+              or pointer.get('generation') != expected_generation
+          ):
+              raise SystemExit('authoritative macOS beta pointer compare-and-swap did not succeed')
+          print(json.dumps(response, indent=2))
+          PY
 
       - name: Prove Stable pointer, release metadata, and appcast are unchanged
         env:
@@ -251,17 +257,65 @@ jobs:
           PY
           cmp /tmp/desktop-emergency-beta/stable-appcast-before.xml /tmp/desktop-emergency-beta/stable-appcast-after.xml
 
-      - name: Notify incident responders immediately
+      - name: Reconcile explicit emergency release metadata after beta pointer CAS
+        # This must reconcile metadata even when the CAS response parser or a
+        # later Stable-proof step fails after the backend transaction commits.
+        # The backend verifies the append-only emergency audit and immutable
+        # emergency decision for this exact tag/SHA; a matching beta pointer
+        # alone could have been written by a concurrent normal promotion.
+        id: reconcile
+        if: always()
         env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.target_sha }}
           REPO: ${{ github.repository }}
         run: |
-          gh issue comment "${{ inputs.incident_id }}" --repo "$REPO" --body \
-            "Emergency macOS beta promotion completed for ${{ inputs.release_tag }} from ${{ steps.candidate.outputs.target_sha }}. Approvers: ${{ steps.evidence.outputs.approvers }}. The mandatory one-hour beta monitor is now running: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
+          RECONCILIATION=$(curl -fsS --get \
+            -H "secret-key: $ADMIN_KEY" \
+            --data-urlencode "release_id=$RELEASE_TAG" \
+            --data-urlencode "source_sha=$SOURCE_SHA" \
+            https://api.omi.me/v2/desktop/channels/emergency-promote-beta/reconciliation)
+          RECONCILIATION="$RECONCILIATION" RELEASE_TAG="$RELEASE_TAG" SOURCE_SHA="$SOURCE_SHA" python3 - <<'PY'
+          import json
+          import os
+
+          reconciliation = json.loads(os.environ['RECONCILIATION'])
+          if (
+              reconciliation.get('success') is not True
+              or reconciliation.get('emergency_reconciled') is not True
+              or reconciliation.get('release_id') != os.environ['RELEASE_TAG']
+              or reconciliation.get('source_sha') != os.environ['SOURCE_SHA']
+          ):
+              raise SystemExit('authoritative emergency transaction reconciliation did not verify this release identity')
+          PY
+          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/desktop-emergency-beta/release-body.md
+          python3 .github/scripts/mark-desktop-release-emergency-beta.py \
+            --input /tmp/desktop-emergency-beta/release-body.md \
+            --evidence /tmp/desktop-emergency-beta/evidence.json \
+            --output /tmp/desktop-emergency-beta/release-body-emergency.md
+          gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/desktop-emergency-beta/release-body-emergency.md
+          echo "emergency_reconciled=true" >> "$GITHUB_OUTPUT"
+
+  notify:
+    needs: promote
+    if: ${{ always() && needs.promote.outputs.emergency_reconciled == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify incident responders immediately
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue comment "${{ needs.promote.outputs.incident_id }}" --repo "$REPO" --body \
+            "Emergency macOS beta promotion completed for ${{ needs.promote.outputs.release_tag }}. Approvers: ${{ needs.promote.outputs.approvers }}. The mandatory one-hour beta monitor is now running: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   monitor:
     needs: promote
-    environment: prod
+    if: ${{ always() && needs.promote.outputs.emergency_reconciled == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Monitor beta-only feed for one hour
