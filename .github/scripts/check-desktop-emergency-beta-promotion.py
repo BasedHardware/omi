@@ -80,6 +80,16 @@ def parse_expiry(value: str, *, now: datetime) -> datetime:
     return expires_at
 
 
+def workflow_run_identity(run_id: str, run_attempt: str) -> tuple[int, int]:
+    values = {"workflow_run_id": run_id, "workflow_run_attempt": run_attempt}
+    parsed: dict[str, int] = {}
+    for field, value in values.items():
+        if not re.fullmatch(r"[1-9][0-9]*", value):
+            fail(f"{field} must be a positive GitHub Actions integer")
+        parsed[field] = int(value)
+    return parsed["workflow_run_id"], parsed["workflow_run_attempt"]
+
+
 def approval_identities(comments: list[dict], tag: str, source_sha: str, expires_at: str) -> list[str]:
     approvers: list[str] = []
     for comment in comments:
@@ -120,6 +130,7 @@ def validate(args: argparse.Namespace) -> dict:
         fail("operator must be the GitHub login that started the protected workflow")
     now = datetime.now(timezone.utc) if args.now is None else datetime.fromisoformat(args.now.replace("Z", "+00:00"))
     expiry = parse_expiry(args.expires_at, now=now)
+    workflow_run_id, workflow_run_attempt = workflow_run_identity(args.workflow_run_id, args.workflow_run_attempt)
     behavioral_url = https_url(args.behavioral_evidence_url, "behavioral_evidence_url")
     behavioral_digest = sha256_file(args.behavioral_evidence_file)
 
@@ -179,6 +190,8 @@ def validate(args: argparse.Namespace) -> dict:
         "reason": args.reason.strip(),
         "operator": operator,
         "expires_at": expiry.isoformat().replace("+00:00", "Z"),
+        "workflow_run_id": workflow_run_id,
+        "workflow_run_attempt": workflow_run_attempt,
         "approvers": approvers,
         "evidence": {
             "signed_smoke_url": signed_smoke_url,
@@ -209,6 +222,8 @@ def main() -> int:
     parser.add_argument("--reason", required=True)
     parser.add_argument("--operator", required=True)
     parser.add_argument("--expires-at", required=True)
+    parser.add_argument("--workflow-run-id", required=True)
+    parser.add_argument("--workflow-run-attempt", required=True)
     parser.add_argument("--confirm", required=True)
     parser.add_argument("--now")
     parser.add_argument("--output", required=True)

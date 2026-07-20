@@ -27,6 +27,13 @@ def _asset(release: dict, names: set[str]) -> dict:
     fail(f"release is missing required asset: {', '.join(sorted(names))}")
 
 
+def _require_emergency_workflow_identity(evidence: dict) -> None:
+    for field in ("workflow_run_id", "workflow_run_attempt"):
+        value = evidence.get(field)
+        if type(value) is not int or value <= 0:
+            fail(f"emergency evidence {field} must be a positive GitHub Actions integer")
+
+
 def prepare_manifest(
     release: dict,
     release_tag: str,
@@ -69,6 +76,10 @@ def prepare_manifest(
         fail("emergency evidence does not bind the requested release tag and source SHA")
     elif emergency_evidence.get("emergencyPromotion") is not True:
         fail("emergency evidence must explicitly declare emergencyPromotion")
+    elif not isinstance(emergency_evidence, dict):
+        fail("emergency evidence must be an object")
+    else:
+        _require_emergency_workflow_identity(emergency_evidence)
 
     zip_asset = _asset(release, {"Omi.zip"})
     dmg_asset = _asset(release, {"Omi.dmg", "omi.dmg"})
