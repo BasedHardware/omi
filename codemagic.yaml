@@ -2861,19 +2861,21 @@ workflows:
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
 
-          # Safe re-run: delete existing release if it exists
-          gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
-            gh release delete "$CM_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null || true
-
-          gh release create "$CM_TAG" \
-            --repo "$GITHUB_REPO" \
-            --title "Omi Desktop v${VERSION} (candidate)" \
-            --notes "$RELEASE_NOTES" \
-            "$SPARKLE_ZIP_PATH" \
-            "$DMG_PATH" \
-            "$BUILD_DIR/desktop-smoke-result.json"
-
-          echo "GitHub release candidate created: $CM_TAG"
+          # A candidate is the evidence container. Once published, preserve its
+          # signed artifacts and every qualification observation; retries only
+          # resume the dispatch handoff below.
+          if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
+            echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
+          else
+            gh release create "$CM_TAG" \
+              --repo "$GITHUB_REPO" \
+              --title "Omi Desktop v${VERSION} (candidate)" \
+              --notes "$RELEASE_NOTES" \
+              "$SPARKLE_ZIP_PATH" \
+              "$DMG_PATH" \
+              "$BUILD_DIR/desktop-smoke-result.json"
+            echo "GitHub release candidate created: $CM_TAG"
+          fi
 
       - name: Dispatch trusted macOS beta qualification
         script: |
@@ -2885,11 +2887,68 @@ workflows:
             echo "Automatic desktop beta qualification paused by DESKTOP_AUTO_BETA_ENABLED=false; candidate remains non-live."
             exit 0
           fi
-          if ! gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-            -f release_tag="$CM_TAG"; then
-            echo "WARNING: qualification dispatch failed; candidate remains non-live."
-            echo "Retry desktop_qualify_beta.yml for $CM_TAG after GitHub Actions recovers."
+          set -euo pipefail
+          dispatch_dir="/tmp/desktop-qualification-dispatch"
+          dispatch_key="codemagic:${CM_TAG}"
+          repo_root="$(git rev-parse --show-toplevel)"
+          dispatch_helper="$repo_root/.github/scripts/desktop_qualification_dispatch.py"
+          [[ -f "$dispatch_helper" ]] || {
+            echo "ERROR: desktop qualification dispatch helper is missing from the checkout" >&2
+            exit 1
+          }
+          mkdir -p "$dispatch_dir"
+          gh release view "$CM_TAG" --repo "$GITHUB_REPO" --json body --jq .body > "$dispatch_dir/before.md"
+          python3 "$dispatch_helper" initialize \
+            --input "$dispatch_dir/before.md" --output "$dispatch_dir/pending.md" \
+            --key "$dispatch_key" --updated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --diagnostic "candidate published; Codemagic is requesting trusted qualification" \
+            > "$dispatch_dir/initialize.json"
+          if ! cmp -s "$dispatch_dir/before.md" "$dispatch_dir/pending.md"; then
+            gh release edit "$CM_TAG" --repo "$GITHUB_REPO" --notes-file "$dispatch_dir/pending.md"
           fi
+          dispatch_state=$(REPO_ROOT="$repo_root" python3 - "$dispatch_dir/pending.md" <<'PY'
+          import os
+          import sys
+          sys.path.insert(0, os.path.join(os.environ["REPO_ROOT"], ".github/scripts"))
+          from desktop_release_metadata import parse_metadata
+          print(parse_metadata(open(sys.argv[1], encoding='utf-8').read()).get('qualificationDispatchState', ''))
+          PY
+          )
+          if [[ "$dispatch_state" != "pending" ]]; then
+            echo "Qualification dispatch already $dispatch_state for $CM_TAG; candidate remains non-live until trusted qualification succeeds."
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
+              -f release_tag="$CM_TAG" -f dispatch_key="$dispatch_key"; then
+              gh release view "$CM_TAG" --repo "$GITHUB_REPO" --json body --jq .body > "$dispatch_dir/current.md"
+              python3 "$dispatch_helper" mark \
+                --input "$dispatch_dir/current.md" --output "$dispatch_dir/queued.md" \
+                --state queued --key "$dispatch_key" --attempt "$attempt" \
+                --updated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                --diagnostic "GitHub Actions accepted trusted qualification dispatch" \
+                > "$dispatch_dir/queued.json"
+              if ! cmp -s "$dispatch_dir/current.md" "$dispatch_dir/queued.md"; then
+                gh release edit "$CM_TAG" --repo "$GITHUB_REPO" --notes-file "$dispatch_dir/queued.md"
+              fi
+              echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep "$((attempt * 2))"
+            fi
+          done
+          gh release view "$CM_TAG" --repo "$GITHUB_REPO" --json body --jq .body > "$dispatch_dir/current.md"
+          python3 "$dispatch_helper" mark \
+            --input "$dispatch_dir/current.md" --output "$dispatch_dir/failed.md" \
+            --state dispatch_failed --key "$dispatch_key" --attempt 3 \
+            --updated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --diagnostic "GitHub Actions dispatch was not confirmed after 3 attempts; candidate remains non-live" \
+            > "$dispatch_dir/failed.json"
+          if ! cmp -s "$dispatch_dir/current.md" "$dispatch_dir/failed.md"; then
+            gh release edit "$CM_TAG" --repo "$GITHUB_REPO" --notes-file "$dispatch_dir/failed.md"
+          fi
+          echo "WARNING: qualification dispatch was not confirmed after bounded retry; candidate remains non-live."
 
     artifacts:
       - build/*.app

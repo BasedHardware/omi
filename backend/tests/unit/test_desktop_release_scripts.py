@@ -18,6 +18,8 @@ def _load(name: str, filename: str):
 
 
 mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
+mark_emergency_beta = _load("mark_desktop_release_emergency_beta", "mark-desktop-release-emergency-beta.py")
+emergency_promotion = _load("check_desktop_emergency_beta_promotion", "check-desktop-emergency-beta-promotion.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 nominate_stable = _load("nominate_desktop_stable_candidate", "nominate-desktop-stable-candidate.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
@@ -56,6 +58,50 @@ def test_mark_beta_changes_only_visibility_fields():
     assert "isLive: true" in result
     assert "channel: beta" in result
     assert "qualifiedBetaSha: " + "a" * 40 in result
+
+
+def test_emergency_metadata_records_two_bound_approvals_without_making_the_release_stable():
+    result = mark_emergency_beta.mark_emergency_beta(
+        _release()["body"],
+        {
+            "emergencyPromotion": True,
+            "release_tag": "v0.12.64+12064-macos",
+            "source_sha": "a" * 40,
+            "incident_id": "10063",
+            "reason": "qualification runner unavailable",
+            "operator": "release-operator",
+            "expires_at": "2026-07-19T13:00:00Z",
+            "approvers": ["alice", "bob"],
+            "evidence": {"behavioral_url": "https://example.test/behavior.json"},
+        },
+    )
+    assert "emergencyPromotion: true" in result
+    assert "emergencyPromotionApprovers: alice,bob" in result
+    assert "emergencyPromotionOperator: release-operator" in result
+    assert "channel: beta" in result
+    assert "channel: stable" not in result
+
+
+def test_emergency_approval_parser_requires_two_distinct_authorized_commenters_bound_to_the_candidate():
+    comments = [
+        {
+            "body": f"Emergency beta promotion approval: v0.12.64+12064-macos {'a' * 40} 2026-07-19T13:00:00Z",
+            "author_association": "MEMBER",
+            "user": {"login": "alice"},
+        },
+        {
+            "body": f"Emergency beta promotion approval: v0.12.64+12064-macos {'a' * 40} 2026-07-19T13:00:00Z",
+            "author_association": "OWNER",
+            "user": {"login": "bob"},
+        },
+    ]
+    assert emergency_promotion.approval_identities(
+        comments, "v0.12.64+12064-macos", "a" * 40, "2026-07-19T13:00:00Z"
+    ) == ["alice", "bob"]
+
+    comments[1]["author_association"] = "CONTRIBUTOR"
+    with pytest.raises(SystemExit, match="exactly two"):
+        emergency_promotion.approval_identities(comments, "v0.12.64+12064-macos", "a" * 40, "2026-07-19T13:00:00Z")
 
 
 def test_prepare_manifest_requires_exact_qualification_and_assets():

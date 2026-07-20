@@ -34,6 +34,11 @@ checks:
     triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
+  - id: desktop-qualification-dispatch
+    command: ["python3", ".github/scripts/test_desktop_qualification_dispatch.py"]
+    triggers: [".github/scripts/desktop_qualification_dispatch.py", ".github/scripts/test_desktop_qualification_dispatch.py", ".github/workflows/desktop_qualify_beta.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10080 timeout retries must expose state and permit only one trusted qualification execution per candidate dispatch key"
   - id: desktop-changelog-io-tests
     command: ["python3", ".github/scripts/test_desktop_changelog.py"]
     triggers: [".github/scripts/desktop-changelog.py", ".github/scripts/test_desktop_changelog.py", ".github/checks-manifest.yaml"]
@@ -327,6 +332,8 @@ checks:
     reason: "#9991 mutation-tests workflow-run event, result, branch, SHA, repository, and manual proof drift"
 
 exempt:
+  - path: ".github/scripts/check-desktop-emergency-beta-promotion.py"
+    reason: "break-glass release verifier requires published artifacts, incident approvals, and protected workflow inputs"
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
     reason: "release pipeline check requires published candidate artifacts and workflow inputs"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
