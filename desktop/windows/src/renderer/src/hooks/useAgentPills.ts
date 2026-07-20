@@ -35,6 +35,12 @@ import type { ChatMsg } from './useChat'
 // Both poll cadences mirror Mac's 2s canonical-run poll (AgentPill.swift:1775).
 const LIST_POLL_MS = 2000
 const RUN_POLL_MS = 2000
+// Idle-burn fix: with NO pills on the bar (the common steady state — no agent
+// running), the fast list poll is pure waste. Drop to a slow safety heartbeat and
+// lean on the kernel's push (`onAgentCardEvent`, broadcast on run.queued) to
+// re-arm the instant an agent appears. The heartbeat is a belt-and-suspenders
+// backstop so a session can never be permanently missed even if a push is lost.
+const IDLE_LIST_POLL_MS = 30_000
 
 export type AgentPillsApi = {
   /** The live pills, projection-merged + lifecycle-trimmed. */
@@ -174,6 +180,12 @@ export function useAgentPills(activePillId: string | null): AgentPillsApi {
   // snapshot fetched BEFORE the override committed can't re-create the pill.
   const dismissedRef = useRef<Set<string>>(new Set())
 
+  // Drives the poll cadence: fast (2s) while any pill is on the bar, slow heartbeat
+  // while empty. A boolean (not the pills array) so the poll effect re-runs only on
+  // the empty⇆non-empty edge — never on every no-op poll, which would reset the
+  // cadence (the reason the closures below read pills through a ref).
+  const hasPills = pills.length > 0
+
   useEffect(() => {
     let cancelled = false
 
@@ -229,14 +241,30 @@ export function useAgentPills(activePillId: string | null): AgentPillsApi {
 
     void runListPoll()
     void runRunPoll()
-    const listTimer = setInterval(() => void runListPoll(), LIST_POLL_MS)
-    const runTimer = setInterval(() => void runRunPoll(), RUN_POLL_MS)
+    // With no pills on the bar, poll the list on a slow heartbeat instead of every
+    // 2s, and skip the per-run timer entirely (it has nothing to refresh). A new
+    // agent re-arms this via the kernel push below (which flips `hasPills` and
+    // re-runs this effect at the fast cadence); the heartbeat only backstops a lost
+    // push. With pills present, keep Mac's 2s cadence for both.
+    const listTimer = setInterval(
+      () => void runListPoll(),
+      hasPills ? LIST_POLL_MS : IDLE_LIST_POLL_MS
+    )
+    const runTimer = hasPills ? setInterval(() => void runRunPoll(), RUN_POLL_MS) : null
+    // Kernel push: a background run reaching queued/terminal broadcasts an agent
+    // card to every window. Poll immediately so a spawned agent's pill appears at
+    // once rather than waiting for the (slow, idle) heartbeat.
+    const unsubCards = window.omi?.onAgentCardEvent?.(() => {
+      void runListPoll()
+      void runRunPoll()
+    })
     return () => {
       cancelled = true
       clearInterval(listTimer)
-      clearInterval(runTimer)
+      if (runTimer) clearInterval(runTimer)
+      unsubCards?.()
     }
-  }, [])
+  }, [hasPills])
 
   const markViewed = useCallback((id: string): void => {
     setPills((prev) => markViewedPure(prev, id, Date.now()))
