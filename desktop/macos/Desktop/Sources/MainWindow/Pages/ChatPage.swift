@@ -21,9 +21,8 @@ struct ChatPage: View {
     VStack(spacing: 0) {
       // Header with app picker
       chatHeader
-        .padding(.horizontal, OmiSpacing.xxl)
-        .padding(.top, OmiSpacing.xxl)
-        .padding(.bottom, OmiSpacing.lg)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
 
       Divider()
         .background(OmiColors.border.opacity(0.4))
@@ -390,6 +389,9 @@ struct ChatPage: View {
       },
       welcomeContent: { welcomeMessage }
     )
+    .overlay(alignment: .bottom) {
+      ChatComposerFade()
+    }
   }
 
   private var welcomeMessage: some View {
@@ -475,6 +477,8 @@ struct ChatPage: View {
         chatProvider.removePendingAttachment(id: id)
       }
     )
+    .padding(.horizontal, ChatComposerLayout.pageMargin)
+    .padding(.bottom, ChatComposerLayout.pageMargin)
   }
 
   /// Copy the entire conversation to clipboard

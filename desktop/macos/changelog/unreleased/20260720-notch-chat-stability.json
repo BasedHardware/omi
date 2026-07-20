@@ -1,3 +1,3 @@
 {
-  "change": "Fixed Notch resizing across Spaces, kept tool progress in compact expandable groups, let active tools reach their own progress timeout before recovering a silent chat bridge, and kept Push-to-Talk speaking when current-screen capture is temporarily unavailable."
+  "change": "Fixed Notch resizing across Spaces, kept tool progress in compact collapsed groups, made regular and Notch chat fade naturally into a lighter composer, reduced main-chat header whitespace, let active tools reach their own progress timeout before recovering a silent chat bridge, and kept Push-to-Talk speaking when current-screen capture is temporarily unavailable."
 }

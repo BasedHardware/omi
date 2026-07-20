@@ -267,6 +267,7 @@ struct ChatBubble: View {
       return AnyView(
         ToolCallsGroup(
           calls: calls,
+          compact: true,
           onCancel: onCancelTurn,
           onOpenAgent: onOpenAgent,
           onOpenAgentRef: onOpenAgentRef
@@ -1030,10 +1031,8 @@ enum ContentBlockGroup: Identifiable {
 
 /// Keeps streamed tool groups compact until the reader explicitly asks for the details.
 enum ToolCallsGroupExpansionPolicy {
-  static let defaultExpandRunning = false
-
-  static func initiallyExpanded(hasRunningTool: Bool, expandRunning: Bool = defaultExpandRunning) -> Bool {
-    expandRunning && hasRunningTool
+  static func initiallyExpanded() -> Bool {
+    false
   }
 }
 
@@ -1042,7 +1041,6 @@ enum ToolCallsGroupExpansionPolicy {
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
   var compact: Bool = false
-  var expandRunning: Bool = ToolCallsGroupExpansionPolicy.defaultExpandRunning
   /// `ChatProvider` wires this to `agentBridge.interrupt()` via the
   /// parent message view. If no action is available, the banner is hidden
   /// so the UI never presents a no-op Cancel button.
@@ -1056,28 +1054,16 @@ struct ToolCallsGroup: View {
   init(
     calls: [ChatContentBlock],
     compact: Bool = false,
-    expandRunning: Bool = true,
     onCancel: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
   ) {
     self.calls = calls
     self.compact = compact
-    self.expandRunning = expandRunning
     self.onCancel = onCancel
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
-    self._isExpanded = State(
-      initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded(
-        hasRunningTool: Self.hasRunningTool(in: calls),
-        expandRunning: expandRunning
-      )
-    )
-  }
-
-  /// Whether any tool in the group is still running.
-  private var hasRunningTool: Bool {
-    Self.hasRunningTool(in: calls)
+    self._isExpanded = State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())
   }
 
   /// True iff at least one tool in the group is `.stalled` and is not a
@@ -1199,13 +1185,8 @@ struct ToolCallsGroup: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+    .fixedSize(horizontal: false, vertical: true)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: compact ? 14 : 16)
-    .onChange(of: hasRunningTool) { _, isRunning in
-      guard expandRunning, isRunning else { return }
-      OmiMotion.withGated(.easeInOut(duration: 0.18)) {
-        isExpanded = true
-      }
-    }
   }
 
   private var header: some View {
@@ -1304,13 +1285,6 @@ struct ToolCallsGroup: View {
       }
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.xs)
-    }
-  }
-
-  private static func hasRunningTool(in calls: [ChatContentBlock]) -> Bool {
-    calls.contains { block in
-      if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
-      return false
     }
   }
 
