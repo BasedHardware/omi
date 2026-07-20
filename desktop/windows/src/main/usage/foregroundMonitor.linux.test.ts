@@ -13,7 +13,7 @@ vi.mock('../ipc/db', () => ({
 }))
 vi.mock('./nativeForeground', () => ({
   getForegroundExePath: () => getForegroundExePath(),
-  subscribeForegroundChange: (cb: () => void) => subscribeForegroundChange(cb)
+  subscribeForegroundChange: () => subscribeForegroundChange()
 }))
 vi.mock('./usageSettings', () => ({
   getUsageSettings: () => ({ enabled: true, retentionDays: 30 })
