@@ -31,4 +31,4 @@ export const initializeApp = app;
 export const getAuth = auth;
 export const getApp = app;
 export const FirebaseAuthTypes = {};
-export default firebase;
+export default auth;
