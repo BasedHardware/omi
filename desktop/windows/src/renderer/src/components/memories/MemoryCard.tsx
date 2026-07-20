@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { Info, ArrowUpRight, Monitor } from 'lucide-react'
 import type { Memory } from '../../hooks/useMemories'
@@ -58,7 +59,15 @@ type MemoryCardProps = {
 // A tappable memory card: content preview + a metadata footer (date, category,
 // tier badge, device, New badge, info tooltip). Tapping the body opens the
 // detail sheet; the info button peeks metadata without leaving the list.
-export function MemoryCard({ memory, onOpen, now }: MemoryCardProps): React.JSX.Element {
+//
+// memo()'d (see the export): the Memories page consumes useLocation (to gate the
+// brain-map reveal), so it re-renders on EVERY app navigation — even to unrelated
+// pages — while it stays mounted-but-hidden. Without memo, all ~400 cards (each
+// mounting a Radix Tooltip.Provider) re-rendered on every nav, which was the bulk
+// of a ~120ms main-thread stall that made navigation feel laggy app-wide. Props
+// are referentially stable (memory rows and the setDetailMemory setter), so the
+// shallow-prop memo skips the whole list on navigation.
+function MemoryCardImpl({ memory, onOpen, now }: MemoryCardProps): React.JSX.Element {
   const isNew = isNewMemory(memory, now)
   const protectedMem = isProtectedContent(memory.content)
   const layer = layerLabel(memory)
@@ -146,3 +155,5 @@ export function MemoryCard({ memory, onOpen, now }: MemoryCardProps): React.JSX.
     </li>
   )
 }
+
+export const MemoryCard = memo(MemoryCardImpl)
