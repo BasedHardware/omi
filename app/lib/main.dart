@@ -80,17 +80,19 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/notification_channel_strings.dart';
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  await NotificationChannelStrings.loadAppLocale();
 
   await AwesomeNotifications().initialize(null, [
     NotificationChannel(
       channelKey: 'channel',
-      channelName: 'Omi Notifications',
-      channelDescription: 'Notification channel for Omi',
+      channelName: NotificationChannelStrings.omiChannelName,
+      channelDescription: NotificationChannelStrings.omiChannelDescription,
       defaultColor: const Color(0xFF9D50DD),
       ledColor: Colors.white,
     ),
@@ -144,6 +146,7 @@ Future _init() async {
   }
 
   await PlatformManager.initializeServices();
+  await NotificationChannelStrings.loadAppLocale();
   await NotificationService.instance.initialize();
 
   // Register FCM background message handler
