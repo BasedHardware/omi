@@ -1061,6 +1061,10 @@ async function main(): Promise<void> {
             if (!(await ensureCodexAdapter())) {
               throw new Error(adapterActivationError("codex"));
             }
+          } else if (adapterId === "codex") {
+            if (!(await ensureCodexAdapter())) {
+              throw new Error(adapterActivationError("codex"));
+            }
           }
         })().catch((err) => {
           logErr(`Unhandled query error: ${err}`);

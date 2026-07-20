@@ -2366,7 +2366,8 @@ class ChatProvider: ObservableObject {
       guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
       }
-      let usesNativeModelChoice = newHarness == "hermes" || newHarness == "openclaw" || newHarness == "codex"
+      let usesNativeModelChoice =
+        newHarness == "hermes" || newHarness == "openclaw" || newHarness == "codex"
       let configured = try await resolvedAgentClient().configureDefaultExecutionProfile(
         adapterId: adapterId,
         modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
@@ -6509,7 +6510,9 @@ class ChatProvider: ObservableObject {
       runId: runId,
       title: title,
       objective: objective,
-      provider: spawnProvider
+      provider: spawnSource.spawnedAgentProvider
+        .flatMap(AgentRuntimeRouting.harnessMode(from:))
+        .flatMap { $0 == .hermes || $0 == .openclaw || $0 == .codex ? $0 : nil }
     )
     // Keep the tool block for in-session progress; insert structured spawn
     // immediately after it so reload/metadata durability has a first-class card.

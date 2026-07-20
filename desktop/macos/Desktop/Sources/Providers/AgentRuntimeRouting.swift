@@ -90,17 +90,7 @@ struct LocalAgentProviderAvailability: Equatable {
   }
 
   var setupPrompt: String {
-    switch provider {
-    case .hermes:
-      return
-        "I don't see Hermes installed. Install it by running: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash — then try again."
-    case .openclaw:
-      return
-        "I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again."
-    case .codex:
-      return
-        "I don't see Codex set up for Omi. Install it by running: npm install -g @openai/codex @agentclientprotocol/codex-acp — then sign in with codex login and try again."
-    }
+    "I don't see \(provider.displayName) installed. Install it with `\(provider.installCommand)`, then run `\(provider.loginCommand)`."
   }
 
     /// The one-line install command surfaced by the install-helper UI.

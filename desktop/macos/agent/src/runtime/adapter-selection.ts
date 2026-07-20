@@ -60,7 +60,7 @@ export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
     activationEnv: ADAPTER_ACTIVATION_ENV.codex,
     maxWorkers: 1,
     capabilities: adapterCapabilitiesFor("codex"),
-    createAdapter: ({ log }) => new CodexRuntimeAdapter({ log }),
+    createAdapter: ({ log }) => new AcpRuntimeAdapter({ adapterId: "codex", envCommandName: "OMI_CODEX_ADAPTER_COMMAND", log }),
   },
 };
 
@@ -103,10 +103,8 @@ export function adapterProfile(adapterId: ProductionAdapterId): AdapterProfile {
 export function adapterActivationError(adapterId: ProductionAdapterId): string | undefined {
   const envName = adapterActivationEnv(adapterId);
   if (!envName) return undefined;
-  const label = adapterId === "pi-mono" ? "pi-mono"
-    : adapterId === "openclaw" ? "OpenClaw"
-    : adapterId === "codex" ? "Codex"
-    : "Hermes";
+  const label =
+    adapterId === "pi-mono" ? "pi-mono" : adapterId === "openclaw" ? "OpenClaw" : adapterId === "codex" ? "Codex" : "Hermes";
   if (adapterId === "hermes" || adapterId === "openclaw" || adapterId === "codex") {
     return `${label} is not available. Make sure ${label} is installed first, then try again.`;
   }

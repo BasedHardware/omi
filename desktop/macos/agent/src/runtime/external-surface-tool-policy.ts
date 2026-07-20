@@ -75,6 +75,7 @@ const PERMISSION_CAPABILITY_SUBJECTS = new Set([
 const DIRECTED_PROVIDER_TARGETS = [
   { provider: "openclaw" as const, pattern: "(?:open\\s*claw|open\\s*cloud)" },
   { provider: "hermes" as const, pattern: "hermes" },
+  { provider: "codex" as const, pattern: "codex" },
 ] as const;
 const DIRECTED_PROVIDER_ACTION = "(?:ask|tell|ping|message|use|run|try|start|spawn|delegate(?:\\s+to)?|have|let|send|make)";
 
@@ -202,15 +203,38 @@ function constrainSpawnProviderToCurrentUserIntent(
 ): Record<string, unknown> {
   const selectedProvider = directedProviderSelectedByUser(originatingPrompt);
   if (selectedProvider) return { ...toolInput, provider: selectedProvider };
+  if (bestAgentSelectedByUser(originatingPrompt)) return { ...toolInput, provider: "best" };
 
   const suppliedProvider = textField(toolInput, "provider");
-  if (suppliedProvider !== "openclaw" && suppliedProvider !== "hermes") return toolInput;
+  if (
+    suppliedProvider !== "openclaw"
+    && suppliedProvider !== "hermes"
+    && suppliedProvider !== "codex"
+    && suppliedProvider !== "best"
+  ) {
+    return toolInput;
+  }
 
   const { provider: _, ...defaultOmiInput } = toolInput;
   return defaultOmiInput;
 }
 
-function directedProviderSelectedByUser(prompt: string): "openclaw" | "hermes" | null {
+// "use the best agent", "run this with the best coding agent", "use any agent".
+// "any agent" is the same route-it-for-me intent as "best" and is what the
+// spawn_agent guidance advertises, so it must select here too. Requires a
+// directive verb so ordinary task content ("a blog post about the best agent in
+// the NBA") does not select a provider. Mirrors directedProviderSelectedByUser.
+function bestAgentSelectedByUser(prompt: string): boolean {
+  const normalized = prompt.toLowerCase();
+  const action = "(?:use|run|try|pick|choose|route|select|ask|tell|spawn|delegate|have|let|send|start)";
+  const lead = "(?:it\\s+|this\\s+)?(?:to\\s+)?(?:use\\s+)?(?:the\\s+)?";
+  const target = "(?:best|any)\\s+(?:coding\\s+|available\\s+|local\\s+)?agent\\b";
+  const positive = new RegExp(`\\b${action}\\s+${lead}${target}`);
+  const negated = new RegExp(`\\b(?:don'?t|do not|never)\\s+${action}\\s+${lead}${target}`);
+  return positive.test(normalized) && !negated.test(normalized);
+}
+
+function directedProviderSelectedByUser(prompt: string): "openclaw" | "hermes" | "codex" | null {
   const normalized = prompt.toLowerCase();
   const selected = DIRECTED_PROVIDER_TARGETS.flatMap(({ provider, pattern }) => {
     const target = `(?:the\\s+)?${pattern}(?:\\s+agent)?`;

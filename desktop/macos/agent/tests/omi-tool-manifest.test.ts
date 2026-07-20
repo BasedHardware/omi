@@ -100,11 +100,12 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.inputSchema.required).toEqual(["objective"]);
     expect(spawnAgent?.inputSchema.properties).not.toHaveProperty("originSurfaceKind");
     expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
-      enum: ["openclaw", "hermes", "codex"],
+      enum: ["openclaw", "hermes", "codex", "best"],
     });
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='openclaw'");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='codex'");
+    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='best'");
   });
 
   it("leaves explicit provider delegation to the primary model loop", () => {

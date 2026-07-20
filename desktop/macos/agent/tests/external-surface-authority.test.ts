@@ -457,6 +457,65 @@ describe("external realtime surface authority", () => {
       toolInput: { objective: "Review the release notes", provider: "hermes" },
       recoveredFromDelegation: false,
     });
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Refactor this file" },
+      originatingPrompt: "Use the best agent to refactor this file.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Refactor this file", provider: "best" },
+      recoveredFromDelegation: false,
+    });
+
+    // "any agent" is the same route-it-for-me intent as "best" and is what the
+    // spawn_agent guidance tells the model to send provider='best' for.
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Refactor this file", provider: "best" },
+      originatingPrompt: "Use any agent to refactor this file.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Refactor this file", provider: "best" },
+      recoveredFromDelegation: false,
+    });
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Do the task", provider: "best" },
+      originatingPrompt: "Have an agent do the task.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Do the task" },
+      recoveredFromDelegation: false,
+    });
+
+    // "best agent" / "any agent" as task content (not a directive) must NOT
+    // select a provider.
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Write a blog post about the best agent in the NBA" },
+      originatingPrompt: "Write a blog post about the best agent in the NBA.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Write a blog post about the best agent in the NBA" },
+      recoveredFromDelegation: false,
+    });
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Write a blog post about any agent in the NBA", provider: "best" },
+      originatingPrompt: "Write a blog post about any agent in the NBA.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Write a blog post about any agent in the NBA" },
+      recoveredFromDelegation: false,
+    });
   });
 
   it("applies semantic safety policy from the persisted external run prompt", () => {

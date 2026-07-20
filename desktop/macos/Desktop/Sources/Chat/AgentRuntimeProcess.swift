@@ -2796,6 +2796,17 @@ actor AgentRuntimeProcess {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
 
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      case .available(command: let codex) = LocalAgentProviderDetector.availability(
+        for: .codex,
+        environment: env,
+        homeDirectory: home
+      ).status
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexPath: codex)
+    }
+  }
+
     // Codex is bridged by the standalone `codex-acp` binary, which speaks ACP
     // directly on stdio (no `acp` subcommand).
     if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
@@ -2842,8 +2853,71 @@ actor AgentRuntimeProcess {
     return "\(shellQuote(openClawPath)) acp"
   }
 
-  static func codexAdapterCommand(codexPath: String) -> String {
-    "CODEX_PATH=\(shellQuote(codexPath)) npx -y @agentclientprotocol/codex-acp"
+  // Codex has no native `acp` subcommand, so we drive it through the codex-acp
+  // ACP bridge. Prefer the npx that sits next to the detected codex binary.
+  static func codexAdapterCommand(codexPath: String, fileManager: FileManager = .default) -> String {
+    let npxPath = ((codexPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("npx")
+    let npx = fileManager.isExecutableFile(atPath: npxPath) ? shellQuote(npxPath) : "npx"
+    return "\(npx) -y @agentclientprotocol/codex-acp"
+  }
+
+  /// Directly launched app bundles do not inherit the shell's FNM multishell
+  /// PATH entry. Search the stable Node-install roots as well, so a globally
+  /// installed OpenClaw CLI remains available to the shared agent bridge.
+  static func localAdapterSearchDirectories(
+    home: String,
+    fileManager: FileManager = .default
+  ) -> [String] {
+    let adapterPathDirs = [
+      "\(home)/.hermes/hermes-agent/venv/bin",
+      "\(home)/.hermes/node/bin",
+      "\(home)/.hermes/hermes-agent",
+      "\(home)/.local/bin",
+    ]
+    let managedNodeRoots = [
+      "\(home)/.nvm/versions/node",
+      "\(home)/.fnm/node-versions",
+      "\(home)/.local/share/fnm/node-versions",
+      "\(home)/.nodenv/versions",
+      "\(home)/.asdf/installs/nodejs",
+    ]
+    // User-managed Node installations take precedence over machine-wide fallbacks.
+    return Self.uniquePaths(
+      adapterPathDirs
+        + managedNodeRoots.flatMap {
+          Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
+        }
+        + [
+          "/opt/homebrew/bin",
+          "/usr/local/bin",
+        ])
+  }
+
+  private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
+    guard let versions = try? fileManager.contentsOfDirectory(atPath: root) else { return [] }
+    return versions.compactMap { version in
+      let versionDirectory = (root as NSString).appendingPathComponent(version)
+      let directBin = (versionDirectory as NSString).appendingPathComponent("bin")
+      if fileManager.fileExists(atPath: directBin) { return directBin }
+      let installationBin = (versionDirectory as NSString).appendingPathComponent("installation/bin")
+      if fileManager.fileExists(atPath: installationBin) { return installationBin }
+      return nil
+    }
+  }
+
+  private static func uniquePaths(_ paths: [String]) -> [String] {
+    paths.reduce(into: [String]()) { result, path in
+      guard !path.isEmpty, !result.contains(path) else { return }
+      result.append(path)
+    }
+  }
+
+  private nonisolated static func bearerToken(from header: String) -> String? {
+    let prefix = "Bearer "
+    guard header.hasPrefix(prefix) else { return nil }
+    let token = String(header.dropFirst(prefix.count))
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return token.isEmpty ? nil : token
   }
 
   private static func shellQuote(_ value: String) -> String {

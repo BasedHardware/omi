@@ -274,16 +274,14 @@ export const ADAPTER_CAPABILITY_MATRIX = {
     productionAdapter: true,
     credentialScope: "local_user",
     expectations: {
-      // Codex is bridged over ACP (`codex acp` or the codex-acp shim). Its
-      // session ids live in the bridge process and are stale after a restart.
-      nativeResume: unsupported("Codex ACP session ids are process-local and are stale after adapter process restart."),
+      nativeResume: required("Codex ACP exposes native session ids that survive adapter process restart."),
       cancellationDispatch: required("Codex ACP accepts cancellation through the shared ACP interrupt path."),
       cancellationAck: knownLimitation("Codex cancellation resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
-      pinnedWorker: required("Codex keeps session state in the adapter process and must stay worker-pinned while active."),
-      modelSwitching: unsupported("Codex ACP does not expose session/set_model; model selection is configured in the Codex CLI."),
+      pinnedWorker: unsupported("Codex ACP sessions are native and do not require process-local pinned workers."),
+      modelSwitching: unsupported("Codex model is chosen through `codex` config/login, not session/set_model."),
       artifactEmission: unsupported("Codex ACP adapter does not emit artifact references yet."),
-      toolSupport: unsupported("Codex ACP rejects per-session MCP servers; Omi tools are unavailable until configured in the Codex CLI."),
-      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks process-local Codex bindings stale."),
+      toolSupport: required("Codex ACP accepts per-session MCP servers, so Omi tools relay through stdio."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable Codex bindings."),
     },
   },
   a2a: {
