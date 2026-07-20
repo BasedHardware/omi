@@ -38,7 +38,13 @@ function sameFrameIds(a: RewindFrame[], b: RewindFrame[]): boolean {
   return true
 }
 
-export function useRewind(): RewindState {
+// The Rewind panel stays mounted-hidden behind the Home hub (layout/MainViews.tsx),
+// so `active` lets the page pause the silent today-refresh while it is off-screen —
+// otherwise the 3s resample keeps hitting the frames DB (and, because live capture
+// is always adding frames, re-rendering the whole hidden Rewind subtree) for a view
+// nobody is looking at. Defaults to true so every other caller (and the tests) keep
+// the always-refreshing behavior; the page flips it from useIsVisible.
+export function useRewind({ active = true }: { active?: boolean } = {}): RewindState {
   const [selectedDate, setSelectedDate] = useState(() => startOfLocalDay(Date.now()))
   const [frames, setFrames] = useState<RewindFrame[]>([])
   const [loading, setLoading] = useState(true)
@@ -98,21 +104,43 @@ export function useRewind(): RewindState {
   // Silent today-only refresh (macOS): resample the day and republish ONLY when the
   // frame set changed. Never sets loading, never moves the cursor — preserves the
   // user's scrub position and any transient view state. Past days are static.
+  //
+  // Paused while the panel is hidden (`active` false): the interval stops, so no
+  // frames-DB hit and no hidden-subtree re-render happen off-screen. On show
+  // (`active` false→true) this effect re-runs and resamples IMMEDIATELY, so the
+  // panel reflects any frames captured while it was hidden with no visible lag —
+  // then resumes the 3s cadence. Only today ticks; past days are static.
+  const wasActiveRef = useRef(active)
   useEffect(() => {
     const dayStart = selectedDate
+    const becameVisible = active && !wasActiveRef.current
+    wasActiveRef.current = active
+    if (!active) return
     if (startOfLocalDay(Date.now()) !== dayStart) return // only today ticks
     let alive = true
-    const id = setInterval(async () => {
+    const resample = async (): Promise<void> => {
       if (startOfLocalDay(Date.now()) !== dayStart) return // rolled past midnight
       const f = await window.omi.rewindFramesSampled(dayStart, endOfLocalDay(dayStart))
       if (!alive) return
       setFrames((prev) => (sameFrameIds(prev, f) ? prev : f))
-    }, TODAY_REFRESH_MS)
+    }
+    // Immediate resample ONLY when the panel just became visible (catch up on
+    // frames captured while hidden). Not on the first mount — loadDay already
+    // fetched — and not on a day change, which loadDay owns.
+    //
+    // Trade-off when Rewind is the LANDING view: it mounts with active=false (the
+    // observer reports visibility a frame late), loadDay fetches once, then the
+    // observer flips active→true and this fires one more resample — two fetches on
+    // first open. Accepted deliberately: it keeps the common case (Home is the
+    // landing view, Rewind hidden) doing zero refresh work, and the extra fetch is
+    // a cheap, deduped (sameFrameIds) same-day sample.
+    if (becameVisible) void resample()
+    const id = setInterval(() => void resample(), TODAY_REFRESH_MS)
     return () => {
       alive = false
       clearInterval(id)
     }
-  }, [selectedDate])
+  }, [selectedDate, active])
 
   const selectDate = useCallback((dayMs: number) => {
     const day = startOfLocalDay(dayMs)

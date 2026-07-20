@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Play, Pause, X, ChevronLeft, List, Clock } from 'lucide-react'
 import { useRewind } from '../hooks/useRewind'
+import { useIsVisible } from '../hooks/useIsVisible'
 import type { RewindSearchGroup } from '../../../shared/types'
 import { RewindPlayer } from '../components/rewind/RewindPlayer'
 import { RewindTimelineBar } from '../components/rewind/RewindTimelineBar'
@@ -16,7 +17,12 @@ const CTRL =
   'inline-flex items-center gap-1.5 rounded-control border border-line bg-white/[0.06] px-3 py-1.5 text-sm text-white/80 transition-colors hover:border-line-strong hover:bg-white/[0.10] hover:text-white'
 
 export function Rewind(): React.JSX.Element {
-  const r = useRewind()
+  // This page stays mounted-hidden behind the Home hub, so pause the silent
+  // today-refresh (and the hidden re-render churn it drives) whenever the panel is
+  // off-screen; it resamples immediately on show so it is never stale when opened.
+  const pageRef = useRef<HTMLDivElement>(null)
+  const visible = useIsVisible(pageRef)
+  const r = useRewind({ active: visible })
   // Stable useCallbacks — destructured so effects can depend on them without
   // re-running on every render (the `r` object identity changes each render).
   const { search, jumpTo } = r
@@ -83,7 +89,7 @@ export function Rewind(): React.JSX.Element {
   }, [group, query])
 
   return (
-    <div data-testid="rewind-page" className="flex h-full min-h-0 flex-col gap-3 p-4">
+    <div ref={pageRef} data-testid="rewind-page" className="flex h-full min-h-0 flex-col gap-3 p-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="shrink-0 text-lg font-semibold text-white">Rewind</h1>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">

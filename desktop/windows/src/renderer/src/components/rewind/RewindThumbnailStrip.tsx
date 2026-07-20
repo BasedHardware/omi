@@ -53,7 +53,11 @@ const Thumb = memo(function Thumb({
 
   const time = new Date(frame.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   return (
-    <button ref={elRef} onClick={() => onSeek(frame.ts)} className="flex w-28 shrink-0 flex-col gap-1 text-left">
+    <button
+      ref={elRef}
+      onClick={() => onSeek(frame.ts)}
+      className="flex w-28 shrink-0 flex-col gap-1 text-left"
+    >
       <span
         className={`h-16 w-28 overflow-hidden rounded border ${active ? 'border-[color:var(--accent)] ring-1 ring-[color:var(--accent)]' : 'border-white/10'}`}
       >
@@ -61,7 +65,9 @@ const Thumb = memo(function Thumb({
       </span>
       <span className="leading-tight">
         <span className="block text-[11px] text-white/75">{time}</span>
-        <span className="block truncate text-[10px] text-white/40">{frame.app || 'Unknown app'}</span>
+        <span className="block truncate text-[10px] text-white/40">
+          {frame.app || 'Unknown app'}
+        </span>
       </span>
     </button>
   )
@@ -84,7 +90,9 @@ function GapSpacer({
       onClick={onClick}
       style={{ width }}
       className={`flex h-16 shrink-0 flex-col items-center justify-center gap-0.5 self-start rounded border border-dashed text-[10px] ${
-        active ? 'border-[color:var(--accent)] text-[color:var(--accent)]' : 'border-white/10 text-white/30'
+        active
+          ? 'border-[color:var(--accent)] text-[color:var(--accent)]'
+          : 'border-white/10 text-white/30'
       }`}
     >
       <span className="uppercase tracking-wide">no activity</span>
@@ -93,7 +101,14 @@ function GapSpacer({
   )
 }
 
-export function RewindThumbnailStrip({
+// Memoized: the strip is a pure function of (frames, cursorTs, onSeek). Its parent
+// (the Rewind page) re-renders for unrelated reasons — search typing, play/pause —
+// and, paired with useRewind pausing its refresh while the panel is hidden, this
+// keeps the strip (and its per-thumb IntersectionObservers) from re-rendering when
+// none of its own inputs changed. `frames` keeps a stable identity across no-op
+// refreshes (useRewind returns the previous array when the id list is unchanged),
+// so equal-content refreshes don't defeat the memo.
+export const RewindThumbnailStrip = memo(function RewindThumbnailStrip({
   frames,
   cursorTs,
   onSeek
@@ -186,4 +201,4 @@ export function RewindThumbnailStrip({
       )}
     </div>
   )
-}
+})
