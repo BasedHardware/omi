@@ -68,6 +68,7 @@ struct Runtime {
     next_session: u64,
     owner_id: Option<String>,
     last_revocation: Option<OwnerRevocationReceipt>,
+    journal: JournalStore,
     output: mpsc::UnboundedSender<Message>,
     completed: mpsc::UnboundedSender<String>,
 }
@@ -75,6 +76,7 @@ struct Runtime {
 impl Runtime {
     fn new(
         managed_base_url: Option<String>,
+        journal: JournalStore,
         output: mpsc::UnboundedSender<Message>,
         completed: mpsc::UnboundedSender<String>,
     ) -> Self {
@@ -89,6 +91,7 @@ impl Runtime {
             next_session: 1,
             owner_id: None,
             last_revocation: None,
+            journal,
             output,
             completed,
         }
@@ -119,6 +122,12 @@ impl Runtime {
             "context_source_update" => self.context_source_update(input.fields),
             "get_context_snapshot" => self.get_context_snapshot(input.fields),
             "invalidate_session" => self.invalidate_session(input.fields),
+            "journal_record_turn" => self.journal_record_turn(input.fields),
+            "journal_record_exchange" => self.journal_record_exchange(input.fields),
+            "journal_update_turn" => self.journal_update_turn(input.fields),
+            "journal_terminalize_turn" => self.journal_terminalize_turn(input.fields),
+            "journal_list_turns" => self.journal_list_turns(input.fields),
+            "journal_clear_turns" => self.journal_clear_turns(input.fields),
             "query" => self.query(input.fields),
             "interrupt" => self.interrupt(input.fields),
             "stop" => self.stop(),
@@ -502,6 +511,208 @@ impl Runtime {
         };
         let key = (owner_id, surface_kind, external_ref_kind, external_ref_id);
         let _ = self.surfaces.get(&key);
+    }
+
+    fn journal_record_turn(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id)) = required_fields!(&fields, "requestId", "clientId")
+        else {
+            self.invalid_request(&fields, "journal record requires requestId and clientId");
+            return;
+        };
+        let Some(surface) = journal_surface(&fields) else {
+            self.invalid_request(&fields, "journal record requires a surface reference");
+            return;
+        };
+        let Some(turn) = fields.get("turn").and_then(Value::as_object) else {
+            self.invalid_request(&fields, "journal record requires turn");
+            return;
+        };
+        match self.journal.record(&surface, turn) {
+            Ok(page) => {
+                self.emit_journal_result("record", &request_id, &client_id, &surface, page, true)
+            }
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "invalid_request", &error)
+            }
+        }
+    }
+
+    fn journal_record_exchange(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id)) = required_fields!(&fields, "requestId", "clientId")
+        else {
+            self.invalid_request(&fields, "journal exchange requires requestId and clientId");
+            return;
+        };
+        let Some(surface) = journal_surface(&fields) else {
+            self.invalid_request(&fields, "journal exchange requires a surface reference");
+            return;
+        };
+        let Some(turns) = fields.get("turns").and_then(Value::as_array) else {
+            self.invalid_request(&fields, "journal exchange requires turns");
+            return;
+        };
+        let turns = turns
+            .iter()
+            .map(Value::as_object)
+            .collect::<Option<Vec<_>>>();
+        match turns {
+            Some(turns) => match self
+                .journal
+                .record_many(&surface, &turns.into_iter().cloned().collect::<Vec<_>>())
+            {
+                Ok(page) => self.emit_journal_result(
+                    "record_exchange",
+                    &request_id,
+                    &client_id,
+                    &surface,
+                    page,
+                    true,
+                ),
+                Err(error) => {
+                    self.emit_error(Some(request_id), Some(client_id), "invalid_request", &error)
+                }
+            },
+            None => self.emit_error(
+                Some(request_id),
+                Some(client_id),
+                "invalid_request",
+                "journal exchange is invalid",
+            ),
+        }
+    }
+
+    fn journal_update_turn(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id)) = required_fields!(&fields, "requestId", "clientId")
+        else {
+            self.invalid_request(&fields, "journal update requires requestId and clientId");
+            return;
+        };
+        let Some(surface) = journal_surface(&fields) else {
+            self.invalid_request(&fields, "journal update requires a surface reference");
+            return;
+        };
+        let Some(update) = fields.get("update").and_then(Value::as_object) else {
+            self.invalid_request(&fields, "journal update requires update");
+            return;
+        };
+        match self.journal.update(&surface, update) {
+            Ok(page) => {
+                self.emit_journal_result("update", &request_id, &client_id, &surface, page, true)
+            }
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "invalid_request", &error)
+            }
+        }
+    }
+
+    fn journal_terminalize_turn(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id)) = required_fields!(&fields, "requestId", "clientId")
+        else {
+            self.invalid_request(
+                &fields,
+                "journal terminalization requires requestId and clientId",
+            );
+            return;
+        };
+        let Some(surface) = journal_surface(&fields) else {
+            self.invalid_request(
+                &fields,
+                "journal terminalization requires a surface reference",
+            );
+            return;
+        };
+        let Some(terminalization) = fields.get("terminalization").and_then(Value::as_object) else {
+            self.invalid_request(&fields, "journal terminalization requires terminalization");
+            return;
+        };
+        match self.journal.terminalize(&surface, terminalization) {
+            Ok(page) => self.emit_journal_result(
+                "terminalize",
+                &request_id,
+                &client_id,
+                &surface,
+                page,
+                true,
+            ),
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "invalid_request", &error)
+            }
+        }
+    }
+
+    fn journal_list_turns(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id)) = required_fields!(&fields, "requestId", "clientId")
+        else {
+            self.invalid_request(&fields, "journal list requires requestId and clientId");
+            return;
+        };
+        let Some(surface) = journal_surface(&fields) else {
+            self.invalid_request(&fields, "journal list requires a surface reference");
+            return;
+        };
+        let after = fields
+            .get("afterTurnSeq")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let limit = fields.get("limit").and_then(Value::as_u64).unwrap_or(100);
+        match self.journal.list(&surface, after, limit) {
+            Ok(page) => {
+                self.emit_journal_result("list", &request_id, &client_id, &surface, page, false)
+            }
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "invalid_request", &error)
+            }
+        }
+    }
+
+    fn journal_clear_turns(&mut self, fields: Map<String, Value>) {
+        let Some((request_id, client_id)) = required_fields!(&fields, "requestId", "clientId")
+        else {
+            self.invalid_request(&fields, "journal clear requires requestId and clientId");
+            return;
+        };
+        let Some(surface) = journal_surface(&fields) else {
+            self.invalid_request(&fields, "journal clear requires a surface reference");
+            return;
+        };
+        let expected = fields.get("expectedGeneration").and_then(Value::as_u64);
+        if fields.contains_key("expectedGeneration") && expected.is_none() {
+            self.invalid_request(&fields, "journal expected generation is invalid");
+            return;
+        }
+        match self.journal.clear(&surface, expected) {
+            Ok(page) => {
+                self.emit_journal_result("clear", &request_id, &client_id, &surface, page, false)
+            }
+            Err(error) => {
+                self.emit_error(Some(request_id), Some(client_id), "invalid_request", &error)
+            }
+        }
+    }
+
+    fn emit_journal_result(
+        &self,
+        operation: &str,
+        request_id: &str,
+        client_id: &str,
+        surface: &JournalSurface,
+        page: JournalResultPage,
+        emit_changes: bool,
+    ) {
+        let turn = page.turn.clone();
+        let turns = page.turns.clone();
+        self.emit("journal_operation_result", envelope(Some(request_id), Some(client_id), json!({
+            "operation": operation, "conversationId": page.conversation_id, "surfaceKind": surface.surface_kind,
+            "externalRefKind": surface.external_ref_kind, "externalRefId": surface.external_ref_id,
+            "turn": turn, "turns": turns, "clearedCount": page.cleared_count,
+            "highWaterTurnSeq": page.high_water_turn_seq, "conversationGeneration": page.generation,
+            "generationBaseTurnSeq": page.generation_base_turn_seq
+        })));
+        if emit_changes {
+            for turn in page.turns {
+                self.emit("journal_turn_changed", envelope(None, None, json!({"ownerId": surface.owner_id, "conversationGeneration": page.generation, "generationBaseTurnSeq": page.generation_base_turn_seq, "surfaceKind": surface.surface_kind, "externalRefKind": surface.external_ref_kind, "externalRefId": surface.external_ref_id, "turn": turn})));
+            }
+        }
     }
 
     fn session_is_owned(&self, session_id: &str, owner_id: &str) -> bool {
@@ -1007,6 +1218,15 @@ fn optional_string_field(fields: &Map<String, Value>, name: &str) -> Option<Stri
         .map(ToOwned::to_owned)
 }
 
+fn journal_surface(fields: &Map<String, Value>) -> Option<JournalSurface> {
+    Some(JournalSurface {
+        owner_id: string_field(fields, "ownerId")?,
+        surface_kind: string_field(fields, "surfaceKind")?,
+        external_ref_kind: string_field(fields, "externalRefKind")?,
+        external_ref_id: string_field(fields, "externalRefId")?,
+    })
+}
+
 fn valid_adapter(adapter_id: &str) -> bool {
     adapter_id == "rx4"
 }
@@ -1022,6 +1242,12 @@ fn is_owner_scoped_message(kind: &str) -> bool {
             | "invalidate_session"
             | "query"
             | "interrupt"
+            | "journal_record_turn"
+            | "journal_record_exchange"
+            | "journal_update_turn"
+            | "journal_terminalize_turn"
+            | "journal_list_turns"
+            | "journal_clear_turns"
     )
 }
 
@@ -1098,7 +1324,19 @@ fn hash_json(value: &Value) -> String {
 async fn main() {
     let (output, mut output_receiver) = mpsc::unbounded_channel();
     let (completed, mut completed_receiver) = mpsc::unbounded_channel();
-    let mut runtime = Runtime::new(env::var("OMI_API_BASE_URL").ok(), output, completed);
+    let journal = match JournalStore::open_default() {
+        Ok(journal) => journal,
+        Err(error) => {
+            eprintln!("unable to open Omi journal: {error}");
+            return;
+        }
+    };
+    let mut runtime = Runtime::new(
+        env::var("OMI_API_BASE_URL").ok(),
+        journal,
+        output,
+        completed,
+    );
     runtime.emit(
         "init",
         envelope(
@@ -1139,6 +1377,18 @@ async fn main() {
 mod tests {
     use super::*;
 
+    fn test_runtime(
+        managed_base_url: Option<String>,
+        output: mpsc::UnboundedSender<Message>,
+        completed: mpsc::UnboundedSender<String>,
+    ) -> Runtime {
+        let journal = match JournalStore::in_memory() {
+            Ok(journal) => journal,
+            Err(error) => panic!("journal test setup failed: {error}"),
+        };
+        Runtime::new(managed_base_url, journal, output, completed)
+    }
+
     #[test]
     fn agent_events_keep_the_swift_jsonl_shapes() {
         let text = map_agent_event(
@@ -1169,7 +1419,7 @@ mod tests {
     async fn rejects_query_without_omi_managed_credentials() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
-        let mut runtime = Runtime::new(Some("https://api.omi.me/v2".into()), output, completed);
+        let mut runtime = test_runtime(Some("https://api.omi.me/v2".into()), output, completed);
         runtime.handle(
             parse_line(r#"{"type":"refresh_owner","ownerId":"o"}"#)
                 .expect("owner fixture must parse"),
@@ -1187,7 +1437,7 @@ mod tests {
     async fn interrupt_emits_existing_cancel_ack_shape() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
-        let mut runtime = Runtime::new(None, output, completed);
+        let mut runtime = test_runtime(None, output, completed);
         runtime.handle(
             parse_line(r#"{"type":"refresh_owner","ownerId":"o"}"#)
                 .expect("owner fixture must parse"),
@@ -1206,7 +1456,7 @@ mod tests {
     async fn session_profile_and_context_messages_keep_swift_contract_shapes() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
-        let mut runtime = Runtime::new(None, output, completed);
+        let mut runtime = test_runtime(None, output, completed);
         runtime.handle(
             parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
                 .expect("owner fixture must parse"),
@@ -1263,7 +1513,7 @@ mod tests {
     async fn rejects_non_rx4_session_profiles() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
-        let mut runtime = Runtime::new(None, output, completed);
+        let mut runtime = test_runtime(None, output, completed);
         runtime.handle(
             parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
                 .expect("owner fixture must parse"),
@@ -1278,7 +1528,7 @@ mod tests {
     async fn owner_revocation_cancels_runs_and_reuses_its_receipt() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
-        let mut runtime = Runtime::new(None, output, completed);
+        let mut runtime = test_runtime(None, output, completed);
         runtime.handle(
             parse_line(r#"{"type":"refresh_owner","ownerId":"owner-a"}"#)
                 .expect("owner fixture must parse"),
@@ -1306,7 +1556,7 @@ mod tests {
     async fn token_refresh_cannot_replace_an_established_owner() {
         let (output, mut receiver) = mpsc::unbounded_channel();
         let (completed, _) = mpsc::unbounded_channel();
-        let mut runtime = Runtime::new(None, output, completed);
+        let mut runtime = test_runtime(None, output, completed);
         runtime.handle(
             parse_line(r#"{"type":"refresh_owner","ownerId":"owner-a"}"#)
                 .expect("owner fixture must parse"),
@@ -1325,4 +1575,83 @@ mod tests {
         let error = receiver.recv().await.expect("owner mismatch must reject");
         assert_eq!(error.fields["failure"]["failureCode"], "authentication");
     }
+
+    #[tokio::test]
+    async fn journal_rpc_persists_records_revisions_and_clear_generation() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .unwrap_or_else(|error| panic!("owner fixture invalid: {error}")),
+        );
+        runtime.handle(parse_line(r#"{"type":"journal_record_turn","requestId":"record","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","turn":{"turnId":"turn-1","role":"user","origin":"local","status":"completed","content":"hello","contentBlocks":[],"resources":[],"metadataJson":"{}","createdAtMs":1}}"#).unwrap_or_else(|error| panic!("record fixture invalid: {error}")));
+        let record = receiver
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("record response missing"));
+        assert_eq!(record.kind, "journal_operation_result");
+        assert_eq!(record.fields["turn"]["turnSeq"], 1);
+        let changed = receiver
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("change event missing"));
+        assert_eq!(changed.kind, "journal_turn_changed");
+
+        runtime.handle(parse_line(r#"{"type":"journal_update_turn","requestId":"update","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","update":{"turnId":"turn-1","content":"hello again","appendContentBlocks":[{"type":"text","text":"hello again"}]}}"#).unwrap_or_else(|error| panic!("update fixture invalid: {error}")));
+        let update = receiver
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("update response missing"));
+        assert_eq!(update.fields["turn"]["turnSeq"], 2);
+        let _ = receiver.recv().await;
+
+        runtime.handle(parse_line(r#"{"type":"journal_list_turns","requestId":"list","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","afterTurnSeq":0,"limit":100}"#).unwrap_or_else(|error| panic!("list fixture invalid: {error}")));
+        let listed = receiver
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("list response missing"));
+        assert_eq!(listed.fields["turns"].as_array().map(Vec::len), Some(1));
+        assert_eq!(listed.fields["turns"][0]["content"], "hello again");
+
+        runtime.handle(parse_line(r#"{"type":"journal_clear_turns","requestId":"clear","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","expectedGeneration":1}"#).unwrap_or_else(|error| panic!("clear fixture invalid: {error}")));
+        let cleared = receiver
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("clear response missing"));
+        assert_eq!(cleared.fields["clearedCount"], 1);
+        assert_eq!(cleared.fields["conversationGeneration"], 2);
+    }
+
+    #[tokio::test]
+    async fn journal_rpc_rejects_wrong_owner_and_public_runtime_authority_fields() {
+        let (output, mut receiver) = mpsc::unbounded_channel();
+        let (completed, _) = mpsc::unbounded_channel();
+        let mut runtime = test_runtime(None, output, completed);
+        runtime.handle(
+            parse_line(r#"{"type":"refresh_owner","ownerId":"owner"}"#)
+                .unwrap_or_else(|error| panic!("owner fixture invalid: {error}")),
+        );
+        runtime.handle(parse_line(r#"{"type":"journal_record_turn","requestId":"wrong","clientId":"client","ownerId":"other","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","turn":{}}"#).unwrap_or_else(|error| panic!("owner fixture invalid: {error}")));
+        let owner_error = receiver
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("owner error missing"));
+        assert_eq!(
+            owner_error.fields["failure"]["failureCode"],
+            "authentication"
+        );
+        runtime.handle(parse_line(r#"{"type":"journal_record_turn","requestId":"record","clientId":"client","ownerId":"owner","surfaceKind":"main_chat","externalRefKind":"chat","externalRefId":"chat-1","turn":{"turnId":"turn-1","role":"assistant","content":"x","producingRunId":"run"}}"#).unwrap_or_else(|error| panic!("record fixture invalid: {error}")));
+        let policy_error = receiver
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("policy error missing"));
+        assert_eq!(
+            policy_error.fields["failure"]["failureCode"],
+            "invalid_request"
+        );
+    }
 }
+mod journal;
+
+use journal::{JournalStore, ResultPage as JournalResultPage, Surface as JournalSurface};
