@@ -45,6 +45,7 @@
     "firebase": "^12.13.0",
     "koffi": "^3.0.2",
     "lucide-react": "^1.16.0",
+    "pose-viewer": "^1.2.0",
     "react-router-dom": "^7.15.1",
     "tailwind-merge": "^3.6.0",
     "three": "^0.184.0",

@@ -15,6 +15,7 @@
 import { createServer, type Server } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
+import { app } from 'electron'
 
 const PREFERRED_PORT = 5179
 const PORT_ATTEMPTS = 10
@@ -35,6 +36,10 @@ const MIME: Record<string, string> = {
 }
 
 let baseUrl: string | null = null
+
+/** Writable dir (real FS, NOT inside app.asar) where generated pose/video files
+ * are written so pose-viewer can fetch() them over localhost. */
+export const POSES_DIR = join(app.getPath('temp'), 'omi-sign-poses', 'http')
 
 /** http://localhost:<port> once startRendererServer has resolved, else null (dev mode). */
 export function rendererBaseUrl(): string | null {
@@ -69,6 +74,29 @@ export async function startRendererServer(rendererRoot: string): Promise<string>
   const server = createServer((req, res) => {
     void (async () => {
       const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname)
+      // Sign-language poses/videos written by signLanguage.ts — served from a
+      // real writable dir (not app.asar) so pose-viewer can fetch() them.
+      if (pathname.startsWith('/__poses/')) {
+        const name = normalize(pathname.slice('/__poses/'.length))
+        if (name && !name.includes(sep) && !name.startsWith('..')) {
+          const poseFile = normalize(join(POSES_DIR, name))
+          try {
+            const body = await readFile(poseFile)
+            res.writeHead(200, {
+              'content-type':
+                extname(poseFile).toLowerCase() === '.mp4' ? 'video/mp4' : 'application/json',
+              'cache-control': 'no-cache'
+            })
+            res.end(body)
+            return
+          } catch {
+            res.writeHead(404).end()
+            return
+          }
+        }
+        res.writeHead(403).end()
+        return
+      }
       const rel = pathname === '/' ? 'index.html' : pathname.slice(1)
       const file = normalize(join(root, rel))
       // Containment check — never serve anything outside the renderer dir.
