@@ -1,5 +1,3 @@
-import koffi from 'koffi'
-
 // Native read of the UserAssist Count values from HKCU. Thin and untested by
 // design — all decoding/parsing lives in the pure userAssist.ts. Returns the raw
 // (still ROT13-encoded) value names plus their binary blobs; never throws, and
@@ -45,6 +43,7 @@ function load(): Advapi | null {
   if (advapi) return advapi
   if (loadFailed) return null
   try {
+    const koffi = require('koffi') as typeof import('koffi')
     const lib = koffi.load('advapi32.dll')
     advapi = {
       // HKEY passed as an integer (predefined HKEY_CURRENT_USER); result HKEY is a
