@@ -653,7 +653,7 @@ actor AgentRuntimeProcess {
   /// The Node registry is the authority for adapter activation. Swift must not
   /// re-run local executable detection before advertising a realtime provider.
   func registeredDirectedProviderIDs() -> [String] {
-    runtimeAdapterIDs.intersection(["hermes", "openclaw", "codex"]).sorted()
+    runtimeAdapterIDs.intersection(["hermes", "openclaw"]).sorted()
   }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
@@ -2612,15 +2612,6 @@ actor AgentRuntimeProcess {
         }
       }
       log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
-      // Seed OPENAI_API_KEY from the user's BYOK key so Codex can run without
-      // a separate `codex login`; the bridge's per-adapter allowlist forwards
-      // it to the Codex subprocess only.
-      if (env["OPENAI_API_KEY"]?.isEmpty ?? true),
-        !byok.suppressedProviders.contains(.openai),
-        let openAIKey = APIKeyService.byokKey(.openai)
-      {
-        env["OPENAI_API_KEY"] = openAIKey
-      }
     }
 
     let requiresPiMonoCredentials =
@@ -2747,8 +2738,8 @@ actor AgentRuntimeProcess {
 
   private func applyLocalAgentEnvironment(to env: inout [String: String]) {
     // Seed auto-discovered commands for every local adapter so the shared Node
-    // process can route to Hermes, OpenClaw, or Codex even when it was launched
-    // for a different adapter. registerClient returns early once isRunning, so the
+    // process can route to Hermes or OpenClaw even when it was launched for a
+    // different adapter. registerClient returns early once the reducer is
     // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
     if env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
@@ -2758,15 +2749,10 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
-    // Curated dirs shared with LocalAgentProviderDetector so the bridge and
-    // the detector never disagree about whether an agent is available. Binary
-    // discovery is whitelist-only — never the inherited PATH, since whatever
-    // is found here gets launched as a child process.
-    let adapterSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
+    let adapterPathDirs = Self.localAdapterSearchDirectories(home: home)
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
-    let pathDirs = existingPath.split(separator: ":").map(String.init)
     var pathElements: [String] = []
-    for path in pathDirs + adapterSearchDirs {
+    for path in existingPath.split(separator: ":").map(String.init) + adapterPathDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }
@@ -2795,17 +2781,40 @@ actor AgentRuntimeProcess {
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
+  }
 
-    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      case .available(command: let codex) = LocalAgentProviderDetector.availability(
-        for: .codex,
-        environment: env,
-        homeDirectory: home
-      ).status
-    {
-      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexPath: codex)
+  static func byokEnvironmentKey(for provider: BYOKProvider) -> String {
+    "OMI_BYOK_\(provider.rawValue.uppercased())"
+  }
+
+  static func removeInheritedBYOKEnvironment(from env: inout [String: String]) {
+    let inheritedBYOKKeys = env.keys.filter { $0.uppercased().hasPrefix("OMI_BYOK_") }
+    for key in inheritedBYOKKeys {
+      env.removeValue(forKey: key)
     }
   }
+
+  @MainActor
+  static func usableBYOKEnvironment() -> (values: [String: String], suppressedProviders: [BYOKProvider]) {
+    guard APIKeyService.isByokActive else {
+      return ([:], [])
+    }
+
+    var candidateValues: [String: String] = [:]
+    var suppressedProviders: [BYOKProvider] = []
+    for provider in BYOKProvider.allCases {
+      guard let key = APIKeyService.byokKey(provider) else { continue }
+      let fingerprint = APIKeyService.byokFingerprint(key)
+      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint) {
+        candidateValues[byokEnvironmentKey(for: provider)] = key
+      } else {
+        suppressedProviders.append(provider)
+      }
+    }
+    guard suppressedProviders.isEmpty, candidateValues.count == BYOKProvider.allCases.count else {
+      return ([:], suppressedProviders)
+    }
+    return (candidateValues, [])
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
@@ -2814,14 +2823,6 @@ actor AgentRuntimeProcess {
       return "\(shellQuote(nodePath)) \(shellQuote(openClawPath)) acp"
     }
     return "\(shellQuote(openClawPath)) acp"
-  }
-
-  // Codex has no native `acp` subcommand, so we drive it through the codex-acp
-  // ACP bridge. Prefer the npx that sits next to the detected codex binary.
-  static func codexAdapterCommand(codexPath: String, fileManager: FileManager = .default) -> String {
-    let npxPath = ((codexPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("npx")
-    let npx = fileManager.isExecutableFile(atPath: npxPath) ? shellQuote(npxPath) : "npx"
-    return "\(npx) -y @agentclientprotocol/codex-acp"
   }
 
   /// Directly launched app bundles do not inherit the shell's FNM multishell
@@ -3053,26 +3054,18 @@ actor AgentRuntimeProcess {
     let chunkReader = AgentRuntimeStdoutChunkReader()
 
     let handle = stdoutPipe.fileHandleForReading
-    // Chunks must reach the actor in pipe order. An unstructured Task per
-    // readability callback gives no FIFO guarantee when hopping onto the
-    // actor, so under bursty output (e.g. large adapter message.delta
-    // streams) chunks could be appended to the line buffer out of order,
-    // corrupting the JSONL protocol mid-run (parse failures, pills stuck in
-    // "starting", invalid runtime responses). A single AsyncStream consumer
-    // preserves arrival order end to end.
-    let (stream, continuation) = AsyncStream.makeStream(of: Data.self)
-    handle.readabilityHandler = { handle in
-      let data = handle.availableData
-      guard !data.isEmpty else {
-        continuation.finish()
+    handle.readabilityHandler = { [weak self] handle in
+      let chunk = chunkReader.read(from: handle)
+      guard !chunk.data.isEmpty else {
         handle.readabilityHandler = nil
         return
       }
-      continuation.yield(data)
-    }
-    Task { [weak self] in
-      for await chunk in stream {
-        await self?.processStdoutData(chunk, generation: expectedGeneration)
+      Task { [weak self] in
+        await self?.processStdoutData(
+          chunk.data,
+          sequence: chunk.sequence,
+          generation: expectedGeneration
+        )
       }
     }
   }
