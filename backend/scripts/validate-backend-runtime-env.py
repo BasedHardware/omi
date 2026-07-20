@@ -68,9 +68,7 @@ def _as_config_list(value: object) -> list[Any] | None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description='Validate backend runtime env manifests against checked-in GKE config and Cloud Run state.'
-    )
+    parser = argparse.ArgumentParser(description='Validate runtime manifests against GKE and Cloud Run state.')
     parser.add_argument('--env', choices=('dev', 'beta', 'prod'), required=True)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument(
