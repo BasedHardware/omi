@@ -411,4 +411,100 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
       messagingFastPathApps: ["Slack", "Messages"]
     )
   }
+
+  // MARK: - ProactiveCaptureTrigger
+
+  func testCaptureTriggerSkipsWhenIdle() {
+    let now = Date(timeIntervalSinceReferenceDate: 5_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 60, now: now),
+      .skip)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 61, now: now),
+      .skip)
+  }
+
+  func testCaptureTriggerCapturesOnContextChange() {
+    let now = Date(timeIntervalSinceReferenceDate: 6_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    // First call: no prior context, so capture.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now),
+      .capture)
+    // Same context: skip until heartbeat.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(1)),
+      .skip)
+    // App change: capture immediately.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Xcode", windowTitle: "Project", idleSeconds: 0, now: now.addingTimeInterval(2)),
+      .capture)
+    // Title change: capture immediately.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Xcode", windowTitle: "Other", idleSeconds: 0, now: now.addingTimeInterval(2.5)),
+      .capture)
+  }
+
+  func testCaptureTriggerHeartbeatsOnlyWhenActive() {
+    let now = Date(timeIntervalSinceReferenceDate: 7_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now),
+      .capture)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(2.9)),
+      .skip)
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(3)),
+      .preview)
+  }
+
+  func testCaptureTriggerDebouncesAppSwitchRequests() {
+    let now = Date(timeIntervalSinceReferenceDate: 8_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    trigger.requestAppSwitchCapture(app: "Safari", at: now)
+    // Before debounce: skip (same context anyway, but request is pending).
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(0.1)),
+      .skip)
+    // After debounce: context changed from nil, so capture.
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(0.6)),
+      .capture)
+  }
+
+  func testCaptureTriggerPreviewHashSkipsUnchangedFrames() {
+    let now = Date(timeIntervalSinceReferenceDate: 9_000)
+    var trigger = ProactiveCaptureTrigger(
+      idleThreshold: 60, heartbeatInterval: 3, appSwitchDebounce: 0.5)
+
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now),
+      .capture)
+
+    // Simulate heartbeat returning identical preview hash.
+    trigger.markPreviewHash(0x1234)
+    XCTAssertEqual(
+      trigger.nextDecision(app: "Safari", windowTitle: "Docs", idleSeconds: 0, now: now.addingTimeInterval(3)),
+      .preview)
+    XCTAssertTrue(trigger.isPreviewUnchanged(0x1235, threshold: 5))
+    XCTAssertFalse(trigger.isPreviewUnchanged(0xFFFF, threshold: 5))
+  }
 }
