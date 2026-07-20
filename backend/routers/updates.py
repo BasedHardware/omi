@@ -107,6 +107,8 @@ class DesktopBetaEmergencyPromotionRequest(BaseModel):
     reason: str = Field(min_length=1)
     operator: str = Field(min_length=1, max_length=39, pattern=r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$")
     expires_at: str = Field(min_length=1)
+    workflow_run_id: int = Field(ge=1)
+    workflow_run_attempt: int = Field(ge=1)
     approvers: List[str] = Field(min_length=2, max_length=2)
     signed_smoke_url: str = Field(min_length=1)
     signed_smoke_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
@@ -974,6 +976,8 @@ async def emergency_promote_macos_beta_channel_endpoint(
             reason=request.reason,
             operator=request.operator,
             expires_at=request.expires_at,
+            workflow_run_id=request.workflow_run_id,
+            workflow_run_attempt=request.workflow_run_attempt,
             approvers=request.approvers,
             evidence=evidence,
         )
@@ -988,6 +992,8 @@ async def verify_emergency_macos_beta_reconciliation_endpoint(
     release_id: str = Query(min_length=1),
     source_sha: str = Query(pattern=r"^[0-9a-fA-F]{40}$"),
     incident_id: str = Query(min_length=1),
+    workflow_run_id: int = Query(ge=1),
+    workflow_run_attempt: int = Query(ge=1),
     secret_key: str = Header(...),
 ):
     """Verify an emergency transaction before repairing GitHub release metadata."""
@@ -1000,6 +1006,8 @@ async def verify_emergency_macos_beta_reconciliation_endpoint(
             release_id,
             source_sha=source_sha,
             incident_id=incident_id,
+            workflow_run_id=workflow_run_id,
+            workflow_run_attempt=workflow_run_attempt,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

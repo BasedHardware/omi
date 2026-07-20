@@ -13,12 +13,25 @@ from desktop_release_metadata import fail, normalize_metadata_line  # noqa: E402
 
 
 def mark_emergency_beta(body: str, evidence: dict) -> str:
-    required = {"release_tag", "source_sha", "incident_id", "reason", "operator", "expires_at", "approvers", "evidence"}
+    required = {
+        "release_tag",
+        "source_sha",
+        "incident_id",
+        "reason",
+        "operator",
+        "expires_at",
+        "workflow_run_id",
+        "workflow_run_attempt",
+        "approvers",
+        "evidence",
+    }
     if evidence.get("emergencyPromotion") is not True or not required.issubset(evidence):
         fail("validated emergency evidence is incomplete")
     approvers = evidence["approvers"]
     if not isinstance(approvers, list) or len(approvers) != 2:
         fail("emergency metadata requires exactly two approvers")
+    if type(evidence["workflow_run_id"]) is not int or type(evidence["workflow_run_attempt"]) is not int:
+        fail("emergency metadata requires the GitHub Actions workflow identity")
     values = {
         "emergencyPromotion": "true",
         "emergencyPromotionApprovers": ",".join(str(item) for item in approvers),
@@ -26,6 +39,8 @@ def mark_emergency_beta(body: str, evidence: dict) -> str:
         "emergencyPromotionReason": str(evidence["reason"]),
         "emergencyPromotionOperator": str(evidence["operator"]),
         "emergencyPromotionExpiresAt": str(evidence["expires_at"]),
+        "emergencyPromotionWorkflowRunId": str(evidence["workflow_run_id"]),
+        "emergencyPromotionWorkflowRunAttempt": str(evidence["workflow_run_attempt"]),
         "emergencyPromotionEvidence": json.dumps(evidence["evidence"], sort_keys=True, separators=(",", ":")),
     }
     lines, output, in_block, saw_block, saw_live, saw_channel = body.splitlines(), [], False, False, False, False

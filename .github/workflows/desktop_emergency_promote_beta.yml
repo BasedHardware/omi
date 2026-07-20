@@ -47,8 +47,16 @@ permissions:
   id-token: write
 
 concurrency:
-  group: desktop-emergency-beta-promotion
+  # GitHub retains one replaceable pending run per group, so sharing the normal
+  # beta group could silently discard this break-glass request. Each protected
+  # attempt is isolated; the exact Firestore pointer/generation CAS below is
+  # the authoritative cross-lane arbiter and makes any collision visible.
+  group: desktop-emergency-beta-promotion-${{ github.run_id }}-${{ github.run_attempt }}
   cancel-in-progress: false
+
+env:
+  WORKFLOW_RUN_ID: ${{ github.run_id }}
+  WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
 
 jobs:
   promote:
@@ -56,11 +64,6 @@ jobs:
     # verifier additionally requires two distinct repository-member approvals.
     environment: prod
     runs-on: ubuntu-latest
-    # Share the normal beta promotion lane only while either lane can mutate
-    # the pointer. Recovery and its hour-long monitor must not block it.
-    concurrency:
-      group: desktop-beta-promotion
-      cancel-in-progress: false
     steps:
       - name: Checkout protected promotion controls
         uses: actions/checkout@v7
@@ -120,6 +123,8 @@ jobs:
           REASON: ${{ inputs.reason }}
           OPERATOR: ${{ github.triggering_actor }}
           EXPIRES_AT: ${{ inputs.expires_at }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
           BEHAVIORAL_EVIDENCE_URL: ${{ inputs.behavioral_evidence_url }}
           CONFIRM: ${{ inputs.confirm }}
         run: |
@@ -135,7 +140,8 @@ jobs:
             --behavioral-evidence-file /tmp/desktop-emergency-beta/behavioral-evidence \
             --behavioral-evidence-url "$BEHAVIORAL_EVIDENCE_URL" \
             --release-tag "$RELEASE_TAG" --source-sha "$SOURCE_SHA" --incident-id "$INCIDENT_ID" \
-            --reason "$REASON" --operator "$OPERATOR" --expires-at "$EXPIRES_AT" --confirm "$CONFIRM" \
+            --reason "$REASON" --operator "$OPERATOR" --expires-at "$EXPIRES_AT" \
+            --workflow-run-id "$WORKFLOW_RUN_ID" --workflow-run-attempt "$WORKFLOW_RUN_ATTEMPT" --confirm "$CONFIRM" \
             --output /tmp/desktop-emergency-beta/evidence.json
           python3 -c 'import json; print(",".join(json.load(open("/tmp/desktop-emergency-beta/evidence.json"))["approvers"]))' \
             | sed 's/^/approvers=/' >> "$GITHUB_OUTPUT"
@@ -190,6 +196,8 @@ jobs:
           INCIDENT_ID: ${{ inputs.incident_id }}
           REASON: ${{ inputs.reason }}
           OPERATOR: ${{ github.triggering_actor }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
           ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
@@ -204,6 +212,8 @@ jobs:
               'source_sha': os.environ['SOURCE_SHA'], 'expected_current_release_id': os.environ['EXPECTED_CURRENT_RELEASE_ID'],
               'expected_generation': int(os.environ['EXPECTED_GENERATION']), 'incident_id': os.environ['INCIDENT_ID'],
               'reason': os.environ['REASON'], 'operator': os.environ['OPERATOR'], 'expires_at': evidence['expires_at'],
+              'workflow_run_id': int(os.environ['WORKFLOW_RUN_ID']),
+              'workflow_run_attempt': int(os.environ['WORKFLOW_RUN_ATTEMPT']),
               'approvers': evidence['approvers'], **evidence['evidence'],
           }))
           PY
@@ -298,6 +308,8 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           INCIDENT_ID: ${{ inputs.incident_id }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -307,8 +319,11 @@ jobs:
             --data-urlencode "release_id=$RELEASE_TAG" \
             --data-urlencode "source_sha=$SOURCE_SHA" \
             --data-urlencode "incident_id=$INCIDENT_ID" \
+            --data-urlencode "workflow_run_id=$WORKFLOW_RUN_ID" \
+            --data-urlencode "workflow_run_attempt=$WORKFLOW_RUN_ATTEMPT" \
             https://api.omi.me/v2/desktop/channels/emergency-promote-beta/reconciliation)
           RECONCILIATION="$RECONCILIATION" RELEASE_TAG="$RELEASE_TAG" SOURCE_SHA="$SOURCE_SHA" INCIDENT_ID="$INCIDENT_ID" \
+            WORKFLOW_RUN_ID="$WORKFLOW_RUN_ID" WORKFLOW_RUN_ATTEMPT="$WORKFLOW_RUN_ATTEMPT" \
             python3 - <<'PY'
           import json
           import os
@@ -316,21 +331,27 @@ jobs:
 
           reconciliation = json.loads(os.environ['RECONCILIATION'])
           evidence = reconciliation.get('emergency_evidence')
+          workflow_run_id = int(os.environ['WORKFLOW_RUN_ID'])
+          workflow_run_attempt = int(os.environ['WORKFLOW_RUN_ATTEMPT'])
           if (
               reconciliation.get('success') is not True
               or reconciliation.get('emergency_reconciled') is not True
               or reconciliation.get('release_id') != os.environ['RELEASE_TAG']
               or reconciliation.get('source_sha') != os.environ['SOURCE_SHA']
               or reconciliation.get('incident_id') != os.environ['INCIDENT_ID']
+              or reconciliation.get('workflow_run_id') != workflow_run_id
+              or reconciliation.get('workflow_run_attempt') != workflow_run_attempt
               or not isinstance(evidence, dict)
               or evidence.get('emergencyPromotion') is not True
               or evidence.get('release_tag') != os.environ['RELEASE_TAG']
               or evidence.get('source_sha') != os.environ['SOURCE_SHA']
               or str(evidence.get('incident_id')) != os.environ['INCIDENT_ID']
+              or evidence.get('workflow_run_id') != workflow_run_id
+              or evidence.get('workflow_run_attempt') != workflow_run_attempt
               or not isinstance(evidence.get('approvers'), list)
               or len(evidence['approvers']) != 2
           ):
-              raise SystemExit('authoritative emergency transaction reconciliation did not verify tag/SHA/incident')
+              raise SystemExit('authoritative emergency transaction reconciliation did not verify tag/SHA/incident/workflow attempt')
           Path('/tmp/desktop-emergency-beta').mkdir(parents=True, exist_ok=True)
           Path('/tmp/desktop-emergency-beta/evidence.json').write_text(
               json.dumps(evidence, sort_keys=True) + '\n', encoding='utf-8'

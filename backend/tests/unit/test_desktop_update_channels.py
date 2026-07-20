@@ -16,6 +16,9 @@ from database.desktop_update_channels import (
     verify_emergency_macos_beta_reconciliation,
 )
 
+WORKFLOW_RUN_ID = 123456789
+WORKFLOW_RUN_ATTEMPT = 2
+
 
 def _manifest(**overrides):
     data = {
@@ -38,7 +41,18 @@ def _manifest(**overrides):
     return data
 
 
-def _emergency_manifest(*, release_id, version, build_number, reason, expires_at, evidence, incident_id="10063"):
+def _emergency_manifest(
+    *,
+    release_id,
+    version,
+    build_number,
+    reason,
+    expires_at,
+    evidence,
+    incident_id="10063",
+    workflow_run_id=WORKFLOW_RUN_ID,
+    workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
+):
     return normalize_release_manifest(
         _manifest(
             release_id=release_id,
@@ -55,6 +69,8 @@ def _emergency_manifest(*, release_id, version, build_number, reason, expires_at
                     "reason": reason,
                     "operator": "release-operator",
                     "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+                    "workflow_run_id": workflow_run_id,
+                    "workflow_run_attempt": workflow_run_attempt,
                     "approvers": ["alice", "bob"],
                     "evidence": evidence,
                 },
@@ -349,6 +365,8 @@ class TestMacosBetaEmergencyPromotionRules:
             reason="qualification runner is unavailable during an incident",
             operator="release-operator",
             expires_at=expires_at,
+            workflow_run_id=WORKFLOW_RUN_ID,
+            workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
             approvers=["alice", "bob"],
             evidence=evidence,
             audit_id="audit-123",
@@ -369,6 +387,8 @@ class TestMacosBetaEmergencyPromotionRules:
         assert result["audit"]["channel"] == "beta"
         assert result["audit"]["approvers"] == ["alice", "bob"]
         assert result["audit"]["operator"] == "release-operator"
+        assert result["audit"]["workflow_run_id"] == WORKFLOW_RUN_ID
+        assert result["audit"]["workflow_run_attempt"] == WORKFLOW_RUN_ATTEMPT
         transaction.create.assert_called_once_with(audit_ref, result["audit"])
         transaction.set.assert_called_once_with(pointer_ref, result["pointer"])
 
@@ -412,6 +432,8 @@ class TestMacosBetaEmergencyPromotionRules:
                 reason="runner unavailable",
                 operator="release-operator",
                 expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
+                workflow_run_id=WORKFLOW_RUN_ID,
+                workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
                 approvers=["alice", "bob"],
                 evidence=evidence,
                 audit_id="audit-123",
@@ -451,6 +473,8 @@ class TestMacosBetaEmergencyPromotionRules:
                 reason="runner unavailable",
                 operator="release-operator",
                 expires_at=expires_at,
+                workflow_run_id=WORKFLOW_RUN_ID,
+                workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
                 approvers=approvers,
                 evidence=valid_evidence if evidence is None else evidence,
                 firestore_client=MagicMock(),
@@ -467,6 +491,8 @@ class TestMacosBetaEmergencyPromotionRules:
                 reason="runner unavailable",
                 operator="not a github login",
                 expires_at="2026-07-19T13:00:00Z",
+                workflow_run_id=WORKFLOW_RUN_ID,
+                workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
                 approvers=["alice", "bob"],
                 evidence=valid_evidence,
                 firestore_client=MagicMock(),
@@ -498,7 +524,18 @@ class TestMacosBetaEmergencyReconciliation:
     def test_verifies_the_immutable_emergency_decision_and_append_only_audit(self):
         release_id = "v0.12.85+12085-macos"
         source_sha = "a" * 40
-        audit_id = _emergency_promotion_audit_id(release_id, source_sha)
+        audit_id = _emergency_promotion_audit_id(
+            release_id,
+            source_sha,
+            workflow_run_id=WORKFLOW_RUN_ID,
+            workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
+        )
+        assert audit_id != _emergency_promotion_audit_id(
+            release_id,
+            source_sha,
+            workflow_run_id=WORKFLOW_RUN_ID,
+            workflow_run_attempt=WORKFLOW_RUN_ATTEMPT + 1,
+        )
         evidence = {
             "signed_smoke_url": "https://example.test/smoke.json",
             "signed_smoke_sha256": "d" * 64,
@@ -527,6 +564,8 @@ class TestMacosBetaEmergencyReconciliation:
             "target_release_id": release_id,
             "source_sha": source_sha,
             "incident_id": "10063",
+            "workflow_run_id": WORKFLOW_RUN_ID,
+            "workflow_run_attempt": WORKFLOW_RUN_ATTEMPT,
             "previous_generation": 7,
             "generation": 8,
         }
@@ -543,6 +582,8 @@ class TestMacosBetaEmergencyReconciliation:
             release_id,
             source_sha=source_sha,
             incident_id="10063",
+            workflow_run_id=WORKFLOW_RUN_ID,
+            workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
             firestore_client=client,
         )
 
@@ -552,6 +593,8 @@ class TestMacosBetaEmergencyReconciliation:
             "release_id": release_id,
             "source_sha": source_sha,
             "incident_id": "10063",
+            "workflow_run_id": WORKFLOW_RUN_ID,
+            "workflow_run_attempt": WORKFLOW_RUN_ATTEMPT,
             "audit_id": audit_id,
             "generation": 8,
             "emergency_evidence": emergency_evidence,
@@ -579,15 +622,62 @@ class TestMacosBetaEmergencyReconciliation:
                 release_id,
                 source_sha="a" * 40,
                 incident_id="10063",
+                workflow_run_id=WORKFLOW_RUN_ID,
+                workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
                 firestore_client=client,
             )
 
         assert client.collection.call_count == 1
 
-    def test_rejects_an_audit_bound_to_a_different_incident(self):
+    def test_rejects_a_manifest_bound_to_another_workflow_attempt(self):
         release_id = "v0.12.85+12085-macos"
         source_sha = "a" * 40
-        audit_id = _emergency_promotion_audit_id(release_id, source_sha)
+        evidence = {
+            "signed_smoke_url": "https://example.test/smoke.json",
+            "signed_smoke_sha256": "d" * 64,
+            "behavioral_url": "https://example.test/behavior.json",
+            "behavioral_sha256": "e" * 64,
+            "source_gate_url": "https://example.test/check",
+            "zip_sha256": "b" * 64,
+            "dmg_sha256": "c" * 64,
+        }
+        manifest_snapshot = MagicMock(exists=True)
+        manifest_snapshot.to_dict.return_value = _emergency_manifest(
+            release_id=release_id,
+            version="0.12.85+12085",
+            build_number=12085,
+            reason="qualification runner is unavailable during an incident",
+            expires_at=datetime(2026, 7, 19, 13, 0, tzinfo=timezone.utc),
+            evidence=evidence,
+        )
+        manifest_ref = MagicMock()
+        manifest_ref.get.return_value = manifest_snapshot
+        manifests = MagicMock()
+        manifests.document.return_value = manifest_ref
+        client = MagicMock()
+        client.collection.return_value = manifests
+
+        with pytest.raises(ValueError, match="bound emergency decision for this workflow attempt"):
+            verify_emergency_macos_beta_reconciliation(
+                release_id,
+                source_sha=source_sha,
+                incident_id="10063",
+                workflow_run_id=WORKFLOW_RUN_ID,
+                workflow_run_attempt=WORKFLOW_RUN_ATTEMPT + 1,
+                firestore_client=client,
+            )
+
+        assert client.collection.call_count == 1
+
+    def test_rejects_an_audit_bound_to_a_different_workflow_attempt(self):
+        release_id = "v0.12.85+12085-macos"
+        source_sha = "a" * 40
+        audit_id = _emergency_promotion_audit_id(
+            release_id,
+            source_sha,
+            workflow_run_id=WORKFLOW_RUN_ID,
+            workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
+        )
         evidence = {
             "signed_smoke_url": "https://example.test/smoke.json",
             "signed_smoke_sha256": "d" * 64,
@@ -616,7 +706,9 @@ class TestMacosBetaEmergencyReconciliation:
             "emergencyPromotion": True,
             "target_release_id": release_id,
             "source_sha": source_sha,
-            "incident_id": "10064",
+            "incident_id": "10063",
+            "workflow_run_id": WORKFLOW_RUN_ID,
+            "workflow_run_attempt": WORKFLOW_RUN_ATTEMPT + 1,
             "previous_generation": 7,
             "generation": 8,
         }
@@ -629,10 +721,12 @@ class TestMacosBetaEmergencyReconciliation:
         client = MagicMock()
         client.collection.side_effect = [manifests, audits]
 
-        with pytest.raises(ValueError, match="audit does not match.*incident"):
+        with pytest.raises(ValueError, match="audit does not match.*workflow attempt"):
             verify_emergency_macos_beta_reconciliation(
                 release_id,
                 source_sha=source_sha,
                 incident_id="10063",
+                workflow_run_id=WORKFLOW_RUN_ID,
+                workflow_run_attempt=WORKFLOW_RUN_ATTEMPT,
                 firestore_client=client,
             )
