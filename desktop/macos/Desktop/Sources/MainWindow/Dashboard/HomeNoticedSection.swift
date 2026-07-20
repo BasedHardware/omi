@@ -77,49 +77,55 @@ private struct HomeNoticedRecommendationRow: View {
   @State private var isHovering = false
 
   var body: some View {
-    HomeNoticedRowChrome(isHovering: $isHovering, onTap: { Task { await onOpen() } }) {
-      Image(systemName: "sparkle")
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(HomeStagePalette.secondary)
-        .frame(width: 18)
-    } content: {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(recommendation.headline)
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundStyle(HomeStagePalette.ink)
-          .lineLimit(2)
-        Text(captionText)
-          .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundStyle(HomeStagePalette.muted)
-          .lineLimit(1)
-      }
-    } actions: {
-      Button(recommendation.recommendedAction) { Task { await onOpen() } }
-        .buttonStyle(.borderedProminent)
-        .tint(HomeStagePalette.ink)
-        .foregroundColor(.black)
-        .controlSize(.small)
-        .lineLimit(1)
-        .accessibilityIdentifier("wmn-primary-\(recommendation.interventionID)")
-
-      Menu {
-        Button("Later") { Task { await onLater() } }
-        Menu("Dismiss") {
-          Button("Already handled") { Task { await onDismiss(.already_handled) } }
-          Button("Not mine") { Task { await onDismiss(.not_mine) } }
-          Button("Not useful") { Task { await onDismiss(.not_useful) } }
-          Button("No reason") { Task { await onDismiss(nil) } }
-        }
-      } label: {
-        Image(systemName: "ellipsis")
+    HomeNoticedRowChrome(
+      isHovering: $isHovering,
+      onTap: { Task { await onOpen() } },
+      icon: {
+        Image(systemName: "sparkle")
           .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundStyle(HomeStagePalette.secondary)
+          .frame(width: 18)
+      },
+      content: {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(recommendation.headline)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundStyle(HomeStagePalette.ink)
+            .lineLimit(2)
+          Text(captionText)
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundStyle(HomeStagePalette.muted)
+            .lineLimit(1)
+        }
+      },
+      actions: {
+        Button(recommendation.recommendedAction) { Task { await onOpen() } }
+          .buttonStyle(.borderedProminent)
+          .tint(HomeStagePalette.ink)
+          .foregroundColor(.black)
+          .controlSize(.small)
+          .lineLimit(1)
+          .accessibilityIdentifier("wmn-primary-\(recommendation.interventionID)")
+
+        Menu {
+          Button("Later") { Task { await onLater() } }
+          Menu("Dismiss") {
+            Button("Already handled") { Task { await onDismiss(.already_handled) } }
+            Button("Not mine") { Task { await onDismiss(.not_mine) } }
+            Button("Not useful") { Task { await onDismiss(.not_useful) } }
+            Button("No reason") { Task { await onDismiss(nil) } }
+          }
+        } label: {
+          Image(systemName: "ellipsis")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(HomeStagePalette.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 26)
+        .accessibilityIdentifier("wmn-dismiss-\(recommendation.interventionID)")
       }
-      .menuStyle(.borderlessButton)
-      .menuIndicator(.hidden)
-      .frame(width: 26)
-      .accessibilityIdentifier("wmn-dismiss-\(recommendation.interventionID)")
-    }
+    )
   }
 
   private var captionText: String {
@@ -138,34 +144,40 @@ private struct HomeNoticedInsightRow: View {
   @State private var isHovering = false
 
   var body: some View {
-    HomeNoticedRowChrome(isHovering: $isHovering, onTap: onOpen) {
-      Image(systemName: "lightbulb")
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(HomeStagePalette.secondary)
-        .frame(width: 18)
-    } content: {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(insight.text)
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundStyle(HomeStagePalette.ink)
-          .lineLimit(2)
-        Text("\(insight.sourceApp) · \(insight.createdAt.formatted(date: .omitted, time: .shortened))")
-          .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundStyle(HomeStagePalette.muted)
-          .lineLimit(1)
-      }
-    } actions: {
-      Button {
-        Task { await onDismiss() }
-      } label: {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.micro, weight: .semibold)
+    HomeNoticedRowChrome(
+      isHovering: $isHovering,
+      onTap: onOpen,
+      icon: {
+        Image(systemName: "lightbulb")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundStyle(HomeStagePalette.secondary)
+          .frame(width: 18)
+      },
+      content: {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(insight.text)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundStyle(HomeStagePalette.ink)
+            .lineLimit(2)
+          Text("\(insight.sourceApp) · \(insight.createdAt.formatted(date: .omitted, time: .shortened))")
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundStyle(HomeStagePalette.muted)
+            .lineLimit(1)
+        }
+      },
+      actions: {
+        Button {
+          Task { await onDismiss() }
+        } label: {
+          Image(systemName: "xmark")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(HomeStagePalette.secondary)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 26)
+        .help("Dismiss")
       }
-      .buttonStyle(.plain)
-      .frame(width: 26)
-      .help("Dismiss")
-    }
+    )
   }
 }
 
