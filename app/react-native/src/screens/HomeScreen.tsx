@@ -68,7 +68,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.recordBtn}
-          onPress={() => router.push('/(tabs)/capture')}
+          onPress={() => router.push('/capture')}
           activeOpacity={0.8}
         >
           <Text style={styles.recordIcon}>●</Text>

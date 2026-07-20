@@ -41,14 +41,9 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <Stack screenOptions={{ headerShown: false }}>
-        {uid ? (
-          <>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="conversation/[id]" />
-          </>
-        ) : (
-          <Stack.Screen name="onboarding" />
-        )}
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="conversation/[id]" />
+        <Stack.Screen name="onboarding" />
       </Stack>
     </ErrorBoundary>
   );

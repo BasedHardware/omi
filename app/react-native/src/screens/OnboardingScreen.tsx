@@ -10,13 +10,18 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
+import { Redirect } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { useAuthStore } from '@/state/authStore';
 
 const BG = require('../../assets/images/onboarding-bg.webp');
 
 export default function OnboardingScreen() {
-  const { loading, error, loginWithGoogle, loginWithApple } = useAuthStore();
+  const { uid, loading, error, loginWithGoogle, loginWithApple } = useAuthStore();
+
+  if (uid) {
+    return <Redirect href="/(tabs)/home" />;
+  }
 
   return (
     <View style={styles.flex}>
