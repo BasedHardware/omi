@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase/admin';
 import { verifyAdmin } from '@/lib/auth';
-import { cachedPosthogFetch } from '@/lib/posthog';
+import { cachedPosthogFetch, withPosthogRowLimit } from '@/lib/posthog';
 import { getPayload, setPayload } from '@/lib/payload-cache';
 
 export const dynamic = 'force-dynamic';
@@ -37,7 +37,7 @@ type FloatingBarCtrStats = {
 };
 
 async function queryPostHog(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await cachedPosthogFetch(host, projectId, apiKey, query);
+  const response = await cachedPosthogFetch(host, projectId, apiKey, withPosthogRowLimit(query));
 
   if (!response.ok) {
     const text = await response.text();

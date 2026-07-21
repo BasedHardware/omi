@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-silent-query-row-cap",
+  "violated_contract": "A HogQL analytics query must bound its own result size explicitly; it must not rely on PostHog's default, which silently fills LIMIT 100 into any LIMIT-less query (and each UNION arm) and truncates the overflow with no error.",
+  "canonical_prevention": "Wrap LIMIT-less queries with the shared withPosthogRowLimit helper in web/admin/lib/posthog.ts (one outer LIMIT over a subquery, so a trailing limit cannot bind to a single UNION arm); do not append a bare LIMIT or leave admin queries capless.",
+  "evidence_prs": [10191],
+  "scope_hints": ["web/admin/**"],
+  "status": "open"
+}

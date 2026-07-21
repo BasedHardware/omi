@@ -18,6 +18,31 @@
 import { createHash } from "crypto";
 import { getDb } from "@/lib/firebase/admin";
 
+// PostHog's query API fills `LIMIT 100` into any HogQL query (and each UNION
+// arm) that carries none, then truncates silently — a grouped query returning
+// >100 rows loses the overflow with no error. This is the highest row count
+// PostHog will actually serve: `LIMIT 100000` returns exactly 50000 rows (the
+// ad-hoc 100000/500000 limits scattered across routes overstate what they get).
+export const POSTHOG_MAX_ROWS = 50_000;
+
+/**
+ * Guard a LIMIT-less HogQL query against PostHog's silent 100-row cap.
+ *
+ * A trailing `LIMIT` binds to the last arm of a `UNION` only (verified:
+ * `SELECT 1 UNION ALL SELECT 2 LIMIT 1` returns 2 rows), so appending a limit
+ * is unsafe. We always wrap the query as a subquery with one outer limit, which
+ * caps the whole result regardless of unions or grouping. Callers whose query
+ * already pins its own limit are unaffected — the inner limit binds first and
+ * the outer high cap is a no-op.
+ */
+export function withPosthogRowLimit(
+  query: string,
+  limit: number = POSTHOG_MAX_ROWS,
+): string {
+  const inner = query.trim().replace(/;\s*$/, "");
+  return `SELECT * FROM (\n${inner}\n) LIMIT ${limit}`;
+}
+
 const CACHE_COLLECTION = "admin_stats_cache";
 const SOFT_TTL_MS = 30 * 60 * 1000; // serve cached without re-querying for 30 min
 
@@ -40,7 +65,16 @@ async function readCache(
 async function writeCache(key: string, results: unknown[]): Promise<void> {
   try {
     const payload = JSON.stringify(results);
-    if (payload.length > 900_000) return; // Firestore field cap ~1 MB; skip oversized
+    if (payload.length > 900_000) {
+      // Firestore field cap ~1 MB; skip oversized. Log it — silently skipping
+      // means the heaviest queries lose caching + stale-on-throttle fallback
+      // exactly when they grow large, with no signal that it happened.
+      console.warn(
+        `PostHog result too large to cache (${payload.length} bytes, ${results.length} rows) — skipping cache write`,
+        { key },
+      );
+      return;
+    }
     await getDb()
       .collection(CACHE_COLLECTION)
       .doc(key)

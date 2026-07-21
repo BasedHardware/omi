@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { withPosthogRowLimit } from "@/lib/posthog";
 import {
   desktopQualificationFromMetadata,
   desktopReleaseLifecycle,
@@ -106,7 +107,9 @@ async function posthogQuery(query: string): Promise<any> {
         Authorization: `Bearer ${POSTHOG_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withPosthogRowLimit(query) },
+      }),
       cache: "no-store",
     },
   );
