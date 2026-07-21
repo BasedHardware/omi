@@ -6,8 +6,14 @@ on:
   pull_request:
     branches: main
 
+# On a PR, group by PR number so a newer push supersedes the older run. On a
+# push to main there is no PR number, so group by the commit SHA — NOT the ref:
+# a shared per-ref group meant every main push cancelled the previous commit's
+# in-progress run, so on a busy night the newest desktop commit never produced a
+# green source-proof and desktop_auto_release deadlocked on its source gate
+# (#10177). Per-SHA groups let each main commit's run complete.
 concurrency:
-  group: desktop-swift-${{ github.event.pull_request.number || github.ref }}
+  group: desktop-swift-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:

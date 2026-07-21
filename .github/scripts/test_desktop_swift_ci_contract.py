@@ -264,6 +264,39 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             "gate condition must be absent after removal",
         )
 
+    # --- concurrency scoping (#10177) --------------------------------------
+
+    def test_main_push_concurrency_group_is_scoped_per_sha(self):
+        """A push to main (no PR number) must group by commit SHA, not the ref.
+
+        A shared per-ref group with cancel-in-progress meant every main push
+        cancelled the previous commit's in-progress run, so the release source
+        gate never saw a green run for the newest desktop SHA (#10177). The
+        non-PR fallback must therefore be github.sha.
+        """
+        group = re.search(r"^concurrency:\n  group:\s*([^\n]+)", _workflow_text(), re.MULTILINE)
+        self.assertIsNotNone(group, "workflow must declare a concurrency group")
+        group_expr = group.group(1)
+        self.assertIn("github.event.pull_request.number", group_expr, "PRs still group by PR number")
+        self.assertIn("github.sha", group_expr, "non-PR (main push) runs must group per commit SHA")
+        self.assertNotRegex(
+            group_expr,
+            r"pull_request\.number\s*\}\}\s*\|\|\s*github\.ref\b|pull_request\.number\s*\|\|\s*github\.ref\b",
+            "main pushes must not share a per-ref cancel-in-progress group (#10177)",
+        )
+
+    def test_adversarial_shared_per_ref_concurrency_detected(self):
+        """Reverting the fallback to github.ref re-introduces the shared
+        per-ref group that deadlocked the release source gate — the guard
+        above must reject it."""
+        tampered = _workflow_text().replace(
+            "github.event.pull_request.number || github.sha",
+            "github.event.pull_request.number || github.ref",
+        )
+        group_expr = re.search(r"^concurrency:\n  group:\s*([^\n]+)", tampered, re.MULTILINE).group(1)
+        self.assertRegex(group_expr, r"pull_request\.number\s*\|\|\s*github\.ref\b")
+        self.assertNotIn("github.sha", group_expr)
+
 
 if __name__ == "__main__":
     unittest.main()
