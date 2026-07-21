@@ -80,6 +80,58 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                 (root / "codemagic.yaml").write_text(original.replace(block, changed, 1), encoding="utf-8")
                 self.assertTrue(CHECKER.validate(root))
 
+    def test_desktop_release_rejects_staging_or_duplicate_rust_api_assignment(self) -> None:
+        original = (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
+        block = CHECKER._workflow_block(original, CHECKER.DESKTOP_WORKFLOW)
+        self.assertIsNotNone(block)
+        assert block is not None
+        for mutation in ("staging", "duplicate_late"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                if mutation == "staging":
+                    changed = block.replace(
+                        'OMI_DESKTOP_API_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app/"',
+                        'OMI_DESKTOP_API_URL: "https://staging.example.test"',
+                        1,
+                    )
+                else:
+                    changed = block.replace(
+                        'OMI_DESKTOP_API_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app/"',
+                        'OMI_DESKTOP_API_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app/"\n'
+                        '        OMI_DESKTOP_API_URL: "https://staging.example.test"',
+                        1,
+                    )
+                (root / "codemagic.yaml").write_text(original.replace(block, changed, 1), encoding="utf-8")
+                self.assertTrue(CHECKER.validate(root))
+
+    def test_rejects_any_reintroduction_of_legacy_beta_or_staging_routing(self) -> None:
+        for source_path in CHECKER.LEGACY_BETA_ROUTING_PATHS:
+            for token in CHECKER.FORBIDDEN_ROUTING_TOKENS:
+                with self.subTest(source_path=source_path, token=token), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for relative_path in CHECKER.LEGACY_BETA_ROUTING_PATHS:
+                        target = root / relative_path
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        text = (ROOT / relative_path).read_text(encoding="utf-8")
+                        if relative_path == source_path:
+                            text += f"\n// {token}\n"
+                        target.write_text(text, encoding="utf-8")
+                    self.assertTrue(CHECKER.validate(root))
+
+    def test_rejects_mutated_desktop_beta_identity_or_firestore_project(self) -> None:
+        for source_path, fragments in CHECKER.REQUIRED_PRODUCTION_FRAGMENTS.items():
+            for fragment in fragments:
+                with self.subTest(source_path=source_path, fragment=fragment), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for relative_path in (*CHECKER.LEGACY_BETA_ROUTING_PATHS, *CHECKER.REQUIRED_PRODUCTION_FRAGMENTS):
+                        target = root / relative_path
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        text = (ROOT / relative_path).read_text(encoding="utf-8")
+                        if relative_path == source_path:
+                            text = text.replace(fragment, "MUTATED_PRODUCTION_IDENTITY")
+                        target.write_text(text, encoding="utf-8")
+                    self.assertTrue(CHECKER.validate(root))
+
 
 if __name__ == "__main__":
     unittest.main()
