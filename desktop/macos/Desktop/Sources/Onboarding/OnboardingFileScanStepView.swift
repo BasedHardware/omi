@@ -83,6 +83,7 @@ struct OnboardingFileScanStepView: View {
               .foregroundColor(OmiColors.textTertiary)
           }
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {
