@@ -9,12 +9,14 @@ import {
   clearSyncState
 } from '../integrations/syncState'
 import { filterNew } from '../integrations/syncStateLogic'
+import { translateToGlosses, defaultSignOpts } from '../integrations/signLanguage'
 import type {
   GoogleStatus,
   GoogleSource,
   FetchNewResult,
   GmailItem,
-  CalendarItem
+  CalendarItem,
+  TranslationResult
 } from '../../shared/types'
 
 // All integrations IPC lives here (3e Sticky Notes + 3d Gmail/Calendar) so
@@ -74,6 +76,19 @@ export function registerIntegrationsHandlers(): void {
     'integrations:google:markProcessed',
     async (_e, source: GoogleSource, ids: string[]): Promise<void> => {
       markProcessed(source, ids)
+    }
+  )
+
+  ipcMain.handle(
+    'integrations:signLanguage:translate',
+    async (_e, payload: unknown): Promise<TranslationResult> => {
+      const text = typeof payload === 'string' ? payload : (payload as { text?: string })?.text
+      const spokenLanguage =
+        typeof payload === 'object' && payload ? (payload as { spokenLanguage?: string }).spokenLanguage : 'en'
+      const signedLanguage =
+        typeof payload === 'object' && payload ? (payload as { signedLanguage?: string }).signedLanguage : 'ase'
+      if (!text) throw new Error('No text provided for translation')
+      return translateToGlosses(text, spokenLanguage ?? 'en', signedLanguage ?? 'ase', defaultSignOpts())
     }
   )
 }

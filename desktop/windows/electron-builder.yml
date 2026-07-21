@@ -62,14 +62,27 @@ mac:
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
+  # snap intentionally omitted: its default strict confinement blocks xprop,
+  # tesseract, and /proc/<pid>/exe, silently degrading active-window detection
+  # and OCR. Ship AppImage + deb (unconfined); revisit snap with classic
+  # confinement or explicit plugs if needed.
   target:
     - AppImage
-    - snap
     - deb
   maintainer: Based Hardware <team@basedhardware.com>
   category: Utility
+  synopsis: AI that sees your screen, listens, and remembers
 appImage:
   artifactName: ${name}-${version}.${ext}
+deb:
+  # Runtime tools/libs the Linux platform seams call out of process. Missing
+  # ones degrade gracefully (OCR/active-window return empty), but packaging the
+  # depends keeps the shipped App experience complete on Debian/Ubuntu.
+  depends:
+    - tesseract-ocr
+    - tesseract-ocr-eng
+    - libnotify4
+    - libxss1
 npmRebuild: false
 
 # --- AUTO-UPDATE (NOT configured today) ---

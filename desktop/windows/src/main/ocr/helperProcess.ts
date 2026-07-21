@@ -32,7 +32,17 @@ class HelperProcess {
     if (this.child || this.starting || this.unavailable) return
     this.starting = true
     const exe = resolveHelperPath()
-    const child = spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'] })
+    // The Linux helper is a Node script. Run it with Electron's OWN bundled Node
+    // (ELECTRON_RUN_AS_NODE) rather than relying on the `#!/usr/bin/env node`
+    // shebang finding a system `node` — which a packaged AppImage/deb user may
+    // not have installed. The Windows helper is a native .exe, spawned directly.
+    const child =
+      process.platform === 'linux'
+        ? spawn(process.execPath, [exe], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+          })
+        : spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'] })
     this.child = child
     this.starting = false
 

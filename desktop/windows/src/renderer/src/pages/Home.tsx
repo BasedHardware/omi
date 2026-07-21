@@ -12,6 +12,8 @@ import omiMark from '../assets/omi-logo.png'
 import { maybeStartScreenSynthesis } from '../lib/screenSynthesis'
 import { maybeStartInsightEngine } from '../lib/insightEngine'
 import { maybeStartRetentionSweep } from '../lib/retentionSweep'
+import { SignAvatar } from '../components/signLanguage/SignAvatar'
+import type { TranslationResult } from '../../../shared/types'
 
 function firstName(u: User | null): string {
   const display = u?.displayName?.trim().split(/\s+/)[0]
@@ -68,6 +70,16 @@ function ChatBar(props: {
 export function Home(): React.JSX.Element {
   const { chat } = useAppState()
   const [user, setUser] = useState<User | null>(auth.currentUser)
+  const [poseUrl, setPoseUrl] = useState<string | null>(null)
+  const [translationUnavailable, setTranslationUnavailable] = useState(false)
+
+  useEffect(() => {
+    const unsubscribe = window.omi.onDeepgramSignUpdate((result: TranslationResult) => {
+      setPoseUrl(result.poseUrl || null)
+      setTranslationUnavailable(result.swrFull === 'TRANSLATION_UNAVAILABLE')
+    })
+    return unsubscribe
+  }, [])
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const widgetsGridRef = useRef<HTMLDivElement>(null)
   const lastLenRef = useRef(0)
@@ -355,7 +367,23 @@ export function Home(): React.JSX.Element {
           className="h-full overflow-y-auto"
           style={{ WebkitMaskImage: mask, maskImage: mask }}
         >
-          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
+          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col relative">
+            {/* Always-on sign-language avatar — prominent panel, bottom-right of the
+                thread. Visible whenever a live translation is streaming; shows a
+                clear status otherwise. */}
+            <div className="absolute bottom-16 right-0 z-50 w-72 h-56 rounded-2xl border border-white/10 bg-black/40 shadow-2xl overflow-hidden pointer-events-none">
+              {translationUnavailable ? (
+                <div className="flex items-center justify-center h-full text-amber-500 text-[11px] italic text-center px-3">
+                  Sign service unavailable
+                </div>
+              ) : poseUrl ? (
+                <SignAvatar poseUrl={poseUrl} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500 text-[11px] italic text-center px-3">
+                  Start recording to see sign translation
+                </div>
+              )}
+            </div>
             <div className="mt-auto space-y-2 pb-2">
               {started && showThread ? (
                 windowed.map((m, i) => {

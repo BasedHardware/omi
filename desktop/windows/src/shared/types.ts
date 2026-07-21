@@ -1,3 +1,18 @@
+export type SignGloss = {
+  gloss: string
+  duration: number
+  timestamp: number
+  swr?: string
+}
+
+export type TranslationResult = {
+  originalText: string
+  poseUrl?: string
+  assetType?: 'video' | 'pose'
+  glosses: SignGloss[]
+  swrFull?: string
+}
+
 export type CaptureSource = {
   id: string
   name: string
@@ -291,6 +306,7 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => () => void
   screenSynthFramesSince: () => Promise<ScreenFrameLite[]>
   screenSynthGetState: () => Promise<ScreenSynthState>
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>
