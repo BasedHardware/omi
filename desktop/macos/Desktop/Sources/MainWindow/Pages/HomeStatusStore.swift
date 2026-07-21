@@ -1,6 +1,23 @@
 import Combine
 import Foundation
 
+extension Notification.Name {
+  /// Posted after local memory/task visibility changes so Home never waits for
+  /// the activation cooldown before showing the new totals.
+  static let homeKnowledgeCountsDidChange = Notification.Name("com.omi.desktop.homeKnowledgeCountsDidChange")
+}
+
+enum HomeKnowledgeCountInvalidation {
+  static func post() {
+    NotificationCenter.default.post(name: .homeKnowledgeCountsDidChange, object: nil)
+  }
+
+  static func post(logMessage: @autoclosure () -> String) {
+    log(logMessage())
+    post()
+  }
+}
+
 struct HomeKnowledgeCounts: Equatable, Sendable {
   let conversations: Int?
   let memories: Int?
@@ -76,6 +93,8 @@ final class HomeStatusStore: ObservableObject {
   private var refreshTask: Task<Void, Never>?
   private var refreshID: UUID?
   private var latestKnowledgeRefreshID: UUID?
+  private var knowledgeRefreshTask: Task<Void, Never>?
+  private var knowledgeRefreshQueued = false
   private var refreshGeneration = 0
   private var cancellables = Set<AnyCancellable>()
 
@@ -113,6 +132,13 @@ final class HomeStatusStore: ObservableObject {
       .store(in: &cancellables)
 
     connectorStatusStore.connectorDidSync
+      .sink { [weak self] _ in
+        self?.refreshKnowledgeCountsAfterImport()
+      }
+      .store(in: &cancellables)
+
+    NotificationCenter.default.publisher(for: .homeKnowledgeCountsDidChange)
+      .receive(on: DispatchQueue.main)
       .sink { [weak self] _ in
         self?.refreshKnowledgeCountsAfterImport()
       }
@@ -176,6 +202,9 @@ final class HomeStatusStore: ObservableObject {
     refreshTask = nil
     refreshID = nil
     latestKnowledgeRefreshID = nil
+    knowledgeRefreshTask?.cancel()
+    knowledgeRefreshTask = nil
+    knowledgeRefreshQueued = false
     lastRefreshAt = .distantPast
     localDatabaseReady = false
     screenshotCount = nil
@@ -222,17 +251,36 @@ final class HomeStatusStore: ObservableObject {
   }
 
   private func refreshKnowledgeCountsAfterImport() {
+    ensureCurrentSessionScope()
+    guard knowledgeRefreshTask == nil else {
+      knowledgeRefreshQueued = true
+      return
+    }
+
     let generation = refreshGeneration
     let knowledgeRefreshID = beginKnowledgeRefresh()
-    Task { [weak self] in
+    let task = Task { [weak self] in
       guard let self else { return }
       let counts = await self.loader.loadKnowledgeCounts(!self.accountHasOmiDeviceConversations)
       guard !Task.isCancelled,
         generation == self.refreshGeneration,
         knowledgeRefreshID == self.latestKnowledgeRefreshID
-      else { return }
+      else {
+        self.completeKnowledgeRefresh(id: knowledgeRefreshID)
+        return
+      }
       self.apply(knowledgeCounts: counts)
+      self.completeKnowledgeRefresh(id: knowledgeRefreshID)
     }
+    knowledgeRefreshTask = task
+  }
+
+  private func completeKnowledgeRefresh(id: UUID) {
+    guard id == latestKnowledgeRefreshID else { return }
+    knowledgeRefreshTask = nil
+    guard knowledgeRefreshQueued else { return }
+    knowledgeRefreshQueued = false
+    refreshKnowledgeCountsAfterImport()
   }
 
   private func beginKnowledgeRefresh() -> UUID {
