@@ -1,8 +1,19 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  session,
+  nativeImage,
+  desktopCapturer,
+  Menu,
+  Tray
+} from 'electron'
 import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import iconPath from '../../resources/icon.png?asset'
+import iconPngPath from '../../resources/icon.png?asset'
+import iconIcoPath from '../../resources/icon.ico?asset'
 import { listCaptureSources } from './ipc/capture'
 import { registerOmiListenHandlers } from './ipc/omiListen'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
@@ -38,6 +49,12 @@ import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
+import { startWindowsUpdater } from './updater'
+import {
+  addObservabilityBreadcrumb,
+  initMainObservability,
+  registerObservabilityIpc
+} from './observability'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 
 // Default the perf log to the user data dir so marks double as lightweight prod
@@ -143,8 +160,15 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
   const suffix = sandbox === '1' ? 'chat-kg' : sandbox.replace(/[^a-zA-Z0-9._-]/g, '-')
   app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
 }
+// After the sandbox block so the observability sink lands in the re-pinned
+// userData dir, not the production profile.
+initMainObservability()
 
+const iconPath = process.platform === 'win32' ? iconIcoPath : iconPngPath
+const trayIconPath = iconPngPath
 const icon = nativeImage.createFromPath(iconPath)
+let tray: Tray | null = null
+let quitting = false
 import {
   remapConversationId,
   insertLocalConversation,
@@ -180,6 +204,7 @@ function createWindow(): BrowserWindow {
       backgroundThrottling: false
     }
   })
+  mainWindow.setIcon(icon)
 
   // NOTE: the main window is intentionally NOT content-protected. We used to call
   // setContentProtection(true) here (Windows WDA_EXCLUDEFROMCAPTURE) so Rewind/chat
@@ -245,11 +270,51 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
+function showMainWindow(mainWindow: BrowserWindow): void {
+  if (mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function createTray(mainWindow: BrowserWindow): void {
+  if (tray || process.platform !== 'win32') return
+  const trayIcon = icon.isEmpty()
+    ? nativeImage.createFromPath(trayIconPath)
+    : icon.resize({ width: 16, height: 16 })
+  tray = new Tray(trayIcon)
+  tray.setToolTip('Omi')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: 'Show Omi',
+        click: () => showMainWindow(mainWindow)
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit Omi',
+        click: () => {
+          quitting = true
+          app.quit()
+        }
+      }
+    ])
+  )
+  tray.on('click', () => showMainWindow(mainWindow))
+  tray.on('double-click', () => showMainWindow(mainWindow))
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   perfMark('main:ready')
+  registerObservabilityIpc()
+  addObservabilityBreadcrumb(
+    'app.ready',
+    { automationEnabled: AUTOMATION_ENABLED },
+    { category: 'app' }
+  )
 
   // Production only (dev uses the vite dev server): serve the packaged renderer
   // over localhost so Firebase auth sees an authorized origin. Must be up before
@@ -377,6 +442,7 @@ app.whenReady().then(async () => {
   registerScreenSynthHandlers()
 
   const mainWindow = createWindow()
+  createTray(mainWindow)
 
   // Defer non-essential background services until the window is ready to show, so
   // their synchronous setup (foreground-monitor koffi/user32 init ~60ms, rewind
@@ -389,8 +455,9 @@ app.whenReady().then(async () => {
     // Track the last non-Omi foreground window so the automation planner snapshots
     // the app the user was actually using (Omi is foreground once they click chat).
     if (AUTOMATION_ENABLED) startAutomationTargetTracker()
-    // Load the user's persisted Rewind settings — capture is ON by default for a
-    // fresh install, and any change the user makes in Settings survives restarts.
+    // Load the user's persisted Rewind settings. Fresh installs default to
+    // capture-off until the user grants/turns on screen capture, and any change
+    // the user makes in Settings survives restarts.
     // OCR/retention loops are cheap no-ops until frames exist.
     startRewindCapture()
     startRewindOcr()
@@ -400,6 +467,7 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    startWindowsUpdater()
   })
 
   // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
@@ -415,12 +483,16 @@ app.whenReady().then(async () => {
       '[overlay] summon shortcut unavailable; overlay can still be opened via a future rebind UI'
     )
   }
-  // Closing the main window must also tear down the always-alive (hidden) overlay
-  // window — otherwise it keeps a window open, 'window-all-closed' never fires, and
-  // the app lingers as an invisible background process (overlay has skipTaskbar).
+  // On actual quit, tear down the always-alive (hidden) overlay window too.
+  // A normal Windows close is intercepted below and only hides to the tray.
   mainWindow.on('closed', () => {
     const overlay = getOverlayWindow()
     if (overlay && !overlay.isDestroyed()) overlay.destroy()
+  })
+  mainWindow.on('close', (event) => {
+    if (quitting || process.platform !== 'win32') return
+    event.preventDefault()
+    mainWindow.hide()
   })
 
   // Bench mode: after the renderer has loaded, run the fixed DB + IPC workload,
@@ -504,6 +576,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  quitting = true
 })
 
 // On a normal shutdown: flush buffered perf marks, release the overlay shortcut,

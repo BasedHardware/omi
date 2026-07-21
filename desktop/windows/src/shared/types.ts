@@ -93,6 +93,31 @@ export type ListenMessage =
   | { sessionId: string; kind: 'error'; message: string; fatal: boolean }
   | { sessionId: string; kind: 'closed'; code: number; reason: string }
 
+export type ObservabilityLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal'
+
+export type ObservabilitySource = 'main' | 'renderer'
+
+export type ObservabilityBreadcrumb = {
+  name: string
+  category?: string
+  level?: ObservabilityLevel
+  data?: Record<string, unknown>
+  ts?: number
+}
+
+export type ObservabilityEvent = {
+  source?: ObservabilitySource
+  kind: 'breadcrumb' | 'exception' | 'error' | 'crash' | 'unhandled-rejection' | 'warning'
+  name: string
+  category?: string
+  level?: ObservabilityLevel
+  message?: string
+  error?: unknown
+  data?: Record<string, unknown>
+  breadcrumbs?: ObservabilityBreadcrumb[]
+  ts?: number
+}
+
 export type OmiOverlayApi = {
   /** Subscribe to summon events; callback fires each time the overlay is shown. Returns an unsubscribe fn. */
   onShown: (cb: () => void) => () => void

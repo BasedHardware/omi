@@ -22,7 +22,13 @@ asarUnpack:
   # kgWorker.js is loaded via new Worker(path) which bypasses Electron's asar
   # virtual-fs patch — it must be a real file on disk.
   - out/main/kgWorker.js
+extraResources:
+  - from: resources/koffi
+    to: koffi
+    filter:
+      - '**/*'
 win:
+  icon: resources/icon.ico
   executableName: omi-windows
   target:
     - target: nsis
@@ -72,16 +78,9 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 
-# --- AUTO-UPDATE (NOT configured today) ---
-# Finding: the Windows app has no updater — `electron-updater` is not a
-# dependency, there is no `autoUpdater` wiring in src/main, and no `publish`
-# target. Shipped users cannot receive fixes without a manual re-download.
-# To enable (do this deliberately, then test on a real release channel):
-#   1. pnpm add electron-updater
-#   2. wire autoUpdater.checkForUpdatesAndNotify() in src/main (guarded to
-#      packaged builds), with a NSIS differential-update-friendly flow.
-#   3. uncomment and point this at your release host:
-# publish:
-#   - provider: github
-#     owner: BasedHardware
-#     repo: omi
+# --- AUTO-UPDATE ---
+# The updater is wired in src/main/updater.ts (electron-updater, Windows
+# packaged builds only). It uses a generic feed defaulting to
+# https://github.com/BasedHardware/omi/releases/latest/download and can be
+# overridden at runtime with OMI_WINDOWS_UPDATE_FEED_URL. No `publish` block is
+# needed here because the feed URL is set programmatically via setFeedURL().

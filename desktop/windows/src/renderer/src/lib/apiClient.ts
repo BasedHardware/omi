@@ -50,5 +50,7 @@ function makeClient(baseURL: string): AxiosInstance {
   return client
 }
 
-export const omiApi = makeClient(import.meta.env.VITE_OMI_API_BASE as string)
-export const desktopApi = makeClient(import.meta.env.VITE_OMI_DESKTOP_API_BASE as string)
+export const omiApi = makeClient(import.meta.env.VITE_OMI_API_BASE || 'https://api.omi.me')
+export const desktopApi = makeClient(
+  import.meta.env.VITE_OMI_DESKTOP_API_BASE || 'https://desktop-backend-hhibjajaja-uc.a.run.app'
+)

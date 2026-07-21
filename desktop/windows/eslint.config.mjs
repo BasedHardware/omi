@@ -38,9 +38,11 @@ export default defineConfig(
     }
   },
   {
-    // Diagnostic scripts and test files don't benefit from explicit return-type
-    // annotations; the strictness is noise there.
-    files: ['scripts/**/*.{ts,js,mjs,cjs}', '**/*.test.{ts,tsx,mjs}'],
+    // Plain JS cannot carry TypeScript return-type annotations (the upstream
+    // @electron-toolkit config's `*.js`/`*.mjs` globs only match root-level
+    // files, not scripts/**), and diagnostic scripts / test files don't benefit
+    // from explicit return-type annotations either; the strictness is noise.
+    files: ['**/*.{js,mjs,cjs}', 'scripts/**/*.ts', '**/*.test.{ts,tsx,mjs}'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off'
     }

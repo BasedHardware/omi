@@ -11,7 +11,7 @@ import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 
 export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
 
-const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
+const OMI_BASE = import.meta.env.VITE_OMI_API_BASE || 'https://api.omi.me'
 
 export type UseChat = {
   history: ChatMsg[]
@@ -320,7 +320,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // keyword-less follow-up like "again"). Don't render that raw in the thread.
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
-          "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
+          'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }

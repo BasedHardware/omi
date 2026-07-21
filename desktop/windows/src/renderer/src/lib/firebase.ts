@@ -11,10 +11,16 @@ import {
   type User
 } from 'firebase/auth'
 
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'based-hardware.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'based-hardware'
+}
+
 const app = initializeApp({
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string
+  apiKey: firebaseConfig.apiKey,
+  authDomain: firebaseConfig.authDomain,
+  projectId: firebaseConfig.projectId
 })
 
 // Initialize auth with persistence set SYNCHRONOUSLY at init so the saved session

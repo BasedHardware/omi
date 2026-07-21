@@ -1,11 +1,10 @@
 import { win32 } from 'path'
 
-// Always parse Windows exe paths with the win32 semantics, regardless of the
-// host OS this runs under. Node's default `basename` is POSIX on Linux/macOS
-// and does not split on '\', so `D:\a\OMI.EXE` would not reduce to `OMI.EXE`
-// there — breaking self-detection and making this module's unit tests
-// host-dependent (green on Windows, red in Linux CI).
-const basename = win32.basename
+// Always parse Windows exe paths with win32 semantics (`win32.basename`),
+// regardless of the host OS this runs under. Node's default `basename` is
+// POSIX on Linux/macOS and does not split on '\', so `D:\a\OMI.EXE` would not
+// reduce to `OMI.EXE` there — breaking self-detection and making this module's
+// unit tests host-dependent (green on Windows, red in Linux CI).
 
 // Pure target-selection logic, split out from foregroundTarget.ts (which pulls
 // in electron + native koffi) so it can be unit-tested under node Vitest.
@@ -15,7 +14,7 @@ const basename = win32.basename
 // inspector share electron.exe, which is fine: we just won't target ourselves.
 export function isSelfExe(exePath: string | null, selfExe: string): boolean {
   if (!exePath) return false
-  return basename(exePath).toLowerCase() === basename(selfExe).toLowerCase()
+  return win32.basename(exePath).toLowerCase() === win32.basename(selfExe).toLowerCase()
 }
 
 // Window classes of the Windows shell surfaces (desktop, taskbar, Start/search,
