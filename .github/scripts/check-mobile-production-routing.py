@@ -60,6 +60,14 @@ def validate(root: Path) -> list[str]:
                 f"{workflow} must contain exactly one immutable API_BASE_URL=https://api.omi.me/ assignment"
             )
     desktop_block = _workflow_block(text, DESKTOP_WORKFLOW)
+    desktop_bundle_identifiers = re.findall(
+        r"(?m)^\s*BUNDLE_ID:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or ""
+    )
+    if desktop_bundle_identifiers != [CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER]:
+        errors.append(
+            f"{DESKTOP_WORKFLOW} must contain exactly one immutable "
+            f"BUNDLE_ID={CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER} assignment"
+        )
     desktop_assignments = re.findall(r"(?m)^\s*OMI_PYTHON_API_URL:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or "")
     if desktop_assignments != [DESKTOP_PIN]:
         errors.append(
