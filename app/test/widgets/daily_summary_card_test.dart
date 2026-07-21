@@ -23,9 +23,7 @@ void main() {
     expect(find.byKey(const ValueKey('daily_summary_map_summary-1')), findsOneWidget);
     expect(find.byType(FlutterMap), findsOneWidget);
     expect(
-      tester.getSize(find.byKey(const ValueKey('daily_summary_map_summary-1'))).height,
-      DailySummaryCard.mapHeight,
-    );
+        tester.getSize(find.byKey(const ValueKey('daily_summary_map_summary-1'))).height, DailySummaryCard.mapHeight);
 
     final map = tester.widget<FlutterMap>(find.byType(FlutterMap));
     expect(map.options.initialCameraFit, isNotNull);
@@ -106,7 +104,9 @@ Future<void> _pumpCard(WidgetTester tester, DailySummary summary) async {
       ),
     ),
   );
-  await tester.runAsync(() => precacheImage(_MemoryTileProvider._tile, tester.element(find.byType(DailySummaryCard))));
+  await tester.runAsync(
+    () => precacheImage(_MemoryTileProvider._tile, tester.element(find.byType(DailySummaryCard))),
+  );
   await tester.pumpAndSettle();
   await tester.pump(const Duration(milliseconds: 100));
 }

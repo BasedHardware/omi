@@ -274,7 +274,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               onTap: () => routeToPage(
                 context,
                 isOpenGlass
-                    ? OmiGlassOtaUpdate(device: device, latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails)
+                    ? OmiGlassOtaUpdate(
+                        device: device,
+                        latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
+                      )
                     : FirmwareUpdate(device: device),
               ),
             ),
