@@ -7,5 +7,24 @@
   "types": "./src/index.ts",
   "exports": { ".": "./src/index.ts" },
   "license": "MIT",
-  "files": ["src", "README.md"]
+  "files": ["src", "README.md"],
+  "scripts": {
+    "test": "bun src/ble/noble.test.ts",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@stoprocent/noble": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@stoprocent/noble": {
+      "optional": true
+    }
+  },
+  "optionalDependencies": {
+    "@stoprocent/noble": "^2.5.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
 }
