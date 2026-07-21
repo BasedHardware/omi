@@ -10,8 +10,8 @@ fail() {
   exit 1
 }
 
-check_workflow() {
-  python3 - "$WORKFLOW" <<'PY'
+strict_check_workflow() {
+  python3 - "$WORKFLOW" "$SCRIPT_DIR/fixtures/test-install-job-contract.yml" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -21,260 +21,80 @@ def fail(message):
     raise SystemExit(f"FAIL: {message}")
 
 
-workflow = Path(sys.argv[1])
+workflow_path = Path(sys.argv[1])
+contract_path = Path(sys.argv[2])
+workflow_bytes = workflow_path.read_bytes()
+contract_bytes = contract_path.read_bytes()
 try:
-    workflow_text = workflow.read_bytes().decode("utf-8")
+    workflow_text = workflow_bytes.decode("utf-8")
 except UnicodeDecodeError as error:
     fail(f"workflow must be UTF-8: {error}")
+
+if not contract_bytes.endswith(b"\n"):
+    fail("test-install byte contract must end with one literal LF")
+if re.search(r"(?m)(?:^|[ \t:\[\]{},])(?:&|\*)[A-Za-z_][A-Za-z0-9_-]*", workflow_text) or re.search(
+    r"(?m)^ *<<:", workflow_text
+):
+    fail("workflow must not use YAML anchors, aliases, or merges")
+
 lines = workflow_text.splitlines(keepends=True)
-target_name = "Download DMG from GitHub Release"
 
 
 def without_line_ending(line):
-    if line.endswith("\r\n"):
-        return line[:-2]
-    if line.endswith(("\n", "\r")):
-        return line[:-1]
-    return line
+    return line.rstrip("\r\n")
 
 
 def leading_spaces(line):
     return len(line) - len(line.lstrip(" "))
 
 
-if re.search(r"(?m)(?:^|[ \t:\[\]{},])(?:&|\*)[A-Za-z_][A-Za-z0-9_-]*", workflow_text) or re.search(
-    r"(?m)^ *<<:", workflow_text
-):
-    fail("workflow must not use YAML anchors, aliases, or merges")
-
-
-def mapping_end_after(mapping_start, mapping_indent, limit=len(lines)):
+def mapping_end_after(mapping_start, mapping_indent, limit):
     for index in range(mapping_start + 1, limit):
-        bare_line = without_line_ending(lines[index])
-        if bare_line.strip() and leading_spaces(bare_line) <= mapping_indent:
+        line = without_line_ending(lines[index])
+        if line.strip() and leading_spaces(line) <= mapping_indent:
             return index
     return limit
 
 
-top_level_key_pattern = re.compile(r"^(?P<key>[^ #][^:]*):")
+top_level_key = re.compile(r"^(?P<key>[^ #][^:]*):")
 top_level_keys = [
     (index, match.group("key"))
     for index, line in enumerate(lines)
-    if (match := top_level_key_pattern.match(without_line_ending(line)))
+    if (match := top_level_key.match(without_line_ending(line)))
 ]
-if any(key not in {"name", "on", "jobs"} for _, key in top_level_keys):
-    fail("workflow may not add top-level execution-affecting fields")
+if any(key in {"defaults", "env"} for _, key in top_level_keys):
+    fail("workflow may not add top-level defaults or env that affect jobs.test-install")
 if any(key.strip("\"'") == "jobs" and key != "jobs" for _, key in top_level_keys):
     fail("jobs mapping must not use a quoted or alternate spelling")
-top_level_jobs = [index for index, key in top_level_keys if key == "jobs"]
-if len(top_level_jobs) != 1:
+jobs_starts = [index for index, key in top_level_keys if key == "jobs"]
+if len(jobs_starts) != 1 or lines[jobs_starts[0]] != "jobs:\n":
     fail("expected exactly one literal top-level jobs: mapping")
-jobs_start = top_level_jobs[0]
-jobs_end = mapping_end_after(jobs_start, 0)
+jobs_start = jobs_starts[0]
+jobs_end = mapping_end_after(jobs_start, 0, len(lines))
 
-job_key_pattern = re.compile(r"^  (?P<key>[^ #][^:]*):(?:\s*(?:#.*)?)$")
-job_key_lines = [
+job_key = re.compile(r"^  (?P<key>[^ #][^:]*):(?:\s*(?:#.*)?)$")
+job_keys = [
     (index, match.group("key"))
     for index in range(jobs_start + 1, jobs_end)
-    if (match := job_key_pattern.match(without_line_ending(lines[index])))
+    if (match := job_key.match(without_line_ending(lines[index])))
 ]
-test_install_keys = [index for index, key in job_key_lines if key == "test-install"]
-if len(test_install_keys) != 1:
-    fail("expected exactly one exact unquoted test-install: job key")
-if any(key.strip("\"'") == "test-install" and key != "test-install" for _, key in job_key_lines):
+if any(key.strip("\"' ") == "test-install" and key != "test-install" for _, key in job_keys):
     fail("test-install job key must not use a quoted or alternate spelling")
-job_start = test_install_keys[0]
-job_end = next((index for index, _ in job_key_lines if index > job_start), jobs_end)
+test_install_starts = [index for index, key in job_keys if key == "test-install"]
+if len(test_install_starts) != 1 or lines[test_install_starts[0]] != "  test-install:\n":
+    fail("expected exactly one exact unquoted jobs.test-install job key")
+job_start = test_install_starts[0]
+job_end = next((index for index, _ in job_keys if index > job_start), jobs_end)
+actual_block = "".join(lines[job_start:job_end]).encode("utf-8")
 
-
-def direct_job_field_lines(name):
-    pattern = re.compile(rf"^    {re.escape(name)}:(?P<value>.*)$")
-    return [
-        (index, match.group("value"))
-        for index in range(job_start + 1, job_end)
-        if (match := pattern.match(without_line_ending(lines[index])))
-    ]
-
-
-for name, expected in (("runs-on", " macos-15"), ("timeout-minutes", " 15"), ("steps", "")):
-    fields = direct_job_field_lines(name)
-    if len(fields) != 1 or fields[0][1] != expected:
-        fail(f"test-install must retain the exact {name}: {expected.strip() or 'mapping'} contract")
-
-allowed_job_fields = {"runs-on", "timeout-minutes", "steps"}
-for index in range(job_start + 1, job_end):
-    match = re.match(r"^    (?P<name>[^ #][^:]*):", without_line_ending(lines[index]))
-    if match and match.group("name") not in allowed_job_fields:
-        fail(f"test-install may not add execution-affecting job field: {match.group('name')}")
-
-steps_start = direct_job_field_lines("steps")[0][0]
-steps_end = mapping_end_after(steps_start, 4, job_end)
-step_starts = [
-    index
-    for index in range(steps_start + 1, steps_end)
-    if re.match(r"^      - ", without_line_ending(lines[index]))
-]
-if not step_starts:
-    fail("test-install must contain one literal steps: sequence")
-
-
-def step_end_after(step_start):
-    return next((index for index in step_starts if index > step_start), steps_end)
-
-
-def exact_step_start(name):
-    exact = f"      - name: {name}"
-    mentions = [
-        index
-        for index, line in enumerate(lines)
-        if re.match(r"^ *-\s+name:", without_line_ending(line)) and name in without_line_ending(line)
-    ]
-    if any(without_line_ending(lines[index]) != exact for index in mentions):
-        fail(f"{name} step name must use one exact unquoted canonical spelling")
-    matches = [index for index in step_starts if without_line_ending(lines[index]) == exact]
-    if len(matches) != 1 or mentions != matches:
-        fail(f"expected exactly one executable {name!r} step in jobs.test-install.steps")
-    return matches[0]
-
-
-def literal_body_end(run_start, run_indent, limit):
-    for index in range(run_start + 1, limit):
-        bare_line = without_line_ending(lines[index])
-        if bare_line.strip(" ") and leading_spaces(bare_line) <= run_indent:
-            return index
-    return limit
-
-
-step_start = exact_step_start(target_name)
-step_end = step_end_after(step_start)
-run_start = step_start + 4
-expected_download_header = [
-    f"      - name: {target_name}",
-    "        id: download",
-    "        env:",
-    "          GH_TOKEN: ${{ github.token }}",
-    "        run: |",
-]
-if [without_line_ending(line) for line in lines[step_start:run_start + 1]] != expected_download_header:
-    fail("canonical download step must contain only its exact name, id, env, and run fields")
-run_indent = 8
-run_end = literal_body_end(run_start, run_indent, step_end)
-if run_end != step_end:
-    fail("installer literal run block must occupy the rest of its executable step")
-
-canonical_installer_run = '''echo "=== Downloading DMG ==="
-
-# Get release tag from various sources
-TAG="${{ github.event.inputs.release_tag }}"
-if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then
-  TAG="${{ github.event.client_payload.release_tag }}"
-fi
-if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then
-  TAG=$(gh release list --repo BasedHardware/omi --limit 1 --json tagName --jq '.[0].tagName')
-fi
-echo "Testing release: $TAG"
-echo "release_tag=$TAG" >> $GITHUB_OUTPUT
-
-DOWNLOAD_DIR="$RUNNER_TEMP/omi-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-DMG_PATH="$DOWNLOAD_DIR/omi.dmg"
-mkdir -p "$DOWNLOAD_DIR"
-
-# Download only the canonical disk image, never another release asset.
-gh release download "$TAG" \\
-  --repo BasedHardware/omi \\
-  --pattern "omi.dmg" \\
-  --dir "$DOWNLOAD_DIR"
-test -f "$DMG_PATH"
-echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT
-
-echo "## Release Under Test" >> $GITHUB_STEP_SUMMARY
-echo "**Tag:** \\`$TAG\\`" >> $GITHUB_STEP_SUMMARY
-echo "" >> $GITHUB_STEP_SUMMARY
-
-'''
-def body_at_indent(body, content_indent):
-    return "".join(
-        line if line == "\n" else f"{' ' * content_indent}{line}"
-        for line in body.splitlines(keepends=True)
-    )
-
-
-canonical_run_body = body_at_indent(canonical_installer_run, run_indent + 2)
-if "".join(lines[run_start + 1:run_end]).encode("utf-8") != canonical_run_body.encode("utf-8"):
-    fail("installer literal run block differs from the admitted canonical block")
-
-mount_name = "Mount DMG and Install"
-mount_start = exact_step_start(mount_name)
-if mount_start <= step_start:
-    fail("mount/install flow must occur after the download producer")
-mount_end = step_end_after(mount_start)
-mount_field_indent = 8
-if [without_line_ending(line) for line in lines[mount_start:mount_start + 2]] != [
-    f"      - name: {mount_name}",
-    "        run: |",
-]:
-    fail("mount/install step must consist of its exact name and run: | fields")
-mount_run_start = mount_start + 1
-mount_run_end = literal_body_end(mount_run_start, mount_field_indent, mount_end)
-if mount_run_end != mount_end:
-    fail("mount/install literal run block must occupy the rest of its executable step")
-
-canonical_mount_run = '''set -euo pipefail
-DMG_PATH="${{ steps.download.outputs.dmg_path }}"
-MOUNTPOINT="$RUNNER_TEMP/omi-install-mount-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-DEVICE=""
-
-cleanup() {
-  local exit_code=$?
-  if [[ -n "$DEVICE" ]]; then
-    hdiutil detach "$DEVICE" -quiet || true
-  fi
-  rm -rf "$MOUNTPOINT" "$(dirname "$DMG_PATH")"
-  exit "$exit_code"
-}
-trap cleanup EXIT
-
-mkdir -p "$MOUNTPOINT"
-xattr -d com.apple.quarantine "$DMG_PATH" 2>/dev/null || true
-DEVICE=$(hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MOUNTPOINT" | awk '/^\\/dev\\// { print $1; exit }')
-[[ -n "$DEVICE" ]]
-[[ -d "$MOUNTPOINT/Omi.app" ]]
-echo "Mounted $DMG_PATH at $MOUNTPOINT ($DEVICE)"
-
-# Use ditto to preserve extended attributes from the exact mounted image.
-ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"
-
-echo "App installed to /Applications"
-
-'''
-canonical_mount_body = body_at_indent(canonical_mount_run, mount_field_indent + 2)
-if "".join(lines[mount_run_start + 1:mount_run_end]).encode("utf-8") != canonical_mount_body.encode("utf-8"):
-    fail("mount/install literal run block differs from the admitted canonical block")
-
-# Canonical scripts have a single raw owner.  A byte-identical body in any
-# other literal scalar is a decoy, not an alternate execution path.
-literal_scalar_pattern = re.compile(r"^(?P<indent> *)[^#][^:]*:\s*\|[+-]?$")
-for canonical_body, owner, label in (
-    (canonical_installer_run, run_start, "installer"),
-    (canonical_mount_run, mount_run_start, "mount/install"),
-):
-    owners = []
-    for index, line in enumerate(lines):
-        match = literal_scalar_pattern.match(without_line_ending(line))
-        if not match:
-            continue
-        candidate_indent = len(match.group("indent"))
-        candidate_end = literal_body_end(index, candidate_indent, len(lines))
-        if "".join(lines[index + 1:candidate_end]).encode("utf-8") == body_at_indent(
-            canonical_body, candidate_indent + 2
-        ).encode("utf-8"):
-            owners.append(index)
-    if owners != [owner]:
-        fail(f"canonical {label} literal run block must belong only to jobs.test-install.steps")
+if workflow_bytes.count(contract_bytes) != 1:
+    fail("admitted canonical test-install block must occur exactly once")
+if actual_block != contract_bytes:
+    fail("jobs.test-install must byte-match the admitted canonical block")
 PY
 }
 
-check_workflow
+strict_check_workflow
 
 if [[ "${1:-}" == "--check" ]]; then
   echo "test-install workflow exact-DMG contract passed"
@@ -447,6 +267,61 @@ elif mutation == "unrelated-yaml":
     if len(matches) != 1:
         raise SystemExit(f"expected one workflow display-name line, found {len(matches)}")
     lines[matches[0]] = "name: Test macOS Installation contract mutation\n"
+elif mutation == "unrelated-top-level-metadata":
+    index = next(index for index, line in enumerate(lines) if line == "name: Test macOS Installation\n") + 1
+    lines[index:index] = ["run-name: installer-contract ${{ github.event_name }}\n"]
+elif mutation == "pre-download-github-env-bash-env":
+    index = next(index for index, line in enumerate(lines) if line == "      - name: Download DMG from GitHub Release\n")
+    lines[index:index] = [
+        "      - name: Poison BASH_ENV before canonical download\n",
+        "        run: echo \"BASH_ENV=/tmp/discard-canonical\" >> \"$GITHUB_ENV\"\n",
+        "\n",
+    ]
+elif mutation == "pre-download-github-path":
+    index = next(index for index, line in enumerate(lines) if line == "      - name: Download DMG from GitHub Release\n")
+    lines[index:index] = [
+        "      - name: Poison PATH before canonical download\n",
+        "        run: echo \"/tmp/attacker-bin\" >> \"$GITHUB_PATH\"\n",
+        "\n",
+    ]
+elif mutation == "interposed-replacement":
+    index = next(index for index, line in enumerate(lines) if line == "      - name: Mount DMG and Install\n")
+    lines[index:index] = [
+        "      - name: Replace downloaded disk image\n",
+        "        run: echo attacker > \"$RUNNER_TEMP/omi-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/omi.dmg\"\n",
+        "\n",
+    ]
+elif mutation == "post-download-output-overwrite":
+    index = next(index for index, line in enumerate(lines) if line == "      - name: Mount DMG and Install\n")
+    lines[index:index] = [
+        "      - name: Overwrite post-download output\n",
+        "        id: download-output-overwrite\n",
+        "        run: echo \"dmg_path=$RUNNER_TEMP/attacker.dmg\" >> \"$GITHUB_OUTPUT\"\n",
+        "\n",
+    ]
+elif mutation == "extra-action-step":
+    index = next(index for index, line in enumerate(lines) if line == "      - name: Download DMG from GitHub Release\n")
+    lines[index:index] = [
+        "      - name: Add action before installer download\n",
+        "        uses: actions/checkout@v4\n",
+        "\n",
+    ]
+elif mutation == "reorder":
+    system_start = next(index for index, line in enumerate(lines) if line == "      - name: System Info\n")
+    download_start = next(index for index, line in enumerate(lines) if line == "      - name: Download DMG from GitHub Release\n")
+    system_step = lines[system_start:download_start]
+    del lines[system_start:download_start]
+    mount_start = next(index for index, line in enumerate(lines) if line == "      - name: Mount DMG and Install\n")
+    lines[mount_start:mount_start] = system_step
+elif mutation == "modified-checkout-action-input":
+    index = next(index for index, line in enumerate(lines) if line == "      - name: Download DMG from GitHub Release\n")
+    lines[index:index] = [
+        "      - name: Checkout with substituted action input\n",
+        "        uses: actions/checkout@v4\n",
+        "        with:\n",
+        "          ref: attacker-controlled-ref\n",
+        "\n",
+    ]
 elif mutation in {
     "canonical-job-decoy-before-unquoted",
     "canonical-job-decoy-after-unquoted",
@@ -728,6 +603,14 @@ run_mutation duplicate duplicate
 run_mutation commented-command commented-command
 run_mutation canonical canonical accept
 run_mutation unrelated-yaml unrelated-yaml accept
+run_mutation unrelated-top-level-metadata unrelated-top-level-metadata accept
+run_mutation pre-download-github-env-bash-env pre-download-github-env-bash-env
+run_mutation pre-download-github-path pre-download-github-path
+run_mutation interposed-replacement interposed-replacement
+run_mutation post-download-output-overwrite post-download-output-overwrite
+run_mutation extra-action-step extra-action-step
+run_mutation reorder reorder
+run_mutation modified-checkout-action-input modified-checkout-action-input
 run_mutation canonical-job-decoy-before-unquoted canonical-job-decoy-before-unquoted
 run_mutation canonical-job-decoy-after-unquoted canonical-job-decoy-after-unquoted
 run_mutation canonical-job-decoy-before-quoted canonical-job-decoy-before-quoted
