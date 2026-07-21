@@ -1,0 +1,9 @@
+{
+  "files": {
+    "backend/scripts/validate-backend-runtime-env.py": 1825
+  },
+  "raise_justifications": {
+    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement and shared forbidden-env guard keep provider/runtime validation in the authoritative deployment contract validator."
+  },
+  "threshold": 1500
+}

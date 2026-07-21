@@ -1,0 +1,11 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2209,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4314
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "per-turn reasoningEffort threaded through both query variants",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "reasoningEffort added to the query wire message"
+  },
+  "threshold": 1500
+}
