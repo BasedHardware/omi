@@ -14,7 +14,13 @@ import type {
   GoogleSource,
   FetchNewResult,
   GmailItem,
+<<<<<<< Updated upstream
   CalendarItem
+=======
+  CalendarItem,
+  TranslationResult,
+  DeepgramTtsResult
+>>>>>>> Stashed changes
 } from '../../shared/types'
 
 // All integrations IPC lives here (3e Sticky Notes + 3d Gmail/Calendar) so
@@ -76,4 +82,29 @@ export function registerIntegrationsHandlers(): void {
       markProcessed(source, ids)
     }
   )
+<<<<<<< Updated upstream
+=======
+
+  ipcMain.handle(
+    'integrations:signLanguage:translate',
+    async (_e, payload: unknown): Promise<TranslationResult> => {
+      const text = typeof payload === 'string' ? payload : (payload as { text?: string })?.text
+      const spokenLanguage =
+        typeof payload === 'object' && payload ? (payload as { spokenLanguage?: string }).spokenLanguage : 'en'
+      const signedLanguage =
+        typeof payload === 'object' && payload ? (payload as { signedLanguage?: string }).signedLanguage : 'ase'
+      if (!text) throw new Error('No text provided for translation')
+      return translateToGlosses(text, spokenLanguage ?? 'en', signedLanguage ?? 'ase', defaultSignOpts())
+    }
+  )
+
+  // Deepgram TTS synthesis. The renderer's Monologur engine calls this only when
+  // the user selects the Deepgram provider; it currently returns not-implemented
+  // so the engine falls back to the Web Speech API. Wire a real Deepgram Aura
+  // call here in a follow-up when the desktop backend exposes TTS credentials.
+  ipcMain.handle('deepgram:ttsSynthesize', async (): Promise<DeepgramTtsResult> => {
+    console.warn('[deepgram] ttsSynthesize not implemented; falling back to Web Speech TTS')
+    return { ok: false, error: 'not_implemented' }
+  })
+>>>>>>> Stashed changes
 }
