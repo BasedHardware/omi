@@ -56,14 +56,36 @@ void main() {
       Env.clearApiBaseUrlOverrideForTesting();
     });
 
-    test('TestFlight remains on the production backend', () {
-      Env.isTestFlight = true;
+    test('TestFlight production startup accepts the production API and WebSocket', () {
+      Env.validateStartupRouting(productionFamily: true, configuredApiBaseUrl: 'https://api.omi.me/');
+      expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
+    });
 
-      Env.requireProductionRouting();
-      expect(Env.apiBaseUrl, 'https://api.omi.me/');
-      expect(Env.agentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
+    test('Android production startup accepts the production API and WebSocket', () {
+      Env.validateStartupRouting(productionFamily: true, configuredApiBaseUrl: 'https://api.omi.me/');
+      expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
+    });
 
-      Env.isTestFlight = false;
+    test('production startup rejects legacy Beta, dev, staging, and arbitrary endpoints', () {
+      for (final endpoint in [
+        'https://api-beta.omi.me/',
+        'https://api.omi.dev/',
+        'https://staging.example.test/',
+        'https://arbitrary.example.test/',
+      ]) {
+        expect(
+          () => Env.validateStartupRouting(productionFamily: true, configuredApiBaseUrl: endpoint),
+          throwsStateError,
+          reason: endpoint,
+        );
+      }
+    });
+
+    test('development startup remains configurable', () {
+      expect(
+        () => Env.validateStartupRouting(productionFamily: false, configuredApiBaseUrl: 'https://api.omi.dev/'),
+        returnsNormally,
+      );
     });
   });
 }

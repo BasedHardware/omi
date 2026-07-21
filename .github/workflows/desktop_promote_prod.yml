@@ -54,6 +54,7 @@ jobs:
       - name: Checkout promotion controls
         uses: actions/checkout@v7
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Generate Omi Bot token
@@ -64,7 +65,7 @@ jobs:
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
       - name: Download immutable qualification evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: desktop-qualification-evidence-${{ inputs.release_tag }}
           run-id: ${{ inputs.qualification_run_id }}

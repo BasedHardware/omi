@@ -10,3 +10,5 @@ Stable promotion is a protected distribution-pointer operation. It never deploys
 For a controlled repoint, use `operation=repoint` with the target's trusted `qualification_run_id` plus the exact currently observed Stable release ID and generation. The target may be any retained passed-T2 immutable manifest; it need not first become current Beta. Repointing stops future rollout; Sparkle does not downgrade clients already on a higher build, so ship a higher-version hotfix for those clients.
 
 The GitHub Actions run is the audit trail. Do not edit a release body, Firestore pointer, static route, or legacy bridge manually. Backend deployments remain separate established workflows.
+
+Qualification evidence is layered: source-built named-bundle T2/fault coverage is not signed-artifact T2. The exact signed artifact evidence is signing/notarization and signed-smoke proof. A real promotion record must additionally cover the signed `.89` upgrade, `.70` side-by-side install, core journeys, and soak using the same immutable manifest that Stable advances.

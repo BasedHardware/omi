@@ -342,9 +342,9 @@ def test_qualification_and_promotion_bind_all_four_enclosures_to_an_immutable_ru
     for asset in ("Omi.zip", "Omi.dmg", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"):
         assert asset in qualification
         assert asset in promotion
-    assert "actions/upload-artifact@v4" in qualification
+    assert "actions/upload-artifact@v7" in qualification
     assert "qualification_run_id" in promotion
-    assert "actions/download-artifact@v4" in promotion
+    assert "actions/download-artifact@v7" in promotion
     assert "--beta-zip-sha256" in promotion
     assert "--beta-dmg-sha256" in promotion
     assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in qualification
@@ -369,6 +369,34 @@ def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_p
     assert "--allow-stable-channel" in workflow
     assert "from xml.etree import ElementTree as ET" in workflow
     assert "sparkle:channel" in workflow
+    assert 'ref: main' in workflow
+
+
+def test_beta_promotion_controls_are_pinned_to_main_and_only_accept_lost_response_generation_plus_one():
+    workflow = PROMOTE_BETA_WORKFLOW.read_text()
+
+    assert 'ref: main' in workflow
+    manifest = normalize_release_manifest(_prepare())
+    current = {
+        "platform": "macos",
+        "channel": "beta",
+        "release_id": manifest["release_id"],
+        "version": manifest["version"],
+        "build_number": 12064,
+        "generation": 4,
+    }
+    assert (
+        _build_pointer(
+            current,
+            manifest,
+            transition="promote",
+            platform="macos",
+            channel="beta",
+            release_id=manifest["release_id"],
+            expected_generation=3,
+        )
+        is current
+    )
 
 
 def test_stable_repair_is_published_immutably_before_stable_pointer_advances():
