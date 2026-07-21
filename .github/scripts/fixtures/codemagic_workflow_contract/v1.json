@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "codemagic_raw_sha256": "3cbb8c561a68169d8cdf04622e8c52a6ea34f3c1647f1f1959c4bc236cef2f20",
-  "codemagic_semantic_sha256": "04750ba87d8240d91607fb026ceb53b385eba25cf9ca7c6f0e740ad10bc4fe06",
+  "codemagic_raw_sha256": "d45f9d44589dd38a9fafbccdfded8b6be2ef8a9f62c89f6204f773ded72715f0",
+  "codemagic_semantic_sha256": "34ad1e0c62cc64928848fbc5b1ae493040ce79205cb017159a56ade71ef65536",
   "omi-desktop-swift-preview": {
     "semantic_sha256": "ee5316eb2ed168b0b3d1743ecb7251ac18f4886b89b5be63a3873b0922f7d3c7"
   },
