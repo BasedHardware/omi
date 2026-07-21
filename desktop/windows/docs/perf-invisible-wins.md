@@ -121,7 +121,7 @@ The ref + `playbackLevelBus` signal pattern is already correct — most wins her
 - **`synchronous=NORMAL` on the main connection** — under WAL, NORMAL only risks the **last transaction on OS-crash/power-loss** (an app crash is still safe). Write-latency win is real, but the team **deliberately chose FULL** (db.ts:384-387) for `local_conversation` etc. **Needs Chris's explicit sign-off + a runtime `db.pragma('synchronous')` check first.** Source: sqlite.org/wal.html (NORMAL guarantee).
 - **`wal_autocheckpoint` tuning** — can smooth write latency but risks checkpoint starvation with the two-writer (main + kgWorker) setup. Measure the WAL growth first. _[measure]_ Source: sqlite.org/wal.html.
 - **Move KG `queryKgNodes` OR-of-LIKE full-table scan (db.ts:1205) + the rewind vector-similarity scan (db.ts:1673) into the existing `kgWorker` worker_thread pattern** — these are the two confirmed main-thread-blocking scans. Bigger refactor; the invisible payoff is eliminating main-process jank during search. _[measure]_ Win: med-high (responsiveness); risk: med. Source: better-sqlite3 worker_threads guidance; Actual Budget's blocking-main-process case study.
-- **`foreign_keys`** — verification-only (confirm it's set as intended); not a perf lever. 
+- **`foreign_keys`** — verification-only (confirm it's set as intended); not a perf lever.
 
 ---
 
@@ -177,4 +177,3 @@ The ref + `playbackLevelBus` signal pattern is already correct — most wins her
 - phiresky "SQLite performance tuning" — https://phiresky.github.io/blog/2020/sqlite-performance-tuning/
 - WAL + synchronous=NORMAL durability — https://sqlite-users.sqlite.narkive.com/Zy5Lrn6W/wal-durability-and-synchronous-normal
 - Actual Budget "Horror of Blocking Electron's Main Process" — https://medium.com/actualbudget/the-horror-of-blocking-electrons-main-process-351bf11a763c
-
