@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBAccountPage.swift
+  s_2204722b151ea4::t_bbdc16903072e7 4-8
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_2204722b151ea4::t_a0b3619884a93b 418-423
+  s_2204722b151ea4::t_0b67af3cc07036 316-317,326-331,337,348,351-364
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SecondBrainShell.swift
+  s_2204722b151ea4::t_0147c65222e8a9 199
+  s_2204722b151ea4::t_aa083cda7d8049 26-29
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBOverflowPages.swift
+  s_2204722b151ea4::t_0666a0eef58a57 149-155
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_2204722b151ea4::t_55b2175f3e1969 1142-1149
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
+  s_2204722b151ea4::t_fc741099e68997 67-76
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBSettings.swift
+  s_2204722b151ea4::t_52b84bd360108f 44
+desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBAsk.swift
+  s_2204722b151ea4::t_7ce29575aa6c77 106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "406ebdb632fb0708a2831d5591de10ec0f6c7216",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
