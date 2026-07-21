@@ -148,7 +148,7 @@ CREATE TABLE sessions (
   surface_kind TEXT NOT NULL,
   external_ref_kind TEXT,
   external_ref_id TEXT,
-  -- TODO(desktop-agent-platonic-gap-closure G6): drop legacy_client_scope + legacy_session_key two desktop releases after platonic ships.
+  -- TODO(#10240 desktop-agent-platonic-gap-closure G6): drop legacy_client_scope + legacy_session_key two desktop releases after platonic ships.
   legacy_client_scope TEXT,
   legacy_session_key TEXT,
   default_adapter_id TEXT NOT NULL,
@@ -358,7 +358,7 @@ CREATE TABLE grants (
   operation TEXT NOT NULL,
   resource_pattern TEXT NOT NULL,
   effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
-  -- TODO(desktop-agent-platonic-gap-closure G6): drop legacy_default from CHECK after ship+2 releases post-platonic.
+  -- TODO(#10240 desktop-agent-platonic-gap-closure G6): drop legacy_default from CHECK after ship+2 releases post-platonic.
   source TEXT NOT NULL CHECK (source IN ('legacy_default', 'policy', 'user', 'system')),
   constraints_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(constraints_json)),
   created_at_ms INTEGER NOT NULL,

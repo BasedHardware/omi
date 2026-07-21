@@ -69,7 +69,7 @@ export type DelegationStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 
 export type GrantEffect = 'allow' | 'deny'
 
 /** Origin of a grant. `legacy_default` is legacy debt slated for removal. */
-// TODO(desktop-agent-platonic-gap-closure G6): delete legacy_default after ship+2 releases post-platonic.
+// TODO(#10240 desktop-agent-platonic-gap-closure G6): delete legacy_default after ship+2 releases post-platonic.
 export type GrantSource = 'legacy_default' | 'policy' | 'user' | 'system'
 
 /** Speaker role of a conversation turn. */

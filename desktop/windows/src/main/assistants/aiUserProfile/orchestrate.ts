@@ -49,7 +49,7 @@ export function describeError(e: unknown): string {
 // main-process fallback/telemetry emitter yet (the renderer's PostHog is
 // unreachable from main, and Sentry is for hard errors, not fail-open degrades),
 // so this is a single structured console.warn for now.
-// TODO(track3): route through a Windows recordFallback emitter once one exists.
+// TODO(#10240 track3): route through a Windows recordFallback emitter once one exists.
 export function warnDegraded(reason: string, detail: Record<string, unknown> = {}): void {
   console.warn('[ai-profile] fallback', {
     component: 'ai_profile',

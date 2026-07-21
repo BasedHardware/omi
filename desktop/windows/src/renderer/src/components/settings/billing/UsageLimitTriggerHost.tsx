@@ -13,7 +13,7 @@ import { fetchChatQuota } from '../../../lib/billing'
  * only.
  */
 export function UsageLimitTriggerHost(): null {
-  // TODO(stream-1 chat integration — see docs/mac-parity-audit/PARALLEL-PLAN.md
+  // TODO(#10240 stream-1 chat integration — see docs/mac-parity-audit/PARALLEL-PLAN.md
   // §Stream 1): replace this spinner-flag inference with an explicit
   // quota-exceeded signal from the chat engine once fix/windows-wiring-criticals'
   // useChat changes merge.

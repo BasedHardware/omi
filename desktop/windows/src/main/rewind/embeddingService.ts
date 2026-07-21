@@ -244,7 +244,7 @@ async function drain(current: EmbedSession, force: boolean): Promise<void> {
     } catch (e) {
       // Degrade quietly: these frames stay unembedded (keyword search still
       // finds them) and the sweep moves on. There is no Windows recordFallback
-      // emitter to route this through yet (see the Track 3 TODO in
+      // emitter to route this through yet (#10240; see the Track 3 TODO in
       // assistants/aiUserProfile/orchestrate.ts), so a log is the honest option.
       if (generation !== mine) return // torn down mid-request; not the new session's failure
       for (const item of batch) failedThisLaunch.add(item.frameId)

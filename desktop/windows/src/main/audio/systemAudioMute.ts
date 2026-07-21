@@ -92,7 +92,7 @@ class SystemAudioMuteBridge {
           )
           // Durable signal: a field user's "PTT doesn't mute my music" otherwise
           // records nothing. Inside the !unavailable guard, so it fires at most once.
-          // TODO(track3): route through a Windows main-process recordFallback emitter
+          // TODO(#10240 track3): route through a Windows main-process recordFallback emitter
           // as outcome:'degraded' once one exists (see warnDegraded note in
           // src/main/assistants/aiUserProfile/orchestrate.ts:46-52). Until then
           // captureMessage is the correct call (Sentry for developer-facing degrades).
@@ -135,7 +135,7 @@ class SystemAudioMuteBridge {
         if (!this.unavailable) {
           // Durable signal for a stale helper build in the field. Guarded so it
           // fires at most once (before we latch unavailable below).
-          // TODO(track3): route through a Windows main-process recordFallback emitter
+          // TODO(#10240 track3): route through a Windows main-process recordFallback emitter
           // as outcome:'degraded' once one exists (see warnDegraded note in
           // src/main/assistants/aiUserProfile/orchestrate.ts:46-52). Until then
           // captureMessage is the correct call (Sentry for developer-facing degrades).

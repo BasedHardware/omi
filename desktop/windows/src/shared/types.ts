@@ -2312,7 +2312,7 @@ export type TaskEmbeddingSource = 'action_item' | 'staged_task'
 /** Who deleted a task. Mac stores free text; these are the values it emits. */
 export type TaskDeletedBy = 'user' | 'ai_dedup' | 'staged'
 
-/** One local action item (todo/task). Every column except `embedding` is mapped. */
+/** One local action item (to-do/task). Every column except `embedding` is mapped. */
 export type ActionItemRecord = {
   id: number
   backendId: string | null

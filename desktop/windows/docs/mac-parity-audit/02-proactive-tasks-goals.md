@@ -120,7 +120,7 @@
 
 ## Tasks page richness (filters, source/category/priority/origin tags, sort/indent)
 
-**What it is:** `TasksPage.swift` supports a much larger filter surface than Windows: status (todo/done/removed-by-AI/removed-by-me), date range, category (personal/work/feature/bug/code/research/communication/finance/health/other), source (screen/OMI/desktop/manual/OMI-analytics), priority, and origin (the `TaskSourceClassification` category, e.g. direct-request/self-generated/calendar-driven/reactive/external-system). It also carries `sortOrder`/`indentLevel` for manual drag-reordering/nesting (declared in `ActionItemRecord`, `TaskActionItem`).
+**What it is:** `TasksPage.swift` supports a much larger filter surface than Windows: status (to-do/done/removed-by-AI/removed-by-me), date range, category (personal/work/feature/bug/code/research/communication/finance/health/other), source (screen/OMI/desktop/manual/OMI-analytics), priority, and origin (the `TaskSourceClassification` category, e.g. direct-request/self-generated/calendar-driven/reactive/external-system). It also carries `sortOrder`/`indentLevel` for manual drag-reordering/nesting (declared in `ActionItemRecord`, `TaskActionItem`).
 
 **Where (Mac):** `TasksPage.swift` (`TaskFilterTag`/`TaskFilterGroup`), `TaskDetailViews.swift`.
 
