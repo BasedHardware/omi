@@ -990,6 +990,59 @@ def test_trigger_apps_no_preferred_app_runs_suggestion():
     suggestion_mock.assert_called_once()
 
 
+def test_dedup_candidates_exclude_own_and_merge_source_items():
+    """Regression: on reprocess/merge, the conversation's own previous action
+    items (and the merge sources') came back as dedup candidates — the LLM
+    suppressed re-extracting them and the save step then deleted them, so
+    tasks silently vanished. Items from the conversation being processed or
+    its merge sources must never be dedup candidates."""
+    import sys
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    items = [
+        {'id': 'own', 'conversation_id': 'conv-1', 'completed': False, 'updated_at': now},
+        {'id': 'merged', 'conversation_id': 'src-conv', 'completed': False, 'updated_at': now},
+        {'id': 'unrelated', 'conversation_id': 'other-conv', 'completed': False, 'updated_at': now},
+    ]
+    similar = [{'action_item_id': item['id'], 'score': 0.9} for item in items]
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items_by_ids = MagicMock(return_value=items)
+
+    conversation = SimpleNamespace(
+        id='conv-1',
+        external_data={'merge_metadata': {'source_conversation_ids': ['src-conv']}},
+    )
+    structured = SimpleNamespace(overview='discussed follow-ups')
+
+    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
+        eligible = process_conversation._fetch_dedup_candidates('user-1', structured, conversation)
+
+    assert [item['id'] for item in eligible] == ['unrelated']
+
+
+def test_dedup_candidates_unchanged_without_conversation_context():
+    """Without a conversation (new-conversation path has a fresh id), all open
+    recent items remain candidates."""
+    import sys
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    items = [{'id': 'open-item', 'conversation_id': 'other-conv', 'completed': False, 'updated_at': now}]
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items_by_ids = MagicMock(return_value=items)
+
+    similar = [{'action_item_id': 'open-item', 'score': 0.9}]
+    structured = SimpleNamespace(overview='discussed follow-ups')
+
+    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
+        eligible = process_conversation._fetch_dedup_candidates('user-1', structured)
+
+    assert [item['id'] for item in eligible] == ['open-item']
+
+
 def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
     """#10074: the set-preferred route admits apps the enabled-installed slice
     does not contain (e.g. a template whose enable call failed). The reader must

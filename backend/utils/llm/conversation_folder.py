@@ -115,7 +115,10 @@ def validate_folder_assignment(
             validation_status='invalid_folder_id_defaulted',
         )
 
-    if response.confidence < confidence_threshold and default_folder_id:
+    # default_folder_id may be None (users created after the 'Other' system
+    # folder was removed have no default) — a low-confidence guess must still
+    # fall back, leaving the conversation unfiled rather than misfiled.
+    if response.confidence < confidence_threshold:
         return FolderAssignmentResult(
             folder_id=default_folder_id,
             confidence=response.confidence,
