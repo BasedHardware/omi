@@ -1629,13 +1629,16 @@ global `fetch` is enough.
 '''
 
 
+def normalize_text(content: str) -> str:
+    """Canonical file text: LF endings and exactly one trailing newline."""
+    return content.replace('\r\n', '\n').rstrip('\n') + '\n'
+
+
 def write_tree(root: Path, files: dict[str, str]) -> None:
     for rel, content in files.items():
         path = root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        # Exactly one trailing newline (diff-hygiene rejects blank line at EOF).
-        text = content.replace('\r\n', '\n').rstrip('\n') + '\n'
-        path.write_text(text, encoding='utf-8')
+        path.write_text(normalize_text(content), encoding='utf-8')
 
 
 def _format_dart_tree(root: Path) -> None:
@@ -1754,7 +1757,7 @@ def check_dirty(files: dict[str, str], root: Path) -> list[str]:
             dirty.append(f'missing {rel}')
             continue
         existing = path.read_text(encoding='utf-8')
-        if existing != content:
+        if normalize_text(existing) != normalize_text(content):
             dirty.append(f'drift {rel}')
     return dirty
 
@@ -1770,18 +1773,41 @@ def main(argv: list[str] | None = None) -> int:
     out_root = args.out
 
     if args.check:
+        import shutil
+        import subprocess
         import tempfile
 
-        with tempfile.TemporaryDirectory(prefix='omi-integration-sdk-') as tmp:
-            tmp_root = Path(tmp)
-            write_tree(tmp_root, files)
-            _format_dart_tree(tmp_root)
-            # Re-read formatted outputs into expected map
-            expected: dict[str, str] = {}
-            for rel in files:
-                path = tmp_root / rel
-                expected[rel] = path.read_text(encoding='utf-8') if path.exists() else files[rel]
-            dirty = check_dirty(expected, out_root)
+        dirty = check_dirty(files, out_root)
+        # Dart sources are post-processed with `dart format`; compare non-Dart
+        # exactly, and require committed Dart to already be format-clean.
+        dirty = [item for item in dirty if not item.split(' ', 1)[-1].startswith('dart/')]
+        dart_dir = out_root / 'dart'
+        if dart_dir.exists() and shutil.which('dart'):
+            dart_files = [str(path) for path in dart_dir.rglob('*.dart') if path.is_file()]
+            if dart_files:
+                proc = subprocess.run(
+                    [
+                        'dart',
+                        'format',
+                        '--line-length',
+                        '120',
+                        '--set-exit-if-changed',
+                        '--output',
+                        'none',
+                        *dart_files,
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                if proc.returncode != 0:
+                    dirty.append('dart format drift (run generate_integration_sdks.py)')
+        # Ensure generated non-dart files exist for every key
+        for rel in files:
+            if rel.startswith('dart/'):
+                path = out_root / rel
+                if not path.exists():
+                    dirty.append(f'missing {rel}')
         if dirty:
             print('FAIL: integration SDKs are stale:', file=sys.stderr)
             for item in dirty:
