@@ -6,21 +6,28 @@ Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app
 
 - [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
 
+## Prerequisites
+
+- Node.js 22 and pnpm 10 (run `corepack prepare pnpm@10 --activate` to select it).
+- The .NET 10 SDK for OCR, screen-reading, and UI automation. The app still runs
+  without it, but those native-helper features remain disabled.
+
 ## Run from source
 
-```bash
-# 1. Install dependencies
-npm install
+```powershell
+# 1. Enable the repository's package manager and install dependencies
+corepack prepare pnpm@10 --activate
+pnpm install
 
 # 2. Create your local env file (required — the app won't start without it)
-cp .env.example .env
+Copy-Item .env.example .env
 
 # 3. Start the app
-npm run dev
+pnpm run dev
 ```
 
 `.env` is gitignored. `.env.example` ships with Omi's **public** Firebase + PostHog
-config, so after `cp .env.example .env` the app runs and sign-in works with no extra
+config, so after copying `.env.example` to `.env` the app runs and sign-in works with no extra
 keys to obtain.
 
 ## Authentication
@@ -45,15 +52,22 @@ Everything below is blank in `.env.example` and safe to leave unset:
 
 ## Build
 
-```bash
+```powershell
 # Windows
-npm run build:win
+# Build both native helpers (requires the .NET 10 SDK)
+pnpm run build:native-helpers
+
+# Build an unpacked Windows app and verify both packaged helpers
+pnpm run build:unpack
+pnpm run verify:packaged-native-helpers
+
+pnpm run build:win
 
 # macOS
-npm run build:mac
+pnpm run build:mac
 
 # Linux
-npm run build:linux
+pnpm run build:linux
 ```
 
 Vite inlines the `.env` values at build time, so a packaged installer needs no `.env` —
