@@ -25,7 +25,7 @@ import XCTest
       let manager = makeManager(
         registrar: { keyCode, modifiers in
           attempts.append(Attempt(keyCode: keyCode, modifiers: modifiers))
-          return .testing(status: noErr, referenceWasReturned: true)
+          return .testing(status: noErr, reference: .init("atomic"))
         },
         failureRecorder: { _, _, _, outcome in failures.append(outcome) }
       )
@@ -34,6 +34,7 @@ import XCTest
       settings.updateAskOmiRegistration(enabled: true, shortcut: ShortcutSettings.askOmiCommandJShortcut)
 
       XCTAssertEqual(attempts, [Attempt(keyCode: 38, modifiers: 256)])
+      XCTAssertEqual(manager.askOmiRegistrationTraceForAutomation(), [.registered])
       XCTAssertTrue(failures.isEmpty, "The stale saved shortcut must never be registered or reported as a conflict.")
     }
 
@@ -45,7 +46,7 @@ import XCTest
       var attempts: [Attempt] = []
       let manager = makeManager(registrar: { keyCode, modifiers in
         attempts.append(Attempt(keyCode: keyCode, modifiers: modifiers))
-        return .testing(status: noErr, referenceWasReturned: true)
+        return .testing(status: noErr, reference: .init("standalone"))
       })
       defer { manager.stopObservingSettingsForTests() }
 
@@ -63,7 +64,7 @@ import XCTest
       var attempts: [Int] = []
       let manager = makeManager(registrar: { keyCode, _ in
         attempts.append(keyCode)
-        return .testing(status: noErr, referenceWasReturned: true)
+        return .testing(status: noErr, reference: .init("later"))
       })
       defer { manager.stopObservingSettingsForTests() }
 
@@ -76,7 +77,7 @@ import XCTest
     func testNoErrWithoutReferenceRecordsGenericFailureAndNeverLogsSuccess() throws {
       let original = savedRegistration()
       defer { restoreRegistration(original) }
-      let result = try driveRegistration(status: noErr, referenceWasReturned: false)
+      let result = try driveRegistration(status: noErr, reference: nil)
 
       assertRegistrationIncident(result.incidents, failureClass: "unknown", osStatus: 0)
       XCTAssertFalse(result.successLogs.contains { $0.contains("Registered Ask Omi") })
@@ -85,7 +86,7 @@ import XCTest
     func testCarbonConflictRecordsOneConflictIncidentAndNeverLogsSuccess() throws {
       let original = savedRegistration()
       defer { restoreRegistration(original) }
-      let result = try driveRegistration(status: OSStatus(-9878), referenceWasReturned: false)
+      let result = try driveRegistration(status: OSStatus(-9878), reference: nil)
 
       assertRegistrationIncident(result.incidents, failureClass: "hotkey_conflict", osStatus: -9878)
       XCTAssertFalse(result.successLogs.contains { $0.contains("Registered Ask Omi") })
@@ -94,7 +95,7 @@ import XCTest
     func testOtherCarbonFailureRecordsGenericIncidentAndNeverLogsSuccess() throws {
       let original = savedRegistration()
       defer { restoreRegistration(original) }
-      let result = try driveRegistration(status: OSStatus(-50), referenceWasReturned: false)
+      let result = try driveRegistration(status: OSStatus(-50), reference: nil)
 
       assertRegistrationIncident(result.incidents, failureClass: "unknown", osStatus: -50)
       XCTAssertFalse(result.successLogs.contains { $0.contains("Registered Ask Omi") })
@@ -103,21 +104,75 @@ import XCTest
     func testSuccessfulCarbonRegistrationLogsSuccessAndRecordsNoFailure() throws {
       let original = savedRegistration()
       defer { restoreRegistration(original) }
-      let result = try driveRegistration(status: noErr, referenceWasReturned: true)
+      let result = try driveRegistration(status: noErr, reference: .init("success"))
 
       XCTAssertTrue(result.incidents.isEmpty)
       XCTAssertEqual(result.successLogs, ["GlobalShortcutManager: Registered Ask Omi shortcut: ⌘ O"])
     }
 
+    func testSuccessfulRegistrationRetainsReturnedReferenceThenReplacementAndDisableUnregisterItOnce() {
+      let original = savedRegistration()
+      defer { restoreRegistration(original) }
+      settings.updateAskOmiRegistration(enabled: false, shortcut: ShortcutSettings.askOmiCommandOShortcut)
+
+      let first = GlobalShortcutManager.TestHotKeyReference("first")
+      let second = GlobalShortcutManager.TestHotKeyReference("second")
+      var registered = [first, second]
+      var unregistered: [GlobalShortcutManager.TestHotKeyReference] = []
+      let manager = makeManager(
+        registrar: { _, _ in .testing(status: noErr, reference: registered.removeFirst()) },
+        testUnregisterer: {
+          unregistered.append($0)
+          return noErr
+        }
+      )
+      defer { manager.stopObservingSettingsForTests() }
+
+      settings.updateAskOmiRegistration(enabled: true, shortcut: ShortcutSettings.askOmiCommandOShortcut)
+      XCTAssertEqual(manager.retainedTestHotKeyReferences(), [first])
+      XCTAssertTrue(unregistered.isEmpty)
+
+      settings.updateAskOmiRegistration(enabled: true, shortcut: ShortcutSettings.askOmiCommandJShortcut)
+      XCTAssertEqual(manager.retainedTestHotKeyReferences(), [second])
+      XCTAssertEqual(unregistered, [first])
+
+      settings.updateAskOmiRegistration(enabled: false, shortcut: ShortcutSettings.askOmiCommandJShortcut)
+      XCTAssertEqual(manager.retainedTestHotKeyReferences(), [])
+      XCTAssertEqual(unregistered, [first, second])
+    }
+
+    func testNoReferenceFailuresNeverRetainOrUnregisterReferences() {
+      let original = savedRegistration()
+      defer { restoreRegistration(original) }
+      settings.updateAskOmiRegistration(enabled: true, shortcut: ShortcutSettings.askOmiCommandOShortcut)
+
+      var unregistered: [GlobalShortcutManager.TestHotKeyReference] = []
+      var statuses: [OSStatus] = [noErr, OSStatus(-9878), OSStatus(-50)]
+      let manager = makeManager(
+        registrar: { _, _ in .testing(status: statuses.removeFirst(), reference: nil) },
+        testUnregisterer: {
+          unregistered.append($0)
+          return noErr
+        },
+        observesSettings: false
+      )
+
+      manager.registerAskOmi()
+      manager.registerAskOmi()
+      manager.registerAskOmi()
+      XCTAssertEqual(manager.retainedTestHotKeyReferences(), [])
+      XCTAssertTrue(unregistered.isEmpty)
+    }
+
     private func driveRegistration(
       status: OSStatus,
-      referenceWasReturned: Bool
+      reference: GlobalShortcutManager.TestHotKeyReference?
     ) throws -> (incidents: [[String: Any]], successLogs: [String]) {
       settings.updateAskOmiRegistration(enabled: true, shortcut: ShortcutSettings.askOmiCommandOShortcut)
       DesktopDiagnosticsManager.shared.resetForTests()
       var successLogs: [String] = []
       let manager = makeManager(
-        registrar: { _, _ in .testing(status: status, referenceWasReturned: referenceWasReturned) },
+        registrar: { _, _ in .testing(status: status, reference: reference) },
         logger: { successLogs.append($0) },
         observesSettings: false
       )
@@ -128,13 +183,14 @@ import XCTest
 
     private func makeManager(
       registrar: @escaping GlobalShortcutManager.HotKeyRegistrar,
+      testUnregisterer: GlobalShortcutManager.TestHotKeyUnregisterer? = nil,
       failureRecorder: GlobalShortcutManager.HotKeyFailureRecorder? = nil,
       logger: @escaping GlobalShortcutManager.HotKeyLogger = { _ in },
       observesSettings: Bool = true
     ) -> GlobalShortcutManager {
       GlobalShortcutManager(
         registrar: registrar,
-        unregisterer: { _ in noErr },
+        testUnregisterer: testUnregisterer,
         failureRecorder: failureRecorder,
         logger: logger,
         observesSettings: observesSettings)

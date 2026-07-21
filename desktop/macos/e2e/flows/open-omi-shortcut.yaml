@@ -1,0 +1,47 @@
+version: 2
+name: open-omi-shortcut
+tier: 2
+description: Open Omi shortcut registration and activation through the non-production automation bridge
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Change Open Omi to Command Return through the atomic settings mutation
+    bridge.action:
+      name: set_open_omi_shortcut
+      params:
+        preset: command_return
+    expect:
+      result.detail.current_binding: "⌘ ↩"
+      result.detail.registration_attempt_count: "1"
+      result.detail.registration_outcomes: registered
+
+  - id: S2
+    name: Change Open Omi to its final Command J binding without a conflict
+    bridge.action:
+      name: set_open_omi_shortcut
+      params:
+        preset: command_j
+    expect:
+      result.detail.current_binding: "⌘ J"
+      result.detail.registration_attempt_count: "1"
+      result.detail.registration_outcomes: registered
+
+  - id: S3
+    name: Trigger the Open Omi shortcut action
+    bridge.action:
+      name: trigger_open_omi_shortcut
+    expect:
+      result.detail.triggered: "true"
+      result.detail.main_window_visible: "true"
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

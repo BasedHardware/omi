@@ -9,54 +9,67 @@ class GlobalShortcutManager: @unchecked Sendable {
 
   static let askAINotification = Notification.Name("com.omi.desktop.askAI")
 
-  private var hotKeyRefs: [HotKeyID: EventHotKeyRef] = [:]
+  private var hotKeyRefs: [HotKeyID: HotKeyReference] = [:]
   private var isRegistrationSuspended = false
+  #if DEBUG
+    private var askOmiRegistrationTrace: [HotKeyRegistrationOutcome] = []
+  #endif
   typealias HotKeyRegistrar = (Int, Int) -> HotKeyRegistrationAttempt
   typealias HotKeyFailureRecorder = (Int, Int, Int, HotKeyRegistrationOutcome) -> Void
   typealias HotKeyLogger = (String) -> Void
 
+  #if DEBUG
+    /// A test-owned stand-in for Carbon's opaque `EventHotKeyRef`.
+    struct TestHotKeyReference: Hashable {
+      let value: String
+
+      init(_ value: String) {
+        self.value = value
+      }
+    }
+
+    typealias TestHotKeyUnregisterer = (TestHotKeyReference) -> OSStatus
+  #endif
+
+  fileprivate enum HotKeyReference {
+    case carbon(EventHotKeyRef)
+    #if DEBUG
+      case testing(TestHotKeyReference)
+    #endif
+  }
+
   /// The Carbon result pair that determines whether a hotkey is live. The real
-  /// registrar supplies its returned ref; DEBUG tests can model the presence of
-  /// that opaque ref without manufacturing a Core Foundation object.
+  /// registrar supplies its returned ref; DEBUG tests use an owned token that
+  /// travels through the same retention and unregister lifecycle.
   struct HotKeyRegistrationAttempt {
     let status: OSStatus
-    let hotKeyRef: EventHotKeyRef?
-
-    #if DEBUG
-      private let testReferenceWasReturned: Bool?
-    #endif
+    fileprivate let reference: HotKeyReference?
 
     init(status: OSStatus, hotKeyRef: EventHotKeyRef?) {
       self.status = status
-      self.hotKeyRef = hotKeyRef
-      #if DEBUG
-        self.testReferenceWasReturned = nil
-      #endif
+      reference = hotKeyRef.map(HotKeyReference.carbon)
     }
 
     #if DEBUG
-      static func testing(status: OSStatus, referenceWasReturned: Bool) -> Self {
-        Self(status: status, hotKeyRef: nil, testReferenceWasReturned: referenceWasReturned)
+      static func testing(status: OSStatus, reference: TestHotKeyReference?) -> Self {
+        Self(status: status, reference: reference.map(HotKeyReference.testing))
       }
 
-      private init(status: OSStatus, hotKeyRef: EventHotKeyRef?, testReferenceWasReturned: Bool) {
+      private init(status: OSStatus, reference: HotKeyReference?) {
         self.status = status
-        self.hotKeyRef = hotKeyRef
-        self.testReferenceWasReturned = testReferenceWasReturned
+        self.reference = reference
       }
     #endif
 
     var hasReference: Bool {
-      #if DEBUG
-        return testReferenceWasReturned ?? (hotKeyRef != nil)
-      #else
-        return hotKeyRef != nil
-      #endif
+      reference != nil
     }
   }
 
   private let registrar: HotKeyRegistrar
-  private let unregisterer: (EventHotKeyRef) -> OSStatus
+  #if DEBUG
+    private let testUnregisterer: TestHotKeyUnregisterer?
+  #endif
   private let failureRecorder: HotKeyFailureRecorder
   private let logger: HotKeyLogger
 
@@ -68,7 +81,9 @@ class GlobalShortcutManager: @unchecked Sendable {
 
   private init() {
     registrar = Self.registerWithCarbon
-    unregisterer = UnregisterEventHotKey
+    #if DEBUG
+      testUnregisterer = nil
+    #endif
     failureRecorder = Self.recordRegistrationFailure
     logger = { message in NSLog("%@", message) }
 
@@ -87,21 +102,23 @@ class GlobalShortcutManager: @unchecked Sendable {
     observeSettings()
   }
 
-  init(
-    registrar: @escaping HotKeyRegistrar,
-    unregisterer: @escaping (EventHotKeyRef) -> OSStatus,
-    failureRecorder: HotKeyFailureRecorder? = nil,
-    logger: @escaping HotKeyLogger,
-    observesSettings: Bool
-  ) {
-    self.registrar = registrar
-    self.unregisterer = unregisterer
-    self.failureRecorder = failureRecorder ?? Self.recordRegistrationFailure
-    self.logger = logger
-    if observesSettings {
-      observeSettings()
+  #if DEBUG
+    init(
+      registrar: @escaping HotKeyRegistrar,
+      testUnregisterer: TestHotKeyUnregisterer? = nil,
+      failureRecorder: HotKeyFailureRecorder? = nil,
+      logger: @escaping HotKeyLogger,
+      observesSettings: Bool
+    ) {
+      self.registrar = registrar
+      self.testUnregisterer = testUnregisterer
+      self.failureRecorder = failureRecorder ?? Self.recordRegistrationFailure
+      self.logger = logger
+      if observesSettings {
+        observeSettings()
+      }
     }
-  }
+  #endif
 
   private func observeSettings() {
     // Re-register Ask Omi shortcut when user changes it in settings.
@@ -143,7 +160,7 @@ class GlobalShortcutManager: @unchecked Sendable {
     guard !isRegistrationSuspended else { return }
     // Unregister previous Ask Omi hotkey if any
     if let ref = hotKeyRefs.removeValue(forKey: .askOmi) {
-      _ = unregisterer(ref)
+      _ = unregisterHotKey(ref)
     }
     let (askOmiEnabled, askOmiShortcut) = MainActor.assumeIsolated {
       (ShortcutSettings.shared.askOmiEnabled, ShortcutSettings.shared.askOmiShortcut)
@@ -175,8 +192,13 @@ class GlobalShortcutManager: @unchecked Sendable {
   private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) -> HotKeyRegistrationOutcome {
     let attempt = registrar(keyCode, modifiers)
     let outcome = registrationOutcome(for: attempt)
+    #if DEBUG
+      if id == .askOmi {
+        askOmiRegistrationTrace.append(outcome)
+      }
+    #endif
     if outcome == .registered {
-      if let ref = attempt.hotKeyRef {
+      if let ref = attempt.reference {
         hotKeyRefs[id] = ref
       }
     } else {
@@ -219,6 +241,34 @@ class GlobalShortcutManager: @unchecked Sendable {
     return .otherFailure
   }
 
+  private func unregisterHotKey(_ reference: HotKeyReference) -> OSStatus {
+    switch reference {
+    case .carbon(let reference):
+      return UnregisterEventHotKey(reference)
+    #if DEBUG
+      case .testing(let reference):
+        return testUnregisterer?(reference) ?? noErr
+    #endif
+    }
+  }
+
+  #if DEBUG
+    func retainedTestHotKeyReferences() -> [TestHotKeyReference] {
+      hotKeyRefs.values.compactMap { reference in
+        guard case .testing(let reference) = reference else { return nil }
+        return reference
+      }
+    }
+
+    func resetAskOmiRegistrationTraceForAutomation() {
+      askOmiRegistrationTrace.removeAll()
+    }
+
+    func askOmiRegistrationTraceForAutomation() -> [HotKeyRegistrationOutcome] {
+      askOmiRegistrationTrace
+    }
+  #endif
+
   private func handleHotKeyEvent(_ event: EventRef) -> OSStatus {
     var hotKeyID = EventHotKeyID()
     let status = GetEventParameter(
@@ -237,20 +287,31 @@ class GlobalShortcutManager: @unchecked Sendable {
 
     switch id {
     case .askOmi:
-      NSLog("GlobalShortcutManager: Open Omi shortcut detected")
-      DispatchQueue.main.async {
-        // Typing moved to the main app: the shortcut opens Omi itself
-        // instead of the floating bar's typed input panel.
-        (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
-      }
+      openOmiFromShortcut()
     }
 
     return noErr
   }
 
+  private func openOmiFromShortcut() {
+    NSLog("GlobalShortcutManager: Open Omi shortcut detected")
+    DispatchQueue.main.async {
+      // Typing moved to the main app: the shortcut opens Omi itself
+      // instead of the floating bar's typed input panel.
+      (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+    }
+  }
+
+  #if DEBUG
+    /// Drives the same dispatched Open Omi action as a registered Carbon event.
+    func triggerOpenOmiShortcutForAutomation() {
+      openOmiFromShortcut()
+    }
+  #endif
+
   func unregisterShortcuts() {
     for (_, ref) in hotKeyRefs {
-      _ = unregisterer(ref)
+      _ = unregisterHotKey(ref)
     }
     hotKeyRefs.removeAll()
   }
