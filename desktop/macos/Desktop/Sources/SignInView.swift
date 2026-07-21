@@ -16,9 +16,29 @@ struct SignInView: View {
     return img
   }()
 
+  private static let backgroundImage: NSImage? = {
+    guard let url = Bundle.resourceBundle.url(forResource: "signin_bg", withExtension: "png") else { return nil }
+    return NSImage(contentsOf: url)
+  }()
+
   var body: some View {
     ZStack {
-      SBWallpaper()
+      // Sign-in background image, dimmed under the content for legibility.
+      if let bg = Self.backgroundImage {
+        Image(nsImage: bg)
+          .resizable()
+          .scaledToFill()
+          .overlay(
+            LinearGradient(
+              colors: [.black.opacity(0.5), .black.opacity(0.62), .black.opacity(0.82)],
+              startPoint: .top, endPoint: .bottom)
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .clipped()
+          .ignoresSafeArea()
+      } else {
+        SBWallpaper()
+      }
 
       VStack(spacing: 0) {
         // Breathing logo.
