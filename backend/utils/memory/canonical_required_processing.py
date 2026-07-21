@@ -27,7 +27,6 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.short_term_lifecycle import default_short_term_expiry
 from utils.memory.required_promotion import (
     REQUIRED_PROCESSING_STATUS_FAILED_RETRYABLE,
     REQUIRED_PROCESSING_STATUS_PENDING,
@@ -300,7 +299,6 @@ def _apply_processed_result(
             "expected_item_revision": item.item_revision,
             "expected_content_hash": item.content_hash,
             "promotion_audit": promotion,
-            "expires_at": default_short_term_expiry(max(now, item.captured_at)).isoformat(),
             "subject_entity_id": processed.subject_entity_id,
             "predicate": processed.predicate,
             "arguments": processed.arguments,
