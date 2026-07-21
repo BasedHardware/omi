@@ -41,7 +41,16 @@ struct NotchTrayView: View {
       Image(systemName: "mic.fill")
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(Color(red: 1.0, green: 0.45, blue: 0.45))
-        .frame(width: 26, height: 26)
+      Button(action: { PushToTalkManager.shared.cancelListening() }) {
+        Image(systemName: "stop.fill")
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundStyle(.black)
+          .frame(width: 26, height: 26)
+          .background(Circle().fill(.white))
+      }
+      .buttonStyle(.plain)
+      .help("Stop listening")
+      .accessibilityLabel("Stop listening")
     }
     .padding(.leading, 16)
     .padding(.trailing, 6)
@@ -119,8 +128,11 @@ struct NotchTrayView: View {
     guard canSend else { return }
     AnalyticsManager.shared.chatMessageSent(
       messageLength: text.count, hasSelectedAppContext: false, source: "notch_chat")
-    Task { await chatProvider.sendMainDraft(text) }
+    // Empty the field in this run loop so it repaints immediately; sendMainDraft
+    // restores the text if the send never enters the timeline.
+    chatProvider.draftText = ""
     inputFocused = true
+    Task { await chatProvider.sendMainDraft(text) }
   }
 
   // MARK: - Attachments
