@@ -105,19 +105,18 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                 self.assertTrue(CHECKER.validate(root))
 
     def test_rejects_any_reintroduction_of_legacy_beta_or_staging_routing(self) -> None:
-        source_path = CHECKER.LEGACY_BETA_ROUTING_PATHS[1]
-        original = (ROOT / source_path).read_text(encoding="utf-8")
-        for token in CHECKER.FORBIDDEN_ROUTING_TOKENS:
-            with self.subTest(token=token), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                for relative_path in CHECKER.LEGACY_BETA_ROUTING_PATHS:
-                    target = root / relative_path
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    text = (ROOT / relative_path).read_text(encoding="utf-8")
-                    if relative_path == source_path:
-                        text += f"\n// {token}\n"
-                    target.write_text(text, encoding="utf-8")
-                self.assertTrue(CHECKER.validate(root))
+        for source_path in CHECKER.LEGACY_BETA_ROUTING_PATHS:
+            for token in CHECKER.FORBIDDEN_ROUTING_TOKENS:
+                with self.subTest(source_path=source_path, token=token), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for relative_path in CHECKER.LEGACY_BETA_ROUTING_PATHS:
+                        target = root / relative_path
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        text = (ROOT / relative_path).read_text(encoding="utf-8")
+                        if relative_path == source_path:
+                            text += f"\n// {token}\n"
+                        target.write_text(text, encoding="utf-8")
+                    self.assertTrue(CHECKER.validate(root))
 
     def test_rejects_mutated_desktop_beta_identity_or_firestore_project(self) -> None:
         for source_path, fragments in CHECKER.REQUIRED_PRODUCTION_FRAGMENTS.items():

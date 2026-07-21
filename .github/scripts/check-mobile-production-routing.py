@@ -21,6 +21,8 @@ DESKTOP_PIN = "https://api.omi.me"
 DESKTOP_RUST_PIN = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
 LEGACY_BETA_ROUTING_PATHS = (
     "codemagic.yaml",
+    "app/lib/env/dev_env.dart",
+    "app/lib/env/prod_env.dart",
     "app/lib/main.dart",
     "app/lib/utils/environment_detector.dart",
     "desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift",
