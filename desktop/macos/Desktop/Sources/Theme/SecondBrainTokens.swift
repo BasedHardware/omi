@@ -125,24 +125,17 @@ extension EnvironmentValues {
   }
 }
 
-/// App-wide theme selection, persisted. Toggled by the menu-bar ◐ control.
+/// App-wide theme. Dark-only — light mode was removed as a user option; the light
+/// tokens remain in `SBTheme` but are not selectable.
 @MainActor
 package final class SBThemeManager: ObservableObject {
   package static let shared = SBThemeManager()
-  private let key = "sbThemeMode"
 
-  @Published package var mode: SBThemeMode {
-    didSet { UserDefaults.standard.set(mode.rawValue, forKey: key) }
-  }
+  @Published package private(set) var mode: SBThemeMode = .dark
 
-  private init() {
-    let raw = UserDefaults.standard.string(forKey: key)
-    self.mode = raw.flatMap(SBThemeMode.init(rawValue:)) ?? .dark
-  }
+  private init() {}
 
   package var theme: SBTheme { SBTheme(mode) }
-
-  package func toggle() { mode = (mode == .dark) ? .light : .dark }
 }
 
 /// Injects the current SBTheme + matching color scheme into the environment.

@@ -114,11 +114,11 @@ struct DesktopHomeView: View {
             appState.hasCompletedOnboarding = true
           }
         } else {
-          OnboardingView(
+          SBOnboardingView(
             appState: appState, chatProvider: viewModelContainer.chatProvider, onComplete: nil
           )
           .onAppear {
-            log("DesktopHomeView: Showing OnboardingView (signed in, not onboarded)")
+            log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
           }
         }
       } else {
