@@ -1,10 +1,12 @@
 """Core hermetic E2E coverage for high-churn backend flows."""
 
+from testing.e2e.sync_helpers import patch_fresh_sync_lane
 import asyncio
 import json
 import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fakes.firestore import read_conversation, seed_conversation
 from fakes.stt import fake_suggested_transcript_event
@@ -85,6 +87,7 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
     def fake_process_conversation(uid, language_code, conversation, **kwargs):
         conversations_db = sys.modules["database.conversations"]
         deserialize_conversation = sys.modules["utils.conversations.factory"].deserialize_conversation
+        lifecycle = sys.modules["utils.conversations.lifecycle"]
         structured = conversation.structured.model_dump()
         structured.update(
             {
@@ -96,35 +99,76 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
         conversations_db.update_conversation(
             uid,
             conversation.id,
-            {"structured": structured, "status": "completed", "finished_at": datetime.now(timezone.utc)},
+            {"structured": structured, "finished_at": datetime.now(timezone.utc)},
         )
+        lifecycle.complete(uid, conversation.id)
         return deserialize_conversation(conversations_db.get_conversation(uid, conversation.id))
 
-    async def fake_trigger_external_integrations(uid, conversation):
+    async def fake_trigger_external_integrations(uid, conversation, **kwargs):
         return []
+
+    # The exact-ID finalize route now hands off to the durable Cloud Tasks
+    # worker instead of processing inline. Configure dispatch, stub the enqueue
+    # (the hermetic harness cannot reach Cloud Tasks), and patch the expensive
+    # processing surfaces the worker calls through the shared finalizer.
+    monkeypatch.setenv("LISTEN_FINALIZATION_DISPATCH_MODE", "cloud_tasks")
+    monkeypatch.setenv("SYNC_TASKS_PROJECT", "test-e2e-project")
+    monkeypatch.setenv("SYNC_TASKS_LOCATION", "us-central1")
+    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_QUEUE", "conversation-finalization")
+    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_HANDLER_URL", "https://example.invalid/finalize")
+    monkeypatch.setenv("LISTEN_FINALIZATION_TASKS_INVOKER_SA", "worker@example.invalid")
+
+    cloud_tasks_module = sys.modules["utils.cloud_tasks"]
+    monkeypatch.setattr(cloud_tasks_module, "enqueue_listen_finalization_job", lambda *a, **k: None)
 
     conversations_router = sys.modules["routers.conversations"]
     monkeypatch.setattr(conversations_router, "process_conversation", fake_process_conversation)
     monkeypatch.setattr(conversations_router, "trigger_external_integrations", fake_trigger_external_integrations)
 
+    finalization_router = sys.modules["routers.conversation_finalization"]
+    finalizer_module = sys.modules["utils.conversations.finalizer"]
+    monkeypatch.setattr(finalizer_module, "process_conversation", fake_process_conversation)
+    monkeypatch.setattr(finalizer_module, "extract_memories", lambda *a, **k: None)
+    monkeypatch.setattr(finalizer_module, "trigger_external_integrations", fake_trigger_external_integrations)
+
     finalized = client.post(f"/v1/conversations/{conversation_id}/finalize", headers=auth_headers)
     assert finalized.status_code == 200, finalized.text
     finalized_body = finalized.json()["conversation"]
     assert finalized_body["id"] == conversation_id
-    assert finalized_body["status"] == "completed"
-    assert finalized_body["structured"]["title"] == "Finalized hermetic listen session"
-    assert finalized_body["transcript_segments"] == emitted_segments
+    # The route returns promptly after durable dispatch; processing completes
+    # when the Cloud Tasks worker claims the job lease below.
+    assert finalized_body["status"] == "processing"
+
+    # Drive the durable worker the way Cloud Tasks would. The hermetic harness
+    # cannot mint a real OIDC token, so bypass the verifier dependency.
+    original_overrides = dict(client.app.dependency_overrides)
+    client.app.dependency_overrides[finalization_router.verify_listen_finalization_cloud_tasks_oidc] = lambda: 0
+    try:
+        job = client.get(f"/v1/conversations/{conversation_id}/finalization", headers=auth_headers)
+        assert job.status_code == 200, job.text
+        worker_response = client.post(
+            "/v1/conversation-finalization-jobs/run",
+            json={"job_id": job.json()["job_id"], "dispatch_generation": 1},
+        )
+        assert worker_response.status_code == 200, worker_response.text
+        assert worker_response.json()["status"] == "done"
+    finally:
+        client.app.dependency_overrides.clear()
+        client.app.dependency_overrides.update(original_overrides)
 
     persisted = client.get(f"/v1/conversations/{conversation_id}", headers=auth_headers)
     assert persisted.status_code == 200, persisted.text
-    assert persisted.json()["status"] == "completed"
+    persisted_body = persisted.json()
+    assert persisted_body["status"] == "completed"
+    assert persisted_body["structured"]["title"] == "Finalized hermetic listen session"
+    assert persisted_body["transcript_segments"] == emitted_segments
 
 
 def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_headers, monkeypatch):
     """The v2 sync API should create, run, and expose a completed job against hermetic fakes."""
+    patch_fresh_sync_lane(monkeypatch)
     scheduled = []
     sync_conversation_id = "sync-core-flow-conversation"
-    segment_path = "syncing/123/e2e-job/1760000000.wav"
 
     def capture_background_task(coro, *, name):
         scheduled.append((name, coro))
@@ -132,10 +176,18 @@ def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_heade
 
     def fake_decode_files_to_wav(raw_paths):
         assert raw_paths
-        return [segment_path]
+        wav_paths = []
+        for raw_path in raw_paths:
+            wav_path = str(Path(raw_path).with_suffix(".wav"))
+            Path(wav_path).write_bytes(b"fake wav bytes")
+            wav_paths.append(wav_path)
+        return wav_paths
 
     def fake_retrieve_vad_segments(path, segmented_paths, errors=None):
-        assert path == segment_path
+        from utils.sync.files import get_timestamp_from_path
+
+        segment_path = f"{Path(path).parent}/{int(get_timestamp_from_path(path))}.wav"
+        Path(segment_path).write_bytes(b"fake wav bytes")
         segmented_paths.add(segment_path)
 
     def fake_process_segment(
@@ -163,18 +215,19 @@ def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_heade
         return True
 
     sync_router = sys.modules["routers.sync"]
+    sync_pipeline = sys.modules["utils.sync.pipeline"]
     monkeypatch.setattr(sync_router, "start_background_task", capture_background_task)
-    monkeypatch.setattr(sync_router, "decode_files_to_wav", fake_decode_files_to_wav)
-    monkeypatch.setattr(sync_router, "retrieve_vad_segments", fake_retrieve_vad_segments)
-    monkeypatch.setattr(sync_router, "get_wav_duration", lambda path: 2.0)
-    monkeypatch.setattr(sync_router, "process_segment", fake_process_segment)
-    monkeypatch.setattr(sync_router, "_reprocess_merged_conversations", lambda uid, response: None)
-    monkeypatch.setattr(sync_router, "build_person_embeddings_cache", lambda uid: {})
+    monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
+    monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
+    monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 2.0)
+    monkeypatch.setattr(sync_pipeline, "process_segment", fake_process_segment)
+    monkeypatch.setattr(sync_pipeline, "_reprocess_merged_conversations", lambda uid, response: None)
+    monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_router, "get_hard_restriction_status", lambda uid: (False, None))
     monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
     monkeypatch.setattr(sync_router, "is_cloud_tasks_dispatch_enabled", lambda: False)
     monkeypatch.setattr(sync_router, "has_byok_keys", lambda: False)
-    monkeypatch.setattr(sync_router, "FAIR_USE_ENABLED", False)
+    monkeypatch.setattr(sync_pipeline, "FAIR_USE_ENABLED", False)
 
     response = client.post(
         "/v2/sync-local-files",

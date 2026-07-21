@@ -1,0 +1,84 @@
+---
+title: Desktop update architecture
+description: Qualified desktop artifacts, explicit pointers, and recovery semantics.
+---
+
+Desktop Beta is a server-side distribution channel, not a second app. Every
+qualified macOS release has one identity: `Omi.app` (bundle ID
+`com.omi.computer-macos`), `Omi.zip`, and lowercase `omi.dmg`. Beta and Stable
+are independent pointers and Sparkle feed channels over those same retained,
+signed bytes. Channel diagnostics and telemetry remain channel-specific; app
+storage, Keychain/TCC identity, package names, and backend identity do not.
+
+## Release model
+
+One Codemagic build signs and notarizes one `Omi.zip`/`omi.dmg` pair from one
+source revision, then reserves its exact immutable `v...-macos` tag before
+creating an immutable, non-live GitHub candidate. The
+trusted macOS qualifier is dispatched on that immutable candidate tag, checks
+out the same tag, and records qualification evidence bound to its exact source
+SHA and the two signed artifact digests in its exact GitHub Actions artifact.
+It may attach a byte-identical `qualification-evidence-<tag>.json` release
+copy for operator convenience, but that copy is never authority. The one narrow
+`BETA_PROMOTION_TOKEN` bearer capability authorizes both reservation at
+`POST /v2/desktop/beta/candidates/reserve` and the later tag-only
+`POST /v2/desktop/beta/promote-qualified`; it cannot control Stable or pause
+admission. Before expensive GitHub evidence reads, the backend captures the
+server-derived generation from `desktop_beta_admission/control`. It independently reads the
+release, immutable tag, newest acceptable trusted completed qualification run,
+and that run's exact Actions artifact before comparing the current signed assets
+and optional release evidence copy to it. Its final Firestore transaction reads
+the control document first, then all manifest/pointer documents, and writes only
+when enabled state, exact tag/build, and the captured generation still match.
+It then atomically registers one immutable manifest and advances only `macos-beta`.
+The manifest retains the exact asset
+URLs and digests, Sparkle signature, qualification evidence identity/digest,
+source SHA, and compatibility/backend requirements.
+
+The machine-readable evidence explicitly separates two modalities. `source_qualification` records hermetic T2 and fault coverage for source-built named bundles. `signed_artifact_verification` records the exact signed ZIP/DMG digest, Sparkle-signing, notarization, and signed-smoke evidence. The signed production bytes are never described as having run automation T2. Before a human promotes beyond Beta, the operational release evidence still requires the signed `.89` upgrade, `.70` side-by-side install, real core journeys, and soak against the same immutable manifest. Stable never rebuilds or re-reads mutable release state after manifest registration.
+
+`macos-beta` and `macos-stable` are the only mutable release pointers. A pointer always resolves to an immutable qualified manifest. Registration is exact-idempotent; changing metadata under an existing release ID is rejected.
+
+| Stage | Mutation | Audience |
+| --- | --- | --- |
+| Candidate | Immutable GitHub release and signed evidence | None |
+| Qualified Beta | `macos-beta` points at the exact qualified manifest | Beta feed/channel |
+| Stable | `macos-stable` later points at that same retained release ID/artifact | Stable feed/channel |
+
+The normal candidate-to-Beta path uses non-cancelling per-tag GitHub concurrency.
+The capability is fail-closed when `BETA_PROMOTION_TOKEN` is absent.
+`desktop_beta_admission/control` is the sole separate v1 control document: it
+holds enabled state, the latest reserved canonical tag/build, a generation, and
+native Firestore timestamps. Missing or malformed state fails closed. A higher
+reservation and every effective pause/resume increment the generation; exact
+same-tag/state retries do not write. Only ADMIN_KEY can call
+`PUT /v2/desktop/beta/admission` with `{"promotion_enabled": bool}`. Bootstrap
+by deploying the backend first (missing state fails closed), reserving a
+candidate (which creates paused state), then enabling admission with ADMIN_KEY.
+For recovery, pause with the same admin
+endpoint; any in-flight promotion rejects in its final transaction. Resuming
+requires an existing reservation. There is no unreserve/rollback control.
+Qualification evidence and pointer idempotency make lost-response retries safe;
+there is no separate claim/running/complete release-body state machine and no
+unqualified emergency route. Beta promotion never invokes GCP, GCS, legacy Rust,
+cache-wide, Stable, rollback, or emergency mutation paths from GitHub.
+
+## Stable promotion and repoint
+
+`desktop_promote_prod.yml` is protected, manual-only, and independent of backend deployment. `promote` verifies its trusted qualification run and that the requested release ID is the current qualified Beta pointer. It then reads the exact immutable manifest registered by Beta from the control plane and verifies its canonical identity; it does not reconstruct a manifest from mutable release metadata. `repoint` needs only that retained passed-T2 manifest under exact Stable CAS—no Actions artifact or GitHub release body/assets. Both update the existing legacy appcast/static bridges and verify the final pointer, hashes, and exactly one default/non-Beta Stable feed item.
+
+`operation=promote` is roll-forward. `operation=repoint` can choose any retained qualified manifest, in either direction, but requires the exact current release ID and generation. Both use the same transactional pointer authority and qualification gate. A stale compare-and-swap is rejected; a lost response is acknowledged only when the requested release is already selected at exactly the expected next generation.
+
+Repointing stops future rollout but cannot downgrade clients that Sparkle has already upgraded to a higher build. Ship a higher-version hotfix for those users.
+
+## Resolution and compatibility
+
+For each channel, update resolution is: live pointer cache, Firestore pointer/manifest, validated last-known-good pointer, then the same channel's legacy GitHub metadata. Stable never falls through to Beta. The legacy resolver remains while older clients require it; pointer failures record the shared fallback telemetry boundary.
+
+The desktop release workflows retain the existing Firestore legacy bridge and stable static repair route. A desktop pointer promotion never invokes or controls a backend deployment.
+
+## Backend deployment boundary for the update API
+
+The surviving direct backend deployment boundary for the desktop update API is Cloud Run only. `gcp_backend.yml` accepts `environment=prod, deploy_targets=cloud-run-only`: it deploys tagged no-traffic Cloud Run candidate revisions, proves the exact tagged backend with a VPC-connected ephemeral Cloud Run Job and both Cloud Run IAM plus Firebase authentication, then snapshots, promotes, verifies, and restores Cloud Run traffic if final verification fails. The temporary Job, tag, invoker binding, and probe service account are cleaned up on both success and failure.
+
+`environment=prod, deploy_targets=all` is rejected before checkout, cloud authentication, image publication, or mutation. Transactional GKE/config rollback parity does not exist, so this workflow does not claim atomic full-stack deployment. The source-admitted direct GKE workflows (`gcp_backend_listen_helm.yml`, `gcp_backend_pusher.yml`, `gcp_llm_gateway.yml`, and `gcp_backend_agent_proxy.yml`) remain the operational production paths for their respective surfaces.

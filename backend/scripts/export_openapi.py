@@ -60,6 +60,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/app-categories',
     '/v1/apps',
     '/v1/calendar',
+    '/v1/candidates',
     '/v1/conversations',
     '/v1/dev',
     '/v1/fair-use',
@@ -78,13 +79,19 @@ APP_CLIENT_PREFIXES = (
     '/v1/stripe',
     '/v1/sync',
     '/v1/task-integrations',
+    '/v1/task-intelligence',
     '/v1/users',
     '/v1/wrapped',
+    '/v1/work-intents',
+    '/v1/workflow-migrations',
+    '/v1/workstreams',
+    '/v1/what-matters-now',
     '/v2/apps',
     '/v2/files',
     '/v2/firmware',
     '/v2/initial-message',
     '/v2/messages',
+    '/v2/sync-capture-manifest',
     '/v2/sync-local-files',
     '/v2/tts',
     '/v2/voice-message',
@@ -99,6 +106,10 @@ AUDITED_PUBLIC_PREFIXES = (
     '/v1/conversations',
 )
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
+    (
+        'POST',
+        '/v1/conversations/shared/chat',
+    ): 'Trusted frontend service OIDC route; it is not a browser or Developer API surface.',
     (
         'POST',
         '/v1/conversations',
@@ -180,6 +191,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/transcripts',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'GET',
+        '/v1/conversations/{conversation_id}/finalization',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'PATCH',
         '/v1/conversations/{conversation_id}/events',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -190,6 +205,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'GET',
         '/v1/conversations/{conversation_id}/action-items',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/action-items/count',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'PATCH',

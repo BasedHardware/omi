@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
-
 import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/shared.dart';
@@ -24,9 +22,9 @@ Future<String> triggerTestConversationPrompt(String prompt, String transcript) a
   return await executeGptPrompt(
     '''
         Your task is: $prompt
-        
+
         Current Conversation: ```${transcript.trim()}```,
-       
+
         Output your response in plain text, without markdown.
         Make sure to be concise and clear.
         '''

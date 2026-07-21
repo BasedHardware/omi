@@ -1,5 +1,7 @@
 """Hermetic sync v2 lifecycle coverage."""
 
+from testing.e2e.sync_helpers import patch_fresh_sync_lane
+
 import time
 import asyncio
 from datetime import datetime, timezone
@@ -43,6 +45,7 @@ def _patch_sync_pipeline(
     reprocessed: list[str],
 ):
     import routers.sync as sync_router
+    import utils.sync.pipeline as sync_pipeline
 
     pending_coroutines = []
 
@@ -58,7 +61,11 @@ def _patch_sync_pipeline(
         return wav_paths
 
     def fake_retrieve_vad_segments(path, segmented_paths, vad_errors):
-        segmented_paths.add(path)
+        from utils.sync.files import get_timestamp_from_path
+
+        segment_path = f"{Path(path).parent}/{int(get_timestamp_from_path(path))}.wav"
+        Path(segment_path).write_bytes(b"fake wav bytes")
+        segmented_paths.add(segment_path)
 
     def fake_prerecorded(*args, **kwargs):
         return (
@@ -111,7 +118,7 @@ def _patch_sync_pipeline(
             status=ConversationStatus.completed,
             is_locked=conversation.is_locked,
         )
-        conversations_db.upsert_conversation(uid, conversation_obj.dict())
+        conversations_db.upsert_conversation_with_lifecycle(uid, conversation_obj.dict())
         return conversation_obj
 
     def fake_reprocess_after_update(uid, conversation_id, language):
@@ -136,22 +143,24 @@ def _patch_sync_pipeline(
         updated["structured"] = structured
         seed_conversation(uid, updated)
 
-    monkeypatch.setattr(sync_router, "decode_files_to_wav", fake_decode_files_to_wav)
-    monkeypatch.setattr(sync_router, "retrieve_vad_segments", fake_retrieve_vad_segments)
-    monkeypatch.setattr(sync_router, "get_wav_duration", lambda path: 1.25)
+    monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
+    monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
+    monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 1.25)
     monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
-    monkeypatch.setattr(sync_router, "build_person_embeddings_cache", lambda uid: {})
-    monkeypatch.setattr(sync_router, "get_syncing_file_temporal_signed_url", lambda path: path)
-    monkeypatch.setattr(sync_router, "schedule_syncing_temporal_file_deletion", lambda path: None)
-    monkeypatch.setattr(sync_router, "prerecorded", fake_prerecorded)
-    monkeypatch.setattr(sync_router, "postprocess_words", fake_postprocess_words)
-    monkeypatch.setattr(sync_router, "process_conversation", fake_process_conversation)
-    monkeypatch.setattr(sync_router, "_reprocess_conversation_after_update", fake_reprocess_after_update)
+    monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
+    monkeypatch.setattr(sync_pipeline, "get_syncing_file_temporal_signed_url", lambda path: path)
+    monkeypatch.setattr(sync_pipeline, "schedule_syncing_temporal_file_deletion", lambda path: None)
+    monkeypatch.setattr(sync_pipeline, "prerecorded", fake_prerecorded)
+    monkeypatch.setattr(sync_pipeline, "postprocess_words", fake_postprocess_words)
+    monkeypatch.setattr(sync_pipeline, "process_conversation", fake_process_conversation)
+    monkeypatch.setattr(sync_pipeline, "_reprocess_conversation_after_update", fake_reprocess_after_update)
     monkeypatch.setattr(sync_router, "start_background_task", capture_background_task)
+    monkeypatch.setattr(sync_pipeline, "FAIR_USE_ENABLED", False)
     return pending_coroutines
 
 
 def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, monkeypatch):
+    patch_fresh_sync_lane(monkeypatch)
     reprocessed = []
     pending_coroutines = _patch_sync_pipeline(
         monkeypatch,
@@ -189,6 +198,7 @@ def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, mo
 
 
 def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, auth_headers, monkeypatch):
+    patch_fresh_sync_lane(monkeypatch)
     import database.conversations as conversations_db
 
     target_id = "sync-target-conversation"

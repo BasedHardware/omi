@@ -16,12 +16,16 @@ inside the ``with`` block is evicted on teardown so no stub-fed module leaks to 
 import re
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from models.conversation import Conversation, CreateConversation
+from models.conversation_enums import ConversationSource, ConversationStatus
+from models.structured import Structured
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -128,6 +132,21 @@ def _build_fakes() -> dict[str, ModuleType]:
     ]:
         add(name, AutoMockModule(name))
 
+    task_intelligence = ModuleType("utils.task_intelligence")
+    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    add("utils.task_intelligence", task_intelligence)
+    conversation_capture = AutoMockModule("utils.task_intelligence.conversation_capture")
+    conversation_capture.capture_enabled = MagicMock(return_value=False)
+    conversation_capture.process_before_legacy = MagicMock(return_value=False)
+    conversation_capture.canonical_fields = MagicMock(return_value={})
+    conversation_capture.legacy_document_ids = MagicMock(return_value=None)
+    conversation_capture.reconcile_after_legacy = MagicMock()
+    add("utils.task_intelligence.conversation_capture", conversation_capture)
+    task_intelligence.conversation_capture = conversation_capture
+    workstream_association = AutoMockModule("utils.task_intelligence.workstream_association")
+    workstream_association.associate_canonical_evidence = MagicMock()
+    add("utils.task_intelligence.workstream_association", workstream_association)
+
     # --- firebase / pinecone / typesense / anthropic / stripe --------------
     firebase_admin = ModuleType("firebase_admin")
     firebase_admin.auth = MagicMock()
@@ -223,6 +242,10 @@ def _build_fakes() -> dict[str, ModuleType]:
     calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
 
     add("utils.conversations.factory", AutoMockModule("utils.conversations.factory"))
+    lifecycle_service = add("utils.conversations.lifecycle", AutoMockModule("utils.conversations.lifecycle"))
+    lifecycle_service.persist_processed_conversation = MagicMock(return_value=True)
+    lifecycle_service.create_completed_conversation = MagicMock(return_value=True)
+    lifecycle_service.create_processing_conversation = MagicMock(return_value=True)
     subjects = add("utils.conversations.subjects", AutoMockModule("utils.conversations.subjects"))
     subjects.infer_subject_from_segments = lambda segments: (None, None)
 
@@ -364,6 +387,102 @@ def test_sub_feature_constants_exist():
     # Verify they're distinct from the umbrella
     assert usage_tracker.Features.CONVERSATION_DISCARD != usage_tracker.Features.CONVERSATION_PROCESSING
     assert usage_tracker.Features.CONVERSATION_STRUCTURE != usage_tracker.Features.CONVERSATION_PROCESSING
+
+
+def test_fenced_completion_submits_no_derived_work(monkeypatch):
+    input_conversation = MagicMock()
+    input_conversation.source = "omi"
+    input_conversation.get_person_ids.return_value = []
+
+    completed_conversation = MagicMock()
+    completed_conversation.id = "conversation-fenced"
+    completed_conversation.dict.return_value = {"id": "conversation-fenced", "status": "completed"}
+
+    persistence = MagicMock(return_value=False)
+    submit = MagicMock()
+    trigger_apps = MagicMock()
+    create_audio_files = MagicMock()
+    update_conversation = MagicMock()
+    observed_persistence: list[bool] = []
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
+    monkeypatch.setattr(process_conversation, "submit_with_context", submit)
+    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
+    monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
+
+    result = process_conversation.process_conversation(
+        "uid",
+        "en",
+        input_conversation,
+        persistence_observer=observed_persistence.append,
+    )
+
+    assert result is completed_conversation
+    persistence.assert_called_once()
+    submit.assert_not_called()
+    trigger_apps.assert_not_called()
+    create_audio_files.assert_not_called()
+    update_conversation.assert_not_called()
+    assert observed_persistence == [False]
+
+
+def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):
+    new_request = CreateConversation(
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        transcript_segments=[],
+        source=ConversationSource.omi,
+    )
+    completed_conversation = Conversation(
+        id='fresh-conversation',
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=new_request.started_at,
+        finished_at=new_request.finished_at,
+        source=ConversationSource.omi,
+        structured=Structured(title=''),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=True,
+    )
+    created = MagicMock(return_value=True)
+    persisted = MagicMock()
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *args, **kwargs: (MagicMock(), True))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+
+    result = process_conversation.process_conversation('uid', 'en', new_request)
+
+    assert result is completed_conversation
+    created.assert_called_once_with('uid', completed_conversation.dict(), idempotent=True)
+    persisted.assert_not_called()
+
+
+def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(monkeypatch):
+    new_request = CreateConversation(
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        transcript_segments=[],
+        source=ConversationSource.desktop,
+    )
+    deferred_conversation = MagicMock()
+    deferred_conversation.id = 'deferred-conversation'
+    deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': 'processing'}
+    created = MagicMock(return_value=True)
+    persisted = MagicMock()
+    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+
+    result = process_conversation._store_deferred_conversation('uid', new_request)
+
+    assert result is deferred_conversation
+    assert deferred_conversation.deferred is True
+    created.assert_called_once_with('uid', deferred_conversation.dict(), idempotent=True)
+    persisted.assert_not_called()
 
 
 def test_discard_call_uses_discard_feature_tracking():
@@ -797,8 +916,14 @@ def _make_trigger_conversation(suggested_apps=None):
     return conv
 
 
-def _trigger_apps_context(default_apps=None):
-    """Context manager that patches all external dependencies of _trigger_apps."""
+def _trigger_apps_context(default_apps=None, availability_app=None):
+    """Context manager that patches all external dependencies of _trigger_apps.
+
+    `availability_app` stands in for `get_available_app_model_by_id` — the
+    set-preferred route's availability authority (#10074): None models a
+    deleted/inaccessible app; an app object models one the setter admitted even
+    though it is outside the enabled-installed slice.
+    """
     suggestion_mock = MagicMock(return_value=(["suggested-app"], "reasoning"))
     app_result_mock = MagicMock(return_value="App result content")
     record_mock = MagicMock()
@@ -810,6 +935,7 @@ def _trigger_apps_context(default_apps=None):
         patch.object(process_conversation, "get_suggested_apps_for_conversation", suggestion_mock),
         patch.object(process_conversation, "get_app_result", app_result_mock),
         patch.object(process_conversation, "record_app_usage", record_mock),
+        patch.object(process_conversation, "get_available_app_model_by_id", return_value=availability_app),
     )
 
 
@@ -819,11 +945,11 @@ def test_trigger_apps_uses_preferred_app_skips_llm_suggestion():
     _setup_trigger_apps_mocks(preferred_app_id="preferred-app-1", available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context()
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
     # Override get_available_apps to return the preferred app
     p2 = patch.object(process_conversation, "get_available_apps", return_value=[preferred])
 
-    with p1, p2, p3, p4, p5:
+    with p1, p2, p3, p4, p5, p6:
         process_conversation._trigger_apps("user-preferred", conv)
 
     # The suggestion LLM call must NOT have been invoked
@@ -840,9 +966,9 @@ def test_trigger_apps_stale_preferred_app_falls_through_to_suggestion():
     _setup_trigger_apps_mocks(preferred_app_id="deleted-app-999")
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context(default_apps=[suggestion_app])
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
 
-    with p1, p2, p3, p4, p5:
+    with p1, p2, p3, p4, p5, p6:
         process_conversation._trigger_apps("user-stale", conv)
 
     # The suggestion LLM call SHOULD have been invoked since preferred app was invalid
@@ -855,10 +981,125 @@ def test_trigger_apps_no_preferred_app_runs_suggestion():
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context(default_apps=[suggestion_app])
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
 
-    with p1, p2, p3, p4, p5:
+    with p1, p2, p3, p4, p5, p6:
         process_conversation._trigger_apps("user-no-pref", conv)
 
     # The suggestion LLM call SHOULD have been invoked
     suggestion_mock.assert_called_once()
+
+
+def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
+    """#10074: the set-preferred route admits apps the enabled-installed slice
+    does not contain (e.g. a template whose enable call failed). The reader must
+    honor the setter's availability authority instead of silently ignoring it."""
+    preferred = _make_mock_app("template-app-1", "MyTemplate")
+    _setup_trigger_apps_mocks(preferred_app_id="template-app-1")
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(availability_app=preferred)
+
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation._trigger_apps("user-template", conv)
+
+    suggestion_mock.assert_not_called()
+    app_result_mock.assert_called_once()
+    assert len(conv.apps_results) == 1
+
+
+def test_trigger_apps_preferred_app_without_memories_capability_falls_through():
+    """A resolvable preferred app that cannot summarize (no memories capability)
+    falls back to suggestions rather than running as a summarizer."""
+    persona = _make_mock_app("persona-app-1", "ChatPersona")
+    persona.works_with_memories.return_value = False
+    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
+    _setup_trigger_apps_mocks(preferred_app_id="persona-app-1")
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(
+        default_apps=[suggestion_app], availability_app=persona
+    )
+
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation._trigger_apps("user-persona", conv)
+
+    suggestion_mock.assert_called_once()
+
+
+# Regression: the durable write happens before _trigger_apps runs, so the app summary it produces
+# must be written back explicitly (like calendar_event / folder_id / audio_files already are).
+# Without that write-back the LLM output is computed and discarded: the detail view falls back to
+# structured.overview, a preferred summarization app never takes effect, the suggested-apps
+# endpoint stays empty, and PATCH /v1/conversations/{id}/summary has no entry to update.
+
+
+class _FakeAppResult:
+    """Mirrors the AppResult shape the persistence path consumes."""
+
+    def __init__(self, app_id, content):
+        self.app_id = app_id
+        self.content = content
+
+    def dict(self):
+        return {'app_id': self.app_id, 'content': self.content}
+
+
+def test_app_summary_results_reach_the_database(monkeypatch):
+    completed_conversation = Conversation(
+        id='conversation-apps',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=False,
+    )
+
+    persisted_payloads = []
+    updates = []
+
+    def persisted(_uid, payload, **_kwargs):
+        persisted_payloads.append(payload)
+        return True
+
+    def update_conversation(_uid, _conversation_id, data):
+        updates.append(data)
+
+    def fake_trigger_apps(_uid, conversation, **_kwargs):
+        # The real _trigger_apps only mutates the in-memory conversation.
+        conversation.suggested_summarization_apps = ['app-1']
+        conversation.apps_results = [_FakeAppResult('app-1', 'APP SUMMARY')]
+
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', persisted)
+    monkeypatch.setattr(process_conversation, '_trigger_apps', fake_trigger_apps)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
+    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', update_conversation)
+    monkeypatch.setattr(
+        process_conversation.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[])
+    )
+
+    process_conversation.process_conversation('uid', 'en', input_conversation)
+
+    # Everything that actually reached the database: the durable payload plus every write-back.
+    written = {}
+    for payload in persisted_payloads:
+        if isinstance(payload, dict):
+            written.update(payload)
+    for update in updates:
+        written.update(update)
+
+    results = written.get('apps_results')
+    assert results, 'app summary results never reached the database'
+    assert results[0]['app_id'] == 'app-1'
+    assert results[0]['content'] == 'APP SUMMARY'
+    assert written.get('suggested_summarization_apps') == ['app-1']

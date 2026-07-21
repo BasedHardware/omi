@@ -1,0 +1,54 @@
+name: Desktop Backend Image Checks
+
+on:
+  pull_request:
+    paths:
+      - "desktop/macos/Backend-Rust/**"
+      - ".github/workflows/desktop-backend-image-checks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-backend-image-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  docker-context-contract:
+    runs-on: ubuntu-latest
+    outputs:
+      dockerfile_changed: ${{ steps.dockerfile.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Test Docker context checker
+        run: python3 -m unittest discover -s desktop/macos/Backend-Rust/scripts/tests -p 'test_*.py'
+
+      - name: Verify compile-time assets are in the Docker context
+        run: python3 desktop/macos/Backend-Rust/scripts/check_docker_context.py
+
+      - id: dockerfile
+        name: Detect Dockerfile changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA" HEAD -- desktop/macos/Backend-Rust/Dockerfile; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  dockerfile-build:
+    needs: docker-context-contract
+    if: needs.docker-context-contract.outputs.dockerfile_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create non-production credentials placeholder
+        run: printf '%s\n' '{}' > desktop/macos/Backend-Rust/google-credentials.json
+
+      - name: Build desktop backend image
+        run: docker build --file desktop/macos/Backend-Rust/Dockerfile --tag omi-desktop-backend-pr:${{ github.sha }} desktop/macos/Backend-Rust

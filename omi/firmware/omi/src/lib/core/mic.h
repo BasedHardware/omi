@@ -18,5 +18,12 @@ void set_mic_callback(mix_handler _callback);
 
 void mic_off();
 void mic_on();
+void mic_pause();
+void mic_resume();
+bool mic_is_running();
 void mic_set_gain(uint8_t gain_level);
+
+/* True while the mic is in hardware AAD sleep (mic off, waiting for sound).
+ * Lets other subsystems (e.g. the status LED) drop to their lowest-power state. */
+bool mic_in_aad_sleep(void);
 #endif

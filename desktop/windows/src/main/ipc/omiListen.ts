@@ -228,6 +228,14 @@ export function getListenStats(): Record<string, { bytes: number; chunks: number
   return out
 }
 
+export function buildListenHeaders(token: string, deviceIdHash: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    'X-App-Platform': 'windows',
+    'X-Device-Id-Hash': deviceIdHash
+  }
+}
+
 function emit(ownerId: number, msg: ListenMessage): void {
   const wc = webContents.fromId(ownerId)
   if (wc && !wc.isDestroyed()) {
@@ -298,7 +306,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   // there's no per-uid conversation to key.
 
   const ws = new WebSocket(url, {
-    headers: byokSttHeaders({ Authorization: `Bearer ${args.token}` })
+    headers: byokSttHeaders(buildListenHeaders(args.token, args.deviceIdHash))
   })
   ws.binaryType = 'arraybuffer'
   const session: Session = {

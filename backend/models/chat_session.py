@@ -71,6 +71,8 @@ class SaveMessageResponse(BaseModel):
     created_at: str = Field(description='ISO-8601 creation timestamp of the message.')
     session_id: Optional[str] = Field(default=None, description='Chat session the message belongs to.')
     created: bool = Field(description='True if a new message was created; False for an idempotent retry.')
+    updated: bool = Field(default=False, description='True when a newer canonical journal revision replaced payload.')
+    journal_revision: Optional[int] = Field(default=None, description='Highest canonical journal revision stored.')
 
 
 class DeleteMessagesResponse(BaseModel):

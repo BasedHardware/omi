@@ -6,23 +6,25 @@ import logging
 from typing import Callable, Optional
 
 from models.memory_evidence import SourceState
-from models.product_memory import MemoryItemStatus, MemoryItem
+from models.product_memory import MemoryItemStatus, ProcessingState, MemoryItem
 
 logger = logging.getLogger(__name__)
 
 
-def delete_canonical_memory_vector(uid: str, memory_id: str) -> None:
+def delete_canonical_memory_vector(uid: str, memory_id: str) -> bool:
     """Delete a canonical neutral-id vector (identity = memory_id)."""
     try:
         from database.vector_db import delete_pinecone_memory_vectors_by_id
 
-        delete_pinecone_memory_vectors_by_id([memory_id])
+        deleted_count = delete_pinecone_memory_vectors_by_id([memory_id])
+        return deleted_count == 1
     except Exception:
         logger.exception(
             "canonical vector delete failed memory_id=%s uid=%s",
             memory_id,
             uid,
         )
+        return False
 
 
 def sync_canonical_memory_vector(
@@ -32,7 +34,12 @@ def sync_canonical_memory_vector(
     on_hard_failure: Optional[Callable[[], None]] = None,
 ) -> bool:
     """Upsert one live canonical memory item vector. Returns True when an upsert was attempted."""
-    if item.status != MemoryItemStatus.active or item.source_state != SourceState.active:
+    if (
+        item.status != MemoryItemStatus.active
+        or item.processing_state != ProcessingState.processed
+        or item.source_state != SourceState.active
+        or (item.promotion or {}).get("user_review") is False
+    ):
         return False
     content = (item.content or "").strip()
     if not content:

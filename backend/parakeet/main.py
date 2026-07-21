@@ -31,6 +31,7 @@ from transcribe import (
     _transcribe_from_gpu_result,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]  # upstream transcribe partially typed
 )
 from stream_handler import StreamSession, warmup_rnnt_decoder
+from admission import StreamAdmissionController
 
 logging.basicConfig(level=logging.INFO)
 # httpx logs every outbound request at INFO; the per-segment diarizer embedding
@@ -82,6 +83,7 @@ REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', 
 
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
+stream_admission: Optional[StreamAdmissionController] = None
 start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
@@ -122,8 +124,9 @@ def _on_gpu_oom() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global gpu_worker, batch_engine, start_time
+    global gpu_worker, batch_engine, stream_admission, start_time
     start_time = time.monotonic()
+    stream_admission = StreamAdmissionController.from_env(os.environ)
 
     os.makedirs("_temp", exist_ok=True)
 
@@ -305,11 +308,24 @@ async def stream_transcribe(
     hangover_s: float = Query(None),
 ):
     await websocket.accept()
-    session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
+    if stream_admission is None:
+        logger.error('v3/stream admission unavailable')
+        await websocket.close(code=1011, reason='service_not_ready')
+        return
+    decision = stream_admission.try_acquire()
+    if decision.lease is None:
+        REQUESTS_TOTAL.labels(endpoint='v3_stream', status=decision.reason).inc()
+        await websocket.close(code=1013, reason=decision.reason)
+        return
 
-    ACTIVE_STREAMS.inc()
+    session: Optional[StreamSession] = None
+    active_gauge_owned = False
     t0 = time.monotonic()
     try:
+        session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
+        ACTIVE_STREAMS.inc()
+        active_gauge_owned = True
+        await websocket.send_json({'type': 'ready'})
         while True:
             try:
                 msg = await asyncio.wait_for(websocket.receive(), timeout=_WS_RECEIVE_TIMEOUT)
@@ -327,19 +343,32 @@ async def stream_transcribe(
         pass
     except Exception as e:
         logger.error(f"v3/stream error: {e}")
+        try:
+            await websocket.close(code=1011, reason='stream_initialization_failed')
+        except Exception:
+            pass
     finally:
         try:
-            final_segments = cast(List[Any], await session.flush())
-            for seg in final_segments:
-                try:
-                    await websocket.send_json(seg)
-                except Exception:
-                    break
+            if session is not None:
+                final_segments = cast(List[Any], await session.flush())
+                for seg in final_segments:
+                    try:
+                        await websocket.send_json(seg)
+                    except Exception:
+                        break
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
-        ACTIVE_STREAMS.dec()
-        STREAM_DURATION.observe(time.monotonic() - t0)
-        session.cleanup()
+        finally:
+            try:
+                if session is not None:
+                    session.cleanup()
+            except Exception as e:
+                logger.error(f"v3/stream cleanup error: {e}")
+            finally:
+                if active_gauge_owned:
+                    ACTIVE_STREAMS.dec()
+                    STREAM_DURATION.observe(time.monotonic() - t0)
+                decision.lease.release()
 
 
 @app.get("/health", response_model=None)

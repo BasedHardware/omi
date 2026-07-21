@@ -168,6 +168,11 @@ def _build_fakes() -> dict[str, ModuleType]:
     llm_kg = add("utils.llm.knowledge_graph")
     llm_kg.extract_knowledge_from_memory = MagicMock()
 
+    # process_conversation imports date_in_tz from here after the origin/main merge.
+    llm_temporal = add("utils.llm.temporal")
+    for attr in ["date_in_tz", "current_date_in_tz", "current_date_for_uid"]:
+        setattr(llm_temporal, attr, MagicMock())
+
     @contextmanager
     def _track_usage_stub(*_args, **_kwargs):
         yield
@@ -206,12 +211,34 @@ def _build_fakes() -> dict[str, ModuleType]:
     utils_task_sync = add("utils.task_sync")
     utils_task_sync.auto_sync_action_items_batch = MagicMock()
 
+    task_intelligence = ModuleType("utils.task_intelligence")
+    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    fakes["utils.task_intelligence"] = task_intelligence
+    conversation_capture = add("utils.task_intelligence.conversation_capture")
+    conversation_capture.capture_enabled = MagicMock(return_value=False)
+    conversation_capture.process_before_legacy = MagicMock(return_value=False)
+    conversation_capture.canonical_fields = MagicMock(return_value={})
+    conversation_capture.legacy_document_ids = MagicMock(return_value=None)
+    conversation_capture.reconcile_after_legacy = MagicMock()
+    task_intelligence.conversation_capture = conversation_capture
+    workstream_association = add("utils.task_intelligence.workstream_association")
+    workstream_association.associate_canonical_evidence = MagicMock()
+
+    fallback = add("utils.observability.fallback")
+    fallback.record_fallback = MagicMock()
+
     utils_storage = add("utils.other.storage")
     utils_storage.precache_conversation_audio = MagicMock()
+
+    utils_cloud_tasks = add("utils.cloud_tasks")
+    utils_cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
 
     utils_calendar_linking = add("utils.conversations.calendar_linking")
     utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)
     utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
+
+    lifecycle_service = add("utils.conversations.lifecycle")
+    lifecycle_service.persist_processed_conversation = MagicMock(return_value=True)
 
     # utils.conversations.* and utils.memory.* leaves imported by process_conversation.
     subjects = add("utils.conversations.subjects")
@@ -238,6 +265,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "utils.memory",
         "utils.retrieval",
         "utils.other",
+        "utils.observability",
     ]:
         if pkg not in fakes:
             m = ModuleType(pkg)

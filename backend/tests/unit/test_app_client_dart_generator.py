@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from models.conversation import Conversation
@@ -36,7 +39,24 @@ AUDIO_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'aud
 PAYMENTS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'payments_wire.g.dart'
 MEMORIES_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'memories_wire.g.dart'
 GOALS_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'goals_wire.g.dart'
+TASK_INTELLIGENCE_DART_PATH = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen' / 'task_intelligence_wire.g.dart'
 CONVERSATION_FIXTURE_PATH = ROOT_DIR / 'backend' / 'testing' / 'e2e' / 'fixtures' / 'conversations.json'
+
+
+def test_dart_generator_cli_uses_utf8_when_the_process_locale_does_not():
+    env = os.environ.copy()
+    env.update({'LANG': 'C', 'LC_ALL': 'C', 'PYTHONCOERCECLOCALE': '0', 'PYTHONUTF8': '0'})
+
+    completed = subprocess.run(
+        [sys.executable, str(generate_dart_models.__file__), '--all', '--check'],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT_DIR,
+        env=env,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_conversation_wire_dart_is_generated_from_app_client_openapi():
@@ -407,6 +427,39 @@ def test_goals_wire_dart_is_generated_from_app_client_openapi():
     assert 'class GeneratedGoalDeleteResponse' in generated
     assert 'goalType: _required(_readFieldValue<String>' in generated
     assert 'this.suggestedMax = 10' in generated
+
+
+def test_task_intelligence_wire_dart_is_generated_from_app_client_openapi():
+    spec = json.loads(SPEC_PATH.read_text())
+    generated = generate_dart_models.build_output(spec, 'task_intelligence')
+
+    assert TASK_INTELLIGENCE_DART_PATH.read_text() == generated
+    for name in (
+        'GeneratedCandidateRecord',
+        'GeneratedGoalDetailProjection',
+        'GeneratedWorkstreamDetailProjection',
+        'GeneratedArtifactDescriptor',
+        'GeneratedContinuationCheckpoint',
+    ):
+        assert f'class {name}' in generated
+    assert 'final List<GeneratedEvidenceRef>? provenance;' in generated
+    assert 'final GeneratedWorkstreamProposalOutput? workstreamProposal;' in generated
+    assert 'final GeneratedCandidateTaskChange? taskChange;' in generated
+    assert 'GeneratedCandidateTaskChange.fromCandidateJson(json)' in generated
+    assert 'class GeneratedCandidateCreate {' in generated
+    assert 'GeneratedCandidateCreate.taskSupersede' in generated
+    assert 'class GeneratedGoalUpdate {' in generated
+    assert 'final GeneratedPatchField<String> desiredOutcome;' in generated
+    assert 'final GeneratedPatchField<DateTime> nextReviewAt;' in generated
+    assert 'class GeneratedContextMatchSignal {' in generated
+    assert 'static const dependency = GeneratedContextMatchSignal._("dependency");' in generated
+    assert 'factory GeneratedContextMatchSignal.fromJson(dynamic value)' in generated
+    assert '_readValueList(value, GeneratedContextMatchSignal.fromJson)' in generated
+    action_items_generated = ACTION_ITEMS_FOLDERS_DART_PATH.read_text()
+    assert 'class GeneratedActionItemCreateRequest' in action_items_generated
+    assert 'class GeneratedActionItemUpdateRequest' in action_items_generated
+    assert 'final GeneratedPatchField<String> goalId;' in action_items_generated
+    assert 'if (goalId.isPresent) {' in action_items_generated
 
 
 def test_conversation_wire_dart_preserves_known_client_aliases():

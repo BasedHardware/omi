@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Print the base commit that represents a pushed ref's final review surface.
+set -euo pipefail
+
+base_remote_ref="${1:?usage: pre-push-diff-base <base-remote-ref> <local-oid>}"
+local_oid="${2:?usage: pre-push-diff-base <base-remote-ref> <local-oid>}"
+git merge-base "$base_remote_ref" "$local_oid"

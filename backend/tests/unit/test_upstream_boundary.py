@@ -12,7 +12,7 @@ import types
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -115,6 +115,7 @@ def _ensure_process_conversation_importable():
         "utils.apps",
         "utils.executors",
         "utils.subscription",
+        "utils.task_intelligence.workstream_association",
     ]
     for mod_name in stubs:
         if mod_name not in sys.modules:
@@ -149,6 +150,7 @@ def _ensure_process_conversation_importable():
         GOALS=MagicMock(),
         CONVERSATION_FOLDER=MagicMock(),
     )
+    sys.modules["utils.task_intelligence.workstream_association"].associate_canonical_evidence = MagicMock()
 
     sys.modules.pop("utils.conversations.process_conversation", None)
     return importlib.import_module("utils.conversations.process_conversation")
@@ -359,7 +361,9 @@ class TestNoConversationAsMemory:
             mock_delete.return_value = {"vector_delete_ids": []}
             pc._extract_memories_inner("uid-ext", conversation)
 
-        mock_text_extractor.assert_called_once_with("uid-ext", integration_text, "email", language="en")
+        mock_text_extractor.assert_called_once_with(
+            "uid-ext", integration_text, "email", language="en", content_date=ANY
+        )
         mock_segment_extractor.assert_not_called()
 
         text_arg = mock_text_extractor.call_args[0][1]

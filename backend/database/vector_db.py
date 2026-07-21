@@ -120,6 +120,8 @@ def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
 
 
 def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
+    if index is None:
+        return
     data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
     typed_metadata: Dict[str, Any] = data['metadata']
     typed_metadata.update(metadata)
@@ -128,6 +130,8 @@ def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata
 
 
 def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    if index is None:
+        return {}
     metadata['uid'] = uid
     metadata['memory_id'] = conversation_id
     result: Dict[str, Any] = index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
@@ -188,6 +192,8 @@ def query_vectors_by_metadata(
     dates: List[str],
     limit: int = 5,
 ) -> List[str]:
+    if index is None:
+        return []
     and_clauses: List[Dict[str, Any]] = [{'uid': {'$eq': uid}}]
     filter_data: Dict[str, Any] = {'$and': and_clauses}
     if people or topics or entities or dates:
@@ -211,7 +217,12 @@ def query_vectors_by_metadata(
         vector=vector, filter=filter_data, namespace="ns1", include_values=False, include_metadata=True, top_k=1000
     )
     if not xc['matches']:
-        if len(and_clauses) == 3:
+        # Relax-retry when the structured people/topics/entities $or clause produced no hits, dropping
+        # it and re-querying uid-only. The $or clause, when present, is always and_clauses[1] (the date
+        # range is appended after it). The previous len == 3 guard only relaxed when a date filter was
+        # ALSO present, so the common no-date query (uid + $or, len == 2) fell through to return [] and
+        # never broadened. Never pop a date-only clause.
+        if len(and_clauses) > 1 and '$or' in and_clauses[1]:
             and_clauses.pop(1)
             logger.warning(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
             xc = index.query(
@@ -265,6 +276,90 @@ def delete_vector(uid: str, conversation_id: str) -> None:
 # ==========================================
 
 MEMORIES_NAMESPACE = "ns2"
+WORKSTREAM_ASSOCIATION_NAMESPACE = "workstream-association-v1"
+WORKSTREAM_ASSOCIATION_SCHEMA_VERSION = 1
+
+
+def upsert_workstream_association_vector(
+    uid: str,
+    workstream_id: str,
+    *,
+    objective: str,
+    current_state_summary: str,
+    account_generation: int = 0,
+) -> bool:
+    """Write a rebuildable retrieval projection for one open workstream."""
+    if index is None:
+        return False
+    content = f"Objective: {objective.strip()}\nCurrent state: {current_state_summary.strip()}".strip()
+    if not content:
+        return False
+    data: VectorRecordDoc = {
+        'id': f'{uid}:workstream:{account_generation}:{workstream_id}',
+        'values': embeddings.embed_query(content),
+        'metadata': {
+            'uid': uid,
+            'workstream_id': workstream_id,
+            'status': 'open',
+            'account_generation': account_generation,
+            'schema_version': WORKSTREAM_ASSOCIATION_SCHEMA_VERSION,
+        },
+    }
+    index.upsert(vectors=[data], namespace=WORKSTREAM_ASSOCIATION_NAMESPACE)
+    return True
+
+
+def query_workstream_association_candidates(
+    uid: str, summary: str, *, account_generation: int = 0, limit: int = 5
+) -> List[str]:
+    """Return derived candidate IDs only; callers must hydrate authority."""
+    if index is None or not summary.strip():
+        return []
+    response = index.query(
+        vector=embeddings.embed_query(summary),
+        top_k=max(1, min(limit, 20)),
+        include_metadata=True,
+        include_values=False,
+        filter={
+            'uid': {'$eq': uid},
+            'status': {'$eq': 'open'},
+            'account_generation': {'$eq': account_generation},
+            'schema_version': {'$eq': WORKSTREAM_ASSOCIATION_SCHEMA_VERSION},
+        },
+        namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
+    )
+    result: List[str] = []
+    for match in response.get('matches', []):
+        metadata = match.get('metadata') if isinstance(match, dict) else None
+        workstream_id = metadata.get('workstream_id') if isinstance(metadata, dict) else None
+        if isinstance(workstream_id, str) and workstream_id not in result:
+            result.append(workstream_id)
+    return result
+
+
+def delete_workstream_association_vector(uid: str, workstream_id: str, *, account_generation: int = 0) -> bool:
+    if index is None:
+        return False
+    index.delete(
+        ids=[f'{uid}:workstream:{account_generation}:{workstream_id}'],
+        namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
+    )
+    return True
+
+
+def reset_workstream_association_vectors(uid: str, *, account_generation: int = 0) -> bool:
+    if index is None:
+        return False
+    index.delete(
+        filter={
+            '$and': [
+                {'uid': {'$eq': uid}},
+                {'account_generation': {'$eq': account_generation}},
+            ]
+        },
+        namespace=WORKSTREAM_ASSOCIATION_NAMESPACE,
+    )
+    return True
 
 
 def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = None) -> Dict[str, Any]:

@@ -7,56 +7,25 @@ Verifies that:
 3. _send_summary_notification skips work when lock is already held
 """
 
-import os
-import sys
-import types
 import threading
 from datetime import datetime, timedelta, timezone, tzinfo
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from typing import Any, Iterator
 from unittest.mock import MagicMock, patch
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+import pytest
+
+from testing.import_isolation import load_module_fresh, stub_modules
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
-_STUB_MODULE_NAMES = set()
-
-
-def _stub_module(name: str) -> types.ModuleType:
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    _STUB_MODULE_NAMES.add(name)
-    return mod
-
-
-def _remove_stub_module(name: str) -> None:
-    mod = sys.modules.pop(name, None)
-    if "." not in name or mod is None:
-        return
-    parent_name, attr_name = name.rsplit(".", 1)
-    parent = sys.modules.get(parent_name)
-    if getattr(parent, attr_name, None) is mod:
-        delattr(parent, attr_name)
-
-
-def _remove_empty_stub_package(name: str) -> None:
-    mod = sys.modules.get(name)
-    if mod is None or getattr(mod, "__file__", None):
-        return
-    if getattr(mod, "__path__", None) == []:
-        _remove_stub_module(name)
-
-
-def _clear_stale_package_tree(name: str) -> None:
-    mod = sys.modules.get(name)
-    if mod is not None and getattr(mod, "__file__", None):
-        return
-    if mod is None or getattr(mod, "__path__", None) == []:
-        prefix = f"{name}."
-        for module_name in list(sys.modules):
-            if module_name == name or module_name.startswith(prefix):
-                sys.modules.pop(module_name, None)
+def _module(name: str, **attributes: Any) -> ModuleType:
+    module = ModuleType(name)
+    for key, value in attributes.items():
+        setattr(module, key, value)
+    return module
 
 
 class _PytzFixedTimezone(tzinfo):
@@ -130,41 +99,13 @@ _UTC_TZ = _PytzFixedTimezone(timedelta(0), "UTC")
 _NY_TZ = _PytzEasternTimezone()
 _PYTZ_ZONES = {"UTC": _UTC_TZ, "America/New_York": _NY_TZ}
 
-pytz_stub = types.ModuleType("pytz")
+pytz_stub = ModuleType("pytz")
 pytz_stub.utc = _UTC_TZ
 pytz_stub.all_timezones = list(_PYTZ_ZONES)
 pytz_stub.timezone = lambda name: _PYTZ_ZONES.get(name, _UTC_TZ)
-if "pytz" not in sys.modules:
-    sys.modules["pytz"] = pytz_stub
-    _STUB_MODULE_NAMES.add("pytz")
-
-
-# Stub database package and submodules to avoid Firestore init.
-if "database" not in sys.modules:
-    database_mod = _stub_module("database")
-    database_mod.__path__ = []
-else:
-    database_mod = sys.modules["database"]
-
-for submodule in [
-    "redis_db",
-    "chat",
-    "conversations",
-    "notifications",
-    "users",
-    "daily_summaries",
-    "_client",
-    "auth",
-]:
-    full_name = f"database.{submodule}"
-    if full_name not in sys.modules:
-        mod = _stub_module(full_name)
-        setattr(database_mod, submodule, mod)
 
 # Set up mock redis and real lock function
-redis_db_mod = sys.modules["database.redis_db"]
 mock_r = MagicMock()
-redis_db_mod.r = mock_r
 
 
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
@@ -172,85 +113,77 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     return result is not None
 
 
-redis_db_mod.try_acquire_daily_summary_lock = try_acquire_daily_summary_lock
+@pytest.fixture
+def notification_harness() -> Iterator[SimpleNamespace]:
+    conversations_db = _module('database.conversations', get_conversations=MagicMock())
+    notification_db = _module('database.notifications')
+    daily_summaries_db = _module(
+        'database.daily_summaries',
+        get_daily_summary_by_date=MagicMock(return_value=None),
+        create_daily_summary=MagicMock(return_value='summary-123'),
+    )
+    redis_db = _module(
+        'database.redis_db',
+        try_acquire_daily_summary_lock=try_acquire_daily_summary_lock,
+    )
 
-# Set up mock auth
-auth_mod = sys.modules["database.auth"]
-auth_mod.get_user_name = MagicMock(return_value="Test User")
+    mock_conversation = MagicMock()
+    mock_conversation.transcript_segments = [{'text': 'hello'}]
+    mock_conversation.discarded = False
+    conversation_factory = _module(
+        'utils.conversations.factory',
+        deserialize_conversation=MagicMock(return_value=mock_conversation),
+    )
+    generate_summary = MagicMock()
+    external_integrations = _module(
+        'utils.llm.external_integrations',
+        generate_comprehensive_daily_summary=generate_summary,
+    )
+    send_notification = MagicMock()
+    notifications = _module(
+        'utils.notifications',
+        send_bulk_notification=MagicMock(),
+        send_notification=send_notification,
+    )
+    notification_message = MagicMock()
+    notification_message.get_message_as_dict = MagicMock(return_value={})
+    executors = _module(
+        'utils.executors',
+        db_executor=MagicMock(),
+        postprocess_executor=MagicMock(),
+        run_blocking=MagicMock(),
+    )
 
-# Set up mock client
-client_mod = sys.modules["database._client"]
-client_mod.db = MagicMock()
-client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
+    stubs = {
+        'pytz': pytz_stub,
+        'database.conversations': conversations_db,
+        'database.notifications': notification_db,
+        'database.redis_db': redis_db,
+        'database.daily_summaries': daily_summaries_db,
+        'models.notification_message': _module(
+            'models.notification_message',
+            NotificationMessage=notification_message,
+        ),
+        'utils.conversations.factory': conversation_factory,
+        'utils.llm.external_integrations': external_integrations,
+        'utils.notifications': notifications,
+        'utils.webhooks': _module('utils.webhooks', day_summary_webhook=MagicMock()),
+        'utils.executors': executors,
+    }
 
-# Stub utils modules that pull in heavy dependencies.
-_clear_stale_package_tree("utils")
-for package_name in ["utils", "utils.other"]:
-    _remove_empty_stub_package(package_name)
-
-for name in [
-    "utils.llm.external_integrations",
-    "utils.notifications",
-    "utils.webhooks",
-    "utils.conversations",
-    "utils.conversations.factory",
-]:
-    if name not in sys.modules:
-        mod = _stub_module(name)
-        if name == "utils.conversations":
-            mod.__path__ = []
-
-# deserialize_conversation must return an object with transcript_segments and discarded attrs.
-_mock_convo = MagicMock()
-_mock_convo.transcript_segments = [{"text": "hello"}]
-_mock_convo.discarded = False
-sys.modules["utils.conversations.factory"].deserialize_conversation = MagicMock(return_value=_mock_convo)
-
-# Add needed attrs to stubs
-utils_llm_ext = sys.modules["utils.llm.external_integrations"]
-utils_llm_ext.get_conversation_summary = MagicMock()
-utils_llm_ext.generate_comprehensive_daily_summary = MagicMock()
-
-utils_notifications = sys.modules["utils.notifications"]
-utils_notifications.send_bulk_notification = MagicMock()
-utils_notifications.send_notification = MagicMock()
-
-utils_webhooks = sys.modules["utils.webhooks"]
-utils_webhooks.day_summary_webhook = MagicMock()
-
-# Stub models
-for name in ["models.notification_message", "models.conversation"]:
-    if name not in sys.modules:
-        _stub_module(name)
-
-models_notif = sys.modules["models.notification_message"]
-mock_notification_message = MagicMock()
-mock_notification_message.get_message_as_dict = MagicMock(return_value={})
-models_notif.NotificationMessage = mock_notification_message
-
-models_convo = sys.modules["models.conversation"]
-models_convo.Conversation = MagicMock()
-
-# utils.executors / utils.subscription are imported by notifications.py and pull firebase_admin
-# transitively; stub them (neither is used by _send_summary_notification).
-exec_mod = _stub_module("utils.executors")
-exec_mod.postprocess_executor = MagicMock()
-exec_mod.run_blocking = MagicMock()
-sub_mod = _stub_module("utils.subscription")
-sub_mod.is_trial_paywalled = MagicMock(return_value=False)
-
-# Now we can safely import the real module while keeping handles to its stubbed collaborators.
-import utils.other.notifications as notifications_module
-
-_send_summary_notification = notifications_module._send_summary_notification
-_CONVERSATIONS_DB = notifications_module.conversations_db
-_DAILY_SUMMARIES_DB = notifications_module.daily_summaries_db
-_GENERATE_COMPREHENSIVE_DAILY_SUMMARY = notifications_module.generate_comprehensive_daily_summary
-_SEND_NOTIFICATION = notifications_module.send_notification
-
-for stub_name in sorted(_STUB_MODULE_NAMES, key=lambda item: item.count("."), reverse=True):
-    _remove_stub_module(stub_name)
-_remove_stub_module("utils.other.notifications")
+    with stub_modules(stubs):
+        module = load_module_fresh(
+            'utils.other.notifications',
+            str(BACKEND_DIR / 'utils' / 'other' / 'notifications.py'),
+        )
+        yield SimpleNamespace(
+            module=module,
+            send_summary=module._send_summary_notification,
+            conversations_db=conversations_db,
+            daily_summaries_db=daily_summaries_db,
+            generate_summary=generate_summary,
+            send_notification=send_notification,
+        )
 
 
 class TestTryAcquireDailySummaryLock:
@@ -337,68 +270,74 @@ class TestRaceConditionPrevention:
 class TestSendSummaryNotificationLockIntegration:
     """Verify _send_summary_notification respects the lock."""
 
-    @patch.object(notifications_module, 'try_acquire_daily_summary_lock', return_value=False)
-    def test_skips_when_lock_not_acquired(self, mock_lock):
-        convos_db = _CONVERSATIONS_DB
+    def test_skips_when_lock_not_acquired(self, notification_harness):
+        convos_db = notification_harness.conversations_db
         convos_db.get_conversations = MagicMock()
-        gen_mock = _GENERATE_COMPREHENSIVE_DAILY_SUMMARY
-        send_mock = _SEND_NOTIFICATION
+        gen_mock = notification_harness.generate_summary
+        send_mock = notification_harness.send_notification
 
         convos_db.get_conversations.reset_mock()
         gen_mock.reset_mock()
         send_mock.reset_mock()
 
         user_data = ('uid1', ['token1'], 'America/New_York')
-        _send_summary_notification(user_data)
+        with patch.object(
+            notification_harness.module, 'try_acquire_daily_summary_lock', return_value=False
+        ) as mock_lock:
+            notification_harness.send_summary(user_data)
 
         mock_lock.assert_called_once()
         convos_db.get_conversations.assert_not_called()
         gen_mock.assert_not_called()
         send_mock.assert_not_called()
 
-    @patch.object(notifications_module, 'try_acquire_daily_summary_lock', return_value=True)
-    def test_proceeds_when_lock_acquired(self, mock_lock):
-        convos_db = _CONVERSATIONS_DB
+    def test_proceeds_when_lock_acquired(self, notification_harness):
+        convos_db = notification_harness.conversations_db
         convos_db.get_conversations = MagicMock(return_value=[{'id': 'c1'}])
 
-        gen_mock = _GENERATE_COMPREHENSIVE_DAILY_SUMMARY
+        gen_mock = notification_harness.generate_summary
         gen_mock.return_value = {'day_emoji': '!', 'headline': 'Test', 'overview': 'Summary'}
 
-        daily_db = _DAILY_SUMMARIES_DB
+        daily_db = notification_harness.daily_summaries_db
         daily_db.get_daily_summary_by_date = MagicMock(return_value=None)
         daily_db.create_daily_summary = MagicMock(return_value='summary-123')
 
-        send_mock = _SEND_NOTIFICATION
+        send_mock = notification_harness.send_notification
         send_mock.reset_mock()
 
         user_data = ('uid1', ['token1'], 'America/New_York')
-        _send_summary_notification(user_data)
+        with patch.object(
+            notification_harness.module, 'try_acquire_daily_summary_lock', return_value=True
+        ) as mock_lock:
+            notification_harness.send_summary(user_data)
 
         mock_lock.assert_called_once()
         convos_db.get_conversations.assert_called_once()
         gen_mock.assert_called_once()
         send_mock.assert_called_once()
 
-    @patch.object(notifications_module, 'try_acquire_daily_summary_lock', return_value=True)
-    def test_skips_when_summary_already_exists(self, mock_lock):
+    def test_skips_when_summary_already_exists(self, notification_harness):
         """#4608: if a summary already exists for the date (lock lost on a later tick), skip before
         spending LLM tokens or sending — do not create a duplicate doc."""
-        convos_db = _CONVERSATIONS_DB
+        convos_db = notification_harness.conversations_db
         convos_db.get_conversations = MagicMock()
         convos_db.get_conversations.reset_mock()
 
-        gen_mock = _GENERATE_COMPREHENSIVE_DAILY_SUMMARY
+        gen_mock = notification_harness.generate_summary
         gen_mock.reset_mock()
 
-        daily_db = _DAILY_SUMMARIES_DB
+        daily_db = notification_harness.daily_summaries_db
         daily_db.get_daily_summary_by_date = MagicMock(return_value={'id': 'existing-1'})
         daily_db.create_daily_summary = MagicMock()
 
-        send_mock = _SEND_NOTIFICATION
+        send_mock = notification_harness.send_notification
         send_mock.reset_mock()
 
         user_data = ('uid1', ['token1'], 'America/New_York')
-        _send_summary_notification(user_data)
+        with patch.object(
+            notification_harness.module, 'try_acquire_daily_summary_lock', return_value=True
+        ) as mock_lock:
+            notification_harness.send_summary(user_data)
 
         mock_lock.assert_called_once()
         daily_db.get_daily_summary_by_date.assert_called_once()
@@ -408,69 +347,120 @@ class TestSendSummaryNotificationLockIntegration:
         daily_db.create_daily_summary.assert_not_called()
         send_mock.assert_not_called()
 
-    @patch.object(notifications_module, 'try_acquire_daily_summary_lock', return_value=True)
-    def test_summary_lookup_error_propagates_no_duplicate(self, mock_lock):
+    def test_summary_lookup_error_propagates_no_duplicate(self, notification_harness):
         """#4608: a transient Firestore error during the by-date lookup must propagate (skip this
         tick, retry next) rather than being swallowed into a duplicate-creating path."""
-        daily_db = _DAILY_SUMMARIES_DB
+        daily_db = notification_harness.daily_summaries_db
         daily_db.get_daily_summary_by_date = MagicMock(side_effect=Exception("Firestore unavailable"))
         daily_db.create_daily_summary = MagicMock()
 
-        convos_db = _CONVERSATIONS_DB
+        convos_db = notification_harness.conversations_db
         convos_db.get_conversations = MagicMock()
         convos_db.get_conversations.reset_mock()
 
-        gen_mock = _GENERATE_COMPREHENSIVE_DAILY_SUMMARY
+        gen_mock = notification_harness.generate_summary
         gen_mock.reset_mock()
 
         user_data = ('uid1', ['token1'], 'America/New_York')
-        try:
-            _send_summary_notification(user_data)
-            assert False, "Expected the Firestore error to propagate"
-        except Exception as e:
-            assert "Firestore unavailable" in str(e)
+        with patch.object(
+            notification_harness.module, 'try_acquire_daily_summary_lock', return_value=True
+        ) as mock_lock:
+            with pytest.raises(Exception, match='Firestore unavailable'):
+                notification_harness.send_summary(user_data)
+
+        mock_lock.assert_called_once()
 
         # Error surfaced (logged + retried next tick by the outer gather), no duplicate created.
         daily_db.create_daily_summary.assert_not_called()
         gen_mock.assert_not_called()
         convos_db.get_conversations.assert_not_called()
 
-    @patch.object(notifications_module, 'try_acquire_daily_summary_lock', return_value=True)
-    def test_no_conversations_skips_llm(self, mock_lock):
-        convos_db = _CONVERSATIONS_DB
+    def test_no_conversations_skips_llm(self, notification_harness):
+        convos_db = notification_harness.conversations_db
         convos_db.get_conversations = MagicMock(return_value=[])
-        daily_db = _DAILY_SUMMARIES_DB
+        daily_db = notification_harness.daily_summaries_db
         daily_db.get_daily_summary_by_date = MagicMock(return_value=None)
 
-        gen_mock = _GENERATE_COMPREHENSIVE_DAILY_SUMMARY
+        gen_mock = notification_harness.generate_summary
         gen_mock.reset_mock()
 
-        send_mock = _SEND_NOTIFICATION
+        send_mock = notification_harness.send_notification
         send_mock.reset_mock()
 
         user_data = ('uid1', ['token1'], 'America/New_York')
-        _send_summary_notification(user_data)
+        with patch.object(
+            notification_harness.module, 'try_acquire_daily_summary_lock', return_value=True
+        ) as mock_lock:
+            notification_harness.send_summary(user_data)
 
         mock_lock.assert_called_once()
         convos_db.get_conversations.assert_called_once()
         gen_mock.assert_not_called()
         send_mock.assert_not_called()
 
-    @patch.object(notifications_module, 'try_acquire_daily_summary_lock', return_value=False)
-    def test_utc_fallback_still_acquires_lock(self, mock_lock):
+    def test_utc_fallback_still_acquires_lock(self, notification_harness):
         """User data without timezone falls back to UTC; lock must still be called."""
-        convos_db = _CONVERSATIONS_DB
+        convos_db = notification_harness.conversations_db
         convos_db.get_conversations = MagicMock()
         convos_db.get_conversations.reset_mock()
 
-        gen_mock = _GENERATE_COMPREHENSIVE_DAILY_SUMMARY
+        gen_mock = notification_harness.generate_summary
         gen_mock.reset_mock()
 
         # No timezone element in tuple — triggers UTC fallback
         user_data = ('uid1', ['token1'])
-        _send_summary_notification(user_data)
+        with patch.object(
+            notification_harness.module, 'try_acquire_daily_summary_lock', return_value=False
+        ) as mock_lock:
+            notification_harness.send_summary(user_data)
 
         mock_lock.assert_called_once()
         # Lock denied, so no downstream work
         convos_db.get_conversations.assert_not_called()
         gen_mock.assert_not_called()
+
+
+class TestDailyRecapNotDesktopPaywalled:
+    """#9357: the daily recap is a cross-platform, server-initiated cron that does not know the
+    originating platform. It must NOT be gated on the *desktop* trial paywall — doing so (via a
+    hardcoded 'macos' platform) suppressed the recap on mobile/web for any trial-expired user."""
+
+    def test_send_summary_does_not_gate_on_trial_paywall(self, notification_harness):
+        import inspect
+
+        # Ignore comments (the fix documents *why* the gate was removed); only executable code counts.
+        code_lines = [
+            line
+            for line in inspect.getsource(notification_harness.send_summary).splitlines()
+            if not line.strip().startswith('#')
+        ]
+        assert not any(
+            'is_trial_paywalled' in line for line in code_lines
+        ), "daily recap must not gate on the desktop trial paywall (regressed #9357)"
+
+    def test_module_no_longer_imports_desktop_paywall(self, notification_harness):
+        # The import was removed with the gate; re-adding it would signal the gate is back.
+        assert not hasattr(notification_harness.module, 'is_trial_paywalled')
+
+    def test_trial_expired_user_still_gets_recap(self, notification_harness):
+        convos_db = notification_harness.conversations_db
+        convos_db.get_conversations = MagicMock(return_value=[{'id': 'c1'}])
+
+        gen_mock = notification_harness.generate_summary
+        gen_mock.return_value = {'day_emoji': '!', 'headline': 'Test', 'overview': 'Summary'}
+
+        daily_db = notification_harness.daily_summaries_db
+        daily_db.get_daily_summary_by_date = MagicMock(return_value=None)
+        daily_db.create_daily_summary = MagicMock(return_value='summary-123')
+
+        send_mock = notification_harness.send_notification
+        send_mock.reset_mock()
+
+        # Even if this user's desktop trial has expired, the recap must still be generated + sent.
+        user_data = ('uid1', ['token1'], 'America/New_York')
+        with patch.object(notification_harness.module, 'try_acquire_daily_summary_lock', return_value=True):
+            notification_harness.send_summary(user_data)
+
+        gen_mock.assert_called_once()
+        daily_db.create_daily_summary.assert_called_once()
+        send_mock.assert_called_once()

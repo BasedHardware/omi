@@ -117,8 +117,17 @@ class ConversationLanguageState:
         Returns False = translation may be needed.
         """
         detected_lang, confidence = detect_language_with_confidence(text, remove_non_lexical=True)
+        return self.observe_detection(detected_lang, confidence, speaker_id=speaker_id)
 
-        if detected_lang is None:
+    def observe_detection(
+        self,
+        detected_lang: Optional[str],
+        confidence: float,
+        speaker_id: Optional[int] = None,
+    ) -> bool:
+        """Apply an already-computed local or provider language detection."""
+
+        if not detected_lang:
             # Can't detect — don't break the gate, don't increment
             return self.monolingual
 

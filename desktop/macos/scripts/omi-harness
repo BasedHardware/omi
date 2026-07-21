@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from decimal import Decimal, InvalidOperation
 import json
 import os
 import re
@@ -26,7 +27,6 @@ MIN_COMPATIBLE_FLOW_VERSION = 1
 SCRIPT_DIR = Path(__file__).resolve().parent
 DESKTOP_DIR = SCRIPT_DIR.parent
 DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
-DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
 DEFAULT_RUN_ROOT = DESKTOP_DIR / ".harness/runs"
 POLL_INTERVAL_SECONDS = 0.02
 
@@ -115,12 +115,19 @@ def automation_port_from_base_url(base_url: str) -> int:
     return int(base_url.rsplit(":", 1)[1])
 
 
-def request_json(base_url: str, method: str, route: str, body: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]:
+def request_json(
+    base_url: str,
+    method: str,
+    route: str,
+    body: dict[str, typing.Any] | None = None,
+    authenticate: bool = True,
+) -> dict[str, typing.Any]:
     data = None
     headers = {"Accept": "application/json"}
-    token = automation_token(automation_port_from_base_url(base_url))
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    if authenticate:
+        token = automation_token(automation_port_from_base_url(base_url))
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -140,6 +147,25 @@ def request_json(base_url: str, method: str, route: str, body: dict[str, typing.
         return {"ok": False, "error": f"connection_failed: {exc.reason}"}
     except TimeoutError as exc:
         return {"ok": False, "error": f"connection_timeout: {exc}"}
+
+
+def log_path_from_health(health: dict[str, typing.Any], explicit_log: str | None = None) -> Path:
+    if explicit_log:
+        return Path(explicit_log)
+    raw_path = health.get("logFilePath")
+    if not isinstance(raw_path, str) or not raw_path or not Path(raw_path).is_absolute():
+        raise RuntimeError(
+            "automation health did not provide an absolute logFilePath; use a current named bundle "
+            "or pass --log explicitly"
+        )
+    return Path(raw_path)
+
+
+def resolve_log_path(base_url: str, explicit_log: str | None = None) -> Path:
+    health = request_json(base_url, "GET", "/health", authenticate=False)
+    if not health.get("ok"):
+        raise RuntimeError(f"unable to resolve bundle log path: {health.get('error', health)}")
+    return log_path_from_health(health, explicit_log)
 
 
 def git_sha() -> str | None:
@@ -196,16 +222,80 @@ def recent_traces(ctx: HarnessContext) -> list[dict[str, typing.Any]]:
     return result if isinstance(result, list) else []
 
 
+EXPECTATION_OPERATORS = {"min", "max", "exists", "contains"}
+
+
+def _decimal(value: typing.Any) -> Decimal | None:
+    """Coerce only assertion-operator operands; literal equality remains type-strict."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        parsed = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return None
+    return parsed if parsed.is_finite() else None
+
+
+def expectation_mismatch(actual: typing.Any, expected: typing.Any) -> str | None:
+    if not isinstance(expected, dict):
+        return None if actual == expected else f"expected strict equality with {expected!r}, got {actual!r}"
+
+    # Dictionaries remain literal values when the actual value is also a dictionary.
+    # A dictionary against a scalar is an explicit operator expression, so reject
+    # misspellings and mixed operators instead of silently treating them as equality.
+    if isinstance(actual, dict):
+        return None if actual == expected else f"expected strict equality with {expected!r}, got {actual!r}"
+    if not expected:
+        return "numeric operator expression must not be empty"
+    unsupported = sorted(set(expected) - EXPECTATION_OPERATORS)
+    if unsupported:
+        return f"unsupported expectation operator(s): {', '.join(unsupported)}"
+
+    if "exists" in expected:
+        if len(expected) != 1:
+            return "exists cannot be combined with numeric expectation operators"
+        operand = expected["exists"]
+        if not isinstance(operand, bool):
+            return f"exists requires a boolean operand, got {operand!r}"
+        exists = actual is not None
+        return None if exists == operand else f"expected value existence to be {operand!r}, got {exists!r}"
+
+    if "contains" in expected:
+        if len(expected) != 1:
+            return "contains cannot be combined with other expectation operators"
+        operand = expected["contains"]
+        if not isinstance(operand, str):
+            return f"contains requires a string operand, got {operand!r}"
+        if not isinstance(actual, str):
+            return f"contains requires a string actual value, got {actual!r}"
+        return None if operand in actual else f"expected {actual!r} to contain {operand!r}"
+
+    actual_number = _decimal(actual)
+    if actual_number is None:
+        return f"numeric operator requires a finite numeric actual value, got {actual!r}"
+    for operator, operand in expected.items():
+        operand_number = _decimal(operand)
+        if operand_number is None:
+            return f"{operator} requires a finite numeric operand, got {operand!r}"
+        if operator == "min" and actual_number < operand_number:
+            return f"expected {actual!r} to be >= {operand!r}"
+        if operator == "max" and actual_number > operand_number:
+            return f"expected {actual!r} to be <= {operand!r}"
+    return None
+
+
 def expectation_matches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> bool:
-    return all(nested_get(data, key) == value for key, value in expectations.items())
+    return all(expectation_mismatch(nested_get(data, key), value) is None for key, value in expectations.items())
 
 
 def expectation_mismatches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> dict[str, typing.Any]:
-    return {
-        key: {"expected": value, "actual": nested_get(data, key)}
-        for key, value in expectations.items()
-        if nested_get(data, key) != value
-    }
+    mismatches = {}
+    for key, expected in expectations.items():
+        actual = nested_get(data, key)
+        reason = expectation_mismatch(actual, expected)
+        if reason is not None:
+            mismatches[key] = {"expected": expected, "actual": actual, "reason": reason}
+    return mismatches
 
 
 def wait_for_state(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, dict[str, typing.Any]]:
@@ -437,7 +527,7 @@ def assert_state(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -
         return False, "state.expect requires a mapping"
     if expectation_matches({"state": state}, expectations):
         return True, None
-    return False, f"state assertions failed: {expectations}"
+    return False, f"state assertions failed: {expectation_mismatches({'state': state}, expectations)}"
 
 
 def assert_log(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
@@ -466,7 +556,8 @@ def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -
         return False, "trace.expect requires a mapping"
     if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
         return True, None
-    return False, f"no trace matched: {expectations}"
+    reasons = [expectation_mismatches({"trace": trace}, expectations) for trace in traces]
+    return False, f"no trace matched: expectations={expectations}, mismatches={reasons}"
 
 
 def assert_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
@@ -505,7 +596,8 @@ def apply_wait(ctx: HarnessContext, step: dict[str, typing.Any], prefix: str, re
         result["artifacts"]["traces"] = str(trace_path)
         if not waited_ok:
             result["ok"] = False
-            result["error"] = f"trace wait timed out after {timeout}s"
+            mismatches = [expectation_mismatches({"trace": trace}, wait_spec["trace"]) for trace in traces]
+            result["error"] = f"trace wait timed out after {timeout}s; mismatches={mismatches}"
     else:
         waited_ok, state = wait_for_state(ctx, wait_spec, timeout)
         state_path = ctx.steps_dir / f"{prefix}-state.json"
@@ -513,7 +605,8 @@ def apply_wait(ctx: HarnessContext, step: dict[str, typing.Any], prefix: str, re
         result["artifacts"]["state"] = str(state_path)
         if not waited_ok:
             result["ok"] = False
-            result["error"] = f"state wait timed out after {timeout}s"
+            mismatches = expectation_mismatches({"state": state}, wait_spec)
+            result["error"] = f"state wait timed out after {timeout}s; mismatches={mismatches}"
 
 
 def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -> dict[str, typing.Any]:
@@ -695,14 +788,16 @@ def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -
 
 
 def create_context(args: argparse.Namespace, flow_path: Path, run_dir: Path, lane: str) -> HarnessContext:
+    base_url = f"http://127.0.0.1:{args.port}"
+    log_path = resolve_log_path(base_url, args.log)
     return HarnessContext(
-        base_url=f"http://127.0.0.1:{args.port}",
+        base_url=base_url,
         flow_path=flow_path,
         run_dir=run_dir,
         steps_dir=run_dir / "steps",
         lane=lane,
-        log_path=Path(args.log),
-        log_start=log_cursor(Path(args.log)),
+        log_path=log_path,
+        log_start=log_cursor(log_path),
         bundle_id=getattr(args, "bundle_id", None),
         process_match=getattr(args, "process_match", None),
     )
@@ -1051,7 +1146,7 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--lane", choices=["bridge", "visual", "ui"], default="bridge")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
-    parser.add_argument("--log", default=str(DEFAULT_LOG))
+    parser.add_argument("--log", help="explicit app log path; defaults to the exact active bundle path from /health")
     parser.add_argument("--bundle-id")
     parser.add_argument(
         "--process-match",

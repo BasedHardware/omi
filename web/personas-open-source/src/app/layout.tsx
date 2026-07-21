@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'sonner';
 import Script from 'next/script';
+import { PublicBuildCanary } from '../components/public-build-canary';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -45,6 +46,7 @@ export default function RootLayout({
         <link rel="icon" href="/omifavicon.ico" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
+        <PublicBuildCanary />
         {children}
         <Toaster />
         <Script id="posthog-snippet" strategy="afterInteractive">

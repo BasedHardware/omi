@@ -1,0 +1,59 @@
+name: Desktop Release Doctor
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'v*-macos release tag to inspect without mutating release state'
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: desktop-release-doctor-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  doctor:
+    environment: prod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release controls
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Generate advisory release evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          GCS_DESKTOP_UPDATES_BUCKET: ${{ vars.GCS_DESKTOP_UPDATES_BUCKET || 'gs://omi_macos_updates' }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/desktop_release_doctor.py doctor \
+            --release-tag "$RELEASE_TAG" \
+            --project-id "$PROJECT_ID" \
+            --repository "$GITHUB_REPOSITORY" \
+            --gcs-bucket "$GCS_DESKTOP_UPDATES_BUCKET" \
+            --output /tmp/desktop-release-evidence-v1.json \
+            --summary /tmp/desktop-release-doctor.txt \
+            --snapshot-output /tmp/desktop-release-doctor-snapshot-v1.json
+          cat /tmp/desktop-release-doctor.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload advisory release evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-release-doctor-${{ inputs.release_tag }}
+          if-no-files-found: error
+          path: |
+            /tmp/desktop-release-evidence-v1.json
+            /tmp/desktop-release-doctor.txt
+            /tmp/desktop-release-doctor-snapshot-v1.json

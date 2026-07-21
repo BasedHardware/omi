@@ -17,7 +17,13 @@ import type {
   ResumeBindingInput,
   RuntimeAdapter,
 } from "./interface.js";
-import { AdapterRuntimeError, failureFromProcessError, failureFromProcessExit } from "../runtime/failures.js";
+import {
+  AdapterRuntimeError,
+  failureFromProcessError,
+  failureFromProcessExit,
+  normalizeRuntimeFailure,
+  type RuntimeFailure,
+} from "../runtime/failures.js";
 
 type ResponseHandler = {
   resolve: (result: unknown) => void;
@@ -109,7 +115,72 @@ export class AcpError extends Error {
   }
 }
 
+const RECOVERABLE_AUTH_ERROR_MARKERS = [
+  "authentication_error",
+  "authentication_failed",
+  "failed to authenticate",
+  "invalid authentication credentials",
+  "oauth token has been revoked",
+  "not logged in",
+  "please run /login",
+] as const;
+
+/**
+ * Detect ACP authentication failures that should re-enter the login flow.
+ *
+ * Claude ACP reports missing credentials with the canonical -32000 code, but
+ * provider 401s during session/prompt are wrapped as -32603 internal errors.
+ * Restrict wrapped-error matching to known auth markers so unrelated internal
+ * errors remain terminal instead of opening a surprise login flow.
+ */
+export function isRecoverableAcpAuthError(error: unknown): boolean {
+  if (!(error instanceof AcpError)) return false;
+  if (error.code === -32000) return true;
+  if (error.code !== -32603) return false;
+
+  let data = "";
+  if (error.data !== undefined) {
+    try {
+      data = typeof error.data === "string" ? error.data : JSON.stringify(error.data);
+    } catch {
+      // The message remains authoritative when error data is not serializable.
+    }
+  }
+  const searchable = `${error.message}\n${data}`.toLowerCase();
+  return RECOVERABLE_AUTH_ERROR_MARKERS.some((marker) => searchable.includes(marker));
+}
+
 const MAX_RECENT_STDERR_CHARS = 2_000;
+
+const EXTERNAL_TERMINAL_HTTP_FAILURE = /^\s*HTTP\s+([45]\d{2})\s*:\s*(?:\{|\[)/i;
+
+/**
+ * Some external ACP servers emit an HTTP provider failure as their final text
+ * while still returning ACP `end_turn`.  Treat that exact terminal wire shape
+ * as a failure so the runtime never projects a green Done state for it.
+ *
+ * We keep this deliberately narrow: only local external adapters and only a
+ * leading 4xx/5xx JSON response are classified.  A normal agent discussion of
+ * an HTTP status therefore remains ordinary assistant text.
+ */
+function externalTerminalHttpFailure(
+  adapterId: ProductionAdapterId,
+  text: string,
+): RuntimeFailure | undefined {
+  if (adapterId !== "hermes" && adapterId !== "openclaw") return undefined;
+  const match = EXTERNAL_TERMINAL_HTTP_FAILURE.exec(text);
+  if (!match) return undefined;
+  const statusCode = Number(match[1]);
+  const label = adapterId === "hermes" ? "Hermes" : "OpenClaw";
+  return normalizeRuntimeFailure({
+    code: "adapter_terminal_http_failure",
+    source: "adapter_execution",
+    adapterId,
+    retryable: statusCode >= 500,
+    userMessage: `${label} could not complete the request. Try again.`,
+    technicalMessage: `${adapterId} ACP reported terminal HTTP ${statusCode}`,
+  });
+}
 
 function appendRecentStderr(current: string, next: string): string {
   const combined = `${current}${next}`;
@@ -457,10 +528,16 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         _meta?: { costUsd?: number };
       };
 
+      const failure = signal.aborted ? undefined : externalTerminalHttpFailure(this.adapterId, fullText);
       return {
-        text: fullText,
+        // Preserve only a bounded diagnostic in runtime/UI state when an
+        // external adapter has reported an HTTP failure as text.  The raw
+        // provider body stays in the adapter's local logs rather than being
+        // rendered as a successful agent answer.
+        text: failure?.userMessage ?? fullText,
         adapterSessionId,
-        terminalStatus: signal.aborted ? "cancelled" : "succeeded",
+        terminalStatus: signal.aborted ? "cancelled" : failure ? "failed" : "succeeded",
+        failure,
         costUsd: result._meta?.costUsd ?? 0,
         inputTokens: result.usage?.inputTokens ?? 0,
         outputTokens: result.usage?.outputTokens ?? 0,

@@ -1,0 +1,189 @@
+---
+title: Task and Candidate lifecycle
+description: Canonical backend contracts, resolution rules, and rollout compatibility for smart tasks.
+---
+
+The backend owns canonical tasks in `users/{uid}/action_items/{task_id}` and reviewable Candidates in
+`users/{uid}/candidates/{candidate_id}`. Existing action-item clients continue to receive `id`, `completed`,
+and the other compatibility fields while the same response also carries typed status, owner, source,
+provenance, goal/workstream links, due confidence, priority, and recurrence fields.
+
+Candidate payloads are discriminated by `subject_kind`. A task Candidate has either a typed create payload or
+a typed mutation payload. A workstream Candidate has only a workstream proposal with an anchor-task payload.
+Goal links, evidence, source surface, and confidence remain on the Candidate envelope and are never duplicated
+inside either payload.
+
+Every Candidate write requires an idempotency key and account generation. The route and the write transaction
+both compare that generation with the per-user control record, and `off`/`shadow` modes reject visible writes.
+List and point reads expose only the current account generation, including legacy staged by-ID projections, so
+an identifier retained across an account reset cannot retrieve prior evidence.
+
+Capture quality is enforced at the shared boundary, before a Candidate can become product noise. Direct requests,
+inferred next steps, and silently accepted commitments must name a concrete deliverable owned by the user and carry
+both capture and ownership confidence of at least `0.8`. Vague commitments are ignored. A concrete first-person
+commitment below that floor may remain as an internal pending sidecar, but it cannot enter a user-facing projection.
+Transcript and screen capture use the same `capture.v2` fixture contract for these decisions; the version is also
+stamped on new screen evidence so pre-floor and post-floor captures remain distinguishable during rollout analysis.
+
+Pending task-create Candidates also have a conservative semantic claim in addition to caller idempotency. The claim
+includes normalized description, owner, exact due instant, recurrence, goal, and workstream; it deliberately excludes
+evidence, source, confidence annotations, due confidence, and priority. Concurrent captures of that exact work merge
+into one pending Candidate with stable, deduplicated evidence and maximum confidence values. Caller keys still replay
+their original result indefinitely. A pending semantic claimant is reused only within the same 14-day product window;
+a fresh capture after that window starts a new Candidate so stale low-confidence sidecars cannot bury current work.
+An accepted Candidate continues to absorb exact cross-source captures and enrich
+its task while that deterministic task remains active and still matches the claimed description, owner, due date,
+recurrence, goal, and workstream. Completion, cancellation, deletion, a semantic edit, or a non-accepted terminal
+Candidate releases the claim so the work may recur as a new Candidate.
+
+`GET /v1/candidates?surface=suggested` is the product projection for Suggested Tasks. It is enabled only by the
+composed task-intelligence rollout decision: compatible workflow control **and** canonical-memory cohort eligibility.
+Outside that cohort it returns `404`, which clients treat as a calm disabled state. Inside the cohort it returns at
+most five pending, routeable creates from the current generation that are no more than 14 days old, have evidence,
+and meet both confidence floors. Exact duplicate creates are collapsed. Generic Candidate CRUD remains available
+under the universal contract and is not redefined by this product projection. Active Later/Dismiss attention
+overrides use the same bounded Candidate key as What Matters Now and are removed before the five-card cap, so they
+remain suppressed across devices without under-filling the lane. Accepted or rejected representatives also hide
+exact pending siblings that predate their resolution, preventing a terminal action from immediately resurrecting a
+historical duplicate while still allowing a genuinely new post-resolution occurrence. The route rechecks the composed
+rollout and account generation after its reads, so an account reset cannot publish a prior-generation Candidate.
+
+What Matters Now uses the same composed rollout gate and a typed-attention shortlist. Overdue work, blockers, near
+deadlines, matched local context, review/decision loops, and recent explicit manual intent may enter; recency or topic
+overlap alone may not. The deterministic layer builds a stable kind/workstream-balanced recall set of at most 20,
+then one holistic judgment returns zero to three recommendations. Typed tier reservations prevent an overdue flood
+from erasing due/context/review recall, and only the original creation time makes a manual task "recent"—metadata
+edits do not revive old work. Empty is a valid default. Opaque raw-context hints do not invalidate the projection
+cache; normalized subject IDs, typed match signals, displayed fields, and evidence identities do. Desktop requests
+use the full header-bound client device ID for both snapshot and evaluation calls. Cache identity also includes the
+prompt, policy, fact-definition, and live-model versions, so any judgment-contract change forces a fresh decision.
+What Matters Now GET, evaluate, and debug reads recheck the composed rollout and generation before returning. Desktop
+async projection, feedback, and contextual-resurfacing work is owner-fenced across account switches; queued local
+events are discarded rather than attributed to the next owner. Merely opening a recommendation or accepting a
+Candidate never fabricates a downstream workstream-success outcome.
+
+## Firestore query and transaction deployment contract
+
+Serving compound Firestore queries are inventoried by shape (collection scope, filters, and ordering), not by a raw
+`.where()` count. The first migrated query is the active What Matters Now attention-override lookup. Its source of
+truth is `backend/database/firestore_index_registry.py`: the same registered query spec builds the production query
+and declares its required Firebase composite index. The remaining checked-in indexes are explicit index requirements
+until their serving callers migrate to query specs.
+
+Run these repository-local checks after changing a serving query or index requirement:
+
+```bash
+python3 backend/scripts/generate_firestore_indexes.py
+python3 backend/scripts/firestore_query_coverage.py
+python3 backend/scripts/firestore_query_coverage.py --check-ratchet
+```
+
+The report separates serving coverage from tests, migrations, and scripts. It reports registered, raw-unregistered,
+waived, and unsupported serving shapes. `zero_debt=yes` means every eligible serving query is registered and no raw,
+waived, or unsupported serving shape remains. The committed baseline permits only current legacy debt; the CI ratchet
+rejects a new or modified raw/unsupported serving shape, a coverage decrease, and any waiver without an owner and
+unexpired date. To intentionally update the generated Firebase manifest, edit the registry and run
+`python3 backend/scripts/generate_firestore_indexes.py --write`.
+
+The automatic and manual backend deployment paths install the lockfile-pinned Firebase CLI, reconcile only this
+generated manifest, and poll Firestore until every declared composite index is `READY` before a Cloud Run revision is
+deployed or receives traffic. The development verification job then calls `/v1/what-matters-now` as a configured
+synthetic user; it records only the HTTP status, never the user ID, credentials, or response body. It requires the
+development secret `OMI_TASK_INTELLIGENCE_SMOKE_UID`; provisioning or changing that secret is an operational action,
+not part of a code merge.
+
+Task acceptance uses a Firestore transaction and a deterministic task ID, so concurrent retries create or mutate
+one task and return the same receipt. Reusing an idempotency key with a different proposal is a conflict.
+When a Candidate mutates an existing task, the task's creation `source` remains authoritative and its provenance
+is merged with the Candidate evidence using structural deduplication; review feedback never rewrites origin history.
+Accepted task-create integrations are written to a durable outbox in that transaction, then leased and marked
+complete only by the matching lease token after delivery or a terminal no-op. Account generation fences claims
+and completion, and a late completion from an expired lease cannot resolve its replacement attempt. Failed
+delivery remains retryable through the bounded drain endpoint, including crash-after-commit and expired-lease
+recovery. Rejection and expiry are also idempotent
+terminal transitions. Task/workstream goal links are resolved against the canonical workstream store, and
+workstream Candidate acceptance atomically creates its workstream and anchor task.
+
+The per-user universal-contract mode controls compatibility behavior:
+
+- `off`: staged and action-item behavior remains legacy-only.
+- `shadow`: canonical extraction and the shared capture policy evaluate without Candidate product mutations.
+- `write`: legacy reads/writes remain authoritative while Candidate sidecars and reconciliation run.
+- `read`: Candidates and canonical tasks are authoritative; staged endpoints are compatibility projections and
+  never write `staged_tasks`.
+
+## Single-user Smart Tasks dogfood activation
+
+The universal Candidate contract and task-intelligence control remain operationally independent from the
+canonical-memory cohort. The user-facing Smart Tasks surfaces do not: they require the composed rollout decision
+described above. The approved dogfood account is already the only active canonical-memory whitelist member; to make
+Smart Tasks fully active, an operator must explicitly create `users/{uid}/task_intelligence_control/state` in `read`
+mode. Do not change the canonical-memory list, runtime cohort environment, or any other user's control as part of
+this operation. As canonical memory expands, this composition expands Smart Tasks with it instead of maintaining a
+second product whitelist.
+
+Use the repo-tracked operator tool from a checkout containing the merged activation change. It defaults to a
+dry-run and is permanently restricted to the approved dogfood UID. First inspect the existing state and record
+its account generation (a missing document is the safe default: `off`, generation `0`):
+
+```bash
+cd backend
+python scripts/activate_task_intelligence_dogfood_user.py \
+  --credential-source gcloud-user \
+  --firestore-project based-hardware \
+  --inspect-existing \
+  --expected-account-generation 0
+```
+
+After reviewing that redacted control-only report, run the exact same command with `--apply`, the exact UID
+confirmation, and the `read` acknowledgement. The tool re-reads and transactionally fences the generation, so
+an account reset or concurrent control change fails closed rather than activating stale state:
+
+```bash
+cd backend
+python scripts/activate_task_intelligence_dogfood_user.py \
+  --credential-source gcloud-user \
+  --firestore-project based-hardware \
+  --inspect-existing \
+  --expected-account-generation 0 \
+  --apply \
+  --confirm-uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
+  --confirm-workflow-mode read
+```
+
+The tool writes only `workflow_mode: read` and the unchanged `account_generation`; rerunning after a successful
+activation is a no-op. The explicit `gcloud-user` source obtains a short-lived local user token without printing
+or persisting it, and sends the PATCH with the inspected Firestore document revision as a precondition. It does
+not deploy backend code or mutate production merely by merging this PR. Verify
+the live account's `workflow_mode=read`, matching generation, canonical-memory eligibility, and enabled
+intelligence product/evaluation surfaces before resuming dogfood.
+
+Staged reconciliation is resumable by checkpoint. It imports active rows as pending Candidates and terminal
+promotion history as accepted, rejected, or expired without replaying task mutations or notifications. Reports
+contain stable IDs and counts only—never task content.
+
+Write-mode conversation projections derive task IDs from normalized semantic content rather than extraction
+order. Reorder and insertion therefore preserve identity; removed projections remain as hidden terminal records
+so accepted receipts do not dangle, and only an extraction-provided update target links the old record to its
+replacement—text similarity alone never establishes identity. A legacy staged promotion returns `503` until its Candidate sidecar reconciles; retrying the same
+promotion heals the already-terminal legacy row instead of returning a permanent `404`.
+Before any write-mode staged promotion creates or deduplicates an action item, it transactionally claims the
+pending Candidate resolution with a single-owner lease. Immediately before the deterministic legacy write, the
+claim advances from `pre_mutation` to `mutation_started` and reserves the exact task ID. A pre-mutation crash is
+reclaimable after lease expiry; once mutation has started, the non-expiring phase fence continues to block
+accept/reject/expire even if the owner lease expires. Recovery rotates the owner token, retries the reserved task
+ID idempotently, and consumes the claim only with matching Candidate acceptance. A semantic-dedup target is
+revalidated in that transaction and stored as an `existing` reservation; if it is later completed or deleted,
+recovery closes the staged projection without recreating it. Terminal Candidates close the legacy staged row
+without a task, and score-based promotion skips forward rather than starving behind that row.
+
+Released action-item request shapes are accepted through an explicit compatibility adapter. The canonical task
+and Candidate models remain strict; legacy-only fields are ignored at the old route boundary, and
+`clear_due_at` is projected to an explicit `due_at: null` update.
+
+What Matters Now projections, interventions, feedback, outcomes, attention overrides, and device snapshots are
+all account-generation scoped. Their Firestore mutations re-read workflow control in the commit transaction, so
+a reset during model judgment or feedback handling cannot publish or link stale state. Context and open-loop
+snapshot PUTs require both mutation headers; evaluation reads only the captured generation and publication fails
+closed if it changes. Derived workstream association vectors carry the same generation and authority is rehydrated
+with that fence before the journal transaction appends evidence.

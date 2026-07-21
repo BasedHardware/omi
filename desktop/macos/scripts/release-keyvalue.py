@@ -7,10 +7,18 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 MACOS_RELEASE_TAG_RE = re.compile(r"^v\d+\.\d+(?:\.\d+)?\+\d+-macos$")
-BLESSED_KEYS = ("blessed", "blessedAt", "blessedSha", "blessedTier", "blessedEvidence")
+SHA256_DIGEST_RE = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
+QUALIFICATION_KEYS = (
+    "qualifiedBeta",
+    "qualifiedBetaAt",
+    "qualifiedBetaSha",
+    "qualifiedBetaTier",
+    "qualifiedBetaEvidence",
+)
 
 
 def _strip_comment(line: str) -> str:
@@ -39,17 +47,47 @@ def format_keyvalue_lines(metadata: dict[str, str]) -> list[str]:
 
 def preflight_release(release_json_path: Path, tag: str) -> None:
     release = json.loads(release_json_path.read_text(encoding="utf-8"))
+    if not isinstance(release, dict):
+        raise SystemExit("release JSON must be an object")
     if release.get("tagName") != tag:
         raise SystemExit(f"tag mismatch: {release.get('tagName')}")
     if release.get("isDraft") or release.get("isPrerelease"):
         raise SystemExit("release must be published and not a GitHub prerelease")
+    published_at = release.get("publishedAt")
+    if not isinstance(published_at, str) or not published_at.strip():
+        raise SystemExit("release must include a publication timestamp")
+    try:
+        datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise SystemExit(f"release publication timestamp is malformed: {published_at!r}") from exc
+
+    assets = release.get("assets")
+    if not isinstance(assets, list):
+        raise SystemExit("release assets must be a list")
+
+    def required_asset(names: set[str]) -> dict[str, object]:
+        for asset in assets:
+            if isinstance(asset, dict) and asset.get("name") in names:
+                digest = asset.get("digest")
+                if not isinstance(digest, str) or not SHA256_DIGEST_RE.fullmatch(digest):
+                    raise SystemExit(f"release asset {asset.get('name')!r} is missing a SHA-256 digest")
+                return asset
+        raise SystemExit(f"release is missing required asset: {', '.join(sorted(names))}")
+
+    # These are the immutable artifact/evidence inputs consumed by the automatic
+    # candidate contract: signed Sparkle ZIP, DMG, and its signed-smoke evidence.
+    required_asset({"Omi.zip"})
+    required_asset({"omi.dmg"})
+    required_asset({"desktop-smoke-result.json"})
 
     metadata = parse_keyvalue_block(release.get("body") or "")
-    if metadata.get("channel") != "beta":
-        raise SystemExit(f"channel must be beta, got {metadata.get('channel')!r}")
+    if metadata.get("channel") not in {"candidate", "beta"}:
+        raise SystemExit(f"channel must be candidate or beta, got {metadata.get('channel')!r}")
     is_live = metadata.get("isLive", "").lower()
-    if is_live not in {"true", "1", "yes"}:
-        raise SystemExit(f"isLive must be true, got {metadata.get('isLive')!r}")
+    if metadata.get("channel") == "candidate" and is_live not in {"false", "0", "no"}:
+        raise SystemExit(f"candidate isLive must be false, got {metadata.get('isLive')!r}")
+    if metadata.get("channel") == "beta" and is_live not in {"true", "1", "yes"}:
+        raise SystemExit(f"beta isLive must be true, got {metadata.get('isLive')!r}")
     if not MACOS_RELEASE_TAG_RE.match(tag):
         raise SystemExit(f"not a macOS release tag: {tag}")
 
@@ -66,7 +104,7 @@ def check_manifest(manifest_path: Path) -> None:
         raise SystemExit(f"manifest provider_mode must be 'offline', got {provider_mode!r}")
 
 
-def update_blessed_keys(
+def update_qualification_keys(
     body_path: Path,
     *,
     stamp: str,
@@ -79,13 +117,13 @@ def update_blessed_keys(
     out: list[str] = []
     in_block = False
     saw_key_value_block = False
-    seen = {key: False for key in BLESSED_KEYS}
-    blessed_values = {
-        "blessed": "true",
-        "blessedAt": stamp,
-        "blessedSha": sha,
-        "blessedTier": tier,
-        "blessedEvidence": asset,
+    seen = {key: False for key in QUALIFICATION_KEYS}
+    qualification_values = {
+        "qualifiedBeta": "true",
+        "qualifiedBetaAt": stamp,
+        "qualifiedBetaSha": sha,
+        "qualifiedBetaTier": tier,
+        "qualifiedBetaEvidence": asset,
     }
 
     for line in lines:
@@ -96,16 +134,16 @@ def update_blessed_keys(
             out.append(line)
             continue
         if stripped == "KEY_VALUE_END":
-            for key in BLESSED_KEYS:
+            for key in QUALIFICATION_KEYS:
                 if not seen[key]:
-                    out.append(f"{key}: {blessed_values[key]}")
+                    out.append(f"{key}: {qualification_values[key]}")
             in_block = False
             out.append(line)
             continue
         if in_block and ":" in stripped:
             key = stripped.split(":", 1)[0].strip()
             if key in seen:
-                out.append(f"{key}: {blessed_values[key]}")
+                out.append(f"{key}: {qualification_values[key]}")
                 seen[key] = True
                 continue
         out.append(line)
@@ -180,19 +218,19 @@ def _self_test() -> int:
     sample_body = """Release notes
 
 <!-- KEY_VALUE_START -->
-channel: beta
-isLive: true
-blessed: false
+channel: candidate
+isLive: false
+qualifiedBeta: false
 <!-- KEY_VALUE_END -->
 """
     body_path = Path("/tmp/release-keyvalue-body.md")
     body_path.write_text(sample_body, encoding="utf-8")
-    update_blessed_keys(body_path, stamp="2026-07-06T12:00:00Z", sha="abc123", asset="evidence.json")
+    update_qualification_keys(body_path, stamp="2026-07-06T12:00:00Z", sha="abc123", asset="evidence.json")
     updated = parse_keyvalue_block(body_path.read_text(encoding="utf-8"))
-    if updated.get("blessed") != "true" or updated.get("blessedSha") != "abc123":
-        fail("update-blessed", f"unexpected metadata: {updated}")
+    if updated.get("qualifiedBeta") != "true" or updated.get("qualifiedBetaSha") != "abc123":
+        fail("update-qualified-beta", f"unexpected metadata: {updated}")
     else:
-        ok("update-blessed writes blessed keys")
+        ok("update-qualified-beta writes canonical qualification keys")
 
     malformed_body_path = Path("/tmp/release-keyvalue-body-no-kv.md")
     malformed_body_path.write_text("Release notes without KEY_VALUE block\n", encoding="utf-8")
@@ -202,50 +240,84 @@ blessed: false
         encoding="utf-8",
     )
     try:
-        update_blessed_keys(
+        update_qualification_keys(
             malformed_body_path,
             stamp="2026-07-06T12:00:00Z",
             sha="abc123",
             asset="evidence.json",
         )
-        fail("update-blessed missing KEY_VALUE block", "expected SystemExit")
+        fail("update-qualified-beta missing KEY_VALUE block", "expected SystemExit")
     except SystemExit as exc:
         if "KEY_VALUE" in str(exc):
-            ok("update-blessed missing KEY_VALUE block fails loudly")
+            ok("update-qualified-beta missing KEY_VALUE block fails loudly")
         else:
-            fail("update-blessed missing KEY_VALUE block", f"unexpected exit: {exc}")
+            fail("update-qualified-beta missing KEY_VALUE block", f"unexpected exit: {exc}")
 
     try:
-        update_blessed_keys(
+        update_qualification_keys(
             unclosed_body_path,
             stamp="2026-07-06T12:00:00Z",
             sha="abc123",
             asset="evidence.json",
         )
-        fail("update-blessed unclosed KEY_VALUE block", "expected SystemExit")
+        fail("update-qualified-beta unclosed KEY_VALUE block", "expected SystemExit")
     except SystemExit as exc:
         if "KEY_VALUE_END" in str(exc):
-            ok("update-blessed unclosed KEY_VALUE block fails loudly")
+            ok("update-qualified-beta unclosed KEY_VALUE block fails loudly")
         else:
-            fail("update-blessed unclosed KEY_VALUE block", f"unexpected exit: {exc}")
+            fail("update-qualified-beta unclosed KEY_VALUE block", f"unexpected exit: {exc}")
 
     release_json = Path("/tmp/release-keyvalue-release.json")
-    release_json.write_text(
-        json.dumps(
-            {
-                "tagName": "v11.0.0+11000-macos",
-                "isDraft": False,
-                "isPrerelease": False,
-                "body": sample_body,
-            }
-        ),
-        encoding="utf-8",
-    )
+    valid_digest = "sha256:" + ("a" * 64)
+    valid_release = {
+        "tagName": "v11.0.0+11000-macos",
+        "isDraft": False,
+        "isPrerelease": False,
+        "publishedAt": "2026-07-20T12:00:00Z",
+        "assets": [
+            {"name": "Omi.zip", "digest": valid_digest},
+            {"name": "omi.dmg", "digest": valid_digest},
+            {"name": "desktop-smoke-result.json", "digest": valid_digest},
+        ],
+        "body": sample_body,
+    }
+    release_json.write_text(json.dumps(valid_release), encoding="utf-8")
     try:
         preflight_release(release_json, "v11.0.0+11000-macos")
-        ok("preflight-release valid beta release")
+        ok("preflight-release valid candidate release")
     except SystemExit as exc:
-        fail("preflight-release valid beta release", f"unexpected exit {exc.code}")
+        fail("preflight-release valid candidate release", f"unexpected exit {exc.code}")
+
+    for name in ("Omi.dmg", "omi-beta.dmg", "Omi Beta.dmg", "some-other.dmg"):
+        candidate = json.loads(json.dumps(valid_release))
+        candidate["assets"][1]["name"] = name
+        release_json.write_text(json.dumps(candidate), encoding="utf-8")
+        try:
+            preflight_release(release_json, "v11.0.0+11000-macos")
+            fail(f"preflight-release rejects non-canonical DMG {name}", "expected SystemExit")
+        except SystemExit as exc:
+            if "omi.dmg" in str(exc):
+                ok(f"preflight-release rejects non-canonical DMG {name}")
+            else:
+                fail(f"preflight-release rejects non-canonical DMG {name}", f"unexpected exit: {exc}")
+
+    for name, mutate, expected in [
+        ("missing publication timestamp", lambda release: release.pop("publishedAt"), "publication timestamp"),
+        ("malformed publication timestamp", lambda release: release.update(publishedAt="not-a-date"), "malformed"),
+        ("missing signed smoke asset", lambda release: release.update(assets=release["assets"][:-1]), "desktop-smoke-result"),
+        ("missing artifact digest", lambda release: release["assets"][0].pop("digest"), "SHA-256"),
+    ]:
+        candidate = json.loads(json.dumps(valid_release))
+        mutate(candidate)
+        release_json.write_text(json.dumps(candidate), encoding="utf-8")
+        try:
+            preflight_release(release_json, "v11.0.0+11000-macos")
+            fail(f"preflight-release {name}", "expected SystemExit")
+        except SystemExit as exc:
+            if expected in str(exc):
+                ok(f"preflight-release rejects {name}")
+            else:
+                fail(f"preflight-release {name}", f"unexpected exit: {exc}")
 
     if failures:
         print(f"\n{len(failures)} self-test failure(s)", file=sys.stderr)
@@ -265,7 +337,10 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("check-manifest", help="Exit 0 when harness manifest passed")
     check.add_argument("manifest")
 
-    update = sub.add_parser("update-blessed", help="Write blessed metadata into release notes KEY_VALUE block")
+    update = sub.add_parser(
+        "update-qualified-beta",
+        help="Write canonical qualified-beta metadata into the release notes KEY_VALUE block",
+    )
     update.add_argument("body_file")
     update.add_argument("stamp")
     update.add_argument("sha")
@@ -282,8 +357,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "check-manifest":
         check_manifest(Path(args.manifest))
         return 0
-    if args.command == "update-blessed":
-        update_blessed_keys(
+    if args.command == "update-qualified-beta":
+        update_qualification_keys(
             Path(args.body_file),
             stamp=args.stamp,
             sha=args.sha,

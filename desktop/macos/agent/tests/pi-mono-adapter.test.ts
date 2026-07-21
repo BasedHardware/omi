@@ -4,7 +4,11 @@ import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { spawn } from "child_process";
-import { PiMonoAdapter, PiMonoRuntimeAdapter } from "../src/adapters/pi-mono.js";
+import {
+  PiMonoAdapter,
+  PiMonoRuntimeAdapter,
+  routePromptForPublicWeb,
+} from "../src/adapters/pi-mono.js";
 import { HarnessFeature, type AdapterAttemptContext, type HarnessConfig } from "../src/adapters/interface.js";
 import type { OutboundMessage } from "../src/protocol.js";
 
@@ -63,6 +67,7 @@ function makeAttemptContext(overrides: AttemptContextOverrides = {}): AdapterAtt
     clientId: overrides.clientId ?? "client-runtime",
     runId: overrides.runId ?? "run_runtime",
     attemptId,
+    toolCapabilityRef: overrides.toolCapabilityRef ?? `cap_${attemptId}`,
     binding: {
       bindingId: "bind-runtime",
       sessionId,
@@ -115,6 +120,242 @@ function makeErrorTurnEndEvent(errorMessage: string) {
 }
 
 describe("PiMonoAdapter prompt correlation", () => {
+  it("forwards tool execution updates as content-free progress activity", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "write the document" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+
+    (adapter as any).handleEvent(JSON.stringify({
+      type: "tool_execution_update",
+      toolName: "write",
+      toolCallId: "tool-write-1",
+      partialResult: { content: [{ type: "text", text: "private document content" }] },
+    }));
+
+    expect(events).toEqual([{
+      type: "tool_activity",
+      name: "write",
+      status: "progress",
+      toolUseId: "tool-write-1",
+    }]);
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await expect(prompt).resolves.toMatchObject({ text: "done" });
+  });
+
+  it("routes current public web requests for both coordinator and leaf sessions", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "main", "leaf");
+
+    for (const [sessionId, query] of [
+      ["main", "what's the weather in NYC right now?"],
+      ["leaf", "what AI models were released this week?"],
+      ["main", "who's playing in the World Cup right now?"],
+    ] as const) {
+      const prompt = adapter.sendPrompt(
+        sessionId,
+        [{ type: "text", text: query }],
+        [],
+        "act",
+        () => {},
+        async () => ""
+      );
+      const command = (adapter as any).sendCommand.mock.calls.at(-1)[0];
+      expect(command.message).toContain("<omi_retrieval_policy>");
+      expect(command.message).toContain("Web search is required and available for this fresh public request.");
+      expect(command.message).toContain("Use a live public-web or search tool before answering.");
+      expect(command.message).toContain("Never say, imply, or hedge that you lack internet, web-search, real-time-data, or tool access");
+      expect(command.message).toContain(query);
+      (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+      await expect(prompt).resolves.toMatchObject({ text: "done" });
+    }
+  });
+
+  it("does not route explicit private-context requests onto the public web", () => {
+    for (const message of [
+      "search my calendar for weather in NYC",
+      "what did I say today about the current weather?",
+    ]) {
+      expect(routePromptForPublicWeb(message)).toBe(message);
+    }
+  });
+
+  it("does not route a child task from inherited public-web context", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "child");
+    const renderedChildPrompt = [
+      "# Omi Context Snapshot",
+      "Earlier user request: ask OpenClaw what's trending on X right now.",
+      "# User Message",
+      "Sleep for 5 seconds.",
+    ].join("\n");
+
+    const prompt = adapter.sendPrompt(
+      "child",
+      [{ type: "text", text: renderedChildPrompt }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    const command = (adapter as any).sendCommand.mock.calls.at(-1)[0];
+    expect(command.message).toBe(renderedChildPrompt);
+    expect(command.message).not.toContain("<omi_retrieval_policy>");
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([]);
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("Slept for 5 seconds."));
+    await expect(prompt).resolves.toMatchObject({ text: "Slept for 5 seconds." });
+  });
+
+  it("projects gateway web-search progress and removes a false no-access disclaimer without local tool events", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "main");
+    const response = "I don't have direct internet/web access, but I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
+    const prompt = adapter.sendPrompt(
+      "main",
+      [{ type: "text", text: "what's the weather in NYC right now?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleMessageUpdate({
+      assistantMessageEvent: { type: "text_delta", delta: response },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent(response));
+
+    const expected = "I can get you real weather data via the terminal!\n\nCurrent weather: Sunny, 73 F.";
+    await expect(prompt).resolves.toMatchObject({ text: expected });
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([
+      { type: "text_delta", text: expected },
+    ]);
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: "gateway-public-web-1",
+        input: { executor: "gateway" },
+      },
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "completed",
+        toolUseId: "gateway-public-web-1",
+      },
+    ]);
+  });
+
+  it("closes gateway web-search progress as failed when the public lookup fails", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "main");
+    const prompt = adapter.sendPrompt(
+      "main",
+      [{ type: "text", text: "what's the weather in NYC right now?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleTurnEnd(makeErrorTurnEndEvent("public web lookup failed"));
+
+    await expect(prompt).rejects.toThrow("public web lookup failed");
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: "gateway-public-web-1",
+        input: { executor: "gateway" },
+      },
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "failed",
+        toolUseId: "gateway-public-web-1",
+      },
+    ]);
+  });
+
+  it("closes gateway web-search progress when prompt dispatch fails synchronously", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "main");
+    (adapter as any).sendCommand = vi.fn(() => {
+      throw new Error("Pi stdin is not writable");
+    });
+
+    await expect(adapter.sendPrompt(
+      "main",
+      [{ type: "text", text: "what's the weather in NYC right now?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    )).rejects.toThrow("Pi stdin is not writable");
+
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: "gateway-public-web-1",
+        input: { executor: "gateway" },
+      },
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "failed",
+        toolUseId: "gateway-public-web-1",
+      },
+    ]);
+  });
+
+  it("closes gateway web-search progress when abort dispatch fails synchronously", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "main");
+    const prompt = adapter.sendPrompt(
+      "main",
+      [{ type: "text", text: "what's the weather in NYC right now?" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+    (adapter as any).sendCommand = vi.fn(() => {
+      throw new Error("Pi stdin is not writable");
+    });
+
+    adapter.abort("main");
+
+    await expect(prompt).resolves.toMatchObject({ text: "", sessionId: "main" });
+    expect(events.filter((event) => event.type === "tool_activity")).toEqual([
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: "gateway-public-web-1",
+        input: { executor: "gateway" },
+      },
+      {
+        type: "tool_activity",
+        name: "web_search",
+        status: "failed",
+        toolUseId: "gateway-public-web-1",
+      },
+    ]);
+  });
+
   it("writes the active runtime attempt context before prompt execution", async () => {
     const { adapter } = createAdapter();
     seedSessions(adapter, "session-1");
@@ -125,6 +366,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       clientId: "client-runtime",
       runId: "run_runtime",
       attemptId: "att_runtime",
+      toolCapabilityRef: "cap_runtime",
       binding: {
         bindingId: "bind-runtime",
         sessionId: "ses_runtime",
@@ -143,17 +385,7 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
     const relayContext = JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8"));
-    expect(relayContext).toMatchObject({
-      adapterId: "pi-mono",
-      protocolVersion: 2,
-      requestId: "request-runtime",
-      clientId: "client-runtime",
-      sessionId: "ses_runtime",
-      runId: "run_runtime",
-      attemptId: "att_runtime",
-      adapterSessionId: "session-1",
-      disableSwiftBackedTools: true,
-    });
+    expect(relayContext).toEqual({ capabilityRef: "cap_runtime", requestId: "request-runtime" });
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
     await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
@@ -183,7 +415,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const attemptContext = makeAttemptContext({ attemptId: "att_abort" });
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, controller.signal);
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_abort");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_abort");
     controller.abort();
 
     await expect(execution).resolves.toMatchObject({ terminalStatus: "cancelled" });
@@ -200,7 +432,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       () => {},
       new AbortController().signal
     );
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_first");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_first");
 
     const second = runtime.executeAttempt(
       makeAttemptContext({ attemptId: "att_second", binding: { adapterNativeSessionId: "session-2" } }),
@@ -209,7 +441,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
 
     await expect(second).rejects.toThrow("pi-mono prompt already in flight");
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_first");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_first");
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("first done"));
     await expect(first).resolves.toMatchObject({ terminalStatus: "succeeded" });
@@ -226,7 +458,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       () => {},
       new AbortController().signal
     );
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_exit");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).capabilityRef).toBe("cap_att_exit");
 
     (adapter as any).process.emit("exit", 7);
 
@@ -238,7 +470,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const { adapter } = createAdapter();
     writeFileSync((adapter as any).contextFilePath, "{invalid json");
 
-    (adapter as any).clearRelayContextForAttempt("att_invalid");
+    (adapter as any).clearRelayContextForCapability("cap_invalid");
 
     expect(existsSync((adapter as any).contextFilePath)).toBe(false);
   });
@@ -254,6 +486,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       clientId: "client-runtime",
       runId: "run_runtime",
       attemptId: "att_runtime",
+      toolCapabilityRef: "cap_runtime",
       binding: {
         bindingId: "bind-runtime",
         sessionId: "ses_runtime",
@@ -321,6 +554,26 @@ describe("PiMonoAdapter prompt correlation", () => {
     expect(events.some((event) => event.type === "result")).toBe(false);
   });
 
+  it("treats agent_settled as advisory and waits for the authoritative turn_end", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "wait for the child" }],
+      [],
+      "act",
+      () => {},
+      async () => "",
+    );
+
+    (adapter as any).handleEvent(JSON.stringify({ type: "agent_settled" }));
+
+    expect((adapter as any).activePromptGeneration).toBe(1);
+    expect((adapter as any).pendingRequests.size).toBe(1);
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("authoritative terminal result"));
+    await expect(prompt).resolves.toMatchObject({ text: "authoritative terminal result" });
+  });
+
   it("rejects turn_end errors instead of resolving success", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");
@@ -344,6 +597,108 @@ describe("PiMonoAdapter prompt correlation", () => {
         adapterSessionId: "session-1",
       })
     );
+  });
+
+  it("does not report success after a required agent-control operation fails", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create a child" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn",
+      result: {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            ok: false,
+            error: { code: "missing_request_context", message: "missing active Omi request context" },
+          }),
+        }],
+      },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("I could not create the child, but I am done."));
+
+    await expect(prompt).rejects.toThrow("Required spawn_agent operation failed");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        message: expect.stringContaining("missing active Omi request context"),
+      })
+    );
+  });
+
+  it("allows a successful required-control retry to complete the parent turn", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create a child" }],
+      [],
+      "act",
+      () => {},
+      async () => ""
+    );
+
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn-1",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: false, error: { message: "temporary failure" } }) }] },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-spawn-2",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("child created"));
+
+    await expect(prompt).resolves.toMatchObject({ text: "child created" });
+  });
+
+  it("does not let an unrelated control success erase a failed obligation", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "create both children" }],
+      [],
+      "act",
+      () => {},
+      async () => "",
+    );
+
+    (adapter as any).handleToolStart({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-a",
+      args: { objective: "child A" },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-a",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: false, error: { message: "failed A" } }) }] },
+    });
+    (adapter as any).handleToolStart({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-b",
+      args: { objective: "child B" },
+    });
+    (adapter as any).handleToolEnd({
+      toolName: "spawn_agent",
+      toolCallId: "tool-child-b",
+      result: { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] },
+    });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("child B created"));
+
+    await expect(prompt).rejects.toThrow("failed A");
   });
 
   it("resolves abort before turn_end and drops the late completion", async () => {

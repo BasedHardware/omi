@@ -74,17 +74,17 @@ actor GoalsAIService {
     }
 
     let prompt = """
-    Normalize this onboarding goal input into clean structured fields.
+      Normalize this onboarding goal input into clean structured fields.
 
-    Input: "\(rawInput)"
+      Input: "\(rawInput)"
 
-    Rules:
-    - Remove conversational filler like "my goal is", "i want to", "i need to".
-    - Keep title short and noun/action focused.
-    - If a numeric target is explicit (e.g., 200k, 10M), use goal_type=numeric and expand value (200k -> 200000).
-    - If no explicit number, use goal_type=boolean and target_value=1.
-    - Return JSON only.
-    """
+      Rules:
+      - Remove conversational filler like "my goal is", "i want to", "i need to".
+      - Keep title short and noun/action focused.
+      - If a numeric target is explicit (e.g., 200k, 10M), use goal_type=numeric and expand value (200k -> 200000).
+      - If no explicit number, use goal_type=boolean and target_value=1.
+      - Return JSON only.
+      """
 
     do {
       let responseText = try await client.sendRequest(
@@ -302,7 +302,7 @@ actor GoalsAIService {
       currentValue: 0,
       minValue: suggestion.suggestedMin,
       maxValue: suggestion.suggestedMax,
-      source: "ai"
+      source: "ai_suggested"
     )
 
     // Sync to local storage

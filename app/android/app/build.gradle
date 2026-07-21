@@ -83,6 +83,12 @@ android {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
+    }
+
     lintOptions {
         disable 'InvalidPackage'
         checkReleaseBuilds false

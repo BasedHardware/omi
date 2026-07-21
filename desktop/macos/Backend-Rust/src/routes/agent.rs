@@ -195,15 +195,7 @@ async fn get_agent_status(
                     Some(p) => p.clone(),
                     None => {
                         tracing::warn!("GCE_PROJECT_ID not set — returning Firestore status without GCE verification");
-                        return Ok(Json(Some(AgentStatusResponse {
-                            vm_name: vm.vm_name,
-                            zone: vm.zone,
-                            ip: vm.ip,
-                            status: vm.status,
-                            auth_token: vm.auth_token,
-                            created_at: vm.created_at,
-                            last_query_at: vm.last_query_at,
-                        })));
+                        return Ok(Json(Some(vm)));
                     }
                 };
                 match check_gce_instance_status(
@@ -281,13 +273,9 @@ async fn get_agent_status(
 
                         // Return "provisioning" so the client polls
                         return Ok(Json(Some(AgentStatusResponse {
-                            vm_name: vm.vm_name,
-                            zone: vm.zone,
                             ip: None,
                             status: AgentVmStatus::Provisioning,
-                            auth_token: vm.auth_token,
-                            created_at: vm.created_at,
-                            last_query_at: vm.last_query_at,
+                            ..vm
                         })));
                     }
                     Ok(gce_status) if gce_status == "NOT_FOUND" => {
@@ -354,13 +342,9 @@ async fn get_agent_status(
 
                         // Return provisioning so client polls
                         return Ok(Json(Some(AgentStatusResponse {
-                            vm_name: vm.vm_name,
-                            zone: vm.zone,
                             ip: None,
                             status: AgentVmStatus::Provisioning,
-                            auth_token: vm.auth_token,
-                            created_at: vm.created_at,
-                            last_query_at: vm.last_query_at,
+                            ..vm
                         })));
                     }
                     Ok(gce_status) => {
@@ -373,15 +357,7 @@ async fn get_agent_status(
                 }
             }
 
-            Ok(Json(Some(AgentStatusResponse {
-                vm_name: vm.vm_name,
-                zone: vm.zone,
-                ip: vm.ip,
-                status: vm.status,
-                auth_token: vm.auth_token,
-                created_at: vm.created_at,
-                last_query_at: vm.last_query_at,
-            })))
+            Ok(Json(Some(vm)))
         }
         Ok(None) => Ok(Json(None)),
         Err(e) => {

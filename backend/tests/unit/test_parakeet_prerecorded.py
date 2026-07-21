@@ -73,42 +73,97 @@ def test_cdist_stub_handles_pairwise_rows():
 
 
 class TestFactoryRouting:
-
     def test_parakeet_routing_in_get_prerecorded_service(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('en')
             assert service == pr.PrerecordedSTTService.PARAKEET
             assert model == 'parakeet'
 
     def test_parakeet_routing_with_supported_language(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('fr')
             assert service == pr.PrerecordedSTTService.PARAKEET
             assert lang == 'fr'
 
-    def test_parakeet_fallback_to_deepgram_for_unsupported_language(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+    def test_parakeet_falls_back_to_modulate_for_unsupported_language(self):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('zh-CN')
-            assert service == pr.PrerecordedSTTService.DEEPGRAM
+            assert service == pr.PrerecordedSTTService.MODULATE
+            assert model == 'velma-2'
 
-    def test_parakeet_fallback_for_cjk(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+    def test_parakeet_fallback_never_selects_deepgram(self):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             for unsupported in ['ja', 'zh', 'ko', 'hi', 'vi']:
-                service, lang, model = pr.get_prerecorded_service(unsupported)
-                assert service == pr.PrerecordedSTTService.DEEPGRAM, f'{unsupported} should fall back to Deepgram'
+                try:
+                    service, _lang, _model = pr.get_prerecorded_service(unsupported)
+                except RuntimeError:
+                    continue
+                assert service != pr.PrerecordedSTTService.DEEPGRAM
 
     def test_get_prerecorded_provider_returns_parakeet(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             provider = pr.get_prerecorded_provider()
             assert isinstance(provider, pr.ParakeetPrerecordedProvider)
 
-    def test_unknown_model_falls_back_to_deepgram(self):
-        with patch.object(pr, 'stt_prerecorded_models', ['unknown-model']):
+    def test_unknown_model_falls_back_to_modulate(self):
+        with patch.object(pr, 'get_prerecorded_models', return_value=('unknown-model',)):
             provider = pr.get_prerecorded_provider()
-            assert isinstance(provider, pr.DeepgramPrerecordedProvider)
+            assert isinstance(provider, pr.ModulatePrerecordedProvider)
+            assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.MODULATE
+
+    def test_model_selection_reads_environment_at_call_time(self, monkeypatch):
+        monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet')
+        assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
+
+        monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+        assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.MODULATE
+
+    def test_deepgram_client_is_constructed_lazily_once(self, monkeypatch):
+        client = MagicMock()
+        factory = MagicMock(return_value=client)
+        monkeypatch.setattr(pr, '_deepgram_client', None)
+        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
+        monkeypatch.setattr(pr, 'DeepgramClient', factory)
+        monkeypatch.setenv('DEEPGRAM_API_KEY', 'test-key')
+
+        assert pr._get_deepgram_client() is client
+        assert pr._get_deepgram_client() is client
+        assert factory.call_count == 1
+
+    def test_deepgram_process_client_reports_missing_key(self, monkeypatch):
+        monkeypatch.setattr(pr, '_deepgram_client', None)
+        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
+        monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
+
+        with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
+            pr._deepgram_client_for_request()
+
+        assert exc_info.value.provider == pr.PrerecordedSTTService.DEEPGRAM
+        assert exc_info.value.missing_env == 'DEEPGRAM_API_KEY'
+
+    def test_deepgram_byok_does_not_require_process_key(self, monkeypatch):
+        client = MagicMock()
+        factory = MagicMock(return_value=client)
+        monkeypatch.setattr(pr, '_deepgram_client', None)
+        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
+        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: 'user-byok-key')
+        monkeypatch.setattr(pr, 'DeepgramClient', factory)
+        monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
+
+        assert pr._deepgram_client_for_request() is client
+        assert factory.call_args.args[0] == 'user-byok-key'
 
 
 class TestTranscribeBytes:
+    def test_missing_endpoint_raises_controlled_configuration_error(self, monkeypatch):
+        wav = _make_wav()
+        monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
+
+        with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
+            pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
+
+        assert exc_info.value.provider == pr.PrerecordedSTTService.PARAKEET
+        assert exc_info.value.missing_env == 'HOSTED_PARAKEET_API_URL'
 
     def test_basic_transcription(self):
         wav = _make_wav()
@@ -268,15 +323,58 @@ class TestTranscribeBytes:
             with pytest.raises(RuntimeError, match='Parakeet transcription failed'):
                 pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
 
-    def test_missing_api_url(self):
+    # A degraded/foreign 200 must not be mapped to "no speech": sync treats a
+    # word-less segment as success, marks the job completed, and the client then
+    # discards the only copy of the audio. See #9586.
+    @pytest.mark.parametrize(
+        'body',
+        [
+            {},
+            {'detail': 'Model loading, try again shortly'},
+            [],
+        ],
+    )
+    def test_response_without_segments_or_text_raises(self, body):
         wav = _make_wav()
-        with patch.dict(os.environ, {'HOSTED_PARAKEET_API_URL': ''}):
-            with pytest.raises(ValueError, match='HOSTED_PARAKEET_API_URL'):
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = body
+
+        with patch('httpx.Client') as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = resp
+            mock_client_cls.return_value = mock_client
+
+            with pytest.raises(RuntimeError, match='Parakeet transcription failed'):
                 pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
+
+    @pytest.mark.parametrize(
+        'body',
+        [
+            {'text': '', 'segments': []},
+            {'segments': []},
+            {'text': ''},
+        ],
+    )
+    def test_well_formed_silence_is_still_no_speech(self, body):
+        wav = _make_wav()
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = body
+
+        with patch('httpx.Client') as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = resp
+            mock_client_cls.return_value = mock_client
+
+            assert pr.parakeet_prerecorded_from_bytes(wav, diarize=False) == []
 
 
 class TestTranscribeUrl:
-
     def test_downloads_then_transcribes(self):
         wav = _make_wav()
 
@@ -302,6 +400,65 @@ class TestTranscribeUrl:
         assert len(words) == 1
         assert words[0]['text'] == 'hello'
 
+    @pytest.mark.parametrize(
+        ('content_type', 'container_format'),
+        [('audio/webm', 'webm'), ('video/mp4', 'mp4')],
+    )
+    def test_transcodes_browser_containers_before_posting_to_parakeet(self, content_type, container_format):
+        container_bytes = b'browser-container'
+        wav_bytes = _make_wav()
+        stream_resp = MagicMock()
+        stream_resp.raise_for_status = MagicMock()
+        stream_resp.headers = {'content-length': str(len(container_bytes)), 'content-type': content_type}
+        stream_resp.iter_bytes = MagicMock(return_value=iter([container_bytes]))
+        stream_resp.__enter__ = MagicMock(return_value=stream_resp)
+        stream_resp.__exit__ = MagicMock(return_value=False)
+
+        decoded_audio = MagicMock()
+        decoded_audio.export.side_effect = lambda buffer, format: buffer.write(wav_bytes)
+
+        with patch('httpx.Client') as mock_client_cls, patch.object(
+            pr.AudioSegment, 'from_file', return_value=decoded_audio
+        ) as from_file:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.stream.return_value = stream_resp
+            mock_client.post.return_value = _mock_parakeet_response()
+            mock_client_cls.return_value = mock_client
+
+            pr.parakeet_prerecorded('https://storage.example.com/browser-audio', diarize=False)
+
+        assert from_file.call_args.args[0].getvalue() == container_bytes
+        assert from_file.call_args.kwargs == {'format': container_format}
+        posted_file = mock_client.post.call_args.kwargs['files']['file']
+        assert posted_file[0] == 'audio.wav'
+        assert posted_file[1].getvalue() == wav_bytes
+
+    def test_rejects_undecodable_browser_container_without_retrying(self):
+        container_bytes = b'not-a-real-webm'
+        stream_resp = MagicMock()
+        stream_resp.raise_for_status = MagicMock()
+        stream_resp.headers = {'content-length': str(len(container_bytes)), 'content-type': 'audio/webm'}
+        stream_resp.iter_bytes = MagicMock(return_value=iter([container_bytes]))
+        stream_resp.__enter__ = MagicMock(return_value=stream_resp)
+        stream_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch('httpx.Client') as mock_client_cls, patch.object(
+            pr.AudioSegment, 'from_file', side_effect=RuntimeError('decode failed')
+        ):
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.stream.return_value = stream_resp
+            mock_client_cls.return_value = mock_client
+
+            with pytest.raises(pr.ParakeetAudioDecodeError):
+                pr.parakeet_prerecorded('https://storage.example.com/browser-audio', diarize=False)
+
+        mock_client.stream.assert_called_once()
+        mock_client.post.assert_not_called()
+
     def test_rejects_oversized_content_length(self):
         stream_resp = MagicMock()
         stream_resp.raise_for_status = MagicMock()
@@ -322,12 +479,16 @@ class TestTranscribeUrl:
     def test_rejects_streamed_overflow_without_content_length(self):
         chunk_size = 10 * 1024 * 1024  # 10MB per chunk
         num_chunks = (pr._PARAKEET_MAX_DOWNLOAD_BYTES // chunk_size) + 2
+        sized_chunk = MagicMock()
+        sized_chunk.__len__.return_value = chunk_size
 
         def make_stream_resp():
             resp = MagicMock()
             resp.raise_for_status = MagicMock()
             resp.headers = {}
-            resp.iter_bytes = MagicMock(return_value=iter([b'\x00' * chunk_size] * num_chunks))
+            # The overflow branch only needs chunk lengths. Avoid allocating tens
+            # of megabytes in a fast unit test (and charging its GC to the next test).
+            resp.iter_bytes = MagicMock(return_value=iter([sized_chunk] * num_chunks))
             resp.__enter__ = MagicMock(return_value=resp)
             resp.__exit__ = MagicMock(return_value=False)
             return resp
@@ -344,25 +505,25 @@ class TestTranscribeUrl:
 
 
 class TestStreamingFactoryRouting:
-
     def test_parakeet_in_stt_service_models(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
-            service, lang, model = get_stt_service_for_language('en')
+            service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
             assert service == STTService.parakeet
             assert model == 'parakeet'
 
-    def test_parakeet_streaming_fallback_for_cjk(self):
+    def test_parakeet_streaming_fallback_for_cjk_uses_modulate(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
         with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'dg-nova-3']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
             service, lang, model = get_stt_service_for_language('ja')
-            assert service == STTService.deepgram, 'Japanese should fall back to Deepgram'
+            assert service == STTService.modulate
+            assert model == 'velma-2'
 
     def test_parakeet_fallback_without_url(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
@@ -371,14 +532,13 @@ class TestStreamingFactoryRouting:
             env_backup = os.environ.pop('HOSTED_PARAKEET_API_URL', None)
             try:
                 service, lang, model = get_stt_service_for_language('en')
-                assert service == STTService.deepgram
+                assert service == STTService.modulate
             finally:
                 if env_backup:
                     os.environ['HOSTED_PARAKEET_API_URL'] = env_backup
 
 
 class TestOutputFormat:
-
     def test_words_compatible_with_postprocess_words(self):
         wav = _make_wav(duration_s=3.0)
         segments = [
@@ -409,7 +569,8 @@ class TestOutputFormat:
         assert len(result) >= 1
 
     def test_multiple_segments_preserve_timestamps(self):
-        wav = _make_wav(duration_s=5.0)
+        # No WAV parsing occurs when diarization and raw-PCM wrapping are disabled.
+        wav = b'test-audio'
         segments = [
             {"text": "First segment", "start": 0.0, "end": 1.5},
             {"text": "Second segment", "start": 2.0, "end": 3.5},
@@ -432,7 +593,6 @@ class TestOutputFormat:
 
 
 class TestDiarization:
-
     def _dir_vec(self, idx: int) -> np.ndarray:
         v = np.zeros((1, 256), np.float32)
         v[0, idx] = 1.0
@@ -529,7 +689,6 @@ class TestDiarization:
 
 
 class TestProviderClass:
-
     def test_provider_transcribe_bytes_resets_state(self):
         provider = pr.ParakeetPrerecordedProvider()
         wav = _make_wav()

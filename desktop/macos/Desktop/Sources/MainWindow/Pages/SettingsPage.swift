@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 /// Settings page that wraps SettingsView with proper dark theme styling for the main window
 struct SettingsPage: View {
@@ -17,18 +17,18 @@ struct SettingsPage: View {
         VStack(spacing: 0) {
           // Section header
           HStack {
-            Text(selectedSection.rawValue)
-              .scaledFont(size: 28, weight: .bold)
+            Text(selectedSection.displayTitle)
+              .scaledFont(size: OmiType.title, weight: .bold)
               .foregroundColor(OmiColors.textPrimary)
               .id(selectedSection)
               .transition(.opacity)
-              .animation(.easeInOut(duration: 0.15), value: selectedSection)
+              .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
 
             Spacer()
           }
-          .padding(.horizontal, 32)
-          .padding(.top, 32)
-          .padding(.bottom, 24)
+          .padding(.horizontal, OmiSpacing.section)
+          .padding(.top, OmiSpacing.section)
+          .padding(.bottom, OmiSpacing.xxl)
 
           // Settings content - embedded SettingsView with dark theme override
           SettingsContentView(
@@ -37,7 +37,7 @@ struct SettingsPage: View {
             highlightedSettingId: $highlightedSettingId,
             chatProvider: chatProvider
           )
-          .padding(.horizontal, 32)
+          .padding(.horizontal, OmiSpacing.section)
 
           Spacer()
         }
@@ -45,7 +45,7 @@ struct SettingsPage: View {
       .onChange(of: highlightedSettingId) { _, newId in
         guard let newId = newId else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-          withAnimation(.easeInOut(duration: 0.3)) {
+          OmiMotion.withGated(.easeInOut(duration: 0.3)) {
             proxy.scrollTo(newId, anchor: .center)
           }
         }
@@ -126,6 +126,7 @@ struct SettingsContentView: View {
 
   // Master monitoring state (screen analysis)
   @State var isMonitoring: Bool
+  @State var screenCaptureHealth: ScreenCaptureHealth
   @State var isToggling: Bool = false
   @State var permissionError: String?
 
@@ -133,7 +134,7 @@ struct SettingsContentView: View {
   @State var showAskOmiBar: Bool = false
 
   // Grant for chat screenshot tools (capture_screen / get_screenshot);
-  // read by ChatToolExecutor.localPolicyDecision. Default on.
+  // read by ChatToolExecutor.physicalExecutionPrecondition. Default on.
   @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
   var chatScreenshotSharingEnabled: Bool = true
 
@@ -213,6 +214,10 @@ struct SettingsContentView: View {
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
   @State var dailySummaryHour: Int = 22
+  // UI-only date for the Summary Time stepper field; the backend stores whole hours,
+  // so this glides freely while only the hour component is persisted.
+  @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
+    forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = true
   @State var notificationFrequency: Int = 3
 
@@ -294,8 +299,6 @@ struct SettingsContentView: View {
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
   @AppStorage("realtimeOmniProvider") var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") var askModeEnabled = false
-  @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
-  @AppStorage("projectClaudeMdEnabled") var projectClaudeMdEnabled = true
   @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""
   @State var aiChatClaudeMdContent: String?
   @State var aiChatClaudeMdPath: String?
@@ -303,8 +306,7 @@ struct SettingsContentView: View {
   @State var aiChatProjectClaudeMdPath: String?
   @State var aiChatDiscoveredSkills: [(name: String, description: String, path: String)] =
     []
-  @State var aiChatProjectDiscoveredSkills:
-    [(name: String, description: String, path: String)] = []
+  @State var aiChatProjectDiscoveredSkills: [(name: String, description: String, path: String)] = []
   @State var aiChatDisabledSkills: Set<String> = []
   @State var showFileViewer = false
   @State var fileViewerContent = ""
@@ -313,6 +315,7 @@ struct SettingsContentView: View {
 
   // Dev Mode setting
   @AppStorage("devModeEnabled") var devModeEnabled = false
+  @AppStorage(BetaEnhancedDiagnosticsConfiguration.defaultsKey) var betaEnhancedDiagnosticsEnabled = true
 
   // Browser Extension settings
   @AppStorage("playwrightUseExtension") var playwrightUseExtension = true
@@ -335,6 +338,30 @@ struct SettingsContentView: View {
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
     case about = "About"
+
+    /// Label shown in the settings sidebar and page header. Merged sections
+    /// (Account + Plan and Usage, Notifications + Privacy) share one nav item,
+    /// so both cases surface the combined title. Raw values stay untouched —
+    /// they are the automation contract (`selectedSettingsSection` snapshots,
+    /// `omi-ctl navigate settings <section>`, e2e flow waits).
+    var displayTitle: String {
+      switch self {
+      case .account, .planUsage: return "Account & Plan"
+      case .notifications, .privacy: return "Notifications & Privacy"
+      default: return rawValue
+      }
+    }
+
+    /// The sidebar nav entry that represents this section. Legacy deep-link
+    /// targets (`privacy`, `planUsage`) remain routable but highlight their
+    /// merged sidebar item.
+    var sidebarItem: SettingsSection {
+      switch self {
+      case .planUsage: return .account
+      case .privacy: return .notifications
+      default: return self
+      }
+    }
 
     /// Resolve an automation-supplied section name tolerantly (SET-01). The raw values
     /// are Title Case with spaces ("Plan and Usage"), but `omi-ctl navigate settings
@@ -441,6 +468,7 @@ struct SettingsContentView: View {
     self.chatProvider = chatProvider
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
+    _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
     _isTranscribing = State(initialValue: appState.isTranscribing)
     _focusEnabled = State(initialValue: FocusAssistantSettings.shared.isEnabled)
     _cooldownInterval = State(initialValue: FocusAssistantSettings.shared.cooldownInterval)
@@ -489,8 +517,24 @@ struct SettingsContentView: View {
     }
   }
 
+  /// Divider header used when two legacy sections are stacked on one merged
+  /// settings page (visually mirrors `advancedCategoryHeader` but lives here so
+  /// routing does not depend on the Sections content files).
+  func mergedSectionHeader(title: String, icon: String) -> some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(OmiColors.accent)
+      Text(title)
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+      Spacer()
+    }
+    .padding(.top, OmiSpacing.lg)
+  }
+
   var body: some View {
-    VStack(spacing: 24) {
+    VStack(spacing: OmiSpacing.xxl) {
       // Section content
       Group {
         switch selectedSection {
@@ -500,13 +544,13 @@ struct SettingsContentView: View {
           rewindSection
         case .transcription:
           transcriptionSection
-        case .notifications:
+        case .notifications, .privacy:
           notificationsSection
-        case .privacy:
+          mergedSectionHeader(title: "Privacy", icon: "lock.shield")
           privacySection
-        case .account:
+        case .account, .planUsage:
           accountSection
-        case .planUsage:
+          mergedSectionHeader(title: "Plan and Usage", icon: "creditcard")
           planUsageSection
         case .aiChat:
           aiChatSection
@@ -522,10 +566,10 @@ struct SettingsContentView: View {
       }
       .id(selectedSection)
       .transition(.opacity)
-      .animation(.easeInOut(duration: 0.15), value: selectedSection)
+      .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
     }
     .onAppear {
-      if selectedSection == .aiChat {
+      if AppBuild.isProductionBundle && selectedSection == .aiChat {
         selectedSection = .advanced
       }
       loadBackendSettings()
@@ -539,22 +583,26 @@ struct SettingsContentView: View {
       chatProvider?.checkClaudeConnectionStatus()
       // Refresh notification permission state
       appState.checkNotificationPermission()
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
       if let userInfo = notification.userInfo, let state = userInfo["isMonitoring"] as? Bool {
         isMonitoring = state
       }
+      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
     .onChange(of: appState.isTranscribing) { _, newValue in
       isTranscribing = newValue
     }
     .onChange(of: selectedSection) { _, newValue in
-      if newValue == .aiChat {
+      if AppBuild.isProductionBundle && newValue == .aiChat {
         selectedSection = .advanced
         return
       }
-      if newValue == .planUsage {
+      if newValue == .planUsage || newValue == .account {
+        // Plan and Usage now renders on the merged "Account & Plan" page, so
+        // entering via either section id must refresh billing state.
         // Refetch everything for the CURRENT account. Without the trial + limiter
         // refresh, switching accounts leaves the previous user's "Trial Ended" /
         // over-limit state painted here (trialMetadata + serverQuota aren't reset
@@ -573,8 +621,7 @@ struct SettingsContentView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSection = .floatingBar
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh notification permission when app becomes active (user may have changed it in System Settings)
       appState.checkNotificationPermission()
     }
@@ -601,7 +648,6 @@ struct SettingsContentView: View {
       .fixedSize()
     }
   }
-
 
   @ObservedObject var fontScaleSettings = FontScaleSettings.shared
   @ObservedObject var rewindSettings = RewindSettings.shared

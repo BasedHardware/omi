@@ -1,5 +1,6 @@
 {
     "@@locale": "fi",
+    "sessionExpiredSignInAgain": "Istunto on vanhentunut — kirjaudu uudelleen.",
     "appTitle": "Omi",
     "conversationTab": "Keskustelu",
     "transcriptTab": "Litterointi",
@@ -2934,7 +2935,7 @@
     "upgradePlan": "Päivitä suunnitelma",
     "billingMonthly": "Kuukausittain",
     "billingYearly": "Vuosittain",
-    "savePercent": "Säästä ~17%",
+    "savePercent": "Säästä ~{percent}%",
     "popular": "Suosittu",
     "currentPlan": "Nykyinen",
     "neoSubtitle": "{count} kysymystä kuukaudessa",
@@ -3054,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.",
     "transcribeLaterTitle": "Litteroi myöhemmin",
     "transcribeLaterDescription": "Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.",
-    "transcribeLaterNote": "Toimii toistaiseksi Omi- ja Limitless-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.",
+    "transcribeLaterNote": "Toimii puhelimen mikrofonin sekä Omi- ja Limitless-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.",
     "transcribeLaterStorageFull": "Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.",
     "unmute": "Poista mykistys",
     "newRecording": "Uusi tallennus",
@@ -3142,5 +3143,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Laitteen tallennustila",
+    "deviceStoragePercentFull": "{percent} % täynnä",
+    "deviceStorageUsedOfTotal": "{used} / {total} käytössä",
+    "deviceStorageFree": "{free} vapaana",
+    "deviceStorageNearlyFull": "Laite on lähes täynnä — synkronoi vapauttaaksesi tilaa.",
+    "phoneMicOfflineFallbackMessage": "Ei yhteyttä – tallennetaan paikallisesti. Litterointi tehdään, kun olet taas verkossa.",
+    "dataEncryptedBanner": "Tietosi on oletuksena suojattu vahvalla salauksella, ja sinä hallitset, miten niitä säilytetään ja käytetään.",
+    "rayBanMetaMicPickerTitle": "Valitse Ray-Ban Meta -mikrofoni",
+    "rayBanMetaMicPickerDescription": "Valitse lasiesi Bluetooth-mikrofoni. Musiikki keskeytyy, kun Omi käyttää sitä.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth-mikrofoneja ei löytynyt. Yhdistä lasit iPhonen asetuksissa ja yritä uudelleen.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth-mikrofoneja ei voitu ladata. Tarkista, että Bluetooth on päällä, ja yritä uudelleen.",
+    "rayBanMetaMicPickerConnectError": "Mikrofoniin ei voitu muodostaa yhteyttä. Varmista, että se on yhdistetty iPhonen asetuksissa."
 }

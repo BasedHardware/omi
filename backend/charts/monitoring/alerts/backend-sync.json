@@ -141,20 +141,32 @@
       }
     ],
     "updated": "2026-06-23T01:27:10Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "34",
-      "threshold": "2"
+      "threshold": "2",
+      "summary": "Omi API alert: Backend-sync - 4XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api",
+      "alert_identity": "cew97rzyegdtsa",
+      "component": "api",
+      "impact": "product"
+    }
   },
   {
     "id": 34,
@@ -204,7 +216,7 @@
             "groupBys": [
               "metric.label.response_code_class"
             ],
-            "perSeriesAligner": "ALIGN_SUM",
+            "perSeriesAligner": "ALIGN_NONE",
             "preprocessor": "rate",
             "projectName": "based-hardware",
             "view": "FULL"
@@ -298,17 +310,26 @@
       }
     ],
     "updated": "2026-06-23T01:27:10Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "34",
-      "threshold": "2"
+      "threshold": "2",
+      "summary": "Omi API alert: Backend-sync - 5XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "severity": "critical",
+      "alert_identity": "cew97uqu791q8a",
+      "component": "api",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -454,20 +475,32 @@
       }
     ],
     "updated": "2026-06-20T02:27:42Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "31",
-      "threshold": "5 RPS"
+      "threshold": "5 RPS",
+      "summary": "Omi API alert: Backend-sync RPS is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api",
+      "alert_identity": "cew97d5vd0ttse",
+      "component": "api",
+      "impact": "infrastructure"
+    }
   },
   {
     "id": 35,
@@ -607,20 +640,32 @@
       }
     ],
     "updated": "2026-06-20T02:27:43Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "36",
-      "threshold": "20 instances (80% of max)"
+      "threshold": "20 instances (80% of max)",
+      "summary": "Omi API alert: Backend-sync instance count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api",
+      "alert_identity": "cew97x299of7kb",
+      "component": "api",
+      "impact": "infrastructure"
+    }
   },
   {
     "id": 31,
@@ -768,188 +813,39 @@
       }
     ],
     "updated": "2026-06-20T02:27:43Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "32",
-      "threshold": "30"
+      "threshold": "30",
+      "summary": "Omi API alert: Backend-sync max concurrent requests are high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
-  },
-  {
-    "id": 32,
-    "uid": "bew97osjuu22of",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync request latency is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "p99",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_PERCENTILE_99",
-            "filters": [
-              "resource.label.location",
-              "=",
-              "us-central1",
-              "AND",
-              "resource.label.project_id",
-              "=",
-              "based-hardware",
-              "AND",
-              "resource.label.service_name",
-              "=",
-              "backend-sync",
-              "AND",
-              "metric.type",
-              "=",
-              "run.googleapis.com/request_latencies"
-            ],
-            "groupBys": [
-              "resource.label.service_name"
-            ],
-            "perSeriesAligner": "ALIGN_SUM",
-            "preprocessor": "none",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  180000
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "E"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:43Z",
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "33",
-      "threshold": "180000ms (3m)"
-    },
-    "isPaused": true,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api",
+      "alert_identity": "dew97fqr33oxsd",
+      "component": "api",
+      "impact": "infrastructure"
+    }
   },
   {
     "uid": "bfobs1syncenq01",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Backend-sync",
-    "title": "Backend-sync - sync enqueue_failed share high",
+    "title": "Backend-sync - sync enqueue uncertainty share high",
     "condition": "C",
     "data": [
       {
@@ -965,7 +861,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(omi_fallback_total{component=\"sync_dispatch\",reason=\"enqueue_failed\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
+          "expr": "sum(rate(omi_sync_dispatch_attempts_total{mode=\"enqueue_uncertain\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1038,19 +934,32 @@
       }
     ],
     "updated": "2026-07-08T21:00:00Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "runbook": "backend/docs/runbooks/sync-dispatch-fallback.md",
       "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus — use Cloud Logging",
-      "threshold": "0.2 (20% enqueue_failed)"
+      "threshold": "0.2 (20% enqueue uncertainty)",
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "3",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "bfobs1syncenq01",
+      "component": "api",
+      "impact": "product"
+    }
   }
 ]

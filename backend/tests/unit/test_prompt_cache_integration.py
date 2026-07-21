@@ -143,6 +143,8 @@ if not hasattr(langchain_core_mod, "__path__"):
     langchain_core_mod.__path__ = []
 langchain_runnables_mod = _stub_module("langchain_core.runnables")
 langchain_runnables_mod.RunnableConfig = dict
+langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
+langchain_callbacks_mod.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")

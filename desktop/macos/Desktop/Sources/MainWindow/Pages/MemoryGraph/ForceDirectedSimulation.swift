@@ -4,488 +4,581 @@ import simd
 // MARK: - 3D Graph Node for Physics
 
 class GraphNode3D {
-    let id: String
-    let label: String
-    let nodeType: KnowledgeGraphNodeType
+  let id: String
+  let label: String
+  let nodeType: KnowledgeGraphNodeType
 
-    var position: SIMD3<Float>
-    var velocity: SIMD3<Float> = .zero
-    var force: SIMD3<Float> = .zero
-    var isFixed: Bool = false
-    var connectionCount: Int = 0
+  var position: SIMD3<Float>
+  var velocity: SIMD3<Float> = .zero
+  var force: SIMD3<Float> = .zero
+  var isFixed: Bool = false
+  var connectionCount: Int = 0
 
-    init(id: String, label: String, nodeType: KnowledgeGraphNodeType) {
-        self.id = id
-        self.label = label
-        self.nodeType = nodeType
-        // Random initial position in a sphere
-        let theta = Float.random(in: 0...(2 * .pi))
-        let phi = Float.random(in: 0...Float.pi)
-        let r = Float.random(in: 200...600)
-        self.position = SIMD3<Float>(
-            r * sin(phi) * cos(theta),
-            r * sin(phi) * sin(theta),
-            r * cos(phi)
-        )
-    }
+  init(id: String, label: String, nodeType: KnowledgeGraphNodeType) {
+    self.id = id
+    self.label = label
+    self.nodeType = nodeType
+    // Random initial position in a sphere
+    let theta = Float.random(in: 0...(2 * .pi))
+    let phi = Float.random(in: 0...Float.pi)
+    let r = Float.random(in: 200...600)
+    self.position = SIMD3<Float>(
+      r * sin(phi) * cos(theta),
+      r * sin(phi) * sin(theta),
+      r * cos(phi)
+    )
+  }
 }
 
 // MARK: - 3D Graph Edge
 
 struct GraphEdge3D {
-    let id: String
-    let sourceId: String
-    let targetId: String
-    let label: String
-    let affectsPhysics: Bool
+  let id: String
+  let sourceId: String
+  let targetId: String
+  let label: String
+  let affectsPhysics: Bool
 
-    init(id: String, sourceId: String, targetId: String, label: String, affectsPhysics: Bool = true) {
-        self.id = id
-        self.sourceId = sourceId
-        self.targetId = targetId
-        self.label = label
-        self.affectsPhysics = affectsPhysics
-    }
+  init(id: String, sourceId: String, targetId: String, label: String, affectsPhysics: Bool = true) {
+    self.id = id
+    self.sourceId = sourceId
+    self.targetId = targetId
+    self.label = label
+    self.affectsPhysics = affectsPhysics
+  }
 }
 
 // MARK: - Force-Directed Layout Simulation
 
-class ForceDirectedSimulation {
-    private static let userCenterNodeId = "__user_center__"
-    private static let visualBridgeEdgePrefix = "__visual_bridge__"
+class ForceDirectedSimulation: @unchecked Sendable {
+  private static let userCenterNodeId = "__user_center__"
+  private static let visualBridgeEdgePrefix = "__visual_bridge__"
 
-    var nodes: [GraphNode3D] = []
-    var edges: [GraphEdge3D] = []
-    var nodeMap: [String: GraphNode3D] = [:]
+  var nodes: [GraphNode3D] = []
+  var edges: [GraphEdge3D] = []
+  var nodeMap: [String: GraphNode3D] = [:]
 
-    // Physics parameters (adjusted dynamically in populate() based on graph size)
-    var repulsion: Float = 80_000
-    var attraction: Float = 0.003
-    var centerGravity: Float = 0.0008
-    let damping: Float = 0.9
-    let dt: Float = 0.016
-    var restLength: Float = 600
-    let maxSpeed: Float = 40
+  // Physics parameters (adjusted dynamically in populate() based on graph size)
+  var repulsion: Float = 80_000
+  var attraction: Float = 0.003
+  var centerGravity: Float = 0.0008
+  let damping: Float = 0.9
+  let dt: Float = 0.016
+  var restLength: Float = 600
+  let maxSpeed: Float = 40
 
-    private var tickCount = 0
-    private var stableFrameCount = 0
-    private let stableThreshold: Float = 0.2
-    private let stableFramesRequired = 10
+  private var tickCount = 0
+  private(set) var lastStepEnergy: Float = 0
+  private var stableFrameCount = 0
+  private let stableThreshold: Float = 0.2
+  private let stableFramesRequired = 10
 
-    var isStable: Bool { stableFrameCount >= stableFramesRequired }
+  var isStable: Bool { stableFrameCount >= stableFramesRequired }
 
-    /// Populate the simulation with nodes and edges from API response
-    func populate(graphResponse: KnowledgeGraphResponse, userNodeLabel: String?) {
-        nodes.removeAll()
-        edges.removeAll()
-        nodeMap.removeAll()
+  /// Populate the simulation with nodes and edges from API response
+  func populate(graphResponse: KnowledgeGraphResponse, userNodeLabel: String?) {
+    nodes.removeAll()
+    edges.removeAll()
+    nodeMap.removeAll()
 
-        // Pre-compute connection counts from API edges
-        var connectionCounts: [String: Int] = [:]
-        for edge in graphResponse.edges {
-            connectionCounts[edge.sourceId, default: 0] += 1
-            connectionCounts[edge.targetId, default: 0] += 1
-        }
-
-        // Create 3D nodes
-        var foundUserNode = false
-        for node in graphResponse.nodes {
-            let node3D = GraphNode3D(
-                id: node.id,
-                label: node.label,
-                nodeType: node.nodeType
-            )
-            node3D.connectionCount = connectionCounts[node.id] ?? 0
-
-            // Fix the user node at center
-            if let userName = userNodeLabel,
-               node.label.lowercased() == userName.lowercased() {
-                node3D.position = .zero
-                node3D.isFixed = true
-                foundUserNode = true
-            }
-
-            nodes.append(node3D)
-            nodeMap[node.id] = node3D
-        }
-
-        // Always create a center "me" node if none was found
-        if !foundUserNode {
-            let meNode = GraphNode3D(
-                id: Self.userCenterNodeId,
-                label: userNodeLabel ?? "Me",
-                nodeType: .person
-            )
-            meNode.position = .zero
-            meNode.isFixed = true
-            nodes.insert(meNode, at: 0)
-            nodeMap[meNode.id] = meNode
-
-            // Connect "me" to the most-connected nodes
-            let topNodes = connectionCounts.sorted { $0.value > $1.value }.prefix(min(8, graphResponse.nodes.count / 3 + 1))
-            for (nodeId, _) in topNodes {
-                edges.append(GraphEdge3D(
-                    id: "__user_edge_\(nodeId)__",
-                    sourceId: Self.userCenterNodeId,
-                    targetId: nodeId,
-                    label: ""
-                ))
-                // Update connection counts for the user edges
-                nodeMap[nodeId]?.connectionCount += 1
-            }
-            meNode.connectionCount = topNodes.count
-        }
-
-        // Create edges
-        for edge in graphResponse.edges {
-            edges.append(GraphEdge3D(
-                id: edge.id,
-                sourceId: edge.sourceId,
-                targetId: edge.targetId,
-                label: edge.label
-            ))
-        }
-
-        ensureConnectedToUserAnchor(userNodeLabel: userNodeLabel)
-        recountConnections()
-
-        // Adapt physics parameters to graph size
-        let nodeCount = nodes.count
-        if nodeCount <= 15 {
-            // Small graph: tighter layout so it doesn't look sparse
-            restLength = 300
-            repulsion = 50_000
-            centerGravity = 0.002
-            attraction = 0.005
-        } else if nodeCount <= 40 {
-            // Medium graph
-            restLength = 450
-            repulsion = 65_000
-            centerGravity = 0.001
-            attraction = 0.004
-        } else {
-            // Large graph: spread out
-            restLength = 600
-            repulsion = 80_000
-            centerGravity = 0.0008
-            attraction = 0.003
-        }
-
-        // Reset simulation state
-        tickCount = 0
-        stableFrameCount = 0
+    // Pre-compute connection counts from API edges
+    var connectionCounts: [String: Int] = [:]
+    for edge in graphResponse.edges {
+      connectionCounts[edge.sourceId, default: 0] += 1
+      connectionCounts[edge.targetId, default: 0] += 1
     }
 
-    /// Run one tick of the physics simulation
-    func tick() {
-        tickCount += 1
+    // Create 3D nodes
+    var foundUserNode = false
+    for node in graphResponse.nodes {
+      let node3D = GraphNode3D(
+        id: node.id,
+        label: node.label,
+        nodeType: node.nodeType
+      )
+      node3D.connectionCount = connectionCounts[node.id] ?? 0
 
-        // Only run physics every 2 ticks for smoother animation
-        guard tickCount % 2 == 0 else { return }
+      // Fix the user node at center
+      if let userName = userNodeLabel,
+        node.label.lowercased() == userName.lowercased()
+      {
+        node3D.position = .zero
+        node3D.isFixed = true
+        foundUserNode = true
+      }
 
-        // 1. Reset forces
-        for node in nodes {
-            node.force = .zero
-        }
-
-        // 2. Calculate repulsive forces (Coulomb-like)
-        let nodeCount = nodes.count
-        for i in 0..<nodeCount {
-            guard !nodes[i].isFixed else { continue }
-
-            for j in (i + 1)..<nodeCount {
-                let delta = nodes[j].position - nodes[i].position
-                let distSq = max(simd_length_squared(delta), 100) // Avoid division by zero
-
-                // Skip very distant pairs for performance
-                guard distSq < 100_000_000 else { continue }
-
-                let dist = sqrt(distSq)
-                let direction = delta / dist
-                let forceMagnitude = repulsion / distSq
-                let force = direction * forceMagnitude
-
-                nodes[i].force -= force
-                if !nodes[j].isFixed {
-                    nodes[j].force += force
-                }
-            }
-        }
-
-        // 3. Calculate attractive forces (spring-like along edges)
-        for edge in edges where edge.affectsPhysics {
-            guard let source = nodeMap[edge.sourceId],
-                  let target = nodeMap[edge.targetId] else { continue }
-
-            let delta = target.position - source.position
-            let dist = simd_length(delta)
-            guard dist > 0 else { continue }
-
-            let direction = delta / dist
-            let displacement = dist - restLength
-            let forceMagnitude = displacement * attraction
-            let force = direction * forceMagnitude
-
-            if !source.isFixed {
-                source.force += force
-            }
-            if !target.isFixed {
-                target.force -= force
-            }
-        }
-
-        // 4. Apply center gravity
-        for node in nodes where !node.isFixed {
-            node.force -= node.position * centerGravity
-        }
-
-        // 5. Update velocities and positions
-        var totalEnergy: Float = 0
-
-        for node in nodes where !node.isFixed {
-            // Update velocity
-            node.velocity += node.force * dt
-            node.velocity *= damping
-
-            // Cap max speed
-            let speed = simd_length(node.velocity)
-            if speed > maxSpeed {
-                node.velocity = simd_normalize(node.velocity) * maxSpeed
-            }
-
-            // Update position
-            node.position += node.velocity
-
-            // Accumulate kinetic energy
-            totalEnergy += speed * speed
-        }
-
-        // 6. Check for stability
-        if totalEnergy < stableThreshold {
-            stableFrameCount += 1
-        } else {
-            stableFrameCount = 0
-        }
+      nodes.append(node3D)
+      nodeMap[node.id] = node3D
     }
 
-    /// Run multiple physics steps synchronously (for initial layout)
-    /// Bypasses tick counting for full-speed computation.
-    func runSync(ticks: Int) {
-        for _ in 0..<ticks {
-            runPhysicsStep()
-        }
+    // Always create a center "me" node if none was found
+    if !foundUserNode {
+      let meNode = GraphNode3D(
+        id: Self.userCenterNodeId,
+        label: userNodeLabel ?? "Me",
+        nodeType: .person
+      )
+      meNode.position = .zero
+      meNode.isFixed = true
+      nodes.insert(meNode, at: 0)
+      nodeMap[meNode.id] = meNode
+
+      // Connect "me" to the most-connected nodes
+      let topNodes = connectionCounts.sorted { $0.value > $1.value }.prefix(min(8, graphResponse.nodes.count / 3 + 1))
+      for (nodeId, _) in topNodes {
+        edges.append(
+          GraphEdge3D(
+            id: "__user_edge_\(nodeId)__",
+            sourceId: Self.userCenterNodeId,
+            targetId: nodeId,
+            label: ""
+          ))
+        // Update connection counts for the user edges
+        nodeMap[nodeId]?.connectionCount += 1
+      }
+      meNode.connectionCount = topNodes.count
     }
 
-    /// One full physics step (no tick-skipping)
-    private func runPhysicsStep() {
-        // 1. Reset forces
-        for node in nodes {
-            node.force = .zero
-        }
-
-        // 2. Calculate repulsive forces (Coulomb-like)
-        let nodeCount = nodes.count
-        for i in 0..<nodeCount {
-            guard !nodes[i].isFixed else { continue }
-
-            for j in (i + 1)..<nodeCount {
-                let delta = nodes[j].position - nodes[i].position
-                let distSq = max(simd_length_squared(delta), 100)
-
-                guard distSq < 100_000_000 else { continue }
-
-                let dist = sqrt(distSq)
-                let direction = delta / dist
-                let forceMagnitude = repulsion / distSq
-                let force = direction * forceMagnitude
-
-                nodes[i].force -= force
-                if !nodes[j].isFixed {
-                    nodes[j].force += force
-                }
-            }
-        }
-
-        // 3. Calculate attractive forces
-        for edge in edges where edge.affectsPhysics {
-            guard let source = nodeMap[edge.sourceId],
-                  let target = nodeMap[edge.targetId] else { continue }
-
-            let delta = target.position - source.position
-            let dist = simd_length(delta)
-            guard dist > 0 else { continue }
-
-            let direction = delta / dist
-            let displacement = dist - restLength
-            let forceMagnitude = displacement * attraction
-            let force = direction * forceMagnitude
-
-            if !source.isFixed { source.force += force }
-            if !target.isFixed { target.force -= force }
-        }
-
-        // 4. Center gravity
-        for node in nodes where !node.isFixed {
-            node.force -= node.position * centerGravity
-        }
-
-        // 5. Update velocities and positions
-        for node in nodes where !node.isFixed {
-            node.velocity += node.force * dt
-            node.velocity *= damping
-
-            let speed = simd_length(node.velocity)
-            if speed > maxSpeed {
-                node.velocity = simd_normalize(node.velocity) * maxSpeed
-            }
-            node.position += node.velocity
-        }
+    // Create edges
+    for edge in graphResponse.edges {
+      edges.append(
+        GraphEdge3D(
+          id: edge.id,
+          sourceId: edge.sourceId,
+          targetId: edge.targetId,
+          label: edge.label
+        ))
     }
 
-    /// Add new nodes and edges incrementally without clearing existing ones
-    func addNodesAndEdges(graphResponse: KnowledgeGraphResponse, userNodeLabel: String?) {
-        var newNodeIds = Set<String>()
+    ensureConnectedToUserAnchor(userNodeLabel: userNodeLabel)
+    recountConnections()
 
-        // Skip nodes that already exist (by id)
-        for node in graphResponse.nodes {
-            guard nodeMap[node.id] == nil else { continue }
-            let node3D = GraphNode3D(id: node.id, label: node.label, nodeType: node.nodeType)
-            // Position near connected existing nodes, or random
-            if let connectedEdge = graphResponse.edges.first(where: { $0.sourceId == node.id || $0.targetId == node.id }),
-               let existingNode = nodeMap[connectedEdge.sourceId == node.id ? connectedEdge.targetId : connectedEdge.sourceId] {
-                let offset = SIMD3<Float>.random(in: -150...150)
-                node3D.position = existingNode.position + offset
-            }
-            // Check if this is the user node
-            if let userName = userNodeLabel, node.label.lowercased() == userName.lowercased() {
-                node3D.position = .zero
-                node3D.isFixed = true
-            }
-            nodes.append(node3D)
-            nodeMap[node.id] = node3D
-            newNodeIds.insert(node.id)
-        }
-
-        // Add new edges (skip duplicates)
-        let existingEdgeIds = Set(edges.map { $0.id })
-        for edge in graphResponse.edges {
-            guard !existingEdgeIds.contains(edge.id),
-                  nodeMap[edge.sourceId] != nil,
-                  nodeMap[edge.targetId] != nil else { continue }
-            edges.append(GraphEdge3D(id: edge.id, sourceId: edge.sourceId, targetId: edge.targetId, label: edge.label))
-        }
-
-        // Ensure user center node exists
-        if !nodes.contains(where: { $0.isFixed }) {
-            let meNode = GraphNode3D(id: Self.userCenterNodeId, label: userNodeLabel ?? "Me", nodeType: .person)
-            meNode.position = .zero
-            meNode.isFixed = true
-            nodes.insert(meNode, at: 0)
-            nodeMap[meNode.id] = meNode
-        }
-
-        ensureConnectedToUserAnchor(userNodeLabel: userNodeLabel, prioritizeNodeIds: newNodeIds)
-        recountConnections()
-
-        // Re-tune physics for new graph size
-        let nodeCount = nodes.count
-        if nodeCount <= 15 {
-            restLength = 300; repulsion = 50_000; centerGravity = 0.002; attraction = 0.005
-        } else if nodeCount <= 40 {
-            restLength = 450; repulsion = 65_000; centerGravity = 0.001; attraction = 0.004
-        } else {
-            restLength = 600; repulsion = 80_000; centerGravity = 0.0008; attraction = 0.003
-        }
-
-        wake()
+    // Adapt physics parameters to graph size
+    let nodeCount = nodes.count
+    if nodeCount <= 15 {
+      // Small graph: tighter layout so it doesn't look sparse
+      restLength = 300
+      repulsion = 50_000
+      centerGravity = 0.002
+      attraction = 0.005
+    } else if nodeCount <= 40 {
+      // Medium graph
+      restLength = 450
+      repulsion = 65_000
+      centerGravity = 0.001
+      attraction = 0.004
+    } else {
+      // Large graph: spread out
+      restLength = 600
+      repulsion = 80_000
+      centerGravity = 0.0008
+      attraction = 0.003
     }
 
-    private func ensureConnectedToUserAnchor(userNodeLabel: String?, prioritizeNodeIds: Set<String> = []) {
-        guard let anchorId = userAnchorId(userNodeLabel: userNodeLabel),
-              let anchorNode = nodeMap[anchorId] else { return }
+    // Reset simulation state
+    tickCount = 0
+    stableFrameCount = 0
+  }
 
-        var adjacency: [String: Set<String>] = [:]
-        for node in nodes {
-            adjacency[node.id] = adjacency[node.id] ?? []
-        }
-        for edge in edges {
-            adjacency[edge.sourceId, default: []].insert(edge.targetId)
-            adjacency[edge.targetId, default: []].insert(edge.sourceId)
-        }
+  /// Run one tick of the physics simulation
+  func tick() {
+    tickCount += 1
 
-        var visited = Set<String>()
-        var existingEdgeIds = Set(edges.map(\.id))
+    // Only run physics every 2 ticks for smoother animation
+    guard tickCount % 2 == 0 else { return }
 
-        for node in nodes {
-            guard !visited.contains(node.id) else { continue }
-
-            var stack = [node.id]
-            var component: [String] = []
-            visited.insert(node.id)
-
-            while let current = stack.popLast() {
-                component.append(current)
-                for neighbor in adjacency[current, default: []] where !visited.contains(neighbor) {
-                    visited.insert(neighbor)
-                    stack.append(neighbor)
-                }
-            }
-
-            guard !component.contains(anchorId) else { continue }
-            guard let bridgeTargetId = preferredBridgeTarget(in: component, prioritizeNodeIds: prioritizeNodeIds) else { continue }
-
-            let bridgeId = "\(Self.visualBridgeEdgePrefix)_\(anchorId)_\(bridgeTargetId)"
-            guard !existingEdgeIds.contains(bridgeId) else { continue }
-
-            edges.append(GraphEdge3D(
-                id: bridgeId,
-                sourceId: anchorId,
-                targetId: bridgeTargetId,
-                label: "",
-                affectsPhysics: false
-            ))
-            existingEdgeIds.insert(bridgeId)
-            adjacency[anchorId, default: []].insert(bridgeTargetId)
-            adjacency[bridgeTargetId, default: []].insert(anchorId)
-
-            if let bridgeTarget = nodeMap[bridgeTargetId], prioritizeNodeIds.contains(bridgeTargetId) {
-                let offset = SIMD3<Float>.random(in: -180...180)
-                bridgeTarget.position = anchorNode.position + offset
-            }
-        }
+    // 1. Reset forces
+    for node in nodes {
+      node.force = .zero
     }
 
-    private func userAnchorId(userNodeLabel: String?) -> String? {
-        if let fixedNode = nodes.first(where: \.isFixed) {
-            return fixedNode.id
-        }
+    // 2. Calculate repulsive forces (Coulomb-like)
+    let nodeCount = nodes.count
+    for i in 0..<nodeCount {
+      guard !nodes[i].isFixed else { continue }
 
-        guard let userName = userNodeLabel?.lowercased() else { return nil }
-        return nodes.first(where: { $0.label.lowercased() == userName })?.id
+      for j in (i + 1)..<nodeCount {
+        let delta = nodes[j].position - nodes[i].position
+        let distSq = max(simd_length_squared(delta), 100)  // Avoid division by zero
+
+        // Skip very distant pairs for performance
+        guard distSq < 100_000_000 else { continue }
+
+        let dist = sqrt(distSq)
+        let direction = delta / dist
+        let forceMagnitude = repulsion / distSq
+        let force = direction * forceMagnitude
+
+        nodes[i].force -= force
+        if !nodes[j].isFixed {
+          nodes[j].force += force
+        }
+      }
     }
 
-    private func preferredBridgeTarget(in component: [String], prioritizeNodeIds: Set<String>) -> String? {
-        if let prioritizedNodeId = component.first(where: { prioritizeNodeIds.contains($0) }) {
-            return prioritizedNodeId
-        }
+    // 3. Calculate attractive forces (spring-like along edges)
+    for edge in edges where edge.affectsPhysics {
+      guard let source = nodeMap[edge.sourceId],
+        let target = nodeMap[edge.targetId]
+      else { continue }
 
-        return component.max { lhs, rhs in
-            (nodeMap[lhs]?.connectionCount ?? 0) < (nodeMap[rhs]?.connectionCount ?? 0)
-        }
+      let delta = target.position - source.position
+      let dist = simd_length(delta)
+      guard dist > 0 else { continue }
+
+      let direction = delta / dist
+      let displacement = dist - restLength
+      let forceMagnitude = displacement * attraction
+      let force = direction * forceMagnitude
+
+      if !source.isFixed {
+        source.force += force
+      }
+      if !target.isFixed {
+        target.force -= force
+      }
     }
 
-    private func recountConnections() {
-        for node in nodes {
-            node.connectionCount = 0
-        }
-        for edge in edges {
-            nodeMap[edge.sourceId]?.connectionCount += 1
-            nodeMap[edge.targetId]?.connectionCount += 1
-        }
+    // 4. Apply center gravity
+    for node in nodes where !node.isFixed {
+      node.force -= node.position * centerGravity
     }
 
-    /// Wake up the simulation (reset stability counter)
-    func wake() {
-        stableFrameCount = 0
+    // 5. Update velocities and positions
+    var totalEnergy: Float = 0
+
+    for node in nodes where !node.isFixed {
+      // Update velocity
+      node.velocity += node.force * dt
+      node.velocity *= damping
+
+      // Cap max speed
+      let speed = simd_length(node.velocity)
+      if speed > maxSpeed {
+        node.velocity = simd_normalize(node.velocity) * maxSpeed
+      }
+
+      // Update position
+      node.position += node.velocity
+
+      // Accumulate kinetic energy
+      totalEnergy += speed * speed
     }
+
+    // 6. Check for stability
+    if totalEnergy < stableThreshold {
+      stableFrameCount += 1
+    } else {
+      stableFrameCount = 0
+    }
+  }
+
+  /// Run multiple physics steps synchronously (for initial layout)
+  /// Bypasses tick counting for full-speed computation. `ticks` is a
+  /// budget, not a quota — the loop exits as soon as the layout settles
+  /// (total kinetic energy below threshold for a run of steps).
+  /// Bulk layout for the initial build. Same math as `runPhysicsStep`,
+  /// but batched over contiguous value arrays: in unoptimized dev builds
+  /// the per-property class access in the hot loop is dominated by ARC
+  /// retain/release traffic, and the array form sidesteps it entirely.
+  /// Exits early when total kinetic energy plateaus while preserving the
+  /// same stability threshold the animated path uses.
+  func runSync(ticks: Int) {
+    stableFrameCount = 0
+    let nodeCount = nodes.count
+    guard nodeCount > 0 else { return }
+
+    // Snapshot node state into contiguous buffers
+    var positions = [SIMD3<Float>](repeating: .zero, count: nodeCount)
+    var velocities = [SIMD3<Float>](repeating: .zero, count: nodeCount)
+    var forces = [SIMD3<Float>](repeating: .zero, count: nodeCount)
+    var fixed = [Bool](repeating: false, count: nodeCount)
+    var indexOf: [String: Int] = [:]
+    indexOf.reserveCapacity(nodeCount)
+    for (index, node) in nodes.enumerated() {
+      positions[index] = node.position
+      velocities[index] = node.velocity
+      fixed[index] = node.isFixed
+      indexOf[node.id] = index
+    }
+    let springs: [(source: Int, target: Int)] = edges.compactMap { edge in
+      guard edge.affectsPhysics,
+        let source = indexOf[edge.sourceId],
+        let target = indexOf[edge.targetId]
+      else { return nil }
+      return (source, target)
+    }
+
+    var previousEnergy = Float.greatestFiniteMagnitude
+    var plateauSteps = 0
+    var energyStableSteps = 0
+    var executedSteps = 0
+
+    for step in 0..<ticks {
+      executedSteps = step + 1
+
+      // 1. Reset forces
+      for i in 0..<nodeCount { forces[i] = .zero }
+
+      // 2. Repulsion (Coulomb-like)
+      for i in 0..<nodeCount {
+        if fixed[i] { continue }
+        for j in (i + 1)..<nodeCount {
+          let delta = positions[j] - positions[i]
+          let distSq = max(simd_length_squared(delta), 100)
+          guard distSq < 100_000_000 else { continue }
+          let dist = sqrt(distSq)
+          let force = (delta / dist) * (repulsion / distSq)
+          forces[i] -= force
+          if !fixed[j] { forces[j] += force }
+        }
+      }
+
+      // 3. Spring attraction
+      for spring in springs {
+        let delta = positions[spring.target] - positions[spring.source]
+        let dist = simd_length(delta)
+        guard dist > 0 else { continue }
+        let force = (delta / dist) * ((dist - restLength) * attraction)
+        if !fixed[spring.source] { forces[spring.source] += force }
+        if !fixed[spring.target] { forces[spring.target] -= force }
+      }
+
+      // 4. Center gravity + 5. integrate
+      var totalEnergy: Float = 0
+      for i in 0..<nodeCount where !fixed[i] {
+        forces[i] -= positions[i] * centerGravity
+        velocities[i] += forces[i] * dt
+        velocities[i] *= damping
+        let speed = simd_length(velocities[i])
+        if speed > maxSpeed {
+          velocities[i] = simd_normalize(velocities[i]) * maxSpeed
+        }
+        positions[i] += velocities[i]
+        totalEnergy += speed * speed
+      }
+      lastStepEnergy = totalEnergy
+      if totalEnergy < stableThreshold {
+        energyStableSteps += 1
+      } else {
+        energyStableSteps = 0
+      }
+
+      // 6. Plateau detection: layout has stopped improving when energy
+      // change stays below 1% for a sustained run of steps.
+      let delta = abs(previousEnergy - totalEnergy)
+      if delta < previousEnergy * 0.01 {
+        plateauSteps += 1
+        if plateauSteps >= 20 {
+          logPerf(
+            "MemoryGraph: layout plateaued after \(executedSteps)/\(ticks) ticks (energy \(totalEnergy))"
+          )
+          break
+        }
+      } else {
+        plateauSteps = 0
+      }
+      previousEnergy = totalEnergy
+    }
+
+    if plateauSteps < 20 {
+      logPerf(
+        "MemoryGraph: layout budget exhausted (\(executedSteps) ticks, energy \(lastStepEnergy))"
+      )
+    }
+
+    // Write settled state back to the node objects
+    for (index, node) in nodes.enumerated() {
+      node.position = positions[index]
+      node.velocity = velocities[index]
+    }
+    stableFrameCount = min(energyStableSteps, stableFramesRequired)
+  }
+
+  /// Snapshot of every node's settled position, for layout caching.
+  func layoutPositions() -> [String: SIMD3<Float>] {
+    var positions: [String: SIMD3<Float>] = [:]
+    for node in nodes {
+      positions[node.id] = node.position
+    }
+    return positions
+  }
+
+  /// Restore a previously settled layout. Returns false (leaving positions
+  /// untouched for a fresh simulation) unless every node is covered.
+  func applyLayout(_ positions: [String: SIMD3<Float>]) -> Bool {
+    for node in nodes where !node.isFixed {
+      guard positions[node.id] != nil else { return false }
+    }
+    for node in nodes where !node.isFixed {
+      if let position = positions[node.id] {
+        node.position = position
+        node.velocity = .zero
+      }
+    }
+    stableFrameCount = stableFramesRequired
+    return true
+  }
+
+  /// Add new nodes and edges incrementally without clearing existing ones
+  func addNodesAndEdges(graphResponse: KnowledgeGraphResponse, userNodeLabel: String?) {
+    var newNodeIds = Set<String>()
+
+    // Skip nodes that already exist (by id)
+    for node in graphResponse.nodes {
+      guard nodeMap[node.id] == nil else { continue }
+      let node3D = GraphNode3D(id: node.id, label: node.label, nodeType: node.nodeType)
+      // Position near connected existing nodes, or random
+      if let connectedEdge = graphResponse.edges.first(where: { $0.sourceId == node.id || $0.targetId == node.id }),
+        let existingNode = nodeMap[connectedEdge.sourceId == node.id ? connectedEdge.targetId : connectedEdge.sourceId]
+      {
+        let offset = SIMD3<Float>.random(in: -150...150)
+        node3D.position = existingNode.position + offset
+      }
+      // Check if this is the user node
+      if let userName = userNodeLabel, node.label.lowercased() == userName.lowercased() {
+        node3D.position = .zero
+        node3D.isFixed = true
+      }
+      nodes.append(node3D)
+      nodeMap[node.id] = node3D
+      newNodeIds.insert(node.id)
+    }
+
+    // Add new edges (skip duplicates)
+    let existingEdgeIds = Set(edges.map { $0.id })
+    for edge in graphResponse.edges {
+      guard !existingEdgeIds.contains(edge.id),
+        nodeMap[edge.sourceId] != nil,
+        nodeMap[edge.targetId] != nil
+      else { continue }
+      edges.append(GraphEdge3D(id: edge.id, sourceId: edge.sourceId, targetId: edge.targetId, label: edge.label))
+    }
+
+    // Ensure user center node exists
+    if !nodes.contains(where: { $0.isFixed }) {
+      let meNode = GraphNode3D(id: Self.userCenterNodeId, label: userNodeLabel ?? "Me", nodeType: .person)
+      meNode.position = .zero
+      meNode.isFixed = true
+      nodes.insert(meNode, at: 0)
+      nodeMap[meNode.id] = meNode
+    }
+
+    ensureConnectedToUserAnchor(userNodeLabel: userNodeLabel, prioritizeNodeIds: newNodeIds)
+    recountConnections()
+
+    // Re-tune physics for new graph size
+    let nodeCount = nodes.count
+    if nodeCount <= 15 {
+      restLength = 300
+      repulsion = 50_000
+      centerGravity = 0.002
+      attraction = 0.005
+    } else if nodeCount <= 40 {
+      restLength = 450
+      repulsion = 65_000
+      centerGravity = 0.001
+      attraction = 0.004
+    } else {
+      restLength = 600
+      repulsion = 80_000
+      centerGravity = 0.0008
+      attraction = 0.003
+    }
+
+    wake()
+  }
+
+  private func ensureConnectedToUserAnchor(userNodeLabel: String?, prioritizeNodeIds: Set<String> = []) {
+    guard let anchorId = userAnchorId(userNodeLabel: userNodeLabel),
+      let anchorNode = nodeMap[anchorId]
+    else { return }
+
+    var adjacency: [String: Set<String>] = [:]
+    for node in nodes {
+      adjacency[node.id] = adjacency[node.id] ?? []
+    }
+    for edge in edges {
+      adjacency[edge.sourceId, default: []].insert(edge.targetId)
+      adjacency[edge.targetId, default: []].insert(edge.sourceId)
+    }
+
+    var visited = Set<String>()
+    var existingEdgeIds = Set(edges.map(\.id))
+
+    for node in nodes {
+      guard !visited.contains(node.id) else { continue }
+
+      var stack = [node.id]
+      var component: [String] = []
+      visited.insert(node.id)
+
+      while let current = stack.popLast() {
+        component.append(current)
+        for neighbor in adjacency[current, default: []] where !visited.contains(neighbor) {
+          visited.insert(neighbor)
+          stack.append(neighbor)
+        }
+      }
+
+      guard !component.contains(anchorId) else { continue }
+      guard let bridgeTargetId = preferredBridgeTarget(in: component, prioritizeNodeIds: prioritizeNodeIds) else {
+        continue
+      }
+
+      let bridgeId = "\(Self.visualBridgeEdgePrefix)_\(anchorId)_\(bridgeTargetId)"
+      guard !existingEdgeIds.contains(bridgeId) else { continue }
+
+      edges.append(
+        GraphEdge3D(
+          id: bridgeId,
+          sourceId: anchorId,
+          targetId: bridgeTargetId,
+          label: "",
+          affectsPhysics: false
+        ))
+      existingEdgeIds.insert(bridgeId)
+      adjacency[anchorId, default: []].insert(bridgeTargetId)
+      adjacency[bridgeTargetId, default: []].insert(anchorId)
+
+      if let bridgeTarget = nodeMap[bridgeTargetId], prioritizeNodeIds.contains(bridgeTargetId) {
+        let offset = SIMD3<Float>.random(in: -180...180)
+        bridgeTarget.position = anchorNode.position + offset
+      }
+    }
+  }
+
+  private func userAnchorId(userNodeLabel: String?) -> String? {
+    if let fixedNode = nodes.first(where: \.isFixed) {
+      return fixedNode.id
+    }
+
+    guard let userName = userNodeLabel?.lowercased() else { return nil }
+    return nodes.first(where: { $0.label.lowercased() == userName })?.id
+  }
+
+  private func preferredBridgeTarget(in component: [String], prioritizeNodeIds: Set<String>) -> String? {
+    if let prioritizedNodeId = component.first(where: { prioritizeNodeIds.contains($0) }) {
+      return prioritizedNodeId
+    }
+
+    return component.max { lhs, rhs in
+      (nodeMap[lhs]?.connectionCount ?? 0) < (nodeMap[rhs]?.connectionCount ?? 0)
+    }
+  }
+
+  private func recountConnections() {
+    for node in nodes {
+      node.connectionCount = 0
+    }
+    for edge in edges {
+      nodeMap[edge.sourceId]?.connectionCount += 1
+      nodeMap[edge.targetId]?.connectionCount += 1
+    }
+  }
+
+  /// Wake up the simulation (reset stability counter)
+  func wake() {
+    stableFrameCount = 0
+  }
 }

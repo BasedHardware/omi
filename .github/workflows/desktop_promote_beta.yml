@@ -1,0 +1,32 @@
+name: Promote Qualified Desktop Beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Qualified v*-macos candidate tag to promote to beta'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: desktop-beta-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    environment: beta
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask the backend to admit and promote the exact qualified candidate
+        env:
+          BETA_PROMOTION_TOKEN: ${{ secrets.BETA_PROMOTION_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST https://api.omi.me/v2/desktop/beta/promote-qualified \
+            --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data "{\"tag\":\"${RELEASE_TAG}\"}"

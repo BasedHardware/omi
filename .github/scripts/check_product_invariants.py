@@ -61,7 +61,24 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print matched invariants and exit 0.",
     )
+    parser.add_argument(
+        "--suggest",
+        action="store_true",
+        help="Print a paste-ready 'Product invariants affected' markdown block and exit 0.",
+    )
     return parser.parse_args()
+
+
+def format_suggest_block(hits: list[dict]) -> str:
+    """Return a paste-ready PR-body section for the required invariant IDs."""
+    lines = ["## Product invariants affected", ""]
+    if not hits:
+        lines.append("none")
+    else:
+        for hit in hits:
+            lines.append(f"- {hit['id']}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def load_pr_body(args: argparse.Namespace) -> str:
@@ -169,26 +186,8 @@ def matched_invariants(changed: list[str], invariants: list[dict]) -> list[dict]
     return hits
 
 
-def main() -> int:
-    args = parse_args()
-    root = Path(args.root).resolve()
-    changed_path = Path(args.changed_files)
-    changed = [line.strip() for line in changed_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    invariants = load_locked_invariants(root)
-    hits = matched_invariants(changed, invariants)
-    pr_body = load_pr_body(args)
-
-    if args.print_only:
-        if not hits:
-            print("No locked invariants matched changed files.")
-            return 0
-        for hit in hits:
-            print(f"{hit['id']}: {len(hit['matched_files'])} file(s) ({hit['path']})")
-            for f in hit["matched_files"][:20]:
-                print(f"  - {f}")
-        return 0
-
-    still_missing = []
+def missing_invariant_hits(hits: list[dict], pr_body: str) -> list[dict]:
+    still_missing: list[dict] = []
     for hit in hits:
         inv_id = hit["id"]
         if pr_body_cites_id(inv_id, pr_body):
@@ -201,6 +200,33 @@ def main() -> int:
             if "agent-control-plane" in pr_body.lower():
                 continue
         still_missing.append(hit)
+    return still_missing
+
+
+def main() -> int:
+    args = parse_args()
+    root = Path(args.root).resolve()
+    changed_path = Path(args.changed_files)
+    changed = [line.strip() for line in changed_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    invariants = load_locked_invariants(root)
+    hits = matched_invariants(changed, invariants)
+    pr_body = load_pr_body(args)
+
+    if args.suggest:
+        print(format_suggest_block(hits), end="")
+        return 0
+
+    if args.print_only:
+        if not hits:
+            print("No locked invariants matched changed files.")
+            return 0
+        for hit in hits:
+            print(f"{hit['id']}: {len(hit['matched_files'])} file(s) ({hit['path']})")
+            for f in hit["matched_files"][:20]:
+                print(f"  - {f}")
+        return 0
+
+    still_missing = missing_invariant_hits(hits, pr_body)
 
     if not still_missing:
         if hits:
@@ -219,6 +245,10 @@ def main() -> int:
             print(f"    - {f}")
         if len(hit["matched_files"]) > 15:
             print(f"    … and {len(hit['matched_files']) - 15} more")
+    print("\nPaste this into the PR body (or a draft for --pr-body-file / OMI_PR_BODY_FILE):")
+    print()
+    print(format_suggest_block(hits), end="")
+    print("Then re-run: scripts/pr-preflight --pr-body-file <draft.md>")
     return 1
 
 

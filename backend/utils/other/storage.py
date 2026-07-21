@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import io
 import json
 import os
@@ -79,7 +80,7 @@ def _get_storage_client() -> Any:
 
 speech_profiles_bucket = (os.getenv('BUCKET_SPEECH_PROFILES') or '').strip() or None
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
-memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
+memories_recordings_bucket = (os.getenv('BUCKET_MEMORIES_RECORDINGS') or '').strip() or None
 private_cloud_sync_bucket = os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync')
 syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
@@ -345,6 +346,12 @@ def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[s
 
 def delete_all_conversation_recordings(uid: str) -> None:
     if not uid:
+        return
+    if not memories_recordings_bucket:
+        # A required purge failure blocks the irreversible Firestore wipe (see
+        # services/users/account_deletion.py), so an unconfigured bucket must not raise here:
+        # uploads resolve the same name, so a deployment without it cannot have stored recordings.
+        logger.warning('BUCKET_MEMORIES_RECORDINGS is not configured; skipping conversation recordings purge')
         return
     bucket = _get_storage_client().bucket(memories_recordings_bucket)
     # Trailing slash so a uid is not a prefix of another uid's folder (e.g. "abc" matching "abcd/").
@@ -1220,6 +1227,108 @@ def enqueue_conversation_audio_merge(
             logger.error(f'audio_merge: enqueue failed conv={conversation_id} file={audio_file_id}: {e}')
 
 
+# ----------------------------------------------------------------------------
+# Conversation-level playback artifact: ONE dense MP3 per conversation
+# (playback/{uid}/{conversation_id}/conversation.mp3) with only captured audio;
+# inter-part gaps collapsed. The spans manifest + audio_files fingerprint are
+# stamped on the conversation doc (conversation_audio). Same 30-day lifecycle.
+# 'conversation' cannot collide with per-part names: audio_file ids are UUIDv4.
+# ----------------------------------------------------------------------------
+
+CONVERSATION_ARTIFACT_NAME = 'conversation'
+
+
+def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
+    """Content fingerprint of a conversation's audio_files (id + chunk count +
+    last chunk timestamp per part, order-insensitive). Stamped on the doc at
+    build time; a mismatch with the current audio_files means the artifact is
+    stale. Also embedded in the Cloud Tasks task name so rebuilds after late
+    chunks aren't swallowed by named-task dedup."""
+    parts = sorted(
+        [
+            [af['id'], len(af['chunk_timestamps']), round(sorted(af['chunk_timestamps'])[-1], 3)]
+            for af in audio_files
+            if af.get('id') and af.get('chunk_timestamps')
+        ],
+        key=lambda p: p[0],
+    )
+    return hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:12]
+
+
+def maybe_invalidate_conversation_playback(
+    uid: str,
+    conversation_id: str,
+    conversation: Optional[Dict[str, Any]],
+    audio_files: List[Dict[str, Any]],
+    caller: str,
+) -> None:
+    """Re-enqueue the conversation artifact build if a stamped artifact went
+    stale (audio_files changed). No stamp -> no-op, so live-conversation batch
+    flushes never churn rebuilds; the first build happens at completion."""
+    stamp = (conversation or {}).get('conversation_audio') or {}
+    stamped = stamp.get('audio_files_fingerprint')
+    if not stamped:
+        return
+    fingerprint = compute_audio_files_fingerprint(audio_files)
+    if fingerprint != stamped:
+        enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller)
+
+
+def _conversation_playback_blob(uid: str, conversation_id: str):
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{CONVERSATION_ARTIFACT_NAME}.mp3')
+
+
+def get_conversation_playback_signed_url(uid: str, conversation_id: str):
+    blob = _conversation_playback_blob(uid, conversation_id)
+    if not blob.exists():
+        return None
+    return _get_signed_url(blob, 60)
+
+
+def upload_conversation_playback_artifact(uid: str, conversation_id: str, mp3_data: bytes) -> None:
+    blob = _conversation_playback_blob(uid, conversation_id)
+    blob.upload_from_string(mp3_data, content_type='audio/mpeg')
+
+
+def _conversation_playback_unavailable_blob(uid: str, conversation_id: str):
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{CONVERSATION_ARTIFACT_NAME}.unavailable')
+
+
+def mark_conversation_playback_unavailable(uid: str, conversation_id: str, fingerprint: str, reason: str) -> None:
+    """Marker content carries the fingerprint it was written for: a marker for a
+    stale fingerprint is ignored on read (late chunks may fix a chunks_missing verdict)."""
+    blob = _conversation_playback_unavailable_blob(uid, conversation_id)
+    blob.upload_from_string(f'{fingerprint}:{reason}', content_type='text/plain')
+
+
+def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id: str) -> Optional[str]:
+    blob = _conversation_playback_unavailable_blob(uid, conversation_id)
+    try:
+        content = blob.download_as_bytes().decode()
+    except BlobNotFound:
+        return None
+    return content.split(':', 1)[0] if content else None
+
+
+def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerprint: str, caller: str) -> None:
+    """Enqueue the conversation-level artifact build (named-task deduped on the
+    fingerprint). Failures are swallowed: the next /urls poll re-enqueues."""
+    try:
+        enqueue_audio_merge_job(
+            {
+                'schema_version': 2,
+                'uid': uid,
+                'conversation_id': conversation_id,
+                'fingerprint': fingerprint,
+                'caller': caller,
+            }
+        )
+    except Exception as e:
+        logger.error(f'audio_merge: conversation enqueue failed conv={conversation_id}: {e}')
+
+
 def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: str):
     """Download a legacy merged WAV cache blob directly — never merges.
 
@@ -1257,7 +1366,6 @@ def precache_conversation_audio(
         return
 
     def _precache_all():
-
         def _cache_single(af: Dict[str, Any]) -> None:
             try:
                 audio_file_id = af.get('id')
@@ -1394,8 +1502,14 @@ def upload_app_logo(file_path: str, app_id: str):
 
 
 def delete_app_logo(img_url: str):
+    prefix = f'https://storage.googleapis.com/{omi_apps_bucket}/'
+    # Require the URL to START WITH the app-logo prefix, not merely contain it: a foreign-bucket URL
+    # embedding the prefix later could otherwise delete an unrelated object (this is a deletion path).
+    if not img_url.startswith(prefix):
+        logger.warning(f'delete_app_logo: url not in {omi_apps_bucket}, skipping')
+        return
     bucket = _get_storage_client().bucket(omi_apps_bucket)
-    path = img_url.split(f'https://storage.googleapis.com/{omi_apps_bucket}/')[1]
+    path = img_url[len(prefix) :]
     logger.info(f'delete_app_logo {path}')
     blob = bucket.blob(path)
     blob.delete()

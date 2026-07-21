@@ -67,7 +67,7 @@ class ClientDeviceService {
 
   Future<String> _loadOrCreateDeviceIdHash() async {
     final storedHash = SharedPreferencesUtil().deviceIdHash;
-    if (storedHash != null && storedHash.isNotEmpty) {
+    if (storedHash.isNotEmpty) {
       return storedHash;
     }
 

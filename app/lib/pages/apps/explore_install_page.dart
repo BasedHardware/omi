@@ -22,7 +22,6 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:omi/pages/apps/widgets/create_options_sheet.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -209,57 +208,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     );
   }
 
-  Widget _buildShimmerCreateButton() {
-    return ShimmerWithTimeout(
-      baseColor: AppStyles.backgroundSecondary,
-      highlightColor: AppStyles.backgroundTertiary,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(color: AppStyles.backgroundTertiary, borderRadius: BorderRadius.circular(8)),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 180,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    width: 120,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(color: AppStyles.backgroundTertiary, borderRadius: BorderRadius.circular(4)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildShimmerSearchBar() {
     return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
@@ -270,7 +218,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
           children: [
             Expanded(
               child: Container(
-                height: 44,
+                height: 48,
                 decoration: BoxDecoration(
                   color: AppStyles.backgroundSecondary,
                   borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
@@ -280,7 +228,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             const SizedBox(width: 8),
             Container(
               width: 44,
-              height: 44,
+              height: 48,
               decoration: BoxDecoration(
                 color: AppStyles.backgroundSecondary,
                 borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
@@ -606,10 +554,10 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               }
                                               provider.applyFilters();
                                             },
-                                            icon: FaIcon(
-                                              FontAwesomeIcons.magnifyingGlass,
-                                              color: Colors.white70,
-                                              size: 14,
+                                            icon: const Icon(
+                                              Icons.search,
+                                              color: Colors.white60,
+                                              size: 20,
                                             ),
                                             padding: EdgeInsets.zero,
                                           ),
@@ -622,12 +570,12 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               height: 44,
                                               child: SearchBar(
                                                 hintText: context.l10n.searchAppsPlaceholder,
-                                                leading: Padding(
+                                                leading: const Padding(
                                                   padding: EdgeInsets.only(left: 6.0),
-                                                  child: FaIcon(
-                                                    FontAwesomeIcons.magnifyingGlass,
-                                                    color: Colors.white70,
-                                                    size: 14,
+                                                  child: Icon(
+                                                    Icons.search,
+                                                    color: Colors.white60,
+                                                    size: 20,
                                                   ),
                                                 ),
                                                 backgroundColor: WidgetStateProperty.all(

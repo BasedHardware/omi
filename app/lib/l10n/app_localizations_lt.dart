@@ -9,6 +9,9 @@ class AppLocalizationsLt extends AppLocalizations {
   AppLocalizationsLt([String locale = 'lt']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Seanso laikas baigėsi — prisijunkite dar kartą.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -6081,7 +6084,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
+      '300 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8995,7 +8998,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get billingYearly => 'Metinis';
 
   @override
-  String get savePercent => 'Sutaupykite ~17%';
+  String savePercent(int percent) {
+    return 'Sutaupykite ~$percent%';
+  }
 
   @override
   String get popular => 'Populiarus';
@@ -9354,7 +9359,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Kol kas veikia su Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
+      'Veikia su telefono mikrofonu bei Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9587,4 +9592,201 @@ class AppLocalizationsLt extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Klaida jungiantis prie Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Įrenginio saugykla';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'užpildyta $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'panaudota $used iš $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free laisva';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami.';
+
+  @override
+  String get sttModelAccuracy => 'Accuracy';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Debesies transkripcija';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Delete Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloaded';
+
+  @override
+  String get sttModelFaster => 'Faster';
+
+  @override
+  String get sttFilterAuto => 'Auto';
+
+  @override
+  String get sttModelHigher => 'Higher';
+
+  @override
+  String get whisperModelSizeLarge => 'Large';
+
+  @override
+  String get sttModelLower => 'Lower';
+
+  @override
+  String get whisperModelSizeMedium => 'Medium';
+
+  @override
+  String get onDeviceModelDeleted => 'Model deleted';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model download failed';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get onDeviceModelSize => 'Model Size';
+
+  @override
+  String get sttNone => 'None';
+
+  @override
+  String get onDeviceTranscription => 'Transkripcija įrenginyje';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripcija apdorojama vietoje jūsų įrenginyje';
+
+  @override
+  String get sttModelSlower => 'Slower';
+
+  @override
+  String get whisperModelSizeSmall => 'Small';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Kalbos į tekstą teikėjas';
+
+  @override
+  String get speechToTextProviderDesc => 'Pasirinkite transkripcijai naudojamą paslaugą';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Speed';
+
+  @override
+  String get whisperModelSizeTiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Transkripcijos kalba';
+
+  @override
+  String get transcriptionLanguageDesc => 'Pasirinkite kalbos transkripcijos kalbą';
+
+  @override
+  String get whisperModel => 'Whisper modelis';
+
+  @override
+  String get whisperModelDesc => 'Pasirinkite modelį transkripcijai įrenginyje';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+
+  @override
+  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+
+  @override
+  String get downgradeLimitBattery => '7x battery consumption';
+
+  @override
+  String get downgradeLimitQuality => '30% less transcription quality';
+
+  @override
+  String get downgradeLimitDelay => '5-7 second delay';
+
+  @override
+  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+
+  @override
+  String get downgradeAnyway => 'Downgrade Anyway';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Linked to \"$title\"';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+
+  @override
+  String get thanksForYourFeedback => 'Thanks for your feedback!';
+
+  @override
+  String get copyMessage => 'Copy message';
+
+  @override
+  String get searchSettings => 'Search settings…';
+
+  @override
+  String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Pasirinkite „Ray-Ban Meta“ mikrofoną';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Pasirinkite akinių Bluetooth mikrofoną. Kol „Omi“ jį naudoja, muzika pristabdoma.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth mikrofonų nerasta. Prijunkite akinius iPhone nustatymuose ir bandykite dar kartą.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Nepavyko įkelti Bluetooth mikrofonų. Patikrinkite, ar Bluetooth įjungtas, ir bandykite dar kartą.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Nepavyko prisijungti prie šio mikrofono. Įsitikinkite, kad jis prijungtas iPhone nustatymuose.';
 }

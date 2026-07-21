@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingFileScanStepView: View {
   @ObservedObject var appState: AppState
@@ -23,7 +23,7 @@ struct OnboardingFileScanStepView: View {
       onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 24) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
         ZStack {
           RoundedRectangle(cornerRadius: 28, style: .continuous)
             .fill(OmiColors.backgroundSecondary)
@@ -32,7 +32,7 @@ struct OnboardingFileScanStepView: View {
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
 
-          VStack(spacing: 20) {
+          VStack(spacing: OmiSpacing.xl) {
             OnboardingLoadingAnimation(progress: scanProgress)
               .frame(height: 160)
 
@@ -51,21 +51,39 @@ struct OnboardingFileScanStepView: View {
                 .foregroundColor(OmiColors.textTertiary)
             }
           }
-          .padding(28)
+          .padding(OmiSpacing.xxl)
         }
         .frame(maxWidth: 560, maxHeight: 280)
 
-        if coordinator.scanSnapshot != nil {
-          Button("Continue") {
-            onContinue()
+        // Gate Continue on the scan reaching a terminal state, not on a non-empty
+        // snapshot — a failed scan or a scan that indexed zero files (e.g. Full
+        // Disk Access was skipped) leaves `scanSnapshot` nil while `scanState`
+        // becomes `.failed`/`.complete`, and gating on the snapshot would trap
+        // the user on a perpetual "Scanning…" screen with no way forward.
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if OnboardingPagedIntroCoordinator.fileScanReachedTerminalState(coordinator.scanState) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              if let error = coordinator.lastActionError {
+                Text(error)
+                  .font(.system(size: 13))
+                  .foregroundColor(OmiColors.textTertiary)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+              Button("Continue") {
+                onContinue()
+              }
+              .buttonStyle(OmiButtonStyle(.primary))
+              .keyboardShortcut(.defaultAction)
+            }
+          } else {
+            Text("Scanning your workspace…")
+              .font(.system(size: 13))
+              .foregroundColor(OmiColors.textTertiary)
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-          .keyboardShortcut(.defaultAction)
-        } else {
-          Text("Scanning your workspace…")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {

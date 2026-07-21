@@ -5,10 +5,24 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
+from models import memory_search_gateway
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchVectorHit
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState, is_default_access_eligible
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
+
+MEMORY_ADAPTER_FIXTURE_NOW = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+
+
+def freeze_default_vector_eligibility_clock(monkeypatch, *, now: datetime = MEMORY_ADAPTER_FIXTURE_NOW) -> None:
+    """Keep vector hydration's default eligibility check on the fixture clock."""
+    fixture_now = now
+
+    def _fixture_default_access_eligible(item, policy, *, now: datetime | None = None):
+        evaluation_now = fixture_now if now is None else now
+        return is_default_access_eligible(item, policy, now=evaluation_now)
+
+    monkeypatch.setattr(memory_search_gateway, "is_default_access_eligible", _fixture_default_access_eligible)
 
 
 class Snapshot:
@@ -93,7 +107,7 @@ def memory_item(
     quote_text: str,
     **overrides,
 ) -> MemoryItem:
-    now = now or datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = now or MEMORY_ADAPTER_FIXTURE_NOW
     captured_at = captured_at or (now - timedelta(days=1))
     data = {
         "memory_id": memory_id,
@@ -101,7 +115,7 @@ def memory_item(
         "version": 1,
         "tier": tier,
         "status": MemoryItemStatus.active,
-        "processing_state": ProcessingState.pending if tier == MemoryTier.short_term else ProcessingState.processed,
+        "processing_state": ProcessingState.processed,
         "content": content or f"{memory_id} coffee preference",
         "evidence": [evidence(f"{memory_id}-source", quote_text=quote_text)],
         "source_state": SourceState.active,

@@ -124,7 +124,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
 
       if (!showSummarizeConfirmation) {
         await stopRecordingAndProcess();
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
         return;
       }
       showDialog(
@@ -157,8 +159,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 onConfirm: () async {
                   SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
                   await stopRecordingAndProcess();
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pop();
+                  }
                 },
               );
             },

@@ -52,9 +52,17 @@ for sub in [
     "daily_summaries",
     "mem_db",
     "notifications",
+    "workstreams",
+    "firestore_transaction_retry",
 ]:
     mod = _stub_module(f"database.{sub}")
     setattr(database_mod, sub, mod)
+
+sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted = type(
+    "FirestoreContentionExhausted",
+    (RuntimeError,),
+    {},
+)
 
 # Stub vector_db functions used by routers.action_items
 vector_db_mod = sys.modules["database.vector_db"]
@@ -96,6 +104,7 @@ redis_mod.json = __import__("json")
 # Stub database.users with get_user_profile (legacy — still needed by other imports)
 users_mod = sys.modules["database.users"]
 users_mod.get_user_profile = MagicMock(return_value={"name": "TestUser"})
+sys.modules["database.workstreams"].get_workstream_goal_id = MagicMock(return_value=None)
 
 # Stub database.auth with get_user_name (used by utils.users.get_user_display_name)
 auth_db_mod = _stub_module("database.auth")

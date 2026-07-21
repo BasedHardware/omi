@@ -72,11 +72,25 @@ for arg in "$@"; do
 done
 suite="${filter%/}"
 
-case "$suite" in
-  AlphaTests|BetaTests)
-    sleep 3
-    ;;
-esac
+if [[ "$*" == *"swift test"* ]]; then
+  active_dir="$FAKE_XCRUN_SYNC_DIR/active"
+  mkdir -p "$active_dir"
+  active_marker="$active_dir/$$"
+  trap 'rm -f "$active_marker"' EXIT
+  touch "$active_marker"
+
+  # Two workers are concurrent when two suite processes are alive at once.
+  # Do not rendezvous on specific suite names: xargs -P 2 starts the first two
+  # suites alphabetically, which are not guaranteed to be AlphaTests/BetaTests.
+  active_count="$(find "$active_dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+  if [ "$active_count" -ge 2 ]; then
+    touch "$FAKE_XCRUN_SYNC_DIR/overlap-proven"
+  fi
+
+  # Hold the worker briefly so a fast peer suite cannot finish before overlap
+  # is observed when only two suites are in flight.
+  sleep 0.1
+fi
 
 if [ "$suite" = "AlphaTests" ]; then
   echo "alpha failed"
@@ -89,18 +103,18 @@ chmod +x "$TMPDIR/bin/xcrun"
 
 export PATH="$TMPDIR/bin:$PATH"
 export FAKE_XCRUN_LOG="$TMPDIR/xcrun.log"
+export FAKE_XCRUN_SYNC_DIR="$TMPDIR/xcrun-sync"
 export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/tests"
 export OMI_SWIFT_TEST_PACKAGE_PATH="$TMPDIR/package"
 export OMI_SWIFT_TEST_SUITE_WORKERS=2
+mkdir -p "$FAKE_XCRUN_SYNC_DIR"
 
-start=$(date +%s)
 if "$RUNNER" >"$TMPDIR/runner.out" 2>"$TMPDIR/runner.err"; then
   fail "runner unexpectedly succeeded despite AlphaTests failure"
 fi
-elapsed=$(( $(date +%s) - start ))
 
-if [ "$elapsed" -ge 6 ]; then
-  fail "runner did not execute AlphaTests and BetaTests in parallel; elapsed=${elapsed}s"
+if [ ! -f "$FAKE_XCRUN_SYNC_DIR/overlap-proven" ]; then
+  fail "runner did not execute suites concurrently with two workers"
 fi
 if ! grep -q -- "--- FAILED: AlphaTests ---" "$TMPDIR/runner.out"; then
   fail "runner did not print the failed suite heading"
@@ -113,6 +127,17 @@ if ! grep -q "Ran 6 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner
 fi
 if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass ratcheted skips to SwiftPM"
+fi
+
+# Local runs should get the same proven suite-level parallelism as CI unless a
+# diagnosis explicitly asks for fewer workers.
+unset OMI_SWIFT_TEST_SUITE_WORKERS SWIFT_TEST_SUITE_WORKERS
+: >"$FAKE_XCRUN_LOG"
+if "$RUNNER" >"$TMPDIR/default-runner.out" 2>"$TMPDIR/default-runner.err"; then
+  fail "default runner unexpectedly succeeded despite AlphaTests failure"
+fi
+if ! grep -q "Ran 6 Swift suites in isolation with 4 worker(s)." "$TMPDIR/default-runner.out"; then
+  fail "runner did not default local suite execution to four workers"
 fi
 
 echo "swift-test-suites tests passed"

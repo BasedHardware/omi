@@ -65,7 +65,7 @@ def _install_heavy_import_stubs():
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memories import MemoryCategory
 from models.memory_apply import MemoryControlState
-from models.product_memory import MemoryItemStatus
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState
 from utils.memory.canonical_memory_adapter import (
     delete_all_canonical_memories,
     delete_canonical_memory,
@@ -619,7 +619,7 @@ def test_update_canonical_content_fails_on_document_memory_id_mismatch(monkeypat
     assert canonical_db.docs[item_path]["content"] == "Original fact"
 
 
-def test_update_canonical_content_kg_invalidation_uses_merge_update(monkeypatch, canonical_db):
+def test_update_canonical_content_invalidates_kg_and_returns_to_pending(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     payload = _sample_memory_payload(uid=uid, conversation_id="conv-kg-merge", content="Original KG fact")
     memory_id = payload["id"]
@@ -653,21 +653,14 @@ def test_update_canonical_content_kg_invalidation_uses_merge_update(monkeypatch,
         }
     )
 
-    original_set = _DocRef.set
-
-    def concurrent_visibility_change_on_kg_merge(ref, data, merge=False):
-        if ref.path == item_path and merge and set(data) == {"kg_extracted", "updated_at"}:
-            canonical_db.docs[item_path]["visibility"] = "shared"
-        return original_set(ref, data, merge=merge)
-
-    monkeypatch.setattr(_DocRef, "set", concurrent_visibility_change_on_kg_merge)
-
     updated = update_canonical_memory_content(uid, memory_id, "Updated KG fact", db_client=canonical_db)
 
     assert updated.kg_extracted is False
+    assert updated.tier == MemoryTier.short_term
+    assert updated.processing_state == ProcessingState.pending
+    assert updated.promotion["processing_status"] == "pending_processing"
     assert canonical_db.docs[item_path]["content"] == "Updated KG fact"
     assert canonical_db.docs[item_path]["kg_extracted"] is False
-    assert canonical_db.docs[item_path]["visibility"] == "shared"
 
 
 def test_delete_all_canonical_memories_batches_kg_invalidation(monkeypatch, canonical_db):

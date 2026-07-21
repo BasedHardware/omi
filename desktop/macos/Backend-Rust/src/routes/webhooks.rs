@@ -16,6 +16,43 @@ use crate::AppState;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// Outcome of verifying a Sentry webhook HMAC signature against the body.
+#[derive(Debug, PartialEq, Eq)]
+enum SentrySignatureCheck {
+    Verified,
+    /// No signature header was present. With a secret configured this is an
+    /// unauthenticated request and must be rejected.
+    Missing,
+    Mismatch,
+    /// The configured secret could not initialize the HMAC key.
+    KeyError,
+}
+
+/// Verify a Sentry `sentry-hook-signature` header against the raw body using
+/// the configured client secret. Pure so the fail-closed contract is testable
+/// without an HTTP stack.
+fn verify_sentry_signature(
+    secret: &str,
+    body: &[u8],
+    signature: Option<&str>,
+) -> SentrySignatureCheck {
+    let signature = match signature {
+        Some(sig) => sig,
+        None => return SentrySignatureCheck::Missing,
+    };
+    let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
+        Ok(mac) => mac,
+        Err(_) => return SentrySignatureCheck::KeyError,
+    };
+    mac.update(body);
+    let expected = hex::encode(mac.finalize().into_bytes());
+    if expected == signature {
+        SentrySignatureCheck::Verified
+    } else {
+        SentrySignatureCheck::Mismatch
+    }
+}
+
 /// Sentry webhook issue payload
 #[derive(Deserialize)]
 struct SentryWebhookPayload {
@@ -77,29 +114,27 @@ async fn handle_sentry_webhook(
             .get("sentry-hook-signature")
             .and_then(|v| v.to_str().ok());
 
-        match signature {
-            Some(sig) => {
-                let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).map_err(|e| {
-                    tracing::error!("Sentry webhook: HMAC key error: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-                mac.update(&body);
-                let expected = hex::encode(mac.finalize().into_bytes());
-
-                if expected != sig {
-                    tracing::warn!(
-                        "Sentry webhook: signature mismatch (expected={}, got={})",
-                        expected,
-                        sig
-                    );
-                    return Err(StatusCode::UNAUTHORIZED);
-                }
+        match verify_sentry_signature(secret, &body, signature) {
+            SentrySignatureCheck::Verified => {
                 tracing::info!("Sentry webhook: signature verified");
             }
-            None => {
+            SentrySignatureCheck::Missing => {
+                // A configured secret means Sentry signs every delivery. A
+                // request with no signature is unauthenticated and must not
+                // be allowed to create action items; failing open here let
+                // anyone who knew the URL forge feedback issues.
                 tracing::warn!(
-                    "Sentry webhook: no signature header, proceeding anyway (Sentry may omit it)"
+                    "Sentry webhook: secret configured but no signature header; rejecting"
                 );
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+            SentrySignatureCheck::Mismatch => {
+                tracing::warn!("Sentry webhook: signature mismatch; rejecting");
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+            SentrySignatureCheck::KeyError => {
+                tracing::error!("Sentry webhook: HMAC key error");
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }
         }
     } else {
@@ -711,5 +746,45 @@ mod tests {
         assert_eq!(body["created"], 0);
         assert_eq!(body["skipped"], 0);
         assert_eq!(body["total_fetched"], 0);
+    }
+
+    fn valid_sentry_signature(secret: &str, body: &[u8]) -> String {
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(body);
+        hex::encode(mac.finalize().into_bytes())
+    }
+
+    #[test]
+    fn sentry_signature_missing_is_rejected_when_secret_configured() {
+        // Fail-closed: a configured secret means Sentry signs every delivery,
+        // so an unsigned request is unauthenticated and must not proceed.
+        assert_eq!(
+            verify_sentry_signature("shh", b"{\"action\":\"created\"}", None),
+            SentrySignatureCheck::Missing
+        );
+    }
+
+    #[test]
+    fn sentry_signature_valid_is_verified() {
+        let body = b"{\"action\":\"created\"}";
+        let sig = valid_sentry_signature("shh", body);
+        assert_eq!(
+            verify_sentry_signature("shh", body, Some(&sig)),
+            SentrySignatureCheck::Verified
+        );
+    }
+
+    #[test]
+    fn sentry_signature_wrong_secret_or_body_is_mismatch() {
+        let body = b"{\"action\":\"created\"}";
+        let sig = valid_sentry_signature("shh", body);
+        assert_eq!(
+            verify_sentry_signature("different", body, Some(&sig)),
+            SentrySignatureCheck::Mismatch
+        );
+        assert_eq!(
+            verify_sentry_signature("shh", b"tampered", Some(&sig)),
+            SentrySignatureCheck::Mismatch
+        );
     }
 }
