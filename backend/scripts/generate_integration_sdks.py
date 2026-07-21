@@ -1866,7 +1866,10 @@ void main() {
 }
 """
     return {
-        "lib/omi_integration.dart": "\n".join(lines) + "\n",
+        "lib/omi_integration.dart": (
+            header_comment("cpp", spec_path) + "library;\n\n" + "export 'omi_integration.g.dart';\n"
+        ),
+        "lib/omi_integration.g.dart": "\n".join(lines) + "\n",
         "pubspec.yaml": pubspec,
         "test/client_test.dart": test,
         "README.md": """# omi_integration (Dart)
@@ -2029,7 +2032,7 @@ def _format_dart_tree(root: Path) -> None:
         dart = shutil.which('dart')
     if not dart:
         return
-    targets = [str(path) for path in dart_dir.rglob('*.dart') if path.is_file()]
+    targets = [str(path) for path in dart_dir.rglob('*.dart') if path.is_file() and not path.name.endswith('.g.dart')]
     if not targets:
         return
     subprocess.run([dart, 'format', '--line-length', '120', *targets], check=False)
@@ -2169,7 +2172,9 @@ def main(argv: list[str] | None = None) -> int:
         if dart_bin is None:
             dart_bin = shutil.which('dart')
         if dart_dir.exists() and dart_bin:
-            dart_files = [str(path) for path in dart_dir.rglob('*.dart') if path.is_file()]
+            dart_files = [
+                str(path) for path in dart_dir.rglob('*.dart') if path.is_file() and not path.name.endswith('.g.dart')
+            ]
             if dart_files:
                 proc = subprocess.run(
                     [
