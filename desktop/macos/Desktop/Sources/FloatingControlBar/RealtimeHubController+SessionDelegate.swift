@@ -671,6 +671,15 @@ extension RealtimeHubController {
       }
     } else {
       turnTranscript += text
+      // Surface the growing partial in the notch's listening pill so the user
+      // sees their words as they speak. Ephemeral: the settled final above
+      // replaces it, and this never reaches the committed chat transcript.
+      // ponytail: partials can catch background noise on a near-silent hold; the
+      // final is authoritative, so the transient pill text is an acceptable cost.
+      let partial = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !partial.isEmpty {
+        FloatingControlBarManager.shared.barState?.liveVoiceUserText = partial
+      }
     }
     if !text.isEmpty { lastInputTranscriptUpdateAt = Date() }
     // Don't surface Gemini's LIVE partial transcript on the bar: on a quiet/near-silent
