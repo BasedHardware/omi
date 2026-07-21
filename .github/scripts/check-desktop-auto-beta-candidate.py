@@ -120,6 +120,11 @@ def validate(args: argparse.Namespace) -> dict:
 
     release = load_json(args.release_json)
     smoke = load_json(args.smoke_result)
+    smoke_source_sha = smoke.get("source_sha")
+    if not isinstance(smoke_source_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", smoke_source_sha):
+        fail("signed smoke result is missing an exact source SHA")
+    if smoke_source_sha != args.tag_sha:
+        fail("signed smoke source SHA does not match the candidate tag")
     if release.get("tagName") != args.release_tag:
         fail("GitHub release tag does not match the requested candidate")
     if release.get("isDraft") or release.get("isPrerelease"):
@@ -165,7 +170,7 @@ def validate(args: argparse.Namespace) -> dict:
         "passed": True,
         "gate": "desktop-auto-beta-candidate-v1",
         "release_tag": args.release_tag,
-        "source_sha": args.tag_sha,
+        "source_sha": smoke_source_sha,
         "verified_at": datetime.now(timezone.utc).isoformat(),
         "artifact_digests": artifact_digests,
         "signed_smoke_checks": sorted(checks),

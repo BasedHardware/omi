@@ -41,6 +41,7 @@ def fixtures(root: Path) -> argparse.Namespace:
     smoke = {
         "ok": True,
         "release_tag": TAG,
+        "source_sha": SHA,
         "expected_channel": "beta",
         "bundle_id": "com.omi.computer-macos",
         "version": "0.12.99",
@@ -117,6 +118,11 @@ def main() -> int:
         smoke_path.write_text(json.dumps(smoke))
         expect_failure(args, "callback canary validated mismatch")
 
+        smoke["notification_callback_canary"]["validated"] = True
+        smoke["source_sha"] = "d" * 40
+        smoke_path.write_text(json.dumps(smoke))
+        expect_failure(args, "source SHA does not match the candidate tag")
+
     # Beta is a channel designation for the single production Omi identity.
     # A candidate that reintroduces a second app/package identity must fail closed.
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -142,7 +148,7 @@ def test_codemagic_beta_smoke_produces_gate_required_canaries() -> None:
     assert len(invocations) == 2, "expected exactly one production signed-artifact smoke invocation"
     stable_invocation = invocations[1]
 
-    evidence_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary", "--tag"]
+    evidence_flags = ["--launch", "--auth-storage-canary", "--notification-callback-canary", "--source-sha", "--tag"]
     for flag in evidence_flags:
         assert flag in stable_invocation, f"stable smoke invocation lost {flag}; update this contract test"
     return 0
