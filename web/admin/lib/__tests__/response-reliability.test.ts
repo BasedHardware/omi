@@ -319,15 +319,59 @@ describe("response reliability", () => {
     expect(queries.voice).toContain("distinct_id AS actor_id");
   });
 
-  // Static query-contract check: PostHog's query API silently truncates any
-  // HogQL result to 100 rows when the query carries no explicit LIMIT. These
-  // queries are ordered day ASC, so that default cut exactly the newest days
-  // off the dashboard (lines stopped days before today).
+  // Static query-contract check: PostHog's query API silently fills LIMIT 100
+  // into any HogQL (sub)query without one. These queries are ordered day ASC,
+  // so that default cut exactly the newest days off the dashboard (lines
+  // stopped days before today). A trailing LIMIT after UNION ALL binds to the
+  // last arm only, so the voice union must be wrapped in a subquery with one
+  // outer LIMIT.
   it("carries an explicit LIMIT so PostHog's default 100-row cap cannot drop the newest days", () => {
     const queries = responseReliabilityQueries(30);
     expect(queries.chat).toContain(`LIMIT ${RELIABILITY_ROW_LIMIT}`);
-    expect(queries.voice).toContain(`LIMIT ${RELIABILITY_ROW_LIMIT}`);
-    expect(RELIABILITY_ROW_LIMIT).toBeGreaterThanOrEqual(10_000);
+    expect(queries.voice).toContain("SELECT * FROM (");
+    expect(queries.voice.replace(/\s+/g, " ")).toContain(
+      `) ORDER BY day ASC LIMIT ${RELIABILITY_ROW_LIMIT}`,
+    );
+    // The route detects truncation via rows.length >= RELIABILITY_ROW_LIMIT,
+    // so the constant must equal PostHog's served maximum — verified live:
+    // LIMIT 100000 returns exactly 50000 rows. A larger constant would make
+    // the overflow check unreachable and truncation undetectable.
+    expect(RELIABILITY_ROW_LIMIT).toBe(50_000);
+  });
+
+  it("marks the payload partial when rows hit the query row limit", () => {
+    const truncatedPayload = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      truncated: true,
+      chatRows: [
+        [
+          "2026-07-20",
+          "chat_agent_query_completed",
+          "main_chat",
+          "unknown",
+          2,
+          4_000,
+        ],
+      ],
+      voiceRows: [],
+    });
+    expect(truncatedPayload.partial).toBe(true);
+
+    const channels = buildChannelReliabilityPayloads({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      truncated: true,
+      chatRows: [],
+      voiceRows: [],
+      channelByActor: new Map(),
+    });
+    expect(channels.production.partial).toBe(true);
+    expect(channels.beta.partial).toBe(true);
   });
 
   it("trims leading empty days to telemetry coverage but keeps interior gaps", () => {
@@ -388,5 +432,50 @@ describe("response reliability", () => {
       voiceRows: [],
     });
     expect(trimDailyToCoverage(empty.daily)).toEqual([]);
+
+    // A first day with only cancellations is coverage (an all-cancelled
+    // rollout day is a signal), not a pre-coverage gap to trim away.
+    const excludedOnly = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [
+        [
+          "2026-07-18",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          3,
+          0,
+        ],
+        [
+          "2026-07-18",
+          "chat_agent_query_cancelled",
+          "main_chat",
+          "unknown",
+          3,
+          0,
+        ],
+        [
+          "2026-07-19",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          1,
+          0,
+        ],
+        [
+          "2026-07-19",
+          "chat_agent_query_completed",
+          "main_chat",
+          "unknown",
+          1,
+          5_000,
+        ],
+      ],
+      voiceRows: [],
+    });
+    expect(trimDailyToCoverage(excludedOnly.daily)[0]?.date).toBe("2026-07-18");
   });
 });

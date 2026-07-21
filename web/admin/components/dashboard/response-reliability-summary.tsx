@@ -50,21 +50,28 @@ const rateWithCounts = (
   value: number,
   success: number,
   failure: number,
-): string => `${Number(value).toFixed(1)}% (${success}/${success + failure})`;
+): string => `${formatRate(value)} (${success}/${success + failure})`;
 
 function ChannelReliabilityChart({
   data,
+  daily,
 }: {
   data: ResponseReliabilitySeries;
+  daily: ReliabilityDailyPoint[];
 }) {
   const chat = data.summary.chat;
   const voice = data.summary.voice;
   const failures = (chat?.failure ?? 0) + (voice?.failure ?? 0);
-  const daily = trimDailyToCoverage(data.daily);
   const hasData = daily.length > 0;
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-2">
+      {data.partial && (
+        <div className="flex items-center gap-1.5 text-xs text-amber-500">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Partial data — a telemetry source failed or rows were truncated.
+        </div>
+      )}
       <div
         className="grid divide-x border-y py-2 text-xs"
         style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
@@ -120,24 +127,16 @@ function ChannelReliabilityChart({
                   item: { payload?: ReliabilityDailyPoint },
                 ) => {
                   const point = item.payload;
-                  if (!point) return [`${Number(value).toFixed(1)}%`, name];
-                  return name === "Chat success"
-                    ? [
-                        rateWithCounts(
-                          value,
-                          point.chatSuccess,
-                          point.chatFailure,
-                        ),
-                        name,
-                      ]
-                    : [
-                        rateWithCounts(
-                          value,
-                          point.voiceSuccess,
-                          point.voiceFailure,
-                        ),
-                        name,
-                      ];
+                  if (!point) return [formatRate(value), name];
+                  const isChat = name === "Chat success";
+                  return [
+                    rateWithCounts(
+                      value,
+                      isChat ? point.chatSuccess : point.voiceSuccess,
+                      isChat ? point.chatFailure : point.voiceFailure,
+                    ),
+                    name,
+                  ];
                 }}
                 contentStyle={tooltipStyle}
               />
@@ -189,6 +188,15 @@ export function useResponseReliabilityItems({
   );
 
   return useMemo(() => {
+    const covered = (channel: "production" | "beta") => {
+      const series = data?.channels?.[channel];
+      return series ? trimDailyToCoverage(series.daily) : [];
+    };
+    const coveredByChannel = {
+      production: covered("production"),
+      beta: covered("beta"),
+    };
+
     const render = (channel: "production" | "beta") => {
       if (isLoading || !token) {
         return <div className="h-full animate-pulse rounded-md bg-muted/20" />;
@@ -201,7 +209,12 @@ export function useResponseReliabilityItems({
           </div>
         );
       }
-      return <ChannelReliabilityChart data={data.channels[channel]} />;
+      return (
+        <ChannelReliabilityChart
+          data={data.channels[channel]}
+          daily={coveredByChannel[channel]}
+        />
+      );
     };
 
     const subtitle = (channel: "production" | "beta") => {
@@ -214,10 +227,10 @@ export function useResponseReliabilityItems({
         (chat?.failure ?? 0) +
         (voice?.success ?? 0) +
         (voice?.failure ?? 0);
-      const covered = trimDailyToCoverage(series.daily);
+      const trimmed = coveredByChannel[channel];
       const range =
-        covered.length > 0 && covered.length < series.daily.length
-          ? `Since ${formatDay(covered[0].date)}`
+        trimmed.length > 0 && trimmed.length < series.daily.length
+          ? `Since ${formatDay(trimmed[0].date)}`
           : `Last ${series.days} days`;
       return `${range} · ${judged.toLocaleString()} judged responses`;
     };

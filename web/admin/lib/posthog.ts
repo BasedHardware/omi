@@ -23,7 +23,9 @@ const SOFT_TTL_MS = 30 * 60 * 1000; // serve cached without re-querying for 30 m
 
 type CacheDoc = { payload: string; freshAt: number };
 
-async function readCache(key: string): Promise<{ results: unknown[]; freshAt: number } | null> {
+async function readCache(
+  key: string,
+): Promise<{ results: unknown[]; freshAt: number } | null> {
   try {
     const snap = await getDb().collection(CACHE_COLLECTION).doc(key).get();
     if (!snap.exists) return null;
@@ -39,7 +41,10 @@ async function writeCache(key: string, results: unknown[]): Promise<void> {
   try {
     const payload = JSON.stringify(results);
     if (payload.length > 900_000) return; // Firestore field cap ~1 MB; skip oversized
-    await getDb().collection(CACHE_COLLECTION).doc(key).set({ payload, freshAt: Date.now() });
+    await getDb()
+      .collection(CACHE_COLLECTION)
+      .doc(key)
+      .set({ payload, freshAt: Date.now() });
   } catch {
     // best-effort cache write; never block the response
   }
@@ -95,7 +100,8 @@ export async function cachedPosthogFetch(
     });
 
   const cached = await readCache(key);
-  if (cached && Date.now() - cached.freshAt < softTtlMs) return hit(cached.results);
+  if (cached && Date.now() - cached.freshAt < softTtlMs)
+    return hit(cached.results);
 
   const res = await posthogFetch(host, projectId, apiKey, query);
   if (res.ok) {
@@ -140,6 +146,17 @@ export async function posthogResults(
     }
     const raw = await res.json();
     const results = Array.isArray(raw.results) ? raw.results : [];
+    // PostHog fills LIMIT 100 into any HogQL (sub)query that has none and
+    // truncates silently — exactly 100 rows from a LIMIT-less query is the
+    // signature of that cap (it cut the newest days off response-reliability).
+    if (results.length === 100 && !/\blimit\b/i.test(query)) {
+      console.warn(
+        "PostHog returned exactly 100 rows for a query without LIMIT — likely truncated by the default cap",
+        {
+          querySnippet: query.replace(/\s+/g, " ").trim().slice(0, 160),
+        },
+      );
+    }
     await writeCache(key, results);
     return results;
   } catch (err) {
