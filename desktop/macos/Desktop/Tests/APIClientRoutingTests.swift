@@ -489,7 +489,10 @@ final class APIClientRoutingTests: XCTestCase {
       requests, host: "python-test", port: 9001,
       pathContains: "v1/conversations/capture-123", method: "GET",
       label: "getOmiCapture")
-    let queryItems = URLComponents(url: requests.first!.url, resolvingAgainstBaseURL: false)?.queryItems
+    guard let firstRequest = requests.first else {
+      return XCTFail("Expected getOmiCapture to issue a request")
+    }
+    let queryItems = URLComponents(url: firstRequest.url, resolvingAgainstBaseURL: false)?.queryItems
     XCTAssertEqual(queryItems?.first(where: { $0.name == "source" })?.value, "omi")
     XCTAssertEqual(queryItems?.first(where: { $0.name == "include_discarded" })?.value, "false")
   }
