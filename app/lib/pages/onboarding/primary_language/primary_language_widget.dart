@@ -353,7 +353,21 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                             // Update the user's primary language
                             final homeProvider = Provider.of<HomeProvider>(context, listen: false);
                             final userProvider = Provider.of<UserProvider>(context, listen: false);
-                            await homeProvider.updateUserPrimaryLanguage(selectedLanguage!, userProvider: userProvider);
+                            final success = await homeProvider.updateUserPrimaryLanguage(
+                              selectedLanguage!,
+                              userProvider: userProvider,
+                            );
+
+                            if (!context.mounted) return;
+                            if (!success) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(context.l10n.failedToSetLanguage),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
 
                             widget.goNext();
                           },
