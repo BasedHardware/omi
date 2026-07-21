@@ -68,6 +68,22 @@ def _capture_titles(notifications):
     return sent
 
 
+@pytest.mark.parametrize('display_name', [None, ''])
+def test_new_review_falls_back_when_the_reviewer_has_no_name(display_name):
+    with _notifications_with_user(_firebase_user(display_name)) as notifications:
+        titles = _capture_titles(notifications)
+        notifications.send_new_app_review_notification('owner', 'reviewer', 'app1', 'Weather', 'Great!')
+    assert titles == ['A user reviewed Weather']
+
+
+@pytest.mark.parametrize('display_name', [None, ''])
+def test_reply_falls_back_when_the_owner_has_no_name(display_name):
+    with _notifications_with_user(_firebase_user(display_name)) as notifications:
+        titles = _capture_titles(notifications)
+        notifications.send_app_review_reply_notification('reviewer', 'owner', 'thanks!', 'app1', 'Weather')
+    assert titles == ['The developer (Weather)']
+
+
 def test_real_names_are_still_used():
     with _notifications_with_user(_firebase_user('Ada')) as notifications:
         titles = _capture_titles(notifications)
