@@ -2425,6 +2425,11 @@
       }
     }
   },
+  "security": [
+    {
+      "integrationApiKey": []
+    }
+  ],
   "servers": [
     {
       "description": "Production",
@@ -2455,11 +2460,6 @@
     {
       "description": "Create, list, and revoke developer API keys.",
       "name": "API Keys"
-    }
-  ],
-  "security": [
-    {
-      "integrationApiKey": []
     }
   ]
 }

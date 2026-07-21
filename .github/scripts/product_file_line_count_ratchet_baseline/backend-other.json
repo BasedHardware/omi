@@ -1,9 +1,11 @@
 {
   "files": {
-    "backend/scripts/validate-backend-runtime-env.py": 1843
+    "backend/scripts/validate-backend-runtime-env.py": 1825,
+    "backend/scripts/generate_integration_sdks.py": 1777
   },
   "raise_justifications": {
-    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement, shared forbidden-env validation, and the SCA-29 admitted-runtime/workflow-control source boundary remain one authoritative deployment contract."
+    "backend/scripts/validate-backend-runtime-env.py": "Serving STT retirement and shared forbidden-env guard keep provider/runtime validation in the authoritative deployment contract validator.",
+    "backend/scripts/generate_integration_sdks.py": "Single multi-language Integration API SDK generator; one file keeps OpenAPI\u2192TS/Go/Python/Rust/C++/Dart emission consistent."
   },
   "threshold": 1500
 }
