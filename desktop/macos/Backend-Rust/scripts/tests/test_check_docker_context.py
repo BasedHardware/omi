@@ -62,3 +62,23 @@ class DockerContextContractTests(unittest.TestCase):
         errors = self._validate('COPY ["src", "./src"]\nCOPY ["fixtures", "./fixtures"]\n')
 
         self.assertEqual(errors, [])
+
+    def test_accepts_source_root_inside_a_workspace_context(self) -> None:
+        source_root = self.context / "macos/Backend-Rust/src"
+        source = source_root / "routes/llm_stub.rs"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('const DEFAULT: &str = include_str!("../../fixtures/llm/default.sse");\n', encoding="utf-8")
+        self._write("macos/Backend-Rust/fixtures/llm/default.sse", "data: fixture\n")
+        self._write(
+            "Dockerfile",
+            "COPY macos/Backend-Rust/src ./macos/Backend-Rust/src\n"
+            "COPY macos/Backend-Rust/fixtures ./macos/Backend-Rust/fixtures\n",
+        )
+
+        errors = check_docker_context.validate_context(
+            self.context,
+            self.context / "Dockerfile",
+            source_root,
+        )
+
+        self.assertEqual(errors, [])

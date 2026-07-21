@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "desktop/macos/Backend-Rust/**"
+      - "desktop/shared-rust/**"
+      - "desktop/Cargo.toml"
+      - "desktop/Cargo.lock"
       - ".github/workflows/desktop-backend-image-checks.yml"
 
 permissions:
@@ -27,14 +30,14 @@ jobs:
         run: python3 -m unittest discover -s desktop/macos/Backend-Rust/scripts/tests -p 'test_*.py'
 
       - name: Verify compile-time assets are in the Docker context
-        run: python3 desktop/macos/Backend-Rust/scripts/check_docker_context.py
+        run: python3 desktop/macos/Backend-Rust/scripts/check_docker_context.py --context desktop --dockerfile desktop/macos/Backend-Rust/Dockerfile --source-root macos/Backend-Rust/src
 
       - id: dockerfile
-        name: Detect Dockerfile changes
+        name: Detect Docker context changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git diff --quiet "$BASE_SHA" HEAD -- desktop/macos/Backend-Rust/Dockerfile; then
+          if git diff --quiet "$BASE_SHA" HEAD -- desktop; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -51,4 +54,4 @@ jobs:
         run: printf '%s\n' '{}' > desktop/macos/Backend-Rust/google-credentials.json
 
       - name: Build desktop backend image
-        run: docker build --file desktop/macos/Backend-Rust/Dockerfile --tag omi-desktop-backend-pr:${{ github.sha }} desktop/macos/Backend-Rust
+        run: docker build --file desktop/macos/Backend-Rust/Dockerfile --tag omi-desktop-backend-pr:${{ github.sha }} desktop

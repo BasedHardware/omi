@@ -5,6 +5,9 @@ on:
     branches: [ "main" ]
     paths:
       - 'desktop/macos/Backend-Rust/**'
+      - 'desktop/shared-rust/**'
+      - 'desktop/Cargo.toml'
+      - 'desktop/Cargo.lock'
       - 'backend/scripts/firebase_release_probe_token.py'
       - 'scripts/voice-provider-probe.sh'
   workflow_dispatch:
@@ -93,7 +96,7 @@ jobs:
       - name: Build and Push Docker image
         uses: docker/build-push-action@v7
         with:
-          context: ./desktop/macos/Backend-Rust
+          context: ./desktop
           file: ./desktop/macos/Backend-Rust/Dockerfile
           push: true
           tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
