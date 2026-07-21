@@ -1070,9 +1070,9 @@ struct DashboardPage: View {
       onSend: sendFromHomeAskBar,
       onStop: { chatProvider.stopAgent(owner: .mainChat) },
       onConnect: toggleHomeConnectPanel,
-      // Tapping the bar just focuses it to type — staying on the hero. Only
-      // sending a message enters the chat surface (see sendFromHomeAskBar).
-      onActivate: { homeAskFieldFocused = true }
+      // Tapping the bar begins a fresh chat and focuses it to type, staying on
+      // the hero; only sending enters the chat surface (see sendFromHomeAskBar).
+      onActivate: { beginNewHomeChatFromAskBar() }
     )
   }
 
@@ -1129,16 +1129,10 @@ struct DashboardPage: View {
     }
   }
 
-  /// Chat with history is the default Home surface: whenever prior messages
-  /// exist, the hub greeting yields to the chat panel. Runs once per page
-  /// visit so an explicit Esc back to the hub is respected afterwards.
-  private func autoOpenChatForExistingHistoryIfNeeded() {
-    guard !didAutoOpenChatForHistory else { return }
-    guard !useLegacyHomeDesign, homeMode == .hub, !chatProvider.messages.isEmpty else { return }
-    didAutoOpenChatForHistory = true
-    homeMode = .chat
-    reportHomeAutomationMode()
-  }
+  /// Home no longer auto-opens the last conversation — it always rests on the
+  /// greeting hero. Retained as a no-op so the page-lifecycle call sites stay
+  /// stable; chats are entered explicitly instead.
+  private func autoOpenChatForExistingHistoryIfNeeded() {}
 
   private func openHomeChat(focusInput: Bool = true) {
     guard homeMode != .chat else { return }
@@ -1160,8 +1154,11 @@ struct DashboardPage: View {
 
   /// The surface Home rests on when no panel is explicitly open: the chat
   /// timeline once any history exists, otherwise the greeting hub.
+  /// Home always rests on the greeting hero — never the last conversation.
+  /// Chats are entered explicitly (typing in the ask bar, a suggestion, or
+  /// resuming one from History), and collapse back to the hero.
   private var homeRestingMode: HomeStageMode {
-    chatProvider.messages.isEmpty ? .hub : .chat
+    .hub
   }
 
   /// User-facing collapse (click outside, Esc, connect ×): returns to the
@@ -1192,6 +1189,16 @@ struct DashboardPage: View {
       homeMode = .hub
     }
     reportHomeAutomationMode()
+  }
+
+  /// Tapping the ask bar on the hero starts a new conversation rather than
+  /// appending to the last one, then focuses the field to type. The fresh
+  /// session is created only when the current chat still holds messages, so
+  /// repeated taps don't spawn empty sessions.
+  private func beginNewHomeChatFromAskBar() {
+    homeAskFieldFocused = true
+    guard !chatProvider.messages.isEmpty else { return }
+    Task { _ = await chatProvider.createNewSession(skipGreeting: true) }
   }
 
   private func sendFromHomeAskBar() {
