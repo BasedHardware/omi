@@ -153,6 +153,12 @@ jobs:
       - name: Install Swift system dependencies
         run: brew install pkg-config webp
 
+      - name: Install actionlint for workflow contract tests
+        run: |
+          if ! command -v actionlint &>/dev/null; then
+            brew install actionlint
+          fi
+
       - name: Desktop launcher script tests
         working-directory: desktop/macos
         run: |
