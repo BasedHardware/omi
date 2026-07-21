@@ -151,6 +151,19 @@ fn manual_download_url_for_release(release: &ReleaseInfo) -> String {
     release.download_url.clone()
 }
 
+fn constant_time_secret_matches(provided_secret: &str, expected_secret: &str) -> bool {
+    let mut difference = provided_secret.len() ^ expected_secret.len();
+    let max_len = provided_secret.len().max(expected_secret.len());
+
+    for index in 0..max_len {
+        let provided_byte = provided_secret.as_bytes().get(index).copied().unwrap_or(0);
+        let expected_byte = expected_secret.as_bytes().get(index).copied().unwrap_or(0);
+        difference |= usize::from(provided_byte ^ expected_byte);
+    }
+
+    difference == 0
+}
+
 /// GET /appcast.xml - Sparkle appcast feed
 async fn get_appcast(State(state): State<AppState>, Query(query): Query<AppcastQuery>) -> Response {
     // Fetch all releases — generate_appcast_xml handles filtering and per-channel dedup
@@ -290,7 +303,9 @@ async fn create_release(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    if expected_secret.is_empty() || provided_secret != expected_secret {
+    if expected_secret.is_empty()
+        || !constant_time_secret_matches(provided_secret, &expected_secret)
+    {
         return (
             StatusCode::UNAUTHORIZED,
             Json(CreateReleaseResponse {
@@ -373,7 +388,9 @@ async fn promote_release(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    if expected_secret.is_empty() || provided_secret != expected_secret {
+    if expected_secret.is_empty()
+        || !constant_time_secret_matches(provided_secret, &expected_secret)
+    {
         return (
             StatusCode::UNAUTHORIZED,
             Json(PromoteReleaseResponse {
@@ -431,6 +448,19 @@ async fn promote_release(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_secret_comparison_rejects_mismatched_values() {
+        assert!(constant_time_secret_matches(
+            "release-secret",
+            "release-secret"
+        ));
+        assert!(!constant_time_secret_matches(
+            "release-secret",
+            "other-secret"
+        ));
+        assert!(!constant_time_secret_matches("release-secret", "release"));
+    }
 
     fn make_release(
         version: &str,

@@ -133,6 +133,12 @@ def _has_beta_promotion_authorization(secret_key: str) -> bool:
     return bool(token) and hmac.compare_digest(secret_key, token)
 
 
+def _has_admin_authorization(secret_key: str) -> bool:
+    """Match the existing admin key with a constant-time comparison."""
+    admin_key = os.getenv("ADMIN_KEY")
+    return admin_key is not None and hmac.compare_digest(secret_key, admin_key)
+
+
 DESKTOP_RELEASE_TAG_PATTERN = re.compile(
     r'^v?\d+\.\d+(?:\.\d+)?\+\d+-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$',
     re.IGNORECASE,
@@ -977,7 +983,7 @@ def clear_desktop_cache(secret_key: str = Header(...)):
     This forces the next appcast.xml request to fetch fresh data from GitHub.
     Last-known-good entries are deliberately preserved for incident recovery.
     """
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not _has_admin_authorization(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_generic_cache("github_releases_desktop")
     for platform in ("macos", "windows", "linux"):
@@ -989,7 +995,7 @@ def clear_desktop_cache(secret_key: str = Header(...)):
 @router.post("/v2/desktop/releases", status_code=201)
 async def register_desktop_release(request: DesktopReleaseManifestRequest, secret_key: str = Header(...)):
     """Register an immutable release manifest without making it user-visible."""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not _has_admin_authorization(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
         manifest = await run_blocking(db_executor, register_release_manifest, request.model_dump())
@@ -1038,7 +1044,7 @@ async def promote_qualified_macos_beta(
 @router.get("/v2/desktop/releases/{release_id}")
 async def get_desktop_release_manifest(release_id: str, secret_key: str = Header(...)):
     """Return the retained manifest used for a pointer transition, not GitHub metadata."""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not _has_admin_authorization(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     manifest = await run_blocking(db_executor, get_release_manifest, release_id)
     if manifest is None:
@@ -1050,7 +1056,7 @@ async def get_desktop_release_manifest(release_id: str, secret_key: str = Header
 @router.post("/v2/desktop/channels/promote")
 async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secret_key: str = Header(...)):
     """Atomically advance or repoint one explicit qualified channel pointer."""
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not _has_admin_authorization(secret_key):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
         pointer = await run_blocking(

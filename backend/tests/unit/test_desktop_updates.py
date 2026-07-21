@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from routers.updates import (
     VALID_CHANNELS,
+    _has_admin_authorization,
     _format_changelog_html,
     _generate_appcast_xml,
     _get_dmg_download_url,
@@ -773,6 +774,15 @@ class TestDownloadEndpoint:
 
 
 class TestClearCacheEndpoint:
+    def test_admin_authorization_uses_constant_time_digest(self):
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.hmac.compare_digest", return_value=True) as compare_digest,
+        ):
+            assert _has_admin_authorization("different-secret") is True
+
+        compare_digest.assert_called_once_with("different-secret", "real-secret")
+
     @pytest.mark.asyncio
     async def test_forbidden_without_valid_key(self):
         with patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}):
@@ -959,9 +969,12 @@ class TestDesktopUpdateAdminEndpoints:
         promote.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_beta_promotion_token_cannot_use_generic_admin_routes(self):
+    async def test_beta_promotion_token_cannot_use_generic_admin_routes_or_clear_cache(self):
         payload = _pointer_release()["manifest"]
-        with patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "beta-token"}, clear=True):
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "beta-token"}, clear=True),
+            patch("routers.updates.delete_generic_cache") as delete_cache,
+        ):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 generic_manifest = await client.post(
                     "/v2/desktop/releases",
@@ -973,6 +986,10 @@ class TestDesktopUpdateAdminEndpoints:
                     headers={"secret-key": "beta-token"},
                     json={"platform": "macos", "channel": "beta", "release_id": payload["release_id"]},
                 )
+                generic_cache_clear = await client.post(
+                    "/v2/desktop/clear-cache",
+                    headers={"secret-key": "beta-token"},
+                )
                 promotion_without_token = await client.post(
                     "/v2/desktop/channels/promote-qualified-beta",
                     headers={"secret-key": "not-the-token"},
@@ -981,7 +998,9 @@ class TestDesktopUpdateAdminEndpoints:
 
         assert generic_manifest.status_code == 403
         assert generic_pointer.status_code == 403
+        assert generic_cache_clear.status_code == 403
         assert promotion_without_token.status_code == 403
+        delete_cache.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_reads_the_retained_manifest_with_a_canonical_identity(self):
