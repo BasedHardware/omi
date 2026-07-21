@@ -15,7 +15,7 @@ Portable **device BLE protocol** helpers for languages that do not yet have a fu
 | Lang | Path | What you get |
 |------|------|----------------|
 | TypeScript | [`typescript/`](typescript/) | UUIDs, header strip, transport interface |
-| Go | [`go/`](go/) | UUIDs + `StripPacketHeader` |
+| Go | [`go/`](go/) | UUIDs + `StripPacketHeader` + optional BLE (`-tags ble`, tinygo bluetooth) |
 | Rust | [`rust/`](rust/) | UUIDs + `strip_packet_header` |
 | C++ | [`cpp/`](cpp/) | UUIDs + `StripPacketHeader` |
 | Dart | [`dart/`](dart/) | UUIDs + `stripPacketHeader` |
