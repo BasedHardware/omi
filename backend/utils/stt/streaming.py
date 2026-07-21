@@ -1,37 +1,47 @@
 import asyncio
+import inspect
 import io
 import json
 import os
-import random
 import threading
 import urllib.parse
 import wave as _wave
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
+from config.stt_provider_policy import (
+    DEEPGRAM_SELF_HOSTED_PROVIDER,
+    MODULATE_PROVIDER,
+    PARAKEET_PROVIDER,
+    STTServingSurface,
+    default_models_for_surface,
+    modulate_supports_language,
+    normalized_stt_language,
+    parakeet_supports_language,
+    provider_is_enabled,
+    supports_live_multilingual_mode,
+)
 from utils.async_tasks import create_named_task
-from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
+from utils.stt.provider_resilience import EXPECTED_REJECTIONS, ProviderCircuitBreaker
 from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
     async_extract_embedding_from_bytes,
     compare_embeddings,
 )
 from utils.observability.fallback import record_fallback
+from utils.other.backoff import calculate_backoff_with_jitter
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-Type": "audio/*"}
 
 
 class STTService(str, Enum):
@@ -47,6 +57,92 @@ class STTService(str, Enum):
             return 'modulate_streaming'
         if value == STTService.parakeet:
             return 'parakeet_streaming'
+
+
+class ParakeetConnectionError(RuntimeError):
+    def __init__(self, reason: str, detail: str = '') -> None:
+        self.reason = reason
+        super().__init__(detail or reason)
+
+
+_parakeet_circuit = ProviderCircuitBreaker(
+    failure_threshold=int(os.getenv('PARAKEET_CIRCUIT_FAILURE_THRESHOLD', '3')),
+    cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
+)
+
+
+async def connect_stt_socket_with_fallback(
+    *,
+    primary_service: STTService,
+    connect_primary: Callable[[], Awaitable[Optional[STTSocket]]],
+    connect_modulate: Callable[[], Awaitable[Optional[STTSocket]]],
+) -> Tuple[STTSocket, STTService]:
+    """Connect Parakeet before audio starts, falling back once to Modulate.
+
+    The circuit is deliberately process-local and never owns capacity. The
+    Parakeet service rejects excess streams at its GPU boundary; this helper
+    only avoids repeated connection latency while that provider is unhealthy.
+    """
+    if primary_service != STTService.parakeet:
+        raise ValueError('connection fallback is defined only for a Parakeet primary')
+
+    reason = 'circuit_open'
+    if _parakeet_circuit.allow_request():
+        try:
+            socket = await connect_primary()
+            if socket is None:
+                raise ParakeetConnectionError('config_incomplete', 'Parakeet returned no socket')
+            _parakeet_circuit.record_success()
+            return socket, STTService.parakeet
+        except ParakeetConnectionError as error:
+            reason = error.reason
+            if reason in EXPECTED_REJECTIONS:
+                _parakeet_circuit.record_rejection(reason)
+            else:
+                _parakeet_circuit.record_failure()
+        except (asyncio.TimeoutError, TimeoutError):
+            reason = 'timeout'
+            _parakeet_circuit.record_failure()
+        except Exception:
+            reason = 'provider_5xx'
+            _parakeet_circuit.record_failure()
+
+    try:
+        fallback_socket = await connect_modulate()
+        if fallback_socket is None:
+            raise RuntimeError('Modulate returned no socket')
+    except Exception:
+        record_fallback(
+            component='stt_selection',
+            from_mode=STTService.parakeet.value,
+            to_mode=STTService.modulate.value,
+            reason=reason,
+            outcome='exhausted',
+        )
+        raise
+
+    record_fallback(
+        component='stt_selection',
+        from_mode=STTService.parakeet.value,
+        to_mode=STTService.modulate.value,
+        reason=reason,
+        outcome='recovered',
+    )
+    return fallback_socket, STTService.modulate
+
+
+async def drain_stt_socket(socket: STTSocket) -> None:
+    """Await a serving socket's tail drain, with a synchronous close fallback."""
+    drain_and_close = getattr(socket, 'drain_and_close', None)
+    if not callable(drain_and_close):
+        socket.finish()
+        return
+    drain_result = drain_and_close()
+    if inspect.isawaitable(drain_result):
+        await drain_result
+        return
+    logger.warning('STT provider lacks async tail drain')
+    socket.finish()
 
 
 deepgram_nova3_multi_languages = {
@@ -160,106 +256,9 @@ deepgram_nova3_languages = {
 }
 
 
-modulate_languages = {
-    'multi',
-    'en',
-    'af',
-    'sq',
-    'ar',
-    'az',
-    'eu',
-    'be',
-    'bn',
-    'bs',
-    'bg',
-    'ca',
-    'zh',
-    'hr',
-    'cs',
-    'da',
-    'nl',
-    'et',
-    'fi',
-    'fr',
-    'gl',
-    'de',
-    'el',
-    'gu',
-    'he',
-    'hi',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'kn',
-    'kk',
-    'ko',
-    'lv',
-    'lt',
-    'mk',
-    'ms',
-    'ml',
-    'mr',
-    'no',
-    'fa',
-    'pl',
-    'pt',
-    'pa',
-    'ro',
-    'ru',
-    'sr',
-    'sk',
-    'sl',
-    'es',
-    'sw',
-    'sv',
-    'tl',
-    'ta',
-    'te',
-    'th',
-    'tr',
-    'uk',
-    'ur',
-    'vi',
-    'cy',
-}
-
-parakeet_languages = {
-    'multi',
-    'bg',
-    'hr',
-    'cs',
-    'da',
-    'nl',
-    'en',
-    'et',
-    'fi',
-    'fr',
-    'de',
-    'el',
-    'hu',
-    'it',
-    'lt',
-    'lv',
-    'mt',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sl',
-    'es',
-    'sv',
-    'uk',
-}
-
-stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
-
-
-def _normalize_language(language: str) -> str:
-    if not language:
-        return ''
-    return language.split('-')[0].split('_')[0].lower()
+# Compatibility export for callers. Its value is owned by stt_provider_policy.
+DEFAULT_STT_SERVICE_MODELS = default_models_for_surface(STTServingSurface.STREAMING)
+stt_service_models = os.getenv('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS)).split(',')
 
 
 def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
@@ -270,34 +269,138 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     return 'none'
 
 
-def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True) -> Tuple[STTService, str, str]:
-    base_lang = _normalize_language(language)
-    for m in stt_service_models:
-        m = m.strip()
-        if m.startswith('dg-'):
-            dg_model = m.replace('dg-', '', 1)
-            if multi_lang_enabled and language in deepgram_nova3_multi_languages:
-                return STTService.deepgram, 'multi', dg_model
-            if language in deepgram_nova3_languages:
-                return STTService.deepgram, language, dg_model
-            continue
-        if m == 'modulate-velma-2':
-            if base_lang in modulate_languages:
-                return STTService.modulate, base_lang, 'velma-2'
-        if m == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
-            if base_lang in parakeet_languages:
-                return STTService.parakeet, base_lang or 'en', 'parakeet'
-            continue
+def _requested_stt_language(
+    language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
+) -> str:
+    """Resolve the provider language while retaining PTT's explicit input language.
 
-    # Fallback to deepgram nova-3 with English
+    Live sessions with multi-language enabled must select a provider's auto-detect
+    mode. PTT does not load the user's transcription preference, so it keeps its
+    explicit language unless the client itself sends the ``multi`` sentinel.
+    """
+    if base_lang == 'multi' or (
+        surface == STTServingSurface.STREAMING
+        and multi_lang_enabled
+        and language
+        and supports_live_multilingual_mode(language)
+    ):
+        return 'multi'
+    return base_lang
+
+
+def _models_with_preferred_service(
+    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str]
+) -> Tuple[str, ...]:
+    """Honor a recognized client engine preference within the serving policy."""
+    normalized_preference = (preferred_service or '').strip().lower()
+    if normalized_preference != STTService.parakeet.value:
+        return tuple(models)
+    return tuple(model for model in models if model.strip() == STTService.parakeet.value) + tuple(
+        model for model in models if model.strip() != STTService.parakeet.value
+    )
+
+
+def get_stt_service_for_language(
+    language: Optional[str],
+    multi_lang_enabled: bool = True,
+    *,
+    surface: STTServingSurface = STTServingSurface.STREAMING,
+    preferred_service: Optional[str] = None,
+) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
+    """Select a serving STT provider allowed for the requested product surface.
+
+    A ``dg-*`` configuration is eligible only for the retained self-hosted
+    deployment. It never selects Deepgram's hosted API, and a missing
+    self-hosted endpoint falls through to the policy-owned alternatives.
+    """
+    # Missing language metadata historically meant English. Preserve that
+    # behavior without opening a retired-provider fallback for unknown values.
+    base_lang = normalized_stt_language(language) or 'en'
+    requested_language = _requested_stt_language(
+        language,
+        base_lang,
+        multi_lang_enabled=multi_lang_enabled,
+        surface=surface,
+    )
+
+    def select(
+        models: List[str] | Tuple[str, ...],
+    ) -> Tuple[Optional[Tuple[STTService, str, str]], Optional[str]]:
+        parakeet_fallback_reason: Optional[str] = None
+        for model in _models_with_preferred_service(models, preferred_service=preferred_service):
+            model = model.strip()
+            if (
+                model.startswith('dg-')
+                and provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, surface)
+                and is_dg_self_hosted
+            ):
+                dg_model = model.replace('dg-', '', 1)
+                if multi_lang_enabled and language in deepgram_nova3_multi_languages:
+                    return (STTService.deepgram, 'multi', dg_model), parakeet_fallback_reason
+                if language in deepgram_nova3_languages:
+                    return (STTService.deepgram, language, dg_model), parakeet_fallback_reason
+                continue
+            if model == 'parakeet':
+                if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
+                    if parakeet_supports_language(surface, requested_language):
+                        return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
+                    else:
+                        parakeet_fallback_reason = 'capability_mismatch'
+                else:
+                    parakeet_fallback_reason = 'config_incomplete'
+            if (
+                model == 'modulate-velma-2'
+                and provider_is_enabled(MODULATE_PROVIDER, surface)
+                and modulate_supports_language(requested_language)
+            ):
+                return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
+        return None, parakeet_fallback_reason
+
+    prefers_parakeet = (preferred_service or '').strip().lower() == STTService.parakeet.value
+
+    def record_selected_fallback(
+        selected: Tuple[STTService, str, str], *, used_default: bool, parakeet_fallback_reason: Optional[str]
+    ) -> None:
+        if selected[0] != STTService.parakeet and (prefers_parakeet or parakeet_fallback_reason):
+            record_fallback(
+                component='stt_selection',
+                from_mode=STTService.parakeet.value,
+                to_mode=selected[0].value,
+                reason=parakeet_fallback_reason
+                or (
+                    'capability_mismatch'
+                    if not parakeet_supports_language(surface, requested_language)
+                    else 'config_incomplete'
+                ),
+                outcome='degraded',
+            )
+        elif used_default:
+            record_fallback(
+                component='stt_selection',
+                from_mode=_stt_selection_from_mode(language or '', base_lang),
+                to_mode=selected[0].value,
+                reason='config_incomplete',
+                outcome='degraded',
+            )
+
+    selected, parakeet_fallback_reason = select(stt_service_models)
+    if selected is not None:
+        record_selected_fallback(selected, used_default=False, parakeet_fallback_reason=parakeet_fallback_reason)
+        return selected
+
+    selected, parakeet_fallback_reason = select(default_models_for_surface(surface))
+    if selected is not None:
+        record_selected_fallback(selected, used_default=True, parakeet_fallback_reason=parakeet_fallback_reason)
+        return selected
+
     record_fallback(
         component='stt_selection',
-        from_mode=_stt_selection_from_mode(language, base_lang),
-        to_mode='deepgram_en',
+        from_mode=_stt_selection_from_mode(language or '', base_lang),
+        to_mode='unavailable',
         reason='capability_mismatch',
-        outcome='degraded',
+        outcome='exhausted',
     )
-    return STTService.deepgram, 'en', 'nova-3'
+    return None, None, None
 
 
 def should_preserve_filler_words(language: str) -> bool:
@@ -309,26 +412,34 @@ def should_preserve_filler_words(language: str) -> bool:
     return not language.startswith('en')
 
 
-# Initialize Deepgram client based on environment configuration
+# Initialize a Deepgram client only for the retained self-hosted deployment.
+# Never construct the SDK's default client here: its default endpoint is the
+# retired hosted Deepgram API.
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
-deepgram_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
+deepgram: Optional[DeepgramClient] = None
 
-deepgram_cloud_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
-deepgram_cloud_options.url = "https://api.deepgram.com"
+
+def _self_hosted_deepgram_options(endpoint: str) -> DeepgramClientOptions:
+    """Build options for a verified self-hosted endpoint, never the SDK default."""
+    options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
+    options.url = endpoint
+    return options
+
+
+def _require_self_hosted_deepgram_endpoint(endpoint: str) -> str:
+    """Reject the retired hosted endpoint before constructing an SDK client."""
+    if not endpoint:
+        raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
+    if urllib.parse.urlparse(endpoint).hostname == 'api.deepgram.com':
+        raise ValueError('DEEPGRAM_SELF_HOSTED_URL must not point to api.deepgram.com')
+    return endpoint
+
 
 if is_dg_self_hosted:
-    dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
-    if not dg_self_hosted_url:
-        raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
-    # Override only the URL while keeping all other options
-    deepgram_options.url = dg_self_hosted_url
-    deepgram_cloud_options.url = dg_self_hosted_url
+    dg_self_hosted_url = _require_self_hosted_deepgram_endpoint(os.getenv('DEEPGRAM_SELF_HOSTED_URL') or '')
+    deepgram_options = _self_hosted_deepgram_options(dg_self_hosted_url)
     logger.info(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
-
-deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', deepgram_options)
-
-# unused fn
-deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', deepgram_cloud_options)
+    deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', deepgram_options)
 
 
 async def process_audio_dg(
@@ -409,13 +520,6 @@ async def process_audio_dg(
     return safe_conn
 
 
-# Calculate backoff with jitter
-def calculate_backoff_with_jitter(attempt: int, base_delay: int = 1000, max_delay: int = 32000) -> float:
-    jitter = random.random() * base_delay
-    backoff = min(((2**attempt) * base_delay) + jitter, max_delay)
-    return backoff
-
-
 async def connect_to_deepgram_with_backoff(
     on_message: Callable[..., Any],
     on_error: Callable[..., Any],
@@ -472,17 +576,9 @@ def _dg_keywords_set(options: LiveOptions, keywords: List[str]):
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
-    """Return a Deepgram client keyed to the current request's BYOK Deepgram key.
-
-    BYOK users pay Deepgram directly — we don't want to rack up minutes on the
-    Omi Deepgram account for them. Self-hosted Deepgram ignores BYOK since
-    there's no per-user billing concept there.
-    """
-    if is_dg_self_hosted:
-        return deepgram
-    byok = get_byok_key('deepgram')
-    if byok:
-        return DeepgramClient(byok, deepgram_cloud_options)
+    """Return the explicitly configured self-hosted Deepgram client only."""
+    if not is_dg_self_hosted or deepgram is None:
+        raise RuntimeError('Hosted Deepgram is disabled; self-hosted Deepgram is not configured')
     return deepgram
 
 
@@ -575,7 +671,6 @@ def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int
 
 
 class SafeModulateSocket(STTSocket):
-
     def __init__(
         self,
         ws: Any,
@@ -618,24 +713,51 @@ class SafeModulateSocket(STTSocket):
                 self._dead = True
                 self._death_reason = reason
 
-    def send(self, data: bytes) -> None:
+    def send(self, data: bytes) -> bool:
+        """Synchronously accept audio only when it reaches the provider queue.
+
+        The listen handler runs on ``self._loop``.  A producer on a different
+        event loop cannot safely wait for a queue callback without blocking that
+        loop, so it is treated as a terminal ownership error rather than
+        optimistically dropping audio.
+        """
         with self._lock:
             if self._dead or self._closed:
-                return
-            if not self._header_sent and self._wav_header:
-                data = self._wav_header + data
-                self._header_sent = True
-
-        def _enqueue() -> None:
-            try:
-                self._send_queue.put_nowait(data)
-            except asyncio.QueueFull:
-                self._mark_dead('send queue full')
+                return False
+            if not data:
+                # b'' is this socket's shutdown sentinel: _send_loop breaks on it and finish()
+                # uses it to stop the loop. Enqueuing an empty audio frame would therefore end
+                # the send loop mid-session while the socket still reports itself alive, so every
+                # later frame would be queued and never sent. The Parakeet sockets guard the same
+                # way. The header stays pending because _header_sent is only set once it is queued.
+                return True
+            prepend_header = not self._header_sent and self._wav_header is not None
+            queued_data = (self._wav_header or b'') + data if prepend_header else data
 
         try:
-            self._loop.call_soon_threadsafe(_enqueue)
+            current_loop = asyncio.get_running_loop()
         except RuntimeError:
-            self._mark_dead('event loop closed')
+            current_loop = None
+
+        if current_loop is not self._loop:
+            # This only occurs in synchronous tests / shutdown code where the
+            # provider loop is stopped, so no concurrent queue consumer exists.
+            # It remains a truthful immediate enqueue rather than a deferred
+            # cross-loop callback. A live foreign loop is a terminal misuse.
+            if current_loop is not None or self._loop.is_running():
+                self._mark_dead('send called outside provider event loop')
+                return False
+
+        try:
+            self._send_queue.put_nowait(queued_data)
+        except asyncio.QueueFull:
+            self._mark_dead('send queue full')
+            return False
+
+        if prepend_header:
+            with self._lock:
+                self._header_sent = True
+        return True
 
     def finalize(self) -> None:
         pass
@@ -903,11 +1025,14 @@ class ParakeetStreamingSocket(STTSocket):
         self._pump_task = create_named_task(self._pump(), name="parakeet_stt_pump")
 
     # --- STTSocket interface the listen pipeline / VAD gate call (all sync) ---
-    def send(self, data: bytes) -> None:
-        if self._closed or getattr(self, '_finalized', False) or not data:
-            return
+    def send(self, data: bytes) -> bool:
+        if self._closed or self._dead or getattr(self, '_finalized', False):
+            return False
+        if not data:
+            return True
         with self._lock:
             self._buf.extend(data)
+        return True
 
     def finish(self) -> None:
         # Sync close signal (ABC requirement; the VAD gate calls this). The pump observes
@@ -1103,6 +1228,7 @@ class ParakeetWebSocketSocket(STTSocket):
         self._receiver_task: Optional[asyncio.Task[None]] = None
         self._connected_event = asyncio.Event()
         self._startup_event = asyncio.Event()
+        self._startup_failure_reason = 'provider_5xx'
 
     async def start(self) -> None:
         self._sender_task = create_named_task(self._run(), name="parakeet_ws_stream")
@@ -1111,21 +1237,29 @@ class ParakeetWebSocketSocket(STTSocket):
         except asyncio.TimeoutError:
             logger.error(f'Parakeet WS connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
             self._mark_dead(f'parakeet ws connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
+            self._startup_failure_reason = 'timeout'
             self._closed = True
             self._cancel_task(self._sender_task)
-            raise
+            raise ParakeetConnectionError('timeout', self._dead_reason or 'Parakeet connect timeout')
         if not self._connected_event.is_set():
             logger.error(f'Parakeet WS failed before connection: {self._dead_reason}')
-            raise RuntimeError(self._dead_reason or 'parakeet ws failed before connection')
+            raise ParakeetConnectionError(
+                self._startup_failure_reason,
+                self._dead_reason or 'parakeet ws failed before connection',
+            )
         logger.info('Parakeet WS connected successfully')
 
-    def send(self, data: bytes) -> None:
-        if self._closed or not data:
-            return
+    def send(self, data: bytes) -> bool:
+        if self._closed or self._dead:
+            return False
+        if not data:
+            return True
         try:
             self._send_queue.put_nowait(data)
         except asyncio.QueueFull:
-            pass
+            self._mark_dead('parakeet ws send queue full')
+            return False
+        return True
 
     def finish(self) -> None:
         self._finalized = True
@@ -1180,6 +1314,13 @@ class ParakeetWebSocketSocket(STTSocket):
         try:
             async with websockets.connect(url, max_size=10 * 1024 * 1024) as ws:
                 self._ws = ws
+                ready_raw = await asyncio.wait_for(ws.recv(), timeout=PARAKEET_WS_CONNECT_TIMEOUT)
+                try:
+                    ready = json.loads(ready_raw) if isinstance(ready_raw, str) else None
+                except json.JSONDecodeError as error:
+                    raise RuntimeError('Parakeet returned an invalid readiness frame') from error
+                if not isinstance(ready, dict) or ready.get('type') != 'ready':
+                    raise RuntimeError('Parakeet did not confirm stream admission')
                 self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
                 self._connected_event.set()
                 self._startup_event.set()
@@ -1208,6 +1349,11 @@ class ParakeetWebSocketSocket(STTSocket):
 
         except Exception as e:
             logger.error(f"Parakeet WS connection error: {e}")
+            close_reason = str(getattr(e, 'reason', '') or '')
+            if close_reason in EXPECTED_REJECTIONS:
+                self._startup_failure_reason = close_reason
+            elif isinstance(e, (asyncio.TimeoutError, TimeoutError)):
+                self._startup_failure_reason = 'timeout'
             self._mark_dead(f"parakeet ws failed: {e}")
         finally:
             self._startup_event.set()

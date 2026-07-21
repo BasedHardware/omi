@@ -11,7 +11,7 @@ import argparse
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -29,6 +29,14 @@ IDENTIFIER_RE = re.compile(r'[^A-Za-z0-9_$]')
 
 def stable_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + '\n'
+
+
+def source_label_for_path(spec_path: PurePath, root_dir: PurePath = ROOT_DIR) -> str:
+    """Return a stable slash-separated label for generated-file headers."""
+    try:
+        return spec_path.relative_to(root_dir).as_posix()
+    except ValueError:
+        return spec_path.as_posix()
 
 
 def ts_identifier(name: str) -> str:
@@ -115,6 +123,25 @@ def schema_to_ts(schema: Any) -> str:
     if nullable and 'null' not in {part.strip() for part in result.split('|')}:
         result = f'{result} | null'
     return result
+
+
+def is_plain_object_type_literal(ts_type: str) -> bool:
+    """Return True when ts_type is a single `{ ... }` object literal.
+
+    Top-level unions/intersections (e.g. oneOf/anyOf results, or `{...} | null`)
+    cannot be expressed as `interface` and must use `type`.
+    """
+    if not ts_type.startswith('{'):
+        return False
+    depth = 0
+    for index, char in enumerate(ts_type):
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return index == len(ts_type) - 1
+    return False
 
 
 def object_schema_to_ts(schema: dict[str, Any]) -> str:
@@ -239,6 +266,7 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             raw_params = operation.get('parameters', [])
             path_params: list[tuple[str, str]] = []
             query_params: list[tuple[str, str, bool]] = []
+            header_params: list[tuple[str, str, bool]] = []
             if isinstance(raw_params, list):
                 for p in raw_params:
                     if not isinstance(p, dict):
@@ -251,6 +279,8 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                         path_params.append((pname, ts_type))
                     elif location == 'query':
                         query_params.append((pname, ts_type, required))
+                    elif location == 'header':
+                        header_params.append((pname, ts_type, required))
 
             # Parse requestBody
             body_type: str | None = None
@@ -270,6 +300,9 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             if query_params:
                 fields = ', '.join(f'{ts_identifier(n)}{"?" if not r else ""}: {t}' for n, t, r in query_params)
                 sig_parts.append(f'query: {{ {fields} }}')
+            if header_params:
+                fields = ', '.join(f'{ts_identifier(n)}{"?" if not r else ""}: {t}' for n, t, r in header_params)
+                sig_parts.append(f'header: {{ {fields} }}')
             if body_type:
                 sig_parts.append(f'body: {body_type}')
             sig_parts.append('init?: OmiApiClientInit')
@@ -300,6 +333,14 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                 body_lines.append("      ...(body ? { 'Content-Type': 'application/json' } : {}),")
             body_lines.append("      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),")
             body_lines.append('      ...init?.headers,')
+            for pname, _ptype, required in header_params:
+                prop = ts_identifier(pname)
+                if required:
+                    body_lines.append(f"      {string_literal(pname)}: String(header.{prop}),")
+                else:
+                    body_lines.append(
+                        f"      ...(header.{prop} !== undefined ? {{ {string_literal(pname)}: String(header.{prop}) }} : {{}}),"
+                    )
             body_lines.append('    },')
             if body_type:
                 body_lines.append('    body: body ? JSON.stringify(body) : undefined,')
@@ -337,8 +378,9 @@ def generate(spec: dict[str, Any], source_label: str) -> str:
     for schema_name in sorted(schemas):
         ts_name = ts_identifier(schema_name)
         ts_type = schema_to_ts(schemas[schema_name])
-        declaration = 'interface' if ts_type.startswith('{\n') else 'type'
-        if declaration == 'interface':
+        # Interfaces can only declare a single object shape. Unions/intersections
+        # (oneOf/anyOf/allOf, nullable object wrappers) must be `export type`.
+        if is_plain_object_type_literal(ts_type):
             lines.append(f'export interface {ts_name} {ts_type}')
         else:
             lines.append(f'export type {ts_name} = {ts_type};')
@@ -397,31 +439,24 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     spec_path = args.spec if args.spec.is_absolute() else (Path.cwd() / args.spec)
-    spec = json.loads(spec_path.read_text())
-    try:
-        source_label = str(spec_path.relative_to(ROOT_DIR))
-    except ValueError:
-        source_label = str(spec_path)
-    rendered = generate(spec, source_label)
+    spec = json.loads(spec_path.read_text(encoding='utf-8'))
+    rendered = generate(spec, source_label_for_path(spec_path))
 
     outputs = args.output or DEFAULT_OUTPUTS
     stale: list[Path] = []
     for output in outputs:
         path = output if output.is_absolute() else (Path.cwd() / output)
         if args.check:
-            if not path.exists() or path.read_text() != rendered:
+            if not path.exists() or path.read_text(encoding='utf-8') != rendered:
                 stale.append(path)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(rendered)
-            print(f'wrote {path.relative_to(ROOT_DIR)}')
+            path.write_text(rendered, encoding='utf-8', newline='\n')
+            print(f'wrote {source_label_for_path(path)}')
 
     if stale:
         for path in stale:
-            try:
-                label = path.relative_to(ROOT_DIR)
-            except ValueError:
-                label = path
+            label = source_label_for_path(path)
             print(f'{label} is stale; run backend/scripts/generate_ts_openapi_types.py', file=sys.stderr)
         return 1
     return 0

@@ -137,14 +137,18 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
         else:
             raise ValueError("Failed to parse LLM response as JSON")
 
-    # Validate and construct the response
+    # Coerce present-but-null LLM fields to their defaults. app_data.get(k, default) only applies the
+    # default when k is ABSENT, so a null value ({"name": null}, {"capabilities": null}) slips through
+    # and then crashes here (None[:50], "chat" in None) or fails GeneratedAppData validation - all
+    # outside the JSON try/except above, so an uncaught 500 on app generation.
+    caps = app_data.get("capabilities") or ["chat"]
     return GeneratedAppData(
-        name=app_data.get("name", "My App")[:50],
-        description=app_data.get("description", "An AI-powered app"),
-        category=app_data.get("category", "other"),
-        capabilities=app_data.get("capabilities", ["chat"]),
-        chat_prompt=app_data.get("chat_prompt") if "chat" in app_data.get("capabilities", []) else None,
-        memory_prompt=app_data.get("memory_prompt") if "memories" in app_data.get("capabilities", []) else None,
+        name=(app_data.get("name") or "My App")[:50],
+        description=app_data.get("description") or "An AI-powered app",
+        category=app_data.get("category") or "other",
+        capabilities=caps,
+        chat_prompt=app_data.get("chat_prompt") if "chat" in caps else None,
+        memory_prompt=app_data.get("memory_prompt") if "memories" in caps else None,
     )
 
 

@@ -11,8 +11,6 @@ final class AppStateOwnershipTests: XCTestCase {
   }
 
   func testDesktopHomeViewDoesNotOwnAppState() throws {
-    let path = Bundle.module.bundlePath
-      .replacingOccurrences(of: "/.build/.+", with: "", options: .regularExpression)
     let sourceRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()

@@ -32,8 +32,8 @@ final class StallDetectorTests: XCTestCase {
   }
 
   func testGapWellBeyondStalledStaysStalled() async {
-    // A persistent stall (e.g. the full 180s until ChatProvider's send watchdog
-    // fires, CHAT-02) must remain .stalled, not decay back to running.
+    // A persistent silent bridge must remain .stalled, not decay back to
+    // running before ChatProvider's generic watchdog can recover it.
     let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
     _ = await detector.tick(atMs: thresholds.stalledGapMs)
     _ = await detector.tick(atMs: 185_000)
@@ -170,6 +170,77 @@ final class StallDetectorTests: XCTestCase {
       transitions.contains(.tool(id: "t1", from: .running, to: .slow)),
       "duplicate starts should not reset the original per-tool timer"
     )
+  }
+
+  func testToolProgressResetsOnlyItsNoProgressClock() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 0)
+
+    // Progress immediately before the hard no-progress budget expires must
+    // keep the tool eligible to continue without redefining its start time.
+    _ = await detector.step(kind: .toolProgress(id: "t1"), atMs: 89_999)
+
+    let overdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
+    XCTAssertFalse(overdue.contains("t1"))
+
+    let eventuallyOverdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 180_000)
+    XCTAssertEqual(eventuallyOverdue, ["t1"])
+  }
+
+  func testActiveToolDefersTheGenericWatchdog() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 0)
+
+    let genericWatchdogAt60s = await detector.isSilentWithoutActiveTools(durationMs: 60_000, atMs: 60_000)
+    XCTAssertFalse(genericWatchdogAt60s, "The active tool owns recovery while it is in flight")
+
+    let stalledToolsAt90s = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
+    XCTAssertEqual(stalledToolsAt90s, ["t1"])
+  }
+
+  func testDuplicateToolStartDoesNotManufactureProgress() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 89_999)
+
+    let overdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
+    XCTAssertEqual(overdue, ["t1"])
+  }
+
+  func testToolIdsWithoutProgressReportsOnlyOverdueInFlightTools() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "slow"), atMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "fresh"), atMs: 50_000)
+
+    let firstOverdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
+    XCTAssertEqual(firstOverdue, ["slow"])
+
+    _ = await detector.step(kind: .toolCompleted(id: "slow"), atMs: 90_001)
+    let remainingOverdue = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 200_000)
+    XCTAssertTrue(remainingOverdue.contains("fresh"))
+    XCTAssertFalse(remainingOverdue.contains("slow"))
+  }
+
+  func testGenericWatchdogDefersToAnActiveToolThenUsesPostCompletionSilence() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "write"), atMs: 0)
+
+    let genericWatchdogAt60s = await detector.isSilentWithoutActiveTools(durationMs: 60_000, atMs: 60_000)
+    let stalledToolsAt90s = await detector.toolIdsWithoutProgress(durationMs: 90_000, atMs: 90_000)
+    XCTAssertFalse(genericWatchdogAt60s)
+    XCTAssertEqual(stalledToolsAt90s, ["write"])
+
+    _ = await detector.step(kind: .toolCompleted(id: "write"), atMs: 100_000)
+    let genericWatchdogBeforeQuietInterval = await detector.isSilentWithoutActiveTools(
+      durationMs: 60_000,
+      atMs: 159_999
+    )
+    let genericWatchdogAfterQuietInterval = await detector.isSilentWithoutActiveTools(
+      durationMs: 60_000,
+      atMs: 160_000
+    )
+    XCTAssertFalse(genericWatchdogBeforeQuietInterval)
+    XCTAssertTrue(genericWatchdogAfterQuietInterval)
   }
 
   // MARK: - Threshold guard

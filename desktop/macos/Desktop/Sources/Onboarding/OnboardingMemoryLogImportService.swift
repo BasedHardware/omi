@@ -47,13 +47,18 @@ enum OnboardingMemoryLogSource: String, CaseIterable, Sendable {
 
   var prompt: String {
     """
-    Return everything you know about me inside one fenced code block. Include long-term memory, bio details, and any model-set context you have with dates when available. I want a thorough memory export of what you've learned about me. Skip tool details and include only information that is actually about me. Be exhaustive and careful.
+    Return everything you know about me inside one fenced code block. Include long-term memory, bio details, and any model-set context you have. Prefix every item with when you learned it, using a bracket tag: an exact [YYYY-MM-DD] only if you genuinely have a real date, otherwise the coarse recency tier you actually have — [recent], [earlier], or [long-term]. Never invent or guess a date; if you truly have no recency signal at all, use [unknown]. I want a thorough memory export of what you've learned about me. Skip tool details and include only information that is actually about me. Be exhaustive and careful.
     """
   }
 }
 
 actor OnboardingMemoryLogImportService {
   static let shared = OnboardingMemoryLogImportService()
+
+  struct ExtractedMemoryLog: Sendable {
+    let memories: [String]
+    let profileSummary: String
+  }
 
   /// Distinguishes "the text had nothing durable" (an expected outcome the
   /// user can fix by pasting the right content) from "the import itself
@@ -66,7 +71,8 @@ actor OnboardingMemoryLogImportService {
 
   func importMemoryLog(
     _ rawText: String,
-    source: OnboardingMemoryLogSource
+    source: OnboardingMemoryLogSource,
+    extractedFixture: ExtractedMemoryLog? = nil
   ) async -> ImportOutcome {
     let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return .noDurableMemories }
@@ -91,75 +97,86 @@ actor OnboardingMemoryLogImportService {
       - Deduplicate overlapping memories
       - Exclude tool details, implementation notes, and meta-instructions
       - Each memory should be one concise factual statement
+      - Preserve any leading recency tag the log provides — an exact date ("[2024-05-01]") or a coarse tier ("[recent]", "[earlier]", "[long-term]"). Drop bare "[date unknown]"/"[unknown]" tags; they carry no signal
       """
 
-    do {
-      let result = try await AgentClient.run(
-        surface: .onboarding(),
-        prompt: importPrompt,
-        model: ModelQoS.Claude.synthesis,
-        systemPrompt:
-          "You convert memory-log exports into concise durable user memories. Output only valid JSON.",
-        onTextDelta: { @Sendable _ in },
-        onToolCall: { @Sendable _, _, _ in "" },
-        onToolActivity: { @Sendable _, _, _, _ in }
-      )
-
-      let responseText = Self.extractJSONObject(from: result.text)
-      guard
-        let jsonData = responseText.data(using: .utf8),
-        let parsed = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-      else {
-        log("OnboardingMemoryLogImportService: Failed to parse \(source.displayName) response")
+    let extracted: ExtractedMemoryLog
+    if let extractedFixture {
+      guard AppBuild.isNonProduction else {
         return .failed
       }
-
-      let memoryStrings = (parsed["memories"] as? [String] ?? []).filter {
-        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }
-      let profileSummary = parsed["profile"] as? String ?? ""
-
-      guard !memoryStrings.isEmpty else {
-        log("OnboardingMemoryLogImportService: No durable \(source.displayName) memories found")
-        return .noDurableMemories
-      }
-
-      let items = memoryStrings.map { memory in
-        ImportEvidenceBatchItem(
-            title: source.headline,
-            snippet: memory,
-            content: memory,
-            metadata: ["import_kind": "memory_log"]
+      extracted = extractedFixture
+    } else {
+      do {
+        let result = try await AgentClient.run(
+          surface: .onboarding(),
+          prompt: importPrompt,
+          model: ModelQoS.Claude.synthesis,
+          systemPrompt:
+            "You convert memory-log exports into concise durable user memories. Output only valid JSON.",
+          onTextDelta: { @Sendable _ in },
+          onToolCall: { @Sendable _, _, _ in "" },
+          onToolActivity: { @Sendable _, _, _, _ in }
         )
-      }
-      let legacyMemories = memoryStrings.map { memory in
-        MemoryBatchItem(
-          content: memory,
-          tags: source.tags,
-          headline: source.headline,
-          source: source.memorySource
-        )
-      }
-      let saveResult = await OnboardingImportEvidenceService.save(
-        items,
-        sourceType: source.memorySource,
-        logPrefix: "OnboardingMemoryLogImportService",
-        legacyMemories: legacyMemories
-      )
-      if saveResult.failed > 0 {
-        log(
-          "OnboardingMemoryLogImportService: Saved \(saveResult.saved) \(source.displayName) memories; \(saveResult.failed) failed"
-        )
-      }
 
-      guard saveResult.saved > 0 else {
+        let responseText = Self.extractJSONObject(from: result.text)
+        guard
+          let jsonData = responseText.data(using: .utf8),
+          let parsed = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+        else {
+          log("OnboardingMemoryLogImportService: Failed to parse \(source.displayName) response")
+          return .failed
+        }
+        extracted = ExtractedMemoryLog(
+          memories: parsed["memories"] as? [String] ?? [],
+          profileSummary: parsed["profile"] as? String ?? ""
+        )
+      } catch {
+        log("OnboardingMemoryLogImportService: \(source.displayName) import failed: \(error)")
         return .failed
       }
-      return .imported(memories: saveResult.saved, profileSummary: profileSummary)
-    } catch {
-      log("OnboardingMemoryLogImportService: \(source.displayName) import failed: \(error)")
+    }
+
+    let memoryStrings = extracted.memories.filter {
+      !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    guard !memoryStrings.isEmpty else {
+      log("OnboardingMemoryLogImportService: No durable \(source.displayName) memories found")
+      return .noDurableMemories
+    }
+
+    let items = memoryStrings.map { memory in
+      ImportEvidenceBatchItem(
+        title: source.headline,
+        snippet: memory,
+        content: memory,
+        metadata: ["import_kind": "memory_log"]
+      )
+    }
+    let legacyMemories = memoryStrings.map { memory in
+      MemoryBatchItem(
+        content: memory,
+        tags: source.tags,
+        headline: source.headline,
+        source: source.memorySource
+      )
+    }
+    let saveResult = await OnboardingImportEvidenceService.save(
+      items,
+      sourceType: source.memorySource,
+      logPrefix: "OnboardingMemoryLogImportService",
+      legacyMemories: legacyMemories
+    )
+    if saveResult.failed > 0 {
+      log(
+        "OnboardingMemoryLogImportService: Saved \(saveResult.saved) \(source.displayName) memories; \(saveResult.failed) failed"
+      )
+    }
+
+    guard saveResult.saved > 0 else {
       return .failed
     }
+    return .imported(memories: saveResult.saved, profileSummary: extracted.profileSummary)
   }
 
   private static func extractJSONObject(from text: String) -> String {

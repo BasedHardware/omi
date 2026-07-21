@@ -1,5 +1,5 @@
 import { generateAgentId } from "./sqlite-store.js";
-import type { AgentStore } from "./types.js";
+import type { AgentExecutionRole, AgentStore, ProviderBoundary } from "./types.js";
 
 export interface SurfaceRef {
   surfaceKind: string;
@@ -11,6 +11,11 @@ export interface ResolveSurfaceSessionInput {
   ownerId: string;
   surfaceRef: SurfaceRef;
   defaultAdapterId?: string;
+  executionRole?: AgentExecutionRole;
+  providerBoundary?: ProviderBoundary;
+  modelProfile?: string | null;
+  defaultCwd?: string | null;
+  executionProfileSource?: "creation" | "child_derivation";
   title?: string | null;
 }
 
@@ -22,6 +27,23 @@ export interface ResolveSurfaceSessionResult {
 export interface LegacyMainChatSessionEntry {
   chatId: string;
   agentSessionId: string;
+}
+
+export interface LegacyMainChatSessionImportReceipt {
+  acceptedEntries: LegacyMainChatSessionEntry[];
+  importedCount: number;
+}
+
+export const LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY = {
+  owner: "desktop-agent-runtime",
+  removalCondition: "all supported desktop versions have imported UserDefaults main-chat session aliases",
+  removeBy: "2026-10-01",
+} as const;
+
+const SHARED_CHAT_SURFACES = new Set(["main_chat", "floating_chat", "realtime_voice", "realtime"]);
+
+function sharesChatContinuity(surfaceRef: SurfaceRef): boolean {
+  return surfaceRef.externalRefKind === "chat" && SHARED_CHAT_SURFACES.has(surfaceRef.surfaceKind);
 }
 
 export function surfaceRefKey(surfaceRef: SurfaceRef): string {
@@ -67,6 +89,31 @@ function readSessionIdByExternalRef(store: AgentStore, input: ResolveSurfaceSess
   return row ? String(row.session_id) : undefined;
 }
 
+function readSharedChatMapping(
+  store: AgentStore,
+  input: ResolveSurfaceSessionInput,
+): ResolveSurfaceSessionResult | undefined {
+  if (!sharesChatContinuity(input.surfaceRef)) return undefined;
+  const row = store.getOptionalRow(
+    `SELECT conversation_id, agent_session_id
+     FROM surface_conversations
+     WHERE owner_id = ? AND external_ref_kind = ? AND external_ref_id = ?
+       AND surface_kind IN ('main_chat', 'floating_chat', 'realtime_voice', 'realtime')
+     ORDER BY CASE surface_kind
+       WHEN 'main_chat' THEN 0
+       WHEN 'floating_chat' THEN 1
+       WHEN 'realtime_voice' THEN 2
+       ELSE 3 END,
+       created_at_ms ASC
+     LIMIT 1`,
+    [input.ownerId, input.surfaceRef.externalRefKind, input.surfaceRef.externalRefId],
+  );
+  return row ? {
+    conversationId: String(row.conversation_id),
+    agentSessionId: String(row.agent_session_id),
+  } : undefined;
+}
+
 function touchSurfaceConversation(store: AgentStore, input: ResolveSurfaceSessionInput, now: number): void {
   store.execute(
     `UPDATE surface_conversations
@@ -88,7 +135,11 @@ function createSurfaceConversationMapping(
   agentSessionId: string,
   now: number,
 ): ResolveSurfaceSessionResult {
-  const conversationId = generateAgentId("conversation");
+  const shared = readSharedChatMapping(store, input);
+  if (shared && shared.agentSessionId !== agentSessionId) {
+    throw new Error("Shared chat continuity mapping points at a different canonical session");
+  }
+  const conversationId = shared?.conversationId ?? generateAgentId("conversation");
   try {
     store.insertSurfaceConversation({
       ownerId: input.ownerId,
@@ -142,7 +193,8 @@ export function resolveSurfaceSession(
 
     const existingSessionId = readSessionIdByExternalRef(store, input);
     if (existingSessionId) {
-      return createSurfaceConversationMapping(store, input, existingSessionId, now);
+      const resolved = createSurfaceConversationMapping(store, input, existingSessionId, now);
+      return resolved;
     }
 
     try {
@@ -153,6 +205,11 @@ export function resolveSurfaceSession(
         externalRefId: input.surfaceRef.externalRefId,
         title: input.title ?? null,
         defaultAdapterId: input.defaultAdapterId ?? "acp",
+        executionRole: input.executionRole,
+        providerBoundary: input.providerBoundary,
+        modelProfile: input.modelProfile,
+        defaultCwd: input.defaultCwd,
+        executionProfileSource: input.executionProfileSource,
       });
       return createSurfaceConversationMapping(store, input, session.sessionId, now);
     } catch (error) {
@@ -197,23 +254,33 @@ function resolveLegacyAgentSessionId(
   }
 }
 
-// TODO(desktop-agent-platonic-gap-closure G6): delete importLegacyMainChatSessions two desktop releases after the release that ships the platonic branch.
 export function importLegacyMainChatSessions(
   store: AgentStore,
   input: { ownerId: string; entries: LegacyMainChatSessionEntry[] },
   nowMs: () => number,
-): number {
+): LegacyMainChatSessionImportReceipt {
+  const acceptedEntries = input.entries.map((entry) => ({
+    chatId: typeof entry?.chatId === "string" ? entry.chatId.trim() : "",
+    agentSessionId: typeof entry?.agentSessionId === "string" ? entry.agentSessionId.trim() : "",
+  }));
+  const seenChatIds = new Set<string>();
+  for (const entry of acceptedEntries) {
+    if (!entry.chatId || !entry.agentSessionId) {
+      throw new Error("invalid_legacy_main_chat_session_entry");
+    }
+    if (seenChatIds.has(entry.chatId)) {
+      throw new Error("duplicate_legacy_main_chat_session_entry");
+    }
+    seenChatIds.add(entry.chatId);
+  }
+
   const now = nowMs();
   let imported = 0;
-  for (const entry of input.entries) {
-    const chatId = entry.chatId.trim();
-    const agentSessionId = entry.agentSessionId.trim();
-    if (!chatId || !agentSessionId) continue;
-
+  for (const entry of acceptedEntries) {
     const surfaceRef: SurfaceRef = {
       surfaceKind: "main_chat",
       externalRefKind: "chat",
-      externalRefId: chatId,
+      externalRefId: entry.chatId,
     };
     const existing = store.getOptionalRow(
       `SELECT conversation_id FROM surface_conversations
@@ -225,7 +292,7 @@ export function importLegacyMainChatSessions(
     const resolvedSessionId = resolveLegacyAgentSessionId(store, {
       ownerId: input.ownerId,
       surfaceRef,
-      legacySessionId: agentSessionId,
+      legacySessionId: entry.agentSessionId,
       defaultAdapterId: "acp",
     });
 
@@ -249,85 +316,7 @@ export function importLegacyMainChatSessions(
     }
     imported += 1;
   }
-  return imported;
-}
-
-export interface MergeFloatingChatIntoMainChatResult {
-  mergedTurns: number;
-  removedFloatingMapping: boolean;
-}
-
-/** One-time migration: fold legacy floating_chat transcript into main_chat. */
-export function mergeFloatingChatIntoMainChat(
-  store: AgentStore,
-  input: { ownerId: string; chatId?: string },
-  nowMs: () => number,
-): MergeFloatingChatIntoMainChatResult {
-  const chatId = input.chatId?.trim() || "default";
-  const floatingRef: SurfaceRef = {
-    surfaceKind: "floating_chat",
-    externalRefKind: "chat",
-    externalRefId: chatId,
-  };
-  const mainRef: SurfaceRef = {
-    surfaceKind: "main_chat",
-    externalRefKind: "chat",
-    externalRefId: chatId,
-  };
-
-  const floatingRow = store.getOptionalRow(
-    `SELECT conversation_id FROM surface_conversations
-     WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
-    [input.ownerId, floatingRef.surfaceKind, floatingRef.externalRefKind, floatingRef.externalRefId],
-  );
-  if (!floatingRow) {
-    return { mergedTurns: 0, removedFloatingMapping: false };
-  }
-
-  const floatingConversationId = String(floatingRow.conversation_id);
-  const mainResolved = resolveSurfaceSession(store, { ownerId: input.ownerId, surfaceRef: mainRef }, nowMs);
-  const mainConversationId = mainResolved.conversationId;
-
-  if (floatingConversationId === mainConversationId) {
-    store.execute(
-      `DELETE FROM surface_conversations
-       WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
-      [input.ownerId, floatingRef.surfaceKind, floatingRef.externalRefKind, floatingRef.externalRefId],
-    );
-    return { mergedTurns: 0, removedFloatingMapping: true };
-  }
-
-  const turns = store.allRows(
-    `SELECT role, content, created_at_ms, metadata_json
-     FROM conversation_turns
-     WHERE conversation_id = ?
-     ORDER BY created_at_ms ASC`,
-    [floatingConversationId],
-  );
-
-  let mergedTurns = 0;
-  store.withTransaction(() => {
-    for (const row of turns) {
-      store.insertConversationTurn({
-        conversationId: mainConversationId,
-        turnId: generateAgentId("turn"),
-        role: String(row.role) as "user" | "assistant",
-        surfaceKind: "main_chat",
-        content: String(row.content),
-        createdAtMs: Number(row.created_at_ms),
-        metadataJson: String(row.metadata_json ?? "{}"),
-      });
-      mergedTurns += 1;
-    }
-    store.execute(`DELETE FROM conversation_turns WHERE conversation_id = ?`, [floatingConversationId]);
-    store.execute(
-      `DELETE FROM surface_conversations
-       WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
-      [input.ownerId, floatingRef.surfaceKind, floatingRef.externalRefKind, floatingRef.externalRefId],
-    );
-  });
-
-  return { mergedTurns, removedFloatingMapping: true };
+  return { acceptedEntries, importedCount: imported };
 }
 
 export function clearOwnerSurfaceState(store: AgentStore, ownerId: string, nowMs: () => number): {

@@ -42,7 +42,10 @@ def get_trends_data() -> List[Dict[str, Any]]:
             # KeyError and drop the entire category from the public /v1/trends response.
             topics = sorted(topics_docs, key=lambda e: len(e.get('memory_ids') or []), reverse=True)
             for topic in topics:
-                if topic['topic'] not in valid_items:
+                # A topic doc can be missing 'topic' the same way it can be missing 'memory_ids'
+                # (guarded above); use .get so one such topic is skipped rather than raising KeyError
+                # and dropping the entire category from the public /v1/trends response.
+                if topic.get('topic') not in valid_items:
                     continue
                 topic['memories_count'] = len(topic.get('memory_ids') or [])
                 topic.pop('memory_ids', None)

@@ -1,5 +1,6 @@
 {
     "@@locale": "sr",
+    "sessionExpiredSignInAgain": "Сесија је истекла — пријавите се поново.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10520,7 +10521,7 @@
     "upgradePlan": "Надогради план",
     "billingMonthly": "Месечно",
     "billingYearly": "Годишње",
-    "savePercent": "Уштедите ~17%",
+    "savePercent": "Уштедите ~{percent}%",
     "popular": "Популарно",
     "currentPlan": "Тренутни",
     "neoSubtitle": "{count} питања месечно",
@@ -10632,7 +10633,7 @@
     "syncCustomSttWarningMessage": "Користите сопственог пружаоца транскрипције. Синхронизација ових снимака их транскрибује на Omi серверима и рачунају се у лимит транскрипције вашег плана.",
     "transcribeLaterTitle": "Transkripcija kasnije",
     "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kada vam zatreba, umesto uživo. Snimci se čuvaju na telefonu, a zatim ih otpremate da biste kreirali razgovore.",
-    "transcribeLaterNote": "Za sada radi sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
+    "transcribeLaterNote": "Radi sa mikrofonom telefona i sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
     "transcribeLaterStorageFull": "Na telefonu je ostalo malo prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite snimke i automatski će se nastaviti.",
     "unmute": "Uključi zvuk",
     "newRecording": "Novi snimak",
@@ -10720,5 +10721,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Меморија уређаја",
+    "deviceStoragePercentFull": "{percent}% попуњено",
+    "deviceStorageUsedOfTotal": "{used} од {total} искоришћено",
+    "deviceStorageFree": "{free} слободно",
+    "deviceStorageNearlyFull": "Уређај је скоро пун — синхронизујте да ослободите простор.",
+    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Biće transkribovano kada ponovo budete na mreži.",
+    "dataEncryptedBanner": "Ваши подаци су подразумевано заштићени јаким шифровањем, а ви контролишете како се чувају и користе.",
+    "rayBanMetaMicPickerTitle": "Изаберите микрофон Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Изаберите Bluetooth микрофон наочара. Музика се паузира док га Omi користи.",
+    "rayBanMetaMicPickerEmpty": "Није пронађен ниједан Bluetooth микрофон. Повежите наочаре у подешавањима iPhone-а и покушајте поново.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth микрофони нису могли да се учитају. Проверите да ли је Bluetooth укључен и покушајте поново.",
+    "rayBanMetaMicPickerConnectError": "Повезивање са тим микрофоном није успело. Проверите да ли је повезан у подешавањима iPhone-а."
 }

@@ -34,32 +34,26 @@ sha2 = "0.10"
 hmac = "0.12"
 hex = "0.4"
 base64 = "0.21"
-regex = "1"
-
-# Encryption (for decrypting user data with enhanced protection level)
-aes-gcm = "0.10"
-hkdf = "0.12"
 
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
-tracing-appender = "0.2"
 time = { version = "0.3.36", features = ["macros", "formatting", "local-offset"] }
 
 # Async utilities
 futures = "0.3"
 async-stream = "0.3"
 
-# Compression (for transcript decompression)
-flate2 = "1.0"
-
 # URL encoding for OAuth
 urlencoding = "2.1"
 
-# Redis for conversation visibility
+# Redis for distributed request rate limiting
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 
 # GCP authentication (Vertex AI service account tokens)
 gcp_auth = "0.12"
 
 # Note: Using Firestore REST API directly instead of gcloud-sdk for compatibility
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

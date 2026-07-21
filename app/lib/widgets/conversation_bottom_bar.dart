@@ -20,6 +20,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ConversationBottomBarMode {
@@ -64,6 +65,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   Duration _totalDuration = Duration.zero;
   List<Duration> _trackStartOffsets = [];
 
+  // Single conversation-level artifact mode: one dense MP3 (gaps collapsed),
+  // wall-clock timeline mapped through the spans manifest. Fallback stays on
+  // the per-part ConcatenatingAudioSource playlist.
+  bool _singleArtifact = false;
+  AudioTimelineMapper? _timelineMapper;
+
   List<AudioFile> _getSortedAudioFiles() {
     if (widget.conversation == null) return [];
     final files = List<AudioFile>.from(widget.conversation!.audioFiles);
@@ -99,6 +106,15 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   void _calculateTotalDuration() {
     if (widget.conversation == null) return;
+    final stamp = widget.conversation!.conversationAudio;
+    if (stamp != null && stamp.spans.isNotEmpty) {
+      // Dense-artifact timeline: the total is the actual captured audio length
+      // (the MP3 has inter-part gaps and lead-in silence collapsed out), so the
+      // scrubber matches what the user can hear. Transcript-segment taps still
+      // map their wall timestamp to the MP3 position via the spans manifest.
+      _totalDuration = Duration(milliseconds: (stamp.capturedDuration * 1000).toInt());
+      return;
+    }
     double totalSeconds = 0;
     _trackStartOffsets = [];
     for (final audioFile in _getSortedAudioFiles()) {
@@ -109,6 +125,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   Duration _getCombinedPosition(int? currentIndex, Duration trackPosition) {
+    if (_singleArtifact) {
+      // The dense MP3 plays linearly; position is the raw artifact time so it
+      // advances 1:1 with playback against the captured-duration total.
+      return trackPosition;
+    }
     if (currentIndex == null || currentIndex >= _trackStartOffsets.length) {
       return trackPosition;
     }
@@ -183,8 +204,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
     if (!mounted || _audioPlayer == null) return;
 
-    // Calculate the correct file position
-    final filePosition = _calculateFilePositionForTimestamp(segmentStartSeconds);
+    // A transcript segment's timestamp is on the wall timeline; the spans
+    // manifest maps it to the exact position in the dense MP3 (artifact time).
+    final filePosition = _singleArtifact
+        ? _timelineMapper!.wallToArtifact(segmentStartSeconds)
+        : _calculateFilePositionForTimestamp(segmentStartSeconds);
 
     // Ensure position is not negative
     final targetPosition = Duration(milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt());
@@ -240,7 +264,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       // endpoint that used to time out on long conversations.
       final deadline = DateTime.now().add(const Duration(seconds: 90));
       var urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
-      while (urlsResponse.files.isEmpty || urlsResponse.hasPending) {
+      while (urlsResponse.files.isEmpty || !urlsResponse.playbackReady) {
         if (!mounted) return;
         if (DateTime.now().isAfter(deadline)) {
           Logger.debug('Audio still pending after poll budget for ${widget.conversation!.id}');
@@ -256,6 +280,18 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
         if (!mounted) return;
         urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      }
+
+      final conversationAudio = urlsResponse.conversationAudio;
+      if (conversationAudio != null && conversationAudio.isCached && conversationAudio.spans.isNotEmpty) {
+        // One dense MP3 for the whole conversation: no playlist, no track
+        // offsets — position and seeks go through the spans mapper.
+        _timelineMapper = AudioTimelineMapper(conversationAudio.spans);
+        _singleArtifact = true;
+        _totalDuration = Duration(milliseconds: (_timelineMapper!.capturedDuration * 1000).toInt());
+        await _audioPlayer!.setAudioSource(AudioSource.uri(Uri.parse(conversationAudio.signedUrl!)), preload: true);
+        _isAudioInitialized = true;
+        return;
       }
 
       final sortedAudioFiles = _getSortedAudioFiles();
@@ -766,6 +802,17 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Future<void> _seekToCombinedPosition(Duration targetPosition) async {
     if (_audioPlayer == null) return;
+
+    if (_singleArtifact) {
+      // targetPosition is already artifact time (the scrubber runs on the dense
+      // MP3; segment taps are mapped wall->artifact before they get here).
+      PlatformManager.instance.analytics.audioPlaybackSeeked(
+        conversationId: widget.conversation?.id ?? '',
+        toPositionSeconds: targetPosition.inSeconds,
+      );
+      await _audioPlayer!.seek(targetPosition);
+      return;
+    }
 
     int targetIndex = 0;
     Duration positionInTrack = targetPosition;

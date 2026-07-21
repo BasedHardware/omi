@@ -1,0 +1,201 @@
+---
+title: "Translation Benchmark Report"
+icon: "language"
+description: "NLLB self-hosted translation quality benchmark against Google Cloud Translation V3 — methodology, results across 3 model sizes, and recommendations."
+---
+
+# Translation Benchmark Report
+
+Benchmark comparing self-hosted NLLB-200 models (600M, 1.3B, 3.3B) against Google Cloud Translation V3 on standardized MT evaluation test sets.
+
+## Methodology
+
+### Corpus
+
+**WMT24 test sets** via [sacrebleu](https://github.com/mjpost/sacrebleu) — 997 sentence pairs per language, no authentication required. WMT (Workshop on Machine Translation) test sets are the standard benchmark corpus for machine translation research.
+
+### Metrics
+
+| Metric | Role | Description |
+|--------|------|-------------|
+| **chrF++** | Primary | Character 6-grams + word bigrams. Robust for CJK scripts, morphologically rich languages, and agglutinative languages. Less sensitive to tokenization artifacts. |
+| **BLEU** | Secondary | Corpus-level BLEU via sacrebleu (13a tokenizer). Widely understood baseline, but penalizes valid paraphrases and struggles with CJK tokenization. |
+| **COMET** | Optional | Neural metric (`wmt22-comet-da`). Highest correlation with human judgment but requires GPU. |
+
+**Why chrF++ is primary**: BLEU operates on word-level n-grams and is heavily affected by tokenization differences between systems. For CJK languages (Chinese, Japanese), where word boundaries are ambiguous, BLEU scores can be misleadingly low even when translations are reasonable. chrF++ operates at character level and is the standard primary metric for multilingual MT evaluation.
+
+### Languages Tested
+
+| Language | BCP-47 | Tier | Script | WMT Set |
+|----------|--------|------|--------|---------|
+| German | de | High resource | Latin | wmt24 en-de |
+| Russian | ru | High resource | Cyrillic | wmt24 en-ru |
+| Ukrainian | uk | Medium resource | Cyrillic | wmt24 en-uk |
+| Japanese | ja | High resource | CJK | wmt24 en-ja |
+| Chinese | zh | High resource | CJK | wmt24 en-zh |
+
+### Models Tested
+
+| Model | Parameters | Quantization | HuggingFace Repo | License |
+|-------|-----------|-------------|-------------------|---------|
+| NLLB-200-distilled-600M | 600M | INT8 | `JustFrederik/nllb-200-distilled-600M-ct2-int8` | CC-BY-NC-4.0 |
+| NLLB-200-distilled-1.3B | 1.3B | INT8 | `JustFrederik/nllb-200-distilled-1.3B-ct2-int8` | CC-BY-NC-4.0 |
+| NLLB-200-3.3B | 3.3B | INT8 | `OpenNMT/nllb-200-3.3B-ct2-int8` | CC-BY-NC-4.0 |
+
+All models run on NVIDIA L4 GPU (24GB VRAM) via CTranslate2 with INT8 quantization.
+
+### Reproducibility
+
+- Google API responses are SHA-256-keyed and cached to disk — no re-billing across benchmark runs
+- All results deterministic given same model weights and test set
+- Script accepts `--model-name` flag to label results per model variant
+- Per-model output files: `benchmark_<model>.json` and `benchmark_<model>.csv`
+- Dry-run mode (`--dry-run`) validates all dependencies before incurring costs
+
+## Results
+
+### chrF++ Quality Relative to Google (Primary Metric)
+
+| Language | Tier | 600M | 1.3B | 3.3B | Google |
+|----------|------|------|------|------|--------|
+| German | High | 84% | 90% | **94%** | 100% |
+| Russian | High | 75% | 81% | **86%** | 100% |
+| Ukrainian | Medium | 69% | 74% | **81%** | 100% |
+| Japanese | High | 64% | 67% | **65%** | 100% |
+| Chinese | High | 56% | 59% | **63%** | 100% |
+
+### BLEU Scores (Secondary Metric)
+
+| Language | 600M | 1.3B | 3.3B | Google |
+|----------|------|------|------|--------|
+| German | 73% | 86% | **92%** | 100% |
+| Russian | 63% | 75% | **81%** | 100% |
+| Ukrainian | 52% | 61% | **71%** | 100% |
+| Japanese | 7% | 9% | 7% | 100% |
+| Chinese | 6% | 6% | 6% | 100% |
+
+CJK BLEU scores are artificially low due to tokenization mismatch — chrF++ is the authoritative metric for these languages.
+
+### Latency (997 sentences, L4 GPU, INT8)
+
+| Model | Avg Latency per Language | Throughput |
+|-------|------------------------|------------|
+| 600M | ~55s | ~3,300 chars/sec |
+| 1.3B | ~71s | ~2,600 chars/sec |
+| 3.3B | ~126s | ~1,500 chars/sec |
+| Google API | ~6s | N/A (cloud) |
+
+## Analysis
+
+### European / Cyrillic Languages
+
+Strong performance across all model sizes. The quality gap narrows significantly with scale:
+
+- **German**: 600M already at 84% of Google, 3.3B reaches 94% — near-parity
+- **Russian**: Steady improvement from 75% → 86%, usable at 1.3B+
+- **Ukrainian** (medium resource): Largest per-step improvement, 69% → 81%
+
+For European language translation in non-critical contexts (internal tools, bulk processing, privacy-sensitive workloads), the 1.3B model is production-viable.
+
+### CJK Languages
+
+CJK shows a persistent quality gap even at 3.3B scale:
+
+- **Japanese**: Plateaus around 65% chrF++ across all model sizes
+- **Chinese**: Modest improvement from 56% → 63%
+
+This is expected — NLLB-200 is a massively multilingual model covering 200 languages. Dedicated CJK models or larger architectures would close this gap, but at the cost of multilingual coverage.
+
+### Cost-Quality Trade-off
+
+| Model | GPU Memory | Quality (European avg) | Latency | Recommendation |
+|-------|-----------|----------------------|---------|----------------|
+| 600M | ~2GB | 76% of Google | Fast | Shadow comparison, prototyping |
+| **1.3B** | ~3GB | **82% of Google** | **Moderate** | **Production for European languages** |
+| 3.3B | ~5GB | 87% of Google | Slow (2x) | When quality is critical |
+
+## Recommendation
+
+**1.3B is the sweet spot** for production deployment:
+- Fits comfortably on a single L4 GPU (24GB) with headroom
+- Achieves 74–90% of Google quality on European/Cyrillic languages
+- Only ~30% slower than 600M, but significantly better quality
+- 3.3B is marginally better on most languages but 2x slower — diminishing returns
+
+**Upgrade path**: If CJK quality needs to match Google, evaluate dedicated models (MADLAD-400-3B for Apache-2.0 license, or fine-tuned NLLB variants) rather than scaling NLLB-200 further.
+
+## Running the Benchmark
+
+### Prerequisites
+
+```bash
+pip install sacrebleu httpx google-cloud-translate
+```
+
+### Commands
+
+```bash
+# Validate setup (no API calls)
+python3 backend/scripts/benchmark_translation.py --dry-run --skip-comet --skip-google
+
+# Benchmark a single model
+python3 backend/scripts/benchmark_translation.py \
+    --nllb-url http://localhost:10150 \
+    --model-name nllb-200-distilled-1.3B \
+    --languages de,zh,ja,ru,uk \
+    --output-dir /tmp/benchmark-results \
+    --skip-comet
+
+# Compare all 3 model sizes (Google results cached after first run)
+for model in "nllb-200-distilled-600M" "nllb-200-distilled-1.3B" "nllb-200-3.3B"; do
+    python3 backend/scripts/benchmark_translation.py \
+        --nllb-url http://localhost:10150 \
+        --model-name "$model" \
+        --output-dir /tmp/benchmark-results \
+        --skip-comet
+done
+```
+
+### Output Files
+
+Each run produces per-model files:
+- `benchmark_<model>.json` — full results with metrics and latency
+- `benchmark_<model>.csv` — tabular summary for spreadsheet analysis
+
+### Deploying Models for Benchmarking
+
+Deploy any NLLB model variant to the dev cluster using the Helm chart with a values override:
+
+```yaml
+# Example: benchmark_1.3B_values.yaml
+image:
+  tag: "benchmark-v2"
+env:
+  - name: NLLB_MODEL_DIR
+    value: "/models/nllb-200-distilled-1.3B-ct2-int8"
+initContainers:
+  - name: model-downloader
+    image: python:3.11-slim
+    command:
+      - sh
+      - -c
+      - |
+        pip install -q huggingface_hub
+        python3 -c "
+        from huggingface_hub import snapshot_download
+        snapshot_download('JustFrederik/nllb-200-distilled-1.3B-ct2-int8',
+            local_dir='/models/nllb-200-distilled-1.3B-ct2-int8',
+            revision='30c36268408177b0fce2bfcfa205d877accd327d')
+        "
+    volumeMounts:
+      - name: model-data
+        mountPath: /models
+```
+
+```bash
+helm upgrade --install dev-omi-nllb-translation \
+    backend/charts/nllb-translation \
+    -n dev-omi-backend \
+    -f backend/charts/nllb-translation/dev_omi_nllb_translation_values.yaml \
+    -f benchmark_1.3B_values.yaml
+```

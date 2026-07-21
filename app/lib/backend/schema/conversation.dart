@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -272,6 +273,33 @@ TranscriptSegment _transcriptSegmentFromGenerated(wire.GeneratedTranscriptSegmen
   return TranscriptSegment.fromGenerated(generated);
 }
 
+/// Conversation-level dense playback artifact stamp: one MP3 per conversation
+/// (inter-part gaps collapsed) + the spans manifest for wall-clock mapping.
+class ConversationAudioInfo {
+  final double duration; // wall-clock seconds
+  final double capturedDuration; // seconds of actual audio
+  final List<ConversationAudioSpan> spans;
+
+  ConversationAudioInfo({required this.duration, required this.capturedDuration, this.spans = const []});
+
+  factory ConversationAudioInfo.fromGenerated(wire.GeneratedConversationAudio generated) {
+    return ConversationAudioInfo(
+      duration: generated.duration,
+      capturedDuration: generated.capturedDuration,
+      spans: generated.spans
+          .map(
+            (s) => ConversationAudioSpan(
+              fileId: s.fileId,
+              wallOffset: s.wallOffset,
+              artifactOffset: s.artifactOffset,
+              len: s.len,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 class ServerConversation {
   final String id;
   final DateTime createdAt;
@@ -283,6 +311,7 @@ class ServerConversation {
   final Geolocation? geolocation;
   final List<ConversationPhoto> photos;
   final List<AudioFile> audioFiles;
+  final ConversationAudioInfo? conversationAudio;
 
   final List<AppResponse> appResults;
   final List<String> suggestedSummarizationApps;
@@ -317,6 +346,7 @@ class ServerConversation {
     this.geolocation,
     this.photos = const [],
     this.audioFiles = const [],
+    this.conversationAudio,
     this.discarded = false,
     this.deleted = false,
     this.source,
@@ -335,6 +365,17 @@ class ServerConversation {
     final structured = json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null;
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
+    }
+    // Legacy caches (< toJson wire-format fix) wrote plugins_results entries as
+    // {'appId', 'content'}; the wire parser requires the plugin_id key.
+    final rawPluginResults = normalized['plugins_results'];
+    if (rawPluginResults is List) {
+      normalized['plugins_results'] = rawPluginResults.map((entry) {
+        if (entry is Map<String, dynamic> && !entry.containsKey('plugin_id')) {
+          return {...entry, 'plugin_id': entry['appId'] ?? entry['app_id']};
+        }
+        return entry;
+      }).toList();
     }
     final generated = wire.GeneratedConversation.fromJson(normalized);
     return ServerConversation.fromGenerated(
@@ -358,12 +399,17 @@ class ServerConversation {
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
       transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
-      appResults: generated.appsResults.map(AppResponse.fromGenerated).toList(),
+      appResults: generated.appsResults.isNotEmpty
+          ? generated.appsResults.map(AppResponse.fromGenerated).toList()
+          : generated.pluginsResults.map((result) => AppResponse(result.content, appId: result.pluginId)).toList(),
       suggestedSummarizationApps: generated.suggestedSummarizationApps,
       geolocation:
           geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
       photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
       audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
+      conversationAudio: generated.conversationAudio == null
+          ? null
+          : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
       source:
           generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
@@ -390,7 +436,10 @@ class ServerConversation {
       'started_at': startedAt?.toUtc().toIso8601String(),
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
-      'plugins_results': appResults.map((result) => result.toJson()).toList(),
+      'apps_results': appResults.map((result) => result.toGenerated().toJson()).toList(),
+      'plugins_results': appResults.map((result) {
+        return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content).toJson();
+      }).toList(),
       'suggested_summarization_apps': suggestedSummarizationApps,
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
@@ -533,12 +582,18 @@ class SyncLocalFilesResponse {
   int totalSegments;
   List<String> errors;
 
+  /// Client-side batches that could not be uploaded. Unlike [failedSegments],
+  /// these failures leave WALs retryable locally and must re-arm foreground
+  /// recovery rather than presenting a completed sync.
+  int localUploadFailures;
+
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
     this.failedSegments = 0,
     this.totalSegments = 0,
     this.errors = const [],
+    this.localUploadFailures = 0,
   });
 
   bool get hasPartialFailure => failedSegments > 0;
@@ -597,6 +652,9 @@ class SyncJobStatusResponse {
   final int failedSegments;
   final SyncLocalFilesResponse? result;
   final String? error;
+  final String? lane;
+  final String? reasonCode;
+  final int? retryAfter;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -607,6 +665,9 @@ class SyncJobStatusResponse {
     this.failedSegments = 0,
     this.result,
     this.error,
+    this.lane,
+    this.reasonCode,
+    this.retryAfter,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
@@ -614,7 +675,20 @@ class SyncJobStatusResponse {
   bool get isPartialFailure => status == 'partial_failure';
 
   factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    return SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
+    final generated = wire.GeneratedSyncJobStatusResponse.fromJson(json);
+    return SyncJobStatusResponse(
+      jobId: generated.jobId,
+      status: generated.status,
+      totalSegments: generated.totalSegments,
+      processedSegments: generated.processedSegments,
+      successfulSegments: generated.successfulSegments,
+      failedSegments: generated.failedSegments,
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      error: generated.error,
+      lane: json['lane'] as String?,
+      reasonCode: json['reason_code'] as String?,
+      retryAfter: (json['retry_after'] as num?)?.toInt(),
+    );
   }
 
   factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {

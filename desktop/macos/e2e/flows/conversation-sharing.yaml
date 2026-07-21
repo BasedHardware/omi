@@ -1,0 +1,66 @@
+version: 2
+name: conversation-sharing
+tier: 2
+description: Hermetic conversation share affordance probe (clipboard/native share stays manual)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/APIClient.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ChatSessions.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Messages.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Conversations
+    bridge.navigate:
+      target: conversations
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 1
+
+  - id: S2
+    name: Create hermetic capture conversation
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: lifecycle
+        text: "[[MARKER:conversation-sharing]] hermetic share probe"
+    expect:
+      result.detail.stopped: "true"
+
+  - id: S3
+    name: Open latest conversation detail
+    bridge.action:
+      name: open_latest_conversation
+      params:
+        showTranscript: "false"
+        settleMs: "500"
+    expect:
+      ok: true
+
+  - id: S4
+    name: Detail open snapshot
+    bridge.action:
+      name: conversation_detail_snapshot
+      params:
+        settleMs: "300"
+    expect:
+      result.detail.detail_open: "true"
+
+  - id: S5
+    name: Share link probe (no clipboard)
+    bridge.action:
+      name: conversation_share_probe
+      params:
+        conversationId: latest
+    expect:
+      ok: true
+
+  - id: S6
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

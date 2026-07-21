@@ -8,26 +8,33 @@
 
 /* Begin PBXBuildFile section */
 		0162ECA35ABCBED5D21250E7 /* prodRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */; };
+		0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */; };
+		085D4BEA7A8615DDB4A4E73C /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF0FE6142D61FDC10072C10D /* Custom.xcconfig */; };
 		0D1B1F2689256C0895BECAE9 /* prodDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */; };
+		0FAD7A181CD39245DCFA718A /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
+		12BC2A482E3676BAAC2404F6 /* OmiCallError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC42F2A81B100E78A3C /* OmiCallError.swift */; };
 		12F9316B94DF72426BF544B4 /* devProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */; };
+		18B5E977FCEDF03D5DDE4A21 /* AppleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CE /* AppleHealthService.swift */; };
+		19570D5AA4C5B2E3154671BE /* RayBanMetaHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */; };
+		1D93FD645488AAB7DBE4EF49 /* LimitlessProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */; };
+		2233D9F0F73BEE78D735B79C /* devRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */; };
 		2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */; };
 		29B635C199B3BDE0F2BE8EC5 /* devRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */; };
+		2AE34400DB52FFE4BE215840 /* PhoneMicInterruptionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */; };
+		2B99FAF9526FEECCB4348D72 /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
+		36D27A357376AC5C2E2B2921 /* prodDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		3E200B606D3D02BFEF213BF1 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = F954EF7C37697F83E05F20D8 /* MWDATCore */; };
+		3FF07873AB8530FF5964C7E4 /* devDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */; };
 		4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 42A7BA342E788BD300138969 /* omiWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); platformFilter = iphoneos; }; };
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
-		BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */; };
-		BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */; };
-		BAADF00DF00DF00DF00DF0D6 /* LimitlessBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */; };
-		BAADF00DF00DF00DF00DF0D8 /* LimitlessProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */; };
-		BAADF00DF00DF00DF00DF0DA /* LimitlessFlashDrainEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */; };
 		42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
-		BAADF00DF00DF00DF00DFC03 /* RayBanMetaAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */; };
-		BAADF00DF00DF00DF00DFC04 /* RayBanMetaHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */; };
 		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
 		42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
@@ -38,26 +45,87 @@
 		42BABFC92F2A81B100E78A3C /* OmiProximitySensor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */; };
 		42BABFCB2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
 		42BABFCD2F2A81B100E78A3C /* OmiRegionCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */; };
+		431C5CAEC909BB0043406A09 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
+		433B391DCC48F1EA64996624 /* PhoneMicConverterPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD04 /* PhoneMicConverterPipeline.swift */; };
+		44E6D3550DDAC81C6ADF09ED /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		4C63D0133E38DE51BA55148C /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = E640392A2909606360520801 /* MWDATCamera */; };
+		4D351AE1E3C89CD45ADBC99C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
+		515BEA34860AB5238B369C52 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
+		51EC531CFC451A317C883EBA /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */; };
+		56428CF0D6B2EDA13E401907 /* devProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */; };
+		5A2653E6C23BCD2FF632A493 /* AppleRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CD /* AppleRemindersService.swift */; };
+		5B5A7C09B854EF0BFB2C4D18 /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
+		5FC8F848E2BD3FDF3AF27F37 /* RayBanMetaAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */; };
+		6382AF22C65ED5A1AA482ECD /* PhoneMicHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD09 /* PhoneMicHostApiImpl.swift */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
+		648454527D23C31E3AF5A635 /* LimitlessFlashDrainEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */; };
+		6BD6CBAE7D0C1392AC7DDEFE /* OmiProximitySensor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */; };
+		6CFA84F577BF1940716EAC98 /* PhoneMicCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD03 /* PhoneMicCaptureEngine.swift */; };
+		715D47AFEB21D49E37F16F3B /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
+		7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
+		7C7857BB4A77A12B03F090B8 /* PhoneMicPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD01 /* PhoneMicPigeon.g.swift */; };
+		7CB1B7DE57C0BCCDA9AB4B9E /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
+		83D001C5192F68F4DD76AB23 /* PhoneMicBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */; };
+		873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
-		9958B35F20EB7136AF2389D8 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF506DE6C24FC5AB2AEFE6DA /* Pods_Runner.framework */; };
+		99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
+		9A25BD940EC94B21766CB950 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E5BBFB39079A4743502BBEE /* Pods_Runner.framework */; };
+		9A26EFBA2ABCE6C441ADBE8E /* OmiCallCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */; };
+		9A519AEFA12F139B0082101F /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
+		9EF175369890F17FC6D78D03 /* PhoneMicEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD08 /* PhoneMicEventEmitter.swift */; };
 		A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2901D39C61D71A9D821F20FE /* BatteryWidgetBundle.swift */; };
 		A0A492964674B881B8E56B3E /* BatteryWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 90E45FFB3093C995950509B7 /* BatteryWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A581C03A63F5564B06F0B80D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		A99145F1E008BFA300A30BA0 /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
 		AB12345678901234567890AB /* AppleRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CD /* AppleRemindersService.swift */; };
 		AB12345678901234567890AC /* AppleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CE /* AppleHealthService.swift */; };
-		AB12345678901234567890AD /* AudioInterruptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CF /* AudioInterruptionManager.swift */; };
+		AFF50718E1B191240567E4A7 /* OmiRegionCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */; };
 		B017E73914CFF7C22190E0C3 /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
+		B07ABDD2736E2C87A59FB5E1 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		B13B18B781B8EFD4C7432C9F /* PhoneMicController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD02 /* PhoneMicController.swift */; };
+		B94F29DDABCC004D34ADA4EA /* PhoneMicOpusEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */; };
+		BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */; };
+		BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */; };
+		BAADF00DF00DF00DF00DF0D6 /* LimitlessBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */; };
+		BAADF00DF00DF00DF00DF0D8 /* LimitlessProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */; };
+		BAADF00DF00DF00DF00DF0DA /* LimitlessFlashDrainEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */; };
+		BAADF00DF00DF00DF00DFC03 /* RayBanMetaAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */; };
+		BAADF00DF00DF00DF00DFC04 /* RayBanMetaHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */; };
+		BAADF00DF00DF00DF00DFD11 /* PhoneMicPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD01 /* PhoneMicPigeon.g.swift */; };
+		BAADF00DF00DF00DF00DFD12 /* PhoneMicController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD02 /* PhoneMicController.swift */; };
+		BAADF00DF00DF00DF00DFD13 /* PhoneMicCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD03 /* PhoneMicCaptureEngine.swift */; };
+		BAADF00DF00DF00DF00DFD14 /* PhoneMicConverterPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD04 /* PhoneMicConverterPipeline.swift */; };
+		BAADF00DF00DF00DF00DFD15 /* PhoneMicSessionConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD05 /* PhoneMicSessionConfigurator.swift */; };
+		BAADF00DF00DF00DF00DFD16 /* PhoneMicPermissionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD06 /* PhoneMicPermissionGate.swift */; };
+		BAADF00DF00DF00DF00DFD17 /* PhoneMicInterruptionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */; };
+		BAADF00DF00DF00DF00DFD18 /* PhoneMicEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD08 /* PhoneMicEventEmitter.swift */; };
+		BAADF00DF00DF00DF00DFD19 /* PhoneMicHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD09 /* PhoneMicHostApiImpl.swift */; };
+		BAADF00DF00DF00DF00DFD1A /* PhoneMicOpusEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */; };
+		BAADF00DF00DF00DF00DFD1B /* PhoneMicBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */; };
+		BAADF00DF00DF00DF00DFD1D /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
+		BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */; };
+		BDE0AA99F4F81A7E0A6EA05E /* WifiNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG12345678901234567890FG /* WifiNetworkPlugin.swift */; };
+		BEC15258E40BD718849A70C0 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		C6DD8F6A334A31116A75C4EE /* devDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */; };
 		CB6580ED5AD268A053F41EB7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 585D7D8307721A4D6595AA27 /* Assets.xcassets */; };
+		CD15410D0ED1D611F4A1B596 /* LimitlessBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */; };
+		CE56DAB4D69CB113C7F955F9 /* OmiAudioLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */; };
 		CE7B938264FB7372447F8E21 /* prodLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */; };
 		CF0FE6152D61FDC10072C10D /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF0FE6142D61FDC10072C10D /* Custom.xcconfig */; };
 		CF2F518D2EC08EA60025B331 /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
 		D4DB62EA3B33E082C7D4E197 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31D5B906D56C4FDBBCCFF403 /* Foundation.framework */; };
+		DD6F1E8CA4013B6A267D5DD2 /* prodLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */; };
+		DECE0A4513CE66136ABC42D2 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
+		DF385A18EA9CC7E3C915F581 /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
+		E618F2CC17DA96A58C947757 /* prodRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */; };
+		E7CED4E302E4E4F7E07BCE74 /* PhoneMicPermissionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD06 /* PhoneMicPermissionGate.swift */; };
 		EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG12345678901234567890FG /* WifiNetworkPlugin.swift */; };
+		F8D0037DFD95E0FA0591D087 /* PhoneMicSessionConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD05 /* PhoneMicSessionConfigurator.swift */; };
 		FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
@@ -116,9 +184,12 @@
 /* Begin PBXFileReference section */
 		03BA73541F37D6361DCF18DC /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodDebug.xcconfig; path = Flutter/prodDebug.xcconfig; sourceTree = "<group>"; };
+		13B22B6FE8D66350C1840287 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devDebug.xcconfig; path = Flutter/devDebug.xcconfig; sourceTree = "<group>"; };
+		17F3C6B9A0FC84C3169B810C /* raybanDatRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = raybanDatRelease.xcconfig; path = Flutter/raybanDatRelease.xcconfig; sourceTree = "<group>"; };
+		2091CCAB9CE841AC3CA23A90 /* Pods-Runner.release-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-prod.xcconfig"; sourceTree = "<group>"; };
 		2901D39C61D71A9D821F20FE /* BatteryWidgetBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BatteryWidgetBundle.swift; sourceTree = "<group>"; };
 		31D5B906D56C4FDBBCCFF403 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodRelease.xcconfig; path = Flutter/prodRelease.xcconfig; sourceTree = "<group>"; };
@@ -133,14 +204,7 @@
 		42A7BA342E788BD300138969 /* omiWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = omiWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleManager.swift; sourceTree = "<group>"; };
-		BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchAudioWriter.swift; sourceTree = "<group>"; };
-		BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseBatchAudioWriter.swift; sourceTree = "<group>"; };
-		BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessBatchAudioWriter.swift; sourceTree = "<group>"; };
-		BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessProtocol.swift; sourceTree = "<group>"; };
-		BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessFlashDrainEngine.swift; sourceTree = "<group>"; };
 		42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleHostApiImpl.swift; sourceTree = "<group>"; };
-		BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayBanMetaAudioCapture.swift; sourceTree = "<group>"; };
-		BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayBanMetaHostApiImpl.swift; sourceTree = "<group>"; };
 		42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PigeonCommunicator.g.swift; sourceTree = "<group>"; };
 		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
 		42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiPhoneCallsPlugin.swift; sourceTree = "<group>"; };
@@ -166,6 +230,11 @@
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
+		7B5E43DB4A6147C1D70FE34F /* Pods-RunnerRayBanDat.release-raybandat.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerRayBanDat.release-raybandat.xcconfig"; path = "Target Support Files/Pods-RunnerRayBanDat/Pods-RunnerRayBanDat.release-raybandat.xcconfig"; sourceTree = "<group>"; };
+		8AF672E55033617EF994D1BD /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8BEEC10DF812923588FD5224 /* raybanDatProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = raybanDatProfile.xcconfig; path = Flutter/raybanDatProfile.xcconfig; sourceTree = "<group>"; };
+		8E5BBFB39079A4743502BBEE /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		90C0DAF526B977D646C1DA60 /* Pods-Runner.profile-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-prod.xcconfig"; sourceTree = "<group>"; };
 		90E45FFB3093C995950509B7 /* BatteryWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BatteryWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
@@ -175,19 +244,38 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		9C2BF831EA0797124264B67C /* BatteryWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BatteryWidget.swift; sourceTree = "<group>"; };
+		9E3D54F7F2F961A21E817773 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = BatteryWidget.entitlements; sourceTree = "<group>"; };
-		A3FA3FEE5E944B8E7459BC94 /* Pods-Runner.release-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-prod.xcconfig"; sourceTree = "<group>"; };
+		AC3A09D045C7DE0727BBD027 /* Pods-RunnerRayBanDat.profile-raybandat.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerRayBanDat.profile-raybandat.xcconfig"; path = "Target Support Files/Pods-RunnerRayBanDat/Pods-RunnerRayBanDat.profile-raybandat.xcconfig"; sourceTree = "<group>"; };
 		ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = prodLaunchScreen.storyboard; path = Runner/prodLaunchScreen.storyboard; sourceTree = "<group>"; };
-		AF506DE6C24FC5AB2AEFE6DA /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodProfile.xcconfig; path = Flutter/prodProfile.xcconfig; sourceTree = "<group>"; };
+		B5C446F7D9007B136D485BB2 /* Pods-RunnerRayBanDat.debug-raybandat.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerRayBanDat.debug-raybandat.xcconfig"; path = "Target Support Files/Pods-RunnerRayBanDat/Pods-RunnerRayBanDat.debug-raybandat.xcconfig"; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchAudioWriter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseBatchAudioWriter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessBatchAudioWriter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessProtocol.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessFlashDrainEngine.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayBanMetaAudioCapture.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RayBanMetaHostApiImpl.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD01 /* PhoneMicPigeon.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicPigeon.g.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD02 /* PhoneMicController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicController.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD03 /* PhoneMicCaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicCaptureEngine.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD04 /* PhoneMicConverterPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicConverterPipeline.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD05 /* PhoneMicSessionConfigurator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicSessionConfigurator.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD06 /* PhoneMicPermissionGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicPermissionGate.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicInterruptionMonitor.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD08 /* PhoneMicEventEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicEventEmitter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD09 /* PhoneMicHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicHostApiImpl.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicOpusEncoder.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicBatchAudioWriter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD0C /* PhoneMicOpusShim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PhoneMicOpusShim.h; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PhoneMicOpusShim.m; sourceTree = "<group>"; };
+		C7894CA52D931C30BB891A25 /* raybanDatDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = raybanDatDebug.xcconfig; path = Flutter/raybanDatDebug.xcconfig; sourceTree = "<group>"; };
 		C84EE89ABD9CB9B1CFD8B8CB /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
 		CD12345678901234567890CD /* AppleRemindersService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleRemindersService.swift; sourceTree = "<group>"; };
 		CD12345678901234567890CE /* AppleHealthService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleHealthService.swift; sourceTree = "<group>"; };
-		CD12345678901234567890CF /* AudioInterruptionManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AudioInterruptionManager.swift; sourceTree = "<group>"; };
 		CF0FE6142D61FDC10072C10D /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Custom.xcconfig; path = Flutter/Custom.xcconfig; sourceTree = "<group>"; };
 		CF2F518C2EC08EA60025B331 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Base.xcconfig; path = Flutter/Base.xcconfig; sourceTree = "<group>"; };
-		D75F0E14BC0E70ACCB7823C4 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
-		DFD28BCDA1DA7AEDD064D056 /* Pods-Runner.profile-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-prod.xcconfig"; sourceTree = "<group>"; };
 		E2100BFB54B13863400AB3AB /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		E73ABF09644041AA35B97211 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
@@ -227,7 +315,17 @@
 			buildActionMask = 2147483647;
 			files = (
 				42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */,
-				9958B35F20EB7136AF2389D8 /* Pods_Runner.framework in Frameworks */,
+				9A25BD940EC94B21766CB950 /* Pods_Runner.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C82A98EF678B6558928D2B66 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				715D47AFEB21D49E37F16F3B /* WatchConnectivity.framework in Frameworks */,
+				3E200B606D3D02BFEF213BF1 /* MWDATCore in Frameworks */,
+				4C63D0133E38DE51BA55148C /* MWDATCamera in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -255,10 +353,26 @@
 				42127D9D2C283C400005AB40 /* OneSignalOSCore.xcframework */,
 				42127D9A2C283C310005AB40 /* OneSignalExtension.xcframework */,
 				42127D962C283C250005AB40 /* OneSignalCore.xcframework */,
-				AF506DE6C24FC5AB2AEFE6DA /* Pods_Runner.framework */,
 				866A58B811C972ED7D93998A /* iOS */,
+				8E5BBFB39079A4743502BBEE /* Pods_Runner.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		42BABFC02F2A81B100E78A3C /* PhoneCalls */ = {
+			isa = PBXGroup;
+			children = (
+				42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */,
+				42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */,
+				42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */,
+				42BABFC42F2A81B100E78A3C /* OmiCallError.swift */,
+				42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */,
+				42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */,
+				42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */,
+				42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */,
+				42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */,
+			);
+			path = PhoneCalls;
 			sourceTree = "<group>";
 		};
 		68E21E60C4FBF7F520F1D656 /* Pods */ = {
@@ -267,12 +381,15 @@
 				E2100BFB54B13863400AB3AB /* Pods-Runner.debug.xcconfig */,
 				03BA73541F37D6361DCF18DC /* Pods-Runner.release.xcconfig */,
 				E73ABF09644041AA35B97211 /* Pods-Runner.profile.xcconfig */,
-				D75F0E14BC0E70ACCB7823C4 /* Pods-Runner.debug-prod.xcconfig */,
-				DFD28BCDA1DA7AEDD064D056 /* Pods-Runner.profile-prod.xcconfig */,
-				A3FA3FEE5E944B8E7459BC94 /* Pods-Runner.release-prod.xcconfig */,
 				EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */,
 				C84EE89ABD9CB9B1CFD8B8CB /* Pods-Runner.profile-dev.xcconfig */,
 				4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */,
+				B5C446F7D9007B136D485BB2 /* Pods-RunnerRayBanDat.debug-raybandat.xcconfig */,
+				AC3A09D045C7DE0727BBD027 /* Pods-RunnerRayBanDat.profile-raybandat.xcconfig */,
+				7B5E43DB4A6147C1D70FE34F /* Pods-RunnerRayBanDat.release-raybandat.xcconfig */,
+				13B22B6FE8D66350C1840287 /* Pods-Runner.debug-prod.xcconfig */,
+				90C0DAF526B977D646C1DA60 /* Pods-Runner.profile-prod.xcconfig */,
+				2091CCAB9CE841AC3CA23A90 /* Pods-Runner.release-prod.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -300,6 +417,9 @@
 				556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */,
 				79B00761CB247C7EC7C8983B /* devRelease.xcconfig */,
 				CF0FE6142D61FDC10072C10D /* Custom.xcconfig */,
+				C7894CA52D931C30BB891A25 /* raybanDatDebug.xcconfig */,
+				8BEEC10DF812923588FD5224 /* raybanDatProfile.xcconfig */,
+				17F3C6B9A0FC84C3169B810C /* raybanDatRelease.xcconfig */,
 			);
 			name = Flutter;
 			sourceTree = "<group>";
@@ -327,24 +447,9 @@
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				42A7BA342E788BD300138969 /* omiWatchApp.app */,
 				90E45FFB3093C995950509B7 /* BatteryWidget.appex */,
+				8AF672E55033617EF994D1BD /* Runner.app */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		42BABFC02F2A81B100E78A3C /* PhoneCalls */ = {
-			isa = PBXGroup;
-			children = (
-				42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */,
-				42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */,
-				42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */,
-				42BABFC42F2A81B100E78A3C /* OmiCallError.swift */,
-				42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */,
-				42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */,
-				42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */,
-				42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */,
-				42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */,
-			);
-			path = PhoneCalls;
 			sourceTree = "<group>";
 		};
 		97C146F01CF9000F007C117D /* Runner */ = {
@@ -355,6 +460,7 @@
 				BAADF00DF00DF00DF00DFC00 /* RayBanMeta */,
 				BAADF00DF00DF00DF00DFB02 /* Batch */,
 				BAADF00DF00DF00DF00DFB03 /* Limitless */,
+				BAADF00DF00DF00DF00DFD00 /* PhoneMic */,
 				42BABFC02F2A81B100E78A3C /* PhoneCalls */,
 				4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */,
 				5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */,
@@ -373,21 +479,11 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
-				CD12345678901234567890CF /* AudioInterruptionManager.swift */,
 				FG12345678901234567890FG /* WifiNetworkPlugin.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				6436409C27A31CD800820AF7 /* InfoPlist.strings */,
 			);
 			path = Runner;
-			sourceTree = "<group>";
-		};
-		BAADF00DF00DF00DF00DFC00 /* RayBanMeta */ = {
-			isa = PBXGroup;
-			children = (
-				BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */,
-				BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */,
-			);
-			path = RayBanMeta;
 			sourceTree = "<group>";
 		};
 		BAADF00DF00DF00DF00DFB01 /* Ble */ = {
@@ -418,9 +514,62 @@
 			path = Limitless;
 			sourceTree = "<group>";
 		};
+		BAADF00DF00DF00DF00DFC00 /* RayBanMeta */ = {
+			isa = PBXGroup;
+			children = (
+				BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */,
+				BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */,
+			);
+			path = RayBanMeta;
+			sourceTree = "<group>";
+		};
+		BAADF00DF00DF00DF00DFD00 /* PhoneMic */ = {
+			isa = PBXGroup;
+			children = (
+				BAADF00DF00DF00DF00DFD01 /* PhoneMicPigeon.g.swift */,
+				BAADF00DF00DF00DF00DFD02 /* PhoneMicController.swift */,
+				BAADF00DF00DF00DF00DFD03 /* PhoneMicCaptureEngine.swift */,
+				BAADF00DF00DF00DF00DFD04 /* PhoneMicConverterPipeline.swift */,
+				BAADF00DF00DF00DF00DFD05 /* PhoneMicSessionConfigurator.swift */,
+				BAADF00DF00DF00DF00DFD06 /* PhoneMicPermissionGate.swift */,
+				BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */,
+				BAADF00DF00DF00DF00DFD08 /* PhoneMicEventEmitter.swift */,
+				BAADF00DF00DF00DF00DFD09 /* PhoneMicHostApiImpl.swift */,
+				BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */,
+				BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */,
+				BAADF00DF00DF00DF00DFD0C /* PhoneMicOpusShim.h */,
+				BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */,
+			);
+			path = PhoneMic;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		3694FB15CC003101A7A13878 /* RunnerRayBanDat */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9DABAC53E3CCAC27302FE7D9 /* Build configuration list for PBXNativeTarget "RunnerRayBanDat" */;
+			buildPhases = (
+				84D7171D1AE38E9FDBD303C7 /* Run Script */,
+				0861BCC898EEF6CDF720072D /* Copy Google Plist file */,
+				A39438EBCDB909113855E505 /* Sources */,
+				C82A98EF678B6558928D2B66 /* Frameworks */,
+				86C81B2505549CDA309E429B /* Resources */,
+				5E566183C4137FBADE4077BD /* Thin Binary */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RunnerRayBanDat;
+			packageProductDependencies = (
+				F954EF7C37697F83E05F20D8 /* MWDATCore */,
+				E640392A2909606360520801 /* MWDATCamera */,
+			);
+			productName = Runner;
+			productReference = 8AF672E55033617EF994D1BD /* Runner.app */;
+			productType = "com.apple.product-type.application";
+		};
 		42A7BA332E788BD300138969 /* omiWatchApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 42A7BA3F2E788BD400138969 /* Build configuration list for PBXNativeTarget "omiWatchApp" */;
@@ -462,7 +611,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
-				5E0F0CE2C49A24EAD456EE00 /* [CP] Check Pods Manifest.lock */,
+				66995868222E35F68A656AEB /* [CP] Check Pods Manifest.lock */,
 				9740EEB61CF901F6004384FC /* Run Script */,
 				426B89AB2C46885100E24442 /* Copy Google Plist file */,
 				97C146EA1CF9000F007C117D /* Sources */,
@@ -472,8 +621,8 @@
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				422906722E75A21E00F49E67 /* Embed Watch Content */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
-				156D489D40D7128A2BB0A77A /* [CP] Embed Pods Frameworks */,
-				8E98B9C67D5C7FA007E2A8D2 /* [CP] Copy Pods Resources */,
+				9C6C2D7BBD98EAE8F1805354 /* [CP] Embed Pods Frameworks */,
+				17C44C533F30F583ABA829D2 /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -510,9 +659,13 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				ja,
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
+			packageReferences = (
+				8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
@@ -521,6 +674,7 @@
 				97C146ED1CF9000F007C117D /* Runner */,
 				42A7BA332E788BD300138969 /* omiWatchApp */,
 				58BC30995C676AAADF2F0F6A /* BatteryWidget */,
+				3694FB15CC003101A7A13878 /* RunnerRayBanDat */,
 			);
 		};
 /* End PBXProject section */
@@ -530,6 +684,30 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		86C81B2505549CDA309E429B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A581C03A63F5564B06F0B80D /* LaunchScreen.storyboard in Resources */,
+				4D351AE1E3C89CD45ADBC99C /* InfoPlist.strings in Resources */,
+				44E6D3550DDAC81C6ADF09ED /* AppFrameworkInfo.plist in Resources */,
+				515BEA34860AB5238B369C52 /* Assets.xcassets in Resources */,
+				085D4BEA7A8615DDB4A4E73C /* Custom.xcconfig in Resources */,
+				BEC15258E40BD718849A70C0 /* Main.storyboard in Resources */,
+				DECE0A4513CE66136ABC42D2 /* Config in Resources */,
+				36D27A357376AC5C2E2B2921 /* prodDebug.xcconfig in Resources */,
+				7CB1B7DE57C0BCCDA9AB4B9E /* prodProfile.xcconfig in Resources */,
+				9A519AEFA12F139B0082101F /* Base.xcconfig in Resources */,
+				E618F2CC17DA96A58C947757 /* prodRelease.xcconfig in Resources */,
+				3FF07873AB8530FF5964C7E4 /* devDebug.xcconfig in Resources */,
+				56428CF0D6B2EDA13E401907 /* devProfile.xcconfig in Resources */,
+				2233D9F0F73BEE78D735B79C /* devRelease.xcconfig in Resources */,
+				DD6F1E8CA4013B6A267D5DD2 /* prodLaunchScreen.storyboard in Resources */,
+				431C5CAEC909BB0043406A09 /* devLaunchScreen.storyboard in Resources */,
+				51EC531CFC451A317C883EBA /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -568,21 +746,39 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		156D489D40D7128A2BB0A77A /* [CP] Embed Pods Frameworks */ = {
+		0861BCC898EEF6CDF720072D /* Copy Google Plist file */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			name = "[CP] Embed Pods Frameworks";
+			inputPaths = (
+			);
+			name = "Copy Google Plist file";
 			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
+			shellScript = "# Type a script or drag a sc# Type a script or drag a script file from your workspace to insert its path.\nDEV_GOOGLE_PLIST=\"${PROJECT_DIR}/Config/Dev\"\nPROD_GOOGLE_PLIST=\"${PROJECT_DIR}/Config/Prod\"\n\necho \"build config is ${CONFIGURATION}\"\n\ncase \"${CONFIGURATION}\" in\n\n   \"Debug-dev\" | \"AdHoc_Staging\" | \"Release-dev\" | \"Debug\" | \"Debug-raybanDat\" | \"Profile-raybanDat\" | \"Release-raybanDat\")\n        cp -r \"$DEV_GOOGLE_PLIST/GoogleService-Info.plist\" \"${PROJECT_DIR}/Runner/GoogleService-Info.plist\" ;;\n   \"Debug-prod\" | \"Profile\" |\"Release-prod\" |\"Release\")\n        cp -r \"$PROD_GOOGLE_PLIST/GoogleService-Info.plist\" \"${PROJECT_DIR}/Runner/GoogleService-Info.plist\" ;;\n\n    *)\n        ;;\nesac\n";
+		};
+		17C44C533F30F583ABA829D2 /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		3B06AD1E1E4923F5004D2608 /* Thin Binary */ = {
@@ -619,7 +815,27 @@
 			shellPath = /bin/sh;
 			shellScript = "# Type a script or drag a sc# Type a script or drag a script file from your workspace to insert its path.\nDEV_GOOGLE_PLIST=\"${PROJECT_DIR}/Config/Dev\"\nPROD_GOOGLE_PLIST=\"${PROJECT_DIR}/Config/Prod\"\n\necho \"build config is ${CONFIGURATION}\"\n\ncase \"${CONFIGURATION}\" in\n\n   \"Debug-dev\" | \"AdHoc_Staging\" | \"Release-dev\" | \"Debug\")\n        cp -r \"$DEV_GOOGLE_PLIST/GoogleService-Info.plist\" \"${PROJECT_DIR}/Runner/GoogleService-Info.plist\" ;;\n   \"Debug-prod\" | \"Profile\" |\"Release-prod\" |\"Release\")\n        cp -r \"$PROD_GOOGLE_PLIST/GoogleService-Info.plist\" \"${PROJECT_DIR}/Runner/GoogleService-Info.plist\" ;;\n\n    *)\n        ;;\nesac\n";
 		};
-		5E0F0CE2C49A24EAD456EE00 /* [CP] Check Pods Manifest.lock */ = {
+		5E566183C4137FBADE4077BD /* Thin Binary */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}",
+			);
+			name = "Thin Binary";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin\n";
+		};
+		66995868222E35F68A656AEB /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -641,22 +857,24 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		8E98B9C67D5C7FA007E2A8D2 /* [CP] Copy Pods Resources */ = {
+		84D7171D1AE38E9FDBD303C7 /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			name = "[CP] Copy Pods Resources";
+			inputPaths = (
+			);
+			name = "Run Script";
 			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources.sh\"\n";
-			showEnvVarsInLog = 0;
+			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\n";
 		};
 		9740EEB61CF901F6004384FC /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -672,6 +890,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\n";
+		};
+		9C6C2D7BBD98EAE8F1805354 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -696,10 +931,21 @@
 				BAADF00DF00DF00DF00DF0DA /* LimitlessFlashDrainEngine.swift in Sources */,
 				AB12345678901234567890AB /* AppleRemindersService.swift in Sources */,
 				AB12345678901234567890AC /* AppleHealthService.swift in Sources */,
-				AB12345678901234567890AD /* AudioInterruptionManager.swift in Sources */,
 				42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */,
 				BAADF00DF00DF00DF00DFC03 /* RayBanMetaAudioCapture.swift in Sources */,
 				BAADF00DF00DF00DF00DFC04 /* RayBanMetaHostApiImpl.swift in Sources */,
+				BAADF00DF00DF00DF00DFD11 /* PhoneMicPigeon.g.swift in Sources */,
+				BAADF00DF00DF00DF00DFD12 /* PhoneMicController.swift in Sources */,
+				BAADF00DF00DF00DF00DFD13 /* PhoneMicCaptureEngine.swift in Sources */,
+				BAADF00DF00DF00DF00DFD14 /* PhoneMicConverterPipeline.swift in Sources */,
+				BAADF00DF00DF00DF00DFD15 /* PhoneMicSessionConfigurator.swift in Sources */,
+				BAADF00DF00DF00DF00DFD16 /* PhoneMicPermissionGate.swift in Sources */,
+				BAADF00DF00DF00DF00DFD17 /* PhoneMicInterruptionMonitor.swift in Sources */,
+				BAADF00DF00DF00DF00DFD18 /* PhoneMicEventEmitter.swift in Sources */,
+				BAADF00DF00DF00DF00DFD19 /* PhoneMicHostApiImpl.swift in Sources */,
+				BAADF00DF00DF00DF00DFD1A /* PhoneMicOpusEncoder.swift in Sources */,
+				BAADF00DF00DF00DF00DFD1B /* PhoneMicBatchAudioWriter.swift in Sources */,
+				BAADF00DF00DF00DF00DFD1D /* PhoneMicOpusShim.m in Sources */,
 				EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */,
 				42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */,
 				42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */,
@@ -713,6 +959,50 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */,
 				42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A39438EBCDB909113855E505 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
+				99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */,
+				0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */,
+				BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */,
+				CD15410D0ED1D611F4A1B596 /* LimitlessBatchAudioWriter.swift in Sources */,
+				1D93FD645488AAB7DBE4EF49 /* LimitlessProtocol.swift in Sources */,
+				648454527D23C31E3AF5A635 /* LimitlessFlashDrainEngine.swift in Sources */,
+				5A2653E6C23BCD2FF632A493 /* AppleRemindersService.swift in Sources */,
+				18B5E977FCEDF03D5DDE4A21 /* AppleHealthService.swift in Sources */,
+				A99145F1E008BFA300A30BA0 /* BleHostApiImpl.swift in Sources */,
+				5FC8F848E2BD3FDF3AF27F37 /* RayBanMetaAudioCapture.swift in Sources */,
+				19570D5AA4C5B2E3154671BE /* RayBanMetaHostApiImpl.swift in Sources */,
+				7C7857BB4A77A12B03F090B8 /* PhoneMicPigeon.g.swift in Sources */,
+				B13B18B781B8EFD4C7432C9F /* PhoneMicController.swift in Sources */,
+				6CFA84F577BF1940716EAC98 /* PhoneMicCaptureEngine.swift in Sources */,
+				433B391DCC48F1EA64996624 /* PhoneMicConverterPipeline.swift in Sources */,
+				F8D0037DFD95E0FA0591D087 /* PhoneMicSessionConfigurator.swift in Sources */,
+				E7CED4E302E4E4F7E07BCE74 /* PhoneMicPermissionGate.swift in Sources */,
+				2AE34400DB52FFE4BE215840 /* PhoneMicInterruptionMonitor.swift in Sources */,
+				9EF175369890F17FC6D78D03 /* PhoneMicEventEmitter.swift in Sources */,
+				6382AF22C65ED5A1AA482ECD /* PhoneMicHostApiImpl.swift in Sources */,
+				B94F29DDABCC004D34ADA4EA /* PhoneMicOpusEncoder.swift in Sources */,
+				83D001C5192F68F4DD76AB23 /* PhoneMicBatchAudioWriter.swift in Sources */,
+				7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */,
+				BDE0AA99F4F81A7E0A6EA05E /* WifiNetworkPlugin.swift in Sources */,
+				0FAD7A181CD39245DCFA718A /* OmiRecordingAudioDevice.swift in Sources */,
+				2B99FAF9526FEECCB4348D72 /* OmiPhoneCallsPlugin.swift in Sources */,
+				CE56DAB4D69CB113C7F955F9 /* OmiAudioLock.swift in Sources */,
+				9A26EFBA2ABCE6C441ADBE8E /* OmiCallCoordinatorProtocol.swift in Sources */,
+				7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */,
+				12BC2A482E3676BAAC2404F6 /* OmiCallError.swift in Sources */,
+				6BD6CBAE7D0C1392AC7DDEFE /* OmiProximitySensor.swift in Sources */,
+				DF385A18EA9CC7E3C915F581 /* OmiDirectCallCoordinator.swift in Sources */,
+				AFF50718E1B191240567E4A7 /* OmiRegionCheck.swift in Sources */,
+				B07ABDD2736E2C87A59FB5E1 /* GeneratedPluginRegistrant.m in Sources */,
+				5B5A7C09B854EF0BFB2C4D18 /* RecorderHostApiImpl.swift in Sources */,
+				15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -747,6 +1037,7 @@
 		6436409C27A31CD800820AF7 /* InfoPlist.strings */ = {
 			isa = PBXVariantGroup;
 			children = (
+				9E3D54F7F2F961A21E817773 /* ja */,
 			);
 			name = InfoPlist.strings;
 			sourceTree = "<group>";
@@ -772,7 +1063,7 @@
 /* Begin XCBuildConfiguration section */
 		0CE6142D2C21F36000559F1E /* Debug-prod */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = D75F0E14BC0E70ACCB7823C4 /* Pods-Runner.debug-prod.xcconfig */;
+			baseConfigurationReference = 13B22B6FE8D66350C1840287 /* Pods-Runner.debug-prod.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
@@ -789,7 +1080,7 @@
 		};
 		0CE6142E2C21F36000559F1E /* Profile-prod */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = DFD28BCDA1DA7AEDD064D056 /* Pods-Runner.profile-prod.xcconfig */;
+			baseConfigurationReference = 90C0DAF526B977D646C1DA60 /* Pods-Runner.profile-prod.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
@@ -809,7 +1100,7 @@
 		};
 		0CE6142F2C21F36000559F1E /* Release-prod */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A3FA3FEE5E944B8E7459BC94 /* Pods-Runner.release-prod.xcconfig */;
+			baseConfigurationReference = 2091CCAB9CE841AC3CA23A90 /* Pods-Runner.release-prod.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
@@ -877,6 +1168,27 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = "Release-dev";
+		};
+		2489CD259F4A43CE54324CC2 /* Release-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 17F3C6B9A0FC84C3169B810C /* raybanDatRelease.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerRelease-dev.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_NAME = Runner;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = "Release-raybanDat";
 		};
 		249021D3217E4FDB00AE95B9 /* Profile */ = {
 			isa = XCBuildConfiguration;
@@ -976,6 +1288,83 @@
 			};
 			name = Profile;
 		};
+		2A730EAEEB89404417675F25 /* Debug-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C7894CA52D931C30BB891A25 /* raybanDatDebug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = Runner/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				MTL_ENABLE_DEBUG_INFO = NO;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = "Debug-raybanDat";
+		};
 		375326788C4D1A9A2AAC93F2 /* Debug-prod */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1031,6 +1420,27 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = "Debug-dev";
+		};
+		424B8138E0C64AD78C3EF67F /* Profile-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 8BEEC10DF812923588FD5224 /* raybanDatProfile.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerProfile-dev.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_NAME = Runner;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = "Profile-raybanDat";
 		};
 		42A7BA402E788BD400138969 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -1544,6 +1954,77 @@
 			};
 			name = Release;
 		};
+		57C3CCFB873048EA0F92E2D9 /* Profile-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 8BEEC10DF812923588FD5224 /* raybanDatProfile.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = Runner/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "Profile-raybanDat";
+		};
 		6603F5DD00A2EBB051A6061F /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1676,6 +2157,77 @@
 				VALIDATE_PRODUCT = YES;
 			};
 			name = "Profile-dev";
+		};
+		81C994C2010A585690E1409B /* Release-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 17F3C6B9A0FC84C3169B810C /* raybanDatRelease.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = $ARCHS_STANDARD_64_BIT;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(ASSET_PREFIX)AppIcon";
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = Runner/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Flutter",
+				);
+				MTL_ENABLE_DEBUG_INFO = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "Release-raybanDat";
 		};
 		87AC190EF56E10A72B9307AD /* Release-prod */ = {
 			isa = XCBuildConfiguration;
@@ -1951,6 +2503,27 @@
 			};
 			name = Release;
 		};
+		A7B37E8675C2EA3ED7A3E29F /* Debug-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C7894CA52D931C30BB891A25 /* raybanDatDebug.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-dev.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_NAME = Runner;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = "Debug-raybanDat";
+		};
 		AC482D2481D9D06501C7B267 /* Release-dev */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */;
@@ -2120,6 +2693,66 @@
 				VALIDATE_PRODUCT = YES;
 			};
 			name = "Profile-dev";
+		};
+		DA7DA7DA7DA7DA7DA7DA7001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-dev.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_NAME = Runner;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		DA7DA7DA7DA7DA7DA7DA7002 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerProfile-dev.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_NAME = Runner;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Profile;
+		};
+		DA7DA7DA7DA7DA7DA7DA7003 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
+				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerRelease-dev.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.friend-app-with-wearable.ios12.development";
+				PRODUCT_NAME = Runner;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
 		};
 		E22FF20645C7AF0B6EE6EFF2 /* Release-dev */ = {
 			isa = XCBuildConfiguration;
@@ -2384,6 +3017,9 @@
 				FB104D39E26908B41978AAC4 /* Debug-dev */,
 				D1183803B1196D13F4909685 /* Profile-dev */,
 				AC482D2481D9D06501C7B267 /* Release-dev */,
+				2A730EAEEB89404417675F25 /* Debug-raybanDat */,
+				57C3CCFB873048EA0F92E2D9 /* Profile-raybanDat */,
+				81C994C2010A585690E1409B /* Release-raybanDat */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -2404,6 +3040,19 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		9DABAC53E3CCAC27302FE7D9 /* Build configuration list for PBXNativeTarget "RunnerRayBanDat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DA7DA7DA7DA7DA7DA7DA7001 /* Debug */,
+				DA7DA7DA7DA7DA7DA7DA7002 /* Profile */,
+				DA7DA7DA7DA7DA7DA7DA7003 /* Release */,
+				A7B37E8675C2EA3ED7A3E29F /* Debug-raybanDat */,
+				424B8138E0C64AD78C3EF67F /* Profile-raybanDat */,
+				2489CD259F4A43CE54324CC2 /* Release-raybanDat */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release-raybanDat";
+		};
 		B7CDB3A5F465F0D4654188E3 /* Build configuration list for PBXNativeTarget "BatteryWidget" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2421,6 +3070,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
+			requirement = {
+				kind = exactVersion;
+				version = 0.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E640392A2909606360520801 /* MWDATCamera */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCamera;
+		};
+		F954EF7C37697F83E05F20D8 /* MWDATCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }

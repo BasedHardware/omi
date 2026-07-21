@@ -508,32 +508,95 @@
       "CreateGoalRequest": {
         "properties": {
           "current_value": {
-            "default": 0,
-            "description": "Current progress value",
-            "title": "Current Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional current progress",
+            "title": "Current Value"
+          },
+          "desired_outcome": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Outcome"
           },
           "goal_type": {
-            "$ref": "#/components/schemas/GoalType",
-            "default": "scale",
-            "description": "Type of goal metric: boolean, scale, or numeric"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalType"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional metric type"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
           },
           "max_value": {
-            "default": 10,
-            "description": "Maximum value of the scale",
-            "title": "Max Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional maximum scale value",
+            "title": "Max Value"
           },
           "min_value": {
-            "default": 0,
-            "description": "Minimum value of the scale",
-            "title": "Min Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional minimum scale value",
+            "title": "Min Value"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Success Criteria",
+            "type": "array"
           },
           "target_value": {
-            "description": "Target value to achieve",
-            "title": "Target Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional target value",
+            "title": "Target Value"
           },
           "title": {
             "description": "The goal title/description",
@@ -553,11 +616,22 @@
             ],
             "description": "Unit label (e.g., 'users', 'points')",
             "title": "Unit"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "required": [
-          "title",
-          "target_value"
+          "title"
         ],
         "title": "CreateGoalRequest",
         "type": "object"
@@ -1181,9 +1255,40 @@
             "title": "Current Value",
             "type": "number"
           },
+          "desired_outcome": {
+            "title": "Desired Outcome",
+            "type": "string"
+          },
+          "focus_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Rank"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
           "goal_type": {
             "title": "Goal Type",
             "type": "string"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
           },
           "id": {
             "title": "Id",
@@ -1197,9 +1302,34 @@
             "title": "Max Value",
             "type": "number"
           },
+          "metric": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "min_value": {
             "title": "Min Value",
             "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success Criteria",
+            "type": "array"
           },
           "target_value": {
             "title": "Target Value",
@@ -1224,11 +1354,26 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "required": [
           "id",
+          "goal_id",
           "title",
+          "desired_outcome",
+          "status",
+          "source",
           "goal_type",
           "target_value",
           "current_value",
@@ -1594,7 +1739,6 @@
         "type": "object"
       },
       "GoalHistoryEntryResponse": {
-        "description": "Response model for a goal progress history entry.",
         "properties": {
           "date": {
             "title": "Date",
@@ -1616,6 +1760,63 @@
           "recorded_at"
         ],
         "title": "GoalHistoryEntryResponse",
+        "type": "object"
+      },
+      "GoalMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "number"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "target": {
+            "title": "Target",
+            "type": "number"
+          },
+          "type": {
+            "$ref": "#/components/schemas/GoalType"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "type",
+          "current",
+          "target"
+        ],
+        "title": "GoalMetric",
         "type": "object"
       },
       "GoalType": {
@@ -1751,6 +1952,30 @@
             "description": "New progress value",
             "title": "Current Value"
           },
+          "desired_outcome": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Outcome"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
+          },
           "max_value": {
             "anyOf": [
               {
@@ -1774,6 +1999,21 @@
             ],
             "description": "New minimum value",
             "title": "Min Value"
+          },
+          "success_criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Criteria"
           },
           "target_value": {
             "anyOf": [
@@ -1812,6 +2052,18 @@
             ],
             "description": "New unit label",
             "title": "Unit"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "title": "UpdateGoalRequest",
@@ -2986,7 +3238,7 @@
         ]
       },
       "post": {
-        "description": "Create a new goal. Supports up to 3 active goals; the oldest is deactivated if at max.\n\n- **title**: The goal title/description (1-500 characters)\n- **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)\n- **target_value**: Target value to achieve\n- **current_value**: Current progress (default: 0)\n- **min_value**: Minimum scale value (default: 0)\n- **max_value**: Maximum scale value (default: 10)\n- **unit**: Optional unit label (e.g., 'users', 'points')",
+        "description": "Create a durable goal. Metrics are optional and other goals are never changed implicitly.\n\n- **title**: The goal title/description (1-500 characters)\n- **goal_type**: Optional metric type: boolean, scale, or numeric\n- **target_value**: Optional target value\n- **current_value**: Optional current progress\n- **min_value**: Optional minimum scale value\n- **max_value**: Optional maximum scale value\n- **unit**: Optional unit label (e.g., 'users', 'points')\n\nOmit all metric fields to create a qualitative goal.",
         "operationId": "createGoal",
         "requestBody": {
           "content": {

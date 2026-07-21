@@ -6,6 +6,8 @@ from types import ModuleType
 
 import pytest
 
+from database.api_key_metadata import ApiKeyCacheReadMode, ApiKeyCacheReadResult
+
 
 def _drop_stale_module(name: str, expected_file: Path) -> None:
     module = sys.modules.get(name)
@@ -119,19 +121,42 @@ class _FakeGrantDoc:
     def set(self, payload, merge=False):
         self.parent.grant_sets.append((self.user_id, self.collection_name, self.doc_id, payload, merge))
 
+    def get(self):
+        return SimpleNamespace(exists=False, to_dict=lambda: {})
+
 
 class _FakeRedis:
     def __init__(self, cached=None):
         self.cached = cached
         self.cached_writes = []
 
-    def get_cached_mcp_api_key_auth_context(self, _hashed_key):
-        return self.cached
+    def read_cached_mcp_api_key_auth_context(self, _hashed_key):
+        if self.cached is None:
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
+        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.HIT, data=self.cached)
 
-    def cache_mcp_api_key_auth_context(self, hashed_key, user_id, scopes=None, key_id=None, app_id=None):
-        payload = {'hashed_key': hashed_key, 'user_id': user_id, 'scopes': scopes, 'key_id': key_id, 'app_id': app_id}
+    def cache_mcp_api_key_auth_context(
+        self,
+        hashed_key,
+        user_id,
+        scopes=None,
+        key_id=None,
+        app_id=None,
+        memory_grant_seeded=True,
+        auth_context_version=mcp_api_key_db.MCP_API_KEY_AUTH_CONTEXT_VERSION,
+    ):
+        payload = {
+            'hashed_key': hashed_key,
+            'user_id': user_id,
+            'scopes': scopes,
+            'key_id': key_id,
+            'app_id': app_id,
+            'memory_grant_seeded': memory_grant_seeded,
+            'auth_context_version': auth_context_version,
+        }
         self.cached_writes.append(payload)
         self.cached = {key: value for key, value in payload.items() if key != 'hashed_key'}
+        return True
 
     def get_cached_mcp_api_key_user_id(self, _hashed_key):
         return None
@@ -174,7 +199,10 @@ def _grant_reader(*, uid, db_client):
 
 
 def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes(monkeypatch):
-    fake_doc = _FakeDoc({'id': 'legacy-key', 'user_id': 'u1', 'hashed_key': 'hashed', 'name': 'legacy'})
+    fake_doc = _FakeDoc(
+        {'id': 'legacy-key', 'user_id': 'u1', 'hashed_key': 'hashed', 'name': 'legacy'},
+        doc_id='legacy-key',
+    )
     fake_redis = _FakeRedis()
     fake_db = _FakeDB([fake_doc])
     monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
@@ -213,7 +241,8 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
             'hashed_key': 'hashed',
             'app_id': 'mcp-api',
             'scopes': ['memories.read', 'goals.read'],
-        }
+        },
+        doc_id='key-1',
     )
     fake_db = _FakeDB([fake_doc])
     monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
@@ -243,8 +272,10 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
 def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
     monkeypatch.setattr(
         mcp_api_key_db,
-        'get_user_and_scopes_by_api_key',
-        lambda token: {'user_id': 'u1', 'scopes': ['memories.read'], 'key_id': 'key-1', 'app_id': 'mcp-api'},
+        'get_api_key_auth_result',
+        lambda token: mcp_api_key_db.ApiKeyAuthLookupResult(
+            context={'user_id': 'u1', 'scopes': ['memories.read'], 'key_id': 'key-1', 'app_id': 'mcp-api'}
+        ),
     )
     monkeypatch.setattr(dependencies, 'check_api_key_rate_limit', lambda **_kwargs: None)
 
@@ -265,8 +296,10 @@ def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
 def test_mcp_memory_dependency_fails_closed_without_persisted_memories_read_scope(monkeypatch):
     monkeypatch.setattr(
         mcp_api_key_db,
-        'get_user_and_scopes_by_api_key',
-        lambda token: {'user_id': 'u1', 'scopes': [], 'key_id': 'key-1', 'app_id': 'mcp-api'},
+        'get_api_key_auth_result',
+        lambda token: mcp_api_key_db.ApiKeyAuthLookupResult(
+            context={'user_id': 'u1', 'scopes': [], 'key_id': 'key-1', 'app_id': 'mcp-api'}
+        ),
     )
 
     auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))

@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
@@ -410,8 +409,6 @@ class PureStreamingSttSocket implements IPureSocket {
 
   IPureSocketListener? _listener;
 
-  double _audioOffsetSeconds = 0;
-
   // Buffer for accumulating small frames before sending
   final List<Uint8List> _frameBuffer = [];
   int _bufferedBytes = 0;
@@ -528,10 +525,6 @@ class PureStreamingSttSocket implements IPureSocket {
       final result = SttTranscriptionResult.fromJsonWithSchema(json, config.responseSchema, audioOffsetSeconds: 0);
 
       if (result.isNotEmpty) {
-        if (result.segments.isNotEmpty) {
-          _audioOffsetSeconds = result.segments.last.end;
-        }
-
         // Aggregate words by speaker (matching backend TranscriptSegment format)
         final segments = mergeTranscriptSegmentsBySpeaker(result.segments);
 
@@ -644,7 +637,6 @@ class PureStreamingSttSocket implements IPureSocket {
     _keepAliveTimer?.cancel();
     _frameBuffer.clear();
     _bufferedBytes = 0;
-    _audioOffsetSeconds = 0;
   }
 
   @override

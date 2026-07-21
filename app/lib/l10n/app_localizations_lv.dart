@@ -9,6 +9,9 @@ class AppLocalizationsLv extends AppLocalizations {
   AppLocalizationsLv([String locale = 'lv']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesija ir beigusies — pierakstieties vēlreiz.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -1467,7 +1470,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get payYourSttProvider => 'Brīvi izmantojiet omi. Jūs maksājat tikai savam STT pakalpojumu sniedzējam tieši.';
 
   @override
-  String get freeMinutesMonth => '600 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
+  String get freeMinutesMonth => '300 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
 
   @override
   String get omiUnlimited => 'Omi Neierobežots';
@@ -4713,7 +4716,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nav konfigurēta specifiska datu piekļuve.';
 
   @override
-  String get basicPlanDescription => '600 premium minūtes + neierobežots ierīcē';
+  String get basicPlanDescription => '300 premium minūtes + neierobežots ierīcē';
 
   @override
   String get minutes => 'minūtes';
@@ -6008,7 +6011,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
+      '300 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
 
   @override
   String get viewUsage => 'Skatīt lietojumu';
@@ -6090,7 +6093,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
+      '300 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9004,7 +9007,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get billingYearly => 'Gadā';
 
   @override
-  String get savePercent => 'Ietaupiet ~17%';
+  String savePercent(int percent) {
+    return 'Ietaupiet ~$percent%';
+  }
 
   @override
   String get popular => 'Populārs';
@@ -9362,7 +9367,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Pagaidām darbojas ar Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
+      'Darbojas ar tālruņa mikrofonu un Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9592,4 +9597,201 @@ class AppLocalizationsLv extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Kļūda, veidojot savienojumu ar Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Ierīces krātuve';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% aizpildīts';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'izmantoti $used no $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free brīvi';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Ierīce ir gandrīz pilna — sinhronizējiet, lai atbrīvotu vietu.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti.';
+
+  @override
+  String get sttModelAccuracy => 'Accuracy';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Mākoņa transkripcija';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Delete Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloaded';
+
+  @override
+  String get sttModelFaster => 'Faster';
+
+  @override
+  String get sttFilterAuto => 'Auto';
+
+  @override
+  String get sttModelHigher => 'Higher';
+
+  @override
+  String get whisperModelSizeLarge => 'Large';
+
+  @override
+  String get sttModelLower => 'Lower';
+
+  @override
+  String get whisperModelSizeMedium => 'Medium';
+
+  @override
+  String get onDeviceModelDeleted => 'Model deleted';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model download failed';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get onDeviceModelSize => 'Model Size';
+
+  @override
+  String get sttNone => 'None';
+
+  @override
+  String get onDeviceTranscription => 'Ierīces transkripcija';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripcija tiek apstrādāta lokāli jūsu ierīcē';
+
+  @override
+  String get sttModelSlower => 'Slower';
+
+  @override
+  String get whisperModelSizeSmall => 'Small';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Runas-teksta nodrošinātājs';
+
+  @override
+  String get speechToTextProviderDesc => 'Izvēlieties transkripcijas pakalpojumu';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Speed';
+
+  @override
+  String get whisperModelSizeTiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Transkripcijas valoda';
+
+  @override
+  String get transcriptionLanguageDesc => 'Izvēlieties runas transkripcijas valodu';
+
+  @override
+  String get whisperModel => 'Whisper modelis';
+
+  @override
+  String get whisperModelDesc => 'Izvēlieties modeli ierīces transkripcijai';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+
+  @override
+  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+
+  @override
+  String get downgradeLimitBattery => '7x battery consumption';
+
+  @override
+  String get downgradeLimitQuality => '30% less transcription quality';
+
+  @override
+  String get downgradeLimitDelay => '5-7 second delay';
+
+  @override
+  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+
+  @override
+  String get downgradeAnyway => 'Downgrade Anyway';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Linked to \"$title\"';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+
+  @override
+  String get thanksForYourFeedback => 'Thanks for your feedback!';
+
+  @override
+  String get copyMessage => 'Copy message';
+
+  @override
+  String get searchSettings => 'Search settings…';
+
+  @override
+  String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Izvēlieties Ray-Ban Meta mikrofonu';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Izvēlieties briļļu Bluetooth mikrofonu. Mūzika tiek apturēta, kamēr Omi to izmanto.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth mikrofoni nav atrasti. Pievienojiet brilles iPhone iestatījumos un mēģiniet vēlreiz.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofonus nevarēja ielādēt. Pārbaudiet, vai Bluetooth ir ieslēgts, un mēģiniet vēlreiz.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Neizdevās izveidot savienojumu ar šo mikrofonu. Pārliecinieties, ka tas ir pievienots iPhone iestatījumos.';
 }

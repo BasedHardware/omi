@@ -92,7 +92,7 @@ def test_enrolled_memory_fake_success_maps_body_cursor_and_allowlisted_headers(c
     captured = []
 
     def fake_memory_service(params, _adapters):
-        from utils.memory.v3_composed_get_service import V3ComposedResponse
+        from utils.memory.v3.composed_get_service import V3ComposedResponse
 
         captured.append(params)
         composed_body = {
@@ -137,7 +137,7 @@ def test_enrolled_memory_fake_error_fails_closed_with_public_error_and_headers(c
     seed_memory("123", _memory_doc("legacy-not-fallback", "must not be returned"))
 
     def failing_memory_service(_params, _adapters):
-        from utils.memory.v3_composed_get_service import V3ComposedResponse
+        from utils.memory.v3.composed_get_service import V3ComposedResponse
 
         return V3ComposedResponse.error(503, "infrastructure_failure")
 

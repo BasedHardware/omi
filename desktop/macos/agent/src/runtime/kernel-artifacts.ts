@@ -15,18 +15,6 @@ import {
   type LegacyMainChatSessionEntry,
   type ResolveSurfaceSessionInput,
 } from "./surface-session.js";
-import {
-  appendConversationTurn,
-  conversationIdForSession,
-  importConversationTurnsForSurface,
-  recordSurfaceTurn as persistSurfaceTurn,
-} from "./conversation-turns.js";
-import {
-  acknowledgeCompletionDelta,
-  assembleTurnContext,
-  bindingCarriesNativeHistory,
-  getVoiceSeedContext,
-} from "./turn-context.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -41,11 +29,12 @@ import type {
   RunStatus,
   DelegationStatus,
   DesktopAttentionOverride,
+  DesktopArtifactDelivery,
+  NewDesktopArtifactDelivery,
   NewDesktopCoordinatorDispatch,
 } from "./types.js";
 import { buildDesktopActionQueue } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
-import { routeDesktopIntent } from "./desktop-intent-router.js";
 import { OmiArtifactStorage } from "./artifact-storage.js";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -132,8 +121,53 @@ import type {
 import { StaleAdapterBindingError } from "./kernel-types.js";
 
 import { KernelRuns } from "./kernel-runs.js";
+import { listRunToolInvocationSummaries } from "./tool-invocation-ledger.js";
 
 export class KernelArtifacts extends KernelRuns {
+  queueArtifactDelivery(input: NewDesktopArtifactDelivery): DesktopArtifactDelivery {
+    if (input.deliveryId) {
+      const existing = this.store.getOptionalRow(
+        "SELECT * FROM desktop_artifact_deliveries WHERE delivery_id = ? AND owner_id = ?",
+        [input.deliveryId, input.ownerId],
+      );
+      if (existing) return desktopArtifactDeliveryFromRow(existing);
+    }
+    return this.store.insertDesktopArtifactDelivery(input);
+  }
+
+  listArtifactDeliveries(input: {
+    ownerId: string;
+    targetRef?: string;
+    statuses?: DesktopArtifactDelivery["deliveryStatus"][];
+    limit?: number;
+  }): DesktopArtifactDelivery[] {
+    const where = ["owner_id = ?"];
+    const values: unknown[] = [input.ownerId];
+    if (input.targetRef) {
+      where.push("target_ref = ?");
+      values.push(input.targetRef);
+    }
+    if (input.statuses?.length) {
+      where.push(`delivery_status IN (${placeholders(input.statuses.length)})`);
+      values.push(...input.statuses);
+    }
+    values.push(boundedLimit(input.limit, 100, 500));
+    return this.store.allRows(
+      `SELECT * FROM desktop_artifact_deliveries
+       WHERE ${where.join(" AND ")}
+       ORDER BY created_at_ms ASC LIMIT ?`,
+      values,
+    ).map(desktopArtifactDeliveryFromRow);
+  }
+
+  updateArtifactDelivery(
+    deliveryId: string,
+    input: { ownerId: string } & Partial<Pick<DesktopArtifactDelivery,
+      "deliveryStatus" | "attemptCount" | "receiptJson" | "errorJson" | "deliveredAtMs">>,
+  ): DesktopArtifactDelivery {
+    return this.store.updateDesktopArtifactDelivery(deliveryId, input);
+  }
+
   getRun(input: GetRunInput): KernelRunDetails {
     const run = this.readRun(input.runId);
     const session = this.readSession(run.sessionId);
@@ -149,6 +183,7 @@ export class KernelArtifacts extends KernelRuns {
       events: input.includeEvents ? this.readEventsForRun(run.runId, boundedLimit(input.eventLimit, 100, 500)) : [],
       parentDelegations: this.readParentDelegationsForRun(run.runId),
       childDelegations: this.readChildDelegationsForRun(run.runId),
+      toolInvocations: listRunToolInvocationSummaries(this.store, run.runId),
     };
   }
 

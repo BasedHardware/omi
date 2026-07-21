@@ -170,6 +170,17 @@ type Session = {
 
 const sessions = new Map<string, Session>()
 
+// Base headers every v4/listen WS carries: auth plus the platform/device
+// identity the backend's platform normalization reads (X-App-Platform,
+// X-Device-Id-Hash). BYOK STT headers are layered on top at the call site.
+export function buildListenHeaders(token: string, deviceIdHash: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    'X-App-Platform': 'windows',
+    'X-Device-Id-Hash': deviceIdHash
+  }
+}
+
 // Verification counters — monotonic bytes/chunks the renderer has fed per
 // `${mode}:${source}`, read by the soak + VAD-playback harnesses via
 // getListenStats(). Post-gate audio only (the renderer's VAD gate drops silence
@@ -298,7 +309,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   // there's no per-uid conversation to key.
 
   const ws = new WebSocket(url, {
-    headers: byokSttHeaders({ Authorization: `Bearer ${args.token}` })
+    headers: byokSttHeaders(buildListenHeaders(args.token, args.deviceIdHash))
   })
   ws.binaryType = 'arraybuffer'
   const session: Session = {

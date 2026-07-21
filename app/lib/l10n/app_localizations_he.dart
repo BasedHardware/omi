@@ -9,6 +9,9 @@ class AppLocalizationsHe extends AppLocalizations {
   AppLocalizationsHe([String locale = 'he']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'ההפעלה פגה — יש להתחבר שוב.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -1454,7 +1457,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get payYourSttProvider => 'השתמש בomi בחופשיות. אתה משלם ישירות לספק STT שלך.';
 
   @override
-  String get freeMinutesMonth => '600 דקות חינם לחודש כלולות. בלתי מוגבל עם ';
+  String get freeMinutesMonth => '300 דקות חינם לחודש כלולות. בלתי מוגבל עם ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4669,7 +4672,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'אין גישת נתונים ספציפית מוגדרת.';
 
   @override
-  String get basicPlanDescription => '600 דקות פרימיום + בלתי מוגבל במכשיר';
+  String get basicPlanDescription => '300 דקות פרימיום + בלתי מוגבל במכשיר';
 
   @override
   String get minutes => 'דקות';
@@ -5948,7 +5951,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get cloudProvider => 'ספק ענן';
 
   @override
-  String get premiumMinutesInfo => '600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.';
+  String get premiumMinutesInfo => '300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.';
 
   @override
   String get viewUsage => 'הצג שימוש';
@@ -6027,7 +6030,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get batteryDrainSignificantly => 'זליגת הסוללה תגדל משמעותית.';
 
   @override
-  String get premiumMinutesMonth => '600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ';
+  String get premiumMinutesMonth => '300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ';
 
   @override
   String get audioProcessedLocally => 'אודיו מעובד מקומית. עובד במצב לא מקוון, פרטי יותר, אך משתמש בסוללה יותר.';
@@ -8915,7 +8918,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get billingYearly => 'שנתי';
 
   @override
-  String get savePercent => 'חסוך ~17%';
+  String savePercent(int percent) {
+    return 'חסוך ~$percent%';
+  }
 
   @override
   String get popular => 'פופולרי';
@@ -9270,7 +9275,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'פועל עם מכשירי Omi ו-Limitless בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
+      'פועל עם מיקרופון הטלפון ועם מכשירי Omi ו-Limitless. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9498,4 +9503,198 @@ class AppLocalizationsHe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'שגיאה בהתחברות ל-Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'אחסון המכשיר';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% מלא';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used מתוך $total בשימוש';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free פנוי';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'המכשיר כמעט מלא — סנכרן כדי לפנות מקום.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => 'אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים.';
+
+  @override
+  String get sttModelAccuracy => 'Accuracy';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Cloud Transcription';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Delete Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloaded';
+
+  @override
+  String get sttModelFaster => 'Faster';
+
+  @override
+  String get sttFilterAuto => 'Auto';
+
+  @override
+  String get sttModelHigher => 'Higher';
+
+  @override
+  String get whisperModelSizeLarge => 'Large';
+
+  @override
+  String get sttModelLower => 'Lower';
+
+  @override
+  String get whisperModelSizeMedium => 'Medium';
+
+  @override
+  String get onDeviceModelDeleted => 'Model deleted';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model download failed';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get onDeviceModelSize => 'Model Size';
+
+  @override
+  String get sttNone => 'None';
+
+  @override
+  String get onDeviceTranscription => 'On-Device Transcription';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+
+  @override
+  String get sttModelSlower => 'Slower';
+
+  @override
+  String get whisperModelSizeSmall => 'Small';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Speech-to-Text Provider';
+
+  @override
+  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Speed';
+
+  @override
+  String get whisperModelSizeTiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Transcription Language';
+
+  @override
+  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+
+  @override
+  String get whisperModel => 'Whisper Model';
+
+  @override
+  String get whisperModelDesc => 'Choose the model for on-device transcription';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+
+  @override
+  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+
+  @override
+  String get downgradeLimitBattery => '7x battery consumption';
+
+  @override
+  String get downgradeLimitQuality => '30% less transcription quality';
+
+  @override
+  String get downgradeLimitDelay => '5-7 second delay';
+
+  @override
+  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+
+  @override
+  String get downgradeAnyway => 'Downgrade Anyway';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Linked to \"$title\"';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+
+  @override
+  String get thanksForYourFeedback => 'Thanks for your feedback!';
+
+  @override
+  String get copyMessage => 'Copy message';
+
+  @override
+  String get searchSettings => 'Search settings…';
+
+  @override
+  String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'בחירת המיקרופון של Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'בחרו את מיקרופון ה-Bluetooth של המשקפיים. המוזיקה מושהית בזמן ש-Omi משתמש בו.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty => 'לא נמצאו מיקרופוני Bluetooth. חברו את המשקפיים בהגדרות ה-iPhone ונסו שוב.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'לא ניתן היה לטעון את מיקרופוני ה-Bluetooth. ודאו ש-Bluetooth מופעל ונסו שוב.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError => 'לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone.';
 }

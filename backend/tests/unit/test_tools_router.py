@@ -19,6 +19,7 @@ import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import FastAPI
@@ -249,6 +250,32 @@ calendar_tools_mod.create_calendar_event_tool = FakeCalendarEventTool()
 
 # Stub render and factory modules
 render_mod = _stub_module("utils.conversations.render")
+
+
+def _stub_resolve_display_tz(tz):
+    if tz:
+        try:
+            return ZoneInfo(tz), tz
+        except Exception:
+            pass
+    return timezone.utc, "UTC"
+
+
+def _stub_format_local_time(dt, display_tz, tz_label):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
+def _stub_format_local_date(dt, display_tz):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(display_tz).strftime('%Y-%m-%d')
+
+
+render_mod.resolve_display_tz = _stub_resolve_display_tz
+render_mod.format_local_time = _stub_format_local_time
+render_mod.format_local_date = _stub_format_local_date
 render_mod.conversations_to_string = MagicMock(
     side_effect=lambda convs, **kw: f"[{len(convs)} conversations formatted]"
 )
@@ -456,17 +483,14 @@ class TestParseIsoDate:
         with pytest.raises(ValueError):
             conversations_svc.parse_iso_date("2026-02-01T00:00:00 07:00 ", "test")
 
-    def test_source_has_encodeQueryDate(self):
-        """Verify desktop APIClient.swift uses encodeQueryDate for date params.
-        Regression guard: if encodeQueryDate is removed, this test fails."""
-        swift_path = os.path.join(
-            os.path.dirname(__file__), '..', '..', '..', 'desktop', 'Desktop', 'Sources', 'APIClient.swift'
-        )
-        if not os.path.exists(swift_path):
-            pytest.skip("APIClient.swift not found (backend-only test environment)")
-        with open(swift_path, encoding="utf-8") as f:
-            source = f.read()
-        assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in APIClient.swift"
+    def test_source_has_encode_query_date(self):
+        """Verify desktop tool routes preserve plus-sign timezone offsets."""
+        source_root = BACKEND_DIR.parent / "desktop" / "macos" / "Desktop" / "Sources"
+        paths = sorted(source_root.rglob("APIClient*.swift"))
+        if not paths:
+            pytest.skip("APIClient sources not found (backend-only test environment)")
+        source = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+        assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in the APIClient extension set"
         # 8 call sites + 1 definition = at least 9 occurrences
         count = source.count('encodeQueryDate(')
         assert count >= 9, f"Expected >= 9 encodeQueryDate( occurrences (1 def + 8 calls), got {count}"
@@ -508,6 +532,43 @@ class TestGetConversationsText:
         ]
         result = conversations_svc.get_conversations_text(uid="test-uid")
         assert "1 conversations formatted" in result
+
+
+class TestGetConversationsTextMalformedPerson:
+    def setup_method(self):
+        conversations_db.get_conversations.reset_mock()
+        conversations_db.get_conversations.return_value = []
+        users_db.get_people_by_ids.reset_mock()
+        users_db.get_people_by_ids.return_value = []
+        render_mod.conversations_to_string.reset_mock()
+
+    def test_malformed_person_is_skipped_not_500(self):
+        """A legacy person doc missing the required name must be skipped, not 500 the whole list.
+
+        Before the fix, Person(**p) raised out of the unguarded people list-comp and, via the
+        unguarded GET /v1/tools/conversations handler, surfaced as HTTP 500 for the entire response.
+        Now the bad person is skipped (and logged) and the conversations still return with the good
+        speaker resolved.
+        """
+        conversations_db.get_conversations.return_value = [
+            {'id': 'conv-1', 'transcript_segments': [{'person_id': 'p-good'}, {'person_id': 'p-bad'}], 'title': 'T'},
+        ]
+        users_db.get_people_by_ids.return_value = [
+            {'id': 'p-good', 'name': 'Alice'},
+            {'id': 'p-bad'},  # legacy doc missing the required 'name'
+        ]
+
+        def fake_person(**kwargs):
+            if 'name' not in kwargs:
+                raise ValueError("Person requires name")  # stand-in for pydantic ValidationError
+            return types.SimpleNamespace(**kwargs)
+
+        with patch.object(conversations_svc, 'Person', side_effect=fake_person):
+            result = conversations_svc.get_conversations_text(uid="test-uid")
+
+        assert "1 conversations formatted" in result  # completed without raising -> no 500
+        people_arg = render_mod.conversations_to_string.call_args.kwargs['people']
+        assert [pp.name for pp in people_arg] == ['Alice']  # malformed person skipped, good one kept
 
 
 # ===========================================================================

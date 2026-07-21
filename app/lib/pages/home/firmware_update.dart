@@ -375,11 +375,12 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         const SizedBox(height: 24),
 
         // Action buttons
-        if (shouldUpdate) ...[
+        if (shouldUpdate && firmwareUpdatePolicy.allowsOmiFirmwareUpdate) ...[
           // Update button
           GestureDetector(
             onTap: () async {
               var targetVersion = latestFirmwareDetails['version']?.toString() ?? '';
+              final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
               if (targetVersion.startsWith('3.0.17')) {
                 var confirmed = await showDialog<bool>(
                   context: context,
@@ -395,13 +396,12 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 if (confirmed != true) return;
               }
 
-              final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
               deviceProvider.setFirmwareUpdateInProgress(true);
 
               if (otaUpdateSteps.isEmpty) {
                 await downloadFirmware();
                 await startDfu(widget.device!);
-              } else {
+              } else if (mounted) {
                 showFirmwareUpdateSheet(
                   context: context,
                   steps: otaUpdateSteps,

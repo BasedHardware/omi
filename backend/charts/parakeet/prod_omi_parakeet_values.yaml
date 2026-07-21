@@ -100,6 +100,10 @@ env:
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S
     value: "5"
+  - name: PARAKEET_STREAM_CAPACITY
+    value: "25"
+  - name: PARAKEET_STREAM_ALLOCATION_PERCENT
+    value: "100"
   - name: PARAKEET_TORCH_COMPILE
     value: "true"
   - name: PARAKEET_CUDA_GRAPHS
@@ -193,7 +197,7 @@ autoscaling:
       - type: Pods
         value: 1
         periodSeconds: 600
-  requestsPerPod: 25
+  requestsPerPod: 20
   targetGPUUtilization: 70
 
 # Additional volumes on the output Deployment definition.

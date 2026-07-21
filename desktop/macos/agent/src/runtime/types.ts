@@ -17,6 +17,12 @@ export type AttemptStatus = RunStatus;
 
 export type RunMode = "ask" | "act";
 
+export type AgentExecutionRole = "coordinator" | "leaf";
+
+export type ProviderBoundary = "managed_cloud" | `local_user:${string}`;
+export type SessionCredentialScope = "managed_cloud" | "local_user";
+export type SessionExecutionProfileSource = "creation" | "migration" | "child_derivation" | "legacy_backfill";
+
 export type ResumeFidelity = "native" | "reconstructed" | "none";
 
 export type AdapterBindingStatus = "active" | "stale" | "invalid" | "closed";
@@ -63,13 +69,106 @@ export type NewSurfaceConversation = Pick<
 
 export type ConversationTurnRole = "user" | "assistant";
 
+export type ConversationTurnOrigin =
+  | "typed_chat"
+  | "floating_chat"
+  | "realtime_voice"
+  | "agent_runtime"
+  | "notification"
+  | "tool_runtime"
+  | "backend_import"
+  | "task_chat"
+  | "workstream"
+  | "swift_backfill"
+  | "legacy";
+
+export type ConversationTurnStatus = "pending" | "streaming" | "completed" | "failed";
+
+export type ConversationToolCallStatus = "running" | "completed" | "failed";
+
+/**
+ * Kernel-owned chat content. The wire keys intentionally match
+ * ChatContentBlockCodec so Swift can remain a projection rather than a second
+ * persistence owner.
+ */
+export type ConversationContentBlock =
+  | { type: "text"; id: string; text: string }
+  | {
+      type: "toolCall";
+      id: string;
+      name: string;
+      status: ConversationToolCallStatus;
+      toolUseId?: string;
+      inputSummary?: string;
+      inputDetails?: string;
+      output?: string;
+    }
+  | { type: "thinking"; id: string; text: string }
+  | { type: "discoveryCard"; id: string; title: string; summary: string; fullText: string }
+  | {
+      type: "agentSpawn";
+      id: string;
+      pillId?: string;
+      sessionId: string;
+      runId: string;
+      title: string;
+      objective: string;
+    }
+  | {
+      type: "agentCompletion";
+      id: string;
+      pillId?: string;
+      sessionId?: string;
+      runId?: string;
+      title: string;
+      promptSnippet: string;
+      output: string;
+      status: string;
+    };
+
+export type ConversationResourceOrigin = "userAttachment" | "generatedArtifact";
+export type ConversationResourceState =
+  | "uploading"
+  | "ready"
+  | "retained"
+  | "opened"
+  | "dismissed"
+  | `failed:${string}`;
+
+/** Surface-neutral resource shape shared with Swift's ChatResource codec. */
+export interface ConversationResource {
+  id: string;
+  origin: ConversationResourceOrigin;
+  title: string;
+  state: ConversationResourceState;
+  subtitle?: string;
+  mimeType?: string;
+  thumbnailURL?: string;
+  uri?: string;
+  artifactId?: string;
+  sessionId?: string;
+  runId?: string;
+}
+
 export interface ConversationTurn {
   conversationId: string;
   turnId: string;
+  turnSeq: number;
+  producerId: string;
+  payloadHash: string;
   role: ConversationTurnRole;
   surfaceKind: string;
   content: string;
+  origin: ConversationTurnOrigin;
+  status: ConversationTurnStatus;
+  contentBlocks: ConversationContentBlock[];
+  resources: ConversationResource[];
+  producingRunId: string | null;
+  producingAttemptId: string | null;
+  remoteId: string | null;
   createdAtMs: number;
+  updatedAtMs: number;
+  completedAtMs: number | null;
   metadataJson: string;
 }
 
@@ -77,7 +176,43 @@ export type NewConversationTurn = Pick<
   ConversationTurn,
   "conversationId" | "role" | "surfaceKind" | "content" | "createdAtMs"
 > &
-  Partial<Pick<ConversationTurn, "turnId" | "metadataJson">>;
+  Partial<Pick<
+    ConversationTurn,
+    | "turnId"
+    | "turnSeq"
+    | "producerId"
+    | "payloadHash"
+    | "origin"
+    | "status"
+    | "contentBlocks"
+    | "resources"
+    | "producingRunId"
+    | "producingAttemptId"
+    | "remoteId"
+    | "updatedAtMs"
+    | "completedAtMs"
+    | "metadataJson"
+  >>;
+
+export type BackendTurnOutboxStatus = "pending" | "delivering" | "retrying" | "delivered" | "failed";
+
+export interface BackendTurnOutboxRecord {
+  turnId: string;
+  conversationId: string;
+  ownerId: string;
+  status: BackendTurnOutboxStatus;
+  attemptCount: number;
+  deliveryGeneration: number;
+  conversationGeneration: number;
+  payloadHash: string;
+  availableAtMs: number;
+  leaseExpiresAtMs: number | null;
+  remoteId: string | null;
+  lastErrorCode: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  deliveredAtMs: number | null;
+}
 
 export interface CompletionDeltaCheckpoint {
   ownerId: string;
@@ -120,7 +255,9 @@ export type DesktopArtifactDeliveryTargetKind = "ask_omi" | "task_chat" | "local
 export type DesktopArtifactDeliveryReviewStatus = "not_required" | "pending" | "approved" | "rejected";
 export type DesktopArtifactDeliveryStatus = "pending" | "delivered" | "failed" | "retrying" | "cancelled";
 export type DesktopCandidateStatus = "pending" | "accepted" | "rejected" | "expired";
-export type DesktopTaskCandidateAction = "create" | "update" | "complete" | "delete";
+export type DesktopTaskCandidateStatus = DesktopCandidateStatus | "forwarded";
+export type DesktopTaskCandidateAction = "create" | "update" | "complete" | "delete" | "supersede";
+export type DesktopTaskCandidateDeliveryStatus = "pending" | "delivering" | "delivered" | "failed" | "blocked";
 export type DesktopContextSourceKind =
   | "omi_db"
   | "rewind_timeline"
@@ -139,11 +276,14 @@ export interface AgentSession {
   title: string | null;
   status: SessionStatus;
   surfaceKind: string;
+  executionRole: AgentExecutionRole;
+  providerBoundary: ProviderBoundary;
   externalRefKind: string | null;
   externalRefId: string | null;
   defaultAdapterId: string;
   defaultCwd: string | null;
   modelProfile: string | null;
+  executionProfileGeneration: number;
   metadataJson: string;
   createdAtMs: number;
   updatedAtMs: number;
@@ -159,6 +299,7 @@ export interface AgentRun {
   idempotencyKey: string | null;
   status: RunStatus;
   mode: RunMode;
+  profileGeneration: number;
   inputJson: string;
   systemPromptHash: string | null;
   modelProfile: string | null;
@@ -183,6 +324,7 @@ export interface RunAttempt {
   attemptId: string;
   runId: string;
   attemptNo: number;
+  profileGeneration: number;
   status: AttemptStatus;
   adapterId: string;
   adapterInstanceId: string;
@@ -210,6 +352,7 @@ export interface AdapterBinding {
   sessionId: string;
   adapterId: string;
   bindingGeneration: number;
+  profileGeneration: number;
   adapterNativeSessionId: string | null;
   adapterInstanceId: string | null;
   resumeFidelity: ResumeFidelity;
@@ -222,7 +365,29 @@ export interface AdapterBinding {
   updatedAtMs: number;
   lastUsedAtMs: number | null;
   invalidatedAtMs: number | null;
-  lastDeliveredTurnCreatedAtMs: number;
+}
+
+export interface SessionExecutionProfile {
+  sessionId: string;
+  generation: number;
+  adapterId: string;
+  credentialScope: SessionCredentialScope;
+  modelProfile: string | null;
+  workingDirectory: string;
+  executionRole: AgentExecutionRole;
+  source: SessionExecutionProfileSource;
+  auditJson: string;
+  createdAtMs: number;
+}
+
+export interface DefaultExecutionProfilePreference {
+  ownerId: string;
+  generation: number;
+  adapterId: string;
+  credentialScope: SessionCredentialScope;
+  modelProfile: string | null;
+  workingDirectory: string;
+  updatedAtMs: number;
 }
 
 export interface AgentEvent {
@@ -356,9 +521,25 @@ export interface DesktopTaskCandidate {
   proposedChangeJson: string;
   evidenceRefsJson: string;
   confidence: number;
+  ownershipConfidence: number;
   requiresApproval: 0 | 1;
-  status: DesktopCandidateStatus;
+  goalRef: string | null;
+  workstreamRef: string | null;
+  sourceSurface: string;
+  accountGeneration: number;
+  generationReconciled: 0 | 1;
+  status: DesktopTaskCandidateStatus;
+  deliveryStatus: DesktopTaskCandidateDeliveryStatus;
+  deliveryAttemptCount: number;
+  deliveryKey: string;
+  backendCandidateId: string | null;
+  backendReceiptJson: string | null;
+  backendResolutionReceiptJson: string | null;
+  backendResolutionStatus: string | null;
+  lastDeliveryErrorJson: string | null;
   createdAtMs: number;
+  updatedAtMs: number;
+  deliveredAtMs: number | null;
   resolvedAtMs: number | null;
 }
 
@@ -439,7 +620,9 @@ export interface AgentGrant {
   revokedAtMs: number | null;
 }
 
-export type NewAgentSession = Partial<AgentSession> & Pick<AgentSession, "ownerId" | "surfaceKind" | "defaultAdapterId">;
+export type NewAgentSession = Partial<AgentSession>
+  & Pick<AgentSession, "ownerId" | "surfaceKind" | "defaultAdapterId">
+  & { executionProfileSource?: SessionExecutionProfileSource };
 
 export type NewAgentRun = Partial<AgentRun> &
   Pick<AgentRun, "sessionId" | "clientId" | "requestId" | "status" | "mode"> & {
@@ -462,7 +645,19 @@ export interface StartupReconciliationResult {
   orphanedRunIds: string[];
   staleBindingIds: string[];
   expiredContextPacketIds: string[];
+  expiredContinuationCheckpointIds: string[];
   failedArtifactDeliveryIds: string[];
+  failedTaskCandidateDeliveryIds: string[];
+  requeuedBackendTurnOutboxIds: string[];
+  requeuedBackendConversationDeleteIds: string[];
+  failedPreparedToolInvocationIds: string[];
+  outcomeUnknownToolInvocationIds: string[];
+  repairedSessionProfileIds: string[];
+  repairedRunProfileReferenceIds: string[];
+  repairedAttemptProfileReferenceIds: string[];
+  repairedBindingProfileReferenceIds: string[];
+  repairedLegacyJournalTurnIds: string[];
+  reconciledJournalTurnIds: string[];
   recoveryDispatchIds: string[];
   clearedAttemptInstanceIds: number;
   clearedBindingInstanceIds: number;

@@ -121,6 +121,31 @@ def wire_common_stubs(install) -> SimpleNamespace:
     observability = install('utils.observability', ModuleType('utils.observability'))
     observability.submit_langsmith_feedback = MagicMock()
 
+    journey_observability = install('utils.observability.journeys', ModuleType('utils.observability.journeys'))
+
+    class JourneyAttempt:
+        """Spy double: records every attempt and its finish() outcomes per suite run."""
+
+        instances = []
+
+        def __init__(self, journey):
+            self.journey = journey
+            self.finished = False
+            self.outcomes = []
+            self.__class__.instances.append(self)
+
+        def finish(self, outcome):
+            if self.finished:
+                return
+            self.finished = True
+            self.outcomes.append(outcome)
+
+    journey_observability.JourneyAttempt = JourneyAttempt
+    transcription_observability = install(
+        'utils.observability.transcription', ModuleType('utils.observability.transcription')
+    )
+    transcription_observability.TranscriptionAttempt = MagicMock
+
     rate_limit = install('utils.rate_limit_config', ModuleType('utils.rate_limit_config'))
     rate_limit.get_effective_limit = MagicMock(return_value=(100, 60))
     rate_limit.RATE_LIMIT_SHADOW = False
@@ -139,6 +164,8 @@ def wire_common_stubs(install) -> SimpleNamespace:
     auth.get_current_user_uid = get_current_user_uid
     auth.get_current_user_uid_ws_listen = get_current_user_uid
     auth.with_rate_limit = with_rate_limit
+    # routers.chat's import chain reaches modules decorated with @timeit.
+    auth.timeit = lambda f: f
     storage = install('utils.other.storage', ModuleType('utils.other.storage'))
     storage.get_syncing_file_temporal_signed_url = MagicMock(return_value='https://example.test/audio.wav')
     storage.schedule_syncing_temporal_file_deletion = MagicMock()
@@ -151,6 +178,17 @@ def wire_common_stubs(install) -> SimpleNamespace:
     stt_streaming = install('utils.stt.streaming', ModuleType('utils.stt.streaming'))
     stt_streaming.process_audio_dg = MagicMock()
     stt_streaming.get_stt_service_for_language = MagicMock()
+    stt_streaming.STTService = MagicMock()
+    stt_streaming.connect_stt_socket_with_fallback = MagicMock()
+    stt_streaming.drain_stt_socket = AsyncMock()
+    stt_streaming.process_audio_modulate = MagicMock()
+    stt_streaming.process_audio_parakeet = MagicMock()
+    # These chat suites do not exercise prerecorded STT. Loading the real module
+    # would import NumPy after a suite restores sys.modules between cases, which
+    # native extension modules cannot safely do in one process.
+    prerecorded = install('utils.stt.pre_recorded', ModuleType('utils.stt.pre_recorded'))
+    prerecorded.PrerecordedSTTConfigurationError = type('PrerecordedSTTConfigurationError', (Exception,), {})
+    prerecorded.get_prerecorded_service = MagicMock(return_value=('parakeet', 'en', 'parakeet'))
 
     usage_tracker = install('utils.llm.usage_tracker', ModuleType('utils.llm.usage_tracker'))
     usage_tracker.set_usage_context = MagicMock(return_value='usage-token')

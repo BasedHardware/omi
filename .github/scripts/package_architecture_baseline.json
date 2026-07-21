@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "packages": {
+    "backend/utils/conversations": 13,
+    "backend/utils/llm": 34,
+    "backend/utils/memory_ingestion": 17,
+    "backend/utils/retrieval": 30,
+    "backend/utils/task_intelligence": 14,
+    "desktop/macos/agent/src": 45
+  }
+}

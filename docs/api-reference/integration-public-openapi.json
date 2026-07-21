@@ -766,9 +766,6 @@
             "title": "Text Source Spec"
           }
         },
-        "required": [
-          "text"
-        ],
         "title": "ExternalIntegrationCreateMemory",
         "type": "object"
       },

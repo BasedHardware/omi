@@ -9,31 +9,83 @@ import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
 
-/// Languages supported by Deepgram Nova-3 multi-language auto-detection.
-/// When a user picks one of these, multi-language mode is enabled (single_language_mode = false).
+/// Base language codes eligible for live multi-language auto-detection.
+/// Mirrors the backend live STT capability policy
+/// (backend/config/stt_provider_policy.py MODULATE_SUPPORTED_LANGUAGES, #10022);
+/// regional variants ("pt-BR") are normalized to their base code before lookup.
 const multiLanguageSupported = {
-  'en',
-  'en-US',
-  'en-AU',
-  'en-GB',
-  'en-IN',
-  'en-NZ',
-  'es',
-  'es-419',
-  'fr',
-  'fr-CA',
+  'multi',
+  'af',
+  'ar',
+  'az',
+  'be',
+  'bg',
+  'bn',
+  'bs',
+  'ca',
+  'cs',
+  'cy',
+  'da',
   'de',
+  'el',
+  'en',
+  'es',
+  'et',
+  'eu',
+  'fa',
+  'fi',
+  'fr',
+  'gl',
+  'gu',
+  'he',
   'hi',
-  'ru',
-  'pt',
-  'pt-BR',
-  'pt-PT',
-  'ja',
+  'hr',
+  'hu',
+  'id',
   'it',
+  'ja',
+  'kk',
+  'kn',
+  'ko',
+  'lt',
+  'lv',
+  'mk',
+  'ml',
+  'mr',
+  'ms',
   'nl',
+  'no',
+  'pa',
+  'pl',
+  'pt',
+  'ro',
+  'ru',
+  'sk',
+  'sl',
+  'sq',
+  'sr',
+  'sv',
+  'sw',
+  'ta',
+  'te',
+  'th',
+  'tl',
+  'tr',
+  'uk',
+  'ur',
+  'vi',
+  'zh',
 };
 
+/// Whether a (possibly regional) language code may enter live multi-language
+/// mode, matching the backend's normalized policy check.
+bool supportsLiveMultilingualMode(String languageCode) {
+  final base = languageCode.split('-').first.split('_').first.toLowerCase();
+  return multiLanguageSupported.contains(base);
+}
+
 class HomeProvider extends ChangeNotifier {
+  int _sessionGeneration = 0;
   int selectedIndex = 0;
   Function(int idx)? onSelectedIndexChanged;
   final FocusNode chatFieldFocusNode = FocusNode();
@@ -132,6 +184,25 @@ class HomeProvider extends ChangeNotifier {
     memoriesSearchFieldFocusNode.addListener(_onFocusChange);
   }
 
+  void clearUserData() {
+    _sessionGeneration++;
+    selectedIndex = 0;
+    isAppsSearchFieldFocused = false;
+    isChatFieldFocused = false;
+    isConvoSearchFieldFocused = false;
+    isMemoriesSearchFieldFocused = false;
+    showConvoSearchBar = false;
+    hasSpeakerProfile = false;
+    isLoading = false;
+    userPrimaryLanguage = '';
+    hasSetPrimaryLanguage = false;
+    chatFieldFocusNode.unfocus();
+    appsSearchFieldFocusNode.unfocus();
+    convoSearchFieldFocusNode.unfocus();
+    memoriesSearchFieldFocusNode.unfocus();
+    notifyListeners();
+  }
+
   void _onFocusChange() {
     isChatFieldFocused = chatFieldFocusNode.hasFocus;
     isAppsSearchFieldFocused = appsSearchFieldFocusNode.hasFocus;
@@ -186,8 +257,10 @@ class HomeProvider extends ChangeNotifier {
   }
 
   Future setupHasSpeakerProfile() async {
+    final generation = _sessionGeneration;
     setIsLoading(true);
     var res = await userHasSpeakerProfile();
+    if (generation != _sessionGeneration) return;
     setSpeakerProfile(res);
     SharedPreferencesUtil().hasSpeakerProfile = res;
     Logger.debug('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
@@ -202,8 +275,10 @@ class HomeProvider extends ChangeNotifier {
       return;
     }
 
+    final generation = _sessionGeneration;
     try {
       final language = await getUserPrimaryLanguage();
+      if (generation != _sessionGeneration) return;
       if (language == null) {
         // User hasn't set a primary language yet
         userPrimaryLanguage = '';
@@ -211,7 +286,7 @@ class HomeProvider extends ChangeNotifier {
 
         // Show language dialog after a short delay to ensure UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
-          if (globalNavigatorKey.currentContext != null) {
+          if (generation == _sessionGeneration && globalNavigatorKey.currentContext != null) {
             showLanguageDialogIfNeeded(globalNavigatorKey.currentContext!);
           }
         });
@@ -224,6 +299,7 @@ class HomeProvider extends ChangeNotifier {
       }
       Logger.debug('setupUserPrimaryLanguage: $language, hasSet: $hasSetPrimaryLanguage');
     } catch (e) {
+      if (generation != _sessionGeneration) return;
       Logger.debug('Error setting up user primary language: $e');
       userPrimaryLanguage = '';
       hasSetPrimaryLanguage = false;
@@ -249,7 +325,7 @@ class HomeProvider extends ChangeNotifier {
         PlatformManager.instance.analytics.setUserAttribute('Primary Language', languageCode);
 
         // Backend auto-sets single_language_mode — sync local state to match
-        final singleLanguageMode = !multiLanguageSupported.contains(languageCode);
+        final singleLanguageMode = !supportsLiveMultilingualMode(languageCode);
         userProvider?.updateSingleLanguageModeLocally(singleLanguageMode);
 
         notifyListeners();

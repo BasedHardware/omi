@@ -6,9 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKIP_RATCHET="$SCRIPT_DIR/swift-test-skip-ratchet.py"
+MAIN_ACTOR_XCTEST_HOOK_GUARD="$SCRIPT_DIR/check-main-actor-xctest-hooks.py"
 TESTS_ROOT="${OMI_SWIFT_TEST_DISCOVERY_ROOT:-$MACOS_DIR/Desktop/Tests}"
 PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
-WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-1}}"
+# Each suite runs in an independent SwiftPM process because of process-global
+# test state. CI has proven four-way execution safe; make that the local
+# default too, while preserving an explicit one-worker escape hatch for a
+# diagnosis (`OMI_SWIFT_TEST_SUITE_WORKERS=1`).
+WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
 
 fail() {
@@ -52,6 +57,17 @@ if [ "$WORKERS" -lt 1 ]; then
 fi
 if [ "$PREBUILD" != "0" ] && [ "$PREBUILD" != "1" ]; then
   fail "OMI_SWIFT_TEST_PREBUILD must be 0 or 1, got '$PREBUILD'"
+fi
+
+# Static guardrails are part of the authoritative Swift component suite, not a
+# separate best-effort lint. Run their fixture tests first so a broken checker
+# cannot turn a green scan into false confidence. Skip when the hermetic
+# launcher fixture overrides discovery — that path only validates runner
+# parallelism/skip wiring, and the real suite job already runs the ratchet.
+if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then
+  python3 "$SCRIPT_DIR/tests/test_check_desktop_test_quality.py"
+  python3 "$SCRIPT_DIR/check_desktop_test_quality.py"
+  python3 "$MAIN_ACTOR_XCTEST_HOOK_GUARD"
 fi
 
 # Discover suites recursively so tests in subfolders of Desktop/Tests are not

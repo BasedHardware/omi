@@ -1,0 +1,10 @@
+{
+  "files": {
+    "backend/database/conversations.py": 1601,
+    "backend/database/users.py": 1943
+  },
+  "raise_justifications": {
+    "backend/database/conversations.py": "Public shared-chat uses the existing conversation storage format for bounded, safe transcript decoding; extraction would duplicate crypto/storage invariants. +21 for the #10033 merge-target eligibility predicate and pure closest-match selector beside the query they filter."
+  },
+  "threshold": 1500
+}

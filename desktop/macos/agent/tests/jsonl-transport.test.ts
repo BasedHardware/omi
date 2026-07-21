@@ -1,1407 +1,816 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OutboundMessage, QueryMessage } from "../src/protocol.js";
-import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
-import {
-  JsonlTransport,
-  selectAdapterScopedToolCallCorrelation,
-  selectUnscopedToolCallCorrelation,
-} from "../src/runtime/jsonl-transport.js";
-import { AdapterRuntimeError } from "../src/runtime/failures.js";
-import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
-import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
-import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
-const createdDirs: string[] = [];
+import { afterEach, describe, expect, it } from "vitest";
+
+import type { OutboundMessageDraft, QueryMessage } from "../src/protocol.js";
+import { JsonlTransport, type McpServerBuilder } from "../src/runtime/jsonl-transport.js";
+import { updateContextSource } from "../src/runtime/context-snapshot.js";
+import { recordJournalTurn, terminalizeJournalTurn } from "../src/runtime/conversation-journal.js";
+import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
+
+const roots: string[] = [];
 
 afterEach(() => {
-  for (const dir of createdDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-describe("JsonlTransport", () => {
-  it("rejects queries without requestId", async () => {
-    const { store, kernel } = createKernelHarness(newDatabasePath());
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    await expect(
-      facade.handleQuery({
-        ...v2Query({ prompt: "missing request id" }),
-        requestId: "",
-        clientId: "client-v2",
-      }),
-    ).rejects.toThrow("query requires requestId");
-    store.close();
+function fixture(buildMcpServers?: McpServerBuilder) {
+  const root = mkdtempSync(join(tmpdir(), "omi-jsonl-"));
+  roots.push(root);
+  const { store, adapter, kernel } = createKernelHarness(join(root, "agent.sqlite"), "fake");
+  const session = store.insertSession({
+    ownerId: "owner",
+    surfaceKind: "main_chat",
+    externalRefKind: "chat",
+    externalRefId: "default",
+    defaultAdapterId: "fake",
+    defaultCwd: "/tmp/pinned-workspace",
+    modelProfile: "pinned-model",
   });
-
-  it("emits structured runtime failures from adapter errors", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const sent: OutboundMessage[] = [];
-    adapter.failNextExecutionError = new AdapterRuntimeError({
-      code: "adapter_process_exited",
-      source: "adapter_process",
-      adapterId: "openclaw",
-      provider: "openai",
-      retryable: true,
-      userMessage: "OpenClaw failed: OpenAI API error: upstream unavailable",
-      technicalMessage: "OpenAI API error: upstream unavailable",
-    });
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    await facade.handleQuery({
-      ...v2Query({ requestId: "request-failed", prompt: "fail" }),
-      protocolVersion: 2,
-      requestId: "request-failed",
-      clientId: "client-failed",
-      adapterId: "fake",
-    });
-
-    expect(sent).toContainEqual(expect.objectContaining({
-      type: "error",
-      message: "OpenClaw failed: OpenAI API error: upstream unavailable",
-      failure: expect.objectContaining({
-        code: "adapter_process_exited",
-        adapterId: "openclaw",
-        provider: "openai",
-      }),
-    }));
-    store.close();
+  const sent: OutboundMessageDraft[] = [];
+  let activeOwner = "owner";
+  const transport = new JsonlTransport({
+    kernel,
+    ownerId: "owner",
+    defaultAdapterId: "fake",
+    activeOwnerId: () => activeOwner,
+    send: (message) => sent.push(message),
+    buildMcpServers,
   });
-
-  it("emits structured runtime failures when binding fails before execution", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const sent: OutboundMessage[] = [];
-    adapter.failNextOpenError = new AdapterRuntimeError({
-      code: "adapter_config_invalid",
-      source: "adapter_process",
-      adapterId: "openclaw",
-      retryable: false,
-      userMessage:
-        "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry. Inspect with `openclaw config validate`.",
-      technicalMessage: "OpenClaw config is invalid",
-    });
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    await facade.handleQuery({
-      ...v2Query({ requestId: "request-binding-failed", prompt: "fail before execution" }),
-      protocolVersion: 2,
-      requestId: "request-binding-failed",
-      clientId: "client-binding-failed",
-      adapterId: "fake",
-    });
-
-    expect(adapter.executed).toHaveLength(0);
-    expect(sent).toContainEqual(expect.objectContaining({
-      type: "error",
-      message:
-        "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry. Inspect with `openclaw config validate`.",
-      failure: expect.objectContaining({
-        code: "adapter_config_invalid",
-        source: "adapter_process",
-        adapterId: "openclaw",
-        retryable: false,
-      }),
-    }));
-    expect(JSON.parse(store.getRow("SELECT result_json FROM runs").result_json).failure).toMatchObject({
-      code: "adapter_config_invalid",
-      adapterId: "openclaw",
-    });
-    store.close();
-  });
-
-  it("selects the sole running request for unscoped tool-call correlation", () => {
-    expect(
-      selectUnscopedToolCallCorrelation([
-        {
-          protocolVersion: 2,
-          requestId: "request-running",
-          clientId: "client-running",
-          sessionId: "session-running",
-          runId: "run-running",
-          attemptId: "attempt-running",
-          isRunning: true,
-        },
-        {
-          protocolVersion: 2,
-          requestId: "request-queued",
-          clientId: "client-queued",
-        },
-      ]),
-    ).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-running",
-      clientId: "client-running",
-      sessionId: "session-running",
-      runId: "run-running",
-      attemptId: "attempt-running",
-    });
-
-    expect(
-      selectUnscopedToolCallCorrelation([
-        {
-          protocolVersion: 2,
-          requestId: "request-a",
-          clientId: "client-a",
-          runId: "run-a",
-          attemptId: "attempt-a",
-          isRunning: true,
-        },
-        {
-          protocolVersion: 2,
-          requestId: "request-b",
-          clientId: "client-b",
-          runId: "run-b",
-          attemptId: "attempt-b",
-          isRunning: true,
-        },
-      ]),
-    ).toEqual({});
-  });
-
-  it("tracks externally-created control runs for Swift-backed tool routing", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      suppressToolUseEvents: false,
-    });
-    adapter.deferResult();
-
-    facade.registerExternalRequestContext({
-      protocolVersion: 2,
-      requestId: "control-run-1",
-      clientId: "control-client",
-      ownerId: "owner",
-      adapterId: "fake",
-    });
-    const running = kernel.executeRun({
-      ...baseRunInput,
-      requestId: "control-run-1",
-      clientId: "control-client",
-      prompt: "control-created child",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-    const attemptId = adapter.executed[0].attemptId;
-
-    adapter.emitLate(attemptId, {
-      type: "tool_use",
-      callId: "tool-control-1",
-      name: "execute_sql",
-      input: { query: "select 1" },
-    });
-
-    expect(sent.find((message) => message.type === "tool_use")).toMatchObject({
-      type: "tool_use",
-      requestId: "control-run-1",
-      clientId: "control-client",
-      runId: adapter.executed[0].runId,
-      attemptId,
-    });
-    expect(facade.toolCallCorrelationForRequest("control-run-1", "control-client")).toMatchObject({
-      requestId: "control-run-1",
-      clientId: "control-client",
-      attemptId,
-    });
-    expect(facade.toolCallCorrelationForRequest("control-run-1", "other-client")).toEqual({});
-
-    adapter.resolveDeferred({
-      text: "done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "succeeded",
-    });
-    await running;
-    expect(facade.toolCallCorrelationForRequest("control-run-1", "control-client")).toEqual({});
-    store.close();
-  });
-
-  it("requires client id when resolving request-scoped v2 tool-call correlation", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
-    adapter.deferResult();
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "fake",
-      suppressToolUseEvents: false,
-    });
-
-    facade.registerExternalRequestContext({
-      protocolVersion: 2,
-      requestId: "shared-control-run",
-      clientId: "client-a",
-      ownerId: "owner",
-      adapterId: "fake",
-    });
-    facade.registerExternalRequestContext({
-      protocolVersion: 2,
-      requestId: "shared-control-run",
-      clientId: "client-b",
-      ownerId: "owner",
-      adapterId: "fake",
-    });
-    const first = kernel.executeRun({
-      ...baseRunInput,
-      requestId: "shared-control-run",
-      clientId: "client-a",
-      prompt: "control-created child a",
-    });
-    const second = kernel.executeRun({
-      ...baseRunInput,
-      requestId: "shared-control-run",
-      clientId: "client-b",
-      prompt: "control-created child b",
-      externalRefId: "task-b",
-    });
-    await waitUntil(() => adapter.executed.length === 2);
-
-    expect(facade.toolCallCorrelationForRequest("shared-control-run", "client-a")).toMatchObject({
-      requestId: "shared-control-run",
-      clientId: "client-a",
-      runId: adapter.executed[0].runId,
-    });
-    expect(facade.toolCallCorrelationForRequest("shared-control-run", "client-b")).toMatchObject({
-      requestId: "shared-control-run",
-      clientId: "client-b",
-      runId: adapter.executed[1].runId,
-    });
-    expect(facade.unscopedToolCallCorrelation("shared-control-run")).toEqual({});
-
-    adapter.resolveDeferred({
-      text: "done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "succeeded",
-    });
-    await Promise.all([first, second]);
-    store.close();
-  });
-
-  it("routes simultaneous Hermes and OpenClaw relay contexts by clientId plus requestId", async () => {
-    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
-    const hermes = new FakeRuntimeAdapter("hermes");
-    const openclaw = new FakeRuntimeAdapter("openclaw");
-    hermes.deferResult();
-    openclaw.deferResult();
-    const registry = new AdapterRegistry();
-    registry.register("hermes", () => hermes, 1);
-    registry.register("openclaw", () => openclaw, 1);
-    const kernel = new AgentRuntimeKernel({ store, registry });
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "hermes",
-      suppressToolUseEvents: false,
-    });
-
-    facade.registerExternalRequestContext({
-      protocolVersion: 2,
-      requestId: "shared-request",
-      clientId: "client-hermes",
-      ownerId: "owner",
-      adapterId: "hermes",
-    });
-    facade.registerExternalRequestContext({
-      protocolVersion: 2,
-      requestId: "shared-request",
-      clientId: "client-openclaw",
-      ownerId: "owner",
-      adapterId: "openclaw",
-    });
-
-    const hermesRun = kernel.executeRun({
-      ...baseRunInput,
-      adapterId: "hermes",
-      defaultAdapterId: "hermes",
-      requestId: "shared-request",
-      clientId: "client-hermes",
-      externalRefId: "task-hermes",
-    });
-    const openclawRun = kernel.executeRun({
-      ...baseRunInput,
-      adapterId: "openclaw",
-      defaultAdapterId: "openclaw",
-      requestId: "shared-request",
-      clientId: "client-openclaw",
-      externalRefId: "task-openclaw",
-    });
-    await waitUntil(() => hermes.executed.length === 1 && openclaw.executed.length === 1);
-
-    expect(facade.toolCallCorrelationForRequest("shared-request", "client-hermes")).toMatchObject({
-      requestId: "shared-request",
-      clientId: "client-hermes",
-      runId: hermes.executed[0].runId,
-      attemptId: hermes.executed[0].attemptId,
-    });
-    expect(facade.toolCallCorrelationForRequest("shared-request", "client-openclaw")).toMatchObject({
-      requestId: "shared-request",
-      clientId: "client-openclaw",
-      runId: openclaw.executed[0].runId,
-      attemptId: openclaw.executed[0].attemptId,
-    });
-    expect(facade.toolCallCorrelationForAdapter("hermes")).toMatchObject({
-      clientId: "client-hermes",
-      runId: hermes.executed[0].runId,
-    });
-    expect(facade.toolCallCorrelationForAdapter("openclaw")).toMatchObject({
-      clientId: "client-openclaw",
-      runId: openclaw.executed[0].runId,
-    });
-    expect(facade.unscopedToolCallCorrelation()).toEqual({});
-
-    hermes.resolveDeferred({
-      adapterSessionId: hermes.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "succeeded",
-    });
-    openclaw.resolveDeferred({
-      adapterSessionId: openclaw.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "succeeded",
-    });
-    await Promise.all([hermesRun, openclawRun]);
-    store.close();
-  });
-
-
-  it("selects the sole running adapter context for adapter-scoped tool-call correlation", () => {
-    expect(
-      selectAdapterScopedToolCallCorrelation([
-        {
-          protocolVersion: 2,
-          adapterId: "acp",
-          requestId: "request-acp",
-          clientId: "client-acp",
-          runId: "run-acp",
-          attemptId: "attempt-acp",
-          isRunning: true,
-        },
-        {
-          protocolVersion: 2,
-          adapterId: "pi-mono",
-          requestId: "request-pi",
-          clientId: "client-pi",
-          runId: "run-pi",
-          attemptId: "attempt-pi",
-          isRunning: true,
-        },
-      ], "pi-mono"),
-    ).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-pi",
-      clientId: "client-pi",
-      runId: "run-pi",
-      attemptId: "attempt-pi",
-    });
-  });
-
-  it("passes request correlation into MCP server builders", async () => {
-    const { store, kernel } = createKernelHarness(newDatabasePath());
-    const buildMcpServers = vi.fn(() => []);
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-      buildMcpServers,
-    });
-
-    await facade.handleQuery({
-      ...v2Query({ prompt: "mcp context" }),
-      protocolVersion: 2,
-      ownerId: "owner-firebase-uid",
-      requestId: "request-mcp",
-      clientId: "client-mcp",
-      sessionId: "session-mcp",
-      cwd: "/tmp/mcp",
-    });
-
-    expect(buildMcpServers).toHaveBeenCalledWith("act", "/tmp/mcp", "task_chat|task|task-1", {
-      ownerId: "owner-firebase-uid",
-      requestId: "request-mcp",
-      clientId: "client-mcp",
-      protocolVersion: 2,
-      sessionId: "session-mcp",
-      adapterId: "fake",
-    });
-    store.close();
-  });
-
-
-
-  it("adds v2 request, session, run, attempt, event, and adapter correlation to stream and result messages", async () => {
-    const { store, kernel } = createKernelHarness(newDatabasePath());
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    await facade.handleQuery({
-      ...v2Query({ prompt: "hello v2" }),
-      protocolVersion: 2,
-      requestId: "request-v2",
-      clientId: "client-v2",
-    });
-
-    const textDelta = sent.find((message): message is Extract<OutboundMessage, { type: "text_delta" }> => message.type === "text_delta");
-    const result = sent.find((message): message is Extract<OutboundMessage, { type: "result" }> => message.type === "result");
-    expect(textDelta).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-v2",
-      clientId: "client-v2",
-      text: expect.stringContaining("delta-att_"),
-      adapterSessionId: "native-1",
-    });
-    expect(textDelta?.sessionId).toMatch(/^ses_/);
-    expect(textDelta?.runId).toMatch(/^run_/);
-    expect(textDelta?.attemptId).toMatch(/^att_/);
-    expect(textDelta?.eventId).toMatch(/^evt_/);
-    expect(result).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-v2",
-      clientId: "client-v2",
-      terminalStatus: "succeeded",
-      adapterSessionId: "native-1",
-    });
-    expect(result?.sessionId).toBe(textDelta?.sessionId);
-    expect(result?.sessionId).not.toBe("native-1");
-    store.close();
-  });
-
-  it("translates v2 interrupt to kernel cancellation with truthful ack", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "cancel me" }),
-      protocolVersion: 2,
-      requestId: "request-cancel",
-      clientId: "client-cancel",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    await facade.handleInterrupt({
-      type: "interrupt",
-      protocolVersion: 2,
-      requestId: "request-cancel",
-      clientId: "client-cancel",
-    });
-
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-cancel",
-      clientId: "client-cancel",
-      accepted: true,
-      dispatchAttempted: true,
-      adapterAcknowledged: false,
-    });
-    expect(cancelAck?.sessionId).toMatch(/^ses_/);
-    expect(cancelAck?.runId).toMatch(/^run_/);
-    expect(cancelAck?.attemptId).toMatch(/^att_/);
-
-    adapter.resolveDeferred({
-      text: "partial",
-      terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await running;
-    expect(sent.some((message) => message.type === "result" && message.terminalStatus === "cancelled")).toBe(true);
-    store.close();
-  });
-
-  it("allows runId-only v2 interrupts to reach kernel cancellation", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "cancel by run id" }),
-      protocolVersion: 2,
-      requestId: "request-run-only-cancel",
-      clientId: "client-run-only-cancel",
-      ownerId: "owner-run-only-cancel",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    await facade.handleInterrupt({
-      protocolVersion: 2,
-      runId: adapter.executed[0].runId,
-      attemptId: adapter.executed[0].attemptId,
-      ownerId: "owner-run-only-cancel",
-    });
-
-    expect(adapter.cancelled).toHaveLength(1);
-    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-run-only-cancel",
-      clientId: "client-run-only-cancel",
-      runId: adapter.executed[0].runId,
-      attemptId: adapter.executed[0].attemptId,
-      accepted: true,
-      dispatchAttempted: true,
-    });
-
-    adapter.resolveDeferred({
-      text: "cancelled by run id",
-      terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
-    await running;
-    store.close();
-  });
-
-  it("rejects runId-only v2 interrupts without active context or explicit owner guard", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "reject bare run id cancel" }),
-      protocolVersion: 2,
-      requestId: "request-bare-run-cancel",
-      clientId: "client-bare-run-cancel",
-      ownerId: "owner-bare-run-cancel",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    await facade.handleInterrupt({
-      protocolVersion: 2,
-      runId: adapter.executed[0].runId,
-      attemptId: adapter.executed[0].attemptId,
-      requestId: "external-cancel-request",
-      clientId: "external-client",
-    });
-
-    expect(adapter.cancelled).toHaveLength(0);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> =>
-      message.type === "cancel_ack" && message.requestId === "external-cancel-request"
-    );
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "external-cancel-request",
-      clientId: "external-client",
-      runId: adapter.executed[0].runId,
-      accepted: false,
-      dispatchAttempted: false,
-      adapterAcknowledged: false,
-    });
-
-    adapter.resolveDeferred({
-      text: "done",
-      terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
-    await running;
-    store.close();
-  });
-
-  it("rejects v2 interrupt when the supplied owner does not match the active request owner", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "do not cancel cross-owner" }),
-      protocolVersion: 2,
-      requestId: "request-owner-guard",
-      clientId: "client-owner-guard",
-      ownerId: "owner-a",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    await facade.handleInterrupt({
-      type: "interrupt",
-      protocolVersion: 2,
-      requestId: "request-owner-guard",
-      clientId: "client-owner-guard",
-      ownerId: "owner-b",
-    });
-
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-owner-guard",
-      clientId: "client-owner-guard",
-      accepted: false,
-      dispatchAttempted: false,
-      adapterAcknowledged: false,
-    });
-    expect(adapter.cancelled).toHaveLength(0);
-
-    adapter.resolveDeferred({
-      text: "still running",
-      terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await running;
-    store.close();
-  });
-
-  it("uses the active request owner when request-scoped interrupt omits ownerId", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "cancel firebase owner" }),
-      protocolVersion: 2,
-      requestId: "request-firebase-owner",
-      clientId: "client-firebase-owner",
-      ownerId: "firebase-owner",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    await facade.handleInterrupt({
-      type: "interrupt",
-      protocolVersion: 2,
-      requestId: "request-firebase-owner",
-      clientId: "client-firebase-owner",
-    });
-
-    expect(adapter.cancelled).toHaveLength(1);
-    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-firebase-owner",
-      clientId: "client-firebase-owner",
-      accepted: true,
-    });
-
-    adapter.resolveDeferred({
-      text: "cancelled",
-      terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await running;
-    store.close();
-  });
-
-  it("rejects protocol v2 request-scoped interrupts that omit clientId", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "cancel without client id" }),
-      protocolVersion: 2,
-      requestId: "request-without-client",
-      clientId: "non-default-client",
-      ownerId: "owner-without-client",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    await facade.handleInterrupt({
-      type: "interrupt",
-      protocolVersion: 2,
-      requestId: "request-without-client",
-    });
-
-    expect(adapter.cancelled).toHaveLength(0);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-without-client",
-      accepted: false,
-      dispatchAttempted: false,
-      adapterAcknowledged: false,
-    });
-    expect(cancelAck).not.toHaveProperty("clientId");
-
-    adapter.resolveDeferred({
-      text: "cancelled",
-      terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await running;
-    store.close();
-  });
-
-  it("ignores request-scoped interrupt context when the client id does not match", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "do not cancel cross-client" }),
-      protocolVersion: 2,
-      requestId: "shared-request-id",
-      clientId: "client-a",
-      ownerId: "owner-a",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    await facade.handleInterrupt({
-      protocolVersion: 2,
-      requestId: "shared-request-id",
-      clientId: "client-b",
-    });
-
-    expect(adapter.cancelled).toHaveLength(0);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "shared-request-id",
-      clientId: "client-b",
-      accepted: false,
-    });
-
-    adapter.resolveDeferred({
-      text: "still running",
-      terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await running;
-    store.close();
-  });
-
-  it("rejects an explicit empty v2 client id instead of using scoped fallback", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "do not cancel with empty explicit client" }),
-      protocolVersion: 2,
-      requestId: "empty-client-request",
-      clientId: "client-a",
-      ownerId: "owner-a",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    await facade.handleInterrupt({
-      protocolVersion: 2,
-      requestId: "empty-client-request",
-      clientId: "",
-    });
-
-    expect(adapter.cancelled).toHaveLength(0);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "empty-client-request",
-      accepted: false,
-    });
-    expect(cancelAck).not.toHaveProperty("clientId");
-
-    adapter.resolveDeferred({
-      text: "still running",
-      terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await running;
-    store.close();
-  });
-
-  it("keeps duplicate request ids isolated by client when interrupting", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const first = facade.handleQuery({
-      ...v2Query({ prompt: "shared request client a", externalRefId: "task-client-a" }),
-      protocolVersion: 2,
-      requestId: "shared-request-id",
-      clientId: "client-a",
-      ownerId: "owner-shared",
-    });
-    const second = facade.handleQuery({
-      ...v2Query({ prompt: "shared request client b", externalRefId: "task-client-b" }),
-      protocolVersion: 2,
-      requestId: "shared-request-id",
-      clientId: "client-b",
-      ownerId: "owner-shared",
-    });
-    await waitUntil(() => adapter.executed.length === 2);
-
-    await facade.handleInterrupt({
-      type: "interrupt",
-      protocolVersion: 2,
-      requestId: "shared-request-id",
-      clientId: "client-a",
-    });
-
-    expect(adapter.cancelled).toHaveLength(1);
-    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      requestId: "shared-request-id",
-      clientId: "client-a",
-      runId: adapter.executed[0].runId,
-      accepted: true,
-    });
-
-    adapter.resolveDeferred({
-      text: "client a cancelled",
-      terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await Promise.all([first, second]);
-    store.close();
-  });
-
-  it("rejects v2 interrupt when requestId is missing", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const ownerA = facade.handleQuery({
-      ...v2Query({ prompt: "owner a" }),
-      protocolVersion: 2,
-      requestId: "request-owner-a",
-      clientId: "shared-client",
-      ownerId: "owner-a",
-    });
-    const ownerB = facade.handleQuery({
-      ...v2Query({ prompt: "owner b" }),
-      protocolVersion: 2,
-      requestId: "request-owner-b",
-      clientId: "shared-client",
-      ownerId: "owner-b",
-    });
-    await waitUntil(() => adapter.executed.length === 2);
-
-    await facade.handleInterrupt({
-      type: "interrupt",
-      protocolVersion: 2, requestId: "interrupt-owner-a",
-      clientId: "shared-client",
-      ownerId: "owner-a",
-    });
-
-    expect(adapter.cancelled).toHaveLength(0);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      clientId: "shared-client",
-      accepted: false,
-      dispatchAttempted: false,
-      adapterAcknowledged: false,
-    });
-    expect(cancelAck).not.toHaveProperty("runId");
-
-    adapter.resolveDeferred({
-      text: "owner a finished",
-      terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await Promise.all([ownerA, ownerB]);
-    store.close();
-  });
-
-  it("does not collide owner/client pairs when selecting latest run for interrupt", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const first = facade.handleQuery({
-      ...v2Query({ prompt: "first" }),
-      protocolVersion: 2,
-      requestId: "request-first",
-      clientId: "b:c",
-      ownerId: "a",
-    });
-    const second = facade.handleQuery({
-      ...v2Query({ prompt: "second" }),
-      protocolVersion: 2,
-      requestId: "request-second",
-      clientId: "c",
-      ownerId: "a:b",
-    });
-    await waitUntil(() => adapter.executed.length === 2);
-
-    await facade.handleInterrupt({
-      type: "interrupt",
-      protocolVersion: 2,
-      clientId: "b:c",
-      ownerId: "a",
-    });
-
-    expect(adapter.cancelled).toHaveLength(0);
-    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck).toMatchObject({
-      protocolVersion: 2,
-      clientId: "b:c",
-      accepted: false,
-      dispatchAttempted: false,
-      adapterAcknowledged: false,
-    });
-
-    adapter.resolveDeferred({
-      text: "first finished",
-      terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await Promise.all([first, second]);
-    store.close();
-  });
-
-  it("queues overlapping v2 requests on one worker without mixing request-scoped results", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 1);
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const first = facade.handleQuery({
-      ...v2Query({ prompt: "first" }),
-      protocolVersion: 2,
-      requestId: "request-one",
-      clientId: "client-one",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-
-    const second = facade.handleQuery({
-      ...v2Query({ prompt: "second" }),
-      protocolVersion: 2,
-      requestId: "request-two",
-      clientId: "client-two",
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(adapter.executed).toHaveLength(1);
-    expect(sent.some((message) => message.type === "error")).toBe(false);
-    expect(facade.unscopedToolCallCorrelation()).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-one",
-      clientId: "client-one",
-      runId: adapter.executed[0].runId,
-      attemptId: adapter.executed[0].attemptId,
-    });
-
-    adapter.resolveDeferred({
-      text: "first done",
-      terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
-    await first;
-    await second;
-
-    expect(adapter.executed).toHaveLength(2);
-    const results = sent.filter((message): message is Extract<OutboundMessage, { type: "result" }> => message.type === "result");
-    expect(results.map((message) => message.requestId).sort()).toEqual(["request-one", "request-two"]);
-    expect(results.find((message) => message.requestId === "request-one")?.text).toBe("first done");
-    expect(results.find((message) => message.requestId === "request-two")?.text).toMatch(/^done-att_/);
-    expect(new Set(results.map((message) => message.runId)).size).toBe(2);
-    expect(store.allRows("SELECT status FROM runs ORDER BY created_at_ms")).toEqual([
-      expect.objectContaining({ status: "succeeded" }),
-      expect.objectContaining({ status: "succeeded" }),
-    ]);
-    store.close();
-  });
-
-  it("serves acp and pi-mono requests through one facade without adapter conflict", async () => {
-    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
-    const acpAdapter = new FakeRuntimeAdapter("acp");
-    const piMonoAdapter = new FakeRuntimeAdapter("pi-mono");
-    const registry = new AdapterRegistry();
-    registry.register("acp", () => acpAdapter, 1);
-    registry.register("pi-mono", () => piMonoAdapter, 1);
-    const kernel = new AgentRuntimeKernel({ store, registry });
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "acp",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    await Promise.all([
-      facade.handleQuery({
-        ...v2Query({ prompt: "use acp" }),
-        protocolVersion: 2,
-        requestId: "request-acp",
-        clientId: "client-acp",
-        adapterId: "acp",
-      }),
-      facade.handleQuery({
-        ...v2Query({ prompt: "use pi" }),
-        protocolVersion: 2,
-        requestId: "request-pi",
-        clientId: "client-pi",
-        adapterId: "pi-mono",
-      }),
-    ]);
-
-    expect(acpAdapter.executed).toHaveLength(1);
-    expect(piMonoAdapter.executed).toHaveLength(1);
-    const results = sent.filter((message): message is Extract<OutboundMessage, { type: "result" }> => message.type === "result");
-    expect(results.map((message) => message.requestId).sort()).toEqual(["request-acp", "request-pi"]);
-    expect(results.find((message) => message.requestId === "request-acp")?.adapterSessionId).toBe("native-1");
-    expect(results.find((message) => message.requestId === "request-pi")?.adapterSessionId).toBe("native-1");
-    expect(store.allRows("SELECT adapter_id, status FROM adapter_bindings ORDER BY adapter_id")).toEqual([
-      expect.objectContaining({ adapter_id: "acp", status: "active" }),
-      expect.objectContaining({ adapter_id: "pi-mono", status: "active" }),
-    ]);
-    store.close();
-  });
-
-  it("records warmup as a hint and invalidate_session invalidates bindings without deleting the canonical session", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    facade.handleWarmup({
-      type: "warmup",
-      cwd: "/tmp/warm",
-      sessions: [{ key: "task_chat|task|task-1", model: "fake-model", systemPrompt: "warm system" }],
-    });
-    expect(store.allRows("SELECT * FROM sessions")).toHaveLength(0);
-
-    await facade.handleQuery(v2Query({ requestId: "request-1", cwd: undefined, systemPrompt: "" }));
-    expect(adapter.opened[0]).toMatchObject({
-      cwd: "/tmp/warm",
-      model: "fake-model",
-      systemPrompt: "warm system",
-    });
-    const sessionId = String(store.getRow("SELECT session_id FROM sessions").session_id);
-    expect(store.getRow("SELECT status FROM adapter_bindings").status).toBe("active");
-
-    facade.handleInvalidateSession({
-      type: "invalidate_session",
-      protocolVersion: 2,
-      requestId: "invalidate-1",
-      clientId: "client-invalidate",
-      surfaceKind: "task_chat",
-      externalRefKind: "task",
-      externalRefId: "task-1",
-    });
-
-    expect(store.getRow("SELECT session_id FROM sessions").session_id).toBe(sessionId);
-    expect(store.getRow("SELECT status FROM adapter_bindings").status).toBe("invalid");
-    store.close();
-  });
-
-  it("uses pi-mono default model when configured as the default adapter", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "pi-mono",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    await facade.handleQuery(v2Query({ requestId: "request-1", model: undefined }));
-
-    expect(adapter.opened[0].model).toBe("omi-sonnet");
-    expect(store.getRow("SELECT default_adapter_id FROM sessions").default_adapter_id).toBe("pi-mono");
-    store.close();
-  });
-
-  it("does not apply the process default model to per-query local adapters", async () => {
-    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
-    const piMonoAdapter = new FakeRuntimeAdapter("pi-mono");
-    const openclawAdapter = new FakeRuntimeAdapter("openclaw");
-    const registry = new AdapterRegistry();
-    registry.register("pi-mono", () => piMonoAdapter, 1);
-    registry.register("openclaw", () => openclawAdapter, 1);
-    const kernel = new AgentRuntimeKernel({ store, registry });
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "pi-mono",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    await facade.handleQuery(v2Query({ requestId: "request-openclaw",
-      adapterId: "openclaw",
-      model: undefined,
-    }));
-
-    expect(openclawAdapter.opened[0].model).toBeUndefined();
-    expect(openclawAdapter.executed[0].model).toBeUndefined();
-    expect(store.getRow("SELECT default_adapter_id FROM sessions").default_adapter_id).toBe("openclaw");
-    expect(store.getRow("SELECT adapter_id FROM adapter_bindings").adapter_id).toBe("openclaw");
-    store.close();
-  });
-
-  it("suppresses pi-mono tool_use events while preserving correlated tool activity", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
-    adapter.deferResult();
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "pi-mono",
-      defaultCwd: () => "/tmp/default",
-      suppressToolUseEvents: true,
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "use tools" }),
-      protocolVersion: 2,
-      requestId: "request-pi",
-      clientId: "client-pi",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-    const attemptId = adapter.executed[0].attemptId;
-    adapter.emitLate(attemptId, {
-      type: "tool_activity",
-      name: "Read",
-      status: "started",
-      toolUseId: "tool-1",
-    });
-    adapter.emitLate(attemptId, {
-      type: "tool_use",
-      callId: "tool-1",
-      name: "Read",
-      input: { file: "README.md" },
-    });
-    adapter.resolveDeferred({
-      text: "done",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,      terminalStatus: "succeeded",
-    });
-    await running;
-
-    expect(sent.some((message) => message.type === "tool_use")).toBe(false);
-    const activity = sent.find((message): message is Extract<OutboundMessage, { type: "tool_activity" }> => message.type === "tool_activity");
-    expect(activity).toMatchObject({
-      protocolVersion: 2,
-      requestId: "request-pi",
-      clientId: "client-pi",
-      name: "Read",
-      status: "started",
-    });
-    expect(activity?.runId).toMatch(/^run_/);
-    store.close();
-  });
-
-  it("clears running marker after a terminal run event for unscoped correlation", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    adapter.deferResult();
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    const running = facade.handleQuery({
-      ...v2Query({ prompt: "terminal marker" }),
-      protocolVersion: 2,
-      requestId: "request-terminal-marker",
-      clientId: "client-terminal-marker",
-    });
-    await waitUntil(() => adapter.executed.length === 1);
-    expect(facade.unscopedToolCallCorrelation()).toMatchObject({
-      requestId: "request-terminal-marker",
-      runId: adapter.executed[0].runId,
-    });
-    expect(facade.toolCallCorrelationForRequest("request-terminal-marker", "client-terminal-marker")).toMatchObject({
-      requestId: "request-terminal-marker",
-      runId: adapter.executed[0].runId,
-      attemptId: adapter.executed[0].attemptId,
-    });
-    expect(facade.toolCallCorrelationForRequest("stale-request-from-reused-mcp-process", "client-terminal-marker")).toEqual({});
-    expect(facade.toolCallCorrelationForAdapter("fake")).toMatchObject({
-      requestId: "request-terminal-marker",
-      runId: adapter.executed[0].runId,
-      attemptId: adapter.executed[0].attemptId,
-    });
-
-    adapter.resolveDeferred({
-      text: "done",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,      terminalStatus: "succeeded",
-    });
-    await running;
-
-    expect(facade.unscopedToolCallCorrelation()).toEqual({});
-    store.close();
-  });
-
-  it("invokes recoverable auth flow and retries under the same run when binding open requires auth", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const sent: OutboundMessage[] = [];
-    let authFlowCalls = 0;
-    const authError = Object.assign(new Error("auth required"), { code: -32000 });
-    adapter.failNextOpenError = authError;
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-      isRecoverableError: (error) => error === authError,
-      onRecoverableError: async () => {
-        authFlowCalls += 1;
-      },
-      maxRecoverableRetries: 2,
-    });
-
-    await facade.handleQuery(v2Query({ requestId: "request-auth"}));
-
-    expect(authFlowCalls).toBe(1);
-    expect(sent.some((message) => message.type === "error")).toBe(false);
-    expect(sent.some((message) => message.type === "result" && message.terminalStatus === "succeeded")).toBe(true);
-    const runs = store.allRows("SELECT run_id, status FROM runs");
-    expect(runs).toHaveLength(1);
-    expect(runs[0].status).toBe("succeeded");
-    expect(store.allRows("SELECT attempt_no, retry_reason, status FROM run_attempts ORDER BY attempt_no")).toEqual([
-      expect.objectContaining({ attempt_no: 1, status: "failed" }),
-      expect.objectContaining({ attempt_no: 2, retry_reason: "recoverable_error", status: "succeeded" }),
-    ]);
-    store.close();
-  });
-
-  it("invokes recoverable auth flow and retries when execution requires auth", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    let authFlowCalls = 0;
-    const authError = Object.assign(new Error("auth required during prompt"), { code: -32000 });
-    adapter.failNextExecutionError = authError;
-    const facade = new JsonlTransport({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-      isRecoverableError: (error) => error === authError,
-      onRecoverableError: async () => {
-        authFlowCalls += 1;
-      },
-      maxRecoverableRetries: 2,
-    });
-
-    await facade.handleQuery(v2Query({ requestId: "request-auth-exec"}));
-
-    expect(authFlowCalls).toBe(1);
-    const runIds = new Set(store.allRows("SELECT run_id FROM run_attempts").map((row) => row.run_id));
-    expect(runIds.size).toBe(1);
-    expect(adapter.executed).toHaveLength(2);
-    expect(store.allRows("SELECT attempt_no, retry_reason, status FROM run_attempts ORDER BY attempt_no")).toEqual([
-      expect.objectContaining({ attempt_no: 1, status: "failed" }),
-      expect.objectContaining({ attempt_no: 2, retry_reason: "recoverable_error", status: "succeeded" }),
-    ]);
-    store.close();
-  });
-
-  it("fails terminally when recoverable error handling fails", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const sent: OutboundMessage[] = [];
-    const authError = Object.assign(new Error("auth required"), { code: -32000 });
-    adapter.failNextOpenError = authError;
-    const facade = new JsonlTransport({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-      isRecoverableError: (error) => error === authError,
-      onRecoverableError: async () => {
-        throw new Error("oauth failed");
-      },
-      maxRecoverableRetries: 2,
-    });
-
-    await facade.handleQuery(v2Query({ requestId: "request-auth-fail"}));
-
-    expect(sent.some((message) => message.type === "error")).toBe(true);
-    expect(store.getRow("SELECT status FROM runs").status).toBe("failed");
-    expect(store.getRow("SELECT status FROM run_attempts").status).toBe("failed");
-    expect(store.allRows("SELECT * FROM run_attempts WHERE status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')")).toHaveLength(0);
-    store.close();
-  });
-});
-
-function v2Query(overrides: Partial<QueryMessage> = {}): QueryMessage {
+  return {
+    store,
+    adapter,
+    kernel,
+    session,
+    sent,
+    transport,
+    setActiveOwner: (owner: string) => { activeOwner = owner; },
+  };
+}
+
+function query(sessionId: string, overrides: Partial<QueryMessage> = {}): QueryMessage {
   return {
     type: "query",
     protocolVersion: 2,
-    requestId: "request",
-    clientId: "client",
-    surfaceKind: "task_chat",
-    externalRefKind: "task",
-    externalRefId: "task-1",
+    requestId: "request-1",
+    clientId: "client-1",
+    ownerId: "owner",
+    sessionId,
     prompt: "hello",
-    systemPrompt: "system",
-    cwd: "/tmp/work",
     mode: "act",
     ...overrides,
   };
 }
 
-function newDatabasePath(): string {
-  const dir = mkdtempSync(join(tmpdir(), "omi-agent-facade-"));
-  createdDirs.push(dir);
-  return join(dir, "omi-agentd.sqlite3");
-}
+describe("JsonlTransport kernel-owned query contract", () => {
+  it("accepts the reasoningEffort wire field and threads it into run metadata", async () => {
+    const { store, session, transport } = fixture();
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-effort",
+      reasoningEffort: "adaptive",
+    }));
+    const row = store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["request-effort"],
+    );
+    const input = JSON.parse(String(row.input_json));
+    expect(input.metadata.reasoningEffort).toBe("adaptive");
+
+    // A query without the field keeps legacy metadata (no key at all).
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-no-effort",
+    }));
+    const legacy = store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["request-no-effort"],
+    );
+    expect("reasoningEffort" in JSON.parse(String(legacy.input_json)).metadata).toBe(false);
+  });
+
+  it("binds the producing turn to the exact admitted run attempt before execution returns", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    const conversationId = "conv-query-admission";
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId,
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-admitted-r1",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "Working R1",
+      contentBlocks: [],
+      createdAtMs: 2,
+    });
+    await transport.handleInterrupt({
+      requestId: "request-admitted-r1",
+      clientId: "client-1",
+      ownerId: session.ownerId,
+    });
+    expect(sent.at(-1)).toMatchObject({ type: "cancel_ack", accepted: false });
+    expect(store.getRow(
+      "SELECT producing_run_id, producing_attempt_id FROM conversation_turns WHERE turn_id = ?",
+      ["turn-admitted-r1"],
+    )).toEqual({ producing_run_id: null, producing_attempt_id: null });
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-admitted-r1",
+      producingTurnId: "turn-admitted-r1",
+    }));
+    const r1 = store.getRow(
+      `SELECT r.run_id, a.attempt_id
+       FROM runs r JOIN run_attempts a ON a.run_id = r.run_id
+       WHERE r.request_id = ?`,
+      ["request-admitted-r1"],
+    );
+    expect(store.getRow(
+      `SELECT producing_run_id, producing_attempt_id, status
+       FROM conversation_turns WHERE turn_id = ?`,
+      ["turn-admitted-r1"],
+    )).toEqual({
+      producing_run_id: r1.run_id,
+      producing_attempt_id: r1.attempt_id,
+      status: "streaming",
+    });
+
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-admitted-r2",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "Working R2",
+      contentBlocks: [],
+      createdAtMs: 3,
+    });
+    adapter.deferResult();
+    const r2Pending = transport.handleQuery(query(session.sessionId, {
+      requestId: "request-admitted-r2",
+      producingTurnId: "turn-admitted-r2",
+    }));
+    await waitUntil(() => store.getRow(
+      "SELECT producing_run_id FROM conversation_turns WHERE turn_id = ?",
+      ["turn-admitted-r2"],
+    ).producing_run_id != null);
+    const r2 = store.getRow(
+      `SELECT producing_run_id, producing_attempt_id
+       FROM conversation_turns WHERE turn_id = ?`,
+      ["turn-admitted-r2"],
+    );
+    expect(r2.producing_run_id).not.toBe(r1.run_id);
+    expect(() => terminalizeJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-admitted-r2",
+      producingRunId: String(r1.run_id),
+      producingAttemptId: String(r1.attempt_id),
+      disposition: "accept",
+    })).toThrow(/run does not match the producing turn/i);
+    expect(store.getRow(
+      "SELECT status, content FROM conversation_turns WHERE turn_id = ?",
+      ["turn-admitted-r2"],
+    )).toEqual({ status: "streaming", content: "Working R2" });
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "R2 result" });
+    await r2Pending;
+    store.close();
+  });
+
+  it("rejects a producing turn from a different canonical session before run mutation", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId: "conv-query-owner-session",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    const otherSession = store.insertSession({
+      ownerId: session.ownerId,
+      surfaceKind: "task_chat",
+      externalRefKind: "task",
+      externalRefId: "other-task",
+      defaultAdapterId: "fake",
+    });
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: "task_chat",
+      externalRefKind: "task",
+      externalRefId: "other-task",
+      conversationId: "conv-query-other-session",
+      agentSessionId: otherSession.sessionId,
+      createdAtMs: 2,
+      lastActiveAtMs: 2,
+    });
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId: "conv-query-other-session",
+      turnId: "turn-forged-other-session",
+      role: "assistant",
+      surfaceKind: "task_chat",
+      origin: "task_chat",
+      status: "pending",
+      content: "Must remain unbound",
+      contentBlocks: [],
+      createdAtMs: 3,
+    });
+
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-forged-other-session",
+      producingTurnId: "turn-forged-other-session",
+    }));
+    expect(sent.at(-1)).toMatchObject({ type: "error", failure: { code: "runtime_query_failed" } });
+    expect(adapter.executed).toHaveLength(0);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(0);
+    expect(store.getRow(
+      "SELECT producing_run_id, producing_attempt_id FROM conversation_turns WHERE turn_id = ?",
+      ["turn-forged-other-session"],
+    )).toEqual({ producing_run_id: null, producing_attempt_id: null });
+    store.close();
+  });
+
+  it("advances producing authority to a recovered second attempt and rejects attempt one", async () => {
+    const { store, adapter, session, transport } = fixture();
+    const conversationId = "conv-query-retry";
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId,
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-query-retry",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "Retrying",
+      contentBlocks: [],
+      createdAtMs: 2,
+    });
+    adapter.failNextExecutionAsStale = true;
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-query-retry",
+      producingTurnId: "turn-query-retry",
+    }));
+    const run = store.getRow("SELECT run_id FROM runs WHERE request_id = ?", ["request-query-retry"]);
+    const attempts = store.allRows(
+      "SELECT attempt_id, attempt_no, status FROM run_attempts WHERE run_id = ? ORDER BY attempt_no",
+      [run.run_id],
+    );
+    expect(attempts).toMatchObject([
+      { attempt_no: 1, status: "failed" },
+      { attempt_no: 2, status: "succeeded" },
+    ]);
+    expect(store.getRow(
+      "SELECT producing_run_id, producing_attempt_id FROM conversation_turns WHERE turn_id = ?",
+      ["turn-query-retry"],
+    )).toEqual({
+      producing_run_id: run.run_id,
+      producing_attempt_id: attempts[1]!.attempt_id,
+    });
+    expect(() => terminalizeJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-query-retry",
+      producingRunId: String(run.run_id),
+      producingAttemptId: String(attempts[0]!.attempt_id),
+      disposition: "accept",
+    })).toThrow(/latest canonical run attempt/i);
+    expect(terminalizeJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-query-retry",
+      producingRunId: String(run.run_id),
+      producingAttemptId: String(attempts[1]!.attempt_id),
+      disposition: "accept",
+    })).toMatchObject({ status: "completed", producingAttemptId: attempts[1]!.attempt_id });
+    store.close();
+  });
+
+  it("discards an admission-bound producing turn on cancellation and ignores late success", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    const conversationId = "conv-query-cancel";
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId,
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-query-cancel",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "Working before cancel",
+      contentBlocks: [{ type: "text", id: "cancel:text", text: "Working before cancel" }],
+      createdAtMs: 2,
+    });
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId, {
+      requestId: "request-query-cancel",
+      producingTurnId: "turn-query-cancel",
+    }));
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await transport.handleInterrupt({
+      requestId: "request-query-cancel",
+      clientId: "client-1",
+      ownerId: session.ownerId,
+    });
+    expect(store.getRow(
+      "SELECT status, content FROM conversation_turns WHERE turn_id = ?",
+      ["turn-query-cancel"],
+    )).toEqual({ status: "failed", content: "Working before cancel" });
+    expect(store.getRow(
+      "SELECT status, last_error_code FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-query-cancel"],
+    )).toEqual({ status: "failed", last_error_code: "discarded_terminal_projection" });
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "late result must not resurrect" });
+    await running;
+    expect(store.getRow(
+      "SELECT status, content FROM conversation_turns WHERE turn_id = ?",
+      ["turn-query-cancel"],
+    )).toEqual({ status: "failed", content: "Working before cancel" });
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toEqual({
+      status: "cancelled",
+      final_text: null,
+    });
+    expect(sent.findLast((message) => message.type === "result")).toMatchObject({
+      type: "result",
+      terminalStatus: "cancelled",
+      failure: { code: "run_cancelled" },
+    });
+    expect(sent.filter((message) => message.type === "error")).toEqual([]);
+    store.close();
+  });
+
+  it("returns correlated failed results for adapter errors and missing terminal status", async () => {
+    for (const outcome of ["throw", "missing_status"] as const) {
+      const { store, adapter, session, sent, transport } = fixture();
+      if (outcome === "throw") {
+        adapter.failNextExecutionError = new Error("adapter exploded");
+        await transport.handleQuery(query(session.sessionId, { requestId: `request-${outcome}` }));
+      } else {
+        adapter.deferResult();
+        const pending = transport.handleQuery(query(session.sessionId, { requestId: `request-${outcome}` }));
+        await waitUntil(() => adapter.executed.length === 1);
+        adapter.resolveDeferred({ terminalStatus: undefined as never });
+        await pending;
+      }
+      const result = sent.findLast((message) => message.type === "result");
+      expect(result).toMatchObject({
+        type: "result",
+        requestId: `request-${outcome}`,
+        clientId: "client-1",
+        terminalStatus: "failed",
+        failure: { code: expect.stringMatching(/^[a-z0-9_.:-]{1,64}$/i) },
+      });
+      const failure = result && "failure" in result ? result.failure : undefined;
+      expect(failure?.userMessage.length).toBeLessThanOrEqual(1_000);
+      expect(sent.filter((message) => message.type === "error")).toEqual([]);
+      store.close();
+    }
+  });
+
+  it("fails and discards an admitted producing turn when an unexpected post-bind step throws", async () => {
+    const { store, adapter, kernel, session, sent, transport } = fixture();
+    const conversationId = "conv-query-post-bind-failure";
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId,
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId,
+      turnId: "turn-post-bind-failure",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "streaming",
+      content: "Bound before failure",
+      contentBlocks: [],
+      createdAtMs: 2,
+    });
+    const capabilityBroker = (kernel as unknown as {
+      toolCapabilities: { register: (...args: unknown[]) => unknown };
+    }).toolCapabilities;
+    capabilityBroker.register = () => {
+      throw new Error("injected post-bind capability failure");
+    };
+
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-post-bind-failure",
+      producingTurnId: "turn-post-bind-failure",
+    }));
+    expect(adapter.executed).toHaveLength(0);
+    expect(store.getRow("SELECT status, error_code FROM runs LIMIT 1")).toEqual({
+      status: "failed",
+      error_code: "post_admission_execution_failed",
+    });
+    expect(store.getRow("SELECT status, error_code FROM run_attempts LIMIT 1")).toEqual({
+      status: "failed",
+      error_code: "post_admission_execution_failed",
+    });
+    expect(store.getRow(
+      "SELECT status, metadata_json FROM conversation_turns WHERE turn_id = ?",
+      ["turn-post-bind-failure"],
+    )).toMatchObject({ status: "failed" });
+    expect(JSON.parse(String(store.getRow(
+      "SELECT metadata_json FROM conversation_turns WHERE turn_id = ?",
+      ["turn-post-bind-failure"],
+    ).metadata_json))).toMatchObject({ terminalMarker: "discarded_terminal_projection" });
+    expect(store.getRow(
+      "SELECT status, last_error_code FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-post-bind-failure"],
+    )).toEqual({ status: "failed", last_error_code: "discarded_terminal_projection" });
+    expect(sent.findLast((message) => message.type === "error")).toMatchObject({
+      type: "error",
+      failure: { code: "runtime_query_failed" },
+    });
+    store.close();
+  });
+  it("requires a canonical session and uses its pinned adapter/model/cwd", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    await transport.handleQuery(query(session.sessionId));
+
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.opened[0]).toMatchObject({
+      cwd: "/tmp/pinned-workspace",
+      model: "pinned-model",
+    });
+    expect(adapter.opened[0].systemPrompt).toContain("desktop kernel is the authority");
+    expect(sent.at(-1)).toMatchObject({
+      type: "result",
+      requestId: "request-1",
+      clientId: "client-1",
+      sessionId: session.sessionId,
+    });
+    store.close();
+  });
+
+  it("rejects every removed query authority field before adapter dispatch", async () => {
+    const { store, adapter, session, transport } = fixture();
+    const legacy = {
+      ...query(session.sessionId),
+      adapterId: "attacker-adapter",
+      model: "attacker-model",
+      cwd: "/tmp/attacker",
+      systemPrompt: "attacker policy",
+      surfaceContextJson: "attacker context",
+    } as unknown as QueryMessage;
+    await expect(transport.handleQuery(legacy)).rejects.toThrow("query_wire_field_not_allowed:adapterId");
+    expect(adapter.opened).toHaveLength(0);
+    expect(adapter.executed).toHaveLength(0);
+
+    for (const field of [
+      "runId", "attemptId", "eventId", "surfaceKind", "surfaceContextJson", "systemPrompt", "cwd", "model",
+    ] as const) {
+      await expect(transport.handleQuery({
+        ...query(session.sessionId),
+        [field]: "forged",
+      } as unknown as QueryMessage)).rejects.toThrow(`query_wire_field_not_allowed:${field}`);
+    }
+    store.close();
+  });
+
+  it("rejects a stale expected snapshot pair without dispatching an adapter", async () => {
+    const { store, adapter, kernel, session, sent, transport } = fixture();
+    const snapshot = kernel.contextSnapshot(session.sessionId, session.ownerId);
+    updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "memories",
+      sourceRevision: "1",
+      outcome: "available",
+      capturedAtMs: 10,
+      payload: { items: [{ id: "m1", text: "new" }] },
+    }, 10);
+
+    await expect(transport.handleQuery(query(session.sessionId, {
+      expectedContextSnapshotVersion: snapshot.version,
+      expectedContextSnapshotGeneration: snapshot.snapshotGeneration,
+      expectedContextRendererFingerprint: snapshot.rendererFingerprint,
+      expectedCapabilityVersion: snapshot.capabilityVersion,
+    }))).rejects.toThrow("context_snapshot_projection_mismatch");
+    expect(adapter.executed).toHaveLength(0);
+    expect(sent).toEqual([]);
+    store.close();
+  });
+
+  it("pins the validated admission snapshot when MCP construction changes a context source", async () => {
+    let storeForBuilder: ReturnType<typeof fixture>["store"];
+    let sessionForBuilder: ReturnType<typeof fixture>["session"];
+    const buildMcpServers: McpServerBuilder = () => {
+      updateContextSource(storeForBuilder, {
+        ownerId: sessionForBuilder.ownerId,
+        sessionId: sessionForBuilder.sessionId,
+        source: "memories",
+        sourceRevision: "after-validation",
+        outcome: "available",
+        capturedAtMs: 20,
+        payload: { items: [{ id: "m-after", text: "MUTATED_AFTER_VALIDATION" }] },
+      }, 20);
+      return [];
+    };
+    const { store, adapter, kernel, session, transport } = fixture(buildMcpServers);
+    storeForBuilder = store;
+    sessionForBuilder = session;
+    updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "memories",
+      sourceRevision: "before-validation",
+      outcome: "available",
+      capturedAtMs: 10,
+      payload: { items: [{ id: "m-before", text: "ORIGINAL_ADMITTED_CONTEXT" }] },
+    }, 10);
+    const admitted = kernel.contextSnapshot(session.sessionId, session.ownerId);
+
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "snapshot-race",
+      expectedContextSnapshotVersion: admitted.version,
+      expectedContextSnapshotGeneration: admitted.snapshotGeneration,
+      expectedContextRendererFingerprint: admitted.rendererFingerprint,
+      expectedCapabilityVersion: admitted.capabilityVersion,
+    }));
+
+    expect(adapter.executed).toHaveLength(1);
+    const prompt = adapter.executed[0].prompt
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+    expect(prompt).toContain("ORIGINAL_ADMITTED_CONTEXT");
+    expect(prompt).not.toContain("MUTATED_AFTER_VALIDATION");
+    const runInput = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["snapshot-race"],
+    ).input_json));
+    expect(runInput.contextSnapshotVersion).toBe(admitted.version);
+    expect(runInput.contextSnapshotGeneration).toBe(admitted.snapshotGeneration);
+    expect(runInput.admittedContextSnapshot.sourceOutcomes).toContainEqual(
+      expect.objectContaining({ source: "memories", sourceRevision: "before-validation" }),
+    );
+    expect(kernel.contextSnapshot(session.sessionId, session.ownerId).sourceOutcomes).toContainEqual(
+      expect.objectContaining({ source: "memories", sourceRevision: "after-validation" }),
+    );
+    store.close();
+  });
+
+  it("validates warmup against only the pinned session/profile identity", () => {
+    const { store, session, transport } = fixture();
+    expect(() => transport.handleWarmup({
+      type: "warmup",
+      protocolVersion: 2,
+      requestId: "warmup-1",
+      clientId: "client-1",
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      profileGeneration: 1,
+    })).not.toThrow();
+    expect(() => transport.handleWarmup({
+      type: "warmup",
+      protocolVersion: 2,
+      requestId: "warmup-2",
+      clientId: "client-1",
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      profileGeneration: 2,
+    })).toThrow(/does not match/);
+    store.close();
+  });
+
+  it("rejects a forged wrong-owner invalidation before mutating that owner's binding", () => {
+    const { store, transport } = fixture();
+    const ownerBSession = store.insertSession({
+      ownerId: "owner-b",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "owner-b-chat",
+      defaultAdapterId: "fake",
+    });
+    const binding = store.insertAdapterBinding({
+      sessionId: ownerBSession.sessionId,
+      adapterId: "fake",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "owner-b-native",
+      adapterInstanceId: "owner-b-worker",
+      resumeFidelity: "native",
+      status: "active",
+    });
+
+    expect(() => transport.handleInvalidateSession({
+      type: "invalidate_session",
+      protocolVersion: 2,
+      requestId: "forged-owner-b-invalidate",
+      clientId: "client-1",
+      ownerId: "owner-b",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "owner-b-chat",
+    })).toThrow(/owner_mismatch/);
+    expect(store.getRow(
+      "SELECT status FROM adapter_bindings WHERE binding_id = ?",
+      [binding.bindingId],
+    ).status).toBe("active");
+    store.close();
+  });
+
+  it("rejects an owner-A invalidation that arrives after the runtime transitions to owner B", () => {
+    const { store, session, transport, setActiveOwner } = fixture();
+    const binding = store.insertAdapterBinding({
+      sessionId: session.sessionId,
+      adapterId: "fake",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "owner-a-native",
+      adapterInstanceId: "owner-a-worker",
+      resumeFidelity: "native",
+      status: "active",
+    });
+    const staleMessage = {
+      type: "invalidate_session" as const,
+      protocolVersion: 2 as const,
+      requestId: "stale-owner-a-invalidate",
+      clientId: "client-1",
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+
+    setActiveOwner("owner-b");
+    expect(() => transport.handleInvalidateSession(staleMessage)).toThrow(/owner_mismatch/);
+    expect(store.getRow(
+      "SELECT status FROM adapter_bindings WHERE binding_id = ?",
+      [binding.bindingId],
+    ).status).toBe("active");
+    store.close();
+  });
+
+  it("derives cancellation authority from the persisted run owner", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId));
+    await waitUntil(() => adapter.executed.length === 1);
+    const run = store.getRow("SELECT run_id FROM runs WHERE session_id = ?", [session.sessionId]);
+
+    await transport.handleInterrupt({
+      requestId: "request-1",
+      clientId: "client-1",
+      ownerId: "owner",
+      runId: String(run.run_id),
+    });
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(sent.findLast((message) => message.type === "cancel_ack")).toMatchObject({
+      accepted: true,
+      dispatchAttempted: true,
+    });
+    adapter.resolveDeferred({ terminalStatus: "cancelled" });
+    await running;
+    store.close();
+  });
+
+  it("rejects wrong-owner cancellation before dispatching a transport mutation", async () => {
+    const { store, adapter, session, transport } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId));
+    await waitUntil(() => adapter.executed.length === 1);
+    const run = store.getRow("SELECT run_id FROM runs WHERE session_id = ?", [session.sessionId]);
+
+    await expect(transport.handleInterrupt({
+      requestId: "request-1",
+      clientId: "client-1",
+      ownerId: "owner-b",
+      runId: String(run.run_id),
+    })).rejects.toThrow(/owner_mismatch/);
+    expect(adapter.cancelled).toHaveLength(0);
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded" });
+    await running;
+    store.close();
+  });
+
+  it("rejects cancellation after the active runtime owner changes", async () => {
+    const { store, adapter, session, sent, transport, setActiveOwner } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId));
+    await waitUntil(() => adapter.executed.length === 1);
+    const run = store.getRow("SELECT run_id FROM runs WHERE session_id = ?", [session.sessionId]);
+    setActiveOwner("owner-2");
+
+    await transport.handleInterrupt({
+      requestId: "request-1",
+      clientId: "client-1",
+      runId: String(run.run_id),
+    });
+    expect(adapter.cancelled).toHaveLength(0);
+    expect(sent.findLast((message) => message.type === "cancel_ack")).toMatchObject({ accepted: false });
+    setActiveOwner("owner");
+    adapter.resolveDeferred({ terminalStatus: "cancelled" });
+    await running;
+    store.close();
+  });
+
+  it("terminalizes owner A before owner B admission and drops deferred adapter success", async () => {
+    const { store, adapter, session, sent, transport, setActiveOwner } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId));
+    await waitUntil(() => adapter.executed.length === 1);
+    sent.splice(0);
+
+    expect(transport.revokeOwner("owner", "owner_changed")).toHaveLength(1);
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toMatchObject({
+      status: "cancelled",
+      final_text: null,
+    });
+    setActiveOwner("owner-b");
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "late owner A success" });
+    await running;
+    expect(sent).toEqual([]);
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toMatchObject({
+      status: "cancelled",
+      final_text: null,
+    });
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE content LIKE '%late owner A success%'",
+    ).count).toBe(0);
+    store.close();
+  });
+
+  it("clear-owner revocation terminalizes foreground work even when the adapter ignores abort", async () => {
+    const { store, adapter, session, sent, transport, setActiveOwner } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId));
+    await waitUntil(() => adapter.executed.length === 1);
+    sent.splice(0);
+
+    setActiveOwner("");
+    expect(transport.revokeOwner("owner", "owner_state_cleared")).toHaveLength(1);
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toMatchObject({
+      status: "cancelled",
+      final_text: null,
+    });
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "late cleared-owner success" });
+    await running;
+    expect(sent).toEqual([]);
+    expect(store.getRow("SELECT status, final_text FROM runs LIMIT 1")).toMatchObject({
+      status: "cancelled",
+      final_text: null,
+    });
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE content LIKE '%late cleared-owner success%'",
+    ).count).toBe(0);
+    store.close();
+  });
+
+  it("keeps overlapping request correlation isolated while sharing one pinned session", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    const first = transport.handleQuery(query(session.sessionId, { requestId: "same", clientId: "client-a" }));
+    const second = transport.handleQuery(query(session.sessionId, { requestId: "same", clientId: "client-b" }));
+    await Promise.all([first, second]);
+    const results = sent.filter((message) => message.type === "result");
+    expect(results).toHaveLength(2);
+    expect(new Set(results.map((message) => "clientId" in message ? message.clientId : undefined))).toEqual(
+      new Set(["client-a", "client-b"]),
+    );
+    expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+});

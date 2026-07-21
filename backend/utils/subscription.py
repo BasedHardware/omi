@@ -14,6 +14,7 @@ from database.announcements import compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_keys
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,14 +24,23 @@ def _get_user(uid: str) -> Any:
     return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
 
 
-PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
+PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.unlimited_v2}
 
-# Plans that unlock the desktop (macOS) app. Neo (unlimited) is a mobile/web
-# plan — it does NOT include desktop access, so on desktop a Neo subscriber is
-# treated like basic for the trial paywall. Operator and Architect include the
-# desktop app. Keep this in sync with the per-plan feature copy + the mobile
-# plans sheet (Operator shows "Desktop app", Neo shows "No desktop access").
+# Mobile consumer tiers: sold on ios/android + web, hidden from desktop.
+MOBILE_PLAN_TYPES = {PlanType.plus, PlanType.unlimited_v2}
+
+# Plans that unlock the full desktop (macOS) experience. This is deliberately
+# narrower than basic desktop usability: every plan, including Neo, has at
+# least the Free desktop tier. Operator and Architect add full desktop access.
+# Keep this in sync with the per-plan feature copy and the mobile plans sheet.
 DESKTOP_ENTITLED_PLAN_TYPES = {PlanType.operator, PlanType.architect}
+
+# Effective desktop tiers are used for Desktop-specific admission decisions.
+# Never use DESKTOP_ENTITLED_PLAN_TYPES as a zero-access check: it represents
+# full Desktop entitlement, while ``desktop_free`` is a valid usable floor.
+DESKTOP_ACCESS_TIER_FREE = "desktop_free"
+DESKTOP_ACCESS_TIER_FULL = "desktop_full"
+DESKTOP_ACCESS_TIER_ARCHITECT = "desktop_architect"
 
 # Grandfather: Neo subscriptions whose current billing period started before
 # this cutoff retain desktop access until that period ends. At their next
@@ -60,6 +70,32 @@ def plan_grants_desktop(plan: PlanType, subscription: Optional[Subscription] = N
     return False
 
 
+def effective_desktop_access_tier(plan: PlanType, subscription: Optional[Subscription] = None) -> str:
+    """Return the usable Desktop tier for a subscription.
+
+    Free is the minimum Desktop tier. A Neo (``unlimited``) subscriber who is
+    not in the full-Desktop grandfather period therefore receives
+    ``desktop_free`` rather than no Desktop access. Operator and grandfathered
+    Neo receive ``desktop_full``; Architect receives its separate premium tier.
+    """
+    if plan == PlanType.architect:
+        return DESKTOP_ACCESS_TIER_ARCHITECT
+    if plan_grants_desktop(plan, subscription):
+        return DESKTOP_ACCESS_TIER_FULL
+    return DESKTOP_ACCESS_TIER_FREE
+
+
+def desktop_trial_paywall_eligible(plan: PlanType, subscription: Optional[Subscription] = None) -> bool:
+    """Whether a plan can be blocked by the Desktop account-age trial paywall.
+
+    The account-age paywall is only for users on the Free tier. Neo is mapped
+    to the usable Free Desktop tier when it lacks full Desktop entitlement, but
+    it is still an active paid plan and must never be converted into zero audio,
+    chat, or realtime access.
+    """
+    return effective_desktop_access_tier(plan, subscription) == DESKTOP_ACCESS_TIER_FREE and plan not in PAID_PLAN_TYPES
+
+
 def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]:
     """If the subscriber is currently grandfathered onto Neo desktop, return
     the unix-seconds timestamp when that access ends (their current period end).
@@ -74,9 +110,11 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
 
 
 def should_defer_desktop_processing(uid: str) -> bool:
-    """True for desktop users on a non-desktop-entitled plan (basic / Neo) without active
-    BYOK — their conversations are stored as raw transcript on capture and the expensive LLM
-    enrichment is deferred until they first open the conversation (freemium cost cut).
+    """True for Desktop users on the Free effective tier without active BYOK.
+
+    Free and non-grandfathered Neo users store a raw transcript on capture and
+    defer expensive LLM enrichment until the first open. This cost policy must
+    not be interpreted as a no-Desktop-access policy.
 
     Operator / Architect (desktop-entitled) and BYOK users (who pay their own LLM bill) are
     processed normally. The caller restricts this to `source == desktop`. Fails safe to False
@@ -88,7 +126,7 @@ def should_defer_desktop_processing(uid: str) -> bool:
             return False
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
-        return plan not in DESKTOP_ENTITLED_PLAN_TYPES
+        return effective_desktop_access_tier(plan, subscription) == DESKTOP_ACCESS_TIER_FREE
     except Exception as e:
         logger.warning("should_defer_desktop_processing lookup failed for uid=%s: %s", uid, e)
         return False
@@ -153,14 +191,15 @@ def _request_has_all_byok_keys() -> bool:
 def _is_trial_expired_uncached(uid: str) -> bool:
     """Is this user past their 3-day desktop trial?
 
-    The trial applies to anyone without a desktop-entitled plan (basic OR Neo);
-    BYOK users are bypassed (they're paying their own LLM/STT bill). Returns
-    False on any lookup error so a Firebase blip never paywalls a paying user.
+    The trial applies only to the Free Desktop tier. Neo may use that tier for
+    non-premium capabilities, but is paid and must never be reduced to zero
+    access. BYOK users are also bypassed. Returns False on any lookup error so
+    a Firebase blip never paywalls a paying user.
     """
     try:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
-        if plan_grants_desktop(plan, subscription):
+        if not desktop_trial_paywall_eligible(plan, subscription):
             return False
         if users_db.is_byok_active(uid):
             return False
@@ -187,6 +226,38 @@ def _is_trial_expired_cached(uid: str) -> bool:
     cache_key = f"trial_paywall:expired:{uid}"
     cached = redis_db.get_generic_cache(cache_key)
     if cached is not None:
+        # A cache entry may have been written before an entitlement correction
+        # or a plan migration. Revalidate a positive value so a paid Neo user
+        # is not left with a zero-access decision until this key's TTL expires.
+        if cached:
+            try:
+                subscription = users_db.get_user_valid_subscription(uid)
+                plan = subscription.plan if subscription else PlanType.basic
+                if not desktop_trial_paywall_eligible(plan, subscription):
+                    clear_trial_paywall_cache(uid)
+                    record_fallback(
+                        component='other',
+                        from_mode='trial_paywall',
+                        to_mode=effective_desktop_access_tier(plan, subscription),
+                        reason='local_heal',
+                        outcome='recovered',
+                        log=logger,
+                    )
+                    return False
+            except Exception as e:
+                # Match the uncached lookup's fail-open behavior. An
+                # entitlement lookup outage must not preserve a zero-access
+                # decision for a paid subscriber from stale cache state.
+                logger.warning("trial paywall cache revalidation failed for uid=%s: %s", uid, e)
+                record_fallback(
+                    component='other',
+                    from_mode='trial_paywall',
+                    to_mode='fail_open',
+                    reason='policy',
+                    outcome='degraded',
+                    log=logger,
+                )
+                return False
         return bool(cached)
     expired = _is_trial_expired_uncached(uid)
     try:
@@ -240,13 +311,17 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
 
-        # Desktop-entitled (Operator / Architect) or BYOK users: trial is moot —
-        # they have full desktop access. Neo (unlimited) is mobile/web only, so
-        # it falls through to the trial computation just like basic.
+        # Any plan that is not eligible for the Free account-age trial, plus
+        # BYOK users, has usable Desktop access. In particular, Neo's Free
+        # Desktop tier is a floor, not a trial-only or zero-access state.
         # Same request-level escape hatch as `_is_trial_expired_cached`: a request
         # carrying all 4 BYOK provider headers is treated as BYOK-active even if
         # Firestore hasn't caught up yet.
-        if plan_grants_desktop(plan, subscription) or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
+        if (
+            not desktop_trial_paywall_eligible(plan, subscription)
+            or users_db.is_byok_active(uid)
+            or _request_has_all_byok_keys()
+        ):
             return TrialMetadata(
                 trial_expired=False,
                 trial_duration_seconds=TRIAL_LENGTH_SECONDS,
@@ -339,6 +414,30 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
+        {
+            "plan_type": PlanType.plus,
+            "plan_id": "plus",
+            "title": "Plus",
+            "subtitle": f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
+            "description": f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month.",
+            "eyebrow": "For everyday use",
+            "monthly_price_id": os.getenv('STRIPE_PLUS_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_PLUS_ANNUAL_PRICE_ID'),
+            "annual_description": "Save with annual billing.",
+            "legacy": False,
+        },
+        {
+            "plan_type": PlanType.unlimited_v2,
+            "plan_id": "unlimited_v2",
+            "title": "Unlimited",
+            "subtitle": "Unlimited transcription",
+            "description": "Unlimited transcription — record all day.",
+            "eyebrow": "Most popular",
+            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'),
+            "annual_description": "Save with annual billing.",
+            "legacy": False,
+        },
     ]
 
 
@@ -365,23 +464,26 @@ LEGACY_PRICE_MAP = {
 # Platform identifiers for the two mobile clients (X-App-Platform header).
 _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 
+# The web storefront (X-App-Platform: web). It's an always-latest client that
+# renders the full new catalog (Plus + Unlimited + Operator + Architect) and is
+# the primary Stripe checkout surface; only deprecated Neo is hidden there.
+WEB_PLATFORMS = {'web'}
+
 
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
-    """Plans that are hidden from the purchase catalog for the given platform.
+    """Plans hidden from the purchase catalog per platform.
 
-    Desktop (macOS / Windows) sells Operator + Architect (pricier tier with
-    usage-based overage on Operator), so Neo is dropped from the desktop picker.
-
-    Mobile (ios/android): Neo is deprecated for new acquisition — it's hidden
-    from the purchase catalog on every mobile build so brand-new / never-paid
-    users only see Operator + Architect. Existing Neo subscribers and anyone
-    who has ever bought a plan are re-included by `filter_plans_for_user`'s
-    escapes, so their resubscribe / manage UI still works.
-
-    Web and any other client are left alone — their catalog is unchanged.
+    Mobile sells Plus + Unlimited; desktop sells Operator + Architect; web sells
+    all four. Neo is deprecated everywhere and hidden on every platform. A
+    subscriber on a hidden plan still sees it via `filter_plans_for_user`'s
+    current-plan / ever-purchased escapes.
     """
     p = (platform or '').lower()
-    if p in DESKTOP_PLATFORMS or p in _MOBILE_PLATFORM_TOKENS:
+    if p in _MOBILE_PLATFORM_TOKENS:
+        return {PlanType.unlimited, PlanType.operator, PlanType.architect}
+    if p in DESKTOP_PLATFORMS:
+        return {PlanType.unlimited, PlanType.plus, PlanType.unlimited_v2}
+    if p in WEB_PLATFORMS:
         return {PlanType.unlimited}
     return set()
 
@@ -467,12 +569,16 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     Mobile (android/ios): any build at or above NEW_PLANS_MIN_MOBILE_VERSION
     qualifies; a missing or unparseable version defaults to the legacy catalog
     (old mobile builds crash on the operator enum).
+    Web: always the new catalog (it's an always-latest client, version-agnostic).
     Unknown platform: legacy catalog.
     """
     if not platform:
         return False
 
     platform_lower = platform.lower()
+
+    if platform_lower in WEB_PLATFORMS:
+        return True
 
     if platform_lower in DESKTOP_PLATFORMS:
         if not app_version:
@@ -491,6 +597,40 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
             return False
 
     return False
+
+
+# Minimum client build whose plan enum includes `plus`/`max`. Defaulted ahead of
+# any shipped build so every current client is remapped today (see
+# wire_plan_for_client); lower once a plus/unlimited_v2-aware client ships.
+PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION', '99.0.0')
+PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', '99.0.0')
+
+
+def client_understands_plus_unlimited_v2(platform: Optional[str], app_version: Optional[str]) -> bool:
+    if not platform or not app_version:
+        return False
+    platform_lower = platform.lower()
+    if platform_lower in _MOBILE_PLATFORM_TOKENS:
+        floor = PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION
+    elif platform_lower in DESKTOP_PLATFORMS:
+        floor = PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION
+    else:
+        return False
+    try:
+        return compare_versions(app_version, floor) >= 0
+    except Exception:
+        return False
+
+
+def wire_plan_for_client(plan: PlanType, platform: Optional[str], app_version: Optional[str]) -> PlanType:
+    """Serialize `plus`/`max` as `unlimited` for clients whose enum predates them.
+
+    Only the label is remapped — real entitlement/limits are computed from the
+    true plan before this is called. Mirrors the `operator`→`unlimited` remap.
+    """
+    if plan in MOBILE_PLAN_TYPES and not client_understands_plus_unlimited_v2(platform, app_version):
+        return PlanType.unlimited
+    return plan
 
 
 def adapt_plans_for_legacy_client(definitions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -580,6 +720,11 @@ NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '20
 OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
+PLUS_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('PLUS_TIER_MINUTES_LIMIT_PER_MONTH', '1500'))
+PLUS_TIER_MONTHLY_SECONDS_LIMIT = PLUS_TIER_MINUTES_LIMIT_PER_MONTH * 60
+PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '200'))
+UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH', '1000'))
+
 # Features available during the 3-day desktop trial (matches paid-plan behavior).
 TRIAL_FEATURES = [
     'unlimited_listening',
@@ -595,6 +740,8 @@ PLAN_DISPLAY_NAMES = {
     PlanType.unlimited: 'Neo',
     PlanType.architect: 'Architect',
     PlanType.operator: 'Operator',
+    PlanType.plus: 'Plus',
+    PlanType.unlimited_v2: 'Unlimited',
 }
 
 
@@ -764,6 +911,20 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             insights_gained=None,
             chat_cost_usd_per_month=ARCHITECT_CHAT_COST_USD_PER_MONTH,
         )
+    if plan == PlanType.plus:
+        return PlanLimits(
+            transcription_seconds=PLUS_TIER_MONTHLY_SECONDS_LIMIT,
+            words_transcribed=None,
+            insights_gained=None,
+            chat_questions_per_month=PLUS_CHAT_QUESTIONS_PER_MONTH,
+        )
+    if plan == PlanType.unlimited_v2:
+        return PlanLimits(
+            transcription_seconds=None,
+            words_transcribed=None,
+            insights_gained=None,
+            chat_questions_per_month=UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH,
+        )
     return get_basic_plan_limits()
 
 
@@ -811,8 +972,31 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
             f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            # Neo is mobile/web only — no desktop app (see DESKTOP_ENTITLED_PLAN_TYPES).
-            "Available on mobile and web",
+            "Desktop capture with Free-tier allowance",
+        ]
+
+    if plan == PlanType.plus:
+        if simplified:
+            return [
+                f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
+                f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            ]
+        return [
+            f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
+            f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited memories and insights",
+        ]
+
+    if plan == PlanType.unlimited_v2:
+        if simplified:
+            return [
+                "Unlimited transcription",
+                f"{UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            ]
+        return [
+            "Unlimited transcription",
+            f"{UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited memories and insights",
         ]
 
     # Basic plan
@@ -1021,13 +1205,15 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     if not subscription:
         return False
 
-    usage = get_monthly_usage_for_subscription(uid)
     limits = get_plan_limits(subscription.plan)
 
-    # Check transcription seconds (0 means unlimited)
-    if limits.transcription_seconds and limits.transcription_seconds > 0:
-        if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
-            return False
+    # Paid and other unlimited-transcription plans do not need a monthly usage scan.
+    if not limits.transcription_seconds or limits.transcription_seconds <= 0:
+        return True
+
+    usage = get_monthly_usage_for_subscription(uid)
+    if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
+        return False
 
     return True
 
@@ -1055,13 +1241,16 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
     if not subscription:
         # No subscription = use basic limits
         limits = get_basic_plan_limits()
-    elif is_paid_plan(subscription.plan):
-        return None  # Unlimited
     else:
+        # Resolve the plan's limits and let the transcription_seconds check below decide
+        # unlimited-ness. Do NOT short-circuit on is_paid_plan(): Plus is a paid plan that
+        # still carries a bounded monthly transcription cap (PLUS_TIER_MONTHLY_SECONDS_LIMIT),
+        # so treating every paid plan as unlimited leaked its cap and never triggered the
+        # freemium on-device switch. This mirrors has_transcription_credits().
         limits = get_plan_limits(subscription.plan)
 
     if not limits.transcription_seconds or limits.transcription_seconds <= 0:
-        return None  # Unlimited (limit is 0 or not set)
+        return None  # Unlimited (limit is 0 or not set — operator/architect/neo/unlimited_v2)
 
     usage = get_monthly_usage_for_subscription(uid)
     used_seconds = usage.get('transcription_seconds', 0)

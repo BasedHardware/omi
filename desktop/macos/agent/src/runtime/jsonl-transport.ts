@@ -12,13 +12,13 @@ import type {
   QueryScopedOutbound,
   ResultMessage,
   WarmupMessage,
-  WarmupSessionConfig,
 } from "../protocol.js";
 import { PROTOCOL_VERSION } from "../protocol.js";
 import { serializeArtifact } from "./artifact-serialization.js";
-import { failureFromError, type RuntimeFailure } from "./failures.js";
+import { failureFromError, normalizeRuntimeFailure, sanitizeProcessDiagnostic, type RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
+import { kernelSystemPolicy } from "./context-snapshot.js";
 
 export type JsonlTransportSend = (message: OutboundMessageDraft) => void;
 export type JsonlTransportLog = (message: string) => void;
@@ -37,6 +37,7 @@ export interface McpServerBuildContext {
   adapterId?: string;
   includeSwiftBackedTools?: boolean;
   screenContext?: boolean;
+  executionRole?: "coordinator" | "leaf";
 }
 
 export type McpServerBuilder = (
@@ -46,8 +47,8 @@ export type McpServerBuilder = (
   context: McpServerBuildContext
 ) => Record<string, unknown>[];
 
-export type RecoverableErrorPredicate = (error: unknown) => boolean;
-export type RecoverableErrorHandler = (error: unknown) => Promise<void>;
+export type RecoverableErrorPredicate = (error: unknown, adapterId: string) => boolean;
+export type RecoverableErrorHandler = (error: unknown, adapterId: string) => Promise<void>;
 
 export interface JsonlTransportOptions {
   kernel: AgentRuntimeKernel;
@@ -61,6 +62,7 @@ export interface JsonlTransportOptions {
   isRecoverableError?: RecoverableErrorPredicate;
   onRecoverableError?: RecoverableErrorHandler;
   maxRecoverableRetries?: number;
+  activeOwnerId?: () => string;
 }
 
 interface ActiveRequestContext {
@@ -73,31 +75,8 @@ interface ActiveRequestContext {
   attemptId?: string;
   adapterSessionId?: string;
   isRunning?: boolean;
-}
-
-export interface UnscopedToolCallContext {
-  requestId: string;
-  clientId: string;
-  adapterId?: string;
-  sessionId?: string;
-  runId?: string;
-  attemptId?: string;
-  adapterSessionId?: string;
-  isRunning?: boolean;
-}
-
-export interface ExternalRequestContextInput {
-  requestId: string;
-  clientId: string;
-  ownerId: string;
-  adapterId: string;
-  sessionId?: string;
-}
-
-interface WarmupHint {
-  cwd?: string;
-  model?: string;
-  systemPrompt?: string;
+  authorityController?: AbortController;
+  revoked?: boolean;
 }
 
 const TERMINAL_RUN_EVENT_STATUSES = new Set([
@@ -108,30 +87,24 @@ const TERMINAL_RUN_EVENT_STATUSES = new Set([
   "orphaned",
 ]);
 
-export function selectUnscopedToolCallCorrelation(
-  contexts: Iterable<UnscopedToolCallContext>
-): Partial<QueryScopedOutbound> {
-  const allContexts = Array.from(contexts);
-  const runningContexts = allContexts.filter((context) => context.isRunning);
-  const selected =
-    runningContexts.length === 1
-      ? runningContexts[0]
-      : allContexts.length === 1
-        ? allContexts[0]
-        : undefined;
-  if (!selected) return {};
-  return toolCallCorrelationForContext(selected);
-}
-
-export function selectAdapterScopedToolCallCorrelation(
-  contexts: Iterable<UnscopedToolCallContext>,
-  adapterId: string
-): Partial<QueryScopedOutbound> {
-  const runningContexts = Array.from(contexts).filter(
-    (context) => context.isRunning && context.adapterId === adapterId
-  );
-  return runningContexts.length === 1 ? selectUnscopedToolCallCorrelation(runningContexts) : {};
-}
+const QUERY_WIRE_FIELDS = new Set([
+  "type",
+  "protocolVersion",
+  "requestId",
+  "clientId",
+  "ownerId",
+  "sessionId",
+  "producingTurnId",
+  "prompt",
+  "mode",
+  "imageBase64",
+  "attachments",
+  "expectedContextSnapshotVersion",
+  "expectedContextSnapshotGeneration",
+  "expectedContextRendererFingerprint",
+  "expectedCapabilityVersion",
+  "reasoningEffort",
+]);
 
 export class JsonlTransport {
   private readonly kernel: AgentRuntimeKernel;
@@ -145,11 +118,11 @@ export class JsonlTransport {
   private readonly isRecoverableError?: RecoverableErrorPredicate;
   private readonly onRecoverableError?: RecoverableErrorHandler;
   private readonly maxRecoverableRetries: number;
+  private readonly activeOwnerId: () => string;
   private readonly activeByRequest = new Map<string, ActiveRequestContext>();
   private readonly activeByRun = new Map<string, ActiveRequestContext>();
   private readonly latestRunByClient = new Map<string, string>();
   private readonly latestRunByOwner = new Map<string, string>();
-  private readonly warmupHints = new Map<string, WarmupHint>();
 
   constructor(options: JsonlTransportOptions) {
     this.kernel = options.kernel;
@@ -163,30 +136,8 @@ export class JsonlTransport {
     this.isRecoverableError = options.isRecoverableError;
     this.onRecoverableError = options.onRecoverableError;
     this.maxRecoverableRetries = Math.max(0, options.maxRecoverableRetries ?? 0);
+    this.activeOwnerId = options.activeOwnerId ?? (() => this.ownerId);
     this.kernel.subscribe((event) => this.handleKernelEvent(event));
-  }
-
-  registerExternalRequestContext(input: ExternalRequestContextInput): void {
-    const key = this.activeRequestKey(input.requestId, input.clientId);
-    if (this.activeByRequest.has(key)) {
-      throw new Error("Request context already active for clientId/requestId");
-    }
-    const context: ActiveRequestContext = {
-      requestId: input.requestId,
-      clientId: input.clientId,
-      ownerId: input.ownerId,
-      adapterId: input.adapterId,
-      sessionId: input.sessionId,
-    };
-    this.activeByRequest.set(key, context);
-  }
-
-  releaseExternalRequestContext(requestId: string, clientId: string): void {
-    const key = this.activeRequestKey(requestId, clientId);
-    const context = this.activeByRequest.get(key);
-    if (context && !context.runId) {
-      this.activeByRequest.delete(key);
-    }
   }
 
   async handleQuery(message: QueryMessage): Promise<void> {
@@ -195,12 +146,16 @@ export class JsonlTransport {
     if (this.activeByRequest.has(key)) {
       throw new Error("Request context already active for clientId/requestId");
     }
+    const authorityController = new AbortController();
+    input.authoritySignal = authorityController.signal;
     const context: ActiveRequestContext = {
       requestId: input.requestId,
       clientId: input.clientId,
       ownerId: input.ownerId,
       adapterId: input.adapterId ?? this.defaultAdapterId,
       sessionId: input.sessionId,
+      authorityController,
+      revoked: false,
     };
     this.activeByRequest.set(key, context);
 
@@ -210,18 +165,7 @@ export class JsonlTransport {
       context.runId = result.run.runId;
       context.attemptId = result.attempt.attemptId;
       context.adapterSessionId = result.adapterSessionId ?? undefined;
-
-      if (result.terminalStatus === "failed") {
-        const failure = failureFromResultJson(result.run.resultJson);
-        const messageText = failure?.userMessage ?? result.run.errorMessage ?? "Agent run failed";
-        const errorMessage = {
-          type: "error" as const,
-          message: messageText,
-          failure,
-        };
-        this.send(this.withCorrelation(errorMessage, context));
-        return;
-      }
+      if (context.revoked) return;
 
       const resultMessage = {
         type: "result" as const,
@@ -229,7 +173,7 @@ export class JsonlTransport {
         sessionId: result.session.sessionId,
         adapterSessionId: result.adapterSessionId ?? undefined,
         terminalStatus: result.terminalStatus,
-        failure: failureFromResultJson(result.run.resultJson),
+        failure: boundedTerminalFailure(result),
         costUsd: result.run.costUsd ?? 0,
         inputTokens: result.run.inputTokens ?? Math.ceil(input.prompt.length / 4),
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
@@ -240,6 +184,7 @@ export class JsonlTransport {
       };
       this.send(this.withCorrelation(resultMessage, context));
     } catch (error) {
+      if (context.revoked) return;
       const failure = failureFromError(error, {
         code: "runtime_query_failed",
         source: "runtime",
@@ -265,6 +210,27 @@ export class JsonlTransport {
         }
       }
     }
+  }
+
+  /**
+   * Revokes every foreground request admitted for one immutable owner. Kernel
+   * terminalization is synchronous, so a new owner is never admitted while an
+   * old owner's deferred adapter can still claim success.
+   */
+  revokeOwner(ownerId: string, reason: "owner_changed" | "owner_state_cleared"): string[] {
+    const normalizedOwnerId = ownerId.trim();
+    if (!normalizedOwnerId) return [];
+    const error = new Error(`Foreground query authority was revoked: ${reason}`);
+    const contexts = new Set(
+      [...this.activeByRequest.values()].filter((context) => context.ownerId === normalizedOwnerId),
+    );
+    for (const context of contexts) {
+      context.revoked = true;
+      if (context.authorityController && !context.authorityController.signal.aborted) {
+        context.authorityController.abort(error);
+      }
+    }
+    return this.kernel.revokeActiveRunsForOwner(normalizedOwnerId, reason).runIds;
   }
 
   async handleInterrupt(message: {
@@ -304,25 +270,7 @@ export class JsonlTransport {
     const activeRequestContext = requestId
       ? this.activeByRequest.get(this.activeRequestKey(requestId, effectiveClientId))
       : undefined;
-    const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
-    if (explicitRunId && !activeRequestContext && !message.ownerId?.trim()) {
-      const cancelAck = {
-        type: "cancel_ack" as const,
-        accepted: false,
-        dispatchAttempted: false,
-        adapterAcknowledged: false,
-      };
-      this.send(this.withCorrelation(cancelAck, {
-        requestId: requestId || randomUUID(),
-        clientId: effectiveClientId,
-        ownerId,
-        adapterId: this.defaultAdapterId,
-        runId: explicitRunId,
-        sessionId: message.sessionId,
-        attemptId: message.attemptId,
-      }));
-      return;
-    }
+    const ownerId = this.requireActiveOwner(message.ownerId);
     if (requestId && !activeRequestContext && !message.runId && !message.attemptId) {
       const cancelAck = {
         type: "cancel_ack" as const,
@@ -368,7 +316,29 @@ export class JsonlTransport {
       return;
     }
 
-    const cancellationOwnerId = message.ownerId ?? activeRequestContext?.ownerId ?? context.ownerId ?? ownerId;
+    let cancellationOwnerId: string;
+    try {
+      cancellationOwnerId = this.kernel.getRun({ runId }).session.ownerId;
+    } catch {
+      const cancelAck = {
+        type: "cancel_ack" as const,
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      };
+      this.send(this.withCorrelation(cancelAck, context));
+      return;
+    }
+    if (cancellationOwnerId !== ownerId || (activeRequestContext && activeRequestContext.ownerId !== ownerId)) {
+      const cancelAck = {
+        type: "cancel_ack" as const,
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      };
+      this.send(this.withCorrelation(cancelAck, context));
+      return;
+    }
     let ack: Awaited<ReturnType<AgentRuntimeKernel["cancelRun"]>>;
     try {
       ack = await this.kernel.cancelRun(runId, { ownerId: cancellationOwnerId });
@@ -393,21 +363,18 @@ export class JsonlTransport {
   }
 
   handleWarmup(message: WarmupMessage): void {
-    const cwd = message.cwd ?? this.defaultCwd();
-    const sessions = this.warmupSessions(message);
-    for (const session of sessions) {
-      this.warmupHints.set(session.key, {
-        cwd,
-        model: session.model,
-        systemPrompt: session.systemPrompt,
-      });
+    const ownerId = this.requireActiveOwner(message.ownerId);
+    const profile = this.kernel.sessionExecutionProfile(message.sessionId, ownerId);
+    if (profile.generation !== message.profileGeneration) {
+      throw new Error("Warmup profileGeneration does not match the pinned session profile");
     }
-    this.log(`Recorded warmup hint(s): ${sessions.map((session) => session.key).join(", ") || "(none)"}`);
+    this.log(`Validated warmup for session ${message.sessionId} profile ${profile.generation}`);
   }
 
   handleInvalidateSession(message: InvalidateSessionMessage): void {
+    const ownerId = this.requireActiveOwner(message.ownerId);
     const result = this.kernel.invalidateBindings({
-      ownerId: message.ownerId ?? this.ownerId,
+      ownerId,
       surfaceKind: message.surfaceKind,
       externalRefKind: message.externalRefKind,
       externalRefId: message.externalRefId,
@@ -415,26 +382,16 @@ export class JsonlTransport {
       adapterId: this.defaultAdapterId,
       reason: "jsonl_invalidate_session",
     });
-    this.warmupHints.delete(surfaceWarmupKey(message.surfaceKind, message.externalRefKind, message.externalRefId));
     this.log(
       `Invalidated ${result.invalidatedBindingIds.length} binding(s) for surface ${message.surfaceKind}/${message.externalRefKind}/${message.externalRefId}`,
     );
   }
 
-  unscopedToolCallCorrelation(): Partial<QueryScopedOutbound> {
-    return selectUnscopedToolCallCorrelation(this.activeByRequest.values());
-  }
-
-  toolCallCorrelationForRequest(requestId: string, clientId: string): Partial<QueryScopedOutbound> {
-    const context = this.activeByRequest.get(this.activeRequestKey(requestId, clientId));
-    return context ? toolCallCorrelationForContext(context) : {};
-  }
-
-  toolCallCorrelationForAdapter(adapterId: string): Partial<QueryScopedOutbound> {
-    return selectAdapterScopedToolCallCorrelation(this.activeByRequest.values(), adapterId);
-  }
-
   private buildRunInput(message: QueryMessage): ExecuteAgentRunInput {
+    const unknownField = Object.keys(message).find((field) => !QUERY_WIRE_FIELDS.has(field));
+    if (unknownField) {
+      throw new Error(`query_wire_field_not_allowed:${unknownField}`);
+    }
     const requestId = message.requestId.trim();
     if (!requestId) {
       throw new Error("query requires requestId");
@@ -443,46 +400,89 @@ export class JsonlTransport {
     if (!clientId) {
       throw new Error("query requires clientId");
     }
+    const ownerId = this.requireActiveOwner(message.ownerId);
+    const sessionId = message.sessionId.trim();
+    if (!sessionId) throw new Error("query requires sessionId");
+    const producingTurnId = message.producingTurnId?.trim();
+    if (message.producingTurnId !== undefined && !producingTurnId) {
+      throw new Error("query producingTurnId must not be empty");
+    }
+    const session = this.kernel.ownedSession(sessionId, ownerId);
+    const surfaceKind = session.surfaceKind;
+    if (!surfaceKind) throw new Error("canonical session requires surfaceKind");
+    const profile = this.kernel.sessionExecutionProfile(sessionId, ownerId);
+    const snapshot = this.kernel.contextSnapshot(sessionId, ownerId, surfaceKind);
+    const expectationCount = [
+      message.expectedContextSnapshotVersion,
+      message.expectedContextSnapshotGeneration,
+      message.expectedContextRendererFingerprint,
+      message.expectedCapabilityVersion,
+    ].filter((value) => value !== undefined).length;
+    if (expectationCount !== 0 && expectationCount !== 4) {
+      throw new Error("query context freshness requires version, generation, renderer, and capability");
+    }
+    if (
+      expectationCount === 4
+      && (
+        message.expectedContextSnapshotVersion !== snapshot.version
+        || message.expectedContextSnapshotGeneration !== snapshot.snapshotGeneration
+        || message.expectedContextRendererFingerprint !== snapshot.rendererFingerprint
+        || message.expectedCapabilityVersion !== snapshot.capabilityVersion
+      )
+    ) {
+      throw new Error("context_snapshot_projection_mismatch");
+    }
     const mode = message.mode ?? "act";
-    const requestedAdapterId = message.adapterId ?? this.defaultAdapterId;
-    const requestedModel = message.model ?? this.defaultModel(requestedAdapterId);
-    const warmupKey = surfaceWarmupKey(message.surfaceKind, message.externalRefKind, message.externalRefId);
-    const hint = this.warmupHints.get(warmupKey);
-    const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
-    const ownerId = message.ownerId ?? this.ownerId;
+    const cwd = profile.workingDirectory || session.defaultCwd || this.defaultCwd();
+    const executionRole = session.executionRole;
 
     return {
       ownerId,
-      sessionId: message.sessionId,
-      surfaceKind: message.surfaceKind,
-      externalRefKind: message.externalRefKind,
-      externalRefId: message.externalRefId,
-      defaultAdapterId: requestedAdapterId,
-      adapterId: requestedAdapterId,
+      sessionId,
+      surfaceKind,
+      executionRole,
+      externalRefKind: session.externalRefKind ?? undefined,
+      externalRefId: session.externalRefId ?? undefined,
+      defaultAdapterId: profile.adapterId,
+      adapterId: profile.adapterId,
       clientId,
       requestId,
+      producingTurnId,
       prompt: message.prompt,
       promptBlocks: this.promptBlocks(message),
-      systemPrompt: message.systemPrompt || hint?.systemPrompt,
+      systemPrompt: kernelSystemPolicy(surfaceKind, executionRole, snapshot.contextPlan),
+      systemPromptCacheIdentity: snapshot.contextPlan.stableCacheIdentity,
+      dynamicContextIdentity: snapshot.contextPlan.dynamicContextIdentity,
+      contextPlanId: snapshot.contextPlan.planId,
+      admittedContextSnapshot: snapshot,
       mode,
       cwd,
-      model: message.model ?? hint?.model ?? requestedModel,
-      mcpServers: this.buildMcpServers?.(mode, cwd, warmupKey, {
+      model: profile.modelProfile ?? undefined,
+      mcpServers: this.buildMcpServers?.(mode, cwd, sessionId, {
         ownerId,
         requestId,
         clientId,
         protocolVersion: PROTOCOL_VERSION,
-        sessionId: message.sessionId,
-        adapterId: requestedAdapterId,
+        sessionId,
+        adapterId: profile.adapterId,
+        executionRole,
       }),
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
-      recoverAfterError: this.recoverAfterError(),
-      attachmentMetadataJson: message.attachmentMetadataJson ?? null,
-      surfaceContextJson: message.surfaceContextJson ?? null,
+      recoverAfterError: this.recoverAfterError(profile.adapterId),
       imagePresent: Boolean(message.imageBase64),
+      attachments: message.attachments,
+      expectedContextSnapshotVersion: message.expectedContextSnapshotVersion,
+      expectedContextSnapshotGeneration: message.expectedContextSnapshotGeneration,
+      expectedContextRendererFingerprint: message.expectedContextRendererFingerprint,
+      expectedCapabilityVersion: message.expectedCapabilityVersion,
       metadata: {
         protocolVersion: PROTOCOL_VERSION,
         source: "jsonl_transport",
+        contextSnapshotVersion: snapshot.version,
+        contextSnapshotGeneration: snapshot.snapshotGeneration,
+        contextRendererFingerprint: snapshot.rendererFingerprint,
+        contextCapabilityVersion: snapshot.capabilityVersion,
+        ...(message.reasoningEffort ? { reasoningEffort: message.reasoningEffort } : {}),
       },
     };
   }
@@ -543,6 +543,7 @@ export class JsonlTransport {
         this.latestRunByOwner.delete(context.ownerId);
       }
     }
+    if (context.revoked) return;
     if (!isAdapterPayloadEvent(event.type)) return;
 
     const adapterEvent = payload as Partial<OutboundMessage> & { adapterSessionId?: string };
@@ -609,58 +610,33 @@ export class JsonlTransport {
     return JSON.stringify([ownerId, clientId]);
   }
 
+  private requireActiveOwner(requestedOwnerId: string | undefined): string {
+    const activeOwnerId = this.activeOwnerId();
+    const requested = requestedOwnerId?.trim() || activeOwnerId;
+    if (!requested || requested !== activeOwnerId) {
+      throw new Error("owner_mismatch: transport mutation owner is not active");
+    }
+    return requested;
+  }
+
   private activeRequestKey(requestId: string, clientId: string): string {
     return JSON.stringify([clientId, requestId]);
   }
 
-  private warmupSessions(message: WarmupMessage): WarmupSessionConfig[] {
-    if (message.sessions && message.sessions.length > 0) {
-      return message.sessions;
-    }
-    const defaultModel = this.defaultModel();
-    const models = message.models ?? (message.model ? [message.model] : defaultModel ? [defaultModel] : []);
-    if (models.length === 0) {
-      return [{ key: "default" }];
-    }
-    return models.map((model) => ({ key: model, model }));
-  }
-
-  private defaultModel(adapterId = this.defaultAdapterId): string | undefined {
-    if (adapterId === "pi-mono") return "omi-sonnet";
-    if (adapterId === "acp") return "claude-sonnet-4-6";
-    return undefined;
-  }
-
-  private recoverAfterError(): ExecuteAgentRunInput["recoverAfterError"] | undefined {
+  private recoverAfterError(adapterId: string): ExecuteAgentRunInput["recoverAfterError"] | undefined {
     if (!this.isRecoverableError || !this.onRecoverableError || this.maxRecoverableRetries === 0) {
       return undefined;
     }
     let recoveries = 0;
     return async (error) => {
-      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error)) {
+      if (recoveries >= this.maxRecoverableRetries || !this.isRecoverableError?.(error, adapterId)) {
         return false;
       }
       recoveries += 1;
-      await this.onRecoverableError?.(error);
+      await this.onRecoverableError?.(error, adapterId);
       return true;
     };
   }
-}
-
-function toolCallCorrelationForContext(context: UnscopedToolCallContext): Partial<QueryScopedOutbound> {
-  return {
-    protocolVersion: PROTOCOL_VERSION,
-    requestId: context.requestId,
-    clientId: context.clientId,
-    sessionId: context.sessionId,
-    runId: context.runId,
-    attemptId: context.attemptId,
-    adapterSessionId: context.adapterSessionId,
-  };
-}
-
-function surfaceWarmupKey(surfaceKind: string, externalRefKind: string, externalRefId: string): string {
-  return `${surfaceKind}|${externalRefKind}|${externalRefId}`;
 }
 
 function failureFromResultJson(resultJson: string | null): RuntimeFailure | undefined {
@@ -668,12 +644,34 @@ function failureFromResultJson(resultJson: string | null): RuntimeFailure | unde
   try {
     const parsed = JSON.parse(resultJson) as { failure?: RuntimeFailure };
     if (parsed.failure?.code && parsed.failure.userMessage) {
-      return parsed.failure;
+      return normalizeRuntimeFailure(parsed.failure);
     }
   } catch {
     return undefined;
   }
   return undefined;
+}
+
+function boundedTerminalFailure(result: Awaited<ReturnType<AgentRuntimeKernel["executeRun"]>>): RuntimeFailure | undefined {
+  if (result.terminalStatus === "succeeded") return undefined;
+  const persisted = failureFromResultJson(result.run.resultJson);
+  const fallbackCode = result.terminalStatus === "cancelled" ? "run_cancelled" : "runtime_run_failed";
+  const rawCode = persisted?.code ?? result.run.errorCode ?? fallbackCode;
+  const code = /^[a-z0-9_.:-]{1,64}$/i.test(rawCode) ? rawCode : fallbackCode;
+  const fallbackMessage = result.terminalStatus === "cancelled" ? "Agent run was cancelled." : "Agent run failed.";
+  const userMessage = sanitizeProcessDiagnostic(
+    persisted?.userMessage ?? result.run.errorMessage ?? fallbackMessage,
+  ) || fallbackMessage;
+  return normalizeRuntimeFailure({
+    code,
+    failureCode: persisted?.failureCode,
+    userMessage,
+    technicalMessage: persisted?.technicalMessage,
+    source: persisted?.source ?? "runtime",
+    adapterId: persisted?.adapterId,
+    provider: persisted?.provider,
+    retryable: persisted?.retryable ?? false,
+  });
 }
 
 function parsePayload(payloadJson: string): Record<string, unknown> {

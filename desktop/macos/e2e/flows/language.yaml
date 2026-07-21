@@ -24,6 +24,25 @@ steps:
       state.selectedSettingsSection: Transcription
 
   - id: S3
+    name: Set transcription language
+    bridge.action:
+      name: set_transcription_language
+      params:
+        language: es
+        autoDetect: "false"
+    expect:
+      result.detail.saved: "true"
+      result.detail.language: es
+
+  - id: S4
+    name: Transcription language snapshot
+    bridge.action:
+      name: transcription_language_snapshot
+    expect:
+      result.detail.language: es
+      result.detail.auto_detect: "false"
+
+  - id: S5
     name: Logs clean
     log.expect:
       absent:

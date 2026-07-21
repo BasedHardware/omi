@@ -47,6 +47,8 @@ _STUB = (
 
 
 def _is_stubbed(n):
+    if n == 'utils.sync' or n.startswith('utils.sync.'):
+        return False
     return any(n == p or n.startswith(p + '.') for p in _STUB)
 
 
@@ -79,7 +81,14 @@ for n in list(sys.modules):
         sys.modules.pop(n, None)
 sys.meta_path.insert(0, _f)
 try:
-    from routers import sync as mod
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    utils_pkg = types.ModuleType('utils')
+    utils_pkg.__path__ = [os.path.join(backend_dir, 'utils')]
+    sys.modules['utils'] = utils_pkg
+    sync_pkg = types.ModuleType('utils.sync')
+    sync_pkg.__path__ = [os.path.join(backend_dir, 'utils', 'sync')]
+    sys.modules['utils.sync'] = sync_pkg
+    from utils.sync import pipeline as mod
 finally:
     sys.meta_path.remove(_f)
     for n in list(sys.modules):
@@ -121,3 +130,26 @@ def test_retrieve_file_paths_v2_bad_extension_still_400(tmp_path, monkeypatch):
         mod._retrieve_file_paths_v2([upload], 'u1', 'job-1')
 
     assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == 'Invalid sync file format'
+    assert upload.filename not in exc_info.value.detail
+
+
+def test_retrieve_file_paths_v2_write_failure_keeps_private_filename_out_of_response(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    upload = _StubUploadFile(filename='private-recording_1704067200.bin')
+
+    # The staging-error contract is independent of filename timestamp parsing;
+    # force a valid in-range timestamp so the test reaches the write seam.
+    monkeypatch.setattr(mod, 'get_timestamp_from_path', lambda _filename: 1_720_000_000)
+
+    def raise_write_error(*_args, **_kwargs):
+        raise OSError('private storage detail')
+
+    monkeypatch.setattr(mod.shutil, 'copyfileobj', raise_write_error)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mod._retrieve_file_paths_v2([upload], 'u1', 'job-1')
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == 'Unable to stage sync file'
+    assert upload.filename not in exc_info.value.detail

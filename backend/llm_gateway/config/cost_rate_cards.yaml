@@ -1,0 +1,64 @@
+# Immutable IDs let historical accounting retain the exact pricing assumptions
+# used when an attempt was recorded. Prices are micro-USD per 1M tokens.
+#
+# The ledger deliberately marks models without a card as `unpriced`, rather
+# than pretending their COGS are zero. Update cards from the provider's public
+# pricing page and create a new ID when a rate changes.
+rate_cards:
+  - rate_card_id: openai.gpt-5-nano.2026-07-17
+    provider: openai
+    model: gpt-5-nano
+    input_micro_usd_per_million: 50000
+    cached_input_micro_usd_per_million: 5000
+    output_micro_usd_per_million: 400000
+
+  - rate_card_id: openai.gpt-5.4-nano.2026-07-17
+    provider: openai
+    model: gpt-5.4-nano
+    input_micro_usd_per_million: 200000
+    cached_input_micro_usd_per_million: 20000
+    output_micro_usd_per_million: 1250000
+
+  - rate_card_id: openai.gpt-5.6-luna.2026-07-17
+    provider: openai
+    model: gpt-5.6-luna
+    input_micro_usd_per_million: 1000000
+    cached_input_micro_usd_per_million: 100000
+    output_micro_usd_per_million: 6000000
+
+  - rate_card_id: vertex.gemini-2.5-flash.2026-07-17
+    provider: gemini
+    model: gemini-2.5-flash
+    input_micro_usd_per_million: 150000
+    cached_input_micro_usd_per_million: 37500
+    output_micro_usd_per_million: 3500000
+
+  # Anthropic's Claude Sonnet 5 introductory rate, valid through 2026-08-31.
+  # Its cache-write rates are the corresponding 5-minute (1.25x) and one-hour
+  # (2x) input multipliers. Add a new card when the introductory rate ends.
+  - rate_card_id: anthropic.claude-sonnet-5.intro.2026-07-17
+    provider: anthropic
+    model: claude-sonnet-5
+    input_micro_usd_per_million: 2000000
+    cached_input_micro_usd_per_million: 200000
+    output_micro_usd_per_million: 10000000
+    cache_write_micro_usd_per_million: 2500000
+    cache_write_1h_micro_usd_per_million: 4000000
+
+# OpenAI's image-generation output rates in micro-USD per image. Prompt input
+# tokens are not reported by the image endpoint, so the accounting event marks
+# that exclusion explicitly in its cost_basis.
+image_rate_cards:
+  # `auto` does not expose a provider-fixed output price. Use the medium
+  # 1024x1024 rate as a transparent planning estimate until response usage
+  # exposes the resolved output dimensions and quality.
+  - {rate_card_id: openai.gpt-image-1.auto.estimate.2026-07-17, provider: openai, model: gpt-image-1, size: auto, quality: auto, micro_usd_per_image: 42000}
+  - {rate_card_id: openai.gpt-image-1.low.1024x1024.2026-07-17, provider: openai, model: gpt-image-1, size: 1024x1024, quality: low, micro_usd_per_image: 11000}
+  - {rate_card_id: openai.gpt-image-1.low.1024x1536.2026-07-17, provider: openai, model: gpt-image-1, size: 1024x1536, quality: low, micro_usd_per_image: 16000}
+  - {rate_card_id: openai.gpt-image-1.low.1536x1024.2026-07-17, provider: openai, model: gpt-image-1, size: 1536x1024, quality: low, micro_usd_per_image: 16000}
+  - {rate_card_id: openai.gpt-image-1.medium.1024x1024.2026-07-17, provider: openai, model: gpt-image-1, size: 1024x1024, quality: medium, micro_usd_per_image: 42000}
+  - {rate_card_id: openai.gpt-image-1.medium.1024x1536.2026-07-17, provider: openai, model: gpt-image-1, size: 1024x1536, quality: medium, micro_usd_per_image: 63000}
+  - {rate_card_id: openai.gpt-image-1.medium.1536x1024.2026-07-17, provider: openai, model: gpt-image-1, size: 1536x1024, quality: medium, micro_usd_per_image: 63000}
+  - {rate_card_id: openai.gpt-image-1.high.1024x1024.2026-07-17, provider: openai, model: gpt-image-1, size: 1024x1024, quality: high, micro_usd_per_image: 167000}
+  - {rate_card_id: openai.gpt-image-1.high.1024x1536.2026-07-17, provider: openai, model: gpt-image-1, size: 1024x1536, quality: high, micro_usd_per_image: 250000}
+  - {rate_card_id: openai.gpt-image-1.high.1536x1024.2026-07-17, provider: openai, model: gpt-image-1, size: 1536x1024, quality: high, micro_usd_per_image: 250000}
