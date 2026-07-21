@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -6,6 +8,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/device_pairing_sheet.dart';
+import 'package:omi/widgets/rayban_meta_input_picker_sheet.dart';
 
 class ConnectionGuideSheet extends StatelessWidget {
   const ConnectionGuideSheet({super.key});
@@ -83,11 +86,27 @@ class ConnectionGuideSheet extends StatelessWidget {
         pairingDescription: l10n.pairingDescNeoOne,
         localImagePath: Assets.images.neoOne.path,
       ),
+      if (Platform.isIOS)
+        DeviceGuideProduct(id: 'rayban_meta', name: 'Ray-Ban Meta', localImagePath: Assets.images.raybanMeta.path),
     ];
   }
 
   void _onDeviceTapped(BuildContext context, DeviceGuideProduct product) {
     PlatformManager.instance.analytics.connectionGuideDeviceTapped(product.id);
+    if (product.id == 'rayban_meta') {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (sheetContext) => RayBanMetaInputPickerSheet(
+          onConnected: () {
+            Navigator.of(sheetContext).pop();
+            Navigator.of(context).pop();
+          },
+        ),
+      );
+      return;
+    }
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

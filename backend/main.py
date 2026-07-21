@@ -71,6 +71,8 @@ from routers import (
     memory_admin,
     memory_product,
     task_recommendations,
+    conversation_finalization,
+    public_shared_conversation_chat,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -84,6 +86,8 @@ from utils.executors import (
     db_executor,
 )
 from utils.executors import start_background_task
+from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
@@ -107,19 +111,13 @@ elif os.environ.get("SERVICE_ACCOUNT_JSON"):
 else:
     firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
-# starlette 0.40 added a default 1 MB cap per multipart form part. Voice
-# messages, audio uploads, and persona/app images legitimately exceed that.
-# Match the existing per-request PCM ceiling.
-from starlette.formparsers import MultiPartParser
-
-MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
-
 app = FastAPI()
 
 app.include_router(transcribe.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
+app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
 app.include_router(candidates.router)
 app.include_router(task_integrations.router)
@@ -133,6 +131,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)
@@ -193,6 +192,7 @@ paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
+    "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
@@ -204,6 +204,7 @@ app.add_middleware(BYOKMiddleware)
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    validate_account_deletion_dispatch_configuration()
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
@@ -214,6 +215,11 @@ async def startup_event():
     # Periodic reconciliation ensures stale retrying claims (worker crashed) and
     # new pending/failed wipes are retried without requiring a restart.
     start_background_task(_periodic_deletion_wipe_reconcile(), name='periodic_deletion_wipe_reconcile')
+    start_background_task(
+        run_blocking(db_executor, _drain_listen_finalization_jobs),
+        name='startup_listen_finalization_reconcile',
+    )
+    start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
 
 
 def _drain_pending_deletion_wipes():
@@ -240,6 +246,28 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
                 logger.info(f"Periodic deletion-wipe reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
+
+
+def _drain_listen_finalization_jobs():
+    """Best-effort durable finalization recovery after a restart/deploy."""
+    try:
+        result = reconcile_listen_finalization_jobs()
+        if result.get('requeued'):
+            logger.info(f"Startup listen-finalization reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup listen-finalization reconciliation failed: {e}")
+
+
+async def _periodic_listen_finalization_reconcile(interval_seconds: int = 300):
+    """Replay stale finalization leases and publish durable backlog metrics."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            result = await run_blocking(db_executor, reconcile_listen_finalization_jobs)
+            if result.get('requeued'):
+                logger.info(f"Periodic listen-finalization reconciliation: {result}")
+        except Exception as e:
+            logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

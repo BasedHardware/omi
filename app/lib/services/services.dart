@@ -30,16 +30,12 @@ class ServiceManager {
       arbiter: micArbiter,
       owner: 'mic',
     );
-    // Conversation capture uses the native AVAudioEngine recorder on iOS;
-    // everything else (chat voice memos, speech profile, all of Android)
-    // stays on the flutter_sound path. The shared arbiter keeps the two
-    // stacks from contending for the microphone.
-    sm._phoneMic = Platform.isIOS
-        ? ArbitratedMic(
-            inner: NativeMicRecorderService(),
-            arbiter: micArbiter,
-            owner: 'conversation',
-          )
+    // Conversation capture uses the native recorder on iOS (AVAudioEngine) and
+    // Android (AudioRecord); chat voice memos and the speech profile stay on the
+    // flutter_sound path via [mic]. The shared arbiter keeps the two stacks from
+    // contending for the microphone.
+    sm._phoneMic = (Platform.isIOS || Platform.isAndroid)
+        ? ArbitratedMic(inner: NativeMicRecorderService(), arbiter: micArbiter, owner: 'conversation')
         : sm._mic;
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
@@ -58,8 +54,8 @@ class ServiceManager {
 
   IMicRecorderService get mic => _mic;
 
-  /// The recorder for conversation capture: native on iOS, flutter_sound
-  /// elsewhere. Chat voice memos and speech profile keep using [mic].
+  /// The recorder for conversation capture: native on iOS and Android,
+  /// flutter_sound elsewhere. Chat voice memos and speech profile keep using [mic].
   IMicRecorderService get phoneMic => _phoneMic;
 
   DeviceService get device => _device;
@@ -168,11 +164,7 @@ class BackgroundService {
     _status = BackgroundServiceStatus.initiated;
 
     await _service.configure(
-      iosConfiguration: IosConfiguration(
-        autoStart: false,
-        onForeground: onStart,
-        onBackground: onIosBackground,
-      ),
+      iosConfiguration: IosConfiguration(autoStart: false, onForeground: onStart, onBackground: onIosBackground),
       androidConfiguration: AndroidConfiguration(
         autoStart: false,
         onStart: onStart,
@@ -279,6 +271,20 @@ abstract class IMicRecorderService {
     // mirrors the state.
     Function(bool began)? onInterruption,
   });
+
+  // Transcribe Later capture: audio is opus-encoded and written to WAL-compatible
+  // .bin files natively (no onByteReceived — nothing streams to Dart). onBatchStalled
+  // fires when the native liveness feed (onBatchProgress) goes silent; onError
+  // forwards non-fatal native failures (e.g. batch_storage_full). Requires the native
+  // recorder (`ServiceManager.phoneMic` on iOS/Android); the flutter_sound
+  // implementations throw UnsupportedError.
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  });
+
   void stop();
 }
 
@@ -309,6 +315,16 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     );
 
     return;
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    throw UnsupportedError('batch capture requires the native recorder');
   }
 
   @override
@@ -358,9 +374,7 @@ class MicRecorderService implements IMicRecorderService {
     Function(bool began)? onInterruption,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
-      throw Exception(
-        "Recorder is recording, please stop it before start new recording.",
-      );
+      throw Exception("Recorder is recording, please stop it before start new recording.");
     }
     if (_status == RecorderServiceStatus.initialising) {
       throw Exception("Recorder is initialising");
@@ -412,6 +426,16 @@ class MicRecorderService implements IMicRecorderService {
 
     _status = RecorderServiceStatus.recording;
     return;
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    throw UnsupportedError('batch capture requires the native recorder');
   }
 
   @override

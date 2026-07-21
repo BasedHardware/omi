@@ -25,16 +25,25 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      # To workaround "no space left on device" issue of GitHub-hosted runner
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
+      # Retain this until the summary shows it no longer buys enough headroom.
+      - name: Measure runner disk cleanup
+        run: |
+          started_at=$SECONDS
+          free_before=$(df -h / | awk 'NR == 2 { print $4 }')
+          rm -rf /opt/hostedtoolcache
+          free_after=$(df -h / | awk 'NR == 2 { print $4 }')
+          {
+            echo "### Runner disk cleanup"
+            echo "- Duration: $((SECONDS - started_at))s"
+            echo "- Free space: ${free_before} → ${free_after}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
@@ -42,15 +51,12 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Compute short SHA
         id: image-tag
         run: |
           echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
 
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
@@ -61,33 +67,46 @@ jobs:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
         run: |
-          python3 backend/scripts/render_backend_runtime_env.py --env dev >> "$GITHUB_OUTPUT"
+          python3 backend/scripts/render_backend_runtime_env.py --env dev --job memory-maintenance-job >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env before deploy
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
 
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
+      - name: Build runtime image
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./backend/modal/Dockerfile.memory_maintenance_job
-          push: true
+          push: false
+          load: true
           tags: |
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Verify built runtime image before publish
+        run: |
+          image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/modal/Dockerfile.memory_maintenance_job \
+            --image "$image"
+
+      - name: Push verified runtime image
+        run: |
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           job: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
-          flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}
           env_vars: ${{ steps.runtime-env.outputs.memory_maintenance_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.memory_maintenance_job_secrets }}
 

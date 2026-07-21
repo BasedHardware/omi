@@ -40,6 +40,9 @@ ALLOWED_REASONS = frozenset(
         'policy',
         'dispatch_disabled',
         'byok',
+        'malformed_doc',
+        'capacity_full',
+        'allocation_rejected',
         'other',
         'none',
     }
@@ -61,6 +64,7 @@ ALLOWED_COMPONENTS = frozenset(
         'llm_gateway',
         'redis_ratelimit',
         'silent_mic',
+        'firestore_read',
         'other',
     }
 )

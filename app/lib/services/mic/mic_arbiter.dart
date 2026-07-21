@@ -29,13 +29,10 @@ class ArbitratedMic implements IMicRecorderService {
   final MicArbiter _arbiter;
   final String _owner;
 
-  ArbitratedMic({
-    required IMicRecorderService inner,
-    required MicArbiter arbiter,
-    required String owner,
-  })  : _inner = inner,
-        _arbiter = arbiter,
-        _owner = owner;
+  ArbitratedMic({required IMicRecorderService inner, required MicArbiter arbiter, required String owner})
+    : _inner = inner,
+      _arbiter = arbiter,
+      _owner = owner;
 
   @override
   Future<void> start({
@@ -62,6 +59,32 @@ class ArbitratedMic implements IMicRecorderService {
         onInitializing: onInitializing,
         onStalled: onStalled,
         onInterruption: onInterruption,
+      );
+    } catch (e) {
+      _arbiter.release(_owner);
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    if (!_arbiter.tryAcquire(_owner)) {
+      throw StateError('Microphone is busy (held by ${_arbiter.owner})');
+    }
+    try {
+      await _inner.startBatch(
+        onStop: () {
+          _arbiter.release(_owner);
+          onStop?.call();
+        },
+        onInterruption: onInterruption,
+        onBatchStalled: onBatchStalled,
+        onError: onError,
       );
     } catch (e) {
       _arbiter.release(_owner);

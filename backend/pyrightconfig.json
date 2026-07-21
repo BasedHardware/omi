@@ -26,6 +26,7 @@
         "scripts/enroll_canonical_memory_user.py",
         "scripts/export_openapi.py",
         "scripts/firestore_python_apply_emulator_test.py",
+        "scripts/listen_lifecycle_emulator_test.py",
         "scripts/firestore_rules_iam_proof.py",
         "scripts/lint_async_blockers.py",
         "scripts/mcp_api_key_scope_readiness.py",

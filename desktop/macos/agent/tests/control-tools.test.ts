@@ -400,6 +400,8 @@ describe("agent control tools", () => {
       "resolve_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
+      "read_tool_output",
+      "search_tool_output",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_background_agent",
@@ -549,6 +551,78 @@ describe("agent control tools", () => {
       error: { code: "invalid_tool_input" },
     });
     expect(valid.ok).toBe(true);
+    store.close();
+  });
+
+  it.each(["background_agent", "delegated_agent"])(
+    "treats semantic %s surface hints as cross-surface child discovery",
+    async (surfaceKind) => {
+      const { store, kernel } = createKernelHarness(newDatabasePath());
+      const child = await kernel.executeRun({
+        ...baseRunInput,
+        requestId: `request-${surfaceKind}`,
+        surfaceKind: "floating_bar",
+        executionRole: "leaf",
+        externalRefKind: "pill",
+        externalRefId: `child-${surfaceKind}`,
+      });
+      const coordinator = await kernel.executeRun({
+        ...baseRunInput,
+        requestId: `request-${surfaceKind}-coordinator`,
+        surfaceKind: "main_chat",
+        externalRefKind: "chat",
+        externalRefId: `coordinator-${surfaceKind}`,
+      });
+
+      expect(coordinator.session.executionRole).toBe("coordinator");
+
+      const listed = parseToolResult(
+        await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+          ownerId: "owner",
+          surfaceKind,
+          limit: 1,
+        }),
+      );
+
+      expect(listed.ok).toBe(true);
+      expect(listed.sessions).toHaveLength(1);
+      expect(listed.sessions[0].session.surfaceKind).toBe("floating_bar");
+      expect(listed.sessions[0].latestRun.runId).toBe(child.run.runId);
+      expect(listed.sessions[0].latestRun.finalText).toBe(child.run.finalText);
+      store.close();
+    },
+  );
+
+  it("treats a legacy closed child-discovery filter as terminal run status, not session archival", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const completedChild = await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "closed-child-discovery",
+      surfaceKind: "floating_bar",
+      executionRole: "leaf",
+      externalRefKind: "pill",
+      externalRefId: "closed-child-discovery",
+    });
+
+    expect(completedChild.session.status).toBe("open");
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+        surfaceKind: "background_agent",
+        status: "closed",
+      }),
+    );
+
+    expect(listed.ok).toBe(true);
+    expect(listed.sessions).toHaveLength(1);
+    expect(listed.sessions[0]).toMatchObject({
+      session: { sessionId: completedChild.session.sessionId, status: "open" },
+      latestRun: {
+        runId: completedChild.run.runId,
+        status: "succeeded",
+        finalText: completedChild.run.finalText,
+      },
+    });
     store.close();
   });
 
@@ -915,6 +989,334 @@ describe("agent control tools", () => {
     });
     expect(inspected.attempts[0].attemptId).toBe(result.attempt.attemptId);
     expect(inspected.events.map((event: any) => event.type)).toContain("run.succeeded");
+    store.close();
+  });
+
+  it("keeps a 620 KiB session listing bounded and makes the full output artifact-readable", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const surfaceContextSentinel = "SENSITIVE_CONTEXT_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: surfaceContextSentinel }),
+      prompt: "p".repeat(4_000),
+    });
+    // Simulate the historical regression shape: a persisted run input that
+    // contains a 620 KiB surface payload. The production projection must stay
+    // bounded while the canonical full result remains artifact-readable.
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "p".repeat(4_000), surfaceContextJson: surfaceContextSentinel }),
+      result.run.runId,
+    ]);
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ownerId: "owner",
+    });
+    const listed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(raw).not.toContain("SENSITIVE_CONTEXT_SENTINEL");
+    expect(listed.sessions[0].latestRun.input.prompt).toContain("[truncated]");
+    expect(listed.sessions[0].latestRun.input).not.toHaveProperty("surfaceContextJson");
+    expect(listed.toolResultEnvelope).toMatchObject({
+      version: 1,
+      truncated: true,
+      originalBytes: expect.any(Number),
+      projectedBytes: expect.any(Number),
+    });
+    expect(listed.toolResultEnvelope.originalBytes).toBeGreaterThanOrEqual(620 * 1024);
+    const artifactId = String(listed.toolResultEnvelope.fullOutputRef);
+    const recovered = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "search_tool_output", {
+      ownerId: "owner",
+      artifactId,
+      query: "SENSITIVE_CONTEXT_SENTINEL",
+    }));
+    expect(recovered.ok).toBe(true);
+    expect(recovered.matches).toHaveLength(1);
+    store.close();
+  });
+
+  it("returns a typed failure when a 620 KiB session listing cannot persist its full output", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const surfaceContextSentinel = "UNSAVED_CONTEXT_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: surfaceContextSentinel }),
+      prompt: "p".repeat(4_000),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "p".repeat(4_000), surfaceContextJson: surfaceContextSentinel }),
+      result.run.runId,
+    ]);
+    vi.spyOn(kernel, "persistArtifact").mockImplementation(() => {
+      throw new Error("deterministic artifact persistence failure");
+    });
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ownerId: "owner",
+    });
+    const failed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(raw).not.toContain("UNSAVED_CONTEXT_SENTINEL");
+    expect(failed).toMatchObject({
+      ok: false,
+      error: { code: "tool_result_exceeded_provider_budget" },
+      toolResultEnvelope: {
+        status: "failed",
+        truncated: false,
+        fullOutputRef: null,
+      },
+    });
+    store.close();
+  });
+
+  it("finalizes oversized awareness snapshots through the same recoverable envelope", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "AWARENESS_CONTEXT_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "awareness", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "build_desktop_awareness_snapshot", {
+      ownerId: "owner",
+    });
+    const projected = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(raw).not.toContain("AWARENESS_CONTEXT_SENTINEL");
+    expect(projected).toMatchObject({ ok: true, toolResultEnvelope: {
+      version: 1,
+      status: "succeeded",
+      truncated: true,
+      originalBytes: expect.any(Number),
+      fullOutputRef: expect.stringMatching(/^artifact:/),
+    } });
+    expect(projected.toolResultEnvelope.originalBytes).toBeGreaterThan(620 * 1024);
+    const recovered = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "search_tool_output", {
+      ownerId: "owner",
+      artifactId: projected.toolResultEnvelope.fullOutputRef,
+      query: "AWARENESS_CONTEXT_SENTINEL",
+    }));
+    expect(recovered.matches).toHaveLength(1);
+    store.close();
+  });
+
+  it("keeps owner-scoped direct awareness structurally usable when history exceeds provider budget", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "DIRECT_AWARENESS_CONTEXT_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({
+        prompt: "direct awareness",
+        surfaceContextJson: sentinel,
+        metadata: { externalSurface: { authority: "swift_realtime" } },
+      }),
+      result.run.runId,
+    ]);
+    for (let index = 0; index < 12; index += 1) {
+      store.insertAdapterBinding({
+        sessionId: result.session.sessionId,
+        adapterId: `historical-${index}`,
+        bindingGeneration: 1,
+        resumeFidelity: "none",
+        status: "stale",
+      });
+    }
+
+    const raw = await handleAgentControlToolCall(
+      { ...ownerContext(kernel), trustedUserControl: true },
+      "build_desktop_awareness_snapshot",
+      { ownerId: "owner" },
+    );
+    const projected = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(raw).not.toContain("DIRECT_AWARENESS_CONTEXT_SENTINEL");
+    expect(projected).toMatchObject({
+      ok: true,
+      snapshot: {
+        ownerId: "owner",
+        sessions: expect.any(Array),
+        runs: expect.any(Array),
+      },
+      toolResultEnvelope: {
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: expect.stringMatching(/^artifact:/),
+      },
+    });
+    expect(projected.snapshot.sessions).toHaveLength(1);
+    expect(projected.snapshot.sessions[0]).toMatchObject({
+      adapterBindings: expect.any(Array),
+      adapterBindingsTruncated: true,
+    });
+    expect(projected.snapshot.sessions[0].adapterBindings).toHaveLength(4);
+    expect(projected.snapshot.runs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: result.run.runId,
+          input: expect.objectContaining({
+            metadata: { externalSurface: { authority: "swift_realtime" } },
+          }),
+        }),
+      ]),
+    );
+    store.close();
+  });
+
+  it("keeps a direct run inspection structurally usable when its canonical detail exceeds provider budget", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "DIRECT_RUN_INSPECTION_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "direct run inspection", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+
+    const raw = await handleAgentControlToolCall(
+      { ...ownerContext(kernel), trustedUserControl: true },
+      "get_agent_run",
+      { ownerId: "owner", runId: result.run.runId },
+    );
+    const projected = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(raw).not.toContain("DIRECT_RUN_INSPECTION_SENTINEL");
+    expect(projected).toMatchObject({
+      ok: true,
+      session: { sessionId: result.session.sessionId, ownerId: "owner" },
+      run: { runId: result.run.runId, sessionId: result.session.sessionId },
+      attempts: expect.any(Array),
+      toolInvocations: expect.any(Array),
+      toolResultEnvelope: {
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: expect.stringMatching(/^artifact:/),
+      },
+    });
+    store.close();
+  });
+
+  it("envelopes unknown and invalid control-tool errors", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const unknown = parseToolResult(await rawHandleAgentControlToolCall(ownerContext(kernel), "not_a_real_tool", {}));
+    const invalid = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", {}));
+
+    for (const result of [unknown, invalid]) {
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: expect.any(String) },
+        toolResultEnvelope: {
+          version: 1,
+          status: "failed",
+          truncated: false,
+          fullOutputRef: null,
+        },
+      });
+    }
+    expect(unknown.error.code).toBe("unknown_control_tool");
+    expect(invalid.error.code).toBe("invalid_tool_input");
+    store.close();
+  });
+
+  it("binds direct realtime control output and validation failures to the authorized invocation", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const invocation = {
+      invocationId: "invocation-realtime-control",
+      runId: "run-realtime-control",
+      attemptId: "attempt-realtime-control",
+      toolName: "list_agent_sessions",
+    };
+    const context = {
+      ...ownerContext(kernel),
+      authorizedToolInvocation: invocation,
+    };
+
+    const success = parseToolResult(await handleAgentControlToolCall(context, "list_agent_sessions", {
+      ownerId: "owner",
+    }));
+    expect(success.toolResultEnvelope.provenance).toEqual(invocation);
+
+    const failedInvocation = {
+      ...invocation,
+      invocationId: "invocation-realtime-invalid",
+      toolName: "get_agent_run",
+    };
+    const failure = parseToolResult(await handleAgentControlToolCall({
+      ...context,
+      authorizedToolInvocation: failedInvocation,
+    }, "get_agent_run", {}));
+    expect(failure).toMatchObject({ ok: false, error: { code: "invalid_tool_input" } });
+    expect(failure.toolResultEnvelope.provenance).toEqual(failedInvocation);
+    store.close();
+  });
+
+  it("bounds get_agent_run and accepts its fullOutputRef verbatim", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "RUN_DETAIL_SENTINEL".repeat(35_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "detail", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", {
+      ownerId: "owner",
+      runId: result.run.runId,
+    });
+    const projected = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(raw).not.toContain("RUN_DETAIL_SENTINEL");
+    expect(projected.toolResultEnvelope).toMatchObject({
+      truncated: true,
+      fullOutputRef: expect.stringMatching(/^artifact:/),
+    });
+    const recovered = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "search_tool_output", {
+      ownerId: "owner",
+      artifactId: projected.toolResultEnvelope.fullOutputRef,
+      query: "RUN_DETAIL_SENTINEL",
+    }));
+    expect(recovered.matches).toHaveLength(1);
+    store.close();
+  });
+
+  it("keeps the aggregate default session list within the realtime provider budget", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    for (let index = 0; index < 60; index += 1) {
+      await kernel.executeRun({
+        ...baseRunInput,
+        externalRefId: `task-${index}`,
+        requestId: `request-${index}`,
+        prompt: `${index}-${"p".repeat(4_000)}`,
+      });
+    }
+
+    const raw = await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+      ownerId: "owner",
+    });
+    const listed = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(8 * 1024);
+    expect(listed.fetched_session_count).toBe(50);
+    expect(listed.returned_session_count).toBeLessThan(listed.fetched_session_count);
+    expect(listed.truncated).toBe(true);
+    expect(listed.sessions).toHaveLength(listed.returned_session_count);
+    expect(listed.task_agents).toHaveLength(listed.returned_session_count);
     store.close();
   });
 
@@ -1738,7 +2140,7 @@ describe("agent control tools", () => {
       sessionId: spawned.session.sessionId,
       parentRunId: null,
       mode: "act",
-      status: "queued",
+      status: "starting",
     });
     store.close();
   });
@@ -2240,6 +2642,16 @@ describe("agent control tools", () => {
         defaultAdapterId: provider,
         providerBoundary: `local_user:${provider}`,
       });
+      const listed = parseToolResult(
+        await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", { ownerId: "owner" }),
+      );
+      expect(listed.floating_agent_pills).toContainEqual(
+        expect.objectContaining({
+          sessionId: spawned.session.sessionId,
+          runId: spawned.run.runId,
+          provider,
+        }),
+      );
       expect(adapter.executed).toHaveLength(1);
       store.close();
     }
@@ -2343,6 +2755,80 @@ describe("agent control tools", () => {
       expect(adapter.executed).toHaveLength(2);
       store.close();
     }
+  });
+
+  it("returns a typed setup-needed result when an authorized realtime spawn selects an unavailable provider", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
+    const surface = {
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "voice-unavailable-provider",
+    };
+    const coordinator = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: surface,
+      defaultAdapterId: "pi-mono",
+      modelProfile: "omi-sonnet",
+      providerBoundary: "managed_cloud",
+      executionRole: "coordinator",
+    });
+    const parentRun = store.insertRun({
+      sessionId: coordinator.agentSessionId,
+      clientId: "realtime",
+      requestId: "voice-parent-unavailable-provider",
+      status: "running",
+      mode: "act",
+    });
+
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        {
+          ...ownerContext(kernel),
+          defaultAdapterId: "pi-mono",
+          providerBoundary: "managed_cloud",
+          callerSessionId: coordinator.agentSessionId,
+          executionRole: "coordinator",
+          authorizedCallerRunId: parentRun.runId,
+          authorizedProducerJournal: {
+            schemaVersion: 1,
+            surface,
+            continuityKey: "voice-provider-setup-needed",
+            pillId: "pill-provider-setup-needed",
+            userText: "Ask OpenClaw for a summary",
+            assistantText: "Starting OpenClaw",
+            objective: "Run this with OpenClaw",
+            title: "Ask OpenClaw",
+          },
+          authorizedToolInvocation: {
+            invocationId: "voice-openclaw-unavailable-invocation",
+            runId: parentRun.runId,
+            attemptId: "attempt-openclaw-unavailable",
+            toolName: "spawn_agent",
+          },
+        },
+        "spawn_agent",
+        {
+          objective: "Run this with OpenClaw",
+          provider: "openclaw",
+          visible: true,
+          externalRefId: "pill-provider-setup-needed",
+          requestId: "voice-openclaw-unavailable",
+          clientId: "realtime",
+          ownerId: "owner",
+        },
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "provider_setup_needed",
+        provider: "openclaw",
+        retryable: true,
+      },
+    });
+    expect(store.allRows("SELECT * FROM runs")).toHaveLength(1);
+    store.close();
   });
 
   it("does not let signed desktop control cross a managed parent run into a local provider", async () => {
@@ -2968,7 +3454,7 @@ describe("agent control tools", () => {
     expect(spawned.ok).toBe(true);
     expect(spawned.result).toBeUndefined();
     expect(spawned.session.sessionId).not.toBe(parent.session.sessionId);
-    expect(spawned.run.status).toBe("queued");
+    expect(spawned.run.status).toBe("starting");
     expect(buildMcpServers).toHaveBeenCalledWith("act", undefined, undefined, {
       ownerId: "owner",
       requestId: "delegate-spawn-1",

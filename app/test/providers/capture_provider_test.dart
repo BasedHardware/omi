@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -106,8 +107,6 @@ class _TestEnvFields implements EnvFields {
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;
-  @override
-  String? get stagingApiUrl => null;
 }
 
 void main() {
@@ -491,6 +490,18 @@ void main() {
   });
 
   group('external actions port', () {
+    test('repeated external-action updates do not schedule duplicate startup recovery', () {
+      fakeAsync((async) {
+        final provider = CaptureProvider();
+        final pendingTimersBeforeUpdates = async.pendingTimers.length;
+
+        provider.updateExternalActions(MockCaptureExternalActions());
+        provider.updateExternalActions(MockCaptureExternalActions());
+
+        expect(async.pendingTimers, hasLength(pendingTimersBeforeUpdates));
+      });
+    });
+
     test('topConversationId delegates through external actions', () {
       final provider = CaptureProvider();
       final mockExternalActions = MockCaptureExternalActions()..topConversationIdOverride = 'conversation-1';

@@ -51,15 +51,27 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 /// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
-/// One end-to-end budget for non-streaming Gemini work. This deliberately leaves
-/// headroom below the observed ~90 second infrastructure boundary and includes
-/// token acquisition, provider selection/fallback, request send, and body drain.
-const GEMINI_TOTAL_TIMEOUT: Duration = Duration::from_secs(75);
+/// Cloud Run's configured request timeout for `desktop-backend`.
+const CLOUD_RUN_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Headroom reserved under the platform deadline so the proxy, rather than
+/// Cloud Run, owns timeout mapping and can return the typed, retryable
+/// `upstream_timeout` response.
+const GEMINI_PLATFORM_HEADROOM: Duration = Duration::from_secs(60);
+
+/// One end-to-end budget for non-streaming Gemini work. It derives from the
+/// Cloud Run request contract and includes token acquisition, provider
+/// selection/fallback, request send, and body drain. Long-context calls can
+/// legitimately spend more than 90 seconds thinking before their first byte.
+const GEMINI_TOTAL_TIMEOUT: Duration =
+    Duration::from_secs(CLOUD_RUN_REQUEST_TIMEOUT.as_secs() - GEMINI_PLATFORM_HEADROOM.as_secs());
 
 /// Per-attempt defense inside the logical budget. There are no post-dispatch
 /// retries: generateContent may have completed (and incurred cost) even when its
 /// response is lost, so replaying it is not known-safe.
-const GEMINI_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(70);
+const GEMINI_ATTEMPT_HEADROOM: Duration = Duration::from_secs(5);
+const GEMINI_ATTEMPT_TIMEOUT: Duration =
+    Duration::from_secs(GEMINI_TOTAL_TIMEOUT.as_secs() - GEMINI_ATTEMPT_HEADROOM.as_secs());
 
 /// Bound TCP/TLS setup for all Gemini proxy calls. Streaming requests must not
 /// use a total response timeout because long SSE replies are expected.
@@ -877,6 +889,19 @@ async fn gemini_stream_proxy(
     ))
 }
 
+/// Fallback outcome for a Vertex-token → AI Studio streaming heal. Recovered
+/// only when the request was dispatched AND the upstream returned a success
+/// status; a send error or a non-success SSE status (AI Studio can accept the
+/// connection and still return 4xx/5xx) is Exhausted. Keeps the streaming heal
+/// consistent with the status-keyed non-streaming heal.
+fn stream_heal_outcome(send_succeeded: bool, status_is_success: bool) -> FallbackOutcome {
+    if send_succeeded && status_is_success {
+        FallbackOutcome::Recovered
+    } else {
+        FallbackOutcome::Exhausted
+    }
+}
+
 /// Non-BYOK streaming Gemini proxy: server key with Vertex AI / AI Studio routing.
 async fn gemini_stream_server_key(
     state: &AppState,
@@ -889,6 +914,13 @@ async fn gemini_stream_server_key(
     // Resolve provider route (same dispatch as non-streaming proxy)
     use crate::llm::model_qos::{resolve_route, Provider};
     let route = resolve_route(model, action);
+
+    // Track a Vertex-token → AI Studio heal so its fallback outcome can be
+    // recorded from the upstream HTTP status (below), not merely from whether
+    // the request was dispatched. AI Studio can accept the connection and still
+    // return a 4xx/5xx SSE error; recording Recovered on send success alone
+    // undercounts exhausted fallbacks (the non-streaming path keys off status).
+    let mut healed_from_vertex = false;
 
     // Build and send request: Vertex AI or AI Studio
     let upstream = if route.provider == Provider::VertexAi {
@@ -923,13 +955,20 @@ async fn gemini_stream_server_key(
                         tracing::warn!("gemini_stream_proxy: Vertex AI token failed, falling back to API key: {}", e);
                         let upstream_url =
                             build_gemini_stream_url(effective_path, gemini_key, query);
-                        state
+                        let healed = state
                             .gemini_stream_client
                             .post(&upstream_url)
                             .header("content-type", "application/json")
                             .body(sanitized_body)
                             .send()
-                            .await
+                            .await;
+                        // A Vertex token failure that reroutes to AI Studio is a
+                        // real provider switch that must emit fallback telemetry.
+                        // The outcome is recorded below from the upstream HTTP
+                        // status so a 4xx/5xx SSE error counts as Exhausted, not
+                        // Recovered (mirrors the non-streaming heal).
+                        healed_from_vertex = true;
+                        healed
                     } else {
                         tracing::error!(
                             "gemini_stream_proxy: Vertex AI token error and no fallback: {}",
@@ -971,6 +1010,23 @@ async fn gemini_stream_server_key(
             .send()
             .await
     };
+
+    // Record the Vertex → AI Studio heal outcome from the actual upstream
+    // result: Recovered only when the healed response carried a success status,
+    // Exhausted on any send error or non-success SSE status.
+    if healed_from_vertex {
+        let (send_ok, status_ok) = match &upstream {
+            Ok(resp) => (true, resp.status().is_success()),
+            Err(_) => (false, false),
+        };
+        record_fallback(
+            "gemini_stream_proxy",
+            "vertex_ai",
+            "ai_studio",
+            "auth",
+            stream_heal_outcome(send_ok, status_ok),
+        );
+    }
 
     let upstream = upstream.map_err(|e| map_upstream_error(e, "stream upstream request"))?;
 
@@ -1305,6 +1361,10 @@ mod tests {
     use tokio::net::{TcpListener, TcpStream};
     use tokio::sync::oneshot;
 
+    fn local_test_client() -> reqwest::Client {
+        reqwest::Client::builder().no_proxy().build().unwrap()
+    }
+
     async fn spawn_hanging_upstream() -> (
         String,
         oneshot::Receiver<()>,
@@ -1355,7 +1415,15 @@ mod tests {
     fn gemini_upstream_timeout_stays_below_cloud_run_deadline() {
         assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_ATTEMPT_TIMEOUT);
         assert!(GEMINI_ATTEMPT_TIMEOUT < GEMINI_TOTAL_TIMEOUT);
-        assert!(GEMINI_TOTAL_TIMEOUT < Duration::from_secs(90));
+        assert!(GEMINI_TOTAL_TIMEOUT < CLOUD_RUN_REQUEST_TIMEOUT);
+        assert!(
+            CLOUD_RUN_REQUEST_TIMEOUT - GEMINI_TOTAL_TIMEOUT >= GEMINI_PLATFORM_HEADROOM,
+            "reserve enough time to flush the proxy-owned timeout response"
+        );
+        assert!(
+            GEMINI_TOTAL_TIMEOUT >= Duration::from_secs(180),
+            "long-context Gemini calls must not be cut off at the old 70-second deadline"
+        );
     }
 
     #[test]
@@ -1420,6 +1488,20 @@ mod tests {
     }
 
     #[test]
+    fn stream_heal_outcome_keys_off_upstream_status_not_send() {
+        // Dispatched + success status → the heal actually recovered.
+        assert_eq!(stream_heal_outcome(true, true), FallbackOutcome::Recovered);
+        // AI Studio accepted the connection (send Ok) but returned a 4xx/5xx SSE
+        // error: the fallback did NOT recover — it is exhausted.
+        assert_eq!(stream_heal_outcome(true, false), FallbackOutcome::Exhausted);
+        // The heal request itself failed to send.
+        assert_eq!(
+            stream_heal_outcome(false, false),
+            FallbackOutcome::Exhausted
+        );
+    }
+
+    #[test]
     fn vertex_token_failure_records_auth_fallback() {
         assert_eq!(
             vertex_to_ai_studio_fallback_reason(true, true),
@@ -1437,7 +1519,7 @@ mod tests {
     #[tokio::test]
     async fn hanging_upstream_is_cancelled_at_injected_deadline() {
         let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
-        let client = reqwest::Client::new();
+        let client = local_test_client();
         let (deadline_tx, deadline_rx) = oneshot::channel();
         let work = tokio::spawn(async move {
             race_gemini_deadline(
@@ -1469,7 +1551,7 @@ mod tests {
     #[tokio::test]
     async fn dropping_proxy_work_cancels_the_upstream_socket() {
         let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
-        let client = reqwest::Client::new();
+        let client = local_test_client();
         let proxy_work = tokio::spawn(async move {
             within_gemini_deadline(
                 Duration::from_secs(30),
@@ -1495,7 +1577,7 @@ mod tests {
     async fn downstream_http_disconnect_cancels_upstream_work() {
         let (upstream_url, request_seen, disconnected, upstream_server) =
             spawn_hanging_upstream().await;
-        let client = reqwest::Client::new();
+        let client = local_test_client();
         let app = Router::new().route(
             "/",
             post(move || {
@@ -1540,7 +1622,7 @@ mod tests {
     #[tokio::test]
     async fn one_budget_includes_pre_dispatch_work_and_upstream_wait() {
         let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
-        let client = reqwest::Client::new();
+        let client = local_test_client();
         let (dispatch_tx, dispatch_rx) = oneshot::channel();
         let (deadline_tx, deadline_rx) = oneshot::channel();
         let work = tokio::spawn(async move {

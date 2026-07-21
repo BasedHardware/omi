@@ -1,6 +1,6 @@
 import copy
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 from typing import Optional
@@ -340,6 +340,53 @@ def test_firestore_apply_allows_update_when_target_is_authoritative_active_same_
     )
 
     assert result.status == ApplyStatus.committed
+
+
+def test_firestore_apply_update_keeps_persisted_timestamps_monotonic_when_apply_clock_is_behind(store, monkeypatch):
+    captured_at = datetime(2026, 8, 21, 1, 24, 2, 685960, tzinfo=timezone(timedelta(hours=5, minutes=30)))
+    prior_updated_at = captured_at + timedelta(minutes=1)
+    expires_at = captured_at + timedelta(days=30)
+    operation = _operation(
+        target_memory_id="mem1",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "memory_text": "Updated.",
+            "result_status": "active",
+        },
+    )
+    existing = _target_item(
+        tier=MemoryTier.short_term,
+        captured_at=captured_at,
+        updated_at=prior_updated_at,
+        expires_at=expires_at,
+    )
+    db = _db_with(operation=operation, target_items=[existing])
+    patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
+
+    import models.memory_apply as memory_apply
+
+    class _EarlierApplyClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            assert tz is timezone.utc
+            return captured_at.astimezone(timezone.utc) - timedelta(days=1)
+
+    monkeypatch.setattr(memory_apply, "datetime", _EarlierApplyClock)
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed
+    persisted = db.docs["users/u1/memory_items/mem1"]
+    restored = MemoryItem(**persisted)
+    assert restored.expires_at == expires_at
+    assert restored.updated_at >= captured_at
+    assert restored.updated_at >= prior_updated_at
 
 
 def test_firestore_apply_retries_committed_operation_from_stored_result_without_rereading_mutable_evidence_or_target(

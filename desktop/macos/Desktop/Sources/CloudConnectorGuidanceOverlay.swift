@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// One copy row on the assisted cloud-connector card. `id` must be unique across
 /// the card — never derive it from `label` alone (duplicate labels crash SwiftUI).
@@ -79,7 +79,10 @@ final class CloudConnectorGuidanceOverlay {
 
   private var window: NSWindow?
   private var dismissTask: Task<Void, Never>?
+  private var settingsWatchTask: Task<Void, Never>?
   private var lastAutomationState: [String: String]?
+  private var dragCardSize: CGSize?
+  private var dragTargetState: ScreenRecordingDragTargetState?
 
   private init() {}
 
@@ -212,6 +215,125 @@ final class CloudConnectorGuidanceOverlay {
         self?.dismiss()
       }
     }
+  }
+
+  /// Screen Recording helper whose app icon can be dropped into System Settings.
+  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect?) {
+    dismissTask?.cancel()
+    settingsWatchTask?.cancel()
+    window?.close()
+
+    let cardSize = Self.dragCardSize(appName: appName)
+    dragCardSize = cardSize
+    let dragTargetState = ScreenRecordingDragTargetState(frame: anchor)
+    self.dragTargetState = dragTargetState
+    let screen = Self.screen(forAnchor: anchor)
+    let frame = Self.dragCardFrame(
+      anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+
+    lastAutomationState = [
+      "visible": "true",
+      "kind": "dragToGrant",
+      "appName": appName,
+      "panelFrame": Self.string(frame),
+    ]
+
+    let view = ScreenRecordingDragCardView(
+      appIcon: appIcon, appName: appName, appURL: appURL, targetState: dragTargetState,
+      size: cardSize)
+    let hostingView = TransparentHostingView(rootView: view)
+    hostingView.frame = CGRect(origin: .zero, size: cardSize)
+    hostingView.wantsLayer = true
+    hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+    hostingView.layer?.isOpaque = false
+
+    let panel = NSPanel(
+      contentRect: frame,
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false
+    )
+    panel.contentView = hostingView
+    panel.isOpaque = false
+    panel.backgroundColor = .clear
+    panel.hasShadow = false
+    panel.level = .screenSaver
+    panel.ignoresMouseEvents = false
+    panel.becomesKeyOnlyIfNeeded = true
+    // Moving the panel would consume the icon's mouse-down before AppKit starts the drag.
+    panel.isMovableByWindowBackground = false
+    panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+    panel.animationBehavior = .none
+    let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    panel.alphaValue = Self.dragCardInitialAlpha(reduceMotion: reduceMotion)
+    panel.orderFrontRegardless()
+    if !reduceMotion {
+      NSAnimationContext.runAnimationGroup { context in
+        context.duration = 0.22
+        panel.animator().alphaValue = 1
+      }
+    }
+    window = panel
+
+    dismissTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 60_000_000_000)
+      await MainActor.run {
+        guard !Task.isCancelled else { return }
+        self?.dismiss()
+      }
+    }
+
+    // Follow the System Settings window: re-anchor over it once it appears, and
+    // dismiss the card as soon as the user closes it — the drag target is gone.
+    settingsWatchTask = Task { [weak self] in
+      var sawSettings = false
+      while !Task.isCancelled {
+        let settingsFrame = await MainActor.run {
+          CloudConnectorFormAutomation.systemSettingsWindowAppKitFrame()
+        }
+        if let settingsFrame {
+          sawSettings = true
+          await MainActor.run { self?.repositionDragCard(near: settingsFrame) }
+        } else if sawSettings {
+          // Window appeared and is now gone → the user closed Settings.
+          await MainActor.run { self?.dismiss() }
+          return
+        }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+      }
+    }
+  }
+
+  func repositionDragCard(near anchor: CGRect) {
+    guard let window, let size = dragCardSize else { return }
+    dragTargetState?.frame = anchor
+    let screen = Self.screen(forAnchor: anchor)
+    let frame = Self.dragCardFrame(
+      anchor: anchor, cardSize: size, visibleFrame: screen.visibleFrame)
+    window.setFrame(frame, display: true)
+    lastAutomationState?["panelFrame"] = Self.string(frame)
+  }
+
+  /// Drag-card placement: horizontally centered on the anchor (Settings window)
+  /// when there is one, and vertically centered within the bottom quarter of the
+  /// screen — below the Settings list, so the card never covers the drop target.
+  static func dragCardFrame(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect) -> CGRect {
+    let x = (anchor ?? visibleFrame).midX - cardSize.width / 2
+    let y = visibleFrame.minY + (visibleFrame.height / 4 - cardSize.height) / 2
+    let proposed = CGRect(x: x, y: y, width: cardSize.width, height: cardSize.height)
+    return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: 12)
+  }
+
+  /// A named development bundle can have a much longer display name than the
+  /// production app. Widen the helper rather than allowing its instruction to
+  /// render outside the transparent panel and get clipped by AppKit.
+  static func dragCardSize(appName: String) -> CGSize {
+    let hasLongDisplayName = appName.count > 16
+    return CGSize(width: hasLongDisplayName ? 240 : 180, height: hasLongDisplayName ? 180 : 164)
+  }
+
+  static func dragCardInitialAlpha(reduceMotion: Bool) -> CGFloat {
+    reduceMotion ? 1 : 0
   }
 
   /// Interactive card with one copy button per connector field, for assisted cloud
@@ -362,8 +484,12 @@ final class CloudConnectorGuidanceOverlay {
   func dismiss() {
     dismissTask?.cancel()
     dismissTask = nil
+    settingsWatchTask?.cancel()
+    settingsWatchTask = nil
     window?.close()
     window = nil
+    dragCardSize = nil
+    dragTargetState = nil
   }
 
   var automationWindow: NSWindow? {
@@ -439,12 +565,14 @@ final class CloudConnectorGuidanceOverlay {
         || (abs(candidate.targetPoint.x - placement.targetPoint.x) <= 1
           && abs(candidate.targetPoint.y - placement.targetPoint.y) <= 1)
     }
-    let targetRect = selected?.targetRect ?? CGRect(
-      x: placement.targetPoint.x - 1,
-      y: placement.targetPoint.y - 1,
-      width: 2,
-      height: 2
-    )
+    let targetRect =
+      selected?.targetRect
+      ?? CGRect(
+        x: placement.targetPoint.x - 1,
+        y: placement.targetPoint.y - 1,
+        width: 2,
+        height: 2
+      )
     // Validate against the actually-rendered arrow apex, not just the solver intent.
     let render = SpatialOverlayRenderGeometry(placement: placement, panelSize: overlaySize)
     let issues = SpatialOverlayDogfoodOracle.issues(
@@ -526,13 +654,195 @@ private struct CloudConnectorInstructionCardView: View {
 
   var body: some View {
     CloudConnectorCardHeaderView(title: title, subtitle: subtitle, onDismiss: onDismiss)
-    .padding(.leading, OmiSpacing.lg)
-    .padding(.trailing, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.lg)
-    .frame(width: size.width, height: size.height, alignment: .topLeading)
-    .background(SpatialOverlayCardBackground())
-    .contentShape(Rectangle())
-    .onTapGesture(perform: onDismiss)
+      .padding(.leading, OmiSpacing.lg)
+      .padding(.trailing, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.lg)
+      .frame(width: size.width, height: size.height, alignment: .topLeading)
+      .background(SpatialOverlayCardBackground())
+      .contentShape(Rectangle())
+      .onTapGesture(perform: onDismiss)
+  }
+}
+
+private final class TransparentHostingView<Content: View>: NSHostingView<Content> {
+  override var isOpaque: Bool { false }
+}
+
+final class ScreenRecordingDragTargetState {
+  var frame: CGRect?
+
+  init(frame: CGRect?) {
+    self.frame = frame
+  }
+}
+
+/// Uses the same file-URL pasteboard payload as dragging an app from Finder.
+final class AppBundleDragSourceNSView: NSView, NSDraggingSource {
+  static let fullDragIconSize = CGSize(width: 64, height: 64)
+  static let compactDragIconSize = CGSize(width: 38, height: 38)
+
+  var appURL: URL?
+  var targetState: ScreenRecordingDragTargetState?
+  var image: NSImage? {
+    didSet { needsDisplay = true }
+  }
+  private var currentDragIconSize = fullDragIconSize
+  /// While the dragging session is in flight the card must not keep painting the
+  /// icon — the dragged copy under the cursor is "it". Restored on end/cancel.
+  private var isDragInFlight = false
+
+  static func pasteboardWriter(for appURL: URL) -> NSURL {
+    appURL as NSURL
+  }
+
+  override func mouseDown(with event: NSEvent) {
+    guard let appURL, let image else { return }
+    let item = NSDraggingItem(pasteboardWriter: Self.pasteboardWriter(for: appURL))
+    item.setDraggingFrame(bounds, contents: image)
+    let session = beginDraggingSession(with: [item], event: event, source: self)
+    session.draggingFormation = .none
+    session.animatesToStartingPositionsOnCancelOrFail = true
+    isDragInFlight = true
+    needsDisplay = true
+  }
+
+  override var isOpaque: Bool { false }
+
+  override func draw(_ dirtyRect: NSRect) {
+    super.draw(dirtyRect)
+    guard !isDragInFlight else { return }
+    image?.draw(
+      in: bounds,
+      from: .zero,
+      operation: .sourceOver,
+      fraction: 1,
+      respectFlipped: true,
+      hints: [.interpolation: NSImageInterpolation.high]
+    )
+  }
+
+  func draggingSession(
+    _ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext
+  ) -> NSDragOperation {
+    context == .outsideApplication ? [.copy, .generic, .link] : []
+  }
+
+  func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
+    guard let image else { return }
+    // Re-anchor the item on every move: once setDraggingFrame has been called
+    // mid-session, AppKit stops moving the drag image itself, so skipping events
+    // (e.g. only on size change) leaves the icon pinned instead of following the
+    // cursor in real time.
+    let size = Self.dragIconSize(pointer: screenPoint, targetFrame: targetState?.frame)
+    currentDragIconSize = size
+    let frame = NSRect(
+      x: screenPoint.x - size.width / 2,
+      y: screenPoint.y - size.height / 2,
+      width: size.width,
+      height: size.height)
+    session.enumerateDraggingItems(
+      options: [], for: nil, classes: [NSURL.self], searchOptions: [:]
+    ) { item, _, _ in
+      item.setDraggingFrame(frame, contents: image)
+    }
+  }
+
+  func draggingSession(
+    _ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation
+  ) {
+    currentDragIconSize = Self.fullDragIconSize
+    isDragInFlight = false
+    needsDisplay = true
+  }
+
+  static func dragIconSize(pointer: CGPoint, targetFrame: CGRect?) -> CGSize {
+    guard let targetFrame, targetFrame.contains(pointer) else { return fullDragIconSize }
+    let depth = min(
+      pointer.x - targetFrame.minX,
+      targetFrame.maxX - pointer.x,
+      pointer.y - targetFrame.minY,
+      targetFrame.maxY - pointer.y)
+    let progress = min(max(depth / 40, 0), 1)
+    let side =
+      fullDragIconSize.width
+      - (fullDragIconSize.width - compactDragIconSize.width) * progress
+    return CGSize(width: side, height: side)
+  }
+}
+
+private struct AppBundleDragSource: NSViewRepresentable {
+  let icon: NSImage
+  let appURL: URL
+  let targetState: ScreenRecordingDragTargetState
+
+  func makeNSView(context: Context) -> AppBundleDragSourceNSView {
+    let view = AppBundleDragSourceNSView()
+    view.image = icon
+    view.appURL = appURL
+    view.targetState = targetState
+    view.unregisterDraggedTypes()
+    return view
+  }
+
+  func updateNSView(_ view: AppBundleDragSourceNSView, context: Context) {
+    view.image = icon
+    view.appURL = appURL
+    view.targetState = targetState
+  }
+}
+
+private struct ScreenRecordingDragCardView: View {
+  let appIcon: NSImage
+  let appName: String
+  let appURL: URL
+  let targetState: ScreenRecordingDragTargetState
+  let size: CGSize
+
+  /// Idle hint: the icon + chevron drift up a few points and settle, on a slow
+  /// loop, so the card reads as "drag me up into the list". Respects reduce-motion.
+  @State private var hintUp = false
+  private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+  var body: some View {
+    ZStack {
+      RadialGradient(
+        colors: [OmiColors.success.opacity(0.22), Color.clear],
+        center: .center,
+        startRadius: 8,
+        endRadius: 88
+      )
+
+      VStack(spacing: 7) {
+        Image(systemName: "chevron.up")
+          .scaledFont(size: 14, weight: .bold)
+          .foregroundColor(OmiColors.textSecondary.opacity(hintUp ? 1 : 0.6))
+          .offset(y: hintUp ? -3 : 1)
+
+        AppBundleDragSource(icon: appIcon, appURL: appURL, targetState: targetState)
+          .frame(width: 64, height: 64)
+          .shadow(color: Color.black.opacity(0.58), radius: 12, y: 5)
+          .offset(y: hintUp ? -6 : 0)
+          .help("Drag \(appName) into the Screen Recording list")
+          .accessibilityLabel("Drag \(appName) to enable Screen Recording")
+
+        Text("Drag \(appName)\ninto the list")
+          .scaledFont(size: 13.5, weight: .bold)
+          .foregroundColor(OmiColors.textPrimary)
+          .multilineTextAlignment(.center)
+          .lineSpacing(-1)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: size.width - 20)
+          .shadow(color: Color.black.opacity(0.65), radius: 3, y: 1)
+      }
+    }
+    .frame(width: size.width, height: size.height)
+    .background(Color.clear)
+    .onAppear {
+      guard !reduceMotion else { return }
+      withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+        hintUp = true
+      }
+    }
   }
 }
 
@@ -622,7 +932,8 @@ private struct CloudConnectorFieldCopyCardView: View {
       .background(
         Capsule().fill(
           copiedFieldID == field.id
-            ? OmiColors.success.opacity(0.16) : Color.white.opacity(0.12)))
+            ? OmiColors.success.opacity(0.16) : Color.white.opacity(0.12))
+      )
       .contentShape(Capsule())
     }
     .buttonStyle(.plain)

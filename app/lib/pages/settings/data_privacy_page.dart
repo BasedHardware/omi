@@ -7,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
-import 'package:omi/pages/settings/widgets/data_protection_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -27,34 +26,39 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     PlatformManager.instance.analytics.dataPrivacyPageOpened();
   }
 
-  Widget _buildIntroSection(BuildContext context) {
+  Widget _buildEncryptionBanner(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: BorderRadius.circular(16)),
-      child: Column(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF35343B), width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('🛡️', style: TextStyle(fontSize: 64)),
-          const SizedBox(height: 16),
-          Text(
-            context.l10n.yourPrivacyYourControl,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-            textAlign: TextAlign.center,
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.deepPurple.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.lock_outline, color: Colors.deepPurple.shade200, size: 20),
           ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          const SizedBox(width: 14),
+          Expanded(
             child: RichText(
-              textAlign: TextAlign.center,
               text: TextSpan(
-                style: TextStyle(fontSize: 16, color: Colors.grey.shade400, height: 1.5),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade300, height: 1.5),
                 children: [
-                  TextSpan(text: '${context.l10n.privacyIntro} '),
+                  TextSpan(text: '${context.l10n.dataEncryptedBanner} '),
                   TextSpan(
                     text: context.l10n.learnMore,
                     style: TextStyle(
-                      color: Colors.deepPurple.shade300,
+                      color: Colors.deepPurple.shade200,
                       decoration: TextDecoration.underline,
-                      decorationColor: Colors.deepPurple.shade300,
+                      decorationColor: Colors.deepPurple.shade200,
                     ),
                     recognizer: TapGestureRecognizer()
                       ..onTap = () async {
@@ -128,23 +132,13 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
               ListView(
                 padding: const EdgeInsets.all(16.0),
                 children: [
-                  _buildIntroSection(context),
+                  _buildEncryptionBanner(context),
                   const SizedBox(height: 32),
-                  Text(
-                    context.l10n.dataProtectionLevel,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(context.l10n.dataProtectionDesc, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-                  const SizedBox(height: 16),
-                  const DataProtectionSection(),
-                  const SizedBox(height: 24),
-                  const Divider(color: Colors.grey),
-                  const SizedBox(height: 24),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
-                      final appsWithDataAccess =
-                          appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
+                      final appsWithDataAccess = appProvider.apps
+                          .where((app) => app.enabled && app.worksExternally())
+                          .toList();
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

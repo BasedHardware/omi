@@ -1,8 +1,8 @@
 import json
 import logging
 import os
-import asyncio
 import time
+from html import escape
 from datetime import datetime, timezone
 
 import httpx
@@ -15,8 +15,9 @@ from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
-from utils.executors import db_executor, llm_executor, storage_executor, run_blocking
+from utils.executors import db_executor, llm_executor, storage_executor, run_blocking, start_background_task
 from utils.http_client import get_webhook_client
+from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
     register_oauth_client,
@@ -142,7 +143,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
 class AppSelectOption(PydanticBaseModel):
@@ -431,7 +432,7 @@ def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> 
     fetched_tools = manifest_result.get('tools')
     if fetched_tools:
         # Resolve relative endpoints to absolute URLs
-        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        base_url = (external_integration.get('app_home_url') or '').rstrip('/')
         if base_url:
             for tool in fetched_tools:
                 endpoint = tool.get('endpoint', '')
@@ -775,6 +776,7 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/apps', tags=['v1'], response_model=AppCreateResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = parse_form_json(dict, app_data, 'app_data')
     data['approved'] = False
@@ -856,6 +858,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
 
 @router.post('/v1/personas', tags=['v1'], response_model=PersonaMutationResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
@@ -899,6 +902,7 @@ async def create_persona(
 
 
 @router.patch('/v1/personas/{persona_id}', tags=['v1'], response_model=PersonaMutationResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 async def update_persona(
     persona_id: str,
     persona_data: str = Form(...),
@@ -1022,6 +1026,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'], response_model=AppMutationResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
 ):
@@ -1114,7 +1119,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
 
     fetched_tools = manifest_result.get('tools')
     if fetched_tools:
-        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        base_url = (external_integration.get('app_home_url') or '').rstrip('/')
         if base_url:
             for tool in fetched_tools:
                 endpoint = tool.get('endpoint', '')
@@ -1678,9 +1683,10 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
 async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
-    # Start async tasks to migrate memories and update persona connected accounts
-    asyncio.create_task(run_blocking(db_executor, migrate_memories, old_id, uid))
-    asyncio.create_task(update_omi_persona_connected_accounts(uid))
+    # Tracked background tasks (not bare asyncio.create_task): keeps a live reference
+    # and logs a failed migration instead of silently dropping it.
+    start_background_task(run_blocking(db_executor, migrate_memories, old_id, uid), name=f"migrate_memories:{uid}")
+    start_background_task(update_omi_persona_connected_accounts(uid), name=f"migrate_persona_accounts:{uid}")
 
     return {"status": "ok", "message": "Migration started"}
 
@@ -1948,7 +1954,7 @@ async def mcp_oauth_callback(code: str, state: str):
     await run_blocking(db_executor, enable_app, uid, app_id)
 
     tool_count = len(tools)
-    tool_names = ', '.join(t.name for t in tools)
+    tool_names = ', '.join(escape(t.name) for t in tools)
 
     return HTMLResponse(f"""
     <html>
@@ -2189,6 +2195,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppThumbnailUploadResponse)
 @router.post('/v1/app/thumbnails', tags=['v1'], response_model=AppThumbnailUploadResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
     """Upload a thumbnail image for an app.
 

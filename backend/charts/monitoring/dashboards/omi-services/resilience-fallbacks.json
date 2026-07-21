@@ -488,6 +488,209 @@
       ],
       "title": "LLM gateway fallback rate (ticket tier)",
       "type": "timeseries"
+    },
+    {
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 6,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "**Real-traffic journeys:** chat, pusher, live transcription, and capture-finalization measure accepted work through a server-observable terminal boundary. Product-failure alerts require real traffic; cancelled client/transport endings and fenced stale work remain visible without counting as product failures. An absent source is scrape health, not zero traffic. Semantics: `backend/docs/runbooks/real-traffic-journeys.md`.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.1.0",
+      "title": "Journey outcome contract",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(sum by (journey) (increase(omi_journey_terminal_total{outcome=\"success\"}[$__rate_interval])) / sum by (journey) (increase(omi_journey_terminal_total{outcome=~\"success|failure\"}[$__rate_interval]))) and on (journey) (sum by (journey) (increase(omi_journey_terminal_total{outcome=~\"success|failure\"}[$__rate_interval])) > 0)",
+          "legendFormat": "{{journey}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Journey terminal success rate (success / success + failure)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (journey, le) (rate(omi_journey_latency_seconds_bucket[15m])))",
+          "legendFormat": "{{journey}} p95",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Journey acceptance-to-terminal latency (p95)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "oldest nonterminal age"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[6h])) - sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[6h]))",
+          "legendFormat": "accepted minus terminal (6h)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(omi_capture_finalization_reconciliations_total[15m]))",
+          "legendFormat": "stale reconciliations / second",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(listen_finalization_oldest_nonterminal_age_seconds)",
+          "legendFormat": "oldest nonterminal age",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Capture finalization reconciliation and nonterminal work",
+      "type": "timeseries"
     }
   ],
   "preload": false,

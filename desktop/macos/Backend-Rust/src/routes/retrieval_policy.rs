@@ -59,6 +59,18 @@ impl RetrievalPolicy {
         self.prohibited_sources.contains(&source)
     }
 
+    /// True only when the user asked for the public web in so many words.
+    ///
+    /// Everything else (`Freshness`, `AnaphoricLookup`) is a heuristic guess, so
+    /// it may steer a turn but must never fail one: a route that cannot search
+    /// the web still owes the user an answer.
+    pub(crate) fn web_requirement_is_explicit(&self) -> bool {
+        matches!(
+            self.reason,
+            RetrievalReason::ExplicitWeb | RetrievalReason::Mixed
+        )
+    }
+
     pub(crate) fn reason(&self) -> &'static str {
         self.reason.as_str()
     }
@@ -126,6 +138,45 @@ const FRESH_PUBLIC_PHRASES: &[&str] = &[
     "news today",
 ];
 
+/// Weather lookups commonly place the location between "weather" and the
+/// freshness qualifier (for example, "what's the weather in NYC right now?").
+/// Keep those public-current requests on the same forced-search path as the
+/// fixed phrases above instead of leaving their tool choice to the model.
+const CURRENT_WEATHER_PREFIXES: &[&str] = &[
+    "what's the weather",
+    "what is the weather",
+    "whats the weather",
+    "how's the weather",
+    "how is the weather",
+    "hows the weather",
+    "weather in ",
+    "weather for ",
+    "weather at ",
+];
+
+/// A broad temporal qualifier is only a public-web signal when paired with a
+/// public lookup subject. This covers current sports fixtures and schedules
+/// without turning ordinary urgency ("help me with this right now") into a
+/// web search. Explicit private-context requests still take precedence.
+const FRESH_PUBLIC_TEMPORAL_QUALIFIERS: &[&str] = &["right now", "currently", "today", "this week"];
+const FRESH_PUBLIC_LOOKUP_TERMS: &[&str] = &[
+    "world cup",
+    "schedule",
+    "fixture",
+    "standings",
+    "match",
+    "game",
+    "playing",
+    "score",
+    "weather",
+    "price",
+    "news",
+    "release",
+    "released",
+    "election",
+    "market",
+];
+
 const ANAPHORIC_LOOKUP_PHRASES: &[&str] = &[
     "look it up",
     "look this up",
@@ -139,8 +190,45 @@ const ANAPHORIC_LOOKUP_PHRASES: &[&str] = &[
     "find out",
 ];
 
+/// The generic qualifier+subject pairing describes a short conversational ask
+/// ("who is playing today?"). Service synthesis prompts, pasted documents and
+/// agent instructions are long and hit these common words by accident, so they
+/// stay out of the broad heuristic. The fixed phrases above still apply at any
+/// length.
+const MAX_GENERIC_LOOKUP_CHARS: usize = 240;
+
 fn contains_any(text: &str, phrases: &[&str]) -> bool {
     phrases.iter().any(|phrase| text.contains(phrase))
+}
+
+/// Substring matching on single words reads "market" out of "marketing" and
+/// "game" out of "gameplan", so the generic terms match on word boundaries.
+fn contains_any_word(text: &str, words: &[&str]) -> bool {
+    words.iter().any(|word| {
+        text.match_indices(word).any(|(start, _)| {
+            let before_is_word = text[..start]
+                .chars()
+                .next_back()
+                .is_some_and(|ch| ch.is_alphanumeric());
+            let after_is_word = text[start + word.len()..]
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_alphanumeric());
+            !before_is_word && !after_is_word
+        })
+    })
+}
+
+fn is_current_weather_lookup(text: &str) -> bool {
+    contains_any(text, CURRENT_WEATHER_PREFIXES)
+}
+
+fn is_fresh_public_lookup(text: &str) -> bool {
+    contains_any(text, FRESH_PUBLIC_PHRASES)
+        || is_current_weather_lookup(text)
+        || (text.len() <= MAX_GENERIC_LOOKUP_CHARS
+            && contains_any_word(text, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
+            && contains_any_word(text, FRESH_PUBLIC_LOOKUP_TERMS))
 }
 
 pub(crate) fn caller_disabled_tools(req: &ChatCompletionRequest) -> bool {
@@ -215,7 +303,7 @@ pub(crate) fn retrieval_policy(messages: &[ChatMessage]) -> RetrievalPolicy {
             reason: RetrievalReason::ExplicitPrivate,
         };
     }
-    if contains_any(&latest, FRESH_PUBLIC_PHRASES) {
+    if is_fresh_public_lookup(&latest) {
         return RetrievalPolicy {
             required_sources: vec![RetrievalSource::PublicWeb],
             prohibited_sources: Vec::new(),
@@ -320,6 +408,34 @@ mod tests {
     }
 
     #[test]
+    fn requires_web_for_weather_with_a_location_and_current_time() {
+        let policy = retrieval_policy(&[message("user", "What's the weather in NYC right now?")]);
+        assert!(policy.requires(RetrievalSource::PublicWeb));
+        assert!(!policy.prohibits(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::Freshness);
+    }
+
+    #[test]
+    fn requires_web_for_current_public_sports_schedule() {
+        let policy =
+            retrieval_policy(&[message("user", "Who's playing in the World Cup right now?")]);
+        assert!(policy.requires(RetrievalSource::PublicWeb));
+        assert!(!policy.prohibits(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::Freshness);
+    }
+
+    #[test]
+    fn keeps_private_weather_history_queries_off_the_public_web() {
+        let policy = retrieval_policy(&[message(
+            "user",
+            "Search my conversations for weather in NYC",
+        )]);
+        assert!(!policy.requires(RetrievalSource::PublicWeb));
+        assert!(policy.prohibits(RetrievalSource::PublicWeb));
+        assert_eq!(policy.reason, RetrievalReason::ExplicitPrivate);
+    }
+
+    #[test]
     fn supports_mixed_public_and_private_sources() {
         let policy = retrieval_policy(&[message(
             "user",
@@ -328,6 +444,41 @@ mod tests {
         assert!(policy.requires(RetrievalSource::PublicWeb));
         assert!(policy.requires(RetrievalSource::OmiPrivate));
         assert_eq!(policy.reason, RetrievalReason::Mixed);
+    }
+
+    #[test]
+    fn leaves_a_service_synthesis_prompt_on_auto() {
+        // The calendar/gmail/notes readers synthesize with a long machine-written
+        // prompt that happens to contain "today" and "schedule". Classifying it as
+        // a public-web lookup routed the import into the web-search-unavailable
+        // failure and dropped every extracted memory.
+        let policy = retrieval_policy(&[message(
+            "user",
+            "Analyze these calendar events and extract a profile.\n\
+             Today's date: 2026-07-14\n\
+             - Extract 10-15 memories (facts about their role, recurring meetings, \
+             relationships, routines, interests, work schedule, hobbies, social life)\n\
+             - Profile should summarize professional identity and schedule patterns",
+        )]);
+        assert_eq!(policy, RetrievalPolicy::auto());
+    }
+
+    #[test]
+    fn does_not_match_generic_lookup_terms_inside_longer_words() {
+        let policy =
+            retrieval_policy(&[message("user", "Review the marketing copy I wrote today")]);
+        assert_eq!(policy, RetrievalPolicy::auto());
+    }
+
+    #[test]
+    fn only_an_explicit_request_is_a_strict_web_requirement() {
+        let guessed = retrieval_policy(&[message("user", "Who's playing in the World Cup today?")]);
+        assert!(guessed.requires(RetrievalSource::PublicWeb));
+        assert!(!guessed.web_requirement_is_explicit());
+
+        let asked = retrieval_policy(&[message("user", "Search the web for the World Cup final")]);
+        assert!(asked.requires(RetrievalSource::PublicWeb));
+        assert!(asked.web_requirement_is_explicit());
     }
 
     #[test]

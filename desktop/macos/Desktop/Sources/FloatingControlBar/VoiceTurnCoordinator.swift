@@ -1,4 +1,5 @@
 import Foundation
+import VoiceTurnDomain
 
 typealias VoiceTurnDeadlineCancellation = DelayedActionCancellation
 
@@ -84,7 +85,7 @@ final class VoiceTurnCoordinator {
     let deadline: VoiceTurnDeadline
   }
 
-  private let reducer: VoiceTurnReducer
+  private let domain: VoiceTurnDomain
   private let scheduler: VoiceTurnDeadlineScheduling
   private let ownerIDProvider: @MainActor () -> String?
   private let ownerIsCurrent: @MainActor (String) -> Bool
@@ -97,14 +98,15 @@ final class VoiceTurnCoordinator {
   private var timeline: [VoiceTurnTimelineEntry] = []
   private let timelineLimit: Int
   private var timelineSequence: UInt64 = 0
-  private var pendingEvents: [VoiceTurnEvent] = []
+  private var turnStartedAt: [VoiceTurnID: ContinuousClock.Instant] = [:]
+  private var turnFullAnswerDurationMs: [VoiceTurnID: Int] = [:]
+  private var pendingFacts: [VoiceTurnFact] = []
   private var isDrainingEvents = false
 
-  private(set) var model: VoiceTurnModel
+  var model: VoiceTurnModel { domain.model }
 
   init(
     model: VoiceTurnModel = .idle,
-    reducer: VoiceTurnReducer = VoiceTurnReducer(),
     scheduler: VoiceTurnDeadlineScheduling? = nil,
     timelineLimit: Int = 256,
     requiresAuthenticatedOwner: Bool = false,
@@ -113,8 +115,7 @@ final class VoiceTurnCoordinator {
       AuthorizedToolExecution.isOwnerCurrent($0)
     }
   ) {
-    self.model = model
-    self.reducer = reducer
+    domain = VoiceTurnDomain(model: model)
     self.scheduler = scheduler ?? TaskVoiceTurnDeadlineScheduler()
     self.timelineLimit = max(1, timelineLimit)
     self.requiresAuthenticatedOwner = requiresAuthenticatedOwner
@@ -134,10 +135,21 @@ final class VoiceTurnCoordinator {
 
   /// Reserves an identity from the authoritative turn generation for an async
   /// physical-driver operation. A callback must return this exact identity.
+  ///
+  /// Effects are deliberately drained FIFO. An effect handler can therefore
+  /// reserve an identity while the coordinator is still draining the effect
+  /// that invoked it (for example, `prepareHubInput` after `hubReady`). In
+  /// that case the reservation is already queued ahead of every subsequent
+  /// scoped event from that handler; it is safe to return the identity without
+  /// waiting for the reducer to apply it synchronously.
   func reserveEffectIdentity() -> VoiceEffectIdentity? {
     guard let turn = activeTurn else { return nil }
     let identity = VoiceEffectIdentity(turnID: turn.id, effectID: turn.nextEffectID)
-    send(.effectIdentityReserved(turnID: turn.id))
+    let reservationIsQueuedBehindCurrentEffect = isDrainingEvents
+    publish(.effectIdentityReserved(turnID: turn.id))
+    if reservationIsQueuedBehindCurrentEffect {
+      return identity
+    }
     guard activeTurn?.nextEffectID == (turn.nextEffectID &+ 1) else { return nil }
     return identity
   }
@@ -169,12 +181,12 @@ final class VoiceTurnCoordinator {
     else { return false }
 
     if outcome == .providerFailed {
-      send(.finish(turnID: token.turnID, reason: .providerFailed))
+      publish(.finish(turnID: token.turnID, reason: .providerFailed))
       return model.lastTerminal?.turnID == token.turnID
         && model.lastTerminal?.reason == .providerFailed
     }
 
-    send(
+    publish(
       .providerTurnFinishedScoped(
         turnID: token.turnID,
         identity: token.providerIdentity,
@@ -186,9 +198,9 @@ final class VoiceTurnCoordinator {
     else { return false }
     switch outcome {
     case .journalAccepted:
-      send(.journalAccepted(turnID: token.turnID, identity: journalIdentity))
+      publish(.journalAccepted(turnID: token.turnID, identity: journalIdentity))
     case .journalFailed:
-      send(
+      publish(
         .journalFailed(
           turnID: token.turnID,
           identity: journalIdentity,
@@ -244,19 +256,40 @@ final class VoiceTurnCoordinator {
       turnID: turnID,
       lane: lane,
       identity: identity)
-    send(.playbackStartedScoped(turnID: turnID, lease: lease))
-    return activeTurn?.activeLease == lease ? .acquired(lease) : .staleTurn
+    publish(.playbackStartedScoped(turnID: turnID, lease: lease))
+    guard activeTurn?.activeLease == lease else { return .staleTurn }
+    if lane != .filler {
+      turnFullAnswerDurationMs.removeValue(forKey: turnID)
+    }
+    return .acquired(lease)
   }
 
   @discardableResult
   func releaseOutput(_ lease: VoiceOutputLease) -> Bool {
     guard activeTurn?.activeLease == lease else { return false }
-    send(
+    if lease.lane != .filler, let startedAt = turnStartedAt[lease.turnID] {
+      turnFullAnswerDurationMs[lease.turnID] = Self.elapsedMilliseconds(since: startedAt)
+    }
+    publish(
       .playbackDrainedScoped(
         turnID: lease.turnID,
         identity: lease.identity,
         leaseID: lease.id))
     return true
+  }
+
+  /// Refresh the native-output inactivity watchdog after a successfully
+  /// scheduled PCM chunk. A matching lease is required so delayed audio from a
+  /// replaced turn cannot prolong the current response.
+  @discardableResult
+  func noteOutputProgress(_ lease: VoiceOutputLease) -> Bool {
+    guard activeTurn?.activeLease == lease else { return false }
+    publish(
+      .playbackProgressScoped(
+        turnID: lease.turnID,
+        identity: lease.identity,
+        leaseID: lease.id))
+    return activeTurn?.activeLease == lease
   }
 
   func configure(barState: FloatingControlBarState) {
@@ -289,9 +322,17 @@ final class VoiceTurnCoordinator {
     ownerID: String? = nil
   ) -> VoiceTurnID {
     if model.turn?.phase.isTerminal == true {
-      send(.reset)
+      publish(.reset)
     }
-    send(.start(turnID: id, ownerID: ownerID ?? ownerIDProvider(), intent: intent))
+    turnStartedAt[id] = ContinuousClock.now
+    publish(.start(turnID: id, ownerID: ownerID ?? ownerIDProvider(), intent: intent))
+    if activeTurnID == id {
+      DesktopDiagnosticsManager.shared.recordVoiceTurnStarted(
+        turnID: id.description,
+        intent: intent.rawValue)
+    } else {
+      turnStartedAt.removeValue(forKey: id)
+    }
     return id
   }
 
@@ -307,7 +348,7 @@ final class VoiceTurnCoordinator {
     guard let ownerID = turn.ownerID, ownerIsCurrent(ownerID) else {
       if activeTurnID == turnID {
         log("VoiceTurnCoordinator: cancelling turn after authenticated owner changed")
-        send(.cancel(turnID: turnID, reason: .cancelled))
+        publish(.cancel(turnID: turnID, reason: .cancelled))
       }
       return nil
     }
@@ -325,40 +366,41 @@ final class VoiceTurnCoordinator {
         "VoiceTurnCoordinator: active turn owner did not match the owner being replaced; "
           + "revoking the turn fail-closed")
     }
-    send(.cancel(turnID: turn.id, reason: .ownerChanged))
+    publish(.cancel(turnID: turn.id, reason: .ownerChanged))
     return model.lastTerminal?.turnID == turn.id
       && model.lastTerminal?.reason == .ownerChanged
   }
 
-  func send(_ event: VoiceTurnEvent) {
-    pendingEvents.append(event)
+  /// Publishes a physical-driver fact. Lifecycle events are intentionally not
+  /// visible from this app target; only `VoiceTurnDomain` can construct them.
+  func publish(_ fact: VoiceTurnFact) {
+    pendingFacts.append(fact)
     guard !isDrainingEvents else { return }
 
     isDrainingEvents = true
     defer {
-      pendingEvents.removeAll(keepingCapacity: true)
+      pendingFacts.removeAll(keepingCapacity: true)
       isDrainingEvents = false
     }
 
     var nextEventIndex = 0
-    while nextEventIndex < pendingEvents.count {
-      let nextEvent = pendingEvents[nextEventIndex]
+    while nextEventIndex < pendingFacts.count {
+      let nextFact = pendingFacts[nextEventIndex]
       nextEventIndex += 1
-      apply(nextEvent)
+      apply(nextFact)
     }
   }
 
   /// Applies one event atomically before any callback can advance the machine.
   ///
-  /// Effect and snapshot handlers are allowed to synchronously call `send`.
-  /// Those nested events join `pendingEvents` and are drained FIFO after this
+  /// Effect and snapshot handlers are allowed to synchronously publish facts.
+  /// Those nested facts join `pendingFacts` and are drained FIFO after this
   /// event has finished publishing, instead of recursively reducing against a
   /// half-published transition.
-  private func apply(_ event: VoiceTurnEvent) {
+  private func apply(_ fact: VoiceTurnFact) {
     let before = model
-    let reduction = reducer.reduce(model, event)
-    model = reduction.model
-    appendTimeline(event: event, before: before, after: model)
+    let reduction = domain.publish(fact)
+    appendTimeline(fact: fact, before: before, after: model)
     process(reduction.effects)
     presenter?.apply(projection)
     snapshotHandler?(model)
@@ -383,7 +425,7 @@ final class VoiceTurnCoordinator {
     guard AppBuild.isNonProduction else { return false }
     if let activeTurn, activeTurn.intent != .automation { return false }
     let turnID = activeTurnID ?? begin(intent: .automation)
-    send(.debugPresentationChanged(turnID: turnID, state: state))
+    publish(.debugPresentationChanged(turnID: turnID, state: state))
     if state == .idle {
       return activeTurnID == nil && projection == .idle
     }
@@ -403,8 +445,8 @@ final class VoiceTurnCoordinator {
 
   func reset() {
     if model.turn != nil {
-      send(.cleanup)
-      send(.reset)
+      publish(.cleanup)
+      publish(.reset)
     }
     for cancellation in deadlineCancellations.values {
       cancellation.cancel()
@@ -428,11 +470,20 @@ final class VoiceTurnCoordinator {
       case .cancelAllDeadlines(let turnID):
         cancelAll(turnID: turnID)
       case .terminal(let terminal):
+        let terminalDurationMs = turnStartedAt.removeValue(forKey: terminal.turnID).map(Self.elapsedMilliseconds)
+        let fullAnswerDurationMs = turnFullAnswerDurationMs.removeValue(forKey: terminal.turnID)
         DesktopDiagnosticsManager.shared.recordVoiceTurnTerminal(
+          turnID: terminal.turnID.description,
           reason: terminal.reason.rawValue,
           route: Self.routeLabel(terminal.route),
+          intent: model.turn?.intent.rawValue ?? "unknown",
+          durationMs: fullAnswerDurationMs ?? terminalDurationMs,
+          answerDelivered: fullAnswerDurationMs != nil,
           staleEventCount: model.staleEventCount,
           invalidTransitionCount: model.invalidTransitionCount)
+        log(
+          "VoiceTurnCoordinator: terminal turn=\(terminal.turnID.description) "
+            + "reason=\(terminal.reason.rawValue) route=\(Self.routeLabel(terminal.route))")
         effectHandler?(effect)
       case .staleEventDropped(let turnID, let event):
         DesktopDiagnosticsManager.shared.recordVoiceTurnAnomaly(
@@ -463,14 +514,23 @@ final class VoiceTurnCoordinator {
   /// so capture/playback cannot be left active.
   private static func ownerFencedTurnID(for effect: VoiceTurnEffect) -> VoiceTurnID? {
     switch effect {
-    case .finalizeCapturedInput(let turnID), .activateHub(let turnID, _),
-      .finalizeJournal(let turnID, _), .fallbackToTranscription(let turnID, _):
+    case .finalizeCapturedInput(let turnID), .commitClaimedHubInput(let turnID), .prepareHubInput(let turnID, _),
+      .screenEvidenceProtocolExpired(let turnID, _), .finalizeJournal(let turnID, _),
+      .fallbackToTranscription(let turnID, _):
       return turnID
     case .scheduleDeadline, .cancelDeadline, .cancelAllDeadlines, .stopCapture,
       .transcriptionFinalizationTimedOut, .cancelHub, .stopPlayback, .terminal,
       .staleEventDropped, .invalidTransition:
       return nil
     }
+  }
+
+  private static func elapsedMilliseconds(since startedAt: ContinuousClock.Instant) -> Int {
+    let components = (ContinuousClock.now - startedAt).components
+    let milliseconds =
+      Int(components.seconds) * 1_000
+      + Int(components.attoseconds / 1_000_000_000_000_000)
+    return max(0, milliseconds)
   }
 
   private func schedule(turnID: VoiceTurnID, deadline: VoiceTurnDeadline, interval: TimeInterval) {
@@ -480,7 +540,11 @@ final class VoiceTurnCoordinator {
       [weak self] in
       guard let self else { return }
       self.deadlineCancellations.removeValue(forKey: key)
-      self.send(.deadlineFired(turnID: turnID, deadline: deadline))
+      let phase = self.activeTurn.map { Self.phaseLabel($0.phase) } ?? "idle"
+      log(
+        "VoiceTurnCoordinator: deadline fired turn=\(turnID.description) "
+          + "deadline=\(deadline.rawValue) phase=\(phase)")
+      self.publish(.deadlineFired(turnID: turnID, deadline: deadline))
     }
   }
 
@@ -497,7 +561,7 @@ final class VoiceTurnCoordinator {
   }
 
   private func appendTimeline(
-    event: VoiceTurnEvent,
+    fact: VoiceTurnFact,
     before: VoiceTurnModel,
     after: VoiceTurnModel
   ) {
@@ -505,12 +569,12 @@ final class VoiceTurnCoordinator {
     timeline.append(
       VoiceTurnTimelineEntry(
         sequence: timelineSequence,
-        turnID: event.turnID ?? after.turn?.id ?? before.turn?.id,
-        event: Self.eventLabel(event),
+        turnID: fact.turnID ?? after.turn?.id ?? before.turn?.id,
+        event: Self.eventLabel(fact),
         phaseBefore: before.turn?.phase,
         phaseAfter: after.turn?.phase,
         route: after.turn?.route,
-        terminalReason: after.lastTerminal?.turnID == (event.turnID ?? after.turn?.id)
+        terminalReason: after.lastTerminal?.turnID == (fact.turnID ?? after.turn?.id)
           ? after.lastTerminal?.reason : nil,
         staleEventCount: after.staleEventCount,
         invalidTransitionCount: after.invalidTransitionCount))
@@ -519,8 +583,8 @@ final class VoiceTurnCoordinator {
     }
   }
 
-  private static func eventLabel(_ event: VoiceTurnEvent) -> String {
-    event.diagnosticLabel
+  private static func eventLabel(_ fact: VoiceTurnFact) -> String {
+    fact.diagnosticLabel
   }
 
   static func phaseLabel(_ phase: VoiceTurnPhase) -> String {
@@ -546,7 +610,6 @@ final class VoiceTurnCoordinator {
     case .omniSTT: return "omni_stt"
     case .deepgramBatch: return "deepgram_batch"
     case .deepgramLive: return "deepgram_live"
-    case .agentFollowUp: return "agent_follow_up"
     }
   }
 

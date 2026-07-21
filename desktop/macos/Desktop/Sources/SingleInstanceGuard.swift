@@ -17,13 +17,15 @@ import Foundation
 /// lock automatically when the process dies, so a crashed instance never leaves a
 /// stale lock behind (unlike a PID file). Keying on the bundle id keeps parallel
 /// *named* dev/test bundles (`com.omi.omi-*`, `com.omi.desktop-dev`) independent of
-/// each other and of production. Keying on the launch mode keeps rewind-only mode
+/// each other and of production — and lets the separately-identified Omi Beta app
+/// (`com.omi.computer-macos.beta`, isolated "Omi Beta" storage root) run beside
+/// stable while still refusing a true duplicate of itself. Keying on the launch mode keeps rewind-only mode
 /// (`--mode=rewind`) and the full app — which the rewind window intentionally spawns
 /// via `open -n` — from evicting one another.
 enum SingleInstanceGuard {
   /// Held for the whole process lifetime once acquired; intentionally never closed.
   /// The OS drops the `flock` when the process exits.
-  private static var lockFileDescriptor: Int32 = -1
+  private nonisolated(unsafe) static var lockFileDescriptor: Int32 = -1
 
   /// If another instance for this `(bundle id, launch mode)` already holds the lock,
   /// foreground it and exit **without** running the normal termination path.

@@ -31,6 +31,9 @@ landing PRs that change product behavior. Engineering standards live in
   apply to your change.
 - A product rule without a guard surface is taste advice, not a locked
   invariant.
+- Keep a new or changed product rule as a proposed design note until its
+  behavior and guard have remained unchanged for seven days; only then may it
+  be locked.
 
 ## Maintainer operating rule
 

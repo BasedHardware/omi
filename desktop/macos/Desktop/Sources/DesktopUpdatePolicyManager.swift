@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 @MainActor
 final class DesktopUpdatePolicyManager: ObservableObject {
@@ -12,8 +12,34 @@ final class DesktopUpdatePolicyManager: ObservableObject {
   private var lastCheckAt = Date.distantPast
   private let minimumCheckInterval: TimeInterval = 5 * 60
   private let dismissedPrefix = "desktopUpdatePolicyDismissed."
+  private let fetchPolicy: (Int?) async throws -> DesktopUpdatePolicyResponse
+  private let currentBuildProvider: () -> Int?
+  private let now: () -> Date
+  private let defaults: UserDefaults
 
-  private init() {}
+  private init() {
+    fetchPolicy = { currentBuild in
+      try await APIClient.shared.getDesktopUpdatePolicy(currentBuild: currentBuild)
+    }
+    currentBuildProvider = {
+      guard let raw = Bundle.main.infoDictionary?["CFBundleVersion"] as? String else { return nil }
+      return Int(raw)
+    }
+    now = Date.init
+    defaults = .standard
+  }
+
+  init(
+    fetchPolicy: @escaping (Int?) async throws -> DesktopUpdatePolicyResponse,
+    currentBuildProvider: @escaping () -> Int? = { nil },
+    now: @escaping () -> Date = Date.init,
+    defaults: UserDefaults = .standard
+  ) {
+    self.fetchPolicy = fetchPolicy
+    self.currentBuildProvider = currentBuildProvider
+    self.now = now
+    self.defaults = defaults
+  }
 
   var visiblePolicy: DesktopUpdatePolicyResponse? {
     guard let policy, policy.active, policy.severity != .none else { return nil }
@@ -22,48 +48,47 @@ final class DesktopUpdatePolicyManager: ObservableObject {
   }
 
   func refresh(force: Bool = false) {
-    let now = Date()
-    guard force || now.timeIntervalSince(lastCheckAt) >= minimumCheckInterval else { return }
-    lastCheckAt = now
+    Task { await refreshNow(force: force) }
+  }
 
-    Task {
-      do {
-        let fetched = try await APIClient.shared.getDesktopUpdatePolicy(currentBuild: currentBuildNumber)
-        await MainActor.run {
-          self.policy = fetched.active ? fetched : nil
-        }
-      } catch {
-        log("DesktopUpdatePolicy: failed to fetch policy: \(error.localizedDescription)")
-      }
+  func refreshNow(force: Bool = false) async {
+    let currentTime = now()
+    guard force || currentTime.timeIntervalSince(lastCheckAt) >= minimumCheckInterval else { return }
+    lastCheckAt = currentTime
+
+    do {
+      let fetched = try await fetchPolicy(currentBuildProvider())
+      policy = fetched.active ? fetched : nil
+    } catch {
+      // Never preserve a stale required prompt when its control plane is down.
+      // Sparkle and the stable manual download path remain available independently.
+      policy = nil
+      log("DesktopUpdatePolicy: unavailable error_type=\(String(reflecting: type(of: error)))")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "other",
+        from: "desktop_update_policy",
+        to: "desktop_update_appcast",
+        reason: "other",
+        outcome: .recovered,
+        extra: ["user_visible": false]
+      )
     }
   }
 
   func dismiss(_ policy: DesktopUpdatePolicyResponse) {
     guard policy.canDismiss, !policy.isRequired else { return }
-    UserDefaults.standard.set(true, forKey: dismissedKey(for: policy))
+    defaults.set(true, forKey: dismissedKey(for: policy))
     if self.policy?.id == policy.id {
       self.policy = nil
     }
   }
 
   func openDownload(_ policy: DesktopUpdatePolicyResponse) {
-    guard let url = URL(string: policy.downloadURL),
-      let scheme = url.scheme?.lowercased(),
-      ["http", "https"].contains(scheme)
-    else {
-      log("DesktopUpdatePolicy: ignored invalid download URL")
-      return
-    }
-    NSWorkspace.shared.open(url)
-  }
-
-  private var currentBuildNumber: Int? {
-    guard let raw = Bundle.main.infoDictionary?["CFBundleVersion"] as? String else { return nil }
-    return Int(raw)
+    NSWorkspace.shared.open(DesktopUpdatePolicyResponse.resolvedDownloadURL(from: policy.downloadURL))
   }
 
   private func isDismissed(_ policy: DesktopUpdatePolicyResponse) -> Bool {
-    UserDefaults.standard.bool(forKey: dismissedKey(for: policy))
+    defaults.bool(forKey: dismissedKey(for: policy))
   }
 
   private func dismissedKey(for policy: DesktopUpdatePolicyResponse) -> String {

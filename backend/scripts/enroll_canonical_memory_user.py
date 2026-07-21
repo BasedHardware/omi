@@ -26,6 +26,7 @@ from config.memory_rollout import MemoryRolloutMode, PASSED
 from database.google_credentials import prepare_google_credentials
 from database.memory_collections import MemoryCollections
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 from utils.memory.v3.limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
 
 FIRST_USER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
@@ -151,16 +152,21 @@ def inspect_existing_docs(db_client: Any, documents: list[RolloutDocumentPlan]) 
 
 
 def inspect_v3_read_prerequisites(db_client: Any, *, uid: str) -> dict[str, bool]:
-    result: dict[str, bool] = {}
-    for path in v3_read_prerequisite_paths(uid):
-        result[path] = _snapshot_data(db_client.document(path).get()) is not None
-    return result
+    paths = MemoryCollections(uid=uid)
+    trusted_head = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    return {
+        paths.memory_state_head: trusted_head.read_error_reason is None,
+        paths.v3_compatibility_projection_state: _snapshot_data(
+            db_client.document(paths.v3_compatibility_projection_state).get()
+        )
+        is not None,
+    }
 
 
 def assert_v3_read_prerequisites_ready(prerequisites: dict[str, bool]) -> None:
     missing = [path for path, exists in prerequisites.items() if not exists]
     if missing:
-        raise RuntimeError("--stage read --apply requires existing v3 read prerequisite docs: " + ", ".join(missing))
+        raise RuntimeError("--stage read --apply requires valid v3 read prerequisite docs: " + ", ".join(missing))
 
 
 def apply_documents(

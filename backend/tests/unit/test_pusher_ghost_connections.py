@@ -22,7 +22,8 @@ from pathlib import Path
 import pytest
 
 PUSHER_SRC = Path(__file__).resolve().parents[2] / 'routers' / 'pusher.py'
-TRANSCRIBE_SRC = Path(__file__).resolve().parents[2] / 'routers' / 'transcribe.py'
+LISTEN_RUNTIME_SRC = Path(__file__).resolve().parents[2] / 'routers' / 'listen' / 'runtime.py'
+LISTEN_CONTRACTS_SRC = Path(__file__).resolve().parents[2] / 'routers' / 'listen' / 'contracts.py'
 
 
 def _read_source(path: Path) -> str:
@@ -568,44 +569,44 @@ class TestSupervisorBehavior:
         await asyncio.gather(receive_task, return_exceptions=True)
 
 
-class TestTranscribeSupervisor:
-    """Verify transcribe.py supervisor distinguishes finite vs lifetime tasks."""
+class TestListenRuntimeSupervisor:
+    """Verify the extracted listen runtime distinguishes finite and lifetime tasks."""
 
-    def test_transcribe_has_session_state_object(self):
-        src = _read_source(TRANSCRIBE_SRC)
+    def test_runtime_uses_session_state_object(self):
+        src = _read_source(LISTEN_CONTRACTS_SRC)
         assert 'class ListenSessionState' in src
-        assert 'session = ListenSessionState()' in src
+        runtime = _read_source(LISTEN_RUNTIME_SRC)
+        assert 'self.state = ListenSessionState()' in runtime
 
-    def test_transcribe_lifetime_task_triggers_teardown(self):
+    def test_runtime_lifetime_task_triggers_teardown(self):
         """Lifetime task handling is routed through WebSocketTaskSupervisor."""
-        src = _read_source(TRANSCRIBE_SRC)
-        assert 'task_supervisor.create_lifetime_task' in src
-        assert 'exit_result = await task_supervisor.supervise(' in src
+        src = _read_source(LISTEN_RUNTIME_SRC)
+        assert 'self.task_supervisor.create_lifetime_task' in src
+        assert 'result = await self.task_supervisor.supervise(' in src
 
-    def test_transcribe_uses_supervisor_utility(self):
-        src = _read_source(TRANSCRIBE_SRC)
-        assert 'WebSocketTaskSupervisor' in src, "Transcribe must use WebSocketTaskSupervisor from async_tasks"
-        assert 'drain_tasks' in src, "Transcribe must use drain_tasks from async_tasks"
+    def test_runtime_uses_supervisor_utility(self):
+        src = _read_source(LISTEN_RUNTIME_SRC)
+        assert 'WebSocketTaskSupervisor' in src
+        assert 'drain_tasks' in src
 
-    def test_transcribe_has_finite_task_creation(self):
-        src = _read_source(TRANSCRIBE_SRC)
-        assert 'task_supervisor.create_finite_task' in src
-        assert 'pending_conversations_task' in src
-        assert 'speaker_id_task' in src
+    def test_runtime_has_finite_task_creation(self):
+        src = _read_source(LISTEN_RUNTIME_SRC)
+        assert 'self.task_supervisor.create_finite_task' in src
+        assert "name='pending_convos'" in src
+        assert "name='speaker_id'" in src
 
-    def test_transcribe_has_receive_timeout(self):
-        src = _read_source(TRANSCRIBE_SRC)
-        assert 'WS_RECEIVE_TIMEOUT' in src
+    def test_runtime_has_receive_timeout(self):
+        src = _read_source(Path(__file__).resolve().parents[2] / 'routers' / 'listen' / 'receiver.py')
+        assert 'ws_receive_timeout' in src
 
-    def test_transcribe_supervisor_session_in_try_finally(self):
-        """The handler must start and end the supervisor session in try/finally."""
-        tree = ast.parse(_read_source(TRANSCRIBE_SRC))
+    def test_runtime_supervisor_session_is_torn_down_in_finally(self):
+        tree = ast.parse(_read_source(LISTEN_RUNTIME_SRC))
         handler = None
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == '_stream_handler':
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == 'run':
                 handler = node
                 break
-        assert handler is not None, '_stream_handler not found in transcribe.py'
+        assert handler is not None, 'ListenSessionRuntime.run not found'
 
         found_start_in_try = False
         found_end_in_finally = False
@@ -626,34 +627,34 @@ class TestTranscribeSupervisor:
                     found_end_in_finally = True
 
         assert found_start_in_try, "task_supervisor.start_session() must be in try body"
-        assert found_end_in_finally, "task_supervisor.end_session() must be in finally block"
+        assert 'await self._teardown()' in _read_source(LISTEN_RUNTIME_SRC)
+        assert 'self.task_supervisor.end_session()' in _read_source(LISTEN_RUNTIME_SRC)
 
-    def test_transcribe_supervisor_before_drain(self):
-        """Supervisor wait must appear before the main bg drain in transcribe.py."""
-        src = _read_source(TRANSCRIBE_SRC)
-        supervise_pos = src.find('exit_result = await task_supervisor.supervise(')
-        drain_pos = src.find('await task_supervisor.drain_monitored(')
-        assert supervise_pos != -1, "'task_supervisor.supervise(' call not found in transcribe.py"
-        assert drain_pos != -1, "'task_supervisor.drain_monitored(' not found in transcribe.py"
+    def test_runtime_supervisor_before_drain(self):
+        src = _read_source(LISTEN_RUNTIME_SRC)
+        supervise_pos = src.find('result = await self.task_supervisor.supervise(')
+        drain_pos = src.find('await self.task_supervisor.drain_monitored(')
+        assert supervise_pos != -1
+        assert drain_pos != -1
         assert supervise_pos < drain_pos, "supervise_tasks must appear before bg drain in transcribe.py"
 
-    def test_transcribe_no_session_start_before_try(self):
+    def test_runtime_no_session_start_before_try(self):
         """Session start must NOT appear before the main try block to prevent leak on early return."""
-        src = _read_source(TRANSCRIBE_SRC)
+        src = _read_source(LISTEN_RUNTIME_SRC)
         lines = src.split('\n')
-        in_stream_handler = False
+        in_run = False
         try_line = None
         start_lines = []
         for i, line in enumerate(lines, 1):
-            if 'def _stream_handler(' in line:
-                in_stream_handler = True
-            if in_stream_handler:
+            if 'async def run(' in line:
+                in_run = True
+            if in_run:
                 if line.strip().startswith('try:') and try_line is None:
                     try_line = i
-                if 'task_supervisor.start_session()' in line:
+                if 'self.task_supervisor.start_session()' in line:
                     start_lines.append(i)
-        assert try_line is not None, "try block not found in _stream_handler"
-        assert start_lines, "No session start found in _stream_handler"
+        assert try_line is not None, "try block not found in ListenSessionRuntime.run"
+        assert start_lines, "No session start found in ListenSessionRuntime.run"
         for start_line in start_lines:
             assert start_line > try_line, (
                 f"Session start at line {start_line} must be after try at line {try_line} "

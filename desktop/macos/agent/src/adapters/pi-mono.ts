@@ -53,6 +53,10 @@ interface PiRpcEvent {
 
 interface PiMonoRelayContext {
   capabilityRef: string;
+  /** Omi-owned opaque correlation id. Never contains prompt or account data. */
+  requestId: string;
+  /** Per-turn effort lane ("adaptive" | "fast") relayed to the gateway. */
+  reasoningEffort?: string;
 }
 
 interface PiAssistantMessageEvent {
@@ -203,6 +207,102 @@ function resolveBundledExtension(): string {
   ).pathname);
 }
 
+const PUBLIC_WEB_ROUTING_INSTRUCTION = "<omi_retrieval_policy>Web search is required and available for this fresh public request. Use a live public-web or search tool before answering. Base time-sensitive claims only on that lookup and identify the source. Never say, imply, or hedge that you lack internet, web-search, real-time-data, or tool access; if the lookup itself fails, state that the lookup failed instead. Do not use private Omi context unless the user explicitly asks for it.</omi_retrieval_policy>";
+
+const EXPLICIT_WEB_REQUESTS = [
+  "search the web", "search web", "search the internet", "search online",
+  "look it up online", "find it online", "google it", "browse the web",
+  "web search", "internet search",
+];
+
+const FRESH_PUBLIC_REQUESTS = [
+  "latest news", "latest on", "what's the latest", "what is the latest",
+  "current weather", "weather right now", "current price", "price right now",
+  "current score", "score right now", "current president", "current ceo",
+  "who is the current", "today's news", "news today", "recent news",
+  "released this week", "released today", "released recently", "newly released",
+];
+
+const CURRENT_WEATHER_PREFIXES = [
+  "what's the weather", "what is the weather", "whats the weather",
+  "how's the weather", "how is the weather", "hows the weather",
+  "weather in ", "weather for ", "weather at ",
+];
+
+const FRESH_PUBLIC_TEMPORAL_QUALIFIERS = ["right now", "currently", "today", "this week"];
+const FRESH_PUBLIC_LOOKUP_TERMS = [
+  "world cup", "schedule", "fixture", "standings", "match", "game", "playing",
+  "score", "weather", "price", "news", "release", "released", "election", "market",
+];
+
+const EXPLICIT_PRIVATE_CONTEXT = [
+  "my conversations", "our conversations", "my memories", "your memory of me",
+  "my screen history", "my screen activity", "my calendar", "your calendar",
+  "my email", "your email", "my files", "your files", "my tasks", "your tasks",
+  "my action items", "my notes", "your notes", "what did i say", "what have i said",
+  "when did i", "what was i doing", "what do you remember about me",
+];
+
+const PUBLIC_WEB_ACCESS_DENIAL = /\b(?:I\s+)?(?:do\s+not|don't|cannot|can't|can not)\s+(?:(?:have\s+)?(?:direct\s+)?(?:access\s+to\s+)?(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?)(?:\s+(?:or|and)\s+(?:the\s+)?(?:internet|web(?:[ -]?search)?|browser|real[- ]time(?:\s+\w+){0,2}(?:\s+data)?))*|(?:have\s+)?(?:direct\s+)?(?:internet|web(?:[ -]?search)?|browser)\s+access|(?:browse|search)\s+(?:the\s+)?(?:web|internet))/i;
+
+// kernel-core renders inherited context before the authoritative instruction
+// using this delimiter. Retrieval routing is an input policy, so historical
+// transcript/context text must never select a gateway tool for a new turn.
+const CURRENT_USER_MESSAGE_DELIMITER = "\n# User Message\n";
+
+function currentUserInstruction(renderedPrompt: string): string {
+  const delimiterIndex = renderedPrompt.lastIndexOf(CURRENT_USER_MESSAGE_DELIMITER);
+  return delimiterIndex === -1
+    ? renderedPrompt
+    : renderedPrompt.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);
+}
+
+type PublicWebTurnState = {
+  bufferedText: string;
+  /**
+   * The Rust gateway resolves Anthropic's server-side web tool internally, so
+   * Pi never receives a local tool lifecycle. This synthetic, query-scoped
+   * activity is the truthful UI projection of the required gateway lookup.
+   */
+  progressToolUseId: string;
+};
+
+/// Compatibility routing for already-deployed desktop backends. The current
+/// request is sent through both coordinator and leaf Pi sessions, so putting
+/// the instruction here guarantees public-web queries keep working for main
+/// agents and subagents while the backend fleet rolls forward independently.
+export function routePromptForPublicWeb(message: string): string {
+  // The adapter receives the full rendered prompt, including inherited context
+  // and prior turns. Inspect only the current user instruction when deciding
+  // whether this particular turn requires a public-web lookup.
+  const normalized = currentUserInstruction(message).trim().toLowerCase();
+  if (!normalized || EXPLICIT_PRIVATE_CONTEXT.some((phrase) => normalized.includes(phrase))) {
+    return message;
+  }
+  const hasFreshPublicTemporalLookup = FRESH_PUBLIC_TEMPORAL_QUALIFIERS.some(
+    (phrase) => normalized.includes(phrase)
+  ) && FRESH_PUBLIC_LOOKUP_TERMS.some((term) => normalized.includes(term));
+  const requiresWeb = EXPLICIT_WEB_REQUESTS.some((phrase) => normalized.includes(phrase))
+    || FRESH_PUBLIC_REQUESTS.some((phrase) => normalized.includes(phrase))
+    || CURRENT_WEATHER_PREFIXES.some((phrase) => normalized.includes(phrase))
+    || hasFreshPublicTemporalLookup;
+  return requiresWeb ? `${PUBLIC_WEB_ROUTING_INSTRUCTION}\n\n${message}` : message;
+}
+
+export function stripFalsePublicWebAvailabilityDisclaimers(text: string): string {
+  const sentences = text.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [text];
+  return sentences
+    .map((sentence) => {
+      if (!PUBLIC_WEB_ACCESS_DENIAL.test(sentence)) return sentence;
+      // Keep a true continuation such as "but I can retrieve it with the
+      // terminal" while removing only the contradictory no-access clause.
+      return sentence.replace(/^\s*(?:I\s+)?(?:do\s+not|don't|cannot|can't|can not)[^.?!]*?\b(?:but|however)\s+/i, "");
+    })
+    .filter((sentence) => !PUBLIC_WEB_ACCESS_DENIAL.test(sentence))
+    .join("")
+    .replace(/^\s+/, "");
+}
+
 export class PiMonoAdapter implements HarnessAdapter {
   private static nextAdapterInstanceId = 1;
 
@@ -239,6 +339,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   private requiredAgentControlFailures = new Map<string, string>();
   private requiredControlInputs = new Map<string, Record<string, unknown>>();
   private currentAbortController: AbortController | null = null;
+  /** A public-web response is buffered until its gateway-routed terminal result,
+   * so false availability boilerplate never escapes before the search completes. */
+  private activePublicWebTurn: PublicWebTurnState | null = null;
   private piPath: string;
   private extensionPath: string;
   private readonly contextFilePath = join(
@@ -371,6 +474,8 @@ export class PiMonoAdapter implements HarnessAdapter {
       }
       this.pendingRequests.clear();
       this.activePromptGeneration = 0;
+      this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
+      this.activePublicWebTurn = null;
       rmSync(this.contextFilePath, { force: true });
     });
   }
@@ -397,6 +502,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.clear();
     this.pendingRequests.clear();
     this.activePromptGeneration = 0;
+    this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
+    this.activePublicWebTurn = null;
     rmSync(this.contextFilePath, { force: true });
   }
 
@@ -494,7 +601,20 @@ export class PiMonoAdapter implements HarnessAdapter {
       }
     }
 
-    const message = textParts.join("\n");
+    const rawMessage = textParts.join("\n");
+    const message = routePromptForPublicWeb(rawMessage);
+    this.activePublicWebTurn = message === rawMessage
+      ? null
+      : { bufferedText: "", progressToolUseId: `gateway-public-web-${generation}` };
+    if (this.activePublicWebTurn) {
+      this.eventHandler?.({
+        type: "tool_activity",
+        name: "web_search",
+        status: "started",
+        toolUseId: this.activePublicWebTurn.progressToolUseId,
+        input: { executor: "gateway" },
+      });
+    }
 
     const cmd: PiRpcCommand = {
       type: "prompt",
@@ -504,7 +624,21 @@ export class PiMonoAdapter implements HarnessAdapter {
       cmd.images = images;
     }
 
-    this.sendCommand(cmd);
+    try {
+      this.sendCommand(cmd);
+    } catch (error) {
+      // `sendCommand` can fail synchronously if Pi exits between prompt setup
+      // and stdin write. The synthetic server-search activity has already been
+      // projected, so it must be terminalized before this async call rejects.
+      this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
+      this.activePublicWebTurn = null;
+      this.activePromptGeneration = 0;
+      this.currentAbortController = null;
+      this.eventHandler = null;
+      this.toolExecutor = null;
+      this.clearRelayContext(relayContext?.capabilityRef);
+      throw error;
+    }
 
     // Wait for turn_end event mapped to THIS generation
     return new Promise<PromptResult>((resolve, reject) => {
@@ -517,13 +651,21 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   abort(sessionId: string): void {
-    this.sendCommand({ type: "abort" });
+    try {
+      this.sendCommand({ type: "abort" });
+    } catch (error) {
+      // The process may already be gone. Keep the normal cancellation cleanup
+      // below so a visible gateway-search activity cannot remain in progress.
+      process.stderr.write(`[pi-mono] abort dispatch failed: ${String(error)}\n`);
+    }
     this.currentAbortController?.abort();
 
     // Resolve the in-flight prompt (by generation) with a partial result and
     // CLEAR activePromptGeneration so a stray late turn_end is dropped instead
     // of completing whatever comes next.
     const generation = this.activePromptGeneration;
+    this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
+    this.activePublicWebTurn = null;
     if (generation === 0) return;
     const pending = this.pendingRequests.get(generation);
     if (pending) {
@@ -694,7 +836,14 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
     mkdirSync(dirname(this.contextFilePath), { recursive: true });
-    writeFileSync(this.contextFilePath, JSON.stringify({ capabilityRef: context.capabilityRef }));
+    writeFileSync(
+      this.contextFilePath,
+      JSON.stringify({
+        capabilityRef: context.capabilityRef,
+        requestId: context.requestId,
+        ...(context.reasoningEffort ? { reasoningEffort: context.reasoningEffort } : {}),
+      })
+    );
   }
 
   private clearRelayContext(expectedCapabilityRef?: string): void {
@@ -742,7 +891,7 @@ export class PiMonoAdapter implements HarnessAdapter {
         break;
 
       case "tool_execution_update":
-        // Partial tool output — emit as tool_activity
+        this.handleToolProgress(event);
         break;
 
       case "tool_execution_end":
@@ -763,12 +912,15 @@ export class PiMonoAdapter implements HarnessAdapter {
       case "compaction_end":
       case "auto_retry_start":
       case "auto_retry_end":
+      case "agent_settled":
         // Protocol control events the adapter observes but does not act on.
         // Turn boundaries and streaming state are already tracked via
         // message_update / turn_end; no action needed here.
         // auto_retry_* events fire when pi retries after a transient provider
         // error (rate limit, 5xx). They do NOT end the in-flight turn — the
         // subsequent turn_end is still authoritative for completion.
+        // agent_settled is an upstream advisory event; only turn_end carries
+        // the terminal result that can settle Omi's canonical run lifecycle.
         break;
 
       default:
@@ -787,10 +939,14 @@ export class PiMonoAdapter implements HarnessAdapter {
     switch (msgEvent.type) {
       case "text_delta":
         if (msgEvent.delta) {
-          this.eventHandler?.({
-            type: "text_delta",
-            text: msgEvent.delta,
-          });
+          if (this.activePublicWebTurn) {
+            this.activePublicWebTurn.bufferedText += msgEvent.delta;
+          } else {
+            this.eventHandler?.({
+              type: "text_delta",
+              text: msgEvent.delta,
+            });
+          }
         }
         break;
 
@@ -897,6 +1053,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     });
   }
 
+  private handleToolProgress(event: PiRpcEvent): void {
+    const name = event.toolName as string;
+    const toolCallId = event.toolCallId as string;
+    if (!name || !toolCallId) return;
+
+    // A progress event proves the local tool is still moving, but its partial
+    // result can contain document content or filesystem paths. Carry only the
+    // bounded lifecycle identity across the bridge.
+    this.eventHandler?.({
+      type: "tool_activity",
+      name,
+      status: "progress",
+      toolUseId: toolCallId,
+    });
+  }
+
   private handleTurnEnd(event: PiRpcEvent): void {
     // Drop stray turn_end events that don't belong to an in-flight prompt.
     // This happens after abort() or when the subprocess emits a late
@@ -914,6 +1086,8 @@ export class PiMonoAdapter implements HarnessAdapter {
         `[pi-mono] dropping stray turn_end for generation ${generation}\n`
       );
       this.activePromptGeneration = 0;
+      this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
+      this.activePublicWebTurn = null;
       return;
     }
 
@@ -922,6 +1096,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       ? message.errorMessage.trim()
       : undefined;
     if (errorMessage) {
+      this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
       this.eventHandler?.({
         type: "error",
         message: errorMessage,
@@ -929,6 +1104,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       });
       this.pendingRequests.delete(generation);
       this.activePromptGeneration = 0;
+      this.activePublicWebTurn = null;
       pending.reject(new Error(errorMessage));
       this.eventHandler = null;
       this.toolExecutor = null;
@@ -951,6 +1127,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const controlFailure = this.requiredAgentControlFailures.values().next().value as string | undefined;
     if (controlFailure) {
+      this.finishPublicWebProgress(this.activePublicWebTurn, "failed");
       this.eventHandler?.({
         type: "error",
         message: controlFailure,
@@ -958,11 +1135,15 @@ export class PiMonoAdapter implements HarnessAdapter {
       });
       this.pendingRequests.delete(generation);
       this.activePromptGeneration = 0;
+      this.activePublicWebTurn = null;
       pending.reject(new Error(controlFailure));
       this.eventHandler = null;
       this.toolExecutor = null;
       return;
     }
+
+    const publicWebTurn = this.activePublicWebTurn;
+    this.activePublicWebTurn = null;
 
     // Extract text from content blocks
     let text = "";
@@ -971,6 +1152,17 @@ export class PiMonoAdapter implements HarnessAdapter {
         .filter((b) => b.type === "text")
         .map((b) => b.text || "")
         .join("");
+    }
+    if (publicWebTurn) {
+      text = publicWebTurn.bufferedText || text;
+      // A terminal public-web turn proves the gateway completed the required
+      // provider interaction. Do not make this depend on local Pi tool events:
+      // Anthropic's server-side web_search intentionally never exposes one.
+      text = stripFalsePublicWebAvailabilityDisclaimers(text);
+      this.finishPublicWebProgress(publicWebTurn, "completed");
+      if (text) {
+        this.eventHandler?.({ type: "text_delta", text });
+      }
     }
 
     // Extract usage
@@ -995,6 +1187,25 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.eventHandler = null;
     this.toolExecutor = null;
   }
+
+  private finishPublicWebProgress(
+    publicWebTurn: PublicWebTurnState | null,
+    status: "completed" | "failed",
+  ): void {
+    if (!publicWebTurn) return;
+    this.eventHandler?.({
+      type: "tool_activity",
+      name: "web_search",
+      status,
+      toolUseId: publicWebTurn.progressToolUseId,
+    });
+  }
+}
+
+/** Allowlisted per-turn effort lane from run metadata — anything else is dropped. */
+function relayReasoningEffort(metadata: Record<string, unknown> | undefined): string | undefined {
+  const raw = metadata?.reasoningEffort;
+  return raw === "adaptive" || raw === "fast" ? raw : undefined;
 }
 
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
@@ -1055,6 +1266,8 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         signal,
         {
           capabilityRef: context.toolCapabilityRef,
+          requestId: context.requestId,
+          reasoningEffort: relayReasoningEffort(context.metadata),
         }
       );
 

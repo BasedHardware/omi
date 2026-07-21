@@ -1,3 +1,4 @@
+progressDeadlineSeconds: 1800
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -81,6 +82,10 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
+envFrom:
+  - configMapRef:
+      name: dev-omi-backend-config
+
 env:
   - name: DESKTOP_UPDATE_POINTERS_MODE
     value: "primary"
@@ -93,11 +98,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GEMINI_API_KEY
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -119,6 +119,8 @@ env:
     value: "dev"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+    value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
     value: "true"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
@@ -154,11 +156,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
-  - name: GOOGLE_CLIENT_ID
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_CLIENT_ID
   - name: GOOGLE_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
@@ -190,11 +187,6 @@ env:
         key: PINECONE_API_KEY
   - name: PINECONE_INDEX_NAME
     value: "memories-backend-dev"
-  - name: REDIS_DB_HOST
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: REDIS_DB_HOST
   - name: REDIS_DB_PORT
     value: "13151"
   - name: REDIS_DB_PASSWORD
@@ -207,18 +199,12 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
-  - name: STT_SERVICE_MODELS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: STT_SERVICE_MODELS
-  - name: STT_PRERECORDED_MODEL
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: STT_PRERECORDED_MODEL
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
+  - name: STT_PRERECORDED_MODEL
+    value: "modulate-velma-2,parakeet"
+  - name: STT_SERVICE_MODELS
+    value: "modulate-velma-2,parakeet"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
@@ -277,11 +263,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: MARKETPLACE_APP_REVIEWERS
-  - name: TYPESENSE_HOST
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: TYPESENSE_HOST
   - name: TYPESENSE_HOST_PORT
     value: "443"
   - name: TYPESENSE_API_KEY
@@ -291,10 +272,6 @@ env:
         key: TYPESENSE_API_KEY
   - name: MEMORY_TYPESENSE_COLLECTION
     value: "canonical_memory_atoms"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omiapi.com"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -329,31 +306,18 @@ env:
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware-dev"
-  - name: TWILIO_ACCOUNT_SID
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: TWILIO_ACCOUNT_SID
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: TWILIO_AUTH_TOKEN
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: TWILIO_AUTH_TOKEN
-  - name: TWILIO_API_KEY_SID
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: TWILIO_API_KEY_SID
   - name: TWILIO_API_KEY_SECRET
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: TWILIO_API_KEY_SECRET
-  - name: TWILIO_TWIML_APP_SID
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: TWILIO_TWIML_APP_SID
   - name: VAD_GATE_MODE
     value: "active"
   # Fair-use system (PR #5748)
@@ -400,71 +364,21 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: OPENROUTER_API_KEY
-  - name: RAPID_API_HOST
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: RAPID_API_HOST
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: RAPID_API_KEY
-  - name: CONVERSATION_SUMMARIZED_APP_IDS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: CONVERSATION_SUMMARIZED_APP_IDS
-  - name: X_OAUTH_CLIENT_ID
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: X_OAUTH_CLIENT_ID
   - name: X_OAUTH_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: X_OAUTH_CLIENT_SECRET
-  - name: X_OAUTH_REDIRECT_URI
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: X_OAUTH_REDIRECT_URI
-  - name: MCP_AUTHORIZATION_SERVER_URL
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: MCP_AUTHORIZATION_SERVER_URL
-  - name: MCP_RESOURCE_URL
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: MCP_RESOURCE_URL
-  - name: MCP_OAUTH_CHATGPT_CLIENT_ID
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: MCP_OAUTH_CHATGPT_CLIENT_ID
   - name: MCP_OAUTH_CHATGPT_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: MCP_OAUTH_CHATGPT_CLIENT_SECRET
-  - name: MCP_OAUTH_CHATGPT_REDIRECT_URIS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
-  - name: MCP_OAUTH_PUBLIC_CLIENT_ID
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: MCP_OAUTH_PUBLIC_CLIENT_ID
-  - name: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

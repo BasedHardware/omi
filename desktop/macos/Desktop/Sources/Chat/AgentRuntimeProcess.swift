@@ -1,6 +1,19 @@
 import Foundation
 import OmiSupport
 
+/// Sendable carrier for `[String: Any]` JSON payloads that must cross actor or
+/// isolation boundaries. The dictionary is parsed once and treated as immutable
+/// thereafter, so unchecked Sendable conformance is safe.
+struct RuntimeJSONPayloadBox: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
+extension Notification.Name {
+  /// Posted on MainActor after the runtime handshake makes direct control
+  /// tools admissible. Carries no owner id or request content.
+  static let agentRuntimeDidBecomeReady = Notification.Name("com.omi.desktop.agentRuntimeDidBecomeReady")
+}
+
 /// Shares one asynchronous runtime launch across every client admitted while
 /// that launch is suspended. The key is deliberately exact (owner-session
 /// authorization plus authority epoch), so work admitted under a newer owner
@@ -43,9 +56,59 @@ actor AgentRuntimeStartupSingleFlight<Key: Equatable & Sendable, Output: Sendabl
     participantCount
   }
 
+  /// A reducer can enter `.starting` just before the owning task reaches this
+  /// actor. Callers must distinguish that short launch-admission window from a
+  /// real in-flight launch; treating both as "wait for init" strands the first
+  /// launch forever.
+  func hasActiveAttempt() -> Bool {
+    attempt != nil
+  }
+
   private func clearAttempt(id: UUID) {
     guard attempt?.id == id else { return }
     attempt = nil
+  }
+}
+
+/// Decides whether a caller joins an existing launch. `.starting` alone is not
+/// sufficient evidence: the reducer records admission before the single-flight
+/// actor has installed its attempt, and the first launcher must proceed.
+enum AgentRuntimeStartupAdmission {
+  static func shouldJoin(
+    lifecycleState: AgentRuntimeBridgeLifecycle.State,
+    hasActiveStartupAttempt: Bool
+  ) -> Bool {
+    lifecycleState == .running || (lifecycleState == .starting && hasActiveStartupAttempt)
+  }
+}
+
+/// Firebase credentials are mandatory for every production and model runtime
+/// start. The sole exception is a non-production journal-control start, whose
+/// owner-bound RPCs deliberately operate without a model credential. The
+/// fault suite supplies a separate, inert model token so its named test bundle
+/// can reach the local 5xx endpoint without contacting Firebase.
+enum AgentRuntimeCredentialPolicy {
+  static let hermeticFaultModelTokenEnvironmentKey = "OMI_FAULT_MODEL_AUTH_TOKEN"
+  static let hermeticFaultBundleIdentifier = "com.omi.omi-fault"
+
+  static func hermeticFaultModelToken(
+    isNonProduction: Bool,
+    bundleIdentifier: String,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> String? {
+    guard isNonProduction, bundleIdentifier == hermeticFaultBundleIdentifier else { return nil }
+    let token =
+      environment[hermeticFaultModelTokenEnvironmentKey]?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return token.isEmpty ? nil : token
+  }
+
+  static func requiresManagedCredentials(
+    requestedCredentials: Bool,
+    isNonProduction: Bool,
+    hermeticFaultModelToken: String? = nil
+  ) -> Bool {
+    (requestedCredentials || !isNonProduction) && hermeticFaultModelToken == nil
   }
 }
 
@@ -79,6 +142,23 @@ struct AgentRuntimeJournalTimeoutPolicy {
 
   static func allowsCorrelatedResult(elapsedNanoseconds: UInt64) -> Bool {
     elapsedNanoseconds < deadlineNanoseconds
+  }
+}
+
+/// Kernel context needs a bounded but startup-tolerant readiness budget. These
+/// requests only establish the pinned session and rendered context; they never
+/// run the user's model query, which is tracked on its own request path.
+enum AgentRuntimeKernelContractTimeoutPolicy {
+  static let defaultDeadlineNanoseconds: UInt64 = 5_000_000_000
+  static let contextReadinessDeadlineNanoseconds: UInt64 = 15_000_000_000
+
+  static func deadlineNanoseconds(for operation: String) -> UInt64 {
+    switch operation {
+    case "resolve_surface_session", "context_source_update", "get_context_snapshot":
+      return contextReadinessDeadlineNanoseconds
+    default:
+      return defaultDeadlineNanoseconds
+    }
   }
 }
 
@@ -195,7 +275,24 @@ final class DebugSuspendControl: @unchecked Sendable {
 
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
+  nonisolated static let expectedProtocolVersion = 2
+  nonisolated static let requiredRuntimeCapabilities: Set<String> = [
+    "journal_import_remote_turn",
+    "runtime_adapter_availability",
+  ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
+
+  struct RuntimeHandshake: Equatable, Sendable {
+    let protocolVersion: Int
+    let runtimeVersion: String
+    let capabilities: Set<String>
+  }
+
+  struct DiagnosticsSnapshot: Equatable, Sendable {
+    let running: Bool
+    let protocolVersion: Int?
+    let runtimeVersion: String?
+  }
 
   struct RuntimeOwnerAuthorityStatus: Equatable, Sendable {
     let epoch: UInt64
@@ -217,6 +314,40 @@ actor AgentRuntimeProcess {
     useExtension && !token.isEmpty && targetHasExtension
   }
 
+  nonisolated static func startupAuthHeader(
+    requiresCredentials: Bool,
+    fetchAuthHeader: () async throws -> String?
+  ) async throws -> String? {
+    guard requiresCredentials else { return nil }
+    return try await fetchAuthHeader()
+  }
+
+  nonisolated static func validateRuntimeHandshake(
+    _ message: RuntimeMessage
+  ) throws -> RuntimeHandshake {
+    guard message.kind == .initMessage,
+      let protocolVersion = message.protocolVersion,
+      protocolVersion == expectedProtocolVersion
+    else {
+      throw BridgeError.agentError("Agent runtime protocol is incompatible")
+    }
+    let runtimeVersion =
+      (message.payload["runtimeVersion"] as? String)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !runtimeVersion.isEmpty else {
+      throw BridgeError.agentError("Agent runtime did not identify its version")
+    }
+    let capabilities = Set(message.payload["runtimeCapabilities"] as? [String] ?? [])
+    guard requiredRuntimeCapabilities.isSubset(of: capabilities) else {
+      throw BridgeError.agentError("Agent runtime is missing required capabilities")
+    }
+    return RuntimeHandshake(
+      protocolVersion: protocolVersion,
+      runtimeVersion: runtimeVersion,
+      capabilities: capabilities
+    )
+  }
+
   nonisolated static func isConfirmedOutOfMemoryDiagnostic(_ text: String) -> Bool {
     let lower = text.lowercased()
     return lower.contains("fatalprocessoutofmemory")
@@ -224,8 +355,8 @@ actor AgentRuntimeProcess {
       || lower.contains("failed to reserve virtual memory")
   }
 
-  struct RuntimeMessage {
-    struct RequestKey: Hashable, Equatable {
+  struct RuntimeMessage: @unchecked Sendable {
+    struct RequestKey: Hashable, Equatable, Sendable {
       let clientId: String
       let requestId: String
     }
@@ -397,9 +528,17 @@ actor AgentRuntimeProcess {
   private struct ActiveKernelContractRequest {
     let clientId: String
     let requestId: String
+    let operation: String
     let expectedKind: RuntimeMessage.Kind
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
-    let continuation: CheckedContinuation<[String: Any], Error>
+    let sentAtUptime: TimeInterval
+    let continuation: CheckedContinuation<RuntimeJSONPayloadBox, Error>
+  }
+
+  private struct TimedOutKernelContractRequest {
+    let operation: String
+    let expectedKind: RuntimeMessage.Kind
+    let timedOutAtUptime: TimeInterval
   }
 
   struct JournalOperationResult: Sendable {
@@ -422,7 +561,6 @@ actor AgentRuntimeProcess {
   private var stdoutPipe: Pipe?
   private var stderrPipe: Pipe?
   private var stdoutBuffer = AgentRuntimeOrderedStdoutBuffer()
-  private var isRunning = false
   private var processGeneration: UInt64 = 0
   private var runtimeOwnerAuthorityEpoch: UInt64 = 0
   private var synchronizedRuntimeOwnerID: String?
@@ -437,25 +575,45 @@ actor AgentRuntimeProcess {
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
+  private var activeControlTimeoutTasks: [RuntimeMessage.RequestKey: Task<Void, Never>] = [:]
   private var activeJournalRequests: [RuntimeMessage.RequestKey: ActiveJournalRequest] = [:]
   private var activeKernelContractRequests: [RuntimeMessage.RequestKey: ActiveKernelContractRequest] = [:]
+  private var timedOutKernelContractRequests: [RuntimeMessage.RequestKey: TimedOutKernelContractRequest] = [:]
   private var activeAuthorizedToolExecutionTasks: [UUID: Task<Void, Never>] = [:]
   private var journalTurnChangedHandler: JournalTurnChangedHandler?
   private var authorizedRealtimeToolHandler: AuthorizedRealtimeToolHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
-  private var receivedInit = false
   private var advertisedAgentControlTools: Set<String> = []
-  private var isRestarting = false
-  private var isStopping = false
+  private var runtimeAdapterIDs: Set<String> = []
+  private var negotiatedProtocolVersion: Int?
+  private var negotiatedRuntimeVersion: String?
   private var stopFlight: StopFlight?
   private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
+  // Lifecycle facts are reduced by the pure state machine; process/pipe handles
+  // remain local implementation resources rather than a second lifecycle truth.
+  private var bridgeLifecycle = AgentRuntimeBridgeLifecycle()
   private let startupSingleFlight =
     AgentRuntimeStartupSingleFlight<StartupKey, StartupReceipt>()
 
+  // `bridgeLifecycle` is the semantic source of truth. Process handles are
+  // intentionally only physical resources: they can be live before the JSONL
+  // handshake, but no request is admitted until the reducer reaches running.
+  private var isBridgeReady: Bool {
+    bridgeLifecycle.state == .running && process?.isRunning == true
+  }
+
+  private var isRestarting: Bool {
+    [.modeSwitching, .draining, .restarting].contains(bridgeLifecycle.state)
+  }
+
+  private var isStopping: Bool {
+    bridgeLifecycle.state == .draining
+  }
+
   var isAlive: Bool {
     let processRunning = process?.isRunning ?? false
-    if isRunning && !processRunning {
+    if process != nil && !processRunning {
       log(
         "AgentRuntimeProcess: stale alive latch — process no longer running "
           + "(failure_class=stale_alive_latch recovery_action=route_to_termination recovery_result=degraded)")
@@ -466,7 +624,21 @@ actor AgentRuntimeProcess {
       // hasn't fired (or is about to be ignored by generation mismatch).
       handleTermination(reason: .exit)
     }
-    return isRunning && processRunning
+    return processRunning
+  }
+
+  func diagnosticsSnapshot() -> DiagnosticsSnapshot {
+    DiagnosticsSnapshot(
+      running: isBridgeReady,
+      protocolVersion: negotiatedProtocolVersion,
+      runtimeVersion: negotiatedRuntimeVersion
+    )
+  }
+
+  /// Read-only admission probe for UI recovery loops. A process handle alone
+  /// is not enough: direct control is valid only after the JSONL handshake.
+  func isReadyForDirectControl() -> Bool {
+    isBridgeReady
   }
 
   func runtimeOwnerAuthorityStatus() -> RuntimeOwnerAuthorityStatus {
@@ -474,8 +646,14 @@ actor AgentRuntimeProcess {
       epoch: runtimeOwnerAuthorityEpoch,
       ownerID: synchronizedRuntimeOwnerID,
       credentialOwnerID: synchronizedRuntimeCredentialOwnerID,
-      processRunning: isRunning && (process?.isRunning ?? false)
+      processRunning: process?.isRunning ?? false
     )
+  }
+
+  /// The Node registry is the authority for adapter activation. Swift must not
+  /// re-run local executable detection before advertising a realtime provider.
+  func registeredDirectedProviderIDs() -> [String] {
+    runtimeAdapterIDs.intersection(["hermes", "openclaw"]).sorted()
   }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
@@ -488,13 +666,15 @@ actor AgentRuntimeProcess {
   func registerClient(
     clientId: String,
     harnessMode: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    requiresCredentials: Bool = true
   ) async throws {
-    guard !isRestarting, !isStopping else {
+    guard !isRestarting else {
       throw BridgeError.restarting
     }
-    guard let authorizationSnapshot = authorizationSnapshot
-      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    guard
+      let authorizationSnapshot = authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     else {
       throw BridgeError.authMissing
     }
@@ -509,7 +689,16 @@ actor AgentRuntimeProcess {
     registration.harnessMode = harnessMode
     clients[clientId] = registration
     do {
-      if isRunning {
+      let startupIsInFlight: Bool
+      if bridgeLifecycle.state == .starting {
+        startupIsInFlight = await startupSingleFlight.hasActiveAttempt()
+      } else {
+        startupIsInFlight = false
+      }
+      if AgentRuntimeStartupAdmission.shouldJoin(
+        lifecycleState: bridgeLifecycle.state,
+        hasActiveStartupAttempt: startupIsInFlight
+      ) {
         try await waitForInit(timeout: 30.0)
         try assertStartupAuthority(
           authorizationSnapshot,
@@ -521,7 +710,8 @@ actor AgentRuntimeProcess {
       try await startProcess(
         preferredHarnessMode: harnessMode,
         authorizationSnapshot: authorizationSnapshot,
-        admissionAuthorityEpoch: admissionAuthorityEpoch)
+        admissionAuthorityEpoch: admissionAuthorityEpoch,
+        requiresCredentials: requiresCredentials)
       try assertAuthorization(authorizationSnapshot)
       try assertClientRegistration(clientId: clientId, registrationID: registrationID)
     } catch {
@@ -544,8 +734,9 @@ actor AgentRuntimeProcess {
       request.continuation.resume(throwing: BridgeError.stopped)
     }
     for (requestKey, request) in activeControlRequests where request.clientId == clientId {
-      activeControlRequests.removeValue(forKey: requestKey)
-      request.continuation.resume(throwing: BridgeError.stopped)
+      if let activeRequest = takeActiveControlRequest(requestKey) {
+        activeRequest.continuation.resume(throwing: BridgeError.stopped)
+      }
     }
     for (requestKey, request) in activeJournalRequests where request.clientId == clientId {
       activeJournalRequests.removeValue(forKey: requestKey)
@@ -583,32 +774,48 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws {
-    guard !isRestarting, !isStopping else { throw BridgeError.restarting }
+    guard !isRestarting else { throw BridgeError.restarting }
     guard activeRequests.isEmpty, activeControlRequests.isEmpty else {
       log(
         "AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) and \(activeControlRequests.count) control request(s) are active"
       )
       throw BridgeError.requestAlreadyActive
     }
-    isRestarting = true
-    defer { isRestarting = false }
+    // Validate before mutating the reducer. A caller can be unregistered
+    // between a UI restart action and this actor turn; that must leave the
+    // bridge usable for a later registration, not stranded in `.draining`.
     guard let registrationID = clients[clientId]?.registrationID else {
       throw BridgeError.stopped
     }
-    await stopProcessSingleFlight(resumeRequestsWith: BridgeError.stopped)
-    try Task.checkCancellation()
-    try assertClientRegistration(clientId: clientId, registrationID: registrationID)
-    guard let authorizationSnapshot = authorizationSnapshot
-      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
-    else {
-      throw BridgeError.authMissing
+    _ = bridgeLifecycle.reduce(.modeSwitchRequested)
+    _ = bridgeLifecycle.reduce(.drainRequested)
+    do {
+      await stopProcessSingleFlight(resumeRequestsWith: BridgeError.stopped)
+      _ = bridgeLifecycle.reduce(.restart)
+      try Task.checkCancellation()
+      try assertClientRegistration(clientId: clientId, registrationID: registrationID)
+      guard
+        let authorizationSnapshot = authorizationSnapshot
+          ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      else {
+        throw BridgeError.authMissing
+      }
+      try await startProcess(
+        preferredHarnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot,
+        admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch,
+        requiresCredentials: true)
+      try assertAuthorization(authorizationSnapshot)
+      try assertClientRegistration(clientId: clientId, registrationID: registrationID)
+    } catch {
+      // A cancelled or unregistered caller cannot own a pending restart. Keep
+      // typed start failures intact, but return abandoned drain/restart paths
+      // to stopped so a subsequent registration can launch normally.
+      if [.draining, .restarting].contains(bridgeLifecycle.state) {
+        _ = bridgeLifecycle.reduce(.kill)
+      }
+      throw error
     }
-    try await startProcess(
-      preferredHarnessMode: harnessMode,
-      authorizationSnapshot: authorizationSnapshot,
-      admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch)
-    try assertAuthorization(authorizationSnapshot)
-    try assertClientRegistration(clientId: clientId, registrationID: registrationID)
   }
 
   private func assertStartupAuthority(
@@ -631,9 +838,7 @@ actor AgentRuntimeProcess {
 
     let id = UUID()
     stopFlight = StopFlight(id: id)
-    isStopping = true
     await stopProcess(resumeRequestsWith: error)
-    isStopping = false
     finishStopFlight(id: id)
   }
 
@@ -651,7 +856,9 @@ actor AgentRuntimeProcess {
   private func finishStopFlight(id: UUID) {
     guard let flight = stopFlight, flight.id == id else { return }
     stopFlight = nil
-    flight.waiters.forEach { $0.resume() }
+    for waiter in flight.waiters {
+      waiter.resume()
+    }
   }
 
   private func assertClientRegistration(
@@ -683,13 +890,14 @@ actor AgentRuntimeProcess {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-    sendJson(Self.warmupWireMessage(
-      clientId: clientId,
-      requestId: UUID().uuidString,
-      ownerId: authorizationSnapshot.ownerID,
-      sessionId: sessionId,
-      profileGeneration: profileGeneration
-    ))
+    sendJson(
+      Self.warmupWireMessage(
+        clientId: clientId,
+        requestId: UUID().uuidString,
+        ownerId: authorizationSnapshot.ownerID,
+        sessionId: sessionId,
+        profileGeneration: profileGeneration
+      ))
   }
 
   func configureDefaultExecutionProfile(
@@ -787,7 +995,7 @@ actor AgentRuntimeProcess {
     outcome: AgentContextSourceOutcome,
     capturedAtMs: Int,
     expiresAtMs: Int?,
-    payload: [String: Any],
+    payload: RuntimeJSONPayloadBox,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentContextSourceUpdateReceipt {
     try assertAuthorization(authorizationSnapshot)
@@ -802,7 +1010,7 @@ actor AgentRuntimeProcess {
       outcome: outcome,
       capturedAtMs: capturedAtMs,
       expiresAtMs: expiresAtMs,
-      payload: payload
+      payload: payload.value
     )
     let result = try await kernelContractRequest(
       payload: message,
@@ -860,7 +1068,7 @@ actor AgentRuntimeProcess {
         previousOwnerID: ownerID)
     } catch {
       log("AgentRuntimeProcess: owner revoke rejected invalid cleanup capability")
-      if isRunning {
+      if process?.isRunning == true {
         await stopProcessSingleFlight(resumeRequestsWith: .stopped)
       } else {
         markRuntimeOwnerAuthorityDirty()
@@ -869,10 +1077,10 @@ actor AgentRuntimeProcess {
     }
     await cancelAndDrainAuthorizedToolExecutionTasks()
     guard !ownerID.isEmpty else {
-      if isRunning { await stopProcessSingleFlight(resumeRequestsWith: .stopped) }
+      if process?.isRunning == true { await stopProcessSingleFlight(resumeRequestsWith: .stopped) }
       return
     }
-    guard isRunning else {
+    guard process?.isRunning == true else {
       markRuntimeOwnerAuthorityDirty()
       return
     }
@@ -938,16 +1146,24 @@ actor AgentRuntimeProcess {
     prompt: String,
     mode: ExternalSurfaceRunMode
   ) async throws -> ExternalSurfaceRunBinding {
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: ownerID)
+    guard
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: ownerID)
     else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
     try assertCurrentExternalOwner(ownerID)
-    try await registerClient(
-      clientId: clientId,
-      harnessMode: harnessMode,
-      authorizationSnapshot: authorizationSnapshot)
+    // Direct control is an owner-scoped runtime protocol, not an interactive
+    // client lease. Once the runtime has completed its handshake, registering
+    // another client here can race the client that owns startup and strand a
+    // read such as `list_agent_sessions`. Only acquire a client lease when we
+    // actually need to start or join an unavailable runtime.
+    if !isBridgeReady {
+      try await registerClient(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot)
+    }
     // Process startup/initialization may suspend for up to its bounded init
     // timeout. Revalidate immediately before the begin mutation so cancelling a
     // pending owner-A task during an A→B transition cannot create a late run.
@@ -1009,16 +1225,23 @@ actor AgentRuntimeProcess {
     toolName: String,
     input: [String: Any]
   ) async throws -> String {
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: binding.ownerID)
+    guard
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: binding.ownerID)
     else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
     try assertCurrentExternalOwner(binding.ownerID)
-    try await registerClient(
-      clientId: clientId,
-      harnessMode: harnessMode,
-      authorizationSnapshot: authorizationSnapshot)
+    // Direct-control reads are owner-scoped protocol messages, not another
+    // interactive client lease. Re-registering while the shared runtime is
+    // already live mutates its startup lease on every reconciliation tick and
+    // can delay otherwise small reads behind concurrent projections.
+    if !isBridgeReady {
+      try await registerClient(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot)
+    }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
@@ -1068,13 +1291,14 @@ actor AgentRuntimeProcess {
         previousOwnerID: binding.ownerID)
       // A cleanup capability may close only a run that already exists in the
       // live daemon. It must never start a new daemon or establish an owner.
-      guard isRunning else {
+      guard process?.isRunning == true else {
         throw ExternalSurfaceAuthorityError(code: "external_surface_runtime_unavailable")
       }
       authorizationSnapshot = nil
     } else {
-      guard let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: binding.ownerID)
+      guard
+        let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+          expectedOwnerID: binding.ownerID)
       else {
         throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
       }
@@ -1148,9 +1372,11 @@ actor AgentRuntimeProcess {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
     if synchronizedRuntimeOwnerID == normalized { return }
-    guard refreshRuntimeOwner(
-      expectedOwnerId: normalized,
-      authorizationSnapshot: authorizationSnapshot) else {
+    guard
+      refreshRuntimeOwner(
+        expectedOwnerId: normalized,
+        authorizationSnapshot: authorizationSnapshot)
+    else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_handshake_failed")
     }
   }
@@ -1159,9 +1385,10 @@ actor AgentRuntimeProcess {
     _ capability: RuntimeOwnerTransitionCleanupCapability,
     previousOwnerID: String
   ) throws {
-    guard RuntimeOwnerIdentity.authorizesTransitionCleanup(
-      capability,
-      previousOwnerID: previousOwnerID)
+    guard
+      RuntimeOwnerIdentity.authorizesTransitionCleanup(
+        capability,
+        previousOwnerID: previousOwnerID)
     else {
       throw ExternalSurfaceAuthorityError(
         code: "external_surface_transition_cleanup_revoked")
@@ -1397,7 +1624,8 @@ actor AgentRuntimeProcess {
     imageData: Data?,
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
-    expectedContext: AgentContextFreshness?
+    expectedContext: AgentContextFreshness?,
+    reasoningEffort: String? = nil
   ) -> [String: Any] {
     var message = protocolEnvelope(
       type: "query",
@@ -1411,6 +1639,7 @@ actor AgentRuntimeProcess {
     if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
+    if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
     if let expectedContext {
       message["expectedContextSnapshotVersion"] = expectedContext.version
       message["expectedContextSnapshotGeneration"] = expectedContext.generation
@@ -1440,9 +1669,9 @@ actor AgentRuntimeProcess {
     payload: [String: Any],
     expectedKind: RuntimeMessage.Kind,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
-    timeoutNanoseconds: UInt64 = 5_000_000_000
+    timeoutNanoseconds: UInt64? = nil
   ) async throws -> [String: Any] {
-    guard isRunning else { throw BridgeError.stopped }
+    guard isBridgeReady else { throw BridgeError.stopped }
     if let authorizationSnapshot {
       try assertAuthorization(authorizationSnapshot)
     }
@@ -1452,26 +1681,60 @@ actor AgentRuntimeProcess {
     else {
       throw BridgeError.agentError("Kernel contract request is missing tracing identity")
     }
+    let operation = payload["type"] as? String ?? "unknown"
+    let deadlineNanoseconds =
+      timeoutNanoseconds
+      ?? AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: operation)
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
-    return try await withCheckedThrowingContinuation { continuation in
+    let box = try await withCheckedThrowingContinuation { continuation in
       activeKernelContractRequests[requestKey] = ActiveKernelContractRequest(
         clientId: clientId,
         requestId: requestId,
+        operation: operation,
         expectedKind: expectedKind,
         authorizationSnapshot: authorizationSnapshot,
+        sentAtUptime: ProcessInfo.processInfo.systemUptime,
         continuation: continuation
       )
       guard sendJson(payload) else {
         activeKernelContractRequests.removeValue(forKey: requestKey)?.continuation.resume(
           throwing: BridgeError.processExited
         )
+        timedOutKernelContractRequests.removeValue(forKey: requestKey)
         return
       }
       Task {
-        try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+        try? await Task.sleep(nanoseconds: deadlineNanoseconds)
         guard let request = self.activeKernelContractRequests.removeValue(forKey: requestKey) else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        self.timedOutKernelContractRequests[requestKey] = TimedOutKernelContractRequest(
+          operation: request.operation,
+          expectedKind: request.expectedKind,
+          timedOutAtUptime: now
+        )
+        self.trimTimedOutKernelContractRequests()
+        let elapsedMilliseconds = Int((now - request.sentAtUptime) * 1_000)
+        log(
+          "AgentRuntimeProcess: kernel contract timeout operation=\(request.operation) "
+            + "expected=\(String(describing: request.expectedKind)) elapsed_ms=\(elapsedMilliseconds)"
+        )
         request.continuation.resume(throwing: BridgeError.timeout)
       }
+    }
+    return box.value
+  }
+
+  private func trimTimedOutKernelContractRequests() {
+    let cutoff = ProcessInfo.processInfo.systemUptime - 60
+    timedOutKernelContractRequests = timedOutKernelContractRequests.filter {
+      $0.value.timedOutAtUptime >= cutoff
+    }
+    if timedOutKernelContractRequests.count > 32,
+      let oldest = timedOutKernelContractRequests.min(by: {
+        $0.value.timedOutAtUptime < $1.value.timedOutAtUptime
+      })?.key
+    {
+      timedOutKernelContractRequests.removeValue(forKey: oldest)
     }
   }
 
@@ -1534,7 +1797,14 @@ actor AgentRuntimeProcess {
 
   /// Test-only projection seam; production events arrive from omi-agentd.
   func dispatchJournalTurnChangedForTesting(_ turn: KernelJournalTurn) {
+    recordLifecycleJournalMutation(turn)
     journalTurnChangedHandler?(turn)
+  }
+
+  /// Test-only observation seam for lifecycle events that production receives
+  /// through the JSONL runtime boundary.
+  func bridgeLifecycleSnapshotForTesting() -> AgentRuntimeBridgeLifecycle {
+    bridgeLifecycle
   }
 
   func recordJournalTurn(
@@ -1556,6 +1826,7 @@ actor AgentRuntimeProcess {
     guard let recorded = result.turn else {
       throw BridgeError.agentError("Kernel journal record returned no turn")
     }
+    recordLifecycleJournalMutation(recorded)
     return recorded
   }
 
@@ -1566,7 +1837,7 @@ actor AgentRuntimeProcess {
     turns: [KernelJournalTurnWrite],
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> JournalOperationResult {
-    try await journalOperation(
+    let result = try await journalOperation(
       type: "journal_record_exchange",
       operation: "record_exchange",
       clientId: clientId,
@@ -1575,6 +1846,10 @@ actor AgentRuntimeProcess {
       payload: ["turns": turns.map(\.dictionary)],
       authorizationSnapshot: authorizationSnapshot
     )
+    for recorded in result.turns {
+      recordLifecycleJournalMutation(recorded)
+    }
+    return result
   }
 
   func updateJournalTurn(
@@ -1596,6 +1871,7 @@ actor AgentRuntimeProcess {
     guard let updated = result.turn else {
       throw BridgeError.agentError("Kernel journal update returned no turn")
     }
+    recordLifecycleJournalMutation(updated)
     return updated
   }
 
@@ -1618,6 +1894,7 @@ actor AgentRuntimeProcess {
     guard let turn = result.turn else {
       throw BridgeError.agentError("Kernel journal terminalization returned no turn")
     }
+    recordLifecycleJournalMutation(turn)
     return turn
   }
 
@@ -1662,6 +1939,7 @@ actor AgentRuntimeProcess {
     guard let imported = result.turn else {
       throw BridgeError.agentError("Kernel journal import returned no turn")
     }
+    recordLifecycleJournalMutation(imported)
     return imported
   }
 
@@ -1695,7 +1973,7 @@ actor AgentRuntimeProcess {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> JournalOperationResult {
     try assertAuthorization(authorizationSnapshot, expectedOwnerID: ownerID)
-    guard isRunning else { throw BridgeError.stopped }
+    guard isBridgeReady else { throw BridgeError.stopped }
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     let dictionary = Self.journalOperationWireMessage(
@@ -1753,7 +2031,6 @@ actor AgentRuntimeProcess {
     for (key, value) in payload { dictionary[key] = value }
     return dictionary
   }
-
 
   private func markRuntimeOwnerAuthorityDirty() {
     cancelAuthorizedToolExecutionTasks()
@@ -1873,11 +2150,12 @@ actor AgentRuntimeProcess {
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any],
+    input: RuntimeJSONPayloadBox,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> String {
-    guard let authorizationSnapshot = authorizationSnapshot
-      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    guard
+      let authorizationSnapshot = authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     else {
       throw BridgeError.authMissing
     }
@@ -1887,34 +2165,34 @@ actor AgentRuntimeProcess {
       clientId: clientId,
       harnessMode: harnessMode,
       name: name,
-      input: input,
+      input: input.value,
       ownerId: ownerId,
       authorizationSnapshot: authorizationSnapshot
     )
   }
 
-#if DEBUG
-  func debugAutomationControlTool(
-    clientId: String,
-    harnessMode: String,
-    name: String,
-    input: [String: Any],
-    ownerId: String
-  ) async throws -> String {
-    guard AppBuild.isNonProduction else {
-      throw BridgeError.agentError("Automation control is disabled on production bundles")
+  #if DEBUG
+    func debugAutomationControlTool(
+      clientId: String,
+      harnessMode: String,
+      name: String,
+      input: RuntimeJSONPayloadBox,
+      ownerId: String
+    ) async throws -> String {
+      guard AppBuild.isNonProduction else {
+        throw BridgeError.agentError("Automation control is disabled on production bundles")
+      }
+      return try await sendDirectControlTool(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        name: name,
+        input: input.value,
+        ownerId: ownerId,
+        authorizationSnapshot: RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+          expectedOwnerID: ownerId)
+      )
     }
-    return try await sendDirectControlTool(
-      clientId: clientId,
-      harnessMode: harnessMode,
-      name: name,
-      input: input,
-      ownerId: ownerId,
-      authorizationSnapshot: RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: ownerId)
-    )
-  }
-#endif
+  #endif
 
   private func sendDirectControlTool(
     clientId: String,
@@ -1927,10 +2205,17 @@ actor AgentRuntimeProcess {
     guard let authorizationSnapshot else {
       throw BridgeError.authMissing
     }
-    try await registerClient(
-      clientId: clientId,
-      harnessMode: harnessMode,
-      authorizationSnapshot: authorizationSnapshot)
+    // A direct control call is an owner-scoped request on the already-live
+    // JSONL bridge, not a new interactive client. Re-registering it on every
+    // read mutates the startup lease and can queue a small canonical read
+    // behind concurrent projection work. Only acquire a client lease while
+    // there is no completed runtime handshake to carry this request.
+    if !isBridgeReady {
+      try await registerClient(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot)
+    }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       throw BridgeError.authMissing
     }
@@ -1941,6 +2226,7 @@ actor AgentRuntimeProcess {
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     let ownerEpoch = observeDirectControlOwner(ownerId)
+    let timeoutNanoseconds = Self.directControlTimeoutNanoseconds(for: name)
     return try await withCheckedThrowingContinuation { continuation in
       activeControlRequests[requestKey] = ActiveControlRequest(
         clientId: clientId,
@@ -1950,6 +2236,11 @@ actor AgentRuntimeProcess {
         authorizationSnapshot: authorizationSnapshot,
         continuation: continuation
       )
+      activeControlTimeoutTasks[requestKey] = Task.detached { [weak self] in
+        try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+        guard !Task.isCancelled else { return }
+        await self?.timeoutControlRequest(requestKey, toolName: name)
+      }
       let dict = Self.directControlToolWireMessage(
         clientId: clientId,
         requestId: requestId,
@@ -1957,10 +2248,42 @@ actor AgentRuntimeProcess {
         name: name,
         input: input)
       let sent = sendJson(dict)
-      if !sent, let request = activeControlRequests.removeValue(forKey: requestKey) {
+      if !sent, let request = takeActiveControlRequest(requestKey) {
         request.continuation.resume(throwing: BridgeError.agentError("Failed to send direct control tool request"))
       }
     }
+  }
+
+  /// Direct control reads are intentionally short so reconciliation cannot
+  /// block on a stalled runtime. Commands that synchronously return a child
+  /// run's result must instead use the full agent-run deadline: a 15-second
+  /// transport timeout can otherwise abandon a valid continuation while the
+  /// runtime is still completing it.
+  nonisolated static func directControlTimeoutNanoseconds(for toolName: String) -> UInt64 {
+    switch toolName {
+    case "list_agent_sessions", "get_agent_run", "build_desktop_awareness_snapshot":
+      return 2_000_000_000
+    case "run_agent_and_wait", "send_agent_message":
+      return 180_000_000_000
+    default:
+      return 15_000_000_000
+    }
+  }
+
+  private func takeActiveControlRequest(
+    _ requestKey: RuntimeMessage.RequestKey
+  ) -> ActiveControlRequest? {
+    activeControlTimeoutTasks.removeValue(forKey: requestKey)?.cancel()
+    return activeControlRequests.removeValue(forKey: requestKey)
+  }
+
+  private func timeoutControlRequest(
+    _ requestKey: RuntimeMessage.RequestKey,
+    toolName: String
+  ) {
+    guard let request = takeActiveControlRequest(requestKey) else { return }
+    log("AgentRuntimeProcess: direct control tool timed out name=\(toolName)")
+    request.continuation.resume(throwing: BridgeError.timeout)
   }
 
   static func directControlToolWireMessage(
@@ -2072,6 +2395,7 @@ actor AgentRuntimeProcess {
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
+    reasoningEffort: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -2080,7 +2404,7 @@ actor AgentRuntimeProcess {
     onAuthRequired: @escaping AgentBridge.AuthRequiredHandler,
     onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
   ) async throws -> AgentBridge.QueryResult {
-    guard isRunning else { throw BridgeError.stopped }
+    guard isBridgeReady else { throw BridgeError.stopped }
     try assertAuthorization(authorizationSnapshot)
 
     return try await withCheckedThrowingContinuation { continuation in
@@ -2114,7 +2438,8 @@ actor AgentRuntimeProcess {
         imageData: imageData,
         attachments: attachments,
         producingTurnId: producingTurnId,
-        expectedContext: expectedContext
+        expectedContext: expectedContext,
+        reasoningEffort: reasoningEffort
       )
       sendJson(queryDict)
     }
@@ -2123,24 +2448,54 @@ actor AgentRuntimeProcess {
   private func startProcess(
     preferredHarnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    admissionAuthorityEpoch: UInt64
+    admissionAuthorityEpoch: UInt64,
+    requiresCredentials: Bool
   ) async throws {
-    if isRunning {
+    let startupIsInFlight: Bool
+    if bridgeLifecycle.state == .starting {
+      startupIsInFlight = await startupSingleFlight.hasActiveAttempt()
+    } else {
+      startupIsInFlight = false
+    }
+    if AgentRuntimeStartupAdmission.shouldJoin(
+      lifecycleState: bridgeLifecycle.state,
+      hasActiveStartupAttempt: startupIsInFlight
+    ) {
       try await waitForInit(timeout: 30.0)
       try assertAuthorization(authorizationSnapshot)
       return
     }
+    _ = bridgeLifecycle.reduce(.spawn)
     let key = StartupKey(
       authorizationSnapshot: authorizationSnapshot,
       admissionAuthorityEpoch: admissionAuthorityEpoch)
-    let receipt = try await startupSingleFlight.run(key: key) { [weak self] in
-      guard let self else { throw BridgeError.stopped }
-      return try await self.performStartProcess(
-        preferredHarnessMode: preferredHarnessMode,
-        authorizationSnapshot: authorizationSnapshot,
-        admissionAuthorityEpoch: admissionAuthorityEpoch)
+    let receipt: StartupReceipt
+    do {
+      receipt = try await startupSingleFlight.run(key: key) { [weak self] in
+        guard let self else { throw BridgeError.stopped }
+        return try await self.performStartProcess(
+          preferredHarnessMode: preferredHarnessMode,
+          authorizationSnapshot: authorizationSnapshot,
+          admissionAuthorityEpoch: admissionAuthorityEpoch,
+          requiresCredentials: requiresCredentials)
+      }
+    } catch {
+      if [.starting, .failedStart].contains(bridgeLifecycle.state) {
+        let failure = Self.startFailure(for: error)
+        if bridgeLifecycle.state == .starting {
+          recordBridgeStartFailure(failure)
+        }
+        if let bridgeError = error as? BridgeError, case .authMissing = bridgeError {
+          throw error
+        }
+        if let bridgeError = error as? BridgeError, case .failedToStart(_) = bridgeError {
+          throw bridgeError
+        }
+        throw BridgeError.failedToStart(failure)
+      }
+      throw error
     }
-    guard isRunning, process?.isRunning == true,
+    guard bridgeLifecycle.state == .running, process?.isRunning == true,
       processGeneration == receipt.processGeneration,
       runtimeOwnerAuthorityEpoch == receipt.authorityEpoch,
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
@@ -2152,9 +2507,13 @@ actor AgentRuntimeProcess {
   private func performStartProcess(
     preferredHarnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    admissionAuthorityEpoch: UInt64
+    admissionAuthorityEpoch: UInt64,
+    requiresCredentials: Bool
   ) async throws -> StartupReceipt {
-    guard !isRunning else {
+    // `startProcess` owns the launch through `startupSingleFlight`. Do not use
+    // the reducer's `.starting` state as a join signal here: the launch owner
+    // intentionally sets it *before* this operation is scheduled.
+    guard process?.isRunning != true else {
       try await waitForInit(timeout: 30.0)
       try assertAuthorization(authorizationSnapshot)
       return StartupReceipt(
@@ -2165,7 +2524,7 @@ actor AgentRuntimeProcess {
     // task was still unwinding. Never launch/re-authorize a replacement daemon
     // until every old-owner Swift execution has actually returned.
     await cancelAndDrainAuthorizedToolExecutionTasks()
-    if isRunning {
+    if process?.isRunning == true {
       try await waitForInit(timeout: 30.0)
       try assertAuthorization(authorizationSnapshot)
       return StartupReceipt(
@@ -2184,8 +2543,10 @@ actor AgentRuntimeProcess {
     process = nil
     closePipes()
     lastExitWasOOM = false
-    receivedInit = false
     advertisedAgentControlTools.removeAll()
+    runtimeAdapterIDs.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
 
     guard let nodePath = findNodeBinary() else {
       throw BridgeError.nodeNotFound
@@ -2209,15 +2570,20 @@ actor AgentRuntimeProcess {
     proc.arguments = ["--max-old-space-size=256", "--max-semi-space-size=16", bridgePath]
 
     var env = ProcessInfo.processInfo.environment
+    let hermeticFaultModelToken = AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+      isNonProduction: AppBuild.isNonProduction,
+      bundleIdentifier: AppBuild.bundleIdentifier,
+      environment: env)
+    env.removeValue(forKey: AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey)
     env["NODE_NO_WARNINGS"] = "1"
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env["OMI_AGENT_ARTIFACTS_DIR"] = Self.defaultArtifactsDirectory()
-#if DEBUG
-    if AppBuild.isNonProduction {
-      env["OMI_AGENT_ALLOW_CONTROL_ONLY"] = "1"
-    }
-#endif
+    #if DEBUG
+      if AppBuild.isNonProduction {
+        env["OMI_AGENT_ALLOW_CONTROL_ONLY"] = "1"
+      }
+    #endif
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     applyLocalAgentEnvironment(to: &env)
@@ -2252,19 +2618,32 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
     }
 
+    let requiresPiMonoCredentials =
+      preferredAdapterId == .piMono
+      && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: requiresCredentials,
+        isNonProduction: AppBuild.isNonProduction,
+        hermeticFaultModelToken: hermeticFaultModelToken)
     let authService = await MainActor.run { AuthService.shared }
     let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
-    let authHeader = try? await authService.getAuthHeader(
-      forceRefresh: forceRefreshToken,
-      expectedUserId: authorizationSnapshot.ownerID)
+    let authHeader = try? await Self.startupAuthHeader(
+      requiresCredentials: requiresPiMonoCredentials,
+      fetchAuthHeader: {
+        try await authService.getAuthHeader(
+          forceRefresh: forceRefreshToken,
+          expectedUserId: authorizationSnapshot.ownerID)
+      })
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
-    if let authHeader,
+    if let hermeticFaultModelToken {
+      env["OMI_AUTH_TOKEN"] = hermeticFaultModelToken
+      log("AgentRuntimeProcess: starting non-production fault-model runtime without Firebase auth")
+    } else if let authHeader,
       let token = Self.bearerToken(from: authHeader)
     {
       env["OMI_AUTH_TOKEN"] = token
-    } else if preferredAdapterId == .piMono && env["OMI_AGENT_ALLOW_CONTROL_ONLY"] != "1" {
+    } else if requiresPiMonoCredentials {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     } else if preferredAdapterId == .piMono {
@@ -2341,7 +2720,6 @@ actor AgentRuntimeProcess {
 
     do {
       try proc.run()
-      isRunning = true
       markRuntimeOwnerAuthorityDirty()
       let launchedAuthorityEpoch = runtimeOwnerAuthorityEpoch
       if env["OMI_AUTH_TOKEN"]?.isEmpty == false {
@@ -2358,14 +2736,14 @@ actor AgentRuntimeProcess {
         processGeneration: expectedGeneration)
     } catch {
       await cleanupFailedStart(process: proc, error: error)
-      throw error
+      throw BridgeError.failedToStart(Self.startFailure(for: error))
     }
   }
 
   private func applyLocalAgentEnvironment(to env: inout [String: String]) {
     // Seed auto-discovered commands for every local adapter so the shared Node
     // process can route to Hermes or OpenClaw even when it was launched for a
-    // different adapter. registerClient returns early once isRunning, so the
+    // different adapter. registerClient returns early once the reducer is
     // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
     if env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
@@ -2375,37 +2753,35 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
-    let adapterPathDirs = [
-      "\(home)/.hermes/hermes-agent/venv/bin",
-      "\(home)/.hermes/node/bin",
-      "\(home)/.hermes/hermes-agent",
-    ]
-    let adapterSearchDirs = adapterPathDirs + [
-      "\(home)/.local/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
-    let trustedPathDirs = [
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
+    let adapterPathDirs = Self.localAdapterSearchDirectories(home: home)
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     var pathElements: [String] = []
-    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterPathDirs {
+    for path in existingPath.split(separator: ":").map(String.init) + adapterPathDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }
     }
     env["PATH"] = pathElements.joined(separator: ":")
 
+    // The same injected PATH/home contract used by the testable detector feeds
+    // the Node registry. PTT receives only the registry projection later; it
+    // never performs a competing executable lookup of its own.
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
+      case .available(command: let hermes) = LocalAgentProviderDetector.availability(
+        for: .hermes,
+        environment: env,
+        homeDirectory: home
+      ).status
     {
       env["OMI_HERMES_ADAPTER_COMMAND"] = "\(Self.shellQuote(hermes)) acp"
     }
 
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
+      case .available(command: let openClaw) = LocalAgentProviderDetector.availability(
+        for: .openclaw,
+        environment: env,
+        homeDirectory: home
+      ).status
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
@@ -2453,6 +2829,57 @@ actor AgentRuntimeProcess {
     return "\(shellQuote(openClawPath)) acp"
   }
 
+  /// Directly launched app bundles do not inherit the shell's FNM multishell
+  /// PATH entry. Search the stable Node-install roots as well, so a globally
+  /// installed OpenClaw CLI remains available to the shared agent bridge.
+  static func localAdapterSearchDirectories(
+    home: String,
+    fileManager: FileManager = .default
+  ) -> [String] {
+    let adapterPathDirs = [
+      "\(home)/.hermes/hermes-agent/venv/bin",
+      "\(home)/.hermes/node/bin",
+      "\(home)/.hermes/hermes-agent",
+      "\(home)/.local/bin",
+    ]
+    let managedNodeRoots = [
+      "\(home)/.nvm/versions/node",
+      "\(home)/.fnm/node-versions",
+      "\(home)/.local/share/fnm/node-versions",
+      "\(home)/.nodenv/versions",
+      "\(home)/.asdf/installs/nodejs",
+    ]
+    // User-managed Node installations take precedence over machine-wide fallbacks.
+    return Self.uniquePaths(
+      adapterPathDirs
+        + managedNodeRoots.flatMap {
+          Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
+        }
+        + [
+          "/opt/homebrew/bin",
+          "/usr/local/bin",
+        ])
+  }
+
+  private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
+    guard let versions = try? fileManager.contentsOfDirectory(atPath: root) else { return [] }
+    return versions.compactMap { version in
+      let versionDirectory = (root as NSString).appendingPathComponent(version)
+      let directBin = (versionDirectory as NSString).appendingPathComponent("bin")
+      if fileManager.fileExists(atPath: directBin) { return directBin }
+      let installationBin = (versionDirectory as NSString).appendingPathComponent("installation/bin")
+      if fileManager.fileExists(atPath: installationBin) { return installationBin }
+      return nil
+    }
+  }
+
+  private static func uniquePaths(_ paths: [String]) -> [String] {
+    paths.reduce(into: [String]()) { result, path in
+      guard !path.isEmpty, !result.contains(path) else { return }
+      result.append(path)
+    }
+  }
+
   private nonisolated static func bearerToken(from header: String) -> String? {
     let prefix = "Bearer "
     guard header.hasPrefix(prefix) else { return nil }
@@ -2465,8 +2892,11 @@ actor AgentRuntimeProcess {
     "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
 
-  private func firstExecutable(named name: String, in directories: [String]) -> String? {
-    let fileManager = FileManager.default
+  static func firstExecutable(
+    named name: String,
+    in directories: [String],
+    fileManager: FileManager = .default
+  ) -> String? {
     for dir in directories {
       let path = (dir as NSString).appendingPathComponent(name)
       if fileManager.isExecutableFile(atPath: path) {
@@ -2474,6 +2904,48 @@ actor AgentRuntimeProcess {
       }
     }
     return nil
+  }
+
+  static func startFailure(for error: Error) -> AgentRuntimeBridgeLifecycle.StartFailure {
+    guard let bridgeError = error as? BridgeError else { return .launchFailed }
+    switch bridgeError {
+    case .timeout:
+      return .handshakeTimedOut
+    case .processExited, .outOfMemory:
+      return .exitedDuringStartup
+    case .agentError:
+      return .incompatibleHandshake
+    case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError,
+      .failedToStart, .stopped, .restarting, .requestAlreadyActive,
+      .agentRuntimeFailure, .quotaExceeded, .authMissing:
+      return .launchFailed
+    }
+  }
+
+  /// A terminal kernel turn is a durable replay boundary. Feed the reducer at
+  /// the runtime boundary rather than maintaining a second ad-hoc set in each
+  /// chat or PTT surface.
+  private func recordLifecycleJournalMutation(_ turn: KernelJournalTurn) {
+    _ = bridgeLifecycle.reduce(
+      .kernelJournalWrite(
+        turnID: turn.turnId,
+        terminal: turn.status == .completed || turn.status == .failed))
+  }
+
+  private func recordBridgeStartFailure(_ failure: AgentRuntimeBridgeLifecycle.StartFailure) {
+    let effects = bridgeLifecycle.reduce(.spawnFailure(failure))
+    guard effects.contains(.surfaceFailedStart(failure)) else { return }
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "agent_runtime",
+      from: "starting",
+      to: "failed_start",
+      reason: failure.rawValue,
+      outcome: .exhausted,
+      extra: [
+        "failure_class": failure.rawValue,
+        "recovery_action": "retry_start",
+        "recovery_result": "exhausted",
+      ])
   }
 
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {
@@ -2495,17 +2967,19 @@ actor AgentRuntimeProcess {
       process = nil
     }
     closePipes()
-    isRunning = false
+    recordBridgeStartFailure(Self.startFailure(for: error))
     await cancelAndDrainAuthorizedToolExecutionTasks()
     markRuntimeOwnerAuthorityDirty()
-    receivedInit = false
     advertisedAgentControlTools.removeAll()
+    runtimeAdapterIDs.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     resumeAllRequests(throwing: BridgeError.stopped)
     resumeInitContinuations(throwing: BridgeError.stopped)
   }
 
   private func waitForInit(timeout: TimeInterval) async throws {
-    if receivedInit { return }
+    if bridgeLifecycle.state == .running { return }
 
     let timeoutTask = Task {
       do {
@@ -2523,7 +2997,7 @@ actor AgentRuntimeProcess {
   }
 
   private func storeInitContinuation(_ continuation: CheckedContinuation<Void, Error>) {
-    if receivedInit {
+    if bridgeLifecycle.state == .running {
       continuation.resume()
       return
     }
@@ -2568,9 +3042,11 @@ actor AgentRuntimeProcess {
     closePipes()
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
-    isRunning = false
-    receivedInit = false
+    _ = bridgeLifecycle.reduce(.kill)
     advertisedAgentControlTools.removeAll()
+    runtimeAdapterIDs.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
@@ -2625,8 +3101,9 @@ actor AgentRuntimeProcess {
 
   private func handleMessage(_ message: RuntimeMessage) {
     if let request = routedRequest(for: message), let surfaceRef = request.surfaceRef {
+      let authorizationSnapshot = request.authorizationSnapshot
       Task { @MainActor in
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot) else {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
           return
         }
         AgentRuntimeStatusStore.shared.ingest(message: message, surface: surfaceRef)
@@ -2635,11 +3112,28 @@ actor AgentRuntimeProcess {
 
     switch message.kind {
     case .initMessage:
-      log("AgentRuntimeProcess: bridge ready (sessionId=\(message.payload["sessionId"] as? String ?? ""))")
+      let handshake: RuntimeHandshake
+      do {
+        handshake = try Self.validateRuntimeHandshake(message)
+      } catch {
+        log("AgentRuntimeProcess: rejecting incompatible runtime handshake")
+        resumeInitContinuations(throwing: error)
+        return
+      }
+      negotiatedProtocolVersion = handshake.protocolVersion
+      negotiatedRuntimeVersion = handshake.runtimeVersion
+      log(
+        "AgentRuntimeProcess: bridge ready "
+          + "(protocol=\(message.protocolVersion.map(String.init) ?? "unknown"), "
+          + "runtime=\(negotiatedRuntimeVersion ?? "unknown"))")
       let tools = message.payload["agentControlTools"] as? [String] ?? []
       advertisedAgentControlTools = Set(tools)
-      receivedInit = true
+      runtimeAdapterIDs = Set(message.payload["runtimeAdapterIds"] as? [String] ?? [])
+      _ = bridgeLifecycle.reduce(.handshakeSucceeded)
       resolveInitContinuations()
+      Task { @MainActor in
+        NotificationCenter.default.post(name: .agentRuntimeDidBecomeReady, object: nil)
+      }
 
     case .authRequired:
       let methods = message.payload["methods"] as? [[String: Any]] ?? []
@@ -2648,7 +3142,8 @@ actor AgentRuntimeProcess {
         request.onAuthRequired(methods, authUrl)
       } else if message.requestKey == nil {
         let eventOwnerID = message.payload["ownerId"] as? String
-        for client in clients.values where client.authAuthorizationSnapshot.map({ snapshot in
+        for client in clients.values
+        where client.authAuthorizationSnapshot.map({ snapshot in
           RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
             && (eventOwnerID == nil || snapshot.ownerID == eventOwnerID)
         }) == true {
@@ -2661,7 +3156,8 @@ actor AgentRuntimeProcess {
         request.onAuthSuccess()
       } else if message.requestKey == nil {
         let eventOwnerID = message.payload["ownerId"] as? String
-        for client in clients.values where client.authAuthorizationSnapshot.map({ snapshot in
+        for client in clients.values
+        where client.authAuthorizationSnapshot.map({ snapshot in
           RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
             && (eventOwnerID == nil || snapshot.ownerID == eventOwnerID)
         }) == true {
@@ -2719,6 +3215,7 @@ actor AgentRuntimeProcess {
 
     case .journalTurnChanged:
       if messageOwnerIsCurrentlyAuthorized(message), let turn = journalTurn(from: message) {
+        recordLifecycleJournalMutation(turn)
         journalTurnChangedHandler?(turn)
       }
 
@@ -2766,13 +3263,31 @@ actor AgentRuntimeProcess {
   }
 
   private func completeKernelContractRequest(_ message: RuntimeMessage) {
-    guard let requestKey = message.requestKey,
-      let request = activeKernelContractRequests.removeValue(forKey: requestKey)
-    else {
+    guard let requestKey = message.requestKey else {
       log("AgentRuntimeProcess: dropping unroutable kernel contract response")
       return
     }
+    guard let request = activeKernelContractRequests.removeValue(forKey: requestKey) else {
+      guard let timedOut = timedOutKernelContractRequests.removeValue(forKey: requestKey) else {
+        log("AgentRuntimeProcess: dropping unroutable kernel contract response")
+        return
+      }
+      let elapsedMilliseconds = Int(
+        (ProcessInfo.processInfo.systemUptime - timedOut.timedOutAtUptime) * 1_000
+      )
+      log(
+        "AgentRuntimeProcess: dropping late kernel contract response operation=\(timedOut.operation) "
+          + "expected=\(String(describing: timedOut.expectedKind)) "
+          + "received=\(String(describing: message.kind)) late_ms=\(elapsedMilliseconds)"
+      )
+      return
+    }
+    timedOutKernelContractRequests.removeValue(forKey: requestKey)
     guard request.expectedKind == message.kind else {
+      log(
+        "AgentRuntimeProcess: kernel contract response type mismatch operation=\(request.operation) "
+          + "expected=\(String(describing: request.expectedKind)) received=\(String(describing: message.kind))"
+      )
       request.continuation.resume(
         throwing: BridgeError.agentError("Kernel contract response type did not match its request")
       )
@@ -2784,7 +3299,7 @@ actor AgentRuntimeProcess {
       request.continuation.resume(throwing: BridgeError.authMissing)
       return
     }
-    request.continuation.resume(returning: message.payload)
+    request.continuation.resume(returning: RuntimeJSONPayloadBox(message.payload))
   }
 
   private func handleAuthorizedToolExecution(_ message: RuntimeMessage) {
@@ -2809,8 +3324,9 @@ actor AgentRuntimeProcess {
       return
     }
 
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: command.ownerID)
+    guard
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: command.ownerID)
     else {
       completeAuthorizedToolExecution(
         command: command,
@@ -2884,7 +3400,9 @@ actor AgentRuntimeProcess {
   }
 
   private func cancelAuthorizedToolExecutionTasks() {
-    activeAuthorizedToolExecutionTasks.values.forEach { $0.cancel() }
+    for task in activeAuthorizedToolExecutionTasks.values {
+      task.cancel()
+    }
   }
 
   private func cancelAndDrainAuthorizedToolExecutionTasks() async {
@@ -2898,7 +3416,9 @@ actor AgentRuntimeProcess {
   nonisolated static func cancelAndAwaitPhysicalExecutionTasks(
     _ tasks: [Task<Void, Never>]
   ) async {
-    tasks.forEach { $0.cancel() }
+    for task in tasks {
+      task.cancel()
+    }
     for task in tasks { await task.value }
   }
 
@@ -2925,9 +3445,10 @@ actor AgentRuntimeProcess {
     command: AuthorizedToolExecution,
     executionResult: AuthorizedRealtimeToolExecutionResult
   ) {
-    sendJson(Self.authorizedToolExecutionResultWireMessage(
-      command: command,
-      executionResult: executionResult))
+    sendJson(
+      Self.authorizedToolExecutionResultWireMessage(
+        command: command,
+        executionResult: executionResult))
   }
 
   static func authorizedToolExecutionResultWireMessage(
@@ -3003,7 +3524,7 @@ actor AgentRuntimeProcess {
 
   private func completeControlRequest(_ message: RuntimeMessage) {
     guard let requestKey = message.requestKey,
-      let request = activeControlRequests.removeValue(forKey: requestKey)
+      let request = takeActiveControlRequest(requestKey)
     else {
       log("AgentRuntimeProcess: dropping unroutable control tool result")
       return
@@ -3012,11 +3533,11 @@ actor AgentRuntimeProcess {
     let activeOwnerEpoch = observeDirectControlOwner(activeOwnerId)
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot),
       Self.isDirectControlResultOwnerCurrent(
-      expectedOwnerId: request.expectedOwnerId,
-      expectedOwnerEpoch: request.expectedOwnerEpoch,
-      resultOwnerId: message.payload["ownerId"] as? String,
-      currentOwnerId: activeOwnerId,
-      currentOwnerEpoch: activeOwnerEpoch)
+        expectedOwnerId: request.expectedOwnerId,
+        expectedOwnerEpoch: request.expectedOwnerEpoch,
+        resultOwnerId: message.payload["ownerId"] as? String,
+        currentOwnerId: activeOwnerId,
+        currentOwnerEpoch: activeOwnerEpoch)
     else {
       log("AgentRuntimeProcess: rejecting stale direct control result for owner transition")
       request.continuation.resume(
@@ -3092,19 +3613,22 @@ actor AgentRuntimeProcess {
       )
     }
     let highWaterTurnSeq = message.payload["highWaterTurnSeq"] as? Int ?? 0
-    let generationBaseTurnSeq = message.payload["generationBaseTurnSeq"] as? Int
+    let generationBaseTurnSeq =
+      message.payload["generationBaseTurnSeq"] as? Int
       ?? turns.map(\.turnSeq).min().map { max(0, $0 - 1) }
       ?? (conversationGeneration > 1 ? highWaterTurnSeq : 0)
-    request.continuation.resume(returning: JournalOperationResult(
-      operation: message.payload["operation"] as? String ?? "",
-      conversationId: message.payload["conversationId"] as? String ?? turn?.conversationId ?? turns.first?.conversationId ?? "",
-      turn: turn,
-      turns: turns,
-      clearedCount: message.payload["clearedCount"] as? Int ?? 0,
-      highWaterTurnSeq: highWaterTurnSeq,
-      conversationGeneration: conversationGeneration,
-      generationBaseTurnSeq: generationBaseTurnSeq
-    ))
+    request.continuation.resume(
+      returning: JournalOperationResult(
+        operation: message.payload["operation"] as? String ?? "",
+        conversationId: message.payload["conversationId"] as? String ?? turn?.conversationId ?? turns.first?
+          .conversationId ?? "",
+        turn: turn,
+        turns: turns,
+        clearedCount: message.payload["clearedCount"] as? Int ?? 0,
+        highWaterTurnSeq: highWaterTurnSeq,
+        conversationGeneration: conversationGeneration,
+        generationBaseTurnSeq: generationBaseTurnSeq
+      ))
   }
 
   private func journalTurn(from message: RuntimeMessage) -> KernelJournalTurn? {
@@ -3371,14 +3895,15 @@ actor AgentRuntimeProcess {
     let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
     let raw = failure?.displayMessage ?? message.payload["message"] as? String ?? "Unknown error"
     if let requestKey = message.requestKey,
-      let controlRequest = activeControlRequests.removeValue(forKey: requestKey)
+      let controlRequest = takeActiveControlRequest(requestKey)
     {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(controlRequest.authorizationSnapshot) else {
         controlRequest.continuation.resume(throwing: BridgeError.authMissing)
         return
       }
       log("AgentRuntimeProcess: control tool error (raw): \(raw)")
-      controlRequest.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
+      controlRequest.continuation.resume(
+        throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
       return
     }
     if let requestKey = message.requestKey,
@@ -3504,10 +4029,19 @@ actor AgentRuntimeProcess {
       oom: likelyOOM
     )
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
-    isRunning = false
+    if bridgeLifecycle.state == .starting {
+      // A launch is not a running bridge yet. Preserve the start-failure
+      // disposition before unblocking its initializer so ChatProvider can
+      // offer retry and diagnostics can record the typed fallback.
+      recordBridgeStartFailure(Self.startFailure(for: error))
+    } else {
+      _ = bridgeLifecycle.reduce(.crash)
+    }
     markRuntimeOwnerAuthorityDirty()
-    receivedInit = false
     advertisedAgentControlTools.removeAll()
+    runtimeAdapterIDs.removeAll()
+    negotiatedProtocolVersion = nil
+    negotiatedRuntimeVersion = nil
     closePipes()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
@@ -3521,6 +4055,9 @@ actor AgentRuntimeProcess {
     }
     let controlRequests = activeControlRequests.values
     activeControlRequests.removeAll()
+    let controlTimeoutTasks = activeControlTimeoutTasks.values
+    activeControlTimeoutTasks.removeAll()
+    for task in controlTimeoutTasks { task.cancel() }
     for request in controlRequests {
       request.continuation.resume(throwing: error)
     }
@@ -3578,9 +4115,11 @@ actor AgentRuntimeProcess {
     bundleIdentifier: String? = Bundle.main.bundleIdentifier,
     homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
   ) -> String {
-    let bundleComponent = (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
+    let bundleComponent =
+      (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
       ?? "com.omi.desktop-dev"
-    return homeDirectory
+    return
+      homeDirectory
       .appendingPathComponent("Library")
       .appendingPathComponent("Application Support")
       .appendingPathComponent("Omi")
@@ -3593,9 +4132,11 @@ actor AgentRuntimeProcess {
     bundleIdentifier: String? = Bundle.main.bundleIdentifier,
     homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
   ) -> String {
-    let bundleComponent = (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
+    let bundleComponent =
+      (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
       ?? "com.omi.desktop-dev"
-    return homeDirectory
+    return
+      homeDirectory
       .appendingPathComponent("Library")
       .appendingPathComponent("Application Support")
       .appendingPathComponent("Omi")
@@ -3649,7 +4190,8 @@ actor AgentRuntimeProcess {
   }
 
   private func findNodeBinary() -> String? {
-    let bundleURLs = [Bundle.main.bundleURL]
+    let bundleURLs =
+      [Bundle.main.bundleURL]
       + Bundle.allBundles.map(\.bundleURL)
       + Bundle.allFrameworks.map(\.bundleURL)
     for bundledNode in Self.runtimeResourceExecutableCandidates(

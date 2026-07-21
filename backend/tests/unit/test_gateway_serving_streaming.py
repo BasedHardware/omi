@@ -13,6 +13,14 @@ from pydantic import Field
 
 from utils.llm import gateway_serving
 from utils.llm.gateway_client import feature_auto_lane_id
+from utils.llm.gateway_resilience import GatewayCircuitBreaker
+
+
+@pytest.fixture(autouse=True)
+def _reset_gateway_circuit_between_tests():
+    gateway_serving.gateway_circuit.reset()
+    yield
+    gateway_serving.gateway_circuit.reset()
 
 
 class _StreamChatModel(BaseChatModel):
@@ -123,6 +131,27 @@ def test_gateway_serving_stream_falls_back_before_first_chunk(monkeypatch):
     assert recorded[0]['mode'] == 'fallback'
     assert recorded[0]['outcome'] == 'fallback'
     assert fallbacks[0]['outcome'] == 'recovered'
+
+
+def test_gateway_serving_open_circuit_bypasses_a_second_transport_attempt(monkeypatch):
+    monkeypatch.setattr(
+        gateway_serving,
+        'gateway_circuit',
+        GatewayCircuitBreaker(failure_threshold=1, cooldown_seconds=30.0),
+    )
+    gateway = _StreamChatModel(name='gateway', chunks=[], fail_before_yield=True)
+    legacy = _StreamChatModel(name='legacy', chunks=['fallback'])
+    wrapped = gateway_serving.wrap_gateway_with_legacy_fallback(
+        feature='chat_responses',
+        gateway_model=gateway,
+        legacy_model=legacy,
+    )
+
+    assert [chunk.message.content for chunk in wrapped._stream([])] == ['fallback']
+    assert [chunk.message.content for chunk in wrapped._stream([])] == ['fallback']
+
+    assert len(gateway.calls) == 1
+    assert len(legacy.calls) == 2
 
 
 def test_gateway_serving_stream_empty_gateway_uses_legacy_and_does_not_claim_gateway_success(monkeypatch):

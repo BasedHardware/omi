@@ -27,6 +27,7 @@
  */
 
 import { createInterface } from "readline";
+import packageMetadata from "../package.json" with { type: "json" };
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
@@ -52,6 +53,7 @@ import type {
   InvalidateSessionMessage,
   JournalRecordTurnMessage,
   JournalRecordExchangeMessage,
+  JournalImportRemoteTurnMessage,
   JournalUpdateTurnMessage,
   JournalTerminalizeTurnMessage,
   JournalListTurnsMessage,
@@ -67,6 +69,8 @@ import type {
 } from "./protocol.js";
 import {
   PROTOCOL_VERSION,
+  RUNTIME_CAPABILITIES,
+  assertJournalRemoteTurnInput,
   assertPublicJournalRecordAuthority,
   assertPublicJournalUpdateAuthority,
   ensureOutboundProtocolVersion,
@@ -104,9 +108,14 @@ import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
 import { executionRoleForSurface } from "./runtime/execution-policy.js";
 import type { AuthorizedRunToolInvocation, RunToolExecutionLease } from "./runtime/run-tool-capability.js";
 import {
-  attachAgentSpawnJournalReceipt,
+  compactRealtimeSpawnToolResult,
   parseAgentSpawnProducerJournalDescriptor,
 } from "./runtime/agent-spawn-journal.js";
+import {
+  finalizeRelayToolResult,
+  finalizedToolResultOutcome,
+  type RelayToolResultIdentity,
+} from "./runtime/relay-tool-result.js";
 import { LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY } from "./runtime/surface-session.js";
 import {
   ackBackendConversationDeleteOutbox,
@@ -122,6 +131,7 @@ import {
   failBackendTurnOutbox,
   journalTurnForSurfaceProjection,
   journalTurnChangedWakes,
+  importRemoteJournalTurn,
   listJournalTurns,
   recordJournalExchange,
   recordJournalTurn,
@@ -295,12 +305,55 @@ function toolCallPendingKey(input: {
   return input.invocationId;
 }
 
+function relayResultIdentity(
+  callId: string,
+  invocation?: AuthorizedRunToolInvocation,
+): RelayToolResultIdentity {
+  if (invocation) {
+    return {
+      invocationId: invocation.invocationId,
+      ownerId: invocation.ownerId,
+      sessionId: invocation.sessionId,
+      runId: invocation.runId,
+      attemptId: invocation.attemptId,
+      toolName: invocation.canonicalToolName,
+    };
+  }
+  // Capability rejection occurs before a kernel-owned invocation exists. It
+  // still receives a canonical envelope, but cannot claim a fabricated run.
+  return {
+    invocationId: `relay:${callId}`,
+    ownerId: currentOwnerId,
+    sessionId: "unknown",
+    runId: "unknown",
+    attemptId: "unknown",
+    toolName: "unknown_relay_tool",
+  };
+}
+
+function finalizeRelayResult(
+  callId: string,
+  result: string,
+  invocation?: AuthorizedRunToolInvocation,
+  outcome?: "succeeded" | "failed",
+): string {
+  return finalizeRelayToolResult({
+    identity: relayResultIdentity(callId, invocation),
+    result,
+    outcome,
+    kernel: runtimeKernel,
+    artifactRoot: agentArtifactsDir(),
+  });
+}
+
 /** Resolve a pending tool call with a result from Swift */
 function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
   const key = toolCallPendingKey(msg);
   const pending = pendingToolCalls.get(key);
   if (pending) {
     try {
+      const result = finalizeRelayResult(pending.callId, msg.result, pending.invocation, msg.outcome);
+      const finalizedOutcome = controlToolInvocationOutcome(result);
       runtimeKernel?.completeRunToolInvocation({
         invocationId: msg.invocationId,
         ownerId: msg.ownerId,
@@ -315,12 +368,12 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
         inputHash: msg.inputHash,
         capabilityRef: pending.invocation.capabilityRef,
         activeOwnerId: currentOwnerId,
-        outcome: msg.outcome,
-        result: msg.result,
+        outcome: finalizedOutcome,
+        result,
       });
       pendingToolCalls.delete(key);
       clearTimeout(pending.timeout);
-      pending.client.write(JSON.stringify({ type: "tool_result", callId: pending.callId, result: msg.result }) + "\n");
+      writeFinalizedRelayToolResult(pending.client, pending.callId, result);
     } catch (error) {
       logErr(`Rejected authorized tool execution result invocation=${msg.invocationId}: ${error}`);
     }
@@ -329,6 +382,8 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
   const external = pendingExternalToolCalls.get(key);
   if (external) {
     try {
+      const result = finalizeRelayResult(external.request.requestId, msg.result, external.invocation, msg.outcome);
+      const finalizedOutcome = controlToolInvocationOutcome(result);
       runtimeKernel?.completeRunToolInvocation({
         invocationId: msg.invocationId,
         ownerId: msg.ownerId,
@@ -343,8 +398,8 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
         inputHash: msg.inputHash,
         capabilityRef: external.invocation.capabilityRef,
         activeOwnerId: currentOwnerId,
-        outcome: msg.outcome,
-        result: msg.result,
+        outcome: finalizedOutcome,
+        result,
       });
       pendingExternalToolCalls.delete(key);
       clearTimeout(external.timeout);
@@ -357,8 +412,11 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
         runId: external.invocation.runId,
         attemptId: external.invocation.attemptId,
         invocationId: external.invocation.invocationId,
+        // This acknowledges the correlated protocol request. The model-facing
+        // tool outcome remains in the canonical `result` envelope; Swift
+        // requires this transport acknowledgement to read that typed failure.
         ok: true,
-        result: msg.result,
+        result,
       });
     } catch (error) {
       logErr(`Rejected external authorized tool result invocation=${msg.invocationId}: ${error}`);
@@ -464,6 +522,8 @@ function rejectPendingToolCallsForOwner(
       pending.client,
       pending.callId,
       relayError(errorCode, message),
+      pending.invocation,
+      "failed",
     );
   }
   for (const [key, pending] of pendingExternalToolCalls) {
@@ -501,6 +561,8 @@ function rejectPendingToolCallsForKernelEvent(event: AgentEvent): void {
       pending.client,
       pending.callId,
       relayError(errorCode, "Run tool authority ended before Swift returned a result"),
+      pending.invocation,
+      "failed",
     );
   }
   for (const [key, pending] of pendingExternalToolCalls) {
@@ -532,11 +594,7 @@ function resolveClientToolCalls(client: Socket, result: string): void {
     } catch (error) {
       logErr(`Failed to mark disconnected tool invocation outcome unknown: ${error}`);
     }
-    try {
-      client.write(JSON.stringify({ type: "tool_result", callId: pending.callId, result }) + "\n");
-    } catch {
-      // The relay client is already closing.
-    }
+    writeRelayToolResult(client, pending.callId, result, pending.invocation, "failed");
   }
 }
 
@@ -545,18 +603,22 @@ function relayError(code: string, message: string): string {
 }
 
 function controlToolInvocationOutcome(result: string): "succeeded" | "failed" {
-  try {
-    const parsed = JSON.parse(result) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      && (parsed as { ok?: unknown }).ok === false
-      ? "failed"
-      : "succeeded";
-  } catch {
-    return "failed";
-  }
+  return finalizedToolResultOutcome(result);
 }
 
-function writeRelayToolResult(client: Socket, callId: string, result: string): void {
+function writeRelayToolResult(
+  client: Socket,
+  callId: string,
+  result: string,
+  invocation?: AuthorizedRunToolInvocation,
+  outcome?: "succeeded" | "failed",
+): string {
+  const finalized = finalizeRelayResult(callId, result, invocation, outcome);
+  writeFinalizedRelayToolResult(client, callId, finalized);
+  return finalized;
+}
+
+function writeFinalizedRelayToolResult(client: Socket, callId: string, result: string): void {
   try {
     client.write(JSON.stringify({ type: "tool_result", callId, result }) + "\n");
   } catch (error) {
@@ -675,6 +737,12 @@ function startOmiToolsRelay(): Promise<string> {
                         defaultAdapterId: activeSession.defaultAdapterId,
                         authorizedProducerJournal: preparedSpawn?.producerJournal,
                         authorizedCallerRunId: preparedSpawn?.parentRunId,
+                        authorizedToolInvocation: {
+                          invocationId: authorized.invocationId,
+                          runId: authorized.runId,
+                          attemptId: authorized.attemptId,
+                          toolName: authorized.canonicalToolName,
+                        },
                         getOwnerId: establishedOwnerId,
                         executionLease,
                       },
@@ -693,6 +761,8 @@ function startOmiToolsRelay(): Promise<string> {
                     );
                   }
                   executionLease?.release();
+                  const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
+                  const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
                   try {
                     runtimeKernel?.completeRunToolInvocation({
                       invocationId: authorized.invocationId,
@@ -708,13 +778,13 @@ function startOmiToolsRelay(): Promise<string> {
                       inputHash: authorized.inputHash,
                       capabilityRef: authorized.capabilityRef,
                       activeOwnerId: currentOwnerId,
-                      outcome,
-                      result,
+                      outcome: finalizedOutcome,
+                      result: finalizedResult,
                     });
                   } catch (error) {
                     logErr(`Failed to complete runtime control invocation ${authorized.invocationId}: ${error}`);
                   }
-                  writeRelayToolResult(client, msg.callId, result);
+                  writeFinalizedRelayToolResult(client, msg.callId, finalizedResult);
                 })();
                 continue;
               }
@@ -724,7 +794,13 @@ function startOmiToolsRelay(): Promise<string> {
                 invocationId,
               });
               if (pendingToolCalls.has(pendingKey)) {
-                writeRelayToolResult(client, callId, relayError("invocation_replayed", "Duplicate tool invocation"));
+                writeRelayToolResult(
+                  client,
+                  callId,
+                  relayError("invocation_replayed", "Duplicate tool invocation"),
+                  authorized,
+                  "failed",
+                );
                 continue;
               }
 
@@ -741,6 +817,8 @@ function startOmiToolsRelay(): Promise<string> {
                   pending.client,
                   pending.callId,
                   relayError("swift_tool_timeout", "Timed out waiting for the Swift tool executor"),
+                  pending.invocation,
+                  "failed",
                 );
               }, 120_000);
               pendingToolCalls.set(pendingKey, {
@@ -1427,7 +1505,14 @@ async function main(): Promise<void> {
   const journalPumpTimer = setInterval(pumpJournalOutbox, 1_000);
   journalPumpTimer.unref();
   // 3. Signal readiness
-  send({ type: "init", sessionId: "", agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES });
+  send({
+    type: "init",
+    sessionId: "",
+    agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
+    runtimeVersion: packageMetadata.version,
+    runtimeCapabilities: [...RUNTIME_CAPABILITIES],
+    runtimeAdapterIds: registry.adapterIds(),
+  });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift
@@ -1764,6 +1849,12 @@ async function main(): Promise<void> {
                   defaultAdapterId: activeSession.defaultAdapterId,
                   authorizedProducerJournal: spawnDescriptor,
                   authorizedCallerRunId: routed.toolName === "spawn_agent" ? request.runId : undefined,
+                  authorizedToolInvocation: {
+                    invocationId: authorized.invocationId,
+                    runId: authorized.runId,
+                    attemptId: authorized.attemptId,
+                    toolName: authorized.canonicalToolName,
+                  },
                   getOwnerId: establishedOwnerId,
                   executionLease,
                 },
@@ -1781,8 +1872,15 @@ async function main(): Promise<void> {
             }
             executionLease?.release();
             if (outcome === "succeeded" && spawnDescriptor) {
-              result = attachAgentSpawnJournalReceipt(result, spawnDescriptor);
+              result = compactRealtimeSpawnToolResult(result, spawnDescriptor);
+              // A parent journal acknowledgement without a durable child
+              // receipt is an external-spawn failure, not a successful tool
+              // invocation. Keep the control ledger aligned with the exact
+              // compact semantic result we return to Swift/provider.
+              outcome = controlToolInvocationOutcome(result);
             }
+            const finalizedResult = finalizeRelayResult(requestId, result, authorized, outcome);
+            const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
             kernel.completeRunToolInvocation({
               invocationId: authorized.invocationId,
               ownerId: authorized.ownerId,
@@ -1797,8 +1895,8 @@ async function main(): Promise<void> {
               inputHash: authorized.inputHash,
               capabilityRef: authorized.capabilityRef,
               activeOwnerId: currentOwnerId,
-              outcome,
-              result,
+              outcome: finalizedOutcome,
+              result: finalizedResult,
             });
             send({
               type: "external_surface_tool_result",
@@ -1809,8 +1907,11 @@ async function main(): Promise<void> {
               runId: authorized.runId,
               attemptId: authorized.attemptId,
               invocationId: authorized.invocationId,
+              // `ok` means the correlated external protocol request was
+              // processed. A failed tool result is carried in its canonical
+              // envelope so Swift can return it to the provider unchanged.
               ok: true,
-              result,
+              result: finalizedResult,
             });
             break;
           }
@@ -2057,6 +2158,68 @@ async function main(): Promise<void> {
             clientId: request.clientId,
             message: envelope.message,
             failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "journal_import_remote_turn": {
+        const request = msg as JournalImportRemoteTurnMessage;
+        const ownerId = resolveActiveOwner(request.ownerId);
+        const resolved = resolveJournalSurface({
+          ownerId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+        });
+        assertJournalRemoteTurnInput(request.turn);
+        const imported = importRemoteJournalTurn(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          remoteId: request.turn.remoteId,
+          canonicalTurnId: request.turn.canonicalTurnId,
+          role: request.turn.role,
+          surfaceKind: request.surfaceKind,
+          content: request.turn.content,
+          contentBlocks: request.turn.contentBlocks as ConversationContentBlock[],
+          resources: request.turn.resources as ConversationResource[],
+          metadataJson: request.turn.metadataJson,
+          createdAtMs: request.turn.createdAtMs,
+          source: "legacy_upgrade",
+        });
+        const range = listJournalTurns(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          afterTurnSeq: Math.max(0, imported.turn.turnSeq - 1),
+          limit: 1,
+        });
+        send({
+          type: "journal_operation_result",
+          protocolVersion: request.protocolVersion,
+          requestId: request.requestId,
+          clientId: request.clientId,
+          operation: "import_remote",
+          conversationId: resolved.conversationId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+          turn: journalTurnProjection(imported.turn),
+          turns: [],
+          clearedCount: 0,
+          highWaterTurnSeq: range.highWaterTurnSeq,
+          generationBaseTurnSeq: range.generationBaseTurnSeq,
+          conversationGeneration: range.generation,
+        });
+        if (imported.imported) {
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: journalTurnProjection(imported.turn),
           });
         }
         break;

@@ -60,8 +60,8 @@ export default function MemoryWithTabs({ memory }: MemoryWithTabsProps) {
         </div>
         <div style={{ display: currentTab === 'chat' ? 'block' : 'none' }}>
           <Chat
+            conversationId={memory.id}
             transcript={memory.transcript_segments}
-            people={memory.people}
             onClearChatRef={handleClearChatRef}
             onMessagesChange={setHasMessages}
           />

@@ -178,11 +178,13 @@ def background_wipe_user_data(uid: str) -> bool:
         return True
 
 
-def enqueue_deletion_wipe(uid: str):
+def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
     """Dispatch the account-deletion wipe using the configured durable mechanism."""
     if is_account_deletion_dispatch_enabled() is True:
-        enqueue_account_deletion_wipe(uid)
+        enqueue_account_deletion_wipe(wipe_job_id)
         return
+    # Inline dispatch is retained solely for deterministic local/dev/test
+    # execution. Production startup rejects this mode before serving traffic.
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 
 
@@ -204,13 +206,12 @@ def _retry_firestore_write(
     on_failure: Literal['raise', 'log'],
     max_attempts: int = 3,
     retry_delay: float = 0.5,
-) -> None:
+) -> Any:
     """Retry a transient Firestore write, then raise or log on persistent failure."""
     last_err: Exception | None = None
     for attempt in range(max_attempts):
         try:
-            fn()
-            return
+            return fn()
         except Exception as e:
             last_err = e
             if attempt < max_attempts - 1:
@@ -263,12 +264,14 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     # premature data wipe for a user whose Firebase account still exists. Retry
     # transient Firestore failures; if the intent cannot be written, do NOT
     # proceed.
-    _retry_firestore_write(
+    wipe_job_id = _retry_firestore_write(
         lambda: users_db.mark_user_deletion_wipe_intent(uid),
         uid=uid,
         fail_msg='Failed to persist deletion-wipe intent',
         on_failure='raise',
     )
+    if not isinstance(wipe_job_id, str) or not wipe_job_id:
+        raise RuntimeError('deletion-wipe intent did not persist a wipe_job_id')
 
     _cancel_subscription_for_account_deletion(uid)
 
@@ -301,7 +304,7 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     )
 
     try:
-        enqueue_deletion_wipe(uid)
+        enqueue_deletion_wipe(uid, wipe_job_id)
     except Exception as e:
         _mark_wipe_failed_after_enqueue_error(uid, e)
         raise
@@ -387,8 +390,23 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         if claimed_uid is None:
             skipped += 1
             continue
+        wipe_job_id = record.get('wipe_job_id')
+        if not isinstance(wipe_job_id, str) or not wipe_job_id:
+            try:
+                wipe_job_id = users_db.ensure_deletion_wipe_job_id(uid)
+            except Exception as e:
+                logger.error(f'delete_account reconciliation job-id recovery failed for {uid}: {sanitize(str(e))}')
+                _mark_wipe_failed_after_enqueue_error(uid, e)
+                skipped += 1
+                continue
+        if not isinstance(wipe_job_id, str) or not wipe_job_id:
+            error = RuntimeError('deletion-wipe job id missing after recovery')
+            logger.error(f'delete_account reconciliation cannot dispatch {uid}: {error}')
+            _mark_wipe_failed_after_enqueue_error(uid, error)
+            skipped += 1
+            continue
         try:
-            enqueue_deletion_wipe(uid)
+            enqueue_deletion_wipe(uid, wipe_job_id)
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
             _mark_wipe_failed_after_enqueue_error(uid, e)

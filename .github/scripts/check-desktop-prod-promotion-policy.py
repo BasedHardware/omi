@@ -1,185 +1,74 @@
 #!/usr/bin/env python3
-"""Guard the desktop backend prod promotion workflow.
-
-Prod desktop backend deploys must be a manual stable-promotion action. This
-check is deliberately text-based and narrow: it fails on the risky regressions
-we have already seen, without requiring PyYAML in CI.
-"""
+"""Guard the manual qualified-artifact Stable pointer promotion."""
 
 from pathlib import Path
 
 WORKFLOW = Path(".github/workflows/desktop_promote_prod.yml")
 
+REQUIRED = (
+    "on:\n  workflow_dispatch:",
+    "confirm:",
+    "promote-stable",
+    "operation:",
+    "expected_current_release_id:",
+    "expected_generation:",
+    "qualification_run_id:",
+    "environment: prod",
+    "Validate trusted qualification run for initial promotion",
+    "Fetch exact retained qualified manifest",
+    '"https://api.omi.me/v2/desktop/releases/$RELEASE_TAG"',
+    "manifest_sha256",
+    "Verify current beta and stable pointer compare-and-swap inputs",
+    '"$BASE/macos-beta"',
+    "check_stable_pointer_precondition.py",
+    "desktop_update_channels/macos-stable",
+    "desktop_release_manifests/$RELEASE_TAG",
+    "Publish immutable stable repair installer",
+    "Advance explicit stable pointer",
+    "Bridge stable for legacy desktop clients",
+    "Publish latest stable repair route",
+    "Verify exact pointer, hashes, and stable feed",
+    "https://api.omi.me/v2/desktop/channels/promote",
+    "Authorization: Bearer $ACCESS_TOKEN",
+    "appcast.xml?identity=stable",
+    "verify_stable_appcast.py",
+    ".event",
+    ".path",
+    "--if-generation-match=0",
+    'operation\": os.environ[\"OPERATION\"]',
+)
 
-def fail(message: str) -> None:
-    raise SystemExit(f"FAIL: {message}")
+ORDERED_STEPS = (
+    "Fetch exact retained qualified manifest",
+    "Verify current beta and stable pointer compare-and-swap inputs",
+    "Publish immutable stable repair installer",
+    "Advance explicit stable pointer",
+    "Bridge stable for legacy desktop clients",
+    "Publish latest stable repair route",
+    "Verify exact pointer, hashes, and stable feed",
+)
 
 
-def require(needle: str, text: str, message: str) -> None:
-    if needle not in text:
-        fail(message)
-
-
-def require_order(text: str, first: str, second: str, message: str) -> None:
-    first_index = text.find(first)
-    second_index = text.find(second)
-    if first_index == -1 or second_index == -1 or first_index >= second_index:
-        fail(message)
-
-
-def workflow_triggers(text: str) -> list[str]:
-    lines = text.splitlines()
-    try:
-        start = next(i for i, line in enumerate(lines) if line == "on:")
-    except StopIteration:
-        fail("workflow is missing top-level on: block")
-
-    triggers: list[str] = []
-    for line in lines[start + 1 :]:
-        if not line.strip() or line.startswith("#"):
-            continue
-        if line and not line.startswith(" "):
-            break
-        if line.startswith("  ") and not line.startswith("    "):
-            triggers.append(line.strip().split(":", 1)[0])
-    return triggers
+def validate(text: str) -> list[str]:
+    errors = [f"missing Stable pointer-promotion guard: {fragment}" for fragment in REQUIRED if fragment not in text]
+    for forbidden in ("break_glass", "Deploy Desktop Backend", "gcloud run deploy", "desktop-backend-prod-deployed"):
+        if forbidden in text:
+            errors.append(f"stable pointer promotion must not contain backend deployment or bypass path: {forbidden}")
+    if "\n  push:" in text or "\n  schedule:" in text or "\n  release:" in text:
+        errors.append("stable pointer promotion must remain manual-only")
+    order = [text.find(fragment) for fragment in ORDERED_STEPS]
+    if -1 in order or order != sorted(order):
+        errors.append("stable promotion must fetch and verify retained identity before pointer mutation, then bridge and verify")
+    return errors
 
 
 def main() -> int:
-    text = WORKFLOW.read_text()
-    triggers = workflow_triggers(text)
-
-    require("on:\n  workflow_dispatch:", text, "prod promotion must be workflow_dispatch only")
-    if triggers != ["workflow_dispatch"]:
-        fail(f"prod promotion must allow only workflow_dispatch, got: {', '.join(triggers) or '<none>'}")
-    require("release_tag:", text, "manual promotion must require an explicit release tag")
-    require("confirm:", text, "manual promotion must require an explicit confirmation input")
-    require("promote-stable", text, "manual promotion confirmation phrase must remain explicit")
-    if "\n      force:" in text or "inputs.force" in text:
-        fail("prod promotion must stay roll-forward only; do not expose a force rollback input")
-
-    forbidden_triggers = [
-        "\n  release:",
-        "\n  schedule:",
-        "\n  push:",
-        "\n  pull_request:",
-        "\n  pull_request_target:",
-    ]
-    for trigger in forbidden_triggers:
-        if trigger in text:
-            fail(f"desktop backend prod promotion must not use automatic trigger {trigger.strip()}")
-
-    require("check-desktop-release-promotion.py", text, "workflow must run pre-release sanity checks")
-    require("--break-glass", text, "workflow must expose an audited emergency bypass")
-    require("--break-glass-confirm", text, "workflow must require typed break-glass confirmation")
-    require("--break-glass-reason", text, "workflow must require a break-glass audit rationale")
-    require("I-ACCEPT-STABLE-PROMOTION-RISK", text, "workflow must require the stable-promotion risk phrase")
-    require("--target-sha", text, "workflow must validate qualification and nomination against the tag SHA")
-    require("Audited break glass by", text, "workflow must record the actor and break-glass reason")
-    require(
-        "PROMOTION_CHECK_ARGS=(",
-        text,
-        "workflow must keep promotion-check arguments populated when break glass is disabled under set -u",
-    )
-    if "BREAK_GLASS_ARGS=()" in text:
-        fail("normal stable promotion must not expand an empty optional array under set -u")
-    require(
-        'git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA"',
-        text,
-        "workflow must reject tags that cannot consume release identity env vars",
-    )
-    require(
-        'git grep -q "release_tag" "$TARGET_SHA"', text, "workflow must reject tags that cannot report release identity"
-    )
-    require(
-        "Preflight Omi Bot token configuration",
-        text,
-        "workflow must verify GitHub App token secrets before prod mutations",
-    )
-    require(
-        "Preflight Omi Bot repository access",
-        text,
-        "workflow must verify GitHub App repository access before prod mutations",
-    )
-    require(
-        "Preflight Firestore bridge release",
-        text,
-        "workflow must verify the Firestore bridge release before prod deploy",
-    )
-    require(
-        "EXPECTED_VERSION: ${{ steps.plan.outputs.release_version }}",
-        text,
-        "workflow must compare Firestore bridge version to the release tag",
-    )
-    require(
-        "EXPECTED_BUILD_NUMBER: ${{ steps.plan.outputs.release_build_number }}",
-        text,
-        "workflow must compare Firestore bridge build number to the release tag",
-    )
-    require(
-        "Firestore bridge release version mismatch", text, "workflow must fail on mismatched Firestore bridge release"
-    )
-    require(
-        "Firestore bridge release build_number mismatch",
-        text,
-        "workflow must fail on mismatched Firestore bridge build number",
-    )
-    require("Deploy Desktop Backend to Production", text, "guard should cover the prod deploy workflow")
-    require(
-        "Verify prod backend release identity",
-        text,
-        "prod deploy must verify the backend release identity before release metadata changes",
-    )
-    require("Promote Firestore release stable", text, "workflow must promote the Rust appcast Firestore release")
-    require(
-        "Generate Omi Bot token for release mutations",
-        text,
-        "workflow must mint the GitHub App token immediately before late release/tag mutations",
-    )
-    require(
-        "mark-desktop-release-stable.py", text, "workflow must mark the release stable only after backend verification"
-    )
-    require(
-        "Clear desktop update cache",
-        text,
-        "workflow should clear Python desktop update cache after stable metadata changes",
-    )
-    require("Advance prod-tracking tag", text, "workflow must move the prod tracking tag after promotion succeeds")
-    require(
-        "This promotion workflow is roll-forward only",
-        text,
-        "workflow must reject older releases instead of force-rolling back",
-    )
-    require("grep -qE '^v.+-macos$'", text, "prod deploys must be limited to macOS desktop release tags")
-    require("OMI_DESKTOP_RELEASE_TAG=", text, "prod deploy must stamp release tag into Cloud Run")
-    require("OMI_DESKTOP_RELEASE_SHA=", text, "prod deploy must stamp release sha into Cloud Run")
-    require("OMI_DESKTOP_RELEASE_CHANNEL=stable", text, "prod deploy must stamp stable channel into Cloud Run")
-    require(
-        "RELEASE_SECRET=RELEASE_SECRET:latest", text, "prod deploy must expose release secret for Firestore promotion"
-    )
-    require_order(
-        text,
-        "Preflight Omi Bot repository access",
-        "Deploy Desktop Backend to Production",
-        "GitHub App token access must be verified before any prod deploy mutation",
-    )
-    require_order(
-        text,
-        "Promote Firestore release stable",
-        "Generate Omi Bot token for release mutations",
-        "GitHub App token should be generated after the long deploy path to avoid expiration before tag advancement",
-    )
-    require_order(
-        text,
-        "Generate Omi Bot token for release mutations",
-        "Advance prod-tracking tag",
-        "GitHub App token must be available for the final prod-tracking tag mutation",
-    )
-
-    if "gh release list" in text:
-        fail("prod promotion must not scan old releases; deploy only the event/manual target")
-
-    print("desktop prod promotion policy OK")
+    errors = validate(WORKFLOW.read_text(encoding="utf-8"))
+    if errors:
+        for error in errors:
+            print(f"FAIL: {error}")
+        return 1
+    print("desktop Stable pointer-promotion policy OK")
     return 0
 
 

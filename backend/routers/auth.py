@@ -421,16 +421,34 @@ async def auth_callback_google(
     )
 
 
+def _parse_apple_user_name(user_json: Optional[str]) -> Optional[str]:
+    """Apple includes the user's name in the ``user`` form field ONLY on the very
+    first authorization (JSON: ``{"name": {"firstName", "lastName"}, ...}``).
+    Parse it into a display name; return None when absent or unparseable."""
+    if not user_json:
+        return None
+    try:
+        name = (json.loads(user_json) or {}).get('name') or {}
+        parts = [str(name.get('firstName', '')).strip(), str(name.get('lastName', '')).strip()]
+        full = ' '.join(p for p in parts if p)
+        return full or None
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return None
+
+
 @router.post("/callback/apple")
 async def auth_callback_apple_post(
     request: Request,
     code: str = Form(...),
     state: str = Form(...),
     error: Optional[str] = Form(None),
+    user: Optional[str] = Form(None),
 ):
     """
     Apple authentication callback handler (POST method)
-    Apple uses form_post response_mode, so we need a separate POST endpoint
+    Apple uses form_post response_mode, so we need a separate POST endpoint.
+    Apple's id_token carries no name, so the ``user`` form field (sent only on the
+    first authorization) is the sole source of the user's name — capture it here.
     """
     auth_flow_id = _auth_flow_id_from_state(state)
     _log_auth_event(provider="apple", stage="provider_callback_received", outcome="started", auth_flow_id=auth_flow_id)
@@ -464,6 +482,18 @@ async def auth_callback_apple_post(
 
     # Exchange code for OAuth credentials
     oauth_credentials = await _exchange_provider_code_for_oauth_credentials('apple', code, session_data)
+
+    # Apple sends the name in the `user` form field only on first auth; carry it
+    # through the auth-code blob so `/token` can persist it (it never rides the
+    # id_token). Absent on every later sign-in — expected, not an error.
+    full_name = _parse_apple_user_name(user)
+    if full_name:
+        try:
+            creds = json.loads(oauth_credentials)
+            creds['full_name'] = full_name
+            oauth_credentials = json.dumps(creds)
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     # Create temporary auth code bound to the original redirect_uri
     auth_code = str(uuid.uuid4())
@@ -623,6 +653,7 @@ async def auth_token(
         provider = oauth_credentials.get('provider')
         id_token = oauth_credentials.get('id_token')
         access_token = oauth_credentials.get('access_token')
+        full_name = oauth_credentials.get('full_name')
 
         response = {
             "provider": provider,
@@ -643,7 +674,7 @@ async def auth_token(
                     auth_flow_id=auth_flow_id,
                     redirect_scheme=redirect_scheme,
                 )
-                custom_token = await _generate_custom_token(provider, id_token, access_token)
+                custom_token = await _generate_custom_token(provider, id_token, access_token, display_name=full_name)
                 response["custom_token"] = custom_token
                 _log_auth_event(
                     provider=provider,
@@ -959,7 +990,9 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: Di
         raise HTTPException(status_code=500, detail="Failed to exchange Apple code for tokens")
 
 
-async def _generate_custom_token(provider: str, id_token: str, access_token: Optional[str] = None) -> str:
+async def _generate_custom_token(
+    provider: str, id_token: str, access_token: Optional[str] = None, display_name: Optional[str] = None
+) -> str:
     """
     Generate Firebase custom token by signing in with OAuth credentials
     This ensures we get the same Firebase UID that client-side auth would create
@@ -1008,6 +1041,20 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: Opt
             raise Exception("No Firebase UID returned from sign-in")
 
         logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
+
+        # Apple's id_token has no name and Firebase can't auto-populate it (unlike
+        # Google), so persist the first-auth name onto the Firebase user. Only set
+        # it when missing — Apple sends the name once, so later sign-ins pass None
+        # and an already-named account is never overwritten.
+        if display_name and not result.get('displayName'):
+            try:
+                await run_blocking(
+                    critical_executor,
+                    lambda: firebase_admin.auth.update_user(firebase_uid, display_name=display_name),
+                )
+                logger.info(f"Set Firebase display_name for {provider} UID {firebase_uid}")
+            except Exception as e:
+                logger.error(f"Failed to set Firebase display_name (non-fatal): {sanitize(str(e))}")
 
         # Create custom token for this UID
         custom_token: object = firebase_admin.auth.create_custom_token(firebase_uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped

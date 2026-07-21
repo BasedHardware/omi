@@ -9,7 +9,8 @@ enum PostOnboardingPromptSuggestions {
   static func save(_ suggestions: [String]) {
     let cleaned = Array(
       NSOrderedSet(
-        array: suggestions
+        array:
+          suggestions
           .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
           .filter { !$0.isEmpty }
       ).array as? [String] ?? suggestions
@@ -41,7 +42,7 @@ enum OnboardingPromptSuggestionBuilder {
     var suggestions: [String] = []
 
     // Universal first question — always relevant, not tied to a random project
-    suggestions.append("What should I focus on today to achieve my goals?")
+    suggestions.append(HomeSuggestionComposer.universalFirstQuestion)
 
     if !coordinator.emailSummary.isEmpty {
       suggestions.append("What email follow-ups matter most today?")

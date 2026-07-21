@@ -38,6 +38,7 @@ from database.sync_jobs import (
     add_processed_segment_if_run_owner,
     delete_sync_job_run_lock_epoch,
     fenced_finalize_sync_job,
+    fenced_finalize_sync_job_from_durable_ledger,
     fenced_mark_job_failed,
     fenced_mark_job_processing,
     fenced_update_sync_job,
@@ -95,6 +96,7 @@ from utils.other.storage import (
     upload_audio_chunk,
     upload_syncing_temporal_file,
 )
+from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
@@ -154,6 +156,27 @@ def _bounded_sync_lane(lane: str | None) -> str:
 def _bounded_exception_type(error: BaseException) -> str:
     name = error.__class__.__name__
     return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
+
+
+async def _resolve_fair_use_soft_cap_plan(uid: str):
+    """Return the stored plan, falling back to the default soft-cap tier on read failure."""
+    try:
+        fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+        return fair_use_sub.plan if fair_use_sub else None
+    except Exception as e:
+        logger.warning(
+            'event=sync_fair_use outcome=subscription_plan_fallback exception_type=%s',
+            _bounded_exception_type(e),
+        )
+        record_fallback(
+            component='other',
+            from_mode='subscription_plan',
+            to_mode='default_cap',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
 
 
 def _bounded_sync_failure_reason(reason: str | None) -> str:
@@ -480,7 +503,9 @@ def bind_or_converge_sync_ledger_completion(
     if not binding.completed or not is_valid_completed_sync_content_result(binding.result):
         raise SyncJobRunLeaseLost(f'sync content ledger owner lost: job={job_id}')
 
-    finalized = _finalize_sync_job_for_run(job_id, run_lock_token, binding.result)
+    finalized = _require_run_owner(
+        fenced_finalize_sync_job_from_durable_ledger(job_id, run_lock_token, binding.result), job_id=job_id
+    )
     delete_sync_job_run_lock_epoch(job_id)
     return finalized
 
@@ -1034,9 +1059,9 @@ def process_segment(
         # attach segments to it directly instead of searching by timestamp.
         if target_conversation_id:
             closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
-            if not closest_memory:
+            if not conversations_db.eligible_merge_target(closest_memory):
                 logger.warning(
-                    f'Target conversation {target_conversation_id} not found, falling back to timestamp lookup'
+                    f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
                 )
                 closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         else:
@@ -1061,7 +1086,6 @@ def process_segment(
             if private_cloud_sync_enabled:
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
-
             transcript_segments = [s.model_dump() for s in transcript_segments]
 
             # assign timestamps to each segment
@@ -1787,8 +1811,11 @@ async def _run_full_pipeline_background_async(
                         raise_on_error=bool(content_id),
                     )
                 if sync_lane == SyncLane.FRESH.value:
+                    fair_use_plan = await _resolve_fair_use_soft_cap_plan(uid)
                     speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
-                    triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
+                    triggered_caps = await run_blocking(
+                        db_executor, check_soft_caps, uid, speech_totals=speech_totals, plan=fair_use_plan
+                    )
                     if triggered_caps:
                         logger.info(
                             'event=sync_fair_use outcome=soft_cap_triggered cap_count=%d',
@@ -1850,9 +1877,11 @@ async def _run_full_pipeline_background_async(
                 },
             )
             # Mirror realtime: store conversation audio only when private cloud sync is on.
-            private_cloud_sync_enabled, data_protection_level, person_embeddings_cache = (
-                await _load_sync_segment_context(uid)
-            )
+            (
+                private_cloud_sync_enabled,
+                data_protection_level,
+                person_embeddings_cache,
+            ) = await _load_sync_segment_context(uid)
 
             # --- Phase 5: Process segments (STT + LLM) ---
             await run_blocking(

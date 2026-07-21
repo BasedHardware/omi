@@ -130,6 +130,7 @@ _stubs = [
     'firebase_admin.messaging',
     'firebase_admin.auth',
     'google.cloud.firestore',
+    'google.cloud.tasks_v2',
     'google.cloud.firestore_v1',
     'google.cloud.firestore_v1.FieldFilter',
     'langchain_core',

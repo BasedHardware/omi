@@ -1,17 +1,20 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct ManualInstallationDisclosure<Content: View>: View {
   @Binding private var isExpanded: Bool
+  private let title: String
   private let fontSize: CGFloat
   private let content: () -> Content
 
   init(
     isExpanded: Binding<Bool>,
+    title: String = "Manual installation",
     fontSize: CGFloat,
     @ViewBuilder content: @escaping () -> Content
   ) {
     _isExpanded = isExpanded
+    self.title = title
     self.fontSize = fontSize
     self.content = content
   }
@@ -24,7 +27,7 @@ struct ManualInstallationDisclosure<Content: View>: View {
             .scaledFont(size: OmiType.micro, weight: .semibold)
             .frame(width: 10)
 
-          Text("Manual installation")
+          Text(title)
             .scaledFont(size: fontSize, weight: .medium)
         }
         .foregroundColor(OmiColors.textTertiary)
@@ -34,8 +37,8 @@ struct ManualInstallationDisclosure<Content: View>: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help(isExpanded ? "Hide manual installation" : "Show manual installation")
-      .accessibilityLabel("Manual installation")
+      .help(isExpanded ? "Hide \(title.lowercased())" : "Show \(title.lowercased())")
+      .accessibilityLabel(title)
       .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
       if isExpanded {

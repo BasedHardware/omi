@@ -48,9 +48,11 @@ from database.redis_db import (
 from database.users import (
     claim_deletion_wipe_for_task,
     get_user_transcription_preferences,
+    resolve_deletion_wipe_job_id,
+    resolve_legacy_deletion_wipe_uid,
     set_user_transcription_preferences,
 )
-from utils.stt.streaming import deepgram_nova3_multi_languages
+from config.stt_provider_policy import supports_live_multilingual_mode
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation
@@ -90,13 +92,18 @@ from utils.subscription import (
     has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
+    wire_plan_for_client,
     legacy_plan_features,
     clear_trial_paywall_cache,
     get_trial_metadata,
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
-from utils.cloud_tasks import get_account_deletion_tasks_max_attempts, verify_cloud_tasks_oidc
+from utils.cloud_tasks import (
+    AccountDeletionTaskAuthentication,
+    get_account_deletion_tasks_max_attempts,
+    verify_account_deletion_cloud_tasks_oidc,
+)
 from utils.executors import cleanup_executor, db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -315,15 +322,58 @@ def delete_account(
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse
 # status codes drive queue retry/ack behavior.
 @router.post('/v1/users/account-deletion-wipes/run', include_in_schema=False)
-async def run_account_deletion_wipe(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+async def run_account_deletion_wipe(
+    request: Request,
+    task_authentication: AccountDeletionTaskAuthentication = Depends(verify_account_deletion_cloud_tasks_oidc),
+):
     try:
         payload = await request.json()
-        uid = payload['uid']
-        if not isinstance(uid, str) or not uid:
-            raise ValueError('uid must be a non-empty string')
+        if not isinstance(payload, dict):
+            raise ValueError('payload must be a JSON object')
+        if 'job_id' in payload:
+            wipe_job_id = payload['job_id']
+            if not isinstance(wipe_job_id, str) or not wipe_job_id:
+                raise ValueError('job_id must be a non-empty string')
+            resolution_fn = resolve_deletion_wipe_job_id
+            resolution_arg = wipe_job_id
+            payload_kind = 'job_id'
+        else:
+            # TODO(#9760): Remove this legacy branch after the Cloud Tasks max-retry window has elapsed.
+            legacy_uid = payload.get('uid')
+            if not isinstance(legacy_uid, str) or not legacy_uid:
+                raise ValueError('job_id must be a non-empty string')
+            resolution_fn = resolve_legacy_deletion_wipe_uid
+            resolution_arg = legacy_uid
+            payload_kind = 'legacy_uid'
     except Exception as e:
         logger.error(f'account_deletion handler: invalid payload, dropping task: {sanitize(str(e))}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    if task_authentication.audience == 'legacy_sync' and payload_kind != 'legacy_uid':
+        logger.warning('account_deletion handler: dropping job-ID payload with legacy sync audience')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'legacy_audience_for_job_id'})
+
+    if payload_kind == 'legacy_uid' and task_authentication.audience != 'legacy_sync':
+        logger.warning('account_deletion handler: dropping legacy uid payload with non-legacy audience')
+        return JSONResponse(
+            status_code=200, content={'status': 'dropped', 'reason': 'legacy_uid_requires_legacy_audience'}
+        )
+
+    try:
+        resolution = await run_blocking(db_executor, resolution_fn, resolution_arg)
+    except Exception as e:
+        logger.error(f'account_deletion handler: job resolution failed, will retry: {sanitize(str(e))}')
+        return JSONResponse(status_code=500, content={'status': 'retry'})
+
+    resolution_outcome = resolution.get('outcome') if isinstance(resolution, dict) else None
+    uid = resolution.get('uid') if isinstance(resolution, dict) else None
+    if resolution_outcome != 'resolved' or not isinstance(uid, str) or not uid:
+        logger.warning(
+            'account_deletion handler: dropping task payload_kind=%s resolution=%s', payload_kind, resolution_outcome
+        )
+        return JSONResponse(
+            status_code=200, content={'status': 'dropped', 'reason': resolution_outcome or 'invalid_job'}
+        )
 
     lock_key = f'account-deletion:{uid}'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
@@ -347,11 +397,15 @@ async def run_account_deletion_wipe(request: Request, task_retry_count: int = De
             return JSONResponse(status_code=200, content={'status': 'done'})
 
         max_attempts = get_account_deletion_tasks_max_attempts()
-        if task_retry_count >= max_attempts - 1:
-            logger.error(f'account_deletion handler: final attempt {task_retry_count + 1} failed for {uid}')
+        if task_authentication.retry_count >= max_attempts - 1:
+            logger.error(
+                f'account_deletion handler: final attempt {task_authentication.retry_count + 1} failed for {uid}'
+            )
             return JSONResponse(status_code=200, content={'status': 'failed_final'})
 
-        logger.warning(f'account_deletion handler: attempt {task_retry_count + 1} failed for {uid}, will retry')
+        logger.warning(
+            f'account_deletion handler: attempt {task_authentication.retry_count + 1} failed for {uid}, will retry'
+        )
         return JSONResponse(status_code=500, content={'status': 'retry'})
     except asyncio.CancelledError:
         release_lock = False
@@ -770,7 +824,7 @@ def set_user_language(data: SetUserLanguageRequest, uid: str = Depends(auth.get_
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
-    single_language_mode = language not in deepgram_nova3_multi_languages
+    single_language_mode = not supports_live_multilingual_mode(language)
     set_user_transcription_preferences(uid, single_language_mode=single_language_mode)
     return {'status': 'ok', 'single_language_mode': single_language_mode}
 
@@ -987,7 +1041,7 @@ def get_user_usage_stats_endpoint(
     period: UsagePeriod = UsagePeriod.TODAY,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
-    stats = user_usage_db.get_current_user_usage(uid, period.value)
+    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=notification_db.get_user_time_zone(uid))
     return stats
 
 
@@ -1241,6 +1295,11 @@ def get_user_subscription_endpoint(
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
     chat_allowed = chat_snapshot['allowed']
 
+    # Grandfather is read from the true plan before the label is remapped for
+    # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
+    desktop_grandfather_until = neo_grandfather_until(subscription)
+    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
+
     return UserSubscriptionResponse(
         subscription=subscription,
         transcription_seconds_used=transcription_seconds_used,
@@ -1257,7 +1316,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
-        desktop_grandfather_until=neo_grandfather_until(subscription),
+        desktop_grandfather_until=desktop_grandfather_until,
     )
 
 
