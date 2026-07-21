@@ -9,7 +9,7 @@ import Foundation
 @MainActor
 final class SBOnboardingModel: ObservableObject {
   enum Step: Int, CaseIterable {
-    case promise, name, role, meet, perm, files, ptt, launch, calendar, wow, capture
+    case promise, name, role, meet, perm, files, ptt, launch, calendar, capture
   }
 
   struct Msg: Identifiable {
@@ -38,11 +38,6 @@ final class SBOnboardingModel: ObservableObject {
   @Published private(set) var accState: PermState = .ask  // accessibility, for the PTT shortcut
   @Published var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
   @Published private(set) var calState: String = "idle"  // idle | connecting | on | needsSignIn
-  @Published private(set) var wowPick: Int?
-  /// Real chat at the wow step: true while Omi is answering the tapped question.
-  @Published private(set) var wowAsking = false
-  private var wowAnswerIndex: Int?
-  private var wowCancellable: AnyCancellable?
 
   private unowned let appState: AppState
   private let chatProvider: ChatProvider
@@ -93,8 +88,6 @@ final class SBOnboardingModel: ObservableObject {
     case .calendar:
       return
         "Now your calendar. Then I know when meetings start, prepare beforehand, and capture automatically."
-    case .wow:
-      return "From day one I can answer things like:"
     case .capture:
       return
         "You're set, \(name). ⌘⇧O opens me anywhere; hold fn to talk. Last choice — I can listen all the time (pause anytime from the notch), or only when your calendar says you're in a meeting:"
@@ -304,71 +297,12 @@ final class SBOnboardingModel: ObservableObject {
       guard let self else { return }
       self.calState = status.isConnected ? "on" : "needsSignIn"
       if status.isConnected {
-        self.advance(userAnswer: "Calendar connected", to: .wow)
+        self.advance(userAnswer: "Calendar connected", to: .capture)
       }
     }
   }
 
-  func skipCalendar() { advance(userAnswer: "Skip for now", to: .wow) }
-
-  /// The wow moment: actually ask Omi the tapped question and stream the real
-  /// answer into the onboarding thread — a live chat, not a canned line.
-  private var wowTimeout: Task<Void, Never>?
-
-  func askWow(_ question: String) {
-    guard !wowAsking else { return }
-    wowAsking = true
-    wowAnswerIndex = nil
-    streamTask?.cancel()
-    streamingText = nil
-    thread.append(Msg(isOmi: false, text: question))
-    typing = true
-    // Keep the widget (and its Continue button) reachable the whole time so a
-    // stalled/empty reply can never trap the user on this step.
-    showWidget = true
-    // Only accept the AI message produced AFTER this send — never a prior greeting
-    // or the previous question's answer (fixes the stale-answer race).
-    let priorAIIds = Set(chatProvider.messages.filter { $0.sender == .ai }.map(\.id))
-    Task { _ = await chatProvider.sendMainDraft(question) }
-    wowCancellable = chatProvider.$messages
-      .receive(on: RunLoop.main)
-      .sink { [weak self] messages in
-        guard let self else { return }
-        guard let ai = messages.last(where: { $0.sender == .ai && !priorAIIds.contains($0.id) }),
-          !ai.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return }
-        self.typing = false
-        if let idx = self.wowAnswerIndex, idx < self.thread.count {
-          self.thread[idx].text = ai.text
-        } else {
-          self.thread.append(Msg(isOmi: true, text: ai.text))
-          self.wowAnswerIndex = self.thread.count - 1
-        }
-        if !ai.isStreaming {
-          self.finishWow()
-        }
-      }
-    // Failure fallback: never leave the step stuck if no answer ever finalizes.
-    wowTimeout = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: 20_000_000_000)
-      guard let self, !Task.isCancelled else { return }
-      self.typing = false
-      self.finishWow()
-    }
-  }
-
-  private func finishWow() {
-    wowAsking = false
-    wowCancellable = nil
-    wowTimeout?.cancel()
-    wowTimeout = nil
-  }
-
-  func answerWow() {
-    wowCancellable = nil
-    wowAsking = false
-    advance(userAnswer: "Continue", to: .capture)
-  }
+  func skipCalendar() { advance(userAnswer: "Skip for now", to: .capture) }
 
   // MARK: capture choice → completes onboarding
 
@@ -382,14 +316,13 @@ final class SBOnboardingModel: ObservableObject {
     complete(startListening: false)
   }
 
-  /// Skip the rest of onboarding: mark it complete and drop straight to the home,
-  /// without force-enabling capture, launch-at-login, or screen analysis the user
-  /// chose to bypass. They can turn those on later from Settings / the notch.
+  /// Skip the rest of onboarding: mark it complete and drop straight to the Chat
+  /// tab (with the personalized opener), without force-enabling capture,
+  /// launch-at-login, or screen analysis the user chose to bypass. They can turn
+  /// those on later from Settings / the notch.
   func skip() {
     streamTask?.cancel()
     pollTask?.cancel()
-    wowTimeout?.cancel()
-    wowCancellable = nil
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")

@@ -1083,6 +1083,13 @@ class ChatProvider: ObservableObject {
   /// polling/sync).
   @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
 
+  /// The personalized post-onboarding opener shown in the empty Chat tab the
+  /// moment onboarding finishes: a greeting addressed to the user by name plus
+  /// tappable starter questions. Non-nil only during that first landing;
+  /// cleared once the user sends their first message. See
+  /// `presentOnboardingOpener()`.
+  @Published var onboardingOpener: OnboardingOpenerContent?
+
   // MARK: - ChatErrorState (structured replacement for the inline error banner)
   //
   // Structured error state for the chat surface. Drives the
@@ -4982,6 +4989,80 @@ class ChatProvider: ObservableObject {
     releaseSendLock(sendGeneration: sendGen)
 
     return completedResponseText
+  }
+
+  // MARK: - Post-onboarding opener
+
+  /// Compose and present the personalized opener the instant the Chat tab
+  /// appears after onboarding. Composed synchronously from locally-known
+  /// facts (name, listening mode, cached suggestion chips) so it is instant
+  /// and never blank; today's calendar, if connected, enriches it a moment
+  /// later without ever blocking the first paint.
+  func presentOnboardingOpener() {
+    let name = Self.firstName(AuthService.shared.givenName)
+    let mode: OnboardingOpenerComposer.ListeningMode =
+      AssistantSettings.shared.systemAudioCaptureMode == .always ? .always : .meetingsOnly
+    let baseStarters = HomeSuggestionComposer.compose(
+      personalized: HomeSuggestionsStore.shared.personalizedQuestions,
+      onboarding: PostOnboardingPromptSuggestions.suggestions())
+
+    onboardingOpener = OnboardingOpenerComposer.compose(
+      name: name, mode: mode, meetings: [], now: Date(), baseStarters: baseStarters)
+
+    // Enrich with today's real calendar when available — never blocks the
+    // instant opener above, and bails if the user has already started chatting.
+    Task { [weak self] in
+      let meetings = await Self.todaysMeetings()
+      guard !meetings.isEmpty else { return }
+      guard let self, self.onboardingOpener != nil else { return }
+      self.onboardingOpener = OnboardingOpenerComposer.compose(
+        name: name, mode: mode, meetings: meetings, now: Date(), baseStarters: baseStarters)
+    }
+  }
+
+  /// Hide the opener once the user sends their first message.
+  func dismissOnboardingOpener() {
+    onboardingOpener = nil
+  }
+
+  private static func firstName(_ full: String) -> String {
+    let trimmed = full.trimmingCharacters(in: .whitespaces)
+    return trimmed.components(separatedBy: " ").first ?? trimmed
+  }
+
+  /// Today's remaining timed meetings (soonest first), best-effort. Returns an
+  /// empty array when the calendar isn't connected or the read fails — the
+  /// opener simply stays in its name-only form.
+  private static func todaysMeetings() async -> [OnboardingMeetingBrief] {
+    guard
+      let events = try? await CalendarReaderService.shared.readEvents(
+        daysBack: 0, daysForward: 1, maxResults: 50)
+    else { return [] }
+
+    let todayPrefix = ISO8601DateFormatter().string(from: Date()).prefix(10)
+    let plain = ISO8601DateFormatter()
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+    let timeFormatter = DateFormatter()
+    timeFormatter.locale = Locale.current
+    timeFormatter.setLocalizedDateFormatFromTemplate("jmm")
+
+    let cutoff = Date().addingTimeInterval(-30 * 60)  // include a meeting that just started
+
+    return
+      events
+      .filter { !$0.isAllDay && $0.startTime.prefix(10) == todayPrefix }
+      .compactMap { event -> (Date, OnboardingMeetingBrief)? in
+        guard let start = plain.date(from: event.startTime) ?? fractional.date(from: event.startTime),
+          start >= cutoff
+        else { return nil }
+        let title = event.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        return (start, OnboardingMeetingBrief(title: title, time: timeFormatter.string(from: start)))
+      }
+      .sorted { $0.0 < $1.0 }
+      .map(\.1)
   }
 
   /// Sends the active main-chat composer and clears only the exact draft that

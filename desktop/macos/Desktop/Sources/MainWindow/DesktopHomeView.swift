@@ -124,8 +124,9 @@ struct DesktopHomeView: View {
             .onAppear {
               if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                log("DesktopHomeView: Onboarding just completed — navigating to Dashboard")
-                selectedIndex = SidebarNavItem.dashboard.rawValue
+                log("DesktopHomeView: Onboarding just completed — landing in Chat with opener")
+                selectedIndex = SidebarNavItem.chat.rawValue
+                viewModelContainer.chatProvider.presentOnboardingOpener()
               }
             }
           mainContent

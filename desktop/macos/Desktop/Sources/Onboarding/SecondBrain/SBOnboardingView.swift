@@ -149,7 +149,6 @@ struct SBOnboardingView: View {
     case .ptt: pttWidget
     case .launch: launchWidget
     case .calendar: calendarWidget
-    case .wow: wowWidget
     case .capture: captureWidget
     }
   }
@@ -364,30 +363,6 @@ struct SBOnboardingView: View {
     case "on": return "✓ Google Calendar connected"
     default: return "Connect Google Calendar"
     }
-  }
-
-  private var wowWidget: some View {
-    // Tapping a question actually asks Omi — the real answer streams into the
-    // thread above (a live chat, not a canned line).
-    let qs = [
-      "What does my day look like?", "What did I promise people?", "What was I working on yesterday?",
-    ]
-    return VStack(alignment: .leading, spacing: 7) {
-      ForEach(qs, id: \.self) { q in
-        Button { model.askWow(q) } label: {
-          Text(q).geist(size: 14).foregroundStyle(sb.ink(.w85))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 13).padding(.vertical, 9)
-            .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w14), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .disabled(model.wowAsking)
-        .opacity(model.wowAsking ? 0.5 : 1)
-      }
-      SBInkButton(title: "Continue") { model.answerWow() }
-        .padding(.top, 4)
-    }
-    .frame(maxWidth: 380, alignment: .leading)
   }
 
   private var captureWidget: some View {
