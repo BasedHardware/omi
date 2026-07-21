@@ -42,10 +42,21 @@ function isFileIndexMemory(content: string): boolean {
 // provenance tag, matches the tight "Uses <App>" template, or is a local
 // file/project-index synthesis sentence. None of these is real user knowledge —
 // it's the on-disk index restated as memories, which the local KG already holds.
+// The "Uses <App>" template is loose enough to also match a real sentence like
+// "Uses Figma for design work" (four connective-free-looking tokens). Reject a
+// match that contains a clause connective (for/with/per) an app-name list never
+// has, so a genuine "Uses X for/with Y" memory is not swept up and deleted. Words
+// common inside proper-noun app names (of/and/the, e.g. "Bank of America") are
+// intentionally not treated as connectives, so those app-index memories are still
+// cleaned up.
+function isUsesTemplate(c: string): boolean {
+  return USES_TEMPLATE.test(c) && !/\b(for|with|per)\b/i.test(c)
+}
+
 export function isAppIndexMemory(m: Memory): boolean {
   if (m.tags?.includes(APP_INDEX_TAG) || m.tags?.includes(SCREEN_TAG)) return true
   const c = (m.content ?? '').trim()
-  return USES_TEMPLATE.test(c) || isFileIndexMemory(c)
+  return isUsesTemplate(c) || isFileIndexMemory(c)
 }
 
 export function appIndexMemoryIds(memories: Memory[]): string[] {

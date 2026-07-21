@@ -16,7 +16,7 @@ export type SweepConvo = {
 export function transcriptWordCount(transcript: string): number {
   const cleaned = (transcript ?? '')
     .replace(/^(microphone|system audio):/gim, ' ')
-    .replace(/^[A-Za-z ]{1,20}:/gm, ' ') // leading "You:" / "Speaker 1:" labels
+    .replace(/^(you|speaker \d+):/gim, ' ') // the recorder's per-line labels: "You:" / "Speaker N:"
     .replace(/\s+/g, ' ')
     .trim()
   if (!cleaned) return 0
@@ -70,7 +70,13 @@ export type RetentionMemoryBreakdown = {
 }
 
 export function memoryJunkBreakdown(memories: Memory[]): RetentionMemoryBreakdown {
-  const b: RetentionMemoryBreakdown = { total: 0, screenSynth: 0, appIndex: 0, meta: 0, duplicate: 0 }
+  const b: RetentionMemoryBreakdown = {
+    total: 0,
+    screenSynth: 0,
+    appIndex: 0,
+    meta: 0,
+    duplicate: 0
+  }
   const seen = new Set<string>()
   for (const m of memories) {
     const content = (m.content ?? '').trim()

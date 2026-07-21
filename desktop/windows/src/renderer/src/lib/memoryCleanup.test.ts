@@ -24,7 +24,9 @@ describe('isAppIndexMemory', () => {
     expect(isAppIndexMemory(mem('1', 'anything at all', [APP_INDEX_TAG]))).toBe(true)
   })
   it('treats SCREEN_TAG (Rewind synthesis) memories as removable', () => {
-    expect(isAppIndexMemory(mem('1', 'The user is working on omi-windows', [SCREEN_TAG]))).toBe(true)
+    expect(isAppIndexMemory(mem('1', 'The user is working on omi-windows', [SCREEN_TAG]))).toBe(
+      true
+    )
   })
   it('matches the tight "Uses <App>" template (untagged legacy builds)', () => {
     expect(isAppIndexMemory(mem('1', 'Uses Warp'))).toBe(true)
@@ -35,6 +37,15 @@ describe('isAppIndexMemory', () => {
     expect(isAppIndexMemory(mem('1', 'Uses Excel daily for budgeting and taxes.'))).toBe(false)
     expect(isAppIndexMemory(mem('2', 'Used to work at Google before joining Omi'))).toBe(false)
   })
+  it('does NOT delete a short "Uses X for/with Y" memory, but still matches a bare app name', () => {
+    expect(isAppIndexMemory(mem('1', 'Uses Figma for design work'))).toBe(false)
+    expect(isAppIndexMemory(mem('2', 'Uses Notion for tasks'))).toBe(false)
+    expect(isAppIndexMemory(mem('3', 'Uses Slack'))).toBe(true)
+  })
+  it('still matches an app name containing of/the/and so it is cleaned up', () => {
+    expect(isAppIndexMemory(mem('1', 'Uses Bank of America'))).toBe(true)
+    expect(isAppIndexMemory(mem('2', 'Uses The Browser Company'))).toBe(true)
+  })
   it('matches file/project-index synthesis sentences (stem + a path)', () => {
     expect(
       isAppIndexMemory(
@@ -42,30 +53,38 @@ describe('isAppIndexMemory', () => {
       )
     ).toBe(true)
     expect(
-      isAppIndexMemory(mem('2', "The user's local files include C:\\Users\\ander\\Documents\\report.pdf"))
+      isAppIndexMemory(
+        mem('2', "The user's local files include C:\\Users\\ander\\Documents\\report.pdf")
+      )
     ).toBe(true)
     expect(
-      isAppIndexMemory(mem('3', "The user's repositories include /home/a/dev/omi and /home/a/dev/sandbox"))
+      isAppIndexMemory(
+        mem('3', "The user's repositories include /home/a/dev/omi and /home/a/dev/sandbox")
+      )
     ).toBe(true)
   })
   it('matches the other file-index synthesis sentences (no path required)', () => {
     expect(
       isAppIndexMemory(mem('1', 'A recently modified local file is named PaperPreview-Light.json.'))
     ).toBe(true)
-    expect(isAppIndexMemory(mem('2', 'The user works on a local project named chatgpt-github-app.'))).toBe(
-      true
-    )
-    expect(isAppIndexMemory(mem('3', "The user's local files show active work in TypeScript."))).toBe(true)
+    expect(
+      isAppIndexMemory(mem('2', 'The user works on a local project named chatgpt-github-app.'))
+    ).toBe(true)
+    expect(
+      isAppIndexMemory(mem('3', "The user's local files show active work in TypeScript."))
+    ).toBe(true)
     expect(
       isAppIndexMemory(mem('4', 'The user has 12,814 local files indexed across their machine.'))
     ).toBe(true)
   })
   it('does NOT match a project mention without a filesystem path', () => {
     // Real knowledge about a project, no path -> keep it.
-    expect(isAppIndexMemory(mem('1', "The user's projects include a community garden initiative"))).toBe(
-      false
-    )
-    expect(isAppIndexMemory(mem('2', 'Working on the omi-cheap-voice-demo project this week'))).toBe(false)
+    expect(
+      isAppIndexMemory(mem('1', "The user's projects include a community garden initiative"))
+    ).toBe(false)
+    expect(
+      isAppIndexMemory(mem('2', 'Working on the omi-cheap-voice-demo project this week'))
+    ).toBe(false)
   })
   it('does not match unrelated memories', () => {
     expect(isAppIndexMemory(mem('1', 'Lives in Madrid', ['gmail/import/note']))).toBe(false)

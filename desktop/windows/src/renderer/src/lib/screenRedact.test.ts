@@ -12,6 +12,12 @@ describe('redact', () => {
   it('leaves benign prose', () => {
     expect(redact('working on omi-windows')).toBe('working on omi-windows')
   })
+  it('redacts only card-shaped numbers that pass the Luhn checksum', () => {
+    // standard Visa test number — valid Luhn → redacted
+    expect(redact('pay 4111111111111111')).toBe('pay [redacted]')
+    // same length, last digit changed → fails Luhn → kept (order number, timestamp)
+    expect(redact('id 4111111111111112')).toBe('id 4111111111111112')
+  })
 })
 
 describe('isPrivateWindow', () => {

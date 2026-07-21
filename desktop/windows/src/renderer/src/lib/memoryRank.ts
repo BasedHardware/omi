@@ -53,7 +53,7 @@ export function rankMemories(memories: Memory[], query: string, limit: number): 
   if (qTokens.size === 0) return []
   return memories
     .map((mem) => {
-      const mTokens = new Set(tokenize(mem.content))
+      const mTokens = new Set(tokenize(mem.content ?? ''))
       let score = 0
       for (const t of qTokens) if (mTokens.has(t)) score++
       return { mem, score }
@@ -65,5 +65,5 @@ export function rankMemories(memories: Memory[], query: string, limit: number): 
         new Date(b.mem.created_at).getTime() - new Date(a.mem.created_at).getTime()
     )
     .slice(0, limit)
-    .map((s) => s.mem.content.trim())
+    .map((s) => (s.mem.content ?? '').trim())
 }

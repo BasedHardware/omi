@@ -21,17 +21,39 @@ export function isDeniedContext(ctx: {
   return DEFAULT_DENYLIST.some((n) => hay.includes(n))
 }
 
+// Credit-card-like run: 13-19 digits with optional space/hyphen separators.
+const CARD = /\b(?:\d[ -]?){13,19}\b/g
+
 const PATTERNS: RegExp[] = [
   /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
-  /\b(?:\d[ -]?){13,19}\b/g,
   /\b\d{3}-\d{2}-\d{4}\b/g,
   /\beyJ[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{3,}(?:\.[A-Za-z0-9_-]+)?\b/g,
   /\b[A-Fa-f0-9]{32,}\b/g,
   /\b[A-Za-z0-9_-]{40,}\b/g
 ]
 
+// A digit string passes the Luhn checksum. Real card numbers do; order numbers,
+// 13-digit epoch-ms timestamps and ISBNs almost never do.
+function luhnValid(digits: string): boolean {
+  let sum = 0
+  let alt = false
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let d = digits.charCodeAt(i) - 48
+    if (alt) {
+      d *= 2
+      if (d > 9) d -= 9
+    }
+    sum += d
+    alt = !alt
+  }
+  return sum % 10 === 0
+}
+
 export function redact(text: string): string {
   let out = text
+  // Redact a card-shaped run only when it passes Luhn, so a 13-19 digit order
+  // number or timestamp the model needs is not destroyed.
+  out = out.replace(CARD, (m) => (luhnValid(m.replace(/\D/g, '')) ? '[redacted]' : m))
   for (const re of PATTERNS) out = out.replace(re, '[redacted]')
   return out
 }
