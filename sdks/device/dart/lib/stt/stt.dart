@@ -24,11 +24,7 @@ String parakeetWsUrl(String apiUrl, {int sampleRate = 16000}) {
 }
 
 class DeepgramTranscriber implements StreamingTranscriber {
-  DeepgramTranscriber({
-    required this.apiKey,
-    required this.onTranscript,
-    this.sampleRate = 16000,
-  }) {
+  DeepgramTranscriber({required this.apiKey, required this.onTranscript, this.sampleRate = 16000}) {
     final uri = Uri.parse(
       'wss://api.deepgram.com/v1/listen?punctuate=true&model=nova&language=en-US'
       '&encoding=linear16&sample_rate=$sampleRate&channels=1',
@@ -67,11 +63,7 @@ class DeepgramTranscriber implements StreamingTranscriber {
 }
 
 class ParakeetTranscriber implements StreamingTranscriber {
-  ParakeetTranscriber({
-    required String apiUrl,
-    required this.onTranscript,
-    this.sampleRate = 16000,
-  }) {
+  ParakeetTranscriber({required String apiUrl, required this.onTranscript, this.sampleRate = 16000}) {
     final uri = Uri.parse(parakeetWsUrl(apiUrl, sampleRate: sampleRate));
     _channel = WebSocketChannel.connect(uri);
     _sub = _channel.stream.listen((event) {
@@ -117,11 +109,7 @@ class ParakeetTranscriber implements StreamingTranscriber {
 
 /// Feature-gated Whisper via injected runner.
 class WhisperTranscriber implements StreamingTranscriber {
-  WhisperTranscriber({
-    required this.runner,
-    required this.onTranscript,
-    this.batchSeconds = 5,
-  });
+  WhisperTranscriber({required this.runner, required this.onTranscript, this.batchSeconds = 5});
 
   final FutureOr<String> Function(Uint8List pcm) runner;
   final TranscriptHandler onTranscript;

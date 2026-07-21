@@ -66,11 +66,7 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
     });
 
     try {
-      await FlutterBluePlus.startScan(
-        timeout: timeout,
-        withServices: withServices,
-        androidUsesFineLocation: true,
-      );
+      await FlutterBluePlus.startScan(timeout: timeout, withServices: withServices, androidUsesFineLocation: true);
       await Future<void>.delayed(timeout);
     } finally {
       await FlutterBluePlus.stopScan();
