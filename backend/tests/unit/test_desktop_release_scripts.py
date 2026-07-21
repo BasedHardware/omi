@@ -105,9 +105,19 @@ def test_prepare_manifest_requires_exact_qualification_and_assets():
     assert manifest["build_number"] == 12064
     assert manifest["qualification"]["tier"] == "T2"
     assert manifest["qualification"]["source"] == "trusted_github_actions_artifact"
+    assert manifest["qualification"]["evidence_asset"] == "qualification-evidence.json"
     assert manifest["qualification"]["source_subject"] == "source-built named-bundle"
     assert manifest["qualification"]["signed_artifact_subject"] == "exact signed ZIP/DMG bytes"
     assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
+
+
+def test_beta_static_redirect_uses_beta_identity_dmg_on_every_surface():
+    workflow = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
+    redirect = workflow.split("Update existing beta download redirect", 1)[1]
+    assert redirect.count('manifest["beta_dmg_url"]') == 1
+    assert redirect.count("['beta_dmg_url']") == 2
+    assert 'manifest["dmg_url"]' not in redirect
+    assert "['dmg_url']" not in redirect
 
 
 def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():

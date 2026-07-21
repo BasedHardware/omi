@@ -238,18 +238,18 @@ jobs:
               "version": manifest["version"],
               "build_number": manifest["build_number"],
               "tag": manifest["release_id"],
-              "download_url": manifest["dmg_url"],
+              "download_url": manifest["beta_dmg_url"],
               "published_at": manifest["published_at"],
           }, indent=2))
           PY
           python3 - <<'PY' > /tmp/macos-beta-index.html
           import html
           import json
-          url = json.load(open('/tmp/desktop-release-manifest.json'))['dmg_url']
+          url = json.load(open('/tmp/desktop-release-manifest.json'))['beta_dmg_url']
           escaped = html.escape(url, quote=True)
           print(f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url={escaped}"><a href="{escaped}">Download Omi Beta</a>')
           PY
-          python3 -c "import json; print(json.load(open('/tmp/desktop-release-manifest.json'))['dmg_url'])" \
+          python3 -c "import json; print(json.load(open('/tmp/desktop-release-manifest.json'))['beta_dmg_url'])" \
             > /tmp/macos-beta-latest-url.txt
           for file in index.html redirect.json latest-url.txt; do
             gcloud storage cp --cache-control='no-store,max-age=0' \
