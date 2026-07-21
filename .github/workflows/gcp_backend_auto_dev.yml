@@ -35,7 +35,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 2
+          # Full history is required only here: a green no-op is safe only when
+          # the triggering SHA is proven to be an ancestor of current main.
+          fetch-depth: 0
 
       - name: Decide whether the triggering commit can affect the backend deployment
         id: scope
@@ -46,6 +48,35 @@ jobs:
           if ! git cat-file -e "${RELEASE_SHA}^{commit}"; then
             echo "Cannot resolve triggering Release Eligibility SHA: $RELEASE_SHA" >&2
             exit 1
+          fi
+
+          # A stale Release Eligibility result must not occupy the deployment
+          # queue or reach a deployment environment. Only a successful refresh
+          # plus ancestry proof may turn it into a green no-op; every resolution
+          # failure continues to the retained current-main admission guard.
+          if ! git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: could not refresh current origin/main; preserving fail-closed source admission."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! main_sha="$(git rev-parse --verify 'origin/main^{commit}' 2>/dev/null)"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: could not resolve current origin/main; preserving fail-closed source admission."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [[ "$RELEASE_SHA" != "$main_sha" ]] && git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"; then
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy superseded no-op"
+              echo "Green no-op: triggering SHA $RELEASE_SHA was superseded by current origin/main $main_sha."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
           if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
