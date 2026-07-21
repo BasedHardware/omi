@@ -92,7 +92,7 @@ pub struct AuthError {
 
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
-        let status = if self.error == "trial_expired" {
+        let status = if self.error == "trial_expired" || self.error == "quota_exceeded" {
             StatusCode::PAYMENT_REQUIRED
         } else if self.error == "byok_validation_failed" {
             StatusCode::FORBIDDEN
@@ -478,6 +478,12 @@ pub struct PaywalledAuthUser {
     pub name: Option<String>,
     pub email: Option<String>,
     pub byok_stripped: bool,
+    /// Monthly free-tier chat quota verdict for this request (fail-open false).
+    /// The extractor already 402s non-BYOK users when this is true; lanes that
+    /// spend ONLY Omi-managed keys regardless of BYOK (realtime session mint)
+    /// must additionally reject when it is set, since BYOK validation alone
+    /// must not buy Omi-funded spend there.
+    pub quota_blocked: bool,
 }
 
 #[async_trait]
@@ -520,6 +526,7 @@ where
         // Validates SHA-256 fingerprints against Firestore enrollment.
         // Non-BYOK users who send BYOK headers get them silently cleared.
         let mut byok_stripped = false;
+        let mut byok_active = false;
         if let Some(byok_ext) = parts.extensions.get::<crate::byok::ByokCacheExt>() {
             // Get the Firestore service from the paywall checker (shares the same Arc)
             if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
@@ -528,6 +535,7 @@ where
                 match crate::byok::validate_byok_request(&uid, &parts.headers, &byok_state) {
                     Ok(crate::byok::ByokValidation::Active) => {
                         // BYOK keys validated, proceed with user's keys
+                        byok_active = true;
                     }
                     Ok(crate::byok::ByokValidation::Inactive { clear_headers }) => {
                         byok_stripped = clear_headers;
@@ -563,11 +571,49 @@ where
             );
         }
 
+        // Monthly free-tier quota gate. Routes that never spend managed LLM
+        // money are exempt: passive screen-activity ingestion (blocking it
+        // past the chat cap silently loses rewind data beyond the client's
+        // 7-day local retention) and the realtime usage report (telemetry —
+        // rejecting it undercounts billing for a session that crossed the cap).
+        // ponytail: path-match, keep in sync with route registrations if renamed.
+        let quota_exempt = matches!(
+            parts.uri.path(),
+            "/v1/screen-activity/sync" | "/v2/realtime/usage"
+        );
+        let mut quota_blocked = false;
+        if !quota_exempt {
+            if let Some(quota) = parts.extensions.get::<crate::quota::ChatQuotaCheckerExt>() {
+                quota_blocked = quota.0.is_quota_blocked(&uid, token).await;
+            } else {
+                crate::fallback::record_fallback(
+                    "other",
+                    "quota_gate",
+                    "fail_open",
+                    "config_incomplete",
+                    crate::fallback::FallbackOutcome::Degraded,
+                );
+                tracing::warn!(
+                    "PaywalledAuthUser: ChatQuotaChecker extension missing, failing open for uid={}",
+                    uid
+                );
+            }
+        }
+        // BYOK requests skip the 402 because BYOK-key-consuming lanes serve on
+        // the user's own keys; server-key-only lanes re-check `quota_blocked`.
+        if quota_blocked && !byok_active {
+            return Err(AuthError {
+                error: "quota_exceeded".to_string(),
+                message: "Monthly free limit reached. Upgrade or bring your own keys.".to_string(),
+            });
+        }
+
         Ok(PaywalledAuthUser {
             uid,
             name,
             email,
             byok_stripped,
+            quota_blocked,
         })
     }
 }
@@ -577,6 +623,13 @@ pub fn paywall_checker_extension(
     checker: Arc<crate::paywall::PaywallChecker>,
 ) -> axum::Extension<crate::paywall::PaywallCheckerExt> {
     axum::Extension(crate::paywall::PaywallCheckerExt(checker))
+}
+
+/// Layer that adds the chat-quota checker to request extensions.
+pub fn chat_quota_checker_extension(
+    checker: Arc<crate::quota::ChatQuotaChecker>,
+) -> axum::Extension<crate::quota::ChatQuotaCheckerExt> {
+    axum::Extension(crate::quota::ChatQuotaCheckerExt(checker))
 }
 
 /// Layer that adds the BYOK state cache to request extensions.

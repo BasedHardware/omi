@@ -113,8 +113,9 @@ from utils.apps import (
 from database.memories import migrate_memories
 
 from utils.llm.persona import generate_persona_intro_message
-from utils.llm.app_generator import generate_description
+from utils.llm.app_generator import generate_description, generate_description_and_emoji
 from utils.llm.app_generation_prompts import app_generation_prompts_from_llm_payload, app_generation_prompts_response
+from utils.subscription import enforce_chat_quota
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
@@ -1438,7 +1439,13 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/app/generate-description', tags=['v1'], response_model=AppDescriptionGenerationResponse)
-def generate_description_endpoint(data: GenerateDescriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
+def generate_description_endpoint(
+    data: GenerateDescriptionRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     if data.name == '':
         raise HTTPException(status_code=422, detail='App Name is required')
     if data.description == '':
@@ -1452,14 +1459,16 @@ def generate_description_endpoint(data: GenerateDescriptionRequest, uid: str = D
 
 @router.post('/v1/app/generate-description-emoji', tags=['v1'], response_model=AppDescriptionEmojiGenerationResponse)
 def generate_description_and_emoji_endpoint(
-    data: GenerateDescriptionEmojiRequest, uid: str = Depends(auth.get_current_user_uid)
+    data: GenerateDescriptionEmojiRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
     """
-    from utils.llm.app_generator import generate_description_and_emoji
-
+    # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     if not data.name:
         raise HTTPException(status_code=422, detail='App Name is required')
     if not data.prompt:
