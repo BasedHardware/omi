@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import hashlib
+import io
 import json
 import os
 import re
 from typing import Any
+import zipfile
 
 from desktop_qualification_admission import validate_qualification_run
 from desktop_qualification_evidence import verify_evidence
@@ -19,6 +21,11 @@ REPOSITORY = "BasedHardware/omi"
 TAG_RE = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+(?:\.[0-9]+)?)\+(?P<build>[1-9][0-9]*)-macos$")
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 RETIRED_ASSET_NAMES = frozenset({"Omi.Beta.zip", "omi-beta.dmg", "Omi Beta.zip", "Omi Beta.dmg"})
+QUALIFICATION_WORKFLOW = "desktop_qualify_beta.yml"
+QUALIFICATION_ARTIFACT_PREFIX = "desktop-qualification-evidence-"
+QUALIFICATION_EVIDENCE_FILE = "qualification-evidence.json"
+MAX_QUALIFICATION_ARTIFACT_BYTES = 1_048_576
+MAX_QUALIFICATION_EVIDENCE_BYTES = 262_144
 
 
 class QualifiedBetaAdmissionError(ValueError):
@@ -71,6 +78,97 @@ def _asset_digest(asset: dict[str, Any]) -> str:
     return value
 
 
+def _trusted_run_id(run: dict[str, Any]) -> int:
+    run_id = run.get("id")
+    if not isinstance(run_id, int) or run_id <= 0:
+        _fail("candidate qualification run has no trusted identity")
+    return run_id
+
+
+def _select_qualification_run(runs: object, tag: str, source_sha: str, now: datetime) -> tuple[dict[str, Any], int]:
+    """Choose the newest fully trusted retry without caller-selected run state."""
+    if not isinstance(runs, list):
+        _fail("candidate qualification runs are unavailable")
+    acceptable: list[tuple[datetime, int, dict[str, Any]]] = []
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        try:
+            validate_qualification_run(run, REPOSITORY, tag, source_sha)
+            run_id = _trusted_run_id(run)
+            completed_at = _timestamp(run.get("updated_at"))
+        except (ValueError, QualifiedBetaAdmissionError):
+            continue
+        if now - completed_at > timedelta(seconds=_max_age_seconds()):
+            continue
+        acceptable.append((completed_at, run_id, run))
+    if not acceptable:
+        _fail("candidate has no fresh trusted qualification run")
+    _, run_id, run = max(acceptable, key=lambda item: (item[0], item[1]))
+    return run, run_id
+
+
+def _qualification_artifact_id(artifacts: object, tag: str) -> int:
+    if not isinstance(artifacts, list):
+        _fail("candidate qualification artifact list is invalid")
+    expected_name = f"{QUALIFICATION_ARTIFACT_PREFIX}{tag}"
+    matches = [
+        artifact for artifact in artifacts if isinstance(artifact, dict) and artifact.get("name") == expected_name
+    ]
+    if len(matches) != 1:
+        _fail("candidate qualification artifact is missing or ambiguous")
+    artifact = matches[0]
+    if artifact.get("expired") is not False:
+        _fail("candidate qualification artifact is expired")
+    artifact_id = artifact.get("id")
+    size = artifact.get("size_in_bytes")
+    if (
+        not isinstance(artifact_id, int)
+        or artifact_id <= 0
+        or not isinstance(size, int)
+        or not 0 < size <= MAX_QUALIFICATION_ARTIFACT_BYTES
+    ):
+        _fail("candidate qualification artifact is invalid")
+    return artifact_id
+
+
+def _evidence_from_artifact(payload: object) -> bytes:
+    if not isinstance(payload, bytes) or not payload or len(payload) > MAX_QUALIFICATION_ARTIFACT_BYTES:
+        _fail("candidate qualification artifact download is invalid")
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            infos = archive.infolist()
+            if len(infos) != 1:
+                _fail("candidate qualification artifact has unexpected contents")
+            info = infos[0]
+            if (
+                info.filename != QUALIFICATION_EVIDENCE_FILE
+                or info.is_dir()
+                or info.flag_bits & 0x1
+                or info.file_size < 1
+                or info.file_size > MAX_QUALIFICATION_EVIDENCE_BYTES
+                or info.compress_size < 0
+                or info.compress_size > MAX_QUALIFICATION_ARTIFACT_BYTES
+            ):
+                _fail("candidate qualification artifact has unsafe contents")
+            evidence = archive.read(info)
+    except (OSError, RuntimeError, zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
+        raise QualifiedBetaAdmissionError("candidate qualification artifact is not a safe ZIP") from exc
+    if len(evidence) != info.file_size or len(evidence) > MAX_QUALIFICATION_EVIDENCE_BYTES:
+        _fail("candidate qualification artifact evidence is invalid")
+    return evidence
+
+
+async def _read_github(source: Any, method: str, *args: Any) -> Any:
+    """Keep every read dependency fail-closed before the admission transaction."""
+    try:
+        return await getattr(source, method)(*args)
+    except QualifiedBetaAdmissionError:
+        raise
+    except Exception as exc:
+        raise QualifiedBetaAdmissionError("candidate GitHub read dependency is unavailable") from exc
+
+
 def _release_for_contract(release: dict[str, Any]) -> dict[str, Any]:
     """Adapt GitHub REST names to the existing canonical evidence owner."""
     return {
@@ -93,10 +191,20 @@ def _release_for_contract(release: dict[str, Any]) -> dict[str, Any]:
 class GitHubQualifiedBetaReader:
     """Read-only public GitHub view used by the backend admission transaction."""
 
+    def _headers(self) -> dict[str, str]:
+        token = os.getenv("GITHUB_TOKEN")
+        if not token:
+            _fail("candidate GitHub read authorization is unavailable")
+        return {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
     async def _api(self, path: str) -> dict[str, Any]:
         response = await get_web_fetch_client().get(
             f"https://api.github.com/repos/{REPOSITORY}/{path}",
-            headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"},
+            headers=self._headers(),
         )
         if response.status_code != 200:
             _fail("candidate GitHub evidence is unavailable")
@@ -125,13 +233,34 @@ class GitHubQualifiedBetaReader:
         comparison = await self._api(f"compare/{source_sha}...main")
         return comparison.get("status") in {"behind", "identical"}
 
-    async def run(self, run_id: int) -> dict[str, Any]:
-        return await self._api(f"actions/runs/{run_id}")
+    async def runs(self) -> list[dict[str, Any]]:
+        response = await self._api(
+            f"actions/workflows/{QUALIFICATION_WORKFLOW}/runs?event=workflow_dispatch&status=completed&per_page=100"
+        )
+        runs = response.get("workflow_runs")
+        if not isinstance(runs, list) or any(not isinstance(run, dict) for run in runs):
+            _fail("candidate qualification runs are invalid")
+        return runs
+
+    async def artifacts(self, run_id: int) -> list[dict[str, Any]]:
+        response = await self._api(f"actions/runs/{run_id}/artifacts?per_page=100")
+        artifacts = response.get("artifacts")
+        if not isinstance(artifacts, list) or any(not isinstance(artifact, dict) for artifact in artifacts):
+            _fail("candidate qualification artifacts are invalid")
+        return artifacts
 
     async def download(self, url: str) -> bytes:
-        response = await get_web_fetch_client().get(url)
+        response = await get_web_fetch_client().get(url, headers=self._headers())
         if response.status_code != 200:
             _fail("candidate GitHub asset is unavailable")
+        return response.content
+
+    async def download_artifact(self, artifact_id: int) -> bytes:
+        response = await get_web_fetch_client().get(
+            f"https://api.github.com/repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip", headers=self._headers()
+        )
+        if response.status_code != 200:
+            _fail("candidate qualification artifact is unavailable")
         return response.content
 
 
@@ -143,7 +272,7 @@ async def build_qualified_beta_manifest(
     if not match:
         _fail("candidate tag is invalid")
     source = reader or GitHubQualifiedBetaReader()
-    release = await source.release(tag)
+    release = await _read_github(source, "release", tag)
     if release.get("tag_name") != tag or release.get("draft") or release.get("prerelease"):
         _fail("candidate release is not an immutable published release")
     published_at = release.get("published_at")
@@ -167,34 +296,29 @@ async def build_qualified_beta_manifest(
         "omi.dmg": _asset_digest(dmg_asset),
         evidence_name: _asset_digest(evidence_asset),
     }
-    source_sha = await source.tag_sha(tag)
-    if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or not await source.is_merged_source(source_sha):
+    source_sha = await _read_github(source, "tag_sha", tag)
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or not await _read_github(source, "is_merged_source", source_sha):
         _fail("candidate source is not a trusted merged source")
+    current_time = now or datetime.now(timezone.utc)
+    _, run_id = _select_qualification_run(await _read_github(source, "runs"), tag, source_sha, current_time)
+    artifact_id = _qualification_artifact_id(await _read_github(source, "artifacts", run_id), tag)
+    trusted_evidence_bytes = _evidence_from_artifact(await _read_github(source, "download_artifact", artifact_id))
+    try:
+        evidence = json.loads(trusted_evidence_bytes)
+    except (TypeError, json.JSONDecodeError):
+        _fail("candidate trusted qualification evidence is invalid")
+    if not isinstance(evidence, dict) or evidence.get("qualification_run_id") != run_id:
+        _fail("candidate trusted qualification evidence does not bind its run")
     downloaded = {
-        "Omi.zip": await source.download(zip_url),
-        "omi.dmg": await source.download(dmg_url),
-        evidence_name: await source.download(evidence_url),
+        "Omi.zip": await _read_github(source, "download", zip_url),
+        "omi.dmg": await _read_github(source, "download", dmg_url),
+        evidence_name: await _read_github(source, "download", evidence_url),
     }
     actual_digests = {name: "sha256:" + hashlib.sha256(content).hexdigest() for name, content in downloaded.items()}
     if actual_digests != expected_digests:
         _fail("candidate asset digest does not match GitHub release metadata")
-    try:
-        evidence = json.loads(downloaded[evidence_name])
-    except (TypeError, json.JSONDecodeError):
-        _fail("candidate qualification evidence is invalid")
-    if not isinstance(evidence, dict):
-        _fail("candidate qualification evidence is invalid")
-    run_id = evidence.get("qualification_run_id")
-    if not isinstance(run_id, int) or run_id <= 0:
-        _fail("candidate qualification evidence has no trusted run identity")
-    run = await source.run(run_id)
-    try:
-        validate_qualification_run(run, REPOSITORY, tag, source_sha)
-    except ValueError as exc:
-        raise QualifiedBetaAdmissionError("candidate qualification run is not trusted") from exc
-    run_time = _timestamp(run.get("updated_at"))
-    if (now or datetime.now(timezone.utc)) - run_time > timedelta(seconds=_max_age_seconds()):
-        _fail("candidate qualification is stale")
+    if downloaded[evidence_name] != trusted_evidence_bytes:
+        _fail("candidate release qualification evidence differs from its trusted run artifact")
     contract_release = _release_for_contract(release)
     try:
         verify_evidence(

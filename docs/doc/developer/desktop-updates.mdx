@@ -16,12 +16,14 @@ One Codemagic build signs and notarizes one `Omi.zip`/`omi.dmg` pair from one
 source revision, then creates an immutable, non-live GitHub candidate. The
 trusted macOS qualifier is dispatched on that immutable candidate tag, checks
 out the same tag, and records qualification evidence bound to its exact source
-SHA and the two signed artifact digests. It attaches that evidence as the
-canonical `qualification-evidence-<tag>.json` release asset. The Beta workflow
+SHA and the two signed artifact digests in its exact GitHub Actions artifact.
+It may attach a byte-identical `qualification-evidence-<tag>.json` release
+copy for operator convenience, but that copy is never authority. The Beta workflow
 then supplies only the tag and its `BETA_PROMOTION_TOKEN` bearer capability to
 `POST /v2/desktop/beta/promote-qualified`. The backend independently reads the
-release, immutable tag, trusted completed qualification run, evidence, signed
-assets, and GitHub SHA-256s before it atomically registers one immutable
+release, immutable tag, newest acceptable trusted completed qualification run,
+and that run's exact Actions artifact before comparing the current signed assets
+and optional release evidence copy to it. It then atomically registers one immutable
 manifest and advances only `macos-beta`. The manifest retains the exact asset
 URLs and digests, Sparkle signature, qualification evidence identity/digest,
 source SHA, and compatibility/backend requirements.
