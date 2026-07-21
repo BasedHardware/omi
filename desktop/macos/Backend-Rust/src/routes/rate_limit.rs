@@ -23,8 +23,8 @@ use tokio::sync::Mutex;
 
 use crate::services::RedisService;
 
-// Daily soft/hard limits are tier-aware — see crate::llm::model_qos.
-use crate::llm::model_qos;
+// Daily soft/hard limits are tier-aware — see omi_desktop_core::model_qos.
+use omi_desktop_core::model_qos;
 
 /// Default Gemini burst cap — max requests per rolling 60-second window.
 const BURST_PER_MINUTE: usize = 30;
@@ -273,7 +273,7 @@ pub fn maybe_rewrite_model_path(path: &str, decision: &RateDecision, action: &st
     }
     // Degrade any non-flash model to the flash degrade target.
     // Extract the model from "models/{model}:{action}" and check if it's already the target.
-    let degrade_target = crate::llm::model_qos::gemini_degrade_target();
+    let degrade_target = omi_desktop_core::model_qos::gemini_degrade_target();
     if let Some(rest) = path.strip_prefix("models/") {
         if let Some((model, action_part)) = rest.split_once(':') {
             if model != degrade_target {
