@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_426197666232b9 1157-1159,1161
+  s_77f2b8dfbc2e90::t_d6438c70780e56 1194-1203
+  s_77f2b8dfbc2e90::t_591df3fe926c1f 1132-1135
+  s_77f2b8dfbc2e90::t_521797902fa8cd 1073-1075
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "2baee84095e41a2a9dbb834ce8d84f7c39300b4f",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
