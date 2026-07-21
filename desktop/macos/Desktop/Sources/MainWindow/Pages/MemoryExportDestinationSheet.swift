@@ -743,10 +743,14 @@ struct MemoryExportDestinationSheet: View {
         Text(completion.title)
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
-        Text(completion.subtitle)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
+        if destination == .claudeCode {
+          ClaudeCodeRestartSubtitle()
+        } else {
+          Text(completion.subtitle)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
     }
     .padding(OmiSpacing.md)
