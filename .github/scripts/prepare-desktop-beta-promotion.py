@@ -33,8 +33,6 @@ def prepare_manifest(
     zip_sha256: str,
     dmg_sha256: str,
     *,
-    beta_zip_sha256: str,
-    beta_dmg_sha256: str,
     qualification_evidence: dict,
     allow_stable_channel: bool = False,
 ) -> dict:
@@ -64,12 +62,9 @@ def prepare_manifest(
 
     zip_asset = _asset(release, {"Omi.zip"})
     dmg_asset = _asset(release, {"Omi.dmg", "omi.dmg"})
-    beta_zip_asset = _asset(release, {"Omi.Beta.zip"})
-    beta_dmg_asset = _asset(release, {"omi-beta.dmg"})
     signature = metadata.get("edSignature", "").strip()
-    beta_signature = metadata.get("betaEdSignature", "").strip()
-    if not signature or not beta_signature:
-        fail("release is missing stable or beta Sparkle signature")
+    if not signature:
+        fail("release is missing Sparkle signature")
     try:
         verify_evidence(
             qualification_evidence,
@@ -79,8 +74,6 @@ def prepare_manifest(
             {
                 "Omi.zip": zip_sha256,
                 dmg_asset["name"]: dmg_sha256,
-                "Omi.Beta.zip": beta_zip_sha256,
-                "omi-beta.dmg": beta_dmg_sha256,
             },
         )
     except ValueError as exc:
@@ -93,8 +86,7 @@ def prepare_manifest(
         "passed": True,
         "tier": "T2",
         "source": "trusted_github_actions_artifact",
-        "evidence_asset": metadata.get("qualifiedBetaEvidence")
-        or f"desktop-qualification-evidence-{release_tag}",
+        "evidence_asset": metadata.get("qualifiedBetaEvidence") or f"desktop-qualification-evidence-{release_tag}",
         "source_subject": "source-built named-bundle",
         "signed_artifact_subject": "exact signed ZIP/DMG bytes",
         "signed_artifact_checks": ["sha256", "Sparkle signature", "notarization", "signed smoke"],
@@ -107,18 +99,13 @@ def prepare_manifest(
         "build_number": build,
         "zip_url": zip_asset.get("url"),
         "dmg_url": dmg_asset.get("url"),
-        "beta_zip_url": beta_zip_asset.get("url"),
-        "beta_dmg_url": beta_dmg_asset.get("url"),
         "ed_signature": signature,
-        "beta_ed_signature": beta_signature,
         "published_at": release.get("publishedAt"),
         "changelog": changelog,
         "mandatory": metadata.get("mandatory", "false").lower() in {"true", "1", "yes"},
         "source_sha": target_sha,
         "zip_sha256": zip_sha256,
         "dmg_sha256": dmg_sha256,
-        "beta_zip_sha256": beta_zip_sha256,
-        "beta_dmg_sha256": beta_dmg_sha256,
         "qualification": qualification_manifest,
     }
 
@@ -130,8 +117,7 @@ def main() -> int:
     parser.add_argument("--target-sha", required=True)
     parser.add_argument("--zip-sha256", required=True)
     parser.add_argument("--dmg-sha256", required=True)
-    parser.add_argument("--beta-zip-sha256", required=True)
-    parser.add_argument("--beta-dmg-sha256", required=True)
+
     parser.add_argument("--qualification-evidence", required=True)
     parser.add_argument("--allow-stable-channel", action="store_true")
     parser.add_argument("--output", required=True)
@@ -145,8 +131,6 @@ def main() -> int:
         args.target_sha,
         args.zip_sha256,
         args.dmg_sha256,
-        beta_zip_sha256=args.beta_zip_sha256,
-        beta_dmg_sha256=args.beta_dmg_sha256,
         qualification_evidence=evidence,
         allow_stable_channel=args.allow_stable_channel,
     )
