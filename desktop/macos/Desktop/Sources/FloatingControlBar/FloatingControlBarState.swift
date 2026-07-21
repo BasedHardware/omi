@@ -381,10 +381,50 @@ class FloatingControlBarState: NSObject, ObservableObject {
   /// True only when the notch-mode setting is enabled and the current display
   /// exposes a real camera housing safe area. External displays keep old pill UI.
   @Published var usesNotchIsland: Bool = false
+
+  /// Live voice-turn mirror for the notch chat. Hub voice turns journal the
+  /// exchange only at turn end, so mid-turn the provider timeline has nothing
+  /// to render; these carry the in-flight transcript and streaming assistant
+  /// text purely for display (never a second transcript store — the journaled
+  /// pair replaces them when it lands).
+  @Published var liveVoiceUserText: String = ""
+  @Published var liveVoiceAssistantText: String = ""
+
+  /// One-shot notch hint outside the voice projection (e.g. PTT blocked by
+  /// the usage limit). The notch's hint presentation falls back to this when
+  /// the projection-derived hint is empty.
+  @Published var transientHintText: String = ""
+  private var transientHintClearTask: Task<Void, Never>?
+
+  func flashHint(_ text: String, for seconds: TimeInterval = 3) {
+    transientHintText = text
+    transientHintClearTask?.cancel()
+    transientHintClearTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(seconds))
+      guard !Task.isCancelled else { return }
+      self?.transientHintText = ""
+    }
+  }
   @Published var notchRevealProgress: CGFloat = 1
 
   private func applyVoiceProjection(_ projection: VoiceTurnUIProjection) {
+    // A new hold is a new turn: drop the previous turn's streamed reply so it
+    // can't flash under the fresh question.
+    if projection.isListening, !voiceProjection.isListening {
+      liveVoiceAssistantText = ""
+      liveVoiceUserText = ""
+    }
     voiceProjection = projection
+    // Mirror the in-flight transcript for the notch chat's live strip; clear
+    // the whole mirror once the voice presentation fully ends (by then the
+    // journaled exchange has landed on the shared timeline).
+    if !projection.transcript.isEmpty {
+      liveVoiceUserText = projection.transcript
+    }
+    if !isVoicePresentationActive {
+      liveVoiceUserText = ""
+      liveVoiceAssistantText = ""
+    }
   }
 
   /// Whether the current query originated from voice (PTT). Used to decide
