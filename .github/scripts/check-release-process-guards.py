@@ -6,17 +6,187 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load_codemagic_with_duplicates(path: Path) -> tuple[dict[str, object], list[str], list[str]]:
+    """Load the executable YAML shape; comments never provide release authority."""
+    text = path.read_text(encoding="utf-8")
+    try:
+        root = yaml.compose(text)
+        document = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        return {}, [], [f"codemagic.yaml is not valid YAML: {exc}"]
+    duplicates: list[str] = []
+
+    def visit(node: yaml.Node | None) -> None:
+        if isinstance(node, yaml.MappingNode):
+            keys: set[str] = set()
+            for key_node, value_node in node.value:
+                if isinstance(key_node, yaml.ScalarNode):
+                    key = key_node.value
+                    if key in keys:
+                        duplicates.append(key)
+                    keys.add(key)
+                visit(value_node)
+        elif isinstance(node, yaml.SequenceNode):
+            for child in node.value:
+                visit(child)
+
+    visit(root)
+    if not isinstance(document, dict):
+        return {}, duplicates, ["codemagic.yaml must be a mapping"]
+    return document, duplicates, []
+
+
+def _script_commands(script: str) -> list[str]:
+    """Return shell-command lines, deliberately excluding comments and quoted decoys."""
+    commands: list[str] = []
+    pending = ""
+    for raw_line in script.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        # A quoted command printed for a log/assertion is never publisher
+        # authority, but ordinary shell output remains an ordering boundary.
+        if line.startswith(("echo ", "printf ")) and "gh release create" in line:
+            continue
+        pending = f"{pending} {line}".strip() if pending else line
+        if pending.endswith("\\"):
+            pending = pending[:-1].rstrip()
+            continue
+        commands.append(pending)
+        pending = ""
+    if pending:
+        commands.append(pending)
+    return commands
+
+
+def _contains_live_release_marker(value: object) -> bool:
+    if isinstance(value, dict):
+        return any(
+            key == "isLive" and item is True or _contains_live_release_marker(item) for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_live_release_marker(item) for item in value)
+    if isinstance(value, str):
+        return bool(re.search(r"(?m)^\s*isLive:\s*true\s*$", value))
+    return False
+
+
+def _release_create_tag(command: str) -> str | None:
+    """Return the tag only for a direct gh release-create invocation."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return None
+    if len(words) >= 4 and words[:3] == ["gh", "release", "create"]:
+        return words[3]
+    return None
+
+
+def _is_isolated_preview_workflow(workflow: dict[str, object]) -> bool:
+    environment = workflow.get("environment")
+    vars_ = environment.get("vars") if isinstance(environment, dict) else None
+    return isinstance(vars_, dict) and vars_.get("PREVIEW_MODE") == "true"
+
+
+def check_codemagic_release_publishers() -> list[str]:
+    """Keep exactly one executable canonical GitHub-release publisher in Codemagic."""
+    document, duplicates, errors = _load_codemagic_with_duplicates(ROOT / "codemagic.yaml")
+    errors.extend(f"codemagic.yaml has duplicate key: {key}" for key in duplicates)
+    workflows = document.get("workflows")
+    if not isinstance(workflows, dict):
+        return [*errors, "codemagic.yaml is missing its workflows mapping"]
+
+    canonical_name = "omi-desktop-swift-release"
+    canonical = workflows.get(canonical_name)
+    if not isinstance(canonical, dict):
+        return [*errors, "codemagic.yaml is missing the omi-desktop-swift-release workflow"]
+
+    publisher_commands: list[tuple[str, str, str]] = []
+    for workflow_name, workflow in workflows.items():
+        if not isinstance(workflow, dict):
+            continue
+        if _contains_live_release_marker(workflow):
+            errors.append(f"Codemagic workflow {workflow_name} contains isLive: true")
+        steps = workflow.get("scripts")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict) or not isinstance(step.get("script"), str):
+                continue
+            step_name = step.get("name") if isinstance(step.get("name"), str) else "unnamed script"
+            for command in _script_commands(step["script"]):
+                tag = _release_create_tag(command)
+                if tag is not None:
+                    publisher_commands.append((str(workflow_name), step_name, tag))
+
+    canonical_commands = [tag for workflow, _, tag in publisher_commands if workflow == canonical_name]
+    if canonical_commands != ["$CM_TAG"]:
+        errors.append(
+            "canonical workflow must contain the exact canonical gh release create \"$CM_TAG\" and no alternate release-create path"
+        )
+    for workflow, _, tag in publisher_commands:
+        workflow_config = workflows.get(workflow)
+        if workflow != canonical_name and not (
+            isinstance(workflow_config, dict) and _is_isolated_preview_workflow(workflow_config)
+        ):
+            if tag == "$TAG_NAME":
+                errors.append(f"Codemagic workflow {workflow} contains a legacy $TAG_NAME publisher")
+            else:
+                errors.append(f"Codemagic workflow {workflow} contains an alternate gh release create publisher")
+
+    scripts = canonical.get("scripts")
+    if not isinstance(scripts, list):
+        return [*errors, "canonical workflow is missing scripts"]
+    smoke_position = next(
+        (
+            index
+            for index, step in enumerate(scripts)
+            if isinstance(step, dict) and step.get("name") == "Smoke signed desktop artifact"
+        ),
+        None,
+    )
+    release_position = next(
+        (
+            index
+            for index, step in enumerate(scripts)
+            if isinstance(step, dict) and step.get("name") == "Create GitHub release"
+        ),
+        None,
+    )
+    if smoke_position is None or release_position is None or smoke_position >= release_position:
+        errors.append("canonical signed smoke must precede canonical publication")
+        return errors
+    release_step = scripts[release_position]
+    release_script = release_step.get("script") if isinstance(release_step, dict) else None
+    commands = _script_commands(release_script) if isinstance(release_script, str) else []
+    create_index = next(
+        (index for index, command in enumerate(commands) if _release_create_tag(command) == "$CM_TAG"), None
+    )
+    reservation_index = next(
+        (index for index, command in enumerate(commands) if "/v2/desktop/beta/candidates/reserve" in command), None
+    )
+    if create_index is None or reservation_index is None or reservation_index + 1 != create_index:
+        errors.append(
+            "canonical candidate reservation must be immediately before the exact canonical gh release create"
+        )
+    return errors
 
 
 def main() -> int:
     errors: list[str] = []
     errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_codemagic_release_publishers())
     errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
     errors.extend(check_desktop_update_docs())
@@ -103,8 +273,14 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
     reserve_index = desktop_workflow_body.find("/v2/desktop/beta/candidates/reserve")
     canonical_publish_index = desktop_workflow_body.find('gh release create "$CM_TAG"')
-    if reserve_index == -1 or canonical_publish_index == -1 or not (smoke_index < reserve_index < canonical_publish_index):
-        errors.append("desktop release must reserve its exact candidate after signed smoke and before canonical publication")
+    if (
+        reserve_index == -1
+        or canonical_publish_index == -1
+        or not (smoke_index < reserve_index < canonical_publish_index)
+    ):
+        errors.append(
+            "desktop release must reserve its exact candidate after signed smoke and before canonical publication"
+        )
     for required_fragment in (
         'Authorization: Bearer ${BETA_PROMOTION_TOKEN}',
         '--data "{\\"tag\\":\\"${CM_TAG}\\"}"',
