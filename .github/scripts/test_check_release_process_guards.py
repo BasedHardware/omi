@@ -309,6 +309,50 @@ def test_codemagic_workflow_contract_accepts_current_production_configuration():
     assert GUARDS.check_codemagic_release_publishers() == []
 
 
+def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str) -> list[str]:
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    _mutate(codemagic, old, new)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    return GUARDS.check_mobile_codemagic_release_triggers()
+
+
+def test_mobile_codemagic_triggers_are_native_and_production_safe(tmp_path, monkeypatch):
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    assert GUARDS.check_mobile_codemagic_release_triggers() == []
+
+
+def test_mobile_codemagic_trigger_guard_rejects_github_dispatcher(tmp_path, monkeypatch):
+    codemagic = tmp_path / "codemagic.yaml"
+    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
+    dispatcher = tmp_path / ".github/workflows/mobile_internal_auto.yml"
+    dispatcher.parent.mkdir(parents=True)
+    dispatcher.write_text("name: legacy dispatcher\n", encoding="utf-8")
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_mobile_codemagic_release_triggers()
+
+    assert any("must not be dispatched through GitHub Actions" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    (
+        ("        - push\n", "        - pull_request\n"),
+        ("        - pattern: main\n", "        - pattern: release/*\n"),
+        ("      cancel_previous_builds: true\n", "      cancel_previous_builds: false\n"),
+        ("          - 'app/**'\n", "          - 'desktop/**'\n"),
+    ),
+)
+def test_mobile_codemagic_trigger_guard_rejects_regressions(tmp_path, monkeypatch, old, new):
+    errors = _mobile_trigger_errors_after(tmp_path, monkeypatch, old, new)
+
+    assert any("must natively trigger" in error for error in errors), errors
+
+
 @pytest.mark.parametrize(
     "forbidden_authority",
     (
