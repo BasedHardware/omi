@@ -16,9 +16,11 @@ import {
 
 import type { ChartItem } from "@/components/dashboard/resizable-chart-grid";
 import { authenticatedFetcher } from "@/hooks/useAuthToken";
-import type {
-  ResponseReliabilityPayload,
-  ResponseReliabilitySeries,
+import {
+  trimDailyToCoverage,
+  type ReliabilityDailyPoint,
+  type ResponseReliabilityPayload,
+  type ResponseReliabilitySeries,
 } from "@/lib/response-reliability";
 
 const tooltipStyle = {
@@ -44,6 +46,12 @@ const formatDay = (value: string) =>
     timeZone: "UTC",
   });
 
+const rateWithCounts = (
+  value: number,
+  success: number,
+  failure: number,
+): string => `${Number(value).toFixed(1)}% (${success}/${success + failure})`;
+
 function ChannelReliabilityChart({
   data,
 }: {
@@ -52,9 +60,8 @@ function ChannelReliabilityChart({
   const chat = data.summary.chat;
   const voice = data.summary.voice;
   const failures = (chat?.failure ?? 0) + (voice?.failure ?? 0);
-  const hasData = data.daily.some(
-    (point) => point.chatSuccessRate != null || point.voiceSuccessRate != null,
-  );
+  const daily = trimDailyToCoverage(data.daily);
+  const hasData = daily.length > 0;
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-2">
@@ -89,7 +96,7 @@ function ChannelReliabilityChart({
       <div className="min-h-0 flex-1">
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.daily}>
+            <LineChart data={daily}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis
                 dataKey="date"
@@ -107,10 +114,31 @@ function ChannelReliabilityChart({
               />
               <Tooltip
                 labelFormatter={(value) => formatDay(String(value))}
-                formatter={(value: number, name: string) => [
-                  `${Number(value).toFixed(1)}%`,
-                  name,
-                ]}
+                formatter={(
+                  value: number,
+                  name: string,
+                  item: { payload?: ReliabilityDailyPoint },
+                ) => {
+                  const point = item.payload;
+                  if (!point) return [`${Number(value).toFixed(1)}%`, name];
+                  return name === "Chat success"
+                    ? [
+                        rateWithCounts(
+                          value,
+                          point.chatSuccess,
+                          point.chatFailure,
+                        ),
+                        name,
+                      ]
+                    : [
+                        rateWithCounts(
+                          value,
+                          point.voiceSuccess,
+                          point.voiceFailure,
+                        ),
+                        name,
+                      ];
+                }}
                 contentStyle={tooltipStyle}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -120,7 +148,7 @@ function ChannelReliabilityChart({
                 name="Chat success"
                 stroke="#22c55e"
                 strokeWidth={2}
-                dot={false}
+                dot={{ r: 2, fill: "#22c55e", strokeWidth: 0 }}
                 connectNulls
                 isAnimationActive={false}
               />
@@ -130,7 +158,7 @@ function ChannelReliabilityChart({
                 name="Voice success"
                 stroke="#06b6d4"
                 strokeWidth={2}
-                dot={false}
+                dot={{ r: 2, fill: "#06b6d4", strokeWidth: 0 }}
                 connectNulls
                 isAnimationActive={false}
               />
@@ -186,7 +214,12 @@ export function useResponseReliabilityItems({
         (chat?.failure ?? 0) +
         (voice?.success ?? 0) +
         (voice?.failure ?? 0);
-      return `Last 30 days · ${judged.toLocaleString()} judged responses`;
+      const covered = trimDailyToCoverage(series.daily);
+      const range =
+        covered.length > 0 && covered.length < series.daily.length
+          ? `Since ${formatDay(covered[0].date)}`
+          : `Last ${series.days} days`;
+      return `${range} · ${judged.toLocaleString()} judged responses`;
     };
 
     return [

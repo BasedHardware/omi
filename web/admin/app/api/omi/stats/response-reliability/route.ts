@@ -6,6 +6,7 @@ import { posthogResults } from "@/lib/posthog";
 import {
   buildChannelReliabilityPayloads,
   buildResponseReliabilityPayload,
+  RELIABILITY_ROW_LIMIT,
   type ReliabilityChannel,
   responseReliabilityQueries,
 } from "@/lib/response-reliability";
@@ -102,6 +103,16 @@ export async function GET(request: NextRequest) {
 
   const chatRows = chatAvailable ? chatResult.value : [];
   const voiceRows = voiceAvailable ? voiceResult.value : [];
+  if (
+    chatRows.length >= RELIABILITY_ROW_LIMIT ||
+    voiceRows.length >= RELIABILITY_ROW_LIMIT
+  ) {
+    console.warn("Response reliability rows hit the HogQL limit", {
+      chatRows: chatRows.length,
+      voiceRows: voiceRows.length,
+      limit: RELIABILITY_ROW_LIMIT,
+    });
+  }
   const actorIds = Array.from(
     new Set(
       [

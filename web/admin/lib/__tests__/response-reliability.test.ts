@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildChannelReliabilityPayloads,
   buildResponseReliabilityPayload,
+  RELIABILITY_ROW_LIMIT,
   responseReliabilityQueries,
+  trimDailyToCoverage,
 } from "../response-reliability";
 
 describe("response reliability", () => {
@@ -315,5 +317,76 @@ describe("response reliability", () => {
     );
     expect(queries.chat).toContain("distinct_id AS actor_id");
     expect(queries.voice).toContain("distinct_id AS actor_id");
+  });
+
+  // Static query-contract check: PostHog's query API silently truncates any
+  // HogQL result to 100 rows when the query carries no explicit LIMIT. These
+  // queries are ordered day ASC, so that default cut exactly the newest days
+  // off the dashboard (lines stopped days before today).
+  it("carries an explicit LIMIT so PostHog's default 100-row cap cannot drop the newest days", () => {
+    const queries = responseReliabilityQueries(30);
+    expect(queries.chat).toContain(`LIMIT ${RELIABILITY_ROW_LIMIT}`);
+    expect(queries.voice).toContain(`LIMIT ${RELIABILITY_ROW_LIMIT}`);
+    expect(RELIABILITY_ROW_LIMIT).toBeGreaterThanOrEqual(10_000);
+  });
+
+  it("trims leading empty days to telemetry coverage but keeps interior gaps", () => {
+    const payload = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [
+        [
+          "2026-07-17",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          2,
+          0,
+        ],
+        [
+          "2026-07-17",
+          "chat_agent_query_completed",
+          "main_chat",
+          "unknown",
+          2,
+          9000,
+        ],
+        [
+          "2026-07-19",
+          "chat_agent_query_started",
+          "main_chat",
+          "unknown",
+          1,
+          0,
+        ],
+        ["2026-07-19", "chat_agent_error", "main_chat", "agent_error", 1, 0],
+      ],
+      voiceRows: [],
+    });
+
+    const trimmed = trimDailyToCoverage(payload.daily);
+    expect(payload.daily).toHaveLength(7);
+    expect(trimmed.map((point) => point.date)).toEqual([
+      "2026-07-17",
+      "2026-07-18",
+      "2026-07-19",
+      "2026-07-20",
+    ]);
+    expect(trimmed[0].chatSuccessRate).toBe(100);
+    expect(trimmed[1].chatSuccessRate).toBeNull();
+    expect(trimmed[2].chatSuccessRate).toBe(0);
+
+    expect(trimDailyToCoverage([])).toEqual([]);
+    const empty = buildResponseReliabilityPayload({
+      days: 7,
+      now: new Date("2026-07-20T12:00:00Z"),
+      chatAvailable: true,
+      voiceAvailable: true,
+      chatRows: [],
+      voiceRows: [],
+    });
+    expect(trimDailyToCoverage(empty.daily)).toEqual([]);
   });
 });

@@ -101,6 +101,12 @@ const CHAT_COMPLETED = "chat_agent_query_completed";
 const CHAT_FAILED = "chat_agent_error";
 const CHAT_CANCELLED = "chat_agent_query_cancelled";
 
+// PostHog's query API silently applies LIMIT 100 when the query has no LIMIT.
+// These queries group by actor_id and order by day ASC, so the default limit
+// truncated exactly the newest days off the charts. Keep the explicit LIMIT at
+// PostHog's per-query maximum and have callers treat a full page as overflow.
+export const RELIABILITY_ROW_LIMIT = 10_000;
+
 const emptyMetric = (): MutableMetric => ({
   attempts: 0,
   success: 0,
@@ -223,6 +229,7 @@ export function responseReliabilityQueries(days: number): {
         AND toString(properties.surface) != 'floating_voice'
       GROUP BY day, event, surface, reason, actor_id
       ORDER BY day ASC
+      LIMIT ${RELIABILITY_ROW_LIMIT}
     `,
     voice: `
       SELECT
@@ -266,8 +273,23 @@ export function responseReliabilityQueries(days: number): {
         AND toString(properties.surface) = 'floating_voice'
       GROUP BY day, health_event, outcome, reason, route, intent, actor_id
       ORDER BY day ASC
+      LIMIT ${RELIABILITY_ROW_LIMIT}
     `,
   };
+}
+
+/**
+ * Drop leading days that have no judged responses so charts start where
+ * telemetry coverage actually begins instead of rendering weeks of empty axis.
+ * Interior gaps are kept — those are real usage gaps.
+ */
+export function trimDailyToCoverage(
+  daily: ReliabilityDailyPoint[],
+): ReliabilityDailyPoint[] {
+  const first = daily.findIndex(
+    (point) => point.chatSuccessRate != null || point.voiceSuccessRate != null,
+  );
+  return first === -1 ? [] : daily.slice(first);
 }
 
 export function buildResponseReliabilityPayload({
