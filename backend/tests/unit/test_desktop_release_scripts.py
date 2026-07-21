@@ -256,6 +256,7 @@ def test_universal_release_stages_and_smokes_both_sharp_architectures():
     smoke = (REPO_ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh").read_text(encoding="utf-8")
     assert "stage_darwin_sharp_arches" in prepare
     assert "for package_arch in arm64 x64" in prepare
+    assert 'npm install --prefix "$overlay" --force' in prepare
     assert "@img/sharp-darwin-$package_arch@$sharp_version" in prepare
     assert "@img/sharp-libvips-darwin-$package_arch@$libvips_version" in prepare
     assert "for sharp_arch in arm64 x64" in prepare

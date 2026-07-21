@@ -230,8 +230,7 @@ stage_darwin_sharp_arches() {
     }
 
     overlay="$(mktemp -d "$PACKAGED_RUNTIME_DIR/sharp-$package_arch.XXXXXX")"
-    npm_config_platform=darwin npm_config_arch="$package_arch" \
-      npm install --prefix "$overlay" --ignore-scripts --no-save --package-lock=false \
+    npm install --prefix "$overlay" --force --ignore-scripts --no-save --package-lock=false \
         --no-fund --no-audit \
         "@img/sharp-darwin-$package_arch@$sharp_version" \
         "@img/sharp-libvips-darwin-$package_arch@$libvips_version"
