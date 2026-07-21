@@ -189,14 +189,13 @@ def _github_surfaces(snapshot: dict[str, object], release_id: str, phase: str) -
 
 def _manifest_surface(snapshot: dict[str, object], release_id: str, tag_sha: str, phase: str, metadata: dict[str, object]) -> dict[str, object]:
     manifest = snapshot.get("manifest", _unavailable("collector did not provide the canonical manifest"))
-    expected = {"release_id": release_id, "source_sha": tag_sha}
+    expected = {"release_id": release_id, "app_source_sha": tag_sha}
     if _is_unavailable(manifest):
         return _unavailable_surface("canonical_manifest", expected, manifest)
 
     manifest_id = _optional_string(manifest.get("release_id")) if isinstance(manifest, dict) else ""
-    manifest_sha = _optional_string(manifest.get("source_sha")) if isinstance(manifest, dict) else ""
-    qualification = manifest.get("qualification") if isinstance(manifest, dict) else None
-    evidence = _optional_string(qualification.get("evidence_asset")) if isinstance(qualification, dict) else ""
+    manifest_sha = _optional_string(manifest.get("app_source_sha")) if isinstance(manifest, dict) else ""
+    evidence = _optional_string(manifest.get("qualification_evidence_asset")) if isinstance(manifest, dict) else ""
     metadata_evidence = _optional_string(metadata.get("qualifiedBetaEvidence"))
     required = phase in {"beta", "stable"}
     valid = manifest_id == release_id and manifest_sha == tag_sha and (not required or bool(evidence))
@@ -216,7 +215,7 @@ def _manifest_surface(snapshot: dict[str, object], release_id: str, tag_sha: str
         "PASS" if valid else "FAIL",
         "aligned" if valid else "reversible_drift",
         {**expected, "qualification_evidence": metadata_evidence or None},
-        {"release_id": manifest_id or None, "source_sha": manifest_sha or None, "qualification_evidence": evidence or None},
+        {"release_id": manifest_id or None, "app_source_sha": manifest_sha or None, "qualification_evidence": evidence or None},
         message,
         repair,
     )

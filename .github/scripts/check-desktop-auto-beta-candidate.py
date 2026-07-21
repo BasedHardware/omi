@@ -144,7 +144,7 @@ def validate(args: argparse.Namespace) -> dict:
     callback_canary = smoke.get("notification_callback_canary")
 
     zip_release = asset_by_name(release, {"Omi.zip"})
-    dmg_release = asset_by_name(release, {"Omi.dmg", "omi.dmg"})
+    dmg_release = asset_by_name(release, {"omi.dmg"})
     zip_smoke = smoke_artifact(smoke, "sparkle_zip")
     dmg_smoke = smoke_artifact(smoke, "dmg")
     artifact_digests = {
