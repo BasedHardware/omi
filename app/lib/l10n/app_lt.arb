@@ -3150,5 +3150,10 @@
     "deviceStorageFree": "{free} laisva",
     "deviceStorageNearlyFull": "Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos.",
     "phoneMicOfflineFallbackMessage": "Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę.",
-    "dataEncryptedBanner": "Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami."
+    "dataEncryptedBanner": "Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami.",
+    "rayBanMetaMicPickerTitle": "Pasirinkite „Ray-Ban Meta“ mikrofoną",
+    "rayBanMetaMicPickerDescription": "Pasirinkite akinių Bluetooth mikrofoną. Kol „Omi“ jį naudoja, muzika pristabdoma.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth mikrofonų nerasta. Prijunkite akinius iPhone nustatymuose ir bandykite dar kartą.",
+    "rayBanMetaMicPickerLoadError": "Nepavyko įkelti Bluetooth mikrofonų. Patikrinkite, ar Bluetooth įjungtas, ir bandykite dar kartą.",
+    "rayBanMetaMicPickerConnectError": "Nepavyko prisijungti prie šio mikrofono. Įsitikinkite, kad jis prijungtas iPhone nustatymuose."
 }
