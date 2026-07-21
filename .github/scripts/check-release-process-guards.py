@@ -331,6 +331,7 @@ def check_no_unprovisioned_beta_backend_hosts() -> list[str]:
     """
     hosts = ("api-beta.omi.me", "pusher-beta.omi.me", "agent-beta.omi.me")
     paths = [ROOT / "app", ROOT / "desktop/macos", ROOT / "codemagic.yaml", ROOT / ".github/workflows"]
+    non_shipped_parts = {".build", ".dart_tool", "Pods", "test", "tests", "Tests", "test_driver"}
     errors: list[str] = []
     for path in paths:
         files = (
@@ -339,7 +340,7 @@ def check_no_unprovisioned_beta_backend_hosts() -> list[str]:
             else [
                 item
                 for item in path.rglob("*")
-                if item.is_file() and not {".build", ".dart_tool", "Pods"}.intersection(item.relative_to(path).parts)
+                if item.is_file() and not non_shipped_parts.intersection(item.relative_to(path).parts)
             ]
         )
         for file in files:
