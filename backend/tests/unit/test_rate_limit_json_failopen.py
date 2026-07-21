@@ -6,6 +6,7 @@ utils/other/endpoints.py has a heavy import graph, so we import it under a stub 
 """
 
 import importlib.abc
+import json
 import importlib.machinery
 import importlib.util
 import os
@@ -105,3 +106,14 @@ def test_partial_cache_entry_fails_open():
     with patch.object(ep_mod, 'cached', {'rate_limit:ep:1.2.3.4': '{"foo": 1}'}):  # missing remaining/timestamp
         result = ep_mod.rate_limit_custom('ep', _req(), 60, 60)
     assert result is True
+
+
+def _stored(cache, key='rate_limit:ep:1.2.3.4'):
+    return json.loads(cache[key])
+
+
+def test_first_window_reserves_exactly_one_request():
+    cache = {}
+    with patch.object(ep_mod, 'cached', cache):
+        assert ep_mod.rate_limit_custom('ep', _req(), 5, 3600) is True
+    assert _stored(cache)['remaining'] == 4
