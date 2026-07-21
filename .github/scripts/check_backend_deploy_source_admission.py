@@ -178,7 +178,7 @@ def validate_auto_workflow(text: str) -> list[str]:
         )
         for fragment, message in (
             (f"ref: {AUTO_PROOF_SHA}", "auto backend scope decision must inspect the triggering SHA"),
-            ("fetch-depth: 2", "auto backend scope decision must fetch the triggering commit parent"),
+            ("fetch-depth: 0", "auto backend scope decision must fetch ancestry for a supersession proof"),
         ):
             require_fragment(errors, scope_checkout, fragment, message)
         scope_decision = require_step(
@@ -189,12 +189,44 @@ def validate_auto_workflow(text: str) -> list[str]:
         )
         for fragment, message in (
             (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "auto backend scope decision must bind the triggering SHA"),
+            (
+                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+                "auto backend scope decision must refresh current origin/main before declaring supersession",
+            ),
+            (
+                "main_sha=\"$(git rev-parse --verify 'origin/main^{commit}'",
+                "auto backend scope decision must resolve current origin/main before declaring supersession",
+            ),
+            (
+                "[[ \"$RELEASE_SHA\" != \"$main_sha\" ]] && git merge-base --is-ancestor \"$RELEASE_SHA\" \"$main_sha\"",
+                "auto backend scope decision must prove a distinct triggering SHA is already on current main before a superseded no-op",
+            ),
+            (
+                "echo \"applies=true\" >> \"$GITHUB_OUTPUT\"",
+                "auto backend scope decision must continue to guarded admission when freshness is uncertain",
+            ),
+            (
+                "could not refresh current origin/main; preserving fail-closed source admission",
+                "auto backend scope decision must treat a main refresh failure as guarded admission, not supersession",
+            ),
+            (
+                "could not resolve current origin/main; preserving fail-closed source admission",
+                "auto backend scope decision must treat an unresolved current main as guarded admission, not supersession",
+            ),
+            ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
+            (
+                "Backend development deploy superseded no-op",
+                "auto backend scope decision must summarize superseded candidates as green no-ops",
+            ),
+            (
+                "triggering SHA $RELEASE_SHA was superseded by current origin/main $main_sha",
+                "auto backend scope decision must name both triggering and current SHAs in a superseded summary",
+            ),
             ("git rev-parse \"${RELEASE_SHA}^\"", "auto backend scope decision must inspect the triggering parent"),
             (
                 "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
                 "auto backend scope decision must diff the triggering SHA against its parent",
             ),
-            ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
             ("Green no-op", "auto backend scope decision must summarize green no-ops"),
         ):
             require_fragment(errors, scope_decision, fragment, message)
