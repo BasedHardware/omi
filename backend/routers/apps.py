@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, H
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
-from utils.apps import fetch_app_chat_tools_from_manifest
+from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
 from utils.executors import db_executor, llm_executor, storage_executor, run_blocking, start_background_task
 from utils.http_client import get_webhook_client
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
@@ -695,10 +695,9 @@ def search_apps(
 
         # Calculate average from reviews
         reviews = apps_reviews.get(app_dict['id'], {})
-        sorted_reviews = list(reviews.values())
-        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-        app_dict['rating_avg'] = rating_avg
-        app_dict['rating_count'] = len(sorted_reviews)
+        scores = [_clamp_review_score(x['score']) for x in reviews.values()]
+        app_dict['rating_avg'] = sum(scores) / len(scores) if scores else None
+        app_dict['rating_count'] = len(scores)
 
         # Skip a malformed/legacy app document rather than 500 the whole search page.
         try:
