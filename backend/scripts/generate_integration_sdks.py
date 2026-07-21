@@ -1821,7 +1821,7 @@ dependencies:
 dev_dependencies:
   test: ^1.25.0
 """
-        return {
+    return {
         "lib/omi_integration.dart": (
             header_comment("cpp", spec_path) + "library;\n\n" + "export 'omi_integration.g.dart';\n"
         ),
