@@ -23,58 +23,119 @@ def fail(message):
 
 
 workflow = Path(sys.argv[1])
-lines = workflow.read_text().splitlines()
+try:
+    workflow_text = workflow.read_bytes().decode("utf-8")
+except UnicodeDecodeError as error:
+    fail(f"workflow must be UTF-8: {error}")
+lines = workflow_text.splitlines(keepends=True)
 target_name = "Download DMG from GitHub Release"
-step_matches = []
-step_pattern = re.compile(r"^(?P<indent>\s*)-\s+name:\s*(?P<name>.*?)\s*(?:#.*)?$")
 
-for index, line in enumerate(lines):
-    match = step_pattern.match(line)
-    if not match:
-        continue
-    name = match.group("name").strip().strip("\"'")
-    if name == target_name:
-        step_matches.append((index, len(match.group("indent"))))
 
+def without_line_ending(line):
+    if line.endswith("\r\n"):
+        return line[:-2]
+    if line.endswith(("\n", "\r")):
+        return line[:-1]
+    return line
+
+
+def leading_spaces(line):
+    return len(line) - len(line.lstrip(" "))
+
+
+target_step_pattern = re.compile(r"^(?P<indent> *)- name: Download DMG from GitHub Release$")
+step_matches = [
+    (index, len(match.group("indent")))
+    for index, line in enumerate(lines)
+    if (match := target_step_pattern.match(without_line_ending(line)))
+]
 if len(step_matches) != 1:
-    fail(f"expected one {target_name!r} step, found {len(step_matches)}")
+    fail(f"expected one exact {target_name!r} step, found {len(step_matches)}")
 
 step_start, step_indent = step_matches[0]
 step_end = len(lines)
-next_step = re.compile(rf"^\s{{{step_indent}}}-\s+")
+next_step_pattern = re.compile(rf"^{' ' * step_indent}- ")
 for index in range(step_start + 1, len(lines)):
-    if next_step.match(lines[index]):
+    if next_step_pattern.match(without_line_ending(lines[index])):
         step_end = index
         break
 
-run_matches = []
-run_pattern = re.compile(r"^(?P<indent>\s*)run:\s*\|\s*(?:#.*)?$")
-for index in range(step_start + 1, step_end):
-    match = run_pattern.match(lines[index])
-    if match:
-        run_matches.append((index, len(match.group("indent"))))
-
+literal_run_pattern = re.compile(r"^(?P<indent> *)run: \|$")
+run_matches = [
+    (index, len(match.group("indent")))
+    for index in range(step_start + 1, step_end)
+    if (match := literal_run_pattern.match(without_line_ending(lines[index])))
+]
 if len(run_matches) != 1:
-    fail(f"installer step must have one literal run block, found {len(run_matches)}")
+    fail(f"installer step must have exactly one literal `run: |` block, found {len(run_matches)}")
 
 run_start, run_indent = run_matches[0]
-run_lines = []
-for line in lines[run_start + 1:step_end]:
-    if line.strip() and len(line) - len(line.lstrip()) <= run_indent:
-        break
-    run_lines.append(line)
-
-nonempty_indents = [len(line) - len(line.lstrip()) for line in run_lines if line.strip()]
+run_lines = lines[run_start + 1:step_end]
+nonempty_indents = [
+    leading_spaces(without_line_ending(line))
+    for line in run_lines
+    if without_line_ending(line).strip(" ")
+]
 if not nonempty_indents:
-    fail("installer step run block is empty")
+    fail("installer literal run block is empty")
 content_indent = min(nonempty_indents)
-run_content = "\n".join(line[content_indent:] if line.strip() else "" for line in run_lines)
+if content_indent <= run_indent:
+    fail("installer literal run block is not indented beneath `run: |`")
+
+normalized_run_lines = []
+for line in run_lines:
+    bare_line = without_line_ending(line)
+    if bare_line.strip(" ") and not line.startswith(" " * content_indent):
+        fail("installer literal run block has inconsistent YAML indentation")
+    normalized_run_lines.append(line[min(leading_spaces(line), content_indent):])
+run_content = "".join(normalized_run_lines)
+if run_content.endswith("\r\n"):
+    run_content = run_content[:-2] + "\n"
+elif run_content.endswith("\r"):
+    run_content = run_content[:-1] + "\n"
+elif not run_content.endswith("\n"):
+    run_content += "\n"
+
+canonical_installer_run = '''echo "=== Downloading DMG ==="
+
+# Get release tag from various sources
+TAG="${{ github.event.inputs.release_tag }}"
+if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then
+  TAG="${{ github.event.client_payload.release_tag }}"
+fi
+if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then
+  TAG=$(gh release list --repo BasedHardware/omi --limit 1 --json tagName --jq '.[0].tagName')
+fi
+echo "Testing release: $TAG"
+echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+
+DOWNLOAD_DIR="$RUNNER_TEMP/omi-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+DMG_PATH="$DOWNLOAD_DIR/omi.dmg"
+mkdir -p "$DOWNLOAD_DIR"
+
+# Download only the canonical disk image, never another release asset.
+gh release download "$TAG" \\
+  --repo BasedHardware/omi \\
+  --pattern "omi.dmg" \\
+  --dir "$DOWNLOAD_DIR"
+test -f "$DMG_PATH"
+echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT
+
+echo "## Release Under Test" >> $GITHUB_STEP_SUMMARY
+echo "**Tag:** \\`$TAG\\`" >> $GITHUB_STEP_SUMMARY
+echo "" >> $GITHUB_STEP_SUMMARY
+
+'''
+if run_content.encode("utf-8") != canonical_installer_run.encode("utf-8"):
+    fail("installer literal run block differs from the admitted canonical block")
 
 
 def other_step_run_content(target_name):
+    step_pattern = re.compile(r"^(?P<indent>\s*)-\s+name:\s*(?P<name>.*?)\s*(?:#.*)?$")
+    run_pattern = re.compile(r"^(?P<indent>\s*)run:\s*\|\s*(?:#.*)?$")
     other_steps = []
     for index, line in enumerate(lines):
-        match = step_pattern.match(line)
+        match = step_pattern.match(without_line_ending(line))
         if match and match.group("name").strip().strip("\"'") == target_name:
             other_steps.append((index, len(match.group("indent"))))
     if len(other_steps) != 1:
@@ -84,13 +145,13 @@ def other_step_run_content(target_name):
     other_end = len(lines)
     other_next_step = re.compile(rf"^\s{{{other_indent}}}-\s+")
     for index in range(other_start + 1, len(lines)):
-        if other_next_step.match(lines[index]):
+        if other_next_step.match(without_line_ending(lines[index])):
             other_end = index
             break
 
     other_runs = []
     for index in range(other_start + 1, other_end):
-        match = run_pattern.match(lines[index])
+        match = run_pattern.match(without_line_ending(lines[index]))
         if match:
             other_runs.append((index, len(match.group("indent"))))
     if len(other_runs) != 1:
@@ -106,7 +167,9 @@ def other_step_run_content(target_name):
     if not other_content_indents:
         fail(f"{target_name!r} run block is empty")
     other_content_indent = min(other_content_indents)
-    return "\n".join(line[other_content_indent:] if line.strip() else "" for line in other_run_lines)
+    return "\n".join(
+        without_line_ending(line)[other_content_indent:] if line.strip() else "" for line in other_run_lines
+    )
 
 
 mount_content = other_step_run_content("Mount DMG and Install")
@@ -252,7 +315,21 @@ def pattern_line_index():
     return matches[0]
 
 
-if mutation == "comment-decoy-wildcard":
+def download_dir_line_index():
+    matches = [index for index, line in enumerate(lines) if '--dir "$DOWNLOAD_DIR"' in line]
+    if len(matches) != 1:
+        raise SystemExit(f"expected one canonical download directory line, found {len(matches)}")
+    return matches[0]
+
+
+if mutation == "canonical":
+    pass
+elif mutation == "unrelated-yaml":
+    matches = [index for index, line in enumerate(lines) if "timeout-minutes: 15" in line]
+    if len(matches) != 1:
+        raise SystemExit(f"expected one unrelated timeout line, found {len(matches)}")
+    lines[matches[0]] = lines[matches[0]].replace("timeout-minutes: 15", "timeout-minutes: 16")
+elif mutation == "comment-decoy-wildcard":
     index = pattern_line_index()
     lines[index:index + 1] = [
         '            # --pattern "omi.dmg" is the canonical download pattern.\n',
@@ -365,6 +442,24 @@ elif mutation in {"semicolon-after-canonical", "and-after-canonical", "or-after-
 elif mutation == "benign-comment":
     index = pattern_line_index()
     lines[index:index] = ['          # This comment is intentionally inert.\n']
+elif mutation == "no-whitespace-hash-literal":
+    index = download_dir_line_index()
+    lines[index] = lines[index].replace('--dir "$DOWNLOAD_DIR"', '--dir "$DOWNLOAD_DIR"#not-a-comment')
+elif mutation == "no-whitespace-hash-parameter":
+    index = download_dir_line_index()
+    lines[index] = lines[index].replace('--dir "$DOWNLOAD_DIR"', '--dir "$DOWNLOAD_DIR"#${GH_TOKEN}')
+elif mutation == "no-whitespace-hash-backtick":
+    index = download_dir_line_index()
+    lines[index] = lines[index].replace(
+        '--dir "$DOWNLOAD_DIR"',
+        '--dir "$DOWNLOAD_DIR"#`gh release download "$TAG" --repo BasedHardware/omi --pattern "*.dmg" --dir "$DOWNLOAD_DIR"`',
+    )
+elif mutation == "no-whitespace-hash-command-substitution":
+    index = download_dir_line_index()
+    lines[index] = lines[index].replace(
+        '--dir "$DOWNLOAD_DIR"',
+        '--dir "$DOWNLOAD_DIR"#$(gh release download "$TAG" --repo BasedHardware/omi --pattern "*.dmg" --dir "$DOWNLOAD_DIR")',
+    )
 else:
     raise SystemExit(f"unknown mutation: {mutation}")
 
@@ -386,6 +481,8 @@ run_mutation beta beta
 run_mutation omitted omitted
 run_mutation duplicate duplicate
 run_mutation commented-command commented-command
+run_mutation canonical canonical accept
+run_mutation unrelated-yaml unrelated-yaml accept
 run_mutation long-equals long-equals
 run_mutation short-pattern short-pattern
 run_mutation short-pattern-concatenated short-pattern-concatenated
@@ -408,6 +505,10 @@ run_mutation semicolon-after-canonical semicolon-after-canonical
 run_mutation and-after-canonical and-after-canonical
 run_mutation or-after-canonical or-after-canonical
 run_mutation pipeline-after-canonical pipeline-after-canonical
-run_mutation benign-comment benign-comment accept
+run_mutation no-whitespace-hash-command-substitution no-whitespace-hash-command-substitution
+run_mutation no-whitespace-hash-backtick no-whitespace-hash-backtick
+run_mutation no-whitespace-hash-parameter no-whitespace-hash-parameter
+run_mutation no-whitespace-hash-literal no-whitespace-hash-literal
+run_mutation benign-comment benign-comment
 
 echo "test-install workflow exact-DMG contract passed"
