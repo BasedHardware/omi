@@ -2084,3 +2084,58 @@ async fn thinking_deltas_stream_as_reasoning_content() {
         .iter()
         .any(|c| c["choices"][0]["finish_reason"] == "stop"));
 }
+
+/// Adaptive thinking must never be requested on a tool-loop continuation:
+/// the OpenAI-format history cannot replay Anthropic thinking/signature
+/// blocks, so a thinking-enabled continuation whose assistant tool_use turn
+/// lacks its thinking block would be rejected upstream. Thinking applies only
+/// when the request tail is the user's message.
+#[test]
+fn adaptive_effort_is_suppressed_on_tool_result_continuations() {
+    let mut req = test_request(vec![
+        user_message("What's the weather in my calendar city?"),
+        ChatMessage {
+            role: "assistant".to_string(),
+            content: None,
+            name: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "call_1".to_string(),
+                call_type: "function".to_string(),
+                function: FunctionCall {
+                    name: "execute_sql".to_string(),
+                    arguments: "{}".to_string(),
+                },
+            }]),
+            tool_call_id: None,
+        },
+        ChatMessage {
+            role: "tool".to_string(),
+            content: Some(json!("query result rows")),
+            name: None,
+            tool_calls: None,
+            tool_call_id: Some("call_1".to_string()),
+        },
+    ]);
+    req.stream = true;
+    let result =
+        translate_request_inner(&req, "claude-sonnet-4-6", true, ReasoningEffort::Adaptive)
+            .unwrap();
+
+    assert!(result.thinking.is_none());
+    // Continuations also keep the legacy token budget (no thinking headroom).
+    assert_eq!(result.max_tokens, DEFAULT_MAX_TOKENS);
+
+    // Past-turn tool history is fine — only the request tail matters.
+    let mut follow_up = req.clone();
+    follow_up
+        .messages
+        .push(user_message("thanks, now think hard about my week"));
+    let result = translate_request_inner(
+        &follow_up,
+        "claude-sonnet-4-6",
+        true,
+        ReasoningEffort::Adaptive,
+    )
+    .unwrap();
+    assert_eq!(result.thinking, Some(json!({"type": "adaptive"})));
+}

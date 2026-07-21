@@ -296,9 +296,23 @@ pub(super) fn translate_request_inner(
 
     // Effort → Anthropic knobs. Haiku (router/synthesis) never thinks — the
     // effort/output_config surface isn't supported there.
+    //
+    // Tool-loop continuations must NOT think: a continuation request replays
+    // the assistant tool_use turn, but the OpenAI-format history cannot carry
+    // Anthropic thinking/signature blocks, and a thinking-enabled request
+    // whose assistant tool_use turn lacks its thinking block is rejected
+    // upstream. With thinking omitted the same history is valid, so thinking
+    // applies only to the first model call of a user turn (the request whose
+    // final non-system message is the user's).
     let model_supports_effort = !upstream_model.starts_with("claude-haiku");
+    let tail_is_user = req
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role != "system" && m.role != "developer")
+        .is_some_and(|m| m.role == "user");
     let use_adaptive_thinking =
-        reasoning_effort == ReasoningEffort::Adaptive && model_supports_effort;
+        reasoning_effort == ReasoningEffort::Adaptive && model_supports_effort && tail_is_user;
 
     let max_tokens = if use_adaptive_thinking {
         let cap = if req.stream {

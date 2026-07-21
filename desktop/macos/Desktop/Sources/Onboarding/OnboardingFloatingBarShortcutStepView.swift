@@ -55,7 +55,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
       Spacer()
 
       VStack(spacing: OmiSpacing.xxl) {
-        Text("Let's set \"Ask a question\" shortcut.\nPress this shortcut. Do the buttons light up?")
+        Text("Let's set the \"Open Omi\" shortcut.\nPress this shortcut. Do the buttons light up?")
           .font(.system(size: 22, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
           .multilineTextAlignment(.center)
