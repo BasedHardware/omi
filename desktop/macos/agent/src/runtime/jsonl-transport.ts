@@ -103,6 +103,7 @@ const QUERY_WIRE_FIELDS = new Set([
   "expectedContextSnapshotGeneration",
   "expectedContextRendererFingerprint",
   "expectedCapabilityVersion",
+  "reasoningEffort",
 ]);
 
 export class JsonlTransport {
@@ -481,6 +482,7 @@ export class JsonlTransport {
         contextSnapshotGeneration: snapshot.snapshotGeneration,
         contextRendererFingerprint: snapshot.rendererFingerprint,
         contextCapabilityVersion: snapshot.capabilityVersion,
+        ...(message.reasoningEffort ? { reasoningEffort: message.reasoningEffort } : {}),
       },
     };
   }

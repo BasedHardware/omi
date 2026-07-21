@@ -53,6 +53,10 @@ interface PiRpcEvent {
 
 interface PiMonoRelayContext {
   capabilityRef: string;
+  /** Omi-owned opaque correlation id. Never contains prompt or account data. */
+  requestId: string;
+  /** Per-turn effort lane ("adaptive" | "fast") relayed to the gateway. */
+  reasoningEffort?: string;
 }
 
 interface PiAssistantMessageEvent {
@@ -832,7 +836,14 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
     mkdirSync(dirname(this.contextFilePath), { recursive: true });
-    writeFileSync(this.contextFilePath, JSON.stringify({ capabilityRef: context.capabilityRef }));
+    writeFileSync(
+      this.contextFilePath,
+      JSON.stringify({
+        capabilityRef: context.capabilityRef,
+        requestId: context.requestId,
+        ...(context.reasoningEffort ? { reasoningEffort: context.reasoningEffort } : {}),
+      })
+    );
   }
 
   private clearRelayContext(expectedCapabilityRef?: string): void {
@@ -880,7 +891,7 @@ export class PiMonoAdapter implements HarnessAdapter {
         break;
 
       case "tool_execution_update":
-        // Partial tool output — emit as tool_activity
+        this.handleToolProgress(event);
         break;
 
       case "tool_execution_end":
@@ -1042,6 +1053,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     });
   }
 
+  private handleToolProgress(event: PiRpcEvent): void {
+    const name = event.toolName as string;
+    const toolCallId = event.toolCallId as string;
+    if (!name || !toolCallId) return;
+
+    // A progress event proves the local tool is still moving, but its partial
+    // result can contain document content or filesystem paths. Carry only the
+    // bounded lifecycle identity across the bridge.
+    this.eventHandler?.({
+      type: "tool_activity",
+      name,
+      status: "progress",
+      toolUseId: toolCallId,
+    });
+  }
+
   private handleTurnEnd(event: PiRpcEvent): void {
     // Drop stray turn_end events that don't belong to an in-flight prompt.
     // This happens after abort() or when the subprocess emits a late
@@ -1175,6 +1202,12 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 }
 
+/** Allowlisted per-turn effort lane from run metadata — anything else is dropped. */
+function relayReasoningEffort(metadata: Record<string, unknown> | undefined): string | undefined {
+  const raw = metadata?.reasoningEffort;
+  return raw === "adaptive" || raw === "fast" ? raw : undefined;
+}
+
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId = "pi-mono";
   readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor("pi-mono");
@@ -1233,6 +1266,8 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         signal,
         {
           capabilityRef: context.toolCapabilityRef,
+          requestId: context.requestId,
+          reasoningEffort: relayReasoningEffort(context.metadata),
         }
       );
 

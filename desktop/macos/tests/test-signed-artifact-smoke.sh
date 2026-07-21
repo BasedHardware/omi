@@ -96,4 +96,51 @@ if "$SMOKE" --app "$tmp_app" --tag "bad-tag" >/tmp/omi-smoke-badtag.out 2>/tmp/o
 fi
 grep -q "invalid release tag" /tmp/omi-smoke-badtag.err || fail "bad tag failure should be explicit"
 
+# Omi Beta variant: identity-scoped feed URL is accepted only when passed
+# explicitly; the default expectation stays the plain shared feed.
+beta_app="$tmp_root/Omi Beta.app"
+mkdir -p "$beta_app/Contents/MacOS" "$beta_app/Contents/Resources" "$beta_app/Contents/Frameworks"
+cat > "$beta_app/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>Omi Computer</string>
+  <key>CFBundleIdentifier</key><string>com.omi.computer-macos.beta</string>
+  <key>CFBundleShortVersionString</key><string>0.12.34</string>
+  <key>CFBundleVersion</key><string>12034</string>
+  <key>CFBundleURLTypes</key>
+  <array><dict><key>CFBundleURLSchemes</key><array><string>omi-computer</string></array></dict></array>
+  <key>SUFeedURL</key><string>https://api.omi.me/v2/desktop/appcast.xml?identity=beta</string>
+</dict>
+</plist>
+PLIST
+touch "$beta_app/Contents/MacOS/Omi Computer"
+chmod +x "$beta_app/Contents/MacOS/Omi Computer"
+
+if "$SMOKE" --app "$beta_app" --tag "v0.12.34+12034-macos" \
+  --expected-bundle-id com.omi.computer-macos.beta \
+  >/tmp/omi-smoke-beta-default.out 2>/tmp/omi-smoke-beta-default.err; then
+  fail "beta feed URL must be rejected without --expected-feed-url"
+fi
+grep -q "SUFeedURL mismatch" /tmp/omi-smoke-beta-default.err \
+  || fail "default feed expectation should reject the identity-scoped feed"
+
+if "$SMOKE" --app "$beta_app" --tag "v0.12.34+12034-macos" \
+  --expected-bundle-id com.omi.computer-macos.beta \
+  --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
+  >/tmp/omi-smoke-beta-feed.out 2>/tmp/omi-smoke-beta-feed.err; then
+  fail "unsigned fixture should still fail later (signing), not pass entirely"
+fi
+grep -q "SUFeedURL mismatch" /tmp/omi-smoke-beta-feed.err \
+  && fail "--expected-feed-url should accept the identity-scoped feed"
+
+# Regression (v0.12.91 build failure): macOS mktemp creates the LITERAL template
+# file when characters follow the final XXXXXX, so the second smoke invocation
+# in one build (stable then Omi Beta) dies with "File exists". Every template
+# must end with XXXXXX.
+if grep -nE 'mktemp (-d )?"[^"]*XXXXXX[^"]+"' "$SMOKE"; then
+  fail "mktemp template with a suffix after XXXXXX breaks repeat smoke invocations"
+fi
+
 echo "signed artifact smoke tests passed"

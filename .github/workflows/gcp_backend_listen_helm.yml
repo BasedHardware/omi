@@ -46,11 +46,27 @@ jobs:
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
           fi
-
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch || github.ref }}
+          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Admit checked-out production source and image identity
+        run: |
+          set -euo pipefail
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
+          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            if ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
+              echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
+              exit 1
+            fi
+          fi
+          IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
+          echo "Admitted deployment source: $CHECKED_OUT_SHA"
+          echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Install Helm
         uses: azure/setup-helm@v5
@@ -98,8 +114,8 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
-          STT_SERVICE_MODELS: parakeet,modulate-velma-2
+          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_SERVICE_MODELS: modulate-velma-2,parakeet
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
           TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
           TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}

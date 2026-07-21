@@ -19,9 +19,10 @@ struct OnboardingExportsStepView: View {
       stepIndex: stepIndex,
       totalSteps: totalSteps,
       eyebrow: "",
-      title: "Put your memories where you work.",
-      description: "Connect the tools where you want Omi context to live.",
+      title: "Use Omi memory where you work.",
+      description: "Export Omi context to the tools you already use.",
       rightPaneFooterText: summaryText,
+      graphLeading: true,
       showsSkip: true,
       onSkip: onSkip,
       onForceComplete: onForceComplete
@@ -33,11 +34,15 @@ struct OnboardingExportsStepView: View {
           exportPanel(for: activeDestination)
         }
 
-        Button("Continue") {
-          onContinue()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          Button("Continue") {
+            onContinue()
+          }
+          .buttonStyle(OmiButtonStyle(.primary))
+          .keyboardShortcut(.defaultAction)
         }
-        .buttonStyle(OmiButtonStyle(.primary))
-        .keyboardShortcut(.defaultAction)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {

@@ -13,6 +13,7 @@ EXPECTED_CHANNEL="${OMI_SIGNED_ARTIFACT_SMOKE_CHANNEL:-beta}"
 EXPECTED_TEAM_ID="${OMI_SIGNED_ARTIFACT_SMOKE_TEAM_ID:-9536L8KLMP}"
 EXPECTED_BUNDLE_ID="${OMI_SIGNED_ARTIFACT_SMOKE_BUNDLE_ID:-com.omi.computer-macos}"
 EXPECTED_URL_SCHEME="${OMI_SIGNED_ARTIFACT_SMOKE_URL_SCHEME:-omi-computer}"
+EXPECTED_FEED_URL="${OMI_SIGNED_ARTIFACT_SMOKE_FEED_URL:-https://api.omi.me/v2/desktop/appcast.xml}"
 EXPECTED_PYTHON_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_PYTHON_API_URL:-https://api.omi.me}"
 EXPECTED_DESKTOP_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_DESKTOP_API_URL:-https://desktop-backend-hhibjajaja-uc.a.run.app/}"
 IS_EXTERNAL_PREVIEW=false
@@ -54,6 +55,8 @@ Options:
   --expected-channel NAME    Expected channel label for result metadata (default: beta)
   --expected-bundle-id ID    Expected app bundle identifier
   --expected-url-scheme URL  Expected app URL scheme
+  --expected-feed-url URL    Expected SUFeedURL (default: plain shared appcast;
+                             the Omi Beta variant passes its identity-scoped feed)
   --expected-python-api-url URL
                              Expected OMI_PYTHON_API_URL in the artifact
   --expected-desktop-api-url URL
@@ -80,7 +83,7 @@ Options:
 
 Optional live-probe environment:
   OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1
-      Required before --launch can launch com.omi.computer-macos.
+      Required before --launch can launch a production-family bundle id.
   OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND='...'
       Required for --auth. Runs after --launch and must prove app-level auth
       persistence/Keychain restore/restart behavior for the launched artifact.
@@ -152,6 +155,7 @@ parse_args() {
       --expected-channel) require_option_value "$1" "${2:-}"; EXPECTED_CHANNEL="$2"; shift 2 ;;
       --expected-bundle-id) require_option_value "$1" "${2:-}"; EXPECTED_BUNDLE_ID="$2"; shift 2 ;;
       --expected-url-scheme) require_option_value "$1" "${2:-}"; EXPECTED_URL_SCHEME="$2"; shift 2 ;;
+      --expected-feed-url) require_option_value "$1" "${2:-}"; EXPECTED_FEED_URL="$2"; shift 2 ;;
       --expected-python-api-url) require_option_value "$1" "${2:-}"; EXPECTED_PYTHON_API_URL="$2"; shift 2 ;;
       --expected-desktop-api-url) require_option_value "$1" "${2:-}"; EXPECTED_DESKTOP_API_URL="$2"; shift 2 ;;
       --preview) IS_EXTERNAL_PREVIEW=true; shift ;;
@@ -373,8 +377,10 @@ assert_bundle_identity() {
     [[ "$automatic_checks" == "false" || "$automatic_checks" == "0" ]] \
       || fail "external preview must disable automatic update checks"
   else
-    [[ "$feed_url" == "https://api.omi.me/v2/desktop/appcast.xml" ]] \
-      || fail "SUFeedURL mismatch: ${feed_url:-missing}"
+    # The Omi Beta variant carries an identity-scoped feed; the expected URL is
+    # passed per artifact (default: the plain shared feed).
+    [[ "$feed_url" == "$EXPECTED_FEED_URL" ]] \
+      || fail "SUFeedURL mismatch: expected $EXPECTED_FEED_URL, got ${feed_url:-missing}"
   fi
   [[ -n "$executable" && -x "$APP_BUNDLE/Contents/MacOS/$executable" ]] || fail "main executable missing or not executable"
 
@@ -404,7 +410,10 @@ assert_signing_and_entitlements() {
   [[ -n "$runtime" ]] || fail "signed app is missing hardened runtime metadata"
 
   local entitlements
-  entitlements="$(mktemp "${TMPDIR:-/tmp}/omi-entitlements.XXXXXX.plist")"
+  # macOS mktemp does not substitute X's followed by a suffix — the literal
+  # template file then collides when the smoke runs twice in one build
+  # (stable + Omi Beta). Templates must end with XXXXXX.
+  entitlements="$(mktemp "${TMPDIR:-/tmp}/omi-entitlements.XXXXXX")"
   codesign -d --entitlements :- "$APP_BUNDLE" >"$entitlements" 2>/dev/null || fail "could not read app entitlements"
 
   if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$entitlements" >/dev/null 2>&1; then
@@ -575,7 +584,7 @@ prepare_notification_callback_canary() {
   [[ "$RUN_LAUNCH" == true ]] || fail "--notification-callback-canary requires --launch"
 
   if [[ -z "$NOTIFICATION_CALLBACK_MARKER" ]]; then
-    NOTIFICATION_CALLBACK_MARKER="$(mktemp "${TMPDIR:-/tmp}/omi-notification-callback.XXXXXX.json")"
+    NOTIFICATION_CALLBACK_MARKER="$(mktemp "${TMPDIR:-/tmp}/omi-notification-callback.XXXXXX")"
     NOTIFICATION_CALLBACK_MARKER_IS_TEMP=true
   fi
   rm -f "$NOTIFICATION_CALLBACK_MARKER"

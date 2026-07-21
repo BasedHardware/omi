@@ -3,18 +3,70 @@ name: Backend Hermetic E2E
 on:
   pull_request:
     branches: main
-    paths:
-      - 'backend/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/backend-hermetic-e2e.yml'
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-hermetic-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  scope:
+    name: Detect Hermetic Backend Scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      applies: ${{ steps.scope.outputs.applies }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether hermetic backend coverage applies
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: |
+          case "$EVENT_NAME" in
+            pull_request) base_sha="$PR_BASE_SHA" ;;
+            merge_group) base_sha="$MERGE_GROUP_BASE_SHA" ;;
+            workflow_dispatch)
+              echo "applies=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+            *)
+              echo "Unsupported event for hermetic backend scope: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}"; then
+            echo "Cannot resolve hermetic backend scope base: ${base_sha:-<empty>}" >&2
+            exit 1
+          fi
+
+          changed_files="$(git diff --name-only "$base_sha"...HEAD)"
+          printf '%s\n' "$changed_files"
+          if grep -Eq '^(backend/|package\.json$|package-lock\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+          fi
+
   hermetic-e2e:
     name: Hermetic Backend E2E
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: scope
+    if: needs.scope.outputs.applies == 'true'
 
     steps:
       - name: Checkout code
@@ -54,6 +106,8 @@ jobs:
     name: Listen Pusher Stack Gauntlet
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: scope
+    if: needs.scope.outputs.applies == 'true'
 
     steps:
       - name: Checkout code
@@ -114,6 +168,8 @@ jobs:
     name: Sync Cloud Tasks Stack Gauntlet
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: scope
+    if: needs.scope.outputs.applies == 'true'
 
     steps:
       - name: Checkout code
@@ -159,3 +215,42 @@ jobs:
 
       - name: Run Sync Cloud Tasks stack gauntlet
         run: npm run test:sync-cloud-tasks-stack:emulator
+
+  merge-gate:
+    name: Backend Hermetic Merge Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: ${{ always() }}
+    needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet]
+    steps:
+      - name: Fail closed on selected hermetic checks
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          SCOPE_APPLIES: ${{ needs.scope.outputs.applies }}
+          HERMETIC_E2E_RESULT: ${{ needs.hermetic-e2e.result }}
+          LISTEN_PUSHER_RESULT: ${{ needs.listen-pusher-stack-gauntlet.result }}
+          SYNC_CLOUD_TASKS_RESULT: ${{ needs.sync-cloud-tasks-stack-gauntlet.result }}
+        run: |
+          if [[ "$SCOPE_RESULT" != 'success' ]]; then
+            echo "Hermetic backend scope failed with result: $SCOPE_RESULT" >&2
+            exit 1
+          fi
+
+          case "$SCOPE_APPLIES" in
+            true) required_result='success' ;;
+            false) required_result='skipped' ;;
+            *)
+              echo "Hermetic backend scope produced an invalid result: ${SCOPE_APPLIES:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
+
+          failed=0
+          for result_name in HERMETIC_E2E_RESULT LISTEN_PUSHER_RESULT SYNC_CLOUD_TASKS_RESULT; do
+            result="${!result_name}"
+            if [[ "$result" != "$required_result" ]]; then
+              echo "$result_name must be $required_result, got ${result:-<empty>}" >&2
+              failed=1
+            fi
+          done
+          exit "$failed"

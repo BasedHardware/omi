@@ -159,7 +159,7 @@ def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_
                             'env': [
                                 {
                                     'name': 'STT_PRERECORDED_MODEL',
-                                    'value': r'parakeet,modulate-velma-2\primary',
+                                    'value': r'modulate-velma-2,parakeet\primary',
                                 }
                             ]
                         }
@@ -171,13 +171,13 @@ def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_
 
     env_vars, _ = clone_environment(
         service,
-        r'RENDERED_STT=parakeet\,modulate-velma-2',
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
         '',
     )
 
     assert env_vars.splitlines() == [
-        r'RENDERED_STT=parakeet\,modulate-velma-2',
-        r'STT_PRERECORDED_MODEL=parakeet\,modulate-velma-2\\primary',
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        r'STT_PRERECORDED_MODEL=modulate-velma-2\,parakeet\\primary',
     ]
 
 
@@ -266,21 +266,16 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     assert 'Remove failed transcription candidate tag' in manual
     assert (
         'if: ${{ failure() && steps.deploy-backend.outcome == \'success\''
-        ' && github.event.inputs.environment == \'development\' }}' in manual
+        " && (github.event.inputs.environment == 'development'"
+        " || github.event.inputs.deploy_targets == 'cloud-run-only') }}" in manual
     )
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
 
 
-def test_transcription_candidate_gate_is_development_only():
-    """The candidate probe must never gate a production deploy.
-
-    The probe reaches the candidate over a Cloud Run tag URL, which is a run.app
-    URL. Production disables run.app URLs and restricts ingress to internal and
-    load-balancer traffic, so a production tag resolves to no HTTPS endpoint and
-    every production deploy fails at the probe (2026-07-17, run 29574215693).
-    """
+def test_production_cloud_run_only_uses_internal_authenticated_candidate_probe():
+    """Prod Cloud Run promotion uses the VPC probe; full-stack prod rejects early."""
     import yaml
 
     root = Path(__file__).resolve().parents[3]
@@ -288,26 +283,27 @@ def test_transcription_candidate_gate_is_development_only():
     steps = workflow['jobs']['deploy']['steps']
     by_name = {step.get('name'): step for step in steps}
 
-    gate_steps = (
+    public_probe = by_name['Gate backend candidate on known audio']
+    assert public_probe['if'] == "${{ github.event.inputs.environment == 'development' }}"
+
+    internal_probe = by_name['Gate internal production candidate on known audio from Cloud Run VPC']
+    assert "github.event.inputs.environment == 'prod'" in internal_probe['if']
+    assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in internal_probe['if']
+    assert 'probe-transcription-candidate-from-cloud-run.sh' in internal_probe['run']
+
+    for name in (
         'Resolve transcription candidate URL',
-        'Gate backend candidate on known audio',
         'Remove passed transcription candidate tag',
         'Remove failed transcription candidate tag',
-    )
-    for name in gate_steps:
-        assert name in by_name, f'{name} step is missing'
+    ):
         condition = by_name[name].get('if') or ''
-        assert (
-            "github.event.inputs.environment == 'development'" in condition
-        ), f'{name} must be development-only; a production run cannot resolve a tag URL'
+        assert "github.event.inputs.environment == 'development'" in condition
+        assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in condition
 
-    # The tag itself is only requested for development; production never creates one.
     deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
-    assert "github.event.inputs.environment == 'development' && format('--tag={0}'" in deploy_flags
-
-    # Promotion must not depend on the skipped gate.
-    for name in ('Verify validated revisions are still current', 'Shift Cloud Run traffic to validated revisions'):
-        assert by_name[name].get('if') is None, f'{name} must still run when the gate is skipped'
+    assert "github.event.inputs.environment == 'development'" in deploy_flags
+    assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in deploy_flags
+    assert steps.index(internal_probe) < steps.index(by_name['Shift Cloud Run traffic to validated revisions'])
 
 
 def test_static_processed_segment_marker_follows_partial_result_checkpoint():

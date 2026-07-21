@@ -16,7 +16,7 @@ use crate::routes::rate_limit::{requires_server_metering, RateDecision};
 use crate::routes::retrieval_policy::{caller_disabled_tools, retrieval_policy, RetrievalSource};
 use crate::AppState;
 
-use super::request_translation::{translate_request_inner, web_search_enabled};
+use super::request_translation::{translate_request_inner, web_search_enabled, ReasoningEffort};
 use super::response_or_500;
 use super::streaming::{handle_server_tool_streaming, handle_streaming};
 use super::transport::{handle_non_streaming, new_anthropic_client};
@@ -58,11 +58,75 @@ pub(super) fn chat_metering_response(decision: &RateDecision) -> Option<Response
 /// cap, which covers all realistic floating-bar sessions. History trimming
 /// is tracked separately as the longer-term fix.
 const CHAT_COMPLETIONS_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
+
+const OMI_REQUEST_ID_HEADER: &str = "x-omi-request-id";
+const RESPONSE_REQUEST_ID_HEADER: &str = "x-request-id";
+/// Per-turn effort directive from the desktop app (relayed by the pi-mono
+/// extension). Header wins over the OpenAI-compatible body field.
+const OMI_REASONING_EFFORT_HEADER: &str = "x-omi-reasoning-effort";
+
+fn inbound_reasoning_effort(headers: &HeaderMap, req: &ChatCompletionRequest) -> ReasoningEffort {
+    headers
+        .get(OMI_REASONING_EFFORT_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(ReasoningEffort::parse)
+        .or_else(|| {
+            req.reasoning_effort
+                .as_deref()
+                .and_then(ReasoningEffort::parse)
+        })
+        .unwrap_or_default()
+}
+
+fn inbound_request_id(headers: &HeaderMap) -> String {
+    headers
+        .get(OMI_REQUEST_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= 128
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        })
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| ulid::Ulid::new().to_string())
+}
+
+fn attach_request_id(response: &mut Response, request_id: &str) {
+    if let Ok(value) = request_id.parse() {
+        response
+            .headers_mut()
+            .insert(RESPONSE_REQUEST_ID_HEADER, value);
+    }
+}
+
 async fn chat_completions(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
     headers: HeaderMap,
     Json(req): Json<ChatCompletionRequest>,
+) -> Result<Response, StatusCode> {
+    let request_id = inbound_request_id(&headers);
+    tracing::info!(
+        event = "chat_completion_request",
+        request_id = %request_id,
+        streaming = req.stream,
+        reasoning_effort = ?inbound_reasoning_effort(&headers, &req),
+        "chat completion received"
+    );
+    let response = chat_completions_inner(state, user, headers, req).await;
+    response.map(|mut response| {
+        attach_request_id(&mut response, &request_id);
+        response
+    })
+}
+
+async fn chat_completions_inner(
+    state: AppState,
+    user: PaywalledAuthUser,
+    headers: HeaderMap,
+    req: ChatCompletionRequest,
 ) -> Result<Response, StatusCode> {
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
@@ -155,11 +219,17 @@ async fn chat_completions(
     };
 
     // Translate request
-    let anthropic_req = translate_request_inner(&req, route.upstream_model, web_search_enabled)
-        .map_err(|e| {
-            tracing::warn!("chat_completions: request translation error: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    let reasoning_effort = inbound_reasoning_effort(&headers, &req);
+    let anthropic_req = translate_request_inner(
+        &req,
+        route.upstream_model,
+        web_search_enabled,
+        reasoning_effort,
+    )
+    .map_err(|e| {
+        tracing::warn!("chat_completions: request translation error: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     // Bound connection establishment so a network blip can't hang the request; the
     // total-response timeout is applied per-call (non-streaming only) inside the retry
@@ -206,4 +276,45 @@ pub(crate) fn chat_completions_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/chat/completions", post(chat_completions))
         .layer(DefaultBodyLimit::max(CHAT_COMPLETIONS_MAX_BODY_SIZE))
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{
+        body::Body,
+        http::{HeaderMap, HeaderValue},
+        response::Response,
+    };
+
+    use super::{attach_request_id, inbound_request_id};
+
+    #[test]
+    fn preserves_a_valid_opaque_request_id() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-omi-request-id", HeaderValue::from_static("req_01AB-cd"));
+
+        assert_eq!(inbound_request_id(&headers), "req_01AB-cd");
+    }
+
+    #[test]
+    fn replaces_invalid_request_ids_without_echoing_them() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-omi-request-id",
+            HeaderValue::from_static("request id with spaces"),
+        );
+
+        let request_id = inbound_request_id(&headers);
+        assert_ne!(request_id, "request id with spaces");
+        assert!(request_id.parse::<ulid::Ulid>().is_ok());
+    }
+
+    #[test]
+    fn echoes_the_resolved_request_id_on_the_response() {
+        let mut response = Response::new(Body::empty());
+
+        attach_request_id(&mut response, "req_01AB-cd");
+
+        assert_eq!(response.headers()["x-request-id"], "req_01AB-cd");
+    }
 }

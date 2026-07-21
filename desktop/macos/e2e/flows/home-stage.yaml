@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeSuggestionsStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
   - automation_bridge_ready
@@ -20,8 +21,10 @@ steps:
       state.selectedTabIndex: 0
 
   - id: S2
-    name: Home starts in hub mode
-    state.expect:
+    name: Collapse to hub baseline (chat auto-opens when history exists)
+    bridge.action:
+      name: home_close_panel
+    wait:
       state.homeMode: hub
 
   - id: S3

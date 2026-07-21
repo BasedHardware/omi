@@ -65,6 +65,30 @@ function query(sessionId: string, overrides: Partial<QueryMessage> = {}): QueryM
 }
 
 describe("JsonlTransport kernel-owned query contract", () => {
+  it("accepts the reasoningEffort wire field and threads it into run metadata", async () => {
+    const { store, session, transport } = fixture();
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-effort",
+      reasoningEffort: "adaptive",
+    }));
+    const row = store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["request-effort"],
+    );
+    const input = JSON.parse(String(row.input_json));
+    expect(input.metadata.reasoningEffort).toBe("adaptive");
+
+    // A query without the field keeps legacy metadata (no key at all).
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-no-effort",
+    }));
+    const legacy = store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["request-no-effort"],
+    );
+    expect("reasoningEffort" in JSON.parse(String(legacy.input_json)).metadata).toBe(false);
+  });
+
   it("binds the producing turn to the exact admitted run attempt before execution returns", async () => {
     const { store, adapter, session, sent, transport } = fixture();
     const conversationId = "conv-query-admission";

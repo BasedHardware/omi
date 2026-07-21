@@ -60,24 +60,28 @@ struct OnboardingFileScanStepView: View {
         // Disk Access was skipped) leaves `scanSnapshot` nil while `scanState`
         // becomes `.failed`/`.complete`, and gating on the snapshot would trap
         // the user on a perpetual "Scanning…" screen with no way forward.
-        if OnboardingPagedIntroCoordinator.fileScanReachedTerminalState(coordinator.scanState) {
-          VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            if let error = coordinator.lastActionError {
-              Text(error)
-                .font(.system(size: 13))
-                .foregroundColor(OmiColors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if OnboardingPagedIntroCoordinator.fileScanReachedTerminalState(coordinator.scanState) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              if let error = coordinator.lastActionError {
+                Text(error)
+                  .font(.system(size: 13))
+                  .foregroundColor(OmiColors.textTertiary)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+              Button("Continue") {
+                onContinue()
+              }
+              .buttonStyle(OmiButtonStyle(.primary))
+              .keyboardShortcut(.defaultAction)
             }
-            Button("Continue") {
-              onContinue()
-            }
-            .buttonStyle(OmiButtonStyle(.primary))
-            .keyboardShortcut(.defaultAction)
+          } else {
+            Text("Scanning your workspace…")
+              .font(.system(size: 13))
+              .foregroundColor(OmiColors.textTertiary)
           }
-        } else {
-          Text("Scanning your workspace…")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)

@@ -54,6 +54,7 @@ import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
     list_default_mcp_memories,
+    mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
@@ -298,7 +299,7 @@ def search_memories(
     )
     if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return vector_search_results.memories
-    if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not mcp_legacy_read_authorized(vector_search_results):
         return []
 
     return memory_service.search_mcp(uid, query, limit=limit)
@@ -394,7 +395,7 @@ def get_memories(
     )
     if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return memory_list_results.memories
-    if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not mcp_legacy_read_authorized(memory_list_results):
         return []
 
     result = collect_filtered_memories(
@@ -558,7 +559,14 @@ def get_conversation_by_id(
 
     populate_speaker_names(uid, [conversation])
 
-    return conversation
+    # A legacy/poisoned record (e.g. a structured.category no longer in CategoryEnum)
+    # must not 500 this single-item fetch via response_model coercion — mirror the
+    # per-record guard already used by the list/search siblings above.
+    try:
+        return FullConversation.model_validate(conversation)
+    except Exception as e:  # noqa: BLE001 - malformed legacy record must not 500
+        logger.warning(f"Conversation {conversation_id} failed MCP response validation: {e}")
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
 
 # ---------------------------------------------------------------------------

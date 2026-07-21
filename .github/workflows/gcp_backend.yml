@@ -31,6 +31,28 @@ on:
         options:
           - all
           - cloud-run-only
+      # Break-glass: the eligibility proof requires a *successful* Release
+      # Eligibility push-run on this exact SHA. A flaky or red check therefore
+      # poisons that SHA permanently -- rerunning does not retroactively make
+      # the original run succeed, so the only other recovery is pushing a new
+      # commit to main and waiting for a full green run. That is unacceptable
+      # for a hotfix, so this hatch exists.
+      #
+      # It does NOT relax the property that matters: the SHA must still be an
+      # ancestor of main, so unreviewed code can never reach production.
+      skip_eligibility_proof:
+        description: 'Break-glass: deploy without a Release Eligibility proof (still requires a merged main SHA)'
+        required: false
+        default: false
+        type: boolean
+      break_glass_confirm:
+        description: 'Type deploy-without-proof when skip_eligibility_proof is set'
+        required: false
+        default: ''
+      break_glass_reason:
+        description: 'Why the eligibility proof is unavailable (required with skip_eligibility_proof)'
+        required: false
+        default: ''
 
 # Cloud Run revision promotion/traffic repair and the shared backend GKE resources
 # are one environment-scoped mutation domain across the backend deploy workflows.
@@ -46,6 +68,30 @@ env:
   TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
+  validate-production-boundary:
+    if: >-
+      github.event.inputs.mode == 'deploy'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject unsupported production deployment boundary before side effects
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          DEPLOY_TARGETS: ${{ github.event.inputs.deploy_targets }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
+            echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'." >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_TARGETS" != "all" && "$DEPLOY_TARGETS" != "cloud-run-only" ]]; then
+            echo "Invalid deploy_targets: $DEPLOY_TARGETS. Must be 'all' or 'cloud-run-only'." >&2
+            exit 1
+          fi
+          if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then
+            echo 'ERROR: environment=prod, deploy_targets=all is unsupported: transactional GKE/config rollback parity does not exist. Use cloud-run-only; direct GKE workflows remain the production path for those surfaces.' >&2
+            exit 1
+          fi
+
   repair-traffic:
     if: >-
       github.ref == 'refs/heads/main' &&
@@ -100,6 +146,7 @@ jobs:
             --cloud-run-service backend-integration || true
 
   firestore_readiness:
+    needs: validate-production-boundary
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'deploy'
@@ -110,6 +157,7 @@ jobs:
     runs-on: ubuntu-latest-m
     outputs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+      break_glass: ${{ steps.admitted_source.outputs.break_glass }}
     steps:
       - name: Validate Firestore readiness inputs
         env:
@@ -120,7 +168,6 @@ jobs:
             echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'."
             exit 1
           fi
-
       - name: Require read-only Firestore credentials
         env:
           GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
@@ -141,6 +188,9 @@ jobs:
         env:
           DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
           GH_TOKEN: ${{ github.token }}
+          SKIP_PROOF: ${{ github.event.inputs.skip_eligibility_proof }}
+          BREAK_GLASS_CONFIRM: ${{ github.event.inputs.break_glass_confirm }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
         run: |
           set -euo pipefail
           if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]; then
@@ -150,15 +200,35 @@ jobs:
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
           git cat-file -e "${DEPLOY_SHA}^{commit}"
-          git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"
-          proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
-          gh api -H "Accept: application/vnd.github+json" \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
-            > "$proof_path"
-          python3 .github/scripts/verify_backend_release_admission.py \
-            --sha "$DEPLOY_SHA" \
-            --repository "$GITHUB_REPOSITORY" \
-            --workflow-runs "$proof_path"
+
+          # Always enforced, break-glass or not: only merged main code deploys.
+          if ! git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"; then
+            echo "ERROR: release_sha is not an ancestor of origin/main; only merged code may deploy."
+            exit 1
+          fi
+
+          if [[ "${SKIP_PROOF:-false}" == "true" ]]; then
+            if [[ "$BREAK_GLASS_CONFIRM" != "deploy-without-proof" ]]; then
+              echo "ERROR: skip_eligibility_proof requires break_glass_confirm=deploy-without-proof." >&2
+              exit 1
+            fi
+            if [[ -z "${BREAK_GLASS_REASON// }" ]]; then
+              echo "ERROR: skip_eligibility_proof requires a non-empty break_glass_reason." >&2
+              exit 1
+            fi
+            echo "::warning::Release Eligibility proof skipped for ${DEPLOY_SHA}: ${BREAK_GLASS_REASON}"
+            printf 'break_glass=true\n' >> "$GITHUB_OUTPUT"
+          else
+            proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+            gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+              > "$proof_path"
+            python3 .github/scripts/verify_backend_release_admission.py \
+              --sha "$DEPLOY_SHA" \
+              --repository "$GITHUB_REPOSITORY" \
+              --workflow-runs "$proof_path"
+            printf 'break_glass=false\n' >> "$GITHUB_OUTPUT"
+          fi
           printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Checkout admitted Firestore source
@@ -211,8 +281,42 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  deploy:
+  # Kept out of firestore_readiness on purpose: that job is a least-privilege
+  # release-proof boundary limited to actions:read/contents:read, so the audit
+  # side effect gets its own job rather than widening it.
+  record_break_glass:
     needs: firestore_readiness
+    if: ${{ needs.firestore_readiness.outputs.break_glass == 'true' }}
+    permissions:
+      contents: 'read'
+      issues: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record that the eligibility proof was bypassed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEPLOY_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
+        run: |
+          set -euo pipefail
+          gh issue create --repo "$REPO" \
+            --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
+            --label release-gate-failure \
+            --body "$(printf '%s\n' \
+              "Backend deploy ran without a Release Eligibility proof." \
+              "" \
+              "- SHA: \`${DEPLOY_SHA}\` (verified ancestor of main)" \
+              "- Environment: ${DEPLOY_ENVIRONMENT}" \
+              "- Operator: @${GITHUB_ACTOR}" \
+              "- Reason: ${BREAK_GLASS_REASON}" \
+              "- Run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}" \
+              "" \
+              "The gate being unusable is the defect. Fix the gate, then close this.")"
+
+  deploy:
+    needs: [validate-production-boundary, firestore_readiness]
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'deploy'
@@ -307,6 +411,7 @@ jobs:
 
       - name: Determine whether this deploy requests gateway-first serving
         id: gateway-intent
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
           python3 backend/scripts/verify-llm-gateway-serving.py \
             --environment="${{ vars.ENV }}" \
@@ -316,7 +421,7 @@ jobs:
             --intent-only >> "$GITHUB_OUTPUT"
 
       - name: Get GKE credentials for gateway serving gate
-        if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
+        if: ${{ github.event.inputs.deploy_targets == 'all' && steps.gateway-intent.outputs.enabled == 'true' }}
         uses: google-github-actions/get-gke-credentials@v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
@@ -325,7 +430,7 @@ jobs:
 
       - name: Verify LLM gateway control plane before promotion
         id: gateway-serving
-        if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
+        if: ${{ github.event.inputs.deploy_targets == 'all' && steps.gateway-intent.outputs.enabled == 'true' }}
         run: |
           python3 backend/scripts/verify-llm-gateway-serving.py \
             --environment="${{ vars.ENV }}" \
@@ -377,7 +482,7 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
       - name: Probe LLM gateway from the Cloud Run VPC before promotion
-        if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
+        if: ${{ github.event.inputs.deploy_targets == 'all' && steps.gateway-intent.outputs.enabled == 'true' }}
         run: |
           bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
             --project "${{ vars.GCP_PROJECT_ID }}" \
@@ -439,7 +544,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            ${{ github.event.inputs.environment == 'development' && format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) || '' }}
+            ${{ (github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only') && format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG) || '' }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -487,6 +592,7 @@ jobs:
           echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
       - name: Provision sync-backfill platform
+        if: ${{ github.event.inputs.deploy_targets == 'all' }}
         uses: ./.github/actions/sync-backfill-lifecycle
         with:
           mode: platform
@@ -498,7 +604,7 @@ jobs:
           alert_notification_channels: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
 
       - name: Configure production conversation-finalization Cloud Tasks queue
-        if: ${{ vars.ENV == 'prod' }}
+        if: ${{ vars.ENV == 'prod' && github.event.inputs.deploy_targets == 'all' }}
         env:
           TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
         run: |
@@ -564,19 +670,13 @@ jobs:
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
 
-      # The manual development deployment runs this no-traffic probe before
-      # promotion, making it the required auth and route dry run for production.
-      #
-      # Development-only by construction. The probe reaches the candidate over a
-      # Cloud Run tag URL, which is a run.app URL. Production deliberately serves
-      # no run.app URL (`run.googleapis.com/default-url-disabled=true`, ingress
-      # `internal-and-cloud-load-balancing`), so a production tag resolves to no
-      # HTTPS endpoint and this runner sits outside the VPC that could reach one.
-      # Do not enable these steps for production without first giving the probe a
-      # route that does not depend on a public revision URL.
+      # Development probes the no-traffic tagged revision directly from the
+      # runner. Production cloud-run-only resolves the same immutable tag but
+      # proves it from an ephemeral VPC-connected Cloud Run Job with both Cloud
+      # Run IAM and Firebase authentication before any traffic movement.
       - name: Resolve transcription candidate URL
         id: transcription-candidate
-        if: ${{ github.event.inputs.environment == 'development' }}
+        if: ${{ github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only' }}
         run: |
           candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -584,7 +684,14 @@ jobs:
             --service=${{ env.SERVICE }} \
             --revision=${{ steps.capture-backend-revision.outputs.revision }} \
             --tag="$TRANSCRIPTION_CANDIDATE_TAG")"
+          identity_audience="$(gcloud run services describe "${{ env.SERVICE }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" --region="${{ env.REGION }}" --format='value(status.url)')"
+          [[ -n "$identity_audience" ]] || { echo 'ERROR: canonical Cloud Run IAM audience is empty' >&2; exit 1; }
+          [[ "$identity_audience" != "$candidate_url" ]] || {
+            echo 'ERROR: canonical Cloud Run IAM audience must differ from tagged candidate URL' >&2; exit 1;
+          }
           printf 'url=%s\n' "$candidate_url" >> "$GITHUB_OUTPUT"
+          printf 'identity_audience=%s\n' "$identity_audience" >> "$GITHUB_OUTPUT"
 
       - name: Gate backend candidate on known audio
         if: ${{ github.event.inputs.environment == 'development' }}
@@ -594,9 +701,37 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           firebase_auth_project_id: based-hardware
 
+      - name: Mint Firebase token for internal production candidate probe
+        if: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.deploy_targets == 'cloud-run-only' }}
+        env:
+          PROBE_SECRET_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          FIREBASE_AUTH_PROJECT_ID: based-hardware
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "$PROBE_SECRET_PROJECT" \
+            --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+            --token-output "$RUNNER_TEMP/firebase-production-candidate-token"
+
+      - name: Gate internal production candidate on known audio from Cloud Run VPC
+        if: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.deploy_targets == 'cloud-run-only' }}
+        run: |
+          set -euo pipefail
+          bash backend/scripts/probe-transcription-candidate-from-cloud-run.sh \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
+            --candidate-url "${{ steps.transcription-candidate.outputs.url }}" \
+            --identity-audience "${{ steps.transcription-candidate.outputs.identity_audience }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --firebase-token-file "$RUNNER_TEMP/firebase-production-candidate-token" \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
       # This is the Cloud Run-only acceptance boundary. GKE config, secrets,
       # and backend-listen stay untouched until every no-traffic revision is
-      # proven ready (and development has passed its known-audio candidate gate).
+      # proven ready and the environment-specific known-audio gate has passed.
       - name: Accept no-traffic Cloud Run candidate
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
@@ -612,7 +747,7 @@ jobs:
             --evidence-path artifacts/backend-cloud-run-candidate-release-vector.json
 
       - name: Remove passed transcription candidate tag
-        if: ${{ success() && github.event.inputs.environment == 'development' }}
+        if: ${{ success() && (github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only') }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -622,9 +757,8 @@ jobs:
 
       - name: Remove failed transcription candidate tag
         # Tag is created at deploy-backend; clean it up on any later failure,
-        # not only after the candidate URL resolution step succeeds. Production
-        # never creates the tag, so there is nothing to remove there.
-        if: ${{ failure() && steps.deploy-backend.outcome == 'success' && github.event.inputs.environment == 'development' }}
+        # not only after the candidate URL resolution step succeeds.
+        if: ${{ failure() && steps.deploy-backend.outcome == 'success' && (github.event.inputs.environment == 'development' || github.event.inputs.deploy_targets == 'cloud-run-only') }}
         run: |
           gcloud run services update-traffic ${{ env.SERVICE }} \
             --project=${{ vars.GCP_PROJECT_ID }} \
@@ -662,8 +796,8 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
-          STT_SERVICE_MODELS: parakeet,modulate-velma-2
+          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_SERVICE_MODELS: modulate-velma-2,parakeet
           SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
@@ -751,8 +885,11 @@ jobs:
       # gate prevents a partial apply from being reported as a healthy release.
       - name: Verify serving backend release vector
         id: verify-serving-release-vector
-        if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
+          CLOUD_RUN_ONLY=""
+          if [[ "${{ github.event.inputs.deploy_targets }}" == "cloud-run-only" ]]; then
+            CLOUD_RUN_ONLY="--cloud-run-only"
+          fi
           python3 backend/scripts/verify_backend_release_vector.py \
             --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
@@ -761,7 +898,8 @@ jobs:
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "${{ env.REGION }}" \
             --environment "${{ vars.ENV }}" \
-            --evidence-path artifacts/backend-serving-release-vector.json
+            --evidence-path artifacts/backend-serving-release-vector.json \
+            $CLOUD_RUN_ONLY
 
       - name: Restore Cloud Run traffic snapshot after failed promotion
         if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') }}

@@ -35,6 +35,7 @@ struct DesktopHomeView: View {
   @State private var isSidebarCollapsed: Bool = true
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
   @AppStorage("onboardingStep") private var onboardingStep = 0
+  @AppStorage("onboardingFurthestStep") private var onboardingFurthestStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
@@ -340,6 +341,7 @@ struct DesktopHomeView: View {
               resetSessionScopedStartupWarmups(preserveCrispReadState: false)
               appState.hasCompletedOnboarding = false
               onboardingStep = 0
+              onboardingFurthestStep = 0
               onboardingJustCompleted = false
               appState.stopTranscription()
             }
@@ -963,7 +965,7 @@ struct DesktopHomeView: View {
           // Settings has its own Back affordance in SettingsSidebar, so skip the
           // redundant Home chrome there.
           if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue
-            && !isInSettings
+            && selectedIndex != SidebarNavItem.chat.rawValue && !isInSettings
           {
             PageChromeBar(
               onHome: {
@@ -1177,7 +1179,9 @@ private struct PageContentView: View {
         ConversationsPageHost(appState: appState)
       case 2:
         ChatPage(
-          appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
+          appProvider: viewModelContainer.appProvider,
+          chatProvider: viewModelContainer.chatProvider,
+          onHome: { selectedTabIndex = SidebarNavItem.dashboard.rawValue }
         )
       case 3:
         MemoriesPage(

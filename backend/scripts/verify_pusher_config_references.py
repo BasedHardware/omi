@@ -79,7 +79,8 @@ def render(environment: str, image_tag: str = "contract-test") -> list[dict[str,
 
 
 def rendered_pusher_deployment(environment: str) -> dict[str, Any]:
-    deployments = [doc for doc in render(environment) if doc.get("kind") == "Deployment"]
+    rendered = render(environment)
+    deployments = [doc for doc in rendered if doc.get("kind") == "Deployment"]
     if len(deployments) != 1:
         raise RuntimeError("pusher render did not contain exactly one Deployment")
     return deployments[0]

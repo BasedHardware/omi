@@ -329,6 +329,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Use the exact skill name from available_skills.",
     ]),
   },
+  search_skills: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Search Skills", "Search installed skill names and compact descriptions before loading a specialized workflow.", [
+      "Use only when the user's request may benefit from a specialized workflow.",
+      "Load a returned skill only when it is relevant to the user's request.",
+    ]),
+  },
   save_knowledge_graph: {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
@@ -829,10 +836,28 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a named skill listed in available_skills.",
-    promptSnippet: "load_skill - Load the full SKILL.md instructions for an available skill",
+    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     latency: "fast local",
-    inputSchema: schema({ name: { type: "string", description: "Skill name exactly as listed in available_skills" } }, ["name"]),
+    inputSchema: schema({ name: { type: "string", description: "Skill name returned by the compact catalog or search_skills" } }, ["name"]),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "nodeTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "search_skills",
+    label: "Search Skills",
+    description: "Search installed skill names and compact descriptions for a workflow relevant to the user's request.",
+    promptSnippet: "search_skills - Find a relevant specialized workflow before loading it",
+    promptGuidelines: [
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({ query: { type: "string", description: "Short description of the user's request" } }, ["query"]),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },

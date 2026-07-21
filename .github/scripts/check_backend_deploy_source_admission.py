@@ -39,6 +39,7 @@ MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
         "github.event.inputs.mode == 'repair-traffic-only'",
     )
 )
+MANUAL_DEPLOY_NEEDS = "needs: [validate-production-boundary, firestore_readiness]"
 
 
 def require_fragment(errors: list[str], text: str, fragment: str, message: str) -> None:
@@ -326,6 +327,12 @@ def validate_manual_workflow(text: str) -> list[str]:
         return errors
     if folded_job_condition(firestore_job) != MANUAL_DEPLOY_CONDITION:
         errors.append("manual source admission must use exactly the main-ref deploy condition")
+    require_fragment(
+        errors,
+        firestore_job,
+        "needs: validate-production-boundary",
+        "manual source admission must wait for production-boundary validation",
+    )
     for fragment, message in (
         ("actions: 'read'", "manual source admission must read the Release Eligibility workflow result"),
         (
@@ -390,8 +397,8 @@ def validate_manual_workflow(text: str) -> list[str]:
         require_fragment(
             errors,
             deploy_job,
-            "needs: firestore_readiness",
-            "manual deployment must depend on source admission",
+            MANUAL_DEPLOY_NEEDS,
+            "manual deployment must depend on production-boundary validation and source admission",
         )
         if folded_job_condition(deploy_job) != MANUAL_DEPLOY_CONDITION:
             errors.append("manual deployment must use exactly the main-ref deploy condition")

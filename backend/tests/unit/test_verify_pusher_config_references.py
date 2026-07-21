@@ -179,8 +179,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
-        "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
-        "STT_SERVICE_MODELS": "parakeet,modulate-velma-2",
+        "STT_PRERECORDED_MODEL": "modulate-velma-2,parakeet",
+        "STT_SERVICE_MODELS": "modulate-velma-2,parakeet",
     }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
@@ -194,7 +194,7 @@ def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(prefligh
     assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
     assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
     assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
-    assert literals["STT_SERVICE_MODELS"] == "parakeet,modulate-velma-2"
+    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,parakeet"
 
 
 def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
@@ -205,7 +205,7 @@ def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: Simpl
 
     assert preflight.validate_dev_pusher_binding_contract(deployment) == [
         "dev pusher literal contract mismatch for STT_SERVICE_MODELS: "
-        "expected 'parakeet,modulate-velma-2', got 'dg-nova-3'"
+        "expected 'modulate-velma-2,parakeet', got 'dg-nova-3'"
     ]
 
 

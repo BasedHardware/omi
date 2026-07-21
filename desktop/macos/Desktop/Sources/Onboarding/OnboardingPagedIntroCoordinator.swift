@@ -74,7 +74,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var isLoadingInsights = false
   @Published var insightStatusText: String = ""
   @Published var isResearchComplete = false
-  @Published var goalDraft: String = ""
+  @Published var goalDraft: String = "" {
+    didSet { UserDefaults.standard.set(goalDraft, forKey: goalDraftKey) }
+  }
   @Published var suggestedGoals: [String] = []
   @Published var goalSaved = OnboardingChatPersistence.isGoalCompleted
   @Published var isSavingGoal = false
@@ -99,6 +101,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   private var webResearchTask: Task<Void, Never>?
   private var localFileMemoryImportTask: Task<Int, Never>?
 
+  private let goalDraftKey = "onboardingGoalDraft"
   private let chatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
   private let chatGPTImportSummaryKey = "onboardingChatGPTImportSummary"
   private let claudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
@@ -120,7 +123,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let initialName = givenName.isEmpty ? (displayName.isEmpty ? "there" : displayName) : givenName
 
     preferredName = initialName
-    draftName = initialName
+    draftName = OnboardingFlow.nameFieldPrefill(initialName)
 
     // Fresh installs start EMPTY so the user's first pick genuinely defines the
     // primary — pre-selecting the "en" fallback would make English primary for everyone.
@@ -154,6 +157,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       canRestoreMemoryImports
       ? defaults.string(forKey: claudeImportSummaryKey) ?? "" : ""
 
+    // Restore the goal text so revisiting the Goal step (incl. across the
+    // permission-step app restart) shows what the user already entered.
+    goalDraft = defaults.string(forKey: goalDraftKey) ?? ""
+
     // The name can arrive asynchronously — Apple only sends it on first auth, and
     // otherwise it's fetched from the backend after sign-in. `givenName` is plain
     // UserDefaults (not observable), so `preferredName` was a frozen snapshot that
@@ -173,6 +180,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     calendarTask?.cancel()
     appleNotesTask?.cancel()
     webResearchTask?.cancel()
+    localFileMemoryImportTask?.cancel()
   }
 
   /// Adopt a name that landed after init — but only replace the "there"
@@ -1138,9 +1146,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       - entities: at most 12
       - node_type must be one of: person, organization, place, thing, concept
       - relation must connect the user to the entity, like works_on, uses, works_with, follows, plans_with, researches
-      - goals: at most 6, concrete and specific, not generic
-      - Prefer project names, organizations, tools, products, repositories, and recurring commitments
-      - Favor labels that will make a graph visually informative, not generic filler
+      - goals: exactly 4, each a short first-person objective of 3-6 words the user would pick as their focus (e.g. "Ship the desktop launch", "Land the billing migration")
+      - Every goal must name something real from the context — a specific project, product, company, deadline, or repository. Never a generic self-improvement line.
+      - Banned: "Be more productive", "Stay focused", "Organize my work", or any goal that could apply to anyone. If the context can't ground 4, return fewer.
+      - No trailing punctuation, no filler adjectives, phrased so it reads well as a selectable chip
+      - Favor entity labels that will make a graph visually informative, not generic filler
       """
 
     do {
@@ -1175,9 +1185,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         }
         return EnrichmentEntity(label: label, nodeType: nodeType, relation: relation)
       }
-      let goals = (parsed["goals"] as? [String] ?? []).filter {
-        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }
+      let goals = (parsed["goals"] as? [String] ?? [])
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
 
       return EnrichmentAnalysis(summary: summary, entities: entities, goals: goals)
     } catch {

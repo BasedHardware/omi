@@ -163,6 +163,10 @@ class ScriptedParakeetPeer(_LoopbackWebSocketServer):
             self.connection_count += 1
             self.paths.append(_peer_path(websocket, path))
             self._condition.notify_all()
+        # The production Parakeet service confirms stream admission by sending a
+        # readiness frame before accepting audio. Mirror that contract so the
+        # real ParakeetWebSocketSocket completes its startup handshake.
+        await websocket.send(json.dumps({'type': 'ready'}))
         segment_index = 0
         async for message in websocket:
             if isinstance(message, bytes):

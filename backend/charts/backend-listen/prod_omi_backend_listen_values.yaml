@@ -286,9 +286,9 @@ env:
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
-    value: "parakeet,modulate-velma-2"
+    value: "modulate-velma-2,parakeet"
   - name: STT_SERVICE_MODELS
-    value: "parakeet,modulate-velma-2"
+    value: "modulate-velma-2,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

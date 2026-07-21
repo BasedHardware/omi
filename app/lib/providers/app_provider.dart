@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:collection/collection.dart';
 
@@ -14,6 +15,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class AppProvider extends BaseProvider {
+  /// Test seam — overrides [enableAppServer] in [toggleApp].
+  @visibleForTesting
+  Future<bool> Function(String appId)? enableAppOverride;
+
+  /// Test seam — overrides [disableAppServer] in [toggleApp].
+  @visibleForTesting
+  Future<void> Function(String appId)? disableAppOverride;
+
   List<App> apps = [];
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
@@ -783,11 +792,13 @@ class AppProvider extends BaseProvider {
     }
   }
 
-  Future<void> toggleApp(String appId, bool isEnabled, int? idx) async {
+  /// Enable/disable [appId] server-side, keeping prefs, local app state, and
+  /// failure UX (error dialog) in one owner. Returns whether the toggle stuck.
+  Future<bool> toggleApp(String appId, bool isEnabled, int? idx) async {
     int loadingIndex = -1;
     if (idx != null && idx >= 0 && idx < appLoading.length) {
       loadingIndex = idx;
-      if (appLoading[loadingIndex]) return;
+      if (appLoading[loadingIndex]) return false;
       appLoading[loadingIndex] = true;
       notifyListeners();
     } else if (idx != null) {
@@ -800,7 +811,7 @@ class AppProvider extends BaseProvider {
 
     try {
       if (isEnabled) {
-        success = await enableAppServer(appId);
+        success = await (enableAppOverride ?? enableAppServer)(appId);
         if (!success) {
           final context = globalNavigatorKey.currentState?.context;
           errorMessage = context != null && context.mounted
@@ -810,7 +821,7 @@ class AppProvider extends BaseProvider {
           PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
-        await disableAppServer(appId);
+        await (disableAppOverride ?? disableAppServer)(appId);
         success = true;
         PlatformManager.instance.analytics.appDisabled(appId);
       }
@@ -866,6 +877,7 @@ class AppProvider extends BaseProvider {
     }
 
     notifyListeners();
+    return success;
   }
 
   // Performance optimization: Dispose method to clean up resources

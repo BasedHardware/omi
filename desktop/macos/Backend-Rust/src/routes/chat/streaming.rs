@@ -65,6 +65,7 @@ pub(super) async fn handle_server_tool_streaming(
         ChunkDelta {
             role: Some("assistant".to_string()),
             content: None,
+            reasoning_content: None,
             tool_calls: None,
         },
         None,
@@ -94,6 +95,7 @@ pub(super) async fn handle_server_tool_streaming(
             ChunkDelta {
                 role: None,
                 content: choice.message.content.clone(),
+                reasoning_content: None,
                 tool_calls,
             },
             None,
@@ -108,6 +110,7 @@ pub(super) async fn handle_server_tool_streaming(
         ChunkDelta {
             role: None,
             content: None,
+            reasoning_content: None,
             tool_calls: None,
         },
         choice.finish_reason.clone(),
@@ -231,6 +234,7 @@ where
                                 ChunkDelta {
                                     role: Some("assistant".to_string()),
                                     content: None,
+                                    reasoning_content: None,
                                     tool_calls: None,
                                 },
                                 None,
@@ -254,6 +258,7 @@ where
                                     ChunkDelta {
                                         role: None,
                                         content: None,
+                                        reasoning_content: None,
                                         tool_calls: Some(vec![ChunkToolCall {
                                             index: ordinal,
                                             id: Some(id),
@@ -284,6 +289,11 @@ where
                             AnthropicContentBlock::WebSearchToolResult {} => {
                                 // Consumed by the model upstream — nothing to forward.
                             }
+                            AnthropicContentBlock::Thinking { .. }
+                            | AnthropicContentBlock::RedactedThinking {} => {
+                                // thinking_start — reasoning text arrives via
+                                // thinking deltas; nothing to open here.
+                            }
                         }
                     }
 
@@ -297,6 +307,7 @@ where
                                     ChunkDelta {
                                         role: None,
                                         content: Some(text),
+                                        reasoning_content: None,
                                         tool_calls: None,
                                     },
                                     None,
@@ -307,6 +318,23 @@ where
                             AnthropicDelta::CitationsDelta {} => {
                                 // Web-search citation metadata — no OpenAI equivalent.
                             }
+                            AnthropicDelta::ThinkingDelta { thinking } => {
+                                let chunk_val = make_chunk(
+                                    &stream_id,
+                                    created,
+                                    &model,
+                                    ChunkDelta {
+                                        reasoning_content: Some(thinking),
+                                        ..ChunkDelta::default()
+                                    },
+                                    None,
+                                    None,
+                                );
+                                yield Ok(sse_line(&chunk_val));
+                            }
+                            AnthropicDelta::SignatureDelta {} => {
+                                // Thinking-block signature — internal; dropped.
+                            }
                             AnthropicDelta::InputJsonDelta { partial_json } => {
                                 if let Some(&ordinal) = tool_ordinals.get(&index) {
                                     let chunk_val = make_chunk(
@@ -316,6 +344,7 @@ where
                                         ChunkDelta {
                                             role: None,
                                             content: None,
+                                            reasoning_content: None,
                                             tool_calls: Some(vec![ChunkToolCall {
                                                 index: ordinal,
                                                 id: None,
@@ -360,6 +389,7 @@ where
                             ChunkDelta {
                                 role: None,
                                 content: None,
+                                reasoning_content: None,
                                 tool_calls: None,
                             },
                             finish,

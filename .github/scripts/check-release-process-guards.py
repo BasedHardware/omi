@@ -11,7 +11,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -20,6 +19,7 @@ def main() -> int:
     errors.extend(check_desktop_codemagic_release())
     errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
+    errors.extend(check_no_unprovisioned_beta_backend_hosts())
     errors.extend(check_mobile_codemagic_release_triggers())
     errors.extend(check_docs_workflow_scripts())
     errors.extend(check_python_cli_release_version_source())
@@ -102,10 +102,21 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
     if "desktop_qualify_beta.yml" not in desktop_workflow_body:
         errors.append("desktop release must dispatch the trusted macOS qualification workflow")
-    if "if ! gh workflow run desktop_qualify_beta.yml" not in desktop_workflow_body:
-        errors.append("desktop qualification handoff must not fail a published candidate on a transient dispatch error")
+    for required_fragment in (
+        "for attempt in 1 2 3",
+        "preserving immutable evidence",
+        "duplicate dispatches",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop qualification handoff is missing reliable dispatch fragment: {required_fragment}")
+    dispatch_start = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
+    dispatch_body = desktop_workflow_body[dispatch_start:] if dispatch_start != -1 else ""
+    if "gh release edit \"$CM_TAG\"" in dispatch_body:
+        errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
     if "candidate remains non-live" not in desktop_workflow_body:
         errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
+    if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
+        errors.append("desktop candidate retries must not delete immutable qualification evidence")
     if "docker info" in desktop_workflow_body:
         errors.append("Codemagic desktop release must not run Docker-backed beta qualification")
     if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
@@ -290,6 +301,9 @@ def check_desktop_qualification_runner() -> list[str]:
         "--no-promote",
         "desktop_promote_beta.yml",
         "actions/create-github-app-token@v3",
+        "desktop-beta-qualification-${{ inputs.release_tag }}",
+        "cancel-in-progress: false",
+        "safe without a second release-body claim state machine",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
@@ -302,7 +316,43 @@ def check_desktop_qualification_runner() -> list[str]:
         "callback canary",
     ):
         if required_fragment not in candidate_gate_text:
-            errors.append(f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}")
+            errors.append(
+                f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}"
+            )
+    return errors
+
+
+def check_no_unprovisioned_beta_backend_hosts() -> list[str]:
+    """Production-family clients must share the established production backend.
+
+    This keeps the #10090 beta-host routing regression from returning while
+    deliberately excluding docs and Git history, where the retired names are
+    useful migration evidence rather than shipped routing.
+    """
+    hosts = ("api-beta.omi.me", "pusher-beta.omi.me", "agent-beta.omi.me")
+    paths = [ROOT / "app", ROOT / "desktop/macos", ROOT / "codemagic.yaml", ROOT / ".github/workflows"]
+    non_shipped_parts = {".build", ".dart_tool", "Pods", "test", "tests", "Tests", "test_driver"}
+    errors: list[str] = []
+    for path in paths:
+        files = (
+            [path]
+            if path.is_file()
+            else [
+                item
+                for item in path.rglob("*")
+                if item.is_file() and not non_shipped_parts.intersection(item.relative_to(path).parts)
+            ]
+        )
+        for file in files:
+            try:
+                text = file.read_text(encoding="utf-8")
+            except (FileNotFoundError, UnicodeDecodeError):
+                continue
+            for host in hosts:
+                if host in text:
+                    errors.append(
+                        f"shipped release source references unprovisioned beta backend host {host}: {file.relative_to(ROOT)}"
+                    )
     return errors
 
 
@@ -318,7 +368,11 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
             errors.append(f"codemagic.yaml is missing {workflow_id}")
             continue
         body = match.group("body")
-        if re.search(r"\n    triggering:\n(?:(?!\n    [A-Za-z_]).)*\n      events:\n(?:(?!\n    [A-Za-z_]).)*\n        - push\b", body, flags=re.DOTALL):
+        if re.search(
+            r"\n    triggering:\n(?:(?!\n    [A-Za-z_]).)*\n      events:\n(?:(?!\n    [A-Za-z_]).)*\n        - push\b",
+            body,
+            flags=re.DOTALL,
+        ):
             errors.append(f"{workflow_id} must not directly trigger on push; GitHub paths filtering dispatches it")
 
     workflow = ROOT / ".github/workflows/mobile_internal_auto.yml"

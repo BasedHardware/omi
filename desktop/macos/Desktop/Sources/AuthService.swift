@@ -1282,10 +1282,9 @@ class AuthService {
     Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
     if !AnalyticsManager.isDevBuild {
-      let sentryUser = User(userId: userId)
-      sentryUser.email = AuthState.shared.userEmail
-      sentryUser.username = displayName.isEmpty ? nil : displayName
-      SentrySDK.setUser(sentryUser)
+      // Keep Sentry correlation opaque; PII remains in the application/backend,
+      // not crash and error reports.
+      SentrySDK.setUser(User(userId: userId))
     }
 
     NSLog("OMI AUTH: Apple Sign in complete!")
@@ -1576,12 +1575,9 @@ class AuthService {
       // floating bar read it); without this it stays nil/old until launch.
       Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
-      // Set Sentry user context for error tracking (skip in dev builds)
+      // Set opaque Sentry user context for error correlation (skip in dev builds).
       if !AnalyticsManager.isDevBuild {
-        let sentryUser = User(userId: userId)
-        sentryUser.email = tokenResult.email
-        sentryUser.username = displayName.isEmpty ? nil : displayName
-        SentrySDK.setUser(sentryUser)
+        SentrySDK.setUser(User(userId: userId))
       }
 
       NSLog("OMI AUTH: Sign in complete!")
@@ -3000,15 +2996,10 @@ class AuthService {
     NotificationCenter.default.post(name: .userDidSignOut, object: nil)
 
     // Clear non-@AppStorage onboarding keys via UserDefaults (these work fine).
-    UserDefaults.standard.removeObject(forKey: "onboardingStep")
-    UserDefaults.standard.removeObject(forKey: "hasTriggeredNotification")
-    UserDefaults.standard.removeObject(forKey: "hasTriggeredAutomation")
-    UserDefaults.standard.removeObject(forKey: "hasTriggeredScreenRecording")
-    UserDefaults.standard.removeObject(forKey: "hasTriggeredMicrophone")
-    UserDefaults.standard.removeObject(forKey: "hasTriggeredSystemAudio")
-    UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
-    UserDefaults.standard.removeObject(forKey: "onboardingACPSessionId")
-    UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
+    // Shared list with resetOnboardingAndRestart so a new onboarding key
+    // can't be forgotten at one site and leak to the next account.
+    OnboardingFlow.clearPersistedState()
+    OnboardingChatPersistence.clear()
 
     // screenAnalysisEnabled: Don't removeObject here — SettingsSyncManager overwrites
     // it from the server within ~200ms of sign-in. Instead, onboarding force-starts

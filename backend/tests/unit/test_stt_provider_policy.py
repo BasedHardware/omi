@@ -46,7 +46,7 @@ def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
-    expected = 'parakeet,modulate-velma-2'
+    expected = 'modulate-velma-2,parakeet'
     for surface in STTServingSurface:
         assert canonical_model_config(surface) == expected
         assert provider_is_enabled(PARAKEET_PROVIDER, surface)

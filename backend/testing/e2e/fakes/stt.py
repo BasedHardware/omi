@@ -61,6 +61,10 @@ class FakeStreamingSTTSocket:
 
     async def drain_and_close(self):
         self.drain_calls += 1
+        # Production drain_and_close finalizes the socket (Parakeet sets
+        # _closed, Deepgram queues EOS); mirror that so teardown observability
+        # (finish_calls) stays consistent between real and fake sockets.
+        self.finish()
 
     def finish(self) -> None:
         self.finish_calls += 1
