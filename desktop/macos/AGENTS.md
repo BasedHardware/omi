@@ -75,14 +75,11 @@ Signed artifact smoke scope:
 - Artifact creation and user visibility are split: create/upload the immutable candidate first, then advance beta/stable visibility only after digest-matched qualification passes.
 - Automatic beta is fail-closed: any signed-smoke, digest, static, T2, fault-suite, newest-tag, manifest, or pointer failure leaves the candidate non-live. Set `DESKTOP_AUTO_BETA_ENABLED=false` in Codemagic or the GitHub `prod` environment to pause automatic qualification/promotion without changing stable.
 
-Stable/prod is manual:
-- Automatic qualification never nominates or promotes stable. Stable workflows remain `workflow_dispatch` only.
-- Nominate the current qualified beta with `desktop_nominate_stable_candidate.yml`. Nomination records the tag/SHA, operator, rationale, soak review, telemetry review, release-note review, and qualification evidence. It never changes beta/stable pointers or deploys production.
-- Before preparing stable/prod promotion, follow `docs/agent-prod-promotion-runbook.md` for target discovery, curated stable release-log creation, shared-backend coupling, approval shape, and deterministic post-promotion checks. External readiness is handled separately.
-- Run GitHub Actions workflow `desktop_promote_prod.yml` with the nominated `release_tag=v*-macos` stable candidate and `confirm=promote-stable`.
-- The workflow runs `.github/scripts/check-desktop-release-promotion.py`, deploys the Rust backend from that exact tag, verifies `/health` reports the release tag/SHA, promotes the Firestore bridge release, marks the GitHub release `channel: stable`, then moves `desktop-backend-prod-deployed`.
-- Do not manually edit a release to stable before the backend is promoted; the promotion workflow owns that mutation.
-- The promotion workflow is roll-forward only. Stable rollback needs a newer fixed release or a separate manual infrastructure rollback plan, because both desktop feeds choose the newest stable app release.
+Stable is manual:
+- Automatic qualification never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
+- Run it with the current qualified Beta `release_tag`, `confirm=promote-stable`, and the observed Stable pointer release ID/generation. It verifies the exact Beta artifact, advances only the Stable pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
+- `operation=repoint` selects a retained qualified manifest with exact current pointer CAS. It cannot downgrade clients Sparkle has already upgraded; issue a higher-version hotfix for those clients.
+- Backend deployments remain independent in their established workflows. Do not manually edit release visibility or pointers outside the promotion workflow.
 
 **Codemagic CLI & API:**
 - Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)

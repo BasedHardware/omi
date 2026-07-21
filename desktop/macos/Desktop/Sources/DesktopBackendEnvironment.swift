@@ -2,32 +2,8 @@ import Foundation
 
 enum DesktopBackendEnvironment {
   static let productionPythonAPIURL = "https://api.omi.me/"
-  static let betaPythonAPIURL = "https://api-beta.omi.me/"
   static let developmentPythonAPIURL = "https://api.omiapi.com/"
   static let developmentRustBackendURL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
-
-  static var shouldUseBetaRingBackends: Bool {
-    shouldUseBetaRingBackends(
-      bundleIdentifier: AppBuild.bundleIdentifier,
-      updateChannel: AppBuild.currentUpdateChannel,
-      forceOverride: currentEnvironmentValue("OMI_FORCE_DEV_BACKENDS"),
-      externalPreviewBackend: AppBuild.externalPreviewBackend
-    )
-  }
-
-  static func shouldUseBetaRingBackends(
-    bundleIdentifier: String,
-    updateChannel: String,
-    forceOverride: String? = nil,
-    externalPreviewBackend: AppBuild.ExternalPreviewBackend? = nil
-  ) -> Bool {
-    guard !AppBuild.isExternalPreviewBundleIdentifier(bundleIdentifier) else { return false }
-    guard !isAffirmative(forceOverride) else { return false }
-    // Both production-family identities ride the beta ring on the beta channel;
-    // the separately-installable Omi Beta app pins its channel to beta.
-    return AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier)
-      && normalizedChannel(updateChannel) == "beta"
-  }
 
   static var shouldUseDevelopmentBackends: Bool {
     shouldUseDevelopmentBackends(
@@ -59,8 +35,6 @@ enum DesktopBackendEnvironment {
       return true
     }
 
-    // Production beta now has a dedicated stateless release ring. It selects
-    // beta URLs below rather than inheriting the development backend.
     if isAffirmative(forceOverride) {
       return true
     }
@@ -73,23 +47,18 @@ enum DesktopBackendEnvironment {
   ) -> String {
     pythonBaseURL(
       useDevelopmentBackends: shouldUseDevelopmentBackends,
-      useBetaRingBackends: shouldUseBetaRingBackends,
       environmentValue: environmentValue
     )
   }
 
   static func pythonBaseURL(
     useDevelopmentBackends: Bool,
-    useBetaRingBackends: Bool = false,
     environmentValue: String?
   ) -> String {
     if let url = normalizedURL(environmentValue) {
       return url
     }
 
-    if useBetaRingBackends {
-      return betaPythonAPIURL
-    }
     if useDevelopmentBackends {
       return developmentPythonAPIURL
     }
@@ -116,7 +85,6 @@ enum DesktopBackendEnvironment {
   ) -> String {
     rustBackendURL(
       useDevelopmentBackends: shouldUseDevelopmentBackends,
-      useBetaRingBackends: shouldUseBetaRingBackends,
       environmentValue: environmentValue,
       launchEnvironmentValue: launchEnvironmentValue
     )
@@ -124,7 +92,6 @@ enum DesktopBackendEnvironment {
 
   static func rustBackendURL(
     useDevelopmentBackends: Bool,
-    useBetaRingBackends: Bool = false,
     environmentValue: String?,
     launchEnvironmentValue: String?
   ) -> String {
@@ -136,10 +103,6 @@ enum DesktopBackendEnvironment {
       return url
     }
 
-    // The Rust desktop backend has its own, currently roll-forward-only
-    // release path. v1's stateless beta ring is the Python/GKE path; leave
-    // this unset so the signed production bundle's explicit Rust endpoint
-    // remains authoritative rather than inventing an unprovisioned beta host.
     if useDevelopmentBackends {
       return developmentRustBackendURL
     }
@@ -148,9 +111,6 @@ enum DesktopBackendEnvironment {
   }
 
   static func applyReleaseChannelDefaults() {
-    if shouldUseBetaRingBackends, normalizedURL(currentEnvironmentValue("OMI_PYTHON_API_URL")) == nil {
-      setenv("OMI_PYTHON_API_URL", betaPythonAPIURL, 1)
-    }
     if shouldUseDevelopmentBackends {
       if normalizedURL(currentEnvironmentValue("OMI_PYTHON_API_URL")) == nil {
         setenv("OMI_PYTHON_API_URL", developmentPythonAPIURL, 1)
@@ -160,11 +120,6 @@ enum DesktopBackendEnvironment {
       }
     }
     log("BackendEnvironment: release-channel defaults applied only for missing backend URLs")
-  }
-
-  private static func normalizedChannel(_ channel: String) -> String {
-    let normalized = channel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return normalized == "staging" ? "beta" : normalized
   }
 
   private static func normalizedURL(_ raw: String?) -> String? {

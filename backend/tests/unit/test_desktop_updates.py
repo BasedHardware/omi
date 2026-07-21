@@ -373,13 +373,18 @@ def _pointer_release(channel="beta", build=200):
             "build_number": build,
             "zip_url": f"https://example.com/{build}/Omi.zip",
             "dmg_url": f"https://example.com/{build}/Omi.dmg",
+            "beta_zip_url": f"https://example.com/{build}/Omi.Beta.zip",
+            "beta_dmg_url": f"https://example.com/{build}/omi-beta.dmg",
             "ed_signature": "signature",
+            "beta_ed_signature": "beta-signature",
             "published_at": "2026-03-01T00:00:00Z",
             "changelog": ["Qualified release"],
             "mandatory": False,
             "source_sha": "a" * 40,
             "zip_sha256": None,
             "dmg_sha256": None,
+            "beta_zip_sha256": "d" * 64,
+            "beta_dmg_sha256": "e" * 64,
             "qualification": {"tier": "T2", "passed": True},
         },
     }
@@ -841,6 +846,23 @@ class TestDesktopUpdateAdminEndpoints:
         assert "immutable" in resp.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_reads_the_retained_manifest_with_a_canonical_identity(self):
+        payload = _pointer_release()["manifest"]
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
+            patch("routers.updates.get_release_manifest", return_value=payload) as read_manifest,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get(
+                    f"/v2/desktop/releases/{payload['release_id']}", headers={"secret-key": "real-secret"}
+                )
+
+        assert resp.status_code == 200
+        assert resp.json()["manifest"] == payload
+        assert len(resp.json()["manifest_sha256"]) == 64
+        read_manifest.assert_called_once_with(payload["release_id"])
+
+    @pytest.mark.asyncio
     async def test_promotes_pointer_and_clears_only_live_pointer_cache(self):
         pointer = {
             "platform": "macos",
@@ -872,109 +894,17 @@ class TestDesktopUpdateAdminEndpoints:
             "v1.0.0+200-macos",
             expected_generation=1,
             expected_current_release_id=None,
-            emergency=False,
+            operation="promote",
         )
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
 
     @pytest.mark.asyncio
-    async def test_rolls_back_macos_beta_with_auditable_response(self):
-        result = {
-            "pointer": {
-                "platform": "macos",
-                "channel": "beta",
-                "release_id": "v0.12.73+12073-macos",
-                "generation": 8,
-            },
-            "audit": {
-                "audit_id": "immutable-audit-id",
-                "operation": "macos_beta_rollback",
-                "platform": "macos",
-                "channel": "beta",
-                "previous_release_id": "v0.12.84+12084-macos",
-                "previous_generation": 7,
-                "target_release_id": "v0.12.73+12073-macos",
-                "generation": 8,
-            },
-        }
-        with (
-            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
-            patch("routers.updates.rollback_macos_beta_channel", return_value=result) as rollback,
-            patch("routers.updates.delete_generic_cache") as delete_cache,
-        ):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                resp = await client.post(
-                    "/v2/desktop/channels/rollback",
-                    headers={"secret-key": "real-secret"},
-                    json={
-                        "platform": "macos",
-                        "channel": "beta",
-                        "release_id": "v0.12.73+12073-macos",
-                        "expected_current_release_id": "v0.12.84+12084-macos",
-                        "expected_generation": 7,
-                    },
-                )
-
-        assert resp.status_code == 200
-        assert resp.json()["audit"] == result["audit"]
-        rollback.assert_called_once_with(
-            "v0.12.73+12073-macos",
-            expected_current_release_id="v0.12.84+12084-macos",
-            expected_generation=7,
-        )
-        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
-
-    @pytest.mark.asyncio
-    async def test_rollback_reports_stale_compare_and_swap(self):
-        with (
-            patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
-            patch(
-                "routers.updates.rollback_macos_beta_channel",
-                side_effect=ValueError("current release mismatch: expected old, current newer"),
-            ),
-        ):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                resp = await client.post(
-                    "/v2/desktop/channels/rollback",
-                    headers={"secret-key": "real-secret"},
-                    json={
-                        "platform": "macos",
-                        "channel": "beta",
-                        "release_id": "v0.12.73+12073-macos",
-                        "expected_current_release_id": "v0.12.84+12084-macos",
-                        "expected_generation": 7,
-                    },
-                )
-
-        assert resp.status_code == 409
-        assert "current release mismatch" in resp.json()["detail"]
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(("platform", "channel"), [("macos", "stable"), ("windows", "beta")])
-    async def test_rollback_rejects_stable_or_other_platform(self, platform, channel):
-        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-            resp = await client.post(
-                "/v2/desktop/channels/rollback",
-                headers={"secret-key": "any-secret"},
-                json={
-                    "platform": platform,
-                    "channel": channel,
-                    "release_id": "v0.12.73+12073-macos",
-                    "expected_current_release_id": "v0.12.84+12084-macos",
-                    "expected_generation": 7,
-                },
-            )
-
-        assert resp.status_code == 422
-
-    @pytest.mark.asyncio
-    async def test_emergency_flag_routes_through_promote_and_clears_only_beta_cache(self):
-        """Break-glass promotion is the normal endpoint with `emergency: true`."""
+    async def test_repoint_routes_through_the_shared_pointer_authority(self):
         pointer = {
             "platform": "macos",
-            "channel": "beta",
-            "release_id": "v0.12.87+12087-macos",
+            "channel": "stable",
+            "release_id": "v0.12.73+12073-macos",
             "generation": 10,
-            "emergency": True,
         }
         with (
             patch("routers.updates.os.getenv", return_value="real-secret"),
@@ -987,25 +917,25 @@ class TestDesktopUpdateAdminEndpoints:
                     headers={"secret-key": "real-secret"},
                     json={
                         "platform": "macos",
-                        "channel": "beta",
-                        "release_id": "v0.12.87+12087-macos",
+                        "channel": "stable",
+                        "release_id": "v0.12.73+12073-macos",
                         "expected_current_release_id": "v0.12.86+12086-macos",
                         "expected_generation": 9,
-                        "emergency": True,
+                        "operation": "repoint",
                     },
                 )
 
         assert resp.status_code == 200
-        assert resp.json()["pointer"]["emergency"] is True
+        assert resp.json()["pointer"]["release_id"] == pointer["release_id"]
         promote.assert_called_once_with(
             "macos",
-            "beta",
-            "v0.12.87+12087-macos",
+            "stable",
+            "v0.12.73+12073-macos",
             expected_generation=9,
             expected_current_release_id="v0.12.86+12086-macos",
-            emergency=True,
+            operation="repoint",
         )
-        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
+        delete_cache.assert_called_once_with("desktop_update_pointer:macos:stable")
 
 
 # --- Update policy endpoint ---
@@ -1252,6 +1182,15 @@ def _live_entry(channel="beta", assets=None, metadata=None, tag="v1.0.0+100-maco
 
 
 class TestBetaIdentityServing:
+    def test_beta_pointer_projects_only_registered_enclosure_hash_and_signature(self):
+        from routers.updates import _pointer_release_to_entry
+
+        entry = _pointer_release_to_entry(_pointer_release("beta"), "beta", "pointer")
+        beta_zip = next(asset for asset in entry["release"]["assets"] if asset["name"] == "Omi.Beta.zip")
+        assert beta_zip["browser_download_url"] == "https://example.com/200/Omi.Beta.zip"
+        assert entry["metadata"]["betaEdSignature"] == "beta-signature"
+        assert entry["metadata"]["betaZipSha256"] == "d" * 64
+
     @pytest.mark.asyncio
     async def test_appcast_identity_beta_serves_beta_enclosure_and_drops_stable_items(self):
         entries = [
@@ -1313,10 +1252,14 @@ class TestBetaIdentityServing:
         assert resp.text.count("<item>") == 0
 
     @pytest.mark.asyncio
-    async def test_appcast_identity_beta_resolves_pointer_entries_from_release_by_tag(self):
-        # Pointer entries fabricate their asset list from the manifest; the beta
-        # enclosure must come from the underlying GitHub release looked up by tag.
-        entries = [_live_entry(channel="beta", assets=[_zip_asset()], metadata={"edSignature": "sig"})]
+    async def test_appcast_identity_beta_never_resolves_mutable_release_assets_after_promotion(self):
+        entries = [
+            _live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _beta_zip_asset("https://immutable.example/Omi.Beta.zip")],
+                metadata={"edSignature": "sig", "betaEdSignature": "immutable-beta-sig"},
+            )
+        ]
         gh_release = _make_github_release(
             "v1.0.0+100-macos",
             body_kv={"isLive": "false", "betaEdSignature": "beta-sig-from-body"},
@@ -1331,8 +1274,9 @@ class TestBetaIdentityServing:
 
         assert resp.status_code == 200
         xml = resp.text
-        assert "https://example.com/by-tag/Omi.Beta.zip" in xml
-        assert 'edSignature="beta-sig-from-body"' in xml
+        assert "https://immutable.example/Omi.Beta.zip" in xml
+        assert 'edSignature="immutable-beta-sig"' in xml
+        assert "by-tag" not in xml
 
     def test_stable_dmg_picker_never_returns_the_beta_dmg(self):
         release = {
