@@ -5,6 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_WORKFLOW="$SCRIPT_DIR/../.github/workflows/test-install.yml"
 WORKFLOW="${2:-$DEFAULT_WORKFLOW}"
 
+# Self-provision actionlint via Go when not on PATH. The GitHub-hosted macOS
+# runner includes Go but not actionlint; repo-checks.yml installs it separately
+# for its own workflow-lint step, but the desktop launcher-script-tests loop
+# does not.
+if ! command -v actionlint >/dev/null 2>&1; then
+  if command -v go >/dev/null 2>&1; then
+    export GOBIN="${GOBIN:-$(mktemp -d)}"
+    export PATH="$GOBIN:$PATH"
+    go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 >&2
+  else
+    echo "actionlint is required but not installed and Go is not available to build it" >&2
+    exit 1
+  fi
+fi
+
 fail() {
   echo "FAIL: $*" >&2
   exit 1
