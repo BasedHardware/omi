@@ -772,8 +772,10 @@ struct FloatingControlBarView: View {
     Button {
       openOmiChatFromNotchRow()
     } label: {
+      // Audio-centric notch: this is a voice surface, not a chat surface.
+      // Typed chat lives in the main-window ask bar.
       HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "message.fill")
+        Image(systemName: "mic.fill")
           .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundStyle(.white.opacity(0.86))
           .frame(
@@ -782,13 +784,12 @@ struct FloatingControlBarView: View {
           )
           .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, alignment: .leading)
 
-        Text("Omi Chat")
+        Text("Talk to Omi")
           .scaledFont(size: 12, weight: .semibold)
           .foregroundStyle(.white.opacity(0.94))
           .lineLimit(1)
           .frame(maxWidth: .infinity, alignment: .leading)
 
-        notchShortcutHint("Ask", keys: shortcutSettings.askOmiShortcut.displayTokens)
         notchShortcutHint(systemImage: "mic.fill", keys: shortcutSettings.pttShortcut.displayTokens)
       }
       .padding(.leading, NotchAgentStackMetrics.listRowLeadingPadding)
