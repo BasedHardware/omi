@@ -1,0 +1,210 @@
+name: Build release record
+
+on:
+  workflow_run:
+    workflows: ["Release Eligibility"]
+    types: [completed]
+
+# This record builder captures immutable deployment inputs without mutating serving resources.
+# It may publish artifacts but never deploys a serving ring. The
+# selected source is admitted below before checkout; workflow_run's default
+# branch context is never treated as the release source.
+permissions:
+  actions: write
+  contents: read
+  id-token: write
+
+concurrency:
+  group: build-release-record-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  build-record:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    environment: prod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact eligible main source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Refuse superseded or non-main source
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          test "$RELEASE_SHA" = "$(git rev-parse origin/main)"
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+
+      - name: Authenticate as release-record writer
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.RELEASE_RINGS_WIF_PROVIDER }}
+          service_account: ${{ vars.RELEASE_RECORDS_WRITER_SERVICE_ACCOUNT }}
+
+      - name: Set up build tooling
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Read the serving public runtime configuration once
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.RELEASE_GKE_CLUSTER }}
+          location: us-central1
+          project_id: ${{ vars.RELEASE_RUNTIME_PROJECT_ID }}
+
+      - name: Capture deployable public ConfigMap and release topology
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUD_RUN_VPC_NETWORK"
+          test -n "$CLOUD_RUN_VPC_SUBNET"
+          python3 -m pip install -q pyyaml
+          mkdir -p artifacts/release-record
+          for ring in prod; do
+            kubectl -n "${ring}-omi-backend" get configmap "${ring}-omi-backend-config" -o json \
+              | jq '{apiVersion, kind, metadata: {name: .metadata.name}, data}' \
+              > "artifacts/release-record/${ring}-backend-config.yaml"
+            jq --arg network "$CLOUD_RUN_VPC_NETWORK" --arg subnet "$CLOUD_RUN_VPC_SUBNET" \
+              '.data + {CLOUD_RUN_VPC_NETWORK: $network, CLOUD_RUN_VPC_SUBNET: $subnet}' \
+              "artifacts/release-record/${ring}-backend-config.yaml" \
+              > "artifacts/release-record/${ring}-public-values.json"
+          done
+          python3 - <<'PY'
+          import json
+          import yaml
+
+          topology = yaml.safe_load(open("backend/deploy/release_rings.yaml", encoding="utf-8"))["rings"]
+          json.dump(topology, open("artifacts/release-record/topology.json", "w", encoding="utf-8"), sort_keys=True)
+          PY
+
+      - name: Prepare Docker registry
+        run: gcloud auth configure-docker gcr.io --quiet
+
+      - name: Build and publish backend image once
+        id: backend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: gcr.io/${{ vars.RELEASE_ARTIFACT_PROJECT_ID }}/backend:${{ github.event.workflow_run.head_sha }}
+
+      - name: Build and publish pusher image once
+        id: pusher
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/pusher/Dockerfile
+          push: true
+          tags: gcr.io/${{ vars.RELEASE_ARTIFACT_PROJECT_ID }}/pusher:${{ github.event.workflow_run.head_sha }}
+
+      - name: Build and publish LLM gateway image once
+        id: llm_gateway
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: gcr.io/${{ vars.RELEASE_ARTIFACT_PROJECT_ID }}/llm-gateway:${{ github.event.workflow_run.head_sha }}
+
+      - name: Build and publish agent-proxy image once
+        id: agent_proxy
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/agent-proxy/Dockerfile
+          push: true
+          tags: gcr.io/${{ vars.RELEASE_ARTIFACT_PROJECT_ID }}/agent-proxy:${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve release secret versions
+        run: |
+          python3 -m pip install -q pyyaml
+          mkdir -p artifacts/release-record
+          python3 backend/scripts/release_rings.py resolve-secrets \
+            --manifest backend/deploy/runtime_env.yaml \
+            --manifest backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml \
+            --project "${{ vars.RELEASE_RUNTIME_PROJECT_ID }}" \
+            --output artifacts/release-record/secret-versions.json
+
+      - name: Render fully deployable, pinned ring configuration
+        run: |
+          set -euo pipefail
+          for ring in prod; do
+            python3 backend/scripts/release_rings.py materialize-runtime \
+              --manifest backend/deploy/runtime_env.yaml \
+              --secret-versions-file artifacts/release-record/secret-versions.json \
+              --public-values-file "artifacts/release-record/${ring}-public-values.json" \
+              --output "artifacts/release-record/runtime-env-${ring}-pinned.yaml"
+          done
+          python3 backend/scripts/release_rings.py materialize-secrets \
+            --manifest backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml \
+            --secret-versions-file artifacts/release-record/secret-versions.json \
+            --output artifacts/release-record/backend-secrets-pinned.yaml
+          for ring in prod; do
+            python3 backend/scripts/render_release_ring_config.py --ring "$ring" --source "artifacts/release-record/runtime-env-${ring}-pinned.yaml" --output "artifacts/release-record/${ring}-backend.yaml"
+            python3 backend/scripts/render_release_ring_config.py --ring "$ring" --source artifacts/release-record/backend-secrets-pinned.yaml --output "artifacts/release-record/${ring}-backend-secrets.yaml"
+            python3 backend/scripts/render_release_ring_config.py --ring "$ring" --source backend/charts/backend-listen/prod_omi_backend_listen_values.yaml --output "artifacts/release-record/${ring}-backend-listen.yaml"
+            python3 backend/scripts/render_release_ring_config.py --ring "$ring" --source backend/charts/pusher/prod_omi_pusher_values.yaml --output "artifacts/release-record/${ring}-pusher.yaml"
+            python3 backend/scripts/render_release_ring_config.py --ring "$ring" --source backend/charts/llm-gateway/prod_omi_llm_gateway_values.yaml --output "artifacts/release-record/${ring}-llm-gateway.yaml"
+            python3 backend/scripts/render_release_ring_config.py --ring "$ring" --source backend/charts/agent-proxy/prod_omi_agent_proxy_values.yaml --output "artifacts/release-record/${ring}-agent-proxy.yaml"
+          done
+
+      - name: Upload immutable configuration objects and create record
+        id: record
+        env:
+          RELEASE_BUCKET: ${{ vars.RELEASE_RECORDS_BUCKET }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          ELIGIBILITY_RUN_ID: ${{ github.event.workflow_run.id }}
+          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          PUSHER_DIGEST: ${{ steps.pusher.outputs.digest }}
+          LLM_GATEWAY_DIGEST: ${{ steps.llm_gateway.outputs.digest }}
+          AGENT_PROXY_DIGEST: ${{ steps.agent_proxy.outputs.digest }}
+          ARTIFACT_PROJECT: ${{ vars.RELEASE_ARTIFACT_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_BUCKET"
+          release_id="$(date -u +%Y%m%d).${GITHUB_RUN_ID}"
+          config_args=()
+          for ring in prod; do
+            for component in backend backend-config backend-secrets backend-listen pusher llm-gateway agent-proxy; do
+              source="artifacts/release-record/${ring}-${component}.yaml"
+              object="gs://${RELEASE_BUCKET}/config/${release_id}/${ring}/${component}.yaml"
+              gcloud storage cp --if-generation-match=0 "$source" "$object"
+              digest="$(sha256sum "$source" | awk '{print $1}')"
+              config_args+=(--rendered-config "${ring}/${component}=${object}#sha256:${digest}")
+            done
+          done
+          python3 backend/scripts/release_rings.py create-record \
+            --release-id "$release_id" \
+            --git-sha "$RELEASE_SHA" \
+            --eligibility-run-id "$ELIGIBILITY_RUN_ID" \
+            --image "backend=gcr.io/${ARTIFACT_PROJECT}/backend@${BACKEND_DIGEST}" \
+            --image "backend-listen=gcr.io/${ARTIFACT_PROJECT}/backend@${BACKEND_DIGEST}" \
+            --image "pusher=gcr.io/${ARTIFACT_PROJECT}/pusher@${PUSHER_DIGEST}" \
+            --image "llm-gateway=gcr.io/${ARTIFACT_PROJECT}/llm-gateway@${LLM_GATEWAY_DIGEST}" \
+            --image "agent-proxy=gcr.io/${ARTIFACT_PROJECT}/agent-proxy@${AGENT_PROXY_DIGEST}" \
+            "${config_args[@]}" \
+            --secret-versions-file artifacts/release-record/secret-versions.json \
+            --topology-file artifacts/release-record/topology.json \
+            --output artifacts/release-record/record.json
+          python3 backend/scripts/release_rings.py validate-record --record artifacts/release-record/record.json
+          gcloud storage cp --if-generation-match=0 artifacts/release-record/record.json "gs://${RELEASE_BUCKET}/records/${release_id}.json"
+          printf 'release_id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Persist record build evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-record-${{ steps.record.outputs.release_id }}
+          path: artifacts/release-record
+          if-no-files-found: error
+          retention-days: 30

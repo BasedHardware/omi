@@ -1,19 +1,16 @@
 # Backend Deploy Rollout Safety
 
+## Immutable production release records
+
+release-record.yml records one immutable production backend vector: the four
+Cloud Run services, backend configuration and secrets, backend-listen, pusher,
+LLM gateway, and agent proxy. It does not deploy. An operator may manually
+dispatch deploy-release-ring.yml with the recorded ID and confirm=deploy-prod;
+that workflow shares the deploy-backend-stack-prod lock and validates
+no-traffic revisions before traffic mutation. There is no backend beta ring.
+This does not change desktop Beta or Stable update-channel pointers.
+
 Use this runbook when a backend deploy may have produced stale runtime, partial traffic shifts, or GKE pods serving an old ReplicaSet. All commands below are read-only unless explicitly marked as a template for a future deploy workflow.
-
-## Read GKE rollout state
-
-```bash
-python3 backend/scripts/deploy_status_report.py \
-  --env prod \
-  --include-gke \
-  --gke-service backend-listen \
-  --gke-service pusher \
-  --gke-service llm-gateway \
-  --gke-service parakeet \
-  --gke-service diarizer \
-  --gke-service vad
 ```
 
 Interpretation:

@@ -43,6 +43,7 @@ LOCK_CONTRACTS = {
     "gcp_app.yml": LockContract(
         "deploy-cloud-run-omi-web-app-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
+    "deploy-release-ring.yml": LockContract("deploy-backend-stack-prod"),
     "gcp_backend.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
     "gcp_firestore_indexes.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
     "gcp_backend_agent_proxy.yml": LockContract("deploy-gke-agent-proxy-${{ github.event.inputs.environment }}"),
@@ -89,7 +90,9 @@ RUN_SCOPED_EXEMPTIONS = {
 # deployable public values. It never runs Helm, kubectl apply, or a Cloud Run
 # mutation; classifying credential acquisition alone as a writer would hide
 # that distinction and force a meaningless deploy lock.
-READ_ONLY_WORKFLOW_EXEMPTIONS = {}
+READ_ONLY_WORKFLOW_EXEMPTIONS = {
+    "release-record.yml": "record builder captures immutable deployment inputs without mutating serving resources",
+}
 
 # Firestore index creation is a schema migration, not ordinary deploy work.
 # Keep a single auditable writer so backend readiness can stay read-only.
