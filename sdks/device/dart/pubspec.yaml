@@ -1,0 +1,8 @@
+name: omi_device
+description: Omi device BLE protocol helpers (constants + packet framing)
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+dev_dependencies:
+  test: ^1.25.0

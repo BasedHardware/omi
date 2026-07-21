@@ -1,0 +1,8 @@
+[package]
+name = "omi-device"
+version = "0.1.0"
+edition = "2021"
+description = "Omi device BLE protocol helpers"
+license = "MIT"
+
+[dependencies]
