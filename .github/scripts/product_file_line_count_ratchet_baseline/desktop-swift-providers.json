@@ -1,10 +1,10 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6197,
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6214,
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2861
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Ambient turns without Screen Recording carry an honest screen-unavailable payload instead of silence.",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "ChatTurnOwner reasoning-effort lane derivation",
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Already-granted permissions no longer reopen System Settings: screen-recording and full-disk-access requests gate their Settings/drag-card opens behind the granted result."
   },
   "threshold": 1500

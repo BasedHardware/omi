@@ -37,8 +37,6 @@ class LockContract:
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
-    "desktop_promote_prod.yml": LockContract("desktop-backend-promote-prod"),
-    "deploy-release-ring.yml": LockContract("deploy-release-ring-${{ inputs.ring }}"),
     "gcp_admin.yml": LockContract(
         "deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
@@ -91,9 +89,7 @@ RUN_SCOPED_EXEMPTIONS = {
 # deployable public values. It never runs Helm, kubectl apply, or a Cloud Run
 # mutation; classifying credential acquisition alone as a writer would hide
 # that distinction and force a meaningless deploy lock.
-READ_ONLY_WORKFLOW_EXEMPTIONS = {
-    "release-record.yml": 'kubectl -n "${ring}-omi-backend" get configmap "${ring}-omi-backend-config" -o json',
-}
+READ_ONLY_WORKFLOW_EXEMPTIONS = {}
 
 # Firestore index creation is a schema migration, not ordinary deploy work.
 # Keep a single auditable writer so backend readiness can stay read-only.
@@ -248,8 +244,9 @@ def validate_serving_release_vector(name: str, text: str) -> list[str]:
         errors.append(f"{name}: release-vector verification must use the canonical verifier")
     if "--environment" not in verifier_text:
         errors.append(f"{name}: release-vector verification must bind an environment")
-    if name == "gcp_backend.yml" and "github.event.inputs.deploy_targets == 'all'" not in verifier_text:
-        errors.append(f"{name}: all-tier release-vector verification must not run for cloud-run-only deploys")
+    if name == "gcp_backend.yml":
+        if "github.event.inputs.deploy_targets" not in verifier_text or "--cloud-run-only" not in verifier_text:
+            errors.append(f"{name}: cloud-run-only promotion must use the Cloud Run-only release-vector contract")
     return errors
 
 
