@@ -11,6 +11,8 @@ from typing import Any, Mapping, MutableMapping, Optional, Sequence, Union
 
 import httpx
 
+from .models import *  # noqa: F403
+
 JsonValue = Union[None, bool, int, float, str, list[Any], dict[str, Any]]
 
 DEFAULT_BASE_URL = "https://api.omi.me"
@@ -90,11 +92,11 @@ class OmiIntegrationClient:
             raise OmiIntegrationError(response.status_code, body)
         return body
 
-    def send_notification_v1(self, body: Mapping[str, Any]) -> JsonValue:
+    def send_notification_v1(self, body: Mapping[str, Any]) -> IntegrationNotificationResponse:
         """Send App Notification To User"""
         return self._request('POST', '/v1/integrations/notification', params=None, json_body=body)
 
-    def list_conversations(self, uid: str, limit: Optional[int] = None, offset: Optional[int] = None, include_discarded: Optional[bool] = None, statuses: Optional[Sequence[str]] = None, start_date: Optional[str] = None, end_date: Optional[str] = None, max_transcript_segments: Optional[int] = None) -> JsonValue:
+    def list_conversations(self, uid: str, limit: Optional[int] = None, offset: Optional[int] = None, include_discarded: Optional[bool] = None, statuses: Optional[Sequence[str]] = None, start_date: Optional[str] = None, end_date: Optional[str] = None, max_transcript_segments: Optional[int] = None) -> ConversationsResponse:
         """Get Conversations Via Integration"""
         params: MutableMapping[str, Any] = {}
         params['uid'] = uid
@@ -114,7 +116,7 @@ class OmiIntegrationClient:
             params['max_transcript_segments'] = max_transcript_segments
         return self._request('GET', f"/v2/integrations/{self.app_id}/conversations", params=params, json_body=None)
 
-    def list_memories(self, uid: str, limit: Optional[int] = None, offset: Optional[int] = None) -> JsonValue:
+    def list_memories(self, uid: str, limit: Optional[int] = None, offset: Optional[int] = None) -> MemoriesResponse:
         """Get Memories Via Integration"""
         params: MutableMapping[str, Any] = {}
         params['uid'] = uid
@@ -124,14 +126,14 @@ class OmiIntegrationClient:
             params['offset'] = offset
         return self._request('GET', f"/v2/integrations/{self.app_id}/memories", params=params, json_body=None)
 
-    def send_notification(self, message: str, uid: str) -> JsonValue:
+    def send_notification(self, message: str, uid: str) -> IntegrationNotificationResponse:
         """Send Notification Via Integration"""
         params: MutableMapping[str, Any] = {}
         params['message'] = message
         params['uid'] = uid
         return self._request('POST', f"/v2/integrations/{self.app_id}/notification", params=params, json_body=None)
 
-    def search_conversations(self, uid: str, body: Mapping[str, Any], max_transcript_segments: Optional[int] = None) -> JsonValue:
+    def search_conversations(self, uid: str, body: SearchRequest, max_transcript_segments: Optional[int] = None) -> SearchConversationsResponse:
         """Search Conversations Via Integration"""
         params: MutableMapping[str, Any] = {}
         params['uid'] = uid
@@ -139,7 +141,7 @@ class OmiIntegrationClient:
             params['max_transcript_segments'] = max_transcript_segments
         return self._request('POST', f"/v2/integrations/{self.app_id}/search/conversations", params=params, json_body=body)
 
-    def list_tasks(self, uid: str, limit: Optional[int] = None, offset: Optional[int] = None, completed: Optional[bool] = None, conversation_id: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None, due_start_date: Optional[str] = None, due_end_date: Optional[str] = None) -> JsonValue:
+    def list_tasks(self, uid: str, limit: Optional[int] = None, offset: Optional[int] = None, completed: Optional[bool] = None, conversation_id: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None, due_start_date: Optional[str] = None, due_end_date: Optional[str] = None) -> TasksResponse:
         """Get Tasks Via Integration"""
         params: MutableMapping[str, Any] = {}
         params['uid'] = uid
@@ -161,13 +163,13 @@ class OmiIntegrationClient:
             params['due_end_date'] = due_end_date
         return self._request('GET', f"/v2/integrations/{self.app_id}/tasks", params=params, json_body=None)
 
-    def create_conversation(self, uid: str, body: Mapping[str, Any]) -> JsonValue:
+    def create_conversation(self, uid: str, body: ExternalIntegrationCreateConversation) -> EmptyResponse:
         """Create Conversation Via Integration"""
         params: MutableMapping[str, Any] = {}
         params['uid'] = uid
         return self._request('POST', f"/v2/integrations/{self.app_id}/user/conversations", params=params, json_body=body)
 
-    def create_memories(self, uid: str, body: Mapping[str, Any]) -> JsonValue:
+    def create_memories(self, uid: str, body: ExternalIntegrationCreateMemory) -> EmptyResponse:
         """Create Memories Via Integration"""
         params: MutableMapping[str, Any] = {}
         params['uid'] = uid

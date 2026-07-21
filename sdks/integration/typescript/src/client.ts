@@ -4,6 +4,234 @@
  * Spec sha256[0:16]=726f4b3a685da076
  */
 
+export interface ActionItem {
+  completed?: boolean;
+  description: string;
+  export_date?: string | null;
+  export_platform?: string | null;
+  exported?: boolean;
+}
+
+export interface ConversationItem {
+  app_id?: string | null;
+  created_at: string;
+  discarded?: boolean | null;
+  external_data?: Record<string, unknown> | null;
+  finished_at?: string | null;
+  geolocation?: ConversationItemGeolocation | null;
+  id: string;
+  language?: string | null;
+  source: string;
+  started_at?: string | null;
+  status?: string | null;
+  structured?: ConversationItemStructured | null;
+  transcript_segments?: Array<ConversationItemTranscriptSegment> | null;
+}
+
+export interface ConversationItemGeolocation {
+  address?: string | null;
+  google_place_id?: string | null;
+  latitude: number;
+  location_type?: string | null;
+  longitude: number;
+}
+
+export interface ConversationItemStructured {
+  action_items?: Array<ActionItem>;
+  category?: string;
+  emoji?: string;
+  events?: Array<Event>;
+  overview: string;
+  title: string;
+}
+
+export interface ConversationItemTranscriptSegment {
+  end?: number;
+  is_user?: boolean;
+  person_id?: string | null;
+  speaker?: string | null;
+  start?: number;
+  text: string;
+}
+
+export type ConversationSource = "friend" | "omi" | "fieldy" | "bee" | "plaud" | "frame" | "friend_com" | "apple_watch" | "phone" | "phone_call" | "desktop" | "openglass" | "screenpipe" | "workflow" | "sdcard" | "external_integration" | "limitless" | "rayban_meta" | "onboarding" | "unknown";
+
+export interface ConversationsResponse {
+  conversations: Array<ConversationItem>;
+}
+
+export interface EmptyResponse {
+}
+
+export interface ErrorResponse {
+  detail: unknown;
+}
+
+export interface Event {
+  created?: boolean;
+  description?: string;
+  duration?: number;
+  start: string;
+  title: string;
+}
+
+export interface Evidence {
+  artifact_ref?: Record<string, unknown>;
+  capture_confidence?: number;
+  client_device_id?: string | null;
+  created_at?: string;
+  evidence_id: string;
+  extractor_id?: string;
+  extractor_version?: string;
+  independence_group: string;
+  redaction_status?: string;
+  source_id?: string | null;
+  source_signal?: string;
+  source_type?: string;
+}
+
+export type ExternalIntegrationConversationSource = "audio_transcript" | "message" | "other_text";
+
+export interface ExternalIntegrationCreateConversation {
+  app_id?: string | null;
+  client_device_id?: string | null;
+  client_platform?: string | null;
+  finished_at?: string | null;
+  geolocation?: Geolocation | null;
+  language?: string | null;
+  source?: ConversationSource;
+  started_at?: string | null;
+  text: string;
+  text_source?: ExternalIntegrationConversationSource;
+  text_source_spec?: string | null;
+}
+
+export interface ExternalIntegrationCreateMemory {
+  app_id?: string | null;
+  artifact_ref?: Record<string, unknown> | null;
+  memories?: Array<ExternalIntegrationMemory> | null;
+  source_id?: string | null;
+  source_url?: string | null;
+  text?: string | null;
+  text_source?: ExternalIntegrationMemorySource;
+  text_source_spec?: string | null;
+}
+
+export interface ExternalIntegrationMemory {
+  artifact_ref?: Record<string, unknown> | null;
+  content: string;
+  source_id?: string | null;
+  source_url?: string | null;
+  tags?: Array<string> | null;
+}
+
+export type ExternalIntegrationMemorySource = "email" | "social_post" | "other";
+
+export interface Geolocation {
+  address?: string | null;
+  google_place_id?: string | null;
+  latitude: number;
+  location_type?: string | null;
+  longitude: number;
+}
+
+export interface HTTPValidationError {
+  detail?: Array<ValidationError>;
+}
+
+export interface IntegrationNotificationResponse {
+  status: string;
+}
+
+export interface MemoriesResponse {
+  memories: Array<MemoryItem>;
+}
+
+export type MemoryCategory = "interesting" | "system" | "manual" | "workflow" | "core" | "hobbies" | "lifestyle" | "interests" | "habits" | "work" | "skills" | "learnings" | "other" | "auto";
+
+export interface MemoryItem {
+  app_id?: string | null;
+  arguments?: Record<string, unknown>;
+  capture_confidence?: number | null;
+  capture_device_ids?: Array<string>;
+  category?: MemoryCategory;
+  content: string;
+  conversation_id?: string | null;
+  created_at: string;
+  data_protection_level?: string | null;
+  durability?: string | null;
+  edited?: boolean;
+  evidence?: Array<Evidence>;
+  headline?: string | null;
+  id: string;
+  invalid_at?: string | null;
+  is_locked?: boolean;
+  kg_extracted?: boolean;
+  layer: string | null;
+  manually_added?: boolean;
+  memory_id?: string | null;
+  memory_tier?: MemoryLayer | null;
+  object_entity_ids?: Array<string>;
+  predicate?: string | null;
+  primary_capture_device?: string | null;
+  qualifiers?: Record<string, unknown>;
+  reviewed?: boolean;
+  scoring?: string | null;
+  subject_attribution?: SubjectAttribution;
+  subject_entity_id?: string | null;
+  superseded_by?: string | null;
+  tags?: Array<string>;
+  uid: string;
+  uncertainty_reasons?: Array<string>;
+  updated_at: string;
+  user_review?: boolean | null;
+  valid_at?: string | null;
+  veracity?: number | null;
+  visibility?: string | null;
+}
+
+export type MemoryLayer = "short_term" | "long_term" | "archive";
+
+export interface SearchConversationsResponse {
+  conversations: Array<ConversationItem>;
+  current_page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface SearchRequest {
+  end_date?: string | null;
+  include_discarded?: boolean | null;
+  page?: number | null;
+  per_page?: number | null;
+  query?: string;
+  speaker_id?: string | null;
+  start_date?: string | null;
+}
+
+export type SubjectAttribution = "user" | "third_party" | "unknown" | "legacy_assumed";
+
+export interface TaskItem {
+  completed: boolean;
+  completed_at?: string | null;
+  conversation_id?: string | null;
+  created_at?: string | null;
+  description: string;
+  due_at?: string | null;
+  id: string;
+  updated_at?: string | null;
+}
+
+export interface TasksResponse {
+  tasks: Array<TaskItem>;
+}
+
+export interface ValidationError {
+  loc: Array<unknown>;
+  msg: string;
+  type: string;
+}
+
 export type Json =
   | null
   | boolean
@@ -89,12 +317,12 @@ export class OmiIntegrationClient {
   }
 
   /** Send App Notification To User */
-  async sendNotificationV1(body: Record<string, unknown>): Promise<Json> {
-    return this.request("POST", "/v1/integrations/notification", undefined, body);
+  async sendNotificationV1(body: Record<string, unknown>): Promise<IntegrationNotificationResponse> {
+    return (await this.request("POST", "/v1/integrations/notification", undefined, body)) as unknown as IntegrationNotificationResponse;
   }
 
   /** Get Conversations Via Integration */
-  async listConversations(uid: string, options: { limit?: number; offset?: number; includeDiscarded?: boolean; statuses?: string[]; startDate?: string; endDate?: string; maxTranscriptSegments?: number } = {}): Promise<Json> {
+  async listConversations(uid: string, options: { limit?: number; offset?: number; includeDiscarded?: boolean; statuses?: string[]; startDate?: string; endDate?: string; maxTranscriptSegments?: number } = {}): Promise<ConversationsResponse> {
     const query: Record<string, unknown> = {};
     query["uid"] = uid;
     if (options.limit !== undefined) query["limit"] = options.limit;
@@ -104,36 +332,36 @@ export class OmiIntegrationClient {
     if (options.startDate !== undefined) query["start_date"] = options.startDate;
     if (options.endDate !== undefined) query["end_date"] = options.endDate;
     if (options.maxTranscriptSegments !== undefined) query["max_transcript_segments"] = options.maxTranscriptSegments;
-    return this.request("GET", `/v2/integrations/${this.appId}/conversations`, query, undefined);
+    return (await this.request("GET", `/v2/integrations/${this.appId}/conversations`, query, undefined)) as unknown as ConversationsResponse;
   }
 
   /** Get Memories Via Integration */
-  async listMemories(uid: string, options: { limit?: number; offset?: number } = {}): Promise<Json> {
+  async listMemories(uid: string, options: { limit?: number; offset?: number } = {}): Promise<MemoriesResponse> {
     const query: Record<string, unknown> = {};
     query["uid"] = uid;
     if (options.limit !== undefined) query["limit"] = options.limit;
     if (options.offset !== undefined) query["offset"] = options.offset;
-    return this.request("GET", `/v2/integrations/${this.appId}/memories`, query, undefined);
+    return (await this.request("GET", `/v2/integrations/${this.appId}/memories`, query, undefined)) as unknown as MemoriesResponse;
   }
 
   /** Send Notification Via Integration */
-  async sendNotification(message: string, uid: string): Promise<Json> {
+  async sendNotification(message: string, uid: string): Promise<IntegrationNotificationResponse> {
     const query: Record<string, unknown> = {};
     query["message"] = message;
     query["uid"] = uid;
-    return this.request("POST", `/v2/integrations/${this.appId}/notification`, query, undefined);
+    return (await this.request("POST", `/v2/integrations/${this.appId}/notification`, query, undefined)) as unknown as IntegrationNotificationResponse;
   }
 
   /** Search Conversations Via Integration */
-  async searchConversations(uid: string, body: Record<string, unknown>, options: { maxTranscriptSegments?: number } = {}): Promise<Json> {
+  async searchConversations(uid: string, body: SearchRequest, options: { maxTranscriptSegments?: number } = {}): Promise<SearchConversationsResponse> {
     const query: Record<string, unknown> = {};
     query["uid"] = uid;
     if (options.maxTranscriptSegments !== undefined) query["max_transcript_segments"] = options.maxTranscriptSegments;
-    return this.request("POST", `/v2/integrations/${this.appId}/search/conversations`, query, body);
+    return (await this.request("POST", `/v2/integrations/${this.appId}/search/conversations`, query, body)) as unknown as SearchConversationsResponse;
   }
 
   /** Get Tasks Via Integration */
-  async listTasks(uid: string, options: { limit?: number; offset?: number; completed?: boolean; conversationId?: string; startDate?: string; endDate?: string; dueStartDate?: string; dueEndDate?: string } = {}): Promise<Json> {
+  async listTasks(uid: string, options: { limit?: number; offset?: number; completed?: boolean; conversationId?: string; startDate?: string; endDate?: string; dueStartDate?: string; dueEndDate?: string } = {}): Promise<TasksResponse> {
     const query: Record<string, unknown> = {};
     query["uid"] = uid;
     if (options.limit !== undefined) query["limit"] = options.limit;
@@ -144,21 +372,21 @@ export class OmiIntegrationClient {
     if (options.endDate !== undefined) query["end_date"] = options.endDate;
     if (options.dueStartDate !== undefined) query["due_start_date"] = options.dueStartDate;
     if (options.dueEndDate !== undefined) query["due_end_date"] = options.dueEndDate;
-    return this.request("GET", `/v2/integrations/${this.appId}/tasks`, query, undefined);
+    return (await this.request("GET", `/v2/integrations/${this.appId}/tasks`, query, undefined)) as unknown as TasksResponse;
   }
 
   /** Create Conversation Via Integration */
-  async createConversation(uid: string, body: Record<string, unknown>): Promise<Json> {
+  async createConversation(uid: string, body: ExternalIntegrationCreateConversation): Promise<EmptyResponse> {
     const query: Record<string, unknown> = {};
     query["uid"] = uid;
-    return this.request("POST", `/v2/integrations/${this.appId}/user/conversations`, query, body);
+    return (await this.request("POST", `/v2/integrations/${this.appId}/user/conversations`, query, body)) as unknown as EmptyResponse;
   }
 
   /** Create Memories Via Integration */
-  async createMemories(uid: string, body: Record<string, unknown>): Promise<Json> {
+  async createMemories(uid: string, body: ExternalIntegrationCreateMemory): Promise<EmptyResponse> {
     const query: Record<string, unknown> = {};
     query["uid"] = uid;
-    return this.request("POST", `/v2/integrations/${this.appId}/user/memories`, query, body);
+    return (await this.request("POST", `/v2/integrations/${this.appId}/user/memories`, query, body)) as unknown as EmptyResponse;
   }
 
 }

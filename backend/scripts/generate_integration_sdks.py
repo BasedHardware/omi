@@ -162,6 +162,364 @@ def spec_fingerprint(spec_path: Path) -> str:
     return digest
 
 
+def collect_schemas(spec: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw = (spec.get('components') or {}).get('schemas') or {}
+    return {name: schema for name, schema in raw.items() if isinstance(schema, dict)}
+
+
+def _schema_props(schema: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    props = schema.get('properties') or {}
+    required = list(schema.get('required') or [])
+    return props if isinstance(props, dict) else {}, required
+
+
+def _unwrap_nullable(schema: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    if schema.get('nullable') is True:
+        return schema, True
+    any_of = schema.get('anyOf')
+    if isinstance(any_of, list):
+        non_null = [s for s in any_of if not (isinstance(s, dict) and s.get('type') == 'null')]
+        has_null = len(non_null) != len(any_of)
+        if len(non_null) == 1 and isinstance(non_null[0], dict):
+            return non_null[0], has_null
+    t = schema.get('type')
+    if isinstance(t, list) and 'null' in t:
+        non_null = [x for x in t if x != 'null']
+        next_schema = dict(schema)
+        if len(non_null) == 1:
+            next_schema['type'] = non_null[0]
+        elif non_null:
+            next_schema['type'] = non_null
+        else:
+            next_schema.pop('type', None)
+        return next_schema, True
+    return schema, False
+
+
+def ts_type_expr(schema: dict[str, Any] | None, schemas: dict[str, dict[str, Any]]) -> str:
+    if not schema:
+        return 'unknown'
+    if '$ref' in schema:
+        name = ref_name(schema['$ref'])
+        return name or 'unknown'
+    schema, optional = _unwrap_nullable(schema)
+    if '$ref' in schema:
+        name = ref_name(schema['$ref']) or 'unknown'
+        return f'{name} | null' if optional else name
+    t = schema.get('type')
+    if isinstance(t, list):
+        t = next((x for x in t if x != 'null'), 'unknown')
+    enum = schema.get('enum')
+    if enum and all(isinstance(x, str) for x in enum):
+        expr = ' | '.join(json.dumps(x) for x in enum)
+        return f'({expr}) | null' if optional else expr
+    if t == 'string':
+        base = 'string'
+    elif t == 'integer' or t == 'number':
+        base = 'number'
+    elif t == 'boolean':
+        base = 'boolean'
+    elif t == 'array':
+        items = schema.get('items') if isinstance(schema.get('items'), dict) else {}
+        base = f'Array<{ts_type_expr(items, schemas)}>'
+    elif t == 'object' or schema.get('properties') or schema.get('additionalProperties') is not None:
+        if schema.get('additionalProperties') and not schema.get('properties'):
+            base = 'Record<string, unknown>'
+        else:
+            # inline object rare; use Record
+            base = 'Record<string, unknown>'
+    else:
+        base = 'unknown'
+    return f'{base} | null' if optional else base
+
+
+def py_type_expr(schema: dict[str, Any] | None, schemas: dict[str, dict[str, Any]]) -> str:
+    if not schema:
+        return 'Any'
+    if '$ref' in schema:
+        name = ref_name(schema['$ref'])
+        return name or 'Any'
+    schema, optional = _unwrap_nullable(schema)
+    if '$ref' in schema:
+        name = ref_name(schema['$ref']) or 'Any'
+        return f'{name} | None' if optional else name
+    t = schema.get('type')
+    if isinstance(t, list):
+        t = next((x for x in t if x != 'null'), None)
+    if schema.get('enum') and all(isinstance(x, str) for x in schema['enum']):
+        # use Literal
+        lits = ', '.join(repr(x) for x in schema['enum'])
+        base = f'Literal[{lits}]'
+    elif t == 'string':
+        base = 'str'
+    elif t == 'integer':
+        base = 'int'
+    elif t == 'number':
+        base = 'float'
+    elif t == 'boolean':
+        base = 'bool'
+    elif t == 'array':
+        items = schema.get('items') if isinstance(schema.get('items'), dict) else {}
+        base = f'list[{py_type_expr(items, schemas)}]'
+    elif t == 'object' or schema.get('additionalProperties') is not None or schema.get('properties'):
+        base = 'dict[str, Any]'
+    else:
+        base = 'Any'
+    return f'{base} | None' if optional else base
+
+
+def go_type_expr(schema: dict[str, Any] | None, schemas: dict[str, dict[str, Any]], for_field: bool = True) -> str:
+    if not schema:
+        return 'any'
+    if '$ref' in schema:
+        name = ref_name(schema['$ref'])
+        return name or 'any'
+    schema, optional = _unwrap_nullable(schema)
+    if '$ref' in schema:
+        name = ref_name(schema['$ref']) or 'any'
+        return f'*{name}' if optional and for_field else name
+    t = schema.get('type')
+    if isinstance(t, list):
+        t = next((x for x in t if x != 'null'), None)
+    if t == 'string':
+        base = 'string'
+    elif t == 'integer':
+        base = 'int'
+    elif t == 'number':
+        base = 'float64'
+    elif t == 'boolean':
+        base = 'bool'
+    elif t == 'array':
+        items = schema.get('items') if isinstance(schema.get('items'), dict) else {}
+        base = f'[]{go_type_expr(items, schemas, for_field=False)}'
+    elif t == 'object' or schema.get('additionalProperties') is not None or schema.get('properties'):
+        base = 'map[string]any'
+    else:
+        base = 'any'
+    if optional and for_field and base not in {'map[string]any'} and not base.startswith('[]'):
+        return f'*{base}'
+    return base
+
+
+def dart_type_expr(schema: dict[str, Any] | None, schemas: dict[str, dict[str, Any]]) -> str:
+    if not schema:
+        return 'Object?'
+    if '$ref' in schema:
+        name = ref_name(schema['$ref'])
+        return name or 'Object?'
+    schema, optional = _unwrap_nullable(schema)
+    if '$ref' in schema:
+        name = ref_name(schema['$ref']) or 'Object'
+        return f'{name}?' if optional else name
+    t = schema.get('type')
+    if isinstance(t, list):
+        t = next((x for x in t if x != 'null'), None)
+    if t == 'string':
+        base = 'String'
+    elif t == 'integer':
+        base = 'int'
+    elif t == 'number':
+        base = 'double'
+    elif t == 'boolean':
+        base = 'bool'
+    elif t == 'array':
+        items = schema.get('items') if isinstance(schema.get('items'), dict) else {}
+        item_t = dart_type_expr(items, schemas).rstrip('?')
+        base = f'List<{item_t}>'
+    elif t == 'object' or schema.get('additionalProperties') is not None or schema.get('properties'):
+        base = 'Map<String, dynamic>'
+    else:
+        base = 'Object'
+    return f'{base}?' if optional else base
+
+
+def gen_ts_types(schemas: dict[str, dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for name, schema in sorted(schemas.items()):
+        if schema.get('enum') and schema.get('type') == 'string':
+            vals = ' | '.join(json.dumps(v) for v in schema['enum'])
+            lines.append(f'export type {name} = {vals};')
+            lines.append('')
+            continue
+        props, required = _schema_props(schema)
+        if schema.get('type') == 'object' or props:
+            lines.append(f'export interface {name} {{')
+            for prop, ps in props.items():
+                if not isinstance(ps, dict):
+                    continue
+                opt = prop not in required
+                # also nullable fields optional-ish
+                te = ts_type_expr(ps, schemas)
+                q = '?' if opt else ''
+                lines.append(f'  {json.dumps(prop)[1:-1] if not prop.isidentifier() else prop}{q}: {te};')
+            lines.append('}')
+            lines.append('')
+        else:
+            lines.append(f'export type {name} = Record<string, unknown>;')
+            lines.append('')
+    return '\n'.join(lines)
+
+
+def gen_py_types(schemas: dict[str, dict[str, Any]]) -> str:
+    lines = [
+        'from __future__ import annotations',
+        '',
+        'from typing import Any, Literal, NotRequired, TypedDict',
+        '',
+    ]
+    # enums first
+    for name, schema in sorted(schemas.items()):
+        if schema.get('enum') and schema.get('type') == 'string':
+            lits = ', '.join(repr(v) for v in schema['enum'])
+            lines.append(f'{name} = Literal[{lits}]')
+            lines.append('')
+    for name, schema in sorted(schemas.items()):
+        if schema.get('enum') and schema.get('type') == 'string':
+            continue
+        props, required = _schema_props(schema)
+        lines.append(f'class {name}(TypedDict):')
+        if not props:
+            lines.append('    pass')
+            lines.append('')
+            continue
+        for prop, ps in props.items():
+            if not isinstance(ps, dict):
+                continue
+            te = py_type_expr(ps, schemas)
+            if prop in required:
+                lines.append(f'    {prop}: {te}')
+            else:
+                lines.append(f'    {prop}: NotRequired[{te}]')
+        lines.append('')
+    return '\n'.join(lines) + '\n'
+
+
+def gen_go_types(schemas: dict[str, dict[str, Any]]) -> str:
+    lines = ['package omiintegration', '', 'import "time"', '']
+    # drop unused time if no date-time - use string for date-time always
+    lines = ['package omiintegration', '']
+    for name, schema in sorted(schemas.items()):
+        if schema.get('enum') and schema.get('type') == 'string':
+            lines.append(f'// {name} is an OpenAPI string enum.')
+            lines.append(f'type {name} string')
+            lines.append('')
+            lines.append('const (')
+            for v in schema['enum']:
+                const = to_go_export(str(v).replace('-', '_'))
+                lines.append(f'\t{name}{const} {name} = {json.dumps(v)}')
+            lines.append(')')
+            lines.append('')
+            continue
+        props, required = _schema_props(schema)
+        lines.append(f'// {name} is generated from the Integration OpenAPI schema.')
+        lines.append(f'type {name} struct {{')
+        if not props:
+            lines.append('\t// empty response object')
+        for prop, ps in props.items():
+            if not isinstance(ps, dict):
+                continue
+            field = to_go_export(prop)
+            te = go_type_expr(ps, schemas)
+            omit = ',omitempty' if prop not in required else ''
+            lines.append(f'\t{field} {te} `json:"{prop}{omit}"`')
+        lines.append('}')
+        lines.append('')
+    return '\n'.join(lines) + '\n'
+
+
+def gen_dart_types(schemas: dict[str, dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for name, schema in sorted(schemas.items()):
+        if schema.get('enum') and schema.get('type') == 'string':
+            lines.append(f'typedef {name} = String;')
+            lines.append('')
+            continue
+        props, required = _schema_props(schema)
+        lines.append(f'class {name} {{')
+        if not props:
+            lines.append(f'  const {name}();')
+            lines.append(f'  factory {name}.fromJson(Map<String, dynamic> json) => const {name}();')
+            lines.append(f'  Map<String, dynamic> toJson() => const <String, dynamic>{{}};')
+            lines.append('}')
+            lines.append('')
+            continue
+        fields = []
+        for prop, ps in props.items():
+            if not isinstance(ps, dict):
+                continue
+            te = dart_type_expr(ps, schemas)
+            # Non-required OpenAPI fields are optional named params → must be nullable in Dart.
+            if prop not in required and not te.endswith('?'):
+                te = f'{te}?'
+            field = to_camel(prop) if '_' in prop else prop
+            fields.append((prop, field, te, prop in required))
+            lines.append(f'  final {te} {field};')
+        lines.append('')
+        ctor_args = ', '.join(
+            (f'required this.{field}' if req and not te.endswith('?') else f'this.{field}')
+            for _, field, te, req in fields
+        )
+        lines.append(f'  const {name}({{{ctor_args}}});')
+        lines.append('')
+        lines.append(f'  factory {name}.fromJson(Map<String, dynamic> json) {{')
+        lines.append(f'    return {name}(')
+        for prop, field, te, req in fields:
+            is_list = te.startswith('List<') or te.startswith('List<')
+            raw_list = te.startswith('List<')
+            if raw_list:
+                list_type = te[:-1] if te.endswith('?') else te
+                assert list_type.startswith('List<') and list_type.endswith('>')
+                inner = list_type[len('List<') : -1]
+                # strip outer nullable on list type: List<Foo>?
+                list_nullable = False
+                # te is like List<Foo> or List<Foo>? — we forced ? only on whole type earlier
+                if te.endswith('>?'):
+                    # shouldn't happen with our construction
+                    pass
+                inner_base = inner.rstrip('?')
+                if inner_base in schemas and not (
+                    (schemas.get(inner_base) or {}).get('enum')
+                    and (schemas.get(inner_base) or {}).get('type') == 'string'
+                ):
+                    mapped = f"(json[{json.dumps(prop)}] as List<dynamic>?)?.map((e) => {inner_base}.fromJson(e as Map<String, dynamic>)).toList()"
+                else:
+                    mapped = f"(json[{json.dumps(prop)}] as List<dynamic>?)?.map((e) => e as {inner_base}).toList()"
+                if prop in required:
+                    lines.append(f"      {field}: {mapped} ?? const [],")
+                else:
+                    lines.append(f"      {field}: {mapped},")
+            elif te.rstrip('?') in schemas:
+                base = te.rstrip('?')
+                base_schema = schemas.get(base) or {}
+                if base_schema.get('enum') and base_schema.get('type') == 'string':
+                    # enum typedefs are strings
+                    lines.append(f"      {field}: json[{json.dumps(prop)}] as {te},")
+                elif prop in required and not te.endswith('?'):
+                    lines.append(f"      {field}: {base}.fromJson(json[{json.dumps(prop)}] as Map<String, dynamic>),")
+                else:
+                    lines.append(
+                        f"      {field}: json[{json.dumps(prop)}] == null ? null : {base}.fromJson(json[{json.dumps(prop)}] as Map<String, dynamic>),"
+                    )
+            else:
+                cast = te.rstrip('?')
+                if cast == 'Map<String, dynamic>':
+                    expr = f"(json[{json.dumps(prop)}] as Map?)?.cast<String, dynamic>()"
+                    if prop in required and not te.endswith('?'):
+                        lines.append(f"      {field}: {expr} ?? const {{}},")
+                    else:
+                        lines.append(f"      {field}: {expr},")
+                elif cast in {'String', 'int', 'double', 'bool', 'Object'}:
+                    lines.append(f"      {field}: json[{json.dumps(prop)}] as {te},")
+                else:
+                    # enum typedefs etc.
+                    lines.append(f"      {field}: json[{json.dumps(prop)}] as {te},")
+        lines.append('    );')
+        lines.append('  }')
+        lines.append('}')
+        lines.append('')
+    return '\n'.join(lines)
+
+
 def header_comment(lang: str, spec_path: Path) -> str:
     rel = spec_path.relative_to(ROOT_DIR).as_posix()
     common = (
@@ -196,8 +554,9 @@ def to_go_export(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def gen_typescript(ops: list[dict[str, Any]], spec_path: Path) -> dict[str, str]:
+def gen_typescript(ops: list[dict[str, Any]], schemas: dict[str, dict[str, Any]], spec_path: Path) -> dict[str, str]:
     lines: list[str] = [header_comment('ts', spec_path)]
+    lines.append(gen_ts_types(schemas))
     lines.append("""export type Json =
   | null
   | boolean
@@ -316,7 +675,7 @@ export class OmiIntegrationClient {
                 ts_t = 'string[]'
             args.append(f"{to_camel(p['name'])}: {ts_t}")
         if op['body_type']:
-            args.append('body: Record<string, unknown>')
+            args.append(f'body: {op["body_ref"] or "Record<string, unknown>"}')
         if optional_q:
             fields = []
             for p in optional_q:
@@ -337,7 +696,8 @@ export class OmiIntegrationClient {
             args.append(f"options: {{ {'; '.join(fields)} }} = {{}}")
 
         lines.append(f'  /** {op["summary"]} */')
-        lines.append(f'  async {method_name}({", ".join(args)}): Promise<Json> {{')
+        ret_t = op.get('success_ref') or 'Json'
+        lines.append(f'  async {method_name}({", ".join(args)}): Promise<{ret_t}> {{')
         # query object
         if query_params:
             lines.append('    const query: Record<string, unknown> = {};')
@@ -351,7 +711,10 @@ export class OmiIntegrationClient {
         else:
             query_arg = 'undefined'
         body_arg = 'body' if op['body_type'] else 'undefined'
-        lines.append(f'    return this.request({json.dumps(op["method"])}, {path_expr}, {query_arg}, {body_arg});')
+        ret_t = op.get('success_ref') or 'Json'
+        lines.append(
+            f'    return (await this.request({json.dumps(op["method"])}, {path_expr}, {query_arg}, {body_arg})) as unknown as {ret_t};'
+        )
         lines.append('  }')
         lines.append('')
 
@@ -406,7 +769,7 @@ export class OmiIntegrationClient {
 # ---------------------------------------------------------------------------
 
 
-def gen_go(ops: list[dict[str, Any]], spec_path: Path) -> dict[str, str]:
+def gen_go(ops: list[dict[str, Any]], schemas: dict[str, dict[str, Any]], spec_path: Path) -> dict[str, str]:
     lines: list[str] = [header_comment('go', spec_path)]
     lines.append("""package omiintegration
 
@@ -613,6 +976,7 @@ go 1.22
 '''
     return {
         'omiintegration/client_gen.go': '\n'.join(lines) + '\n',
+        'omiintegration/types_gen.go': header_comment('go', spec_path) + gen_go_types(schemas),
         'go.mod': go_mod,
     }
 
@@ -622,13 +986,15 @@ go 1.22
 # ---------------------------------------------------------------------------
 
 
-def gen_python(ops: list[dict[str, Any]], spec_path: Path) -> dict[str, str]:
+def gen_python(ops: list[dict[str, Any]], schemas: dict[str, dict[str, Any]], spec_path: Path) -> dict[str, str]:
     lines: list[str] = [header_comment('py', spec_path)]
     lines.append('''from __future__ import annotations
 
 from typing import Any, Mapping, MutableMapping, Optional, Sequence, Union
 
 import httpx
+
+from .models import *  # noqa: F403
 
 JsonValue = Union[None, bool, int, float, str, list[Any], dict[str, Any]]
 
@@ -733,7 +1099,7 @@ class OmiIntegrationClient:
                 py_t = 'Sequence[str]'
             args.append(f"{p['name']}: {py_t}")
         if op['body_type']:
-            args.append('body: Mapping[str, Any]')
+            args.append(f'body: {op["body_ref"] or "Mapping[str, Any]"}')
         for p in optional_q:
             py_t = 'Optional[str]'
             if p['type'] in {'integer'}:
@@ -746,7 +1112,8 @@ class OmiIntegrationClient:
                 py_t = 'Optional[Sequence[str]]'
             args.append(f"{p['name']}: {py_t} = None")
 
-        lines.append(f'    def {op["name"]}({", ".join(args)}) -> JsonValue:')
+        ret = op.get('success_ref') or 'JsonValue'
+        lines.append(f'    def {op["name"]}({", ".join(args)}) -> {ret}:')
         lines.append(f'        """{op["summary"]}"""')
         if query_params:
             lines.append('        params: MutableMapping[str, Any] = {}')
@@ -793,9 +1160,11 @@ Repository = "https://github.com/BasedHardware/omi"
 [tool.setuptools.packages.find]
 where = ["src"]
 '''
+    models_py = header_comment('py', spec_path) + gen_py_types(schemas)
     return {
         'src/omi_integration/__init__.py': init_py,
         'src/omi_integration/client.py': '\n'.join(lines) + '\n',
+        'src/omi_integration/models.py': models_py,
         'src/omi_integration/py.typed': '',
         'pyproject.toml': pyproject,
     }
@@ -1291,7 +1660,7 @@ def _dart_type(param: dict[str, Any], optional: bool) -> str:
     return base
 
 
-def gen_dart(ops: list[dict[str, Any]], spec_path: Path) -> dict[str, str]:
+def gen_dart(ops: list[dict[str, Any]], schemas: dict[str, dict[str, Any]], spec_path: Path) -> dict[str, str]:
     lines: list[str] = [header_comment("cpp", spec_path)]
     lines.append("""import 'dart:convert';
 
@@ -1389,7 +1758,6 @@ class OmiIntegrationClient {
     return parsed;
   }
 """)
-
     for op in ops:
         method_name = op["name"]  # snake_case is idiomatic Dart for private; public APIs often camelCase.
         dart_name = to_camel(op["name"])
@@ -1401,7 +1769,7 @@ class OmiIntegrationClient {
         for p in required_q:
             args.append(f"required {_dart_type(p, False)} {to_camel(p['name'])}")
         if op["body_type"]:
-            args.append("required Map<String, dynamic> body")
+            args.append(f"required {op['body_ref'] or 'Map<String, dynamic>'} body")
         for p in optional_q:
             args.append(f"{_dart_type(p, True)} {to_camel(p['name'])}")
 
@@ -1440,6 +1808,7 @@ class OmiIntegrationClient {
 
     lines.append("}")
     lines.append("")
+    lines.append(gen_dart_types(schemas))
 
     pubspec = """name: omi_integration
 description: Omi Integration API client (OpenAPI-generated)
@@ -1661,21 +2030,22 @@ def _format_dart_tree(root: Path) -> None:
 def generate_all(spec_path: Path) -> dict[str, str]:
     spec = load_spec(spec_path)
     ops = operations(spec)
+    schemas = collect_schemas(spec)
     if not ops:
         raise GeneratorError(f'no operations found in {spec_path}')
 
     files: dict[str, str] = {}
-    for rel, content in gen_typescript(ops, spec_path).items():
+    for rel, content in gen_typescript(ops, schemas, spec_path).items():
         files[f'typescript/{rel}'] = content
-    for rel, content in gen_go(ops, spec_path).items():
+    for rel, content in gen_go(ops, schemas, spec_path).items():
         files[f'go/{rel}'] = content
-    for rel, content in gen_python(ops, spec_path).items():
+    for rel, content in gen_python(ops, schemas, spec_path).items():
         files[f'python/{rel}'] = content
     for rel, content in gen_rust(ops, spec_path).items():
         files[f'rust/{rel}'] = content
     for rel, content in gen_cpp(ops, spec_path).items():
         files[f'cpp/{rel}'] = content
-    for rel, content in gen_dart(ops, spec_path).items():
+    for rel, content in gen_dart(ops, schemas, spec_path).items():
         files[f'dart/{rel}'] = content
 
     files['README.md'] = gen_readme(ops)
