@@ -355,7 +355,7 @@ pub fn audio_frames(payload: &[u8]) -> Vec<&[u8]> {
         let size = payload[offset] as usize;
         if size == 0 {
             offset += 1;
-        } else if offset + 1 + size > payload.len() {
+        } else if offset + 1 + size >= payload.len() {
             break;
         } else {
             frames.push(&payload[offset + 1..offset + 1 + size]);
@@ -582,7 +582,10 @@ mod tests {
     }
 
     #[test]
-    fn accepts_a_frame_ending_at_the_payload_boundary() {
-        assert_eq!(audio_frames(&[2, 7, 8]), vec![&[7, 8][..]]);
+    fn rejects_a_frame_ending_at_the_payload_boundary() {
+        let mut payload = vec![0; RING_AUDIO_PAYLOAD_SIZE];
+        payload[RING_AUDIO_PAYLOAD_SIZE - 3] = 2;
+        payload[RING_AUDIO_PAYLOAD_SIZE - 2..].copy_from_slice(&[7, 8]);
+        assert!(audio_frames(&payload).is_empty());
     }
 }
