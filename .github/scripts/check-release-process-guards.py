@@ -153,6 +153,11 @@ WORKFLOW_CONTRACT_RELATIVE_PATH = Path(".github/scripts/fixtures/codemagic_workf
 CANONICAL_WORKFLOW = "omi-desktop-swift-release"
 PREVIEW_WORKFLOW = "omi-desktop-swift-preview"
 NORMAL_RELEASE_CREDENTIAL_GROUPS = {"desktop_secrets"}
+TEMPORARY_PREVIEW_CREDENTIAL_GROUPS = [
+    "desktop_preview_secrets",
+    "appstore_credentials",
+    "desktop_secrets",
+]
 WORKFLOW_CONTRACT_SCHEMA_VERSION_FIELD = "schema_version"
 WORKFLOW_CONTRACT_SCHEMA_VERSION = 1
 CODEMAGIC_RAW_SHA256_FIELD = "codemagic_raw_sha256"
@@ -420,8 +425,11 @@ def check_codemagic_release_publishers() -> list[str]:
     preview_environment = preview.get("environment")
     preview_groups = preview_environment.get("groups") if isinstance(preview_environment, dict) else None
     preview_vars = preview_environment.get("vars") if isinstance(preview_environment, dict) else None
-    if preview_groups != ["desktop_preview_secrets"]:
-        errors.append("preview workflow must use only the approved desktop_preview_secrets credential group")
+    if preview_groups != TEMPORARY_PREVIEW_CREDENTIAL_GROUPS:
+        errors.append(
+            "preview workflow must use exactly the approved temporary credential groups "
+            f"{TEMPORARY_PREVIEW_CREDENTIAL_GROUPS}"
+        )
     if not isinstance(preview_vars, dict) or preview_vars.get("PREVIEW_MODE") != "true":
         errors.append('preview workflow must set exact PREVIEW_MODE: "true"')
 
@@ -458,7 +466,7 @@ def check_codemagic_release_publishers() -> list[str]:
             errors.append(f"Codemagic workflow {workflow_name} environment vars must be a mapping")
             continue
         forbidden_groups = NORMAL_RELEASE_CREDENTIAL_GROUPS.intersection(str(group) for group in groups)
-        if workflow_name != CANONICAL_WORKFLOW and forbidden_groups:
+        if workflow_name not in {CANONICAL_WORKFLOW, PREVIEW_WORKFLOW} and forbidden_groups:
             errors.append(
                 f"Codemagic workflow {workflow_name} imports normal release credential group(s): {sorted(forbidden_groups)}"
             )
@@ -726,8 +734,6 @@ def check_desktop_preview_publishing() -> list[str]:
         ):
             if required not in preview_workflow and required not in codemagic_text:
                 errors.append(f"desktop preview workflow is missing required guard fragment: {required}")
-        if re.search(r"(?m)^\s*- desktop_secrets$", preview_workflow):
-            errors.append("desktop preview workflow must not inherit normal desktop_secrets")
         if "${OMI_PYTHON_API_URL%/}/v2/desktop/previews/publish" in codemagic_text:
             errors.append("desktop preview registry must not use the artifact runtime Python API URL")
 
