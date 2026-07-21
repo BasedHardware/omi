@@ -35,6 +35,10 @@ import {
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
+import {
+  startRewindForegroundCaptureTrigger,
+  stopRewindForegroundCaptureTrigger
+} from './rewind/foregroundCaptureTrigger'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
@@ -393,6 +397,7 @@ app.whenReady().then(async () => {
     // fresh install, and any change the user makes in Settings survives restarts.
     // OCR/retention loops are cheap no-ops until frames exist.
     startRewindCapture()
+    startRewindForegroundCaptureTrigger()
     startRewindOcr()
     startRewindRetention()
     // Warm the (slow) screen-source-id cache a few seconds later, off the critical
@@ -513,6 +518,7 @@ app.on('will-quit', () => {
   flushPerfMarks()
   automationBridge.dispose()
   stopAutomationTargetTracker()
+  stopRewindForegroundCaptureTrigger()
 })
 
 // In this file you can include the rest of your app's specific main process

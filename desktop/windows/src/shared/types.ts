@@ -240,6 +240,7 @@ export type OmiBridgeApi = {
   rewindPruneNow: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
   rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
+  onRewindCaptureNow: (cb: () => void) => () => void
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
   /** Capture the primary screen once and OCR it, returning the recognized text
    *  (or '' on failure/timeout). Used by the chat to read the screen at send time. */

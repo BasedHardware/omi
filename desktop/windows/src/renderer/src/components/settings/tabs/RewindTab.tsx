@@ -133,11 +133,11 @@ export function RewindTab(): React.JSX.Element {
       <SettingRow
         icon={Clock}
         title="Capture interval"
-        subtitle="How often a frame is sampled."
+        subtitle="How often a frame is sampled while the active window stays the same. Window switches capture immediately."
         keywords="rewind frequency seconds"
         control={
           <select
-            value={rewind?.intervalMs ?? 1000}
+            value={rewind?.intervalMs ?? 5000}
             onChange={(e) => rewind && saveRewind({ ...rewind, intervalMs: Number(e.target.value) })}
             disabled={!rewind}
             className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-40"
