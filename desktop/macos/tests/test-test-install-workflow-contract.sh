@@ -14,7 +14,6 @@ check_workflow() {
   python3 - "$WORKFLOW" <<'PY'
 from pathlib import Path
 import re
-import shlex
 import sys
 
 
@@ -43,58 +42,82 @@ def leading_spaces(line):
     return len(line) - len(line.lstrip(" "))
 
 
-target_step_pattern = re.compile(r"^(?P<indent> *)- name: Download DMG from GitHub Release$")
-step_matches = [
-    (index, len(match.group("indent")))
+if re.search(r"(?m)(?:^|[ \t:\[\]{},])(?:&|\*)[A-Za-z_][A-Za-z0-9_-]*", workflow_text):
+    fail("workflow must not use YAML anchors or aliases")
+
+
+def step_end_after(step_start, step_indent):
+    next_step_pattern = re.compile(rf"^{' ' * step_indent}- ")
+    for index in range(step_start + 1, len(lines)):
+        if next_step_pattern.match(without_line_ending(lines[index])):
+            return index
+    return len(lines)
+
+
+def exact_named_steps(name):
+    pattern = re.compile(rf"^(?P<indent> *)- name: {re.escape(name)}$")
+    return [
+        (index, len(match.group("indent")))
+        for index, line in enumerate(lines)
+        if (match := pattern.match(without_line_ending(line)))
+    ]
+
+
+# The name itself is part of the identity contract.  A quoted or otherwise
+# noncanonical spelling is not an alternate representation: it is a decoy.
+name_mentions = [
+    (index, without_line_ending(line))
     for index, line in enumerate(lines)
-    if (match := target_step_pattern.match(without_line_ending(line)))
+    if re.match(r"^ *-\s+name:", without_line_ending(line)) and target_name in without_line_ending(line)
 ]
+for _, line in name_mentions:
+    if line != f"      - name: {target_name}":
+        fail("installer step name must use the one exact unquoted canonical spelling")
+
+step_matches = exact_named_steps(target_name)
 if len(step_matches) != 1:
     fail(f"expected one exact {target_name!r} step, found {len(step_matches)}")
 
 step_start, step_indent = step_matches[0]
-step_end = len(lines)
-next_step_pattern = re.compile(rf"^{' ' * step_indent}- ")
-for index in range(step_start + 1, len(lines)):
-    if next_step_pattern.match(without_line_ending(lines[index])):
-        step_end = index
-        break
+step_end = step_end_after(step_start, step_indent)
+field_indent = step_indent + 2
+if without_line_ending(lines[step_start]) != f"{' ' * step_indent}- name: {target_name}":
+    fail("installer step name is not the exact canonical YAML line")
 
-literal_run_pattern = re.compile(r"^(?P<indent> *)run: \|$")
-run_matches = [
-    (index, len(match.group("indent")))
-    for index in range(step_start + 1, step_end)
-    if (match := literal_run_pattern.match(without_line_ending(lines[index])))
-]
-if len(run_matches) != 1:
-    fail(f"installer step must have exactly one literal `run: |` block, found {len(run_matches)}")
+id_pattern = re.compile(r"^(?P<indent> *)id:\s*(?P<value>.*?)$")
+download_ids = []
+for index, line in enumerate(lines):
+    match = id_pattern.match(without_line_ending(line))
+    if match and match.group("value").strip().strip("\"'") == "download":
+        download_ids.append((index, len(match.group("indent")), without_line_ending(line)))
+if len(download_ids) != 1:
+    fail(f"expected one executable id: download, found {len(download_ids)}")
+id_index, id_indent, id_line = download_ids[0]
+if not (step_start < id_index < step_end) or id_indent != field_indent or id_line != f"{' ' * field_indent}id: download":
+    fail("canonical installer step must own the exact literal id: download")
 
-run_start, run_indent = run_matches[0]
-run_lines = lines[run_start + 1:step_end]
-nonempty_indents = [
-    leading_spaces(without_line_ending(line))
-    for line in run_lines
-    if without_line_ending(line).strip(" ")
-]
-if not nonempty_indents:
-    fail("installer literal run block is empty")
-content_indent = min(nonempty_indents)
-if content_indent <= run_indent:
-    fail("installer literal run block is not indented beneath `run: |`")
+run_key_pattern = re.compile(rf"^{' ' * field_indent}run:")
+run_keys = [index for index in range(step_start + 1, step_end) if run_key_pattern.match(without_line_ending(lines[index]))]
+if len(run_keys) != 1:
+    fail(f"installer step must have exactly one run key, found {len(run_keys)}")
+run_start = run_keys[0]
+run_line = without_line_ending(lines[run_start])
+if run_line != f"{' ' * field_indent}run: |":
+    fail("installer step must use the exact literal run: | indicator without chomping or aliases")
+run_indent = field_indent
 
-normalized_run_lines = []
-for line in run_lines:
-    bare_line = without_line_ending(line)
-    if bare_line.strip(" ") and not line.startswith(" " * content_indent):
-        fail("installer literal run block has inconsistent YAML indentation")
-    normalized_run_lines.append(line[min(leading_spaces(line), content_indent):])
-run_content = "".join(normalized_run_lines)
-if run_content.endswith("\r\n"):
-    run_content = run_content[:-2] + "\n"
-elif run_content.endswith("\r"):
-    run_content = run_content[:-1] + "\n"
-elif not run_content.endswith("\n"):
-    run_content += "\n"
+
+def literal_body_end(run_start, run_indent, limit):
+    for index in range(run_start + 1, limit):
+        bare_line = without_line_ending(lines[index])
+        if bare_line.strip(" ") and leading_spaces(bare_line) <= run_indent:
+            return index
+    return limit
+
+
+run_end = literal_body_end(run_start, run_indent, step_end)
+if run_end != step_end:
+    fail("installer literal run block must occupy the rest of its step")
 
 canonical_installer_run = '''echo "=== Downloading DMG ==="
 
@@ -126,160 +149,45 @@ echo "**Tag:** \\`$TAG\\`" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 
 '''
-if run_content.encode("utf-8") != canonical_installer_run.encode("utf-8"):
-    fail("installer literal run block differs from the admitted canonical block")
-
-
-def other_step_run_content(target_name):
-    step_pattern = re.compile(r"^(?P<indent>\s*)-\s+name:\s*(?P<name>.*?)\s*(?:#.*)?$")
-    run_pattern = re.compile(r"^(?P<indent>\s*)run:\s*\|\s*(?:#.*)?$")
-    other_steps = []
-    for index, line in enumerate(lines):
-        match = step_pattern.match(without_line_ending(line))
-        if match and match.group("name").strip().strip("\"'") == target_name:
-            other_steps.append((index, len(match.group("indent"))))
-    if len(other_steps) != 1:
-        fail(f"expected one {target_name!r} step, found {len(other_steps)}")
-
-    other_start, other_indent = other_steps[0]
-    other_end = len(lines)
-    other_next_step = re.compile(rf"^\s{{{other_indent}}}-\s+")
-    for index in range(other_start + 1, len(lines)):
-        if other_next_step.match(without_line_ending(lines[index])):
-            other_end = index
-            break
-
-    other_runs = []
-    for index in range(other_start + 1, other_end):
-        match = run_pattern.match(without_line_ending(lines[index]))
-        if match:
-            other_runs.append((index, len(match.group("indent"))))
-    if len(other_runs) != 1:
-        fail(f"{target_name!r} must have one literal run block, found {len(other_runs)}")
-
-    other_run_start, other_run_indent = other_runs[0]
-    other_run_lines = []
-    for line in lines[other_run_start + 1:other_end]:
-        if line.strip() and len(line) - len(line.lstrip()) <= other_run_indent:
-            break
-        other_run_lines.append(line)
-    other_content_indents = [len(line) - len(line.lstrip()) for line in other_run_lines if line.strip()]
-    if not other_content_indents:
-        fail(f"{target_name!r} run block is empty")
-    other_content_indent = min(other_content_indents)
-    return "\n".join(
-        without_line_ending(line)[other_content_indent:] if line.strip() else "" for line in other_run_lines
+def canonical_body_at_indent(content_indent):
+    return "".join(
+        line if line == "\n" else f"{' ' * content_indent}{line}"
+        for line in canonical_installer_run.splitlines(keepends=True)
     )
 
 
-mount_content = other_step_run_content("Mount DMG and Install")
+canonical_run_body = canonical_body_at_indent(run_indent + 2)
+if "".join(lines[run_start + 1:run_end]).encode("utf-8") != canonical_run_body.encode("utf-8"):
+    fail("installer literal run block differs from the admitted canonical block")
 
+# The admitted raw body must not be duplicated in another literal scalar.  This
+# blocks skipped canonical-name decoys and anonymous canonical blocks alike.
+any_run_key_pattern = re.compile(r"^(?P<indent> *)run:")
+for index, line in enumerate(lines):
+    match = any_run_key_pattern.match(without_line_ending(line))
+    if not match or index == run_start:
+        continue
+    candidate_indent = len(match.group("indent"))
+    candidate_end = literal_body_end(index, candidate_indent, len(lines))
+    candidate_body = "".join(lines[index + 1:candidate_end])
+    expected_body = canonical_body_at_indent(candidate_indent + 2)
+    if candidate_body.encode("utf-8") == expected_body.encode("utf-8"):
+        fail("canonical installer literal run block appears outside id: download")
 
-def strip_shell_comment(line):
-    quote = None
-    escaped = False
-    result = []
-    for character in line:
-        if escaped:
-            result.append(character)
-            escaped = False
-            continue
-        if character == "\\":
-            result.append(character)
-            escaped = True
-            continue
-        if quote:
-            result.append(character)
-            if character == quote:
-                quote = None
-            continue
-        if character in "\"'":
-            result.append(character)
-            quote = character
-        elif character == "#":
-            break
-        else:
-            result.append(character)
-    return "".join(result)
-
-
-def logical_commands(content, description):
-    executable_lines = [strip_shell_comment(line).rstrip() for line in content.splitlines()]
-    executable_lines = [line for line in executable_lines if line.strip()]
-    commands = []
-    pending = ""
-    for line in executable_lines:
-        if line.endswith("\\") and not line.endswith("\\\\"):
-            pending += f"{line[:-1].strip()} "
-        else:
-            commands.append(f"{pending}{line.strip()}")
-            pending = ""
-    if pending:
-        fail(f"{description} has an unterminated command continuation")
-    return commands
-
-
-installer_commands = logical_commands(run_content, "installer run block")
-canonical_installer_commands = [
-    'echo "=== Downloading DMG ==="',
-    'TAG="${{ github.event.inputs.release_tag }}"',
-    'if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then',
-    'TAG="${{ github.event.client_payload.release_tag }}"',
-    'fi',
-    'if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then',
-    "TAG=$(gh release list --repo BasedHardware/omi --limit 1 --json tagName --jq '.[0].tagName')",
-    'fi',
-    'echo "Testing release: $TAG"',
-    'echo "release_tag=$TAG" >> $GITHUB_OUTPUT',
-    'DOWNLOAD_DIR="$RUNNER_TEMP/omi-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
-    'DMG_PATH="$DOWNLOAD_DIR/omi.dmg"',
-    'mkdir -p "$DOWNLOAD_DIR"',
-    'gh release download "$TAG" --repo BasedHardware/omi --pattern "omi.dmg" --dir "$DOWNLOAD_DIR"',
-    'test -f "$DMG_PATH"',
-    'echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT',
-    'echo "## Release Under Test" >> $GITHUB_STEP_SUMMARY',
-    'echo "**Tag:** \\`$TAG\\`" >> $GITHUB_STEP_SUMMARY',
-    'echo "" >> $GITHUB_STEP_SUMMARY',
-]
-if installer_commands != canonical_installer_commands:
-    fail("installer run block does not match the admitted canonical command grammar")
-
-# The admitted download production is deliberately direct and unwrapped.  Lex it
-# independently so the argument contract remains explicit rather than relying on
-# source-text coincidence.
-download = shlex.split(installer_commands[13], posix=True)
-expected_download = [
-    "gh", "release", "download", "$TAG", "--repo", "BasedHardware/omi",
-    "--pattern", "omi.dmg", "--dir", "$DOWNLOAD_DIR",
-]
-if download != expected_download:
-    fail("installer download must be direct gh release download with one exact --pattern omi.dmg")
-
-
-mount_executable_content = "\n".join(
-    strip_shell_comment(line).rstrip() for line in mount_content.splitlines() if strip_shell_comment(line).strip()
-)
-mount_commands = [shlex.split(command, posix=True) for command in logical_commands(mount_content, "mount run block")]
-
-
-def require_mount_command(prefix, description):
-    if not any(command[:len(prefix)] == prefix for command in mount_commands):
-        fail(f"mount run block missing executable {description}")
-
-
-if not re.search(r'(?m)^DMG_PATH="\$\{\{ steps\.download\.outputs\.dmg_path \}\}"$', mount_executable_content):
-    fail("mount run block missing exact DMG_PATH assignment")
-require_mount_command(["xattr", "-d", "com.apple.quarantine", "$DMG_PATH"], "xattr dequarantine command")
-if not re.search(
-    r'DEVICE=\$\(hdiutil\s+attach\s+"\$DMG_PATH"\s+-nobrowse\s+-readonly\s+-mountpoint\s+"\$MOUNTPOINT"',
-    mount_executable_content,
-):
-    fail("mount run block missing exact device-capturing hdiutil attach command")
-require_mount_command(["hdiutil", "detach", "$DEVICE", "-quiet"], "device hdiutil detach command")
-require_mount_command(["trap", "cleanup", "EXIT"], "cleanup trap")
-require_mount_command(["ditto", "$MOUNTPOINT/Omi.app", "/Applications/Omi.app"], "mounted-app copy command")
-if "/Volumes/Omi" in mount_executable_content:
-    fail("installer run block must not discover or detach a pre-existing /Volumes/Omi mount")
+mount_matches = exact_named_steps("Mount DMG and Install")
+if len(mount_matches) != 1:
+    fail("expected one exact Mount DMG and Install step")
+mount_start, mount_indent = mount_matches[0]
+if mount_start <= step_start:
+    fail("mount/install flow must occur after the download producer")
+mount_end = step_end_after(mount_start, mount_indent)
+mount_body = "".join(lines[mount_start + 1:mount_end])
+for required_line, description in [
+    (f"{' ' * (mount_indent + 4)}DMG_PATH=\"${{{{ steps.download.outputs.dmg_path }}}}\"\n", "download output input"),
+    (f"{' ' * (mount_indent + 4)}ditto \"$MOUNTPOINT/Omi.app\" \"/Applications/Omi.app\"\n", "mounted-app copy"),
+]:
+    if required_line not in mount_body:
+        fail(f"mount/install flow missing exact {description}")
 PY
 }
 
@@ -300,6 +208,7 @@ run_mutation() {
 
   python3 - "$DEFAULT_WORKFLOW" "$mutated_workflow" "$mutation" <<'PY'
 from pathlib import Path
+import subprocess
 import sys
 
 source = Path(sys.argv[1])
@@ -322,6 +231,57 @@ def download_dir_line_index():
     return matches[0]
 
 
+def add_skipped_canonical_decoy(quoted):
+    active_starts = [index for index, line in enumerate(lines) if line == '      - name: Download DMG from GitHub Release\n']
+    if len(active_starts) != 1:
+        raise SystemExit(f"expected one active installer step, found {len(active_starts)}")
+    active_start = active_starts[0]
+    active_end = next(
+        index for index in range(active_start + 1, len(lines)) if lines[index].startswith('      - ')
+    )
+    run_start = next(index for index in range(active_start + 1, active_end) if lines[index] == '        run: |\n')
+    canonical_body = lines[run_start + 1:active_end]
+    decoy_name = "'Download DMG from GitHub Release'" if quoted else "Download DMG from GitHub Release"
+    decoy = [
+        f'      - name: {decoy_name}\n',
+        '        if: ${{ false }}\n',
+        '        run: |\n',
+        *canonical_body,
+    ]
+    lines[active_start:active_start] = decoy
+    active_start += len(decoy)
+    lines[active_start] = '      - name: Fetch installer asset\n'
+    active_end += len(decoy)
+    active_patterns = [
+        index
+        for index in range(active_start + 1, active_end)
+        if '--pattern "omi.dmg"' in lines[index]
+    ]
+    if len(active_patterns) != 1:
+        raise SystemExit("active canonical pattern line not found")
+    lines[active_patterns[0]] = lines[active_patterns[0]].replace('"omi.dmg"', '"*.dmg"')
+
+
+def prove_decoy_topology_with_ruby(destination, mutation):
+    ruby = r'''
+require "yaml"
+workflow = YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)
+steps = workflow.fetch("jobs").fetch("test-install").fetch("steps")
+producers = steps.select { |step| step["id"] == "download" }
+abort "expected one active download producer" unless producers.length == 1
+producer = producers.fetch(0)
+abort "wildcard producer was not renamed" unless producer["name"] == "Fetch installer asset"
+abort "wildcard pattern is not owned by id: download" unless producer.fetch("run").include?('--pattern "*.dmg"')
+mounts = steps.select { |step| step["name"] == "Mount DMG and Install" }
+abort "expected one mount/install flow" unless mounts.length == 1
+mount = mounts.fetch(0).fetch("run")
+abort "mount does not consume id: download output" unless mount.include?("steps.download.outputs.dmg_path")
+abort "mount flow does not install the mounted app" unless mount.include?("ditto \"$MOUNTPOINT/Omi.app\" \"/Applications/Omi.app\"")
+'''
+    subprocess.run(["ruby", "-e", ruby, str(destination)], check=True)
+    print(f"Ruby YAML topology proof passed: {mutation}")
+
+
 if mutation == "canonical":
     pass
 elif mutation == "unrelated-yaml":
@@ -329,6 +289,10 @@ elif mutation == "unrelated-yaml":
     if len(matches) != 1:
         raise SystemExit(f"expected one unrelated timeout line, found {len(matches)}")
     lines[matches[0]] = lines[matches[0]].replace("timeout-minutes: 15", "timeout-minutes: 16")
+elif mutation == "unquoted-canonical-decoy-active-wildcard":
+    add_skipped_canonical_decoy(quoted=False)
+elif mutation == "quoted-canonical-decoy-active-wildcard":
+    add_skipped_canonical_decoy(quoted=True)
 elif mutation == "comment-decoy-wildcard":
     index = pattern_line_index()
     lines[index:index + 1] = [
@@ -464,6 +428,8 @@ else:
     raise SystemExit(f"unknown mutation: {mutation}")
 
 destination.write_text(''.join(lines))
+if mutation in {"unquoted-canonical-decoy-active-wildcard", "quoted-canonical-decoy-active-wildcard"}:
+    prove_decoy_topology_with_ruby(destination, mutation)
 PY
 
   if bash "$SCRIPT_DIR/test-test-install-workflow-contract.sh" --check "$mutated_workflow"; then
@@ -483,6 +449,8 @@ run_mutation duplicate duplicate
 run_mutation commented-command commented-command
 run_mutation canonical canonical accept
 run_mutation unrelated-yaml unrelated-yaml accept
+run_mutation unquoted-canonical-decoy-active-wildcard unquoted-canonical-decoy-active-wildcard
+run_mutation quoted-canonical-decoy-active-wildcard quoted-canonical-decoy-active-wildcard
 run_mutation long-equals long-equals
 run_mutation short-pattern short-pattern
 run_mutation short-pattern-concatenated short-pattern-concatenated
