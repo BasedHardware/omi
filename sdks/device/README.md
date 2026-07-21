@@ -37,3 +37,16 @@ Python uses `opuslib`. Other languages should use the platform Opus decoder (lib
 See [`STT.md`](STT.md) and [`PARITY.md`](PARITY.md).
 
 All languages expose the same engine names: `deepgram`, `whisper`, `parakeet`.
+
+## BLE backends (real libraries)
+
+| Lang | Library | Gate |
+|------|---------|------|
+| Python | bleak | always |
+| Swift | CoreBluetooth | always |
+| React Native | react-native-ble-plx | peer |
+| TypeScript | @stoprocent/noble | optionalDependency |
+| Go | tinygo.org/x/bluetooth | `-tags ble` |
+| Rust | btleplug | feature `ble` |
+| Dart | flutter_blue_plus (app UUID map) | Flutter package |
+| C++ | SimpleBLE | `-DOMI_DEVICE_BLE=ON` |

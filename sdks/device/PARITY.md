@@ -2,13 +2,19 @@
 
 | Capability | Python | Swift | React Native | TS device | Go | Rust | Dart | C++ |
 |------------|--------|-------|--------------|-----------|----|------|------|-----|
-| BLE UUIDs / packet strip | yes | yes | yes | yes | yes | yes | yes | yes |
-| Full BLE scan/connect | yes (bleak) | yes (CoreBluetooth) | yes (ble-plx) | transport inject | feature/build-tag | feature `ble` | yes (flutter_blue_plus) | macro `OMI_DEVICE_BLE` |
-| STT Deepgram | yes | yes | yes | yes | yes | feature `stt-deepgram` | yes* | URL helper |
-| STT Whisper | optional extra / runner | yes (SwiftWhisper) | injected runner | injected runner | injected runner | feature `stt-whisper` | injected runner | macro |
-| STT Parakeet `/v3/stream` | yes | yes | yes | yes | yes | feature `stt-parakeet` | yes | URL helper |
-| Opus decode | yes (opuslib) | yes | platform | n/a | n/a | n/a | n/a | n/a |
+| BLE UUIDs / packet strip | yes | yes | yes | yes | yes | yes | yes (app models.dart) | yes |
+| Full BLE scan/connect/listen | yes (bleak) | yes (CoreBluetooth) | yes (ble-plx) | optional `@stoprocent/noble` | `-tags ble` tinygo bluetooth | feature `ble` btleplug | **flutter_blue_plus** (app UUID map) | `OMI_DEVICE_BLE` SimpleBLE |
+| Audio notify + header strip | yes | yes | yes | yes | yes | yes | yes | yes |
+| Read codec / battery | yes | yes | yes | partial | codec yes | via chars | yes (app parity) | via SimpleBLE |
+| STT Deepgram | yes | yes | yes | yes | yes | feature | yes | URL helper |
+| STT Whisper | optional/runner | SwiftWhisper | runner | runner | runner | feature | runner | macro |
+| STT Parakeet `/v3/stream` | yes | yes | yes | yes | yes | feature | yes | URL helper |
 
-\* Dart Deepgram URL is constructed; some platforms need a WS client that can send `Authorization` headers.
+PCM contract for STT: **16-bit LE mono @ 16 kHz**.
 
-PCM contract for all STT engines: **16-bit LE mono @ 16 kHz**.
+## Dart BLE note
+
+Production Omi app uses **native Pigeon BLE**. The Dart device SDK uses **flutter_blue_plus** with the same GATT UUIDs and audio/codec/battery flows from:
+
+- `app/lib/services/devices/models.dart`
+- `app/lib/services/devices/connectors/omi_connection.dart`
