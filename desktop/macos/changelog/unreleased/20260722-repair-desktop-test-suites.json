@@ -1,0 +1,3 @@
+{
+  "change": "Repaired the desktop Swift test suites after the beta-bundle consolidation and floating-bar typing removal so CI reflects the current product surfaces"
+}
