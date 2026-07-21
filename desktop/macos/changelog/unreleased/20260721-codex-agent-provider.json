@@ -1,0 +1,3 @@
+{
+  "change": "Added OpenAI Codex as a selectable AI provider for local agents, bridged through the codex-acp adapter"
+}
