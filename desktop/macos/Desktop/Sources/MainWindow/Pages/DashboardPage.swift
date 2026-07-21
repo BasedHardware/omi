@@ -222,6 +222,7 @@ struct DashboardPage: View {
   var taskChatCoordinator: TaskChatCoordinator? = nil
   @ObservedObject private var deviceProvider = DeviceProvider.shared
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
+  @ObservedObject private var focusStorage = FocusStorage.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
   @State private var dismissedKnowsTaskIDs: Set<String> = []
   @State private var didAutoOpenChatForHistory = false
@@ -834,9 +835,27 @@ struct DashboardPage: View {
       insights: intelligenceStore.recommendations.map {
         HomeKnowsInsightCandidate(id: $0.id, text: $0.headline)
       },
+      focus: homeKnowsFocusText,
       questions: homeSuggestedQuestions,
       dismissedTaskIDs: dismissedKnowsTaskIDs
     )
+  }
+
+  /// The live focus signal for the hub list — what Omi sees you doing right
+  /// now. Nil until the focus assistant has a reading.
+  private var homeKnowsFocusText: String? {
+    guard let status = focusStorage.currentStatus else { return nil }
+    let rawApp = focusStorage.currentApp ?? focusStorage.detectedAppName
+    let app = rawApp?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let appName = (app?.isEmpty == false) ? app : nil
+    switch status {
+    case .focused:
+      return appName.map { "In focus on \($0) — I'll keep it clear." }
+        ?? "You're in focus — I'll keep it clear."
+    case .distracted:
+      return appName.map { "Pulled away by \($0) — want me to mute it?" }
+        ?? "You've drifted — want me to help you refocus?"
+    }
   }
 
   private var homeKnowsTaskCandidates: [HomeKnowsTaskCandidate] {
@@ -877,6 +896,8 @@ struct DashboardPage: View {
           await intelligenceStore.recordPrimaryAction(recommendation)
         }
       }
+    case .focus:
+      navigate(to: .focus)
     case .question:
       askHomeSuggestion(row.text)
     }
@@ -892,7 +913,7 @@ struct DashboardPage: View {
         else { return }
         Task { await intelligenceStore.dismiss(recommendation, reason: reason) }
       }
-    case .question:
+    case .focus, .question:
       return nil
     }
   }
@@ -1457,12 +1478,7 @@ struct DashboardPage: View {
           action: toggleListening,
           modeAction: toggleListeningMode
         )
-
-        HomeSettingsMenuButton(
-          onRefer: openReferFriend,
-          onDiscord: openDiscord,
-          onSettings: { navigate(to: .settings) }
-        )
+        // Settings lives in the nav rail (bottom-left) — no duplicate gear here.
       }
     }
     .frame(height: 36)
@@ -1613,17 +1629,6 @@ struct DashboardPage: View {
     selectedExportDestination = nil
   }
 
-  private func openReferFriend() {
-    if let url = URL(string: "https://affiliate.omi.me") {
-      NSWorkspace.shared.open(url)
-    }
-  }
-
-  private func openDiscord() {
-    if let url = URL(string: "https://discord.com/invite/8MP3b9ymvx") {
-      NSWorkspace.shared.open(url)
-    }
-  }
 
   private func openOmiDeviceWebsite() {
     if let url = URL(string: "https://www.omi.me") {
@@ -2451,6 +2456,7 @@ private struct HomeKnowsRowView: View {
     switch row.kind {
     case .task: return "circle"
     case .insight: return "lightbulb"
+    case .focus: return "eye"
     case .question: return "bubble.left"
     }
   }
@@ -4140,85 +4146,6 @@ private struct HomeIconActionButton: View {
     .onHover { isHovering = $0 }
     .help(title)
     .accessibilityLabel(title)
-  }
-}
-
-private struct HomeSettingsMenuButton: View {
-  let onRefer: () -> Void
-  let onDiscord: () -> Void
-  let onSettings: () -> Void
-
-  @State private var isHovering = false
-  @State private var isPresented = false
-
-  var body: some View {
-    Button {
-      isPresented.toggle()
-    } label: {
-      ZStack {
-        Circle()
-          .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.86))
-          .overlay(
-            Circle()
-              .stroke(HomePalette.hairline.opacity(isHovering ? 0.9 : 0.68), lineWidth: 1)
-          )
-
-        Image(systemName: "gearshape.fill")
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
-      }
-      .frame(width: 34, height: 34)
-      .contentShape(Circle())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .popover(isPresented: $isPresented, arrowEdge: .top) {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        popoverButton(title: "Refer a Friend", systemImage: "gift.fill") {
-          isPresented = false
-          onRefer()
-        }
-
-        popoverButton(title: "Discord", systemImage: "message.fill") {
-          isPresented = false
-          onDiscord()
-        }
-
-        Divider()
-          .padding(.vertical, OmiSpacing.hairline)
-
-        popoverButton(title: "Settings", systemImage: "gearshape.fill") {
-          isPresented = false
-          onSettings()
-        }
-      }
-      .padding(OmiSpacing.sm)
-      .frame(width: 190)
-      .background(HomePalette.panel)
-    }
-    .help("Settings")
-    .accessibilityLabel("Settings menu")
-  }
-
-  private func popoverButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: systemImage)
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundStyle(HomePalette.secondary)
-          .frame(width: 18)
-
-        Text(title)
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundStyle(HomePalette.ink)
-
-        Spacer(minLength: 0)
-      }
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xs)
-      .contentShape(.rect(cornerRadius: OmiChrome.elementRadius))
-    }
-    .buttonStyle(.plain)
   }
 }
 
