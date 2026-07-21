@@ -126,11 +126,14 @@ WORKFLOW_CONTRACT_RELATIVE_PATH = Path(".github/scripts/fixtures/codemagic_workf
 CANONICAL_WORKFLOW = "omi-desktop-swift-release"
 PREVIEW_WORKFLOW = "omi-desktop-swift-preview"
 NORMAL_RELEASE_CREDENTIAL_GROUPS = {"desktop_secrets"}
+WORKFLOW_CONTRACT_SCHEMA_VERSION_FIELD = "schema_version"
+WORKFLOW_CONTRACT_SCHEMA_VERSION = 1
 CODEMAGIC_RAW_SHA256_FIELD = "codemagic_raw_sha256"
 CODEMAGIC_SEMANTIC_SHA256_FIELD = "codemagic_semantic_sha256"
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 WORKFLOW_CONTRACT_TOP_LEVEL_KEYS = frozenset(
     {
+        WORKFLOW_CONTRACT_SCHEMA_VERSION_FIELD,
         CODEMAGIC_RAW_SHA256_FIELD,
         CODEMAGIC_SEMANTIC_SHA256_FIELD,
         CANONICAL_WORKFLOW,
@@ -202,6 +205,12 @@ def _load_workflow_contract(raw_bytes: bytes) -> tuple[dict[str, object] | None,
         ]
 
     errors: list[str] = []
+    schema_version = contract[WORKFLOW_CONTRACT_SCHEMA_VERSION_FIELD]
+    if type(schema_version) is not int or schema_version != WORKFLOW_CONTRACT_SCHEMA_VERSION:
+        errors.append(
+            "Codemagic workflow contract fixture schema_version must be the exact integer "
+            f"{WORKFLOW_CONTRACT_SCHEMA_VERSION}"
+        )
     for field in (CODEMAGIC_RAW_SHA256_FIELD, CODEMAGIC_SEMANTIC_SHA256_FIELD):
         value = contract[field]
         if type(value) is not str or _SHA256_HEX.fullmatch(value) is None:
