@@ -1915,6 +1915,11 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
+  #   GITHUB_TOKEN                    — repo-scoped fine-grained token used only to dispatch
+  #                                     desktop_qualify_beta.yml; requires GitHub Actions: write.
+  #                                     Add Contents: write only if this credential is also used for
+  #                                     candidate-release publishing. Do not reuse the legacy
+  #                                     appstore_credentials GH_TOKEN for qualification dispatch.
   #   DESKTOP_AUTO_BETA_ENABLED       — optional emergency pause; set to false to leave candidates non-live
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
