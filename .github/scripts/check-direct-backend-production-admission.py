@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 WORKFLOWS = (
     Path(".github/workflows/gcp_backend_agent_proxy.yml"),
@@ -34,6 +35,16 @@ def validate(root: Path) -> list[str]:
             errors.append(f"{relative} must diagnose a rejected checked-out source identity")
         if "${GITHUB_SHA::7}" in text:
             errors.append(f"{relative} must not label built source with GITHUB_SHA")
+        if text.count("uses: actions/checkout@v7") != 1:
+            errors.append(f"{relative} must not check out a second source after production admission")
+        if text.count(HEAD_IDENTITY) != 1:
+            errors.append(f"{relative} must establish checked-out source identity exactly once")
+        unsafe_image_assignment = re.search(
+            r"(?m)^\s*(?:.*\brun:\s*)?IMAGE_TAG=(?:latest|\$?\{?GITHUB_SHA\}?|[0-9a-f]{7,})",
+            text,
+        )
+        if text.count(IMAGE_IDENTITY) != 1 or unsafe_image_assignment:
+            errors.append(f"{relative} must establish its immutable image tag exactly once from checked-out HEAD")
     return errors
 
 

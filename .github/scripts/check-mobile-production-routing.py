@@ -13,6 +13,7 @@ WORKFLOWS = (
     "android-prod-internal",
     "ios-prod-patch",
     "android-prod-patch",
+    "macos-prod-appstore",
 )
 PIN = "https://api.omi.me/"
 

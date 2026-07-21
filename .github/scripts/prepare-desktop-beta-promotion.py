@@ -89,7 +89,14 @@ def prepare_manifest(
     changelog = [item.strip() for item in metadata.get("changelog", "").split("|") if item.strip()]
     version = match.group("version")
     build = int(match.group("build"))
-    qualification_manifest = {"passed": True, "tier": "T2", "source": "trusted_github_actions_artifact"}
+    qualification_manifest = {
+        "passed": True,
+        "tier": "T2",
+        "source": "trusted_github_actions_artifact",
+        "source_subject": "source-built named-bundle",
+        "signed_artifact_subject": "exact signed ZIP/DMG bytes",
+        "signed_artifact_checks": ["sha256", "Sparkle signature", "notarization", "signed smoke"],
+    }
 
     return {
         "release_id": release_tag,
