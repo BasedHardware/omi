@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_2204722b151ea4::t_f05aa5b75a9cc7 437-441
+  s_2204722b151ea4::t_be81d31b991512 431
+desktop/macos/changelog/unreleased/20260721-onboarding-signin-notch-moments.json
+  s_2204722b151ea4::t_b36cc79f45f367 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ca8375294d694f0ec69b37a1018c97060a78220f",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
