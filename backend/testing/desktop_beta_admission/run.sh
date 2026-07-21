@@ -5,8 +5,16 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
 firebase_tools_version="15.22.0"
 
-if [[ ! -x "$repo_root/backend/.venv/bin/python" ]]; then
-  echo "Missing backend/.venv. Run backend/scripts/sync-python-deps.sh first." >&2
+if [[ -x "$repo_root/backend/.venv/bin/python" ]]; then
+  python_command=("$repo_root/backend/.venv/bin/python")
+elif command -v uv >/dev/null 2>&1; then
+  python_version="$(tr -d '[:space:]' < "$repo_root/backend/.python-version")"
+  python_command=(
+    uv run --no-project --python "$python_version"
+    --with "google-cloud-firestore==2.20.0" -- python
+  )
+else
+  echo "Missing backend/.venv and uv. Run backend/scripts/sync-python-deps.sh first." >&2
   exit 1
 fi
 
@@ -50,7 +58,10 @@ trap 'rm -rf "$emulator_dir"' EXIT
 $node_bin -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2])}}}))' \
   "$emulator_config" "$emulator_port"
 
-runner_command="FIRESTORE_EMULATOR_HOST=127.0.0.1:${emulator_port} GOOGLE_CLOUD_PROJECT=demo-desktop-beta GCLOUD_PROJECT=demo-desktop-beta PYTHONPATH=${repo_root}/backend ${repo_root}/backend/.venv/bin/python ${repo_root}/backend/testing/desktop_beta_admission/firestore_contention_test.py"
+printf -v quoted_python_command ' %q' "${python_command[@]}"
+printf -v quoted_test_path '%q' "$repo_root/backend/testing/desktop_beta_admission/firestore_contention_test.py"
+printf -v quoted_python_path '%q' "$repo_root/backend"
+runner_command="FIRESTORE_EMULATOR_HOST=127.0.0.1:${emulator_port} GOOGLE_CLOUD_PROJECT=demo-desktop-beta GCLOUD_PROJECT=demo-desktop-beta PYTHONPATH=${quoted_python_path}${quoted_python_command} ${quoted_test_path}"
 firebase_command=(npx --prefix "$repo_root" --yes "firebase-tools@${firebase_tools_version}" emulators:exec --only firestore --project demo-desktop-beta --config "$emulator_config" "$runner_command")
 
 # Firebase writes its debug logs to the current directory, so never launch it

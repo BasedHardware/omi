@@ -151,7 +151,7 @@ jobs:
             ${{ runner.os }}-desktop-swift-build-xcode164-
 
       - name: Install Swift system dependencies
-        run: brew install pkg-config webp
+        run: brew install actionlint pkg-config webp
 
       - name: Desktop launcher script tests
         working-directory: desktop/macos
