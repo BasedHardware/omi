@@ -1554,7 +1554,7 @@ workflows:
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
-          DMG_PATH="build/macos/dmg/Omi.dmg"
+          DMG_PATH="build/macos/dmg/omi.dmg"
 
           # Use dmgbuild instead of create-dmg — writes .DS_Store directly
           # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
@@ -1573,7 +1573,7 @@ workflows:
         script: |
           set -e
 
-          DMG_PATH=$(find build/macos/dmg -name "Omi.dmg" | head -1)
+          DMG_PATH=$(find build/macos/dmg -name "omi.dmg" | head -1)
 
           # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
@@ -1671,7 +1671,7 @@ workflows:
           EOF
 
           # Find the DMG file
-          DMG_FILE=$(find build/macos/dmg -name "Omi.dmg" | head -1)
+          DMG_FILE=$(find build/macos/dmg -name "omi.dmg" | head -1)
 
           # Find the Sparkle ZIP and signature files
           SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/Omi.zip"
@@ -2879,7 +2879,7 @@ workflows:
           # duplicate dispatches; this bounded retry only handles dispatch I/O.
           for attempt in 1 2 3; do
             if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
-              -f release_tag="$CM_TAG"; then
+              -f release_tag="$CM_TAG" --ref "$CM_TAG"; then
               echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
               exit 0
             fi
@@ -2894,7 +2894,6 @@ workflows:
       - build/*.dmg
       - build/*.zip
       - build/desktop-smoke-result.json
-      - build/desktop-smoke-result-beta.json
     publishing:
       email:
         recipients:

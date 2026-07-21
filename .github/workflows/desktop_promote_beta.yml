@@ -33,7 +33,7 @@ jobs:
       - name: Checkout promotion controls
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ inputs.release_tag }}
           fetch-depth: 0
 
       - name: Generate Omi Bot token
@@ -91,27 +91,24 @@ jobs:
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
           [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
           run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
-          test "$(jq -r .conclusion <<<"$run")" = success
-          test "$(jq -r .repository.full_name <<<"$run")" = "$REPO"
-          test "$(jq -r .head_repository.full_name <<<"$run")" = "$REPO"
-          test "$(jq -r .event <<<"$run")" = workflow_dispatch
-          test "$(jq -r .path <<<"$run")" = .github/workflows/desktop_qualify_beta.yml
-          test "$(jq -r .head_branch <<<"$run")" = main
-          test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
-          test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"
+          printf '%s\n' "$run" > /tmp/desktop-qualification-run.json
+          python3 .github/scripts/desktop_qualification_admission.py \
+            --run-json /tmp/desktop-qualification-run.json \
+            --repository "$REPO" --release-tag "$RELEASE_TAG" --candidate-sha "$TARGET_SHA"
           gh release view "$RELEASE_TAG" --repo "$REPO" \
             --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
             > /tmp/desktop-beta-release.json
           mkdir -p /tmp/desktop-beta-assets
           gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg' --dir /tmp/desktop-beta-assets
+            --pattern 'Omi.zip' --pattern 'omi.dmg' --dir /tmp/desktop-beta-assets
 
           ZIP_PATH=/tmp/desktop-beta-assets/Omi.zip
-          DMG_PATH=$(find /tmp/desktop-beta-assets -maxdepth 1 -type f \( -name Omi.dmg -o -name omi.dmg \) -print -quit)
+          DMG_PATH=/tmp/desktop-beta-assets/omi.dmg
           test -f "$ZIP_PATH"
           test -n "$DMG_PATH"
           ZIP_SHA=$(sha256sum "$ZIP_PATH" | cut -d' ' -f1)
           DMG_SHA=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)
+          EVIDENCE_SHA="sha256:$(sha256sum /tmp/desktop-qualification-evidence/qualification-evidence.json | cut -d' ' -f1)"
 
           python3 .github/scripts/prepare-desktop-beta-promotion.py \
             --release-json /tmp/desktop-beta-release.json \
@@ -120,6 +117,7 @@ jobs:
             --zip-sha256 "$ZIP_SHA" \
             --dmg-sha256 "$DMG_SHA" \
             --qualification-evidence /tmp/desktop-qualification-evidence/qualification-evidence.json \
+            --qualification-evidence-sha256 "$EVIDENCE_SHA" \
             --output /tmp/desktop-release-manifest.json
 
           {

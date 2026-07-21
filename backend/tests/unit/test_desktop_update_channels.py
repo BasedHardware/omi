@@ -14,20 +14,35 @@ from database.desktop_update_channels import (
 
 def _manifest(**overrides):
     data = {
+        "schema_version": 1,
         "release_id": "v0.12.64+12064-macos",
         "platform": "macos",
-        "version": "0.12.64+12064",
+        "version": "0.12.64",
         "build_number": 12064,
-        "zip_url": "https://github.com/BasedHardware/omi/releases/download/test/Omi.zip",
-        "dmg_url": "https://github.com/BasedHardware/omi/releases/download/test/Omi.dmg",
+        "app_source_sha": "a" * 40,
+        "zip_url": "https://github.com/BasedHardware/omi/releases/download/v0.12.64+12064-macos/Omi.zip",
+        "dmg_url": "https://github.com/BasedHardware/omi/releases/download/v0.12.64+12064-macos/omi.dmg",
         "ed_signature": "sparkle-signature",
+        "qualification_evidence_asset": "qualification-evidence-v0.12.64+12064-macos.json",
+        "qualification_evidence_sha256": "sha256:" + "d" * 64,
+        "qualification_tier": "T2",
+        "qualification_passed": True,
+        "backend_mode": "app_only",
+        "compatibility_contract": {
+            "schema_version": 1,
+            "app_release_id": "v0.12.64+12064-macos",
+            "app_version": "0.12.64",
+            "app_build_number": 12064,
+            "backend_mode": "app_only",
+            "environment_contract_version": "desktop-backend-env-v1",
+        },
+        "environment_contract_version": "desktop-backend-env-v1",
+        "created_at": "2026-07-09T12:00:00Z",
         "published_at": "2026-07-09T12:00:00Z",
         "changelog": ["Qualified beta"],
         "mandatory": False,
-        "source_sha": "a" * 40,
-        "zip_sha256": "b" * 64,
-        "dmg_sha256": "c" * 64,
-        "qualification": {"tier": "T2", "passed": True},
+        "zip_sha256": "sha256:" + "b" * 64,
+        "dmg_sha256": "sha256:" + "c" * 64,
     }
     data.update(overrides)
     return data
@@ -37,9 +52,9 @@ class TestNormalizeReleaseManifest:
     def test_accepts_complete_manifest(self):
         result = normalize_release_manifest(_manifest())
         assert result["build_number"] == 12064
-        assert result["qualification"]["tier"] == "T2"
+        assert result["qualification_tier"] == "T2"
 
-    @pytest.mark.parametrize("field", ["release_id", "version", "zip_url", "ed_signature", "source_sha"])
+    @pytest.mark.parametrize("field", ["release_id", "version", "zip_url", "ed_signature", "app_source_sha"])
     def test_rejects_missing_required_fields(self, field):
         data = _manifest()
         data.pop(field)
@@ -47,7 +62,7 @@ class TestNormalizeReleaseManifest:
             normalize_release_manifest(data)
 
     def test_rejects_non_https_assets(self):
-        with pytest.raises(ValueError, match="https URL"):
+        with pytest.raises(ValueError, match="github.com release asset URL"):
             normalize_release_manifest(_manifest(zip_url="http://example.com/Omi.zip"))
 
     def test_requires_dmg_for_macos(self):
@@ -71,7 +86,21 @@ class TestReleaseManifestPersistence:
 
     def test_register_rejects_release_id_mutation(self):
         snapshot = MagicMock(exists=True)
-        snapshot.to_dict.return_value = _manifest(version="0.12.63+12063")
+        snapshot.to_dict.return_value = _manifest(
+            release_id="v0.12.63+12063-macos",
+            version="0.12.63",
+            build_number=12063,
+            zip_url="https://github.com/BasedHardware/omi/releases/download/v0.12.63+12063-macos/Omi.zip",
+            dmg_url="https://github.com/BasedHardware/omi/releases/download/v0.12.63+12063-macos/omi.dmg",
+            compatibility_contract={
+                "schema_version": 1,
+                "app_release_id": "v0.12.63+12063-macos",
+                "app_version": "0.12.63",
+                "app_build_number": 12063,
+                "backend_mode": "app_only",
+                "environment_contract_version": "desktop-backend-env-v1",
+            },
+        )
         ref = MagicMock()
         ref.get.return_value = snapshot
         client = MagicMock()
@@ -167,7 +196,7 @@ class TestChannelPromotionRules:
             )
 
     def test_rejects_unqualified_release(self):
-        manifest = normalize_release_manifest(_manifest(qualification={"passed": False, "tier": "T2"}))
+        manifest = _manifest(qualification_passed=False)
         with pytest.raises(ValueError, match="qualification"):
             _build_pointer(
                 {},
@@ -209,7 +238,21 @@ class TestPointerRepointRules:
     def test_repoints_a_qualified_retained_manifest_with_compare_and_swap(self):
         current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
         target = normalize_release_manifest(
-            _manifest(release_id="v0.12.73+12073-macos", version="0.12.73+12073", build_number=12073)
+            _manifest(
+                release_id="v0.12.73+12073-macos",
+                version="0.12.73",
+                build_number=12073,
+                zip_url="https://github.com/BasedHardware/omi/releases/download/v0.12.73+12073-macos/Omi.zip",
+                dmg_url="https://github.com/BasedHardware/omi/releases/download/v0.12.73+12073-macos/omi.dmg",
+                compatibility_contract={
+                    "schema_version": 1,
+                    "app_release_id": "v0.12.73+12073-macos",
+                    "app_version": "0.12.73",
+                    "app_build_number": 12073,
+                    "backend_mode": "app_only",
+                    "environment_contract_version": "desktop-backend-env-v1",
+                },
+            )
         )
 
         pointer = _build_pointer(
@@ -236,7 +279,21 @@ class TestPointerRepointRules:
     def test_rejects_stale_repoint_compare_and_swap(self, expected_release_id, expected_generation, message):
         current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
         target = normalize_release_manifest(
-            _manifest(release_id="v0.12.73+12073-macos", version="0.12.73+12073", build_number=12073)
+            _manifest(
+                release_id="v0.12.73+12073-macos",
+                version="0.12.73",
+                build_number=12073,
+                zip_url="https://github.com/BasedHardware/omi/releases/download/v0.12.73+12073-macos/Omi.zip",
+                dmg_url="https://github.com/BasedHardware/omi/releases/download/v0.12.73+12073-macos/omi.dmg",
+                compatibility_contract={
+                    "schema_version": 1,
+                    "app_release_id": "v0.12.73+12073-macos",
+                    "app_version": "0.12.73",
+                    "app_build_number": 12073,
+                    "backend_mode": "app_only",
+                    "environment_contract_version": "desktop-backend-env-v1",
+                },
+            )
         )
         with pytest.raises(ValueError, match=message):
             _build_pointer(
@@ -252,7 +309,7 @@ class TestPointerRepointRules:
 
     def test_repoint_rejects_unqualified_manifest(self):
         current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
-        target = normalize_release_manifest(_manifest(qualification={"tier": "T2", "passed": False}))
+        target = _manifest(qualification_passed=False)
         with pytest.raises(ValueError, match="qualification"):
             _build_pointer(
                 current,

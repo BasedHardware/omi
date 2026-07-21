@@ -60,24 +60,6 @@ class ClearCacheResponse(BaseModel):
     message: str = Field(description='Human-readable confirmation.')
 
 
-class DesktopReleaseManifestRequest(BaseModel):
-    release_id: str
-    platform: str = Field(pattern="^(macos|windows|linux)$")
-    version: str
-    build_number: int = Field(gt=0)
-    zip_url: str
-    dmg_url: Optional[str] = None
-    ed_signature: str
-    published_at: str
-    changelog: List[str] = Field(default_factory=list)
-    mandatory: bool = False
-    source_sha: str
-    zip_sha256: Optional[str] = None
-    dmg_sha256: Optional[str] = None
-
-    qualification: Dict[str, Any] = Field(default_factory=dict)
-
-
 class DesktopChannelPromotionRequest(BaseModel):
     platform: str = Field(pattern="^(macos|windows|linux)$")
     channel: str = Field(pattern="^(beta|stable)$")
@@ -232,9 +214,14 @@ def _get_sparkle_zip_download_url(release: Dict) -> Optional[str]:
 
 
 def _get_dmg_download_url(release: Dict) -> Optional[str]:
-    """Get the DMG installer download URL from GitHub release assets."""
+    """Get only the canonical lowercase ``omi.dmg`` installer URL.
+
+    The release contract is case-sensitive.  Legacy names (including Omi Beta
+    and arbitrary ``*.dmg`` assets) are deliberately ignored for both beta and
+    stable fallback routes.
+    """
     for asset in release.get("assets", []):
-        if asset.get("name", "").endswith(".dmg"):
+        if asset.get("name") == "omi.dmg":
             return asset.get("browser_download_url")
     return None
 
@@ -299,7 +286,7 @@ def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str
     manifest = release["manifest"]
     assets = [{"name": "Omi.zip", "browser_download_url": manifest["zip_url"]}]
     if manifest.get("dmg_url"):
-        assets.append({"name": "Omi.dmg", "browser_download_url": manifest["dmg_url"]})
+        assets.append({"name": "omi.dmg", "browser_download_url": manifest["dmg_url"]})
 
     return {
         "channel": channel,
@@ -319,7 +306,7 @@ def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str
             "edSignature": manifest["ed_signature"],
             "changelog": manifest.get("changelog", []),
             "mandatory": "true" if manifest.get("mandatory") else "false",
-            "sourceSha": manifest["source_sha"],
+            "sourceSha": manifest["app_source_sha"],
         },
     }
 
@@ -863,12 +850,12 @@ def clear_desktop_cache(secret_key: str = Header(...)):
 
 
 @router.post("/v2/desktop/releases", status_code=201)
-async def register_desktop_release(request: DesktopReleaseManifestRequest, secret_key: str = Header(...)):
+async def register_desktop_release(request: Dict[str, Any], secret_key: str = Header(...)):
     """Register an immutable release manifest without making it user-visible."""
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
-        manifest = await run_blocking(db_executor, register_release_manifest, request.model_dump())
+        manifest = await run_blocking(db_executor, register_release_manifest, request)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"success": True, "manifest": manifest}

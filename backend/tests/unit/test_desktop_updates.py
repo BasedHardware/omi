@@ -256,8 +256,8 @@ class TestAssetHelpers:
         assert _get_sparkle_zip_download_url(release) is None
 
     def test_dmg_found(self):
-        release = {"assets": [{"name": "Omi Beta.dmg", "browser_download_url": "https://example.com/Omi.dmg"}]}
-        assert _get_dmg_download_url(release) == "https://example.com/Omi.dmg"
+        release = {"assets": [{"name": "omi.dmg", "browser_download_url": "https://example.com/omi.dmg"}]}
+        assert _get_dmg_download_url(release) == "https://example.com/omi.dmg"
 
     def test_dmg_missing(self):
         release = {"assets": [{"name": "Omi.zip", "browser_download_url": "https://example.com/Omi.zip"}]}
@@ -325,8 +325,8 @@ def _zip_asset(url="https://example.com/Omi.zip"):
     return {"name": "Omi.zip", "browser_download_url": url}
 
 
-def _dmg_asset(url="https://example.com/Omi.dmg"):
-    return {"name": "Omi Beta.dmg", "browser_download_url": url}
+def _dmg_asset(url="https://example.com/omi.dmg"):
+    return {"name": "omi.dmg", "browser_download_url": url}
 
 
 # --- _get_legacy_live_desktop_releases ---
@@ -377,12 +377,29 @@ def _pointer_release(channel="beta", build=200):
             "published_at": "2026-03-01T00:00:00Z",
             "changelog": ["Qualified release"],
             "mandatory": False,
-            "source_sha": "a" * 40,
+            "app_source_sha": "a" * 40,
             "zip_sha256": None,
             "dmg_sha256": None,
             "qualification": {"tier": "T2", "passed": True},
         },
     }
+
+
+def test_legacy_download_fallback_selects_only_lowercase_canonical_omi_dmg():
+    """Retired beta-named and arbitrary DMGs cannot become either channel installer."""
+    from routers.updates import _get_dmg_download_url
+
+    release = {
+        "assets": [
+            {"name": "omi-beta.dmg", "browser_download_url": "https://example.com/retired-lowercase.dmg"},
+            {"name": "Omi Beta.dmg", "browser_download_url": "https://example.com/retired-title.dmg"},
+            {"name": "anything.dmg", "browser_download_url": "https://example.com/arbitrary.dmg"},
+            {"name": "omi.dmg", "browser_download_url": "https://example.com/omi.dmg"},
+        ]
+    }
+
+    assert _get_dmg_download_url(release) == "https://example.com/omi.dmg"
+    assert _get_dmg_download_url({"assets": release["assets"][:-1]}) is None
 
 
 class TestResolveDesktopReleases:

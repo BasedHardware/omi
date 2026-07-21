@@ -12,6 +12,7 @@ PROMOTE_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_b
 PROMOTE_PROD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml"
 QUALIFY_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_qualify_beta.yml"
 CODEMAGIC_CONFIG = REPO_ROOT / "codemagic.yaml"
+QUALIFICATION_ADMISSION = SCRIPTS / "desktop_qualification_admission.py"
 
 
 def _load(name: str, filename: str):
@@ -26,11 +27,12 @@ mark_beta = _load("mark_desktop_release_beta", "mark-desktop-release-beta.py")
 prepare_beta = _load("prepare_desktop_beta_promotion", "prepare-desktop-beta-promotion.py")
 repair_installer = _load("desktop_repair_installer", "desktop_repair_installer.py")
 qualification_evidence = _load("desktop_qualification_evidence", "desktop_qualification_evidence.py")
+manifest_contract = _load("desktop_release_manifest", "desktop_release_manifest.py")
 
 
 def _release(body: str | None = None):
     tag = "v0.12.64+12064-macos"
-    evidence = "qualification-evidence.json"
+    evidence = "qualification-evidence-v0.12.64+12064-macos.json"
     default_body = f"""<!-- KEY_VALUE_START
 isLive: false
 channel: candidate
@@ -49,9 +51,9 @@ KEY_VALUE_END -->"""
         "isPrerelease": False,
         "publishedAt": "2026-07-09T11:00:00Z",
         "assets": [
-            {"name": "Omi.zip", "url": "https://example.com/Omi.zip"},
-            {"name": "omi.dmg", "url": "https://example.com/omi.dmg"},
-            {"name": evidence, "url": "https://example.com/evidence.json"},
+            {"name": "Omi.zip", "url": f"https://github.com/BasedHardware/omi/releases/download/{tag}/Omi.zip"},
+            {"name": "omi.dmg", "url": f"https://github.com/BasedHardware/omi/releases/download/{tag}/omi.dmg"},
+            {"name": evidence, "url": f"https://github.com/BasedHardware/omi/releases/download/{tag}/{evidence}"},
         ],
     }
 
@@ -64,8 +66,15 @@ def _evidence():
         "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
         "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
         "artifacts": {
-            "Omi.zip": {"url": "https://example.com/Omi.zip", "sha256": "b" * 64, "signature": "signature"},
-            "omi.dmg": {"url": "https://example.com/omi.dmg", "sha256": "c" * 64},
+            "Omi.zip": {
+                "url": "https://github.com/BasedHardware/omi/releases/download/v0.12.64+12064-macos/Omi.zip",
+                "sha256": "b" * 64,
+                "signature": "signature",
+            },
+            "omi.dmg": {
+                "url": "https://github.com/BasedHardware/omi/releases/download/v0.12.64+12064-macos/omi.dmg",
+                "sha256": "c" * 64,
+            },
         },
     }
 
@@ -78,6 +87,7 @@ def _prepare(release=None, *, allow_stable_channel=False):
         "b" * 64,
         "c" * 64,
         qualification_evidence=_evidence(),
+        qualification_evidence_sha256="sha256:" + "d" * 64,
         allow_stable_channel=allow_stable_channel,
     )
 
@@ -92,12 +102,46 @@ def test_mark_beta_changes_only_visibility_fields():
 def test_prepare_manifest_requires_exact_qualification_and_assets():
     manifest = _prepare()
     assert manifest["build_number"] == 12064
-    assert manifest["qualification"]["tier"] == "T2"
-    assert manifest["qualification"]["source"] == "trusted_github_actions_artifact"
-    assert manifest["qualification"]["evidence_asset"] == "qualification-evidence.json"
-    assert manifest["qualification"]["source_subject"] == "source-built named-bundle"
-    assert manifest["qualification"]["signed_artifact_subject"] == "exact signed ZIP/DMG bytes"
+    assert manifest["qualification_tier"] == "T2"
+    assert manifest["qualification_passed"] is True
+    assert manifest["qualification_evidence_asset"] == "qualification-evidence-v0.12.64+12064-macos.json"
     assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
+
+
+def test_prepared_manifest_is_the_exact_immutable_object_registered_and_promoted():
+    """Preparation, registration, and promotion share the v1 executable contract."""
+    release = _release()
+    tag = release["tagName"]
+    for asset in release["assets"]:
+        asset["url"] = f"https://github.com/BasedHardware/omi/releases/download/{tag}/{asset['name']}"
+    evidence = _evidence()
+    evidence["artifacts"]["Omi.zip"]["url"] = release["assets"][0]["url"]
+    evidence["artifacts"]["omi.dmg"]["url"] = release["assets"][1]["url"]
+
+    prepared = prepare_beta.prepare_manifest(
+        release,
+        tag,
+        "a" * 40,
+        "b" * 64,
+        "c" * 64,
+        qualification_evidence=evidence,
+        qualification_evidence_sha256="sha256:" + "d" * 64,
+    )
+
+    accepted = manifest_contract.validate_manifest(prepared)
+    registered = normalize_release_manifest(accepted)
+    pointer = _build_pointer(
+        {},
+        registered,
+        transition="promote",
+        platform="macos",
+        channel="beta",
+        release_id=registered["release_id"],
+        expected_generation=0,
+    )
+
+    assert registered == accepted
+    assert pointer["release_id"] == accepted["release_id"]
 
 
 def test_beta_static_redirect_uses_the_qualified_dmg_on_every_surface():
@@ -106,6 +150,35 @@ def test_beta_static_redirect_uses_the_qualified_dmg_on_every_surface():
     assert redirect.count('manifest["dmg_url"]') == 1
     assert redirect.count("['dmg_url']") == 2
     assert "beta_dmg_url" not in redirect
+
+
+def test_qualification_workflow_binds_immutable_controls_and_candidate_identity():
+    """A later main commit cannot replace controls or invalidate tag-bound evidence."""
+    admission = _load("desktop_qualification_admission", "desktop_qualification_admission.py")
+    tag = "v0.12.64+12064-macos"
+    candidate_sha = "a" * 40
+    trusted_tag_run = {
+        "conclusion": "success",
+        "repository": {"full_name": "BasedHardware/omi"},
+        "head_repository": {"full_name": "BasedHardware/omi"},
+        "event": "workflow_dispatch",
+        "path": ".github/workflows/desktop_qualify_beta.yml",
+        "head_branch": tag,
+        "head_sha": candidate_sha,
+        "name": "Qualify Desktop Beta Candidate",
+    }
+
+    admission.validate_qualification_run(trusted_tag_run, "BasedHardware/omi", tag, candidate_sha)
+    drifted_main_run = {**trusted_tag_run, "head_branch": "main", "head_sha": "b" * 40}
+    with pytest.raises(ValueError, match="candidate tag"):
+        admission.validate_qualification_run(drifted_main_run, "BasedHardware/omi", tag, candidate_sha)
+
+    codemagic = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
+    qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
+    promotion = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
+    assert '-f release_tag="$CM_TAG" --ref "$CM_TAG"' in codemagic
+    assert "ref: ${{ inputs.release_tag }}" in qualification
+    assert "desktop_qualification_admission.py" in promotion
 
 
 def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():
@@ -130,6 +203,7 @@ def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_eviden
             "1" * 64,
             "2" * 64,
             qualification_evidence=evidence,
+            qualification_evidence_sha256="sha256:" + "d" * 64,
         )
 
 
@@ -208,7 +282,7 @@ def test_local_candidate_evidence_beta_stable_repoint_and_retry_simulation():
     )
     assert beta["release_id"] == manifest["release_id"]
     assert repointed["release_id"] == retained["release_id"]
-    assert manifest["zip_sha256"] == "b" * 64
+    assert manifest["zip_sha256"] == "sha256:" + "b" * 64
 
 
 def test_stable_repair_bundle_uses_the_retained_manifest_installer_identity():
@@ -218,8 +292,11 @@ def test_stable_repair_bundle_uses_the_retained_manifest_installer_identity():
 
     assert bundle["repair_object"] == "stable/v0.12.64+12064-macos/repair.json"
     assert bundle["repair"]["channel"] == "stable"
-    assert bundle["repair"]["installer_sha256"] == "c" * 64
-    assert bundle["repair"]["installer_url"] == "https://example.com/omi.dmg"
+    assert bundle["repair"]["installer_sha256"] == "sha256:" + "c" * 64
+    assert (
+        bundle["repair"]["installer_url"]
+        == "https://github.com/BasedHardware/omi/releases/download/v0.12.64+12064-macos/omi.dmg"
+    )
     assert "/Applications" in bundle["landing_page"]
 
 
@@ -251,7 +328,7 @@ def test_prepare_manifest_ignores_mutable_legacy_qualification_metadata():
         .replace("qualifiedBetaEvidence:", "blessedEvidence:")
     )
     manifest = _prepare(release)
-    assert manifest["qualification"]["source"] == "trusted_github_actions_artifact"
+    assert manifest["qualification_passed"] is True
 
 
 def test_prepare_manifest_allows_an_already_stable_release_only_for_repair_retries():
@@ -279,6 +356,7 @@ def test_prepare_manifest_rejects_unqualified_candidate():
             "b" * 64,
             "c" * 64,
             qualification_evidence=evidence,
+            qualification_evidence_sha256="sha256:" + "d" * 64,
         )
 
 
@@ -323,7 +401,7 @@ def test_qualification_and_promotion_bind_the_single_artifact_pair_to_an_immutab
     qualification = QUALIFY_BETA_WORKFLOW.read_text()
     promotion = PROMOTE_BETA_WORKFLOW.read_text()
 
-    for asset in ("Omi.zip", "Omi.dmg", "omi.dmg"):
+    for asset in ("Omi.zip", "omi.dmg"):
         assert asset in qualification
         assert asset in promotion
     assert "actions/upload-artifact@v7" in qualification
@@ -356,27 +434,19 @@ def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_p
     assert "verify_stable_appcast.py" in workflow
     assert 'Authorization: Bearer $ACCESS_TOKEN' in workflow
     assert 'Authorization: Bearer ***' not in workflow
-    assert 'ref: main' in workflow
+    assert 'ref: ${{ inputs.release_tag }}' in workflow
 
 
-def test_qualification_run_is_bound_to_the_exact_main_dispatch_and_workflow():
+def test_qualification_run_is_bound_to_the_exact_tag_dispatch_and_workflow():
     for workflow in (PROMOTE_BETA_WORKFLOW.read_text(), PROMOTE_PROD_WORKFLOW.read_text()):
         assert 'gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID"' in workflow
-        assert 'jq -r .repository.full_name' in workflow
-        assert 'jq -r .head_repository.full_name' in workflow
-        assert 'jq -r .event' in workflow
-        assert '= workflow_dispatch' in workflow
-        assert 'jq -r .path' in workflow
-        assert '= .github/workflows/desktop_qualify_beta.yml' in workflow
-        assert 'jq -r .head_branch' in workflow
-        assert '= main' in workflow
-        assert 'jq -r .head_sha' in workflow
+        assert 'desktop_qualification_admission.py' in workflow
 
 
-def test_beta_promotion_controls_are_pinned_to_main_and_only_accept_lost_response_generation_plus_one():
+def test_beta_promotion_controls_are_pinned_to_candidate_tag_and_only_accept_lost_response_generation_plus_one():
     workflow = PROMOTE_BETA_WORKFLOW.read_text()
 
-    assert 'ref: main' in workflow
+    assert 'ref: ${{ inputs.release_tag }}' in workflow
     manifest = normalize_release_manifest(_prepare())
     current = {
         "platform": "macos",

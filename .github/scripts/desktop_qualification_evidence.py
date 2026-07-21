@@ -17,7 +17,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-ARTIFACTS = ("Omi.zip", "Omi.dmg", "omi.dmg")
+ARTIFACTS = ("Omi.zip", "omi.dmg")
 ZIP_SIGNATURES = {"Omi.zip": "edSignature"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -67,12 +67,9 @@ def build_evidence(
         _fail("was not created after the passing candidate gate")
     metadata = _metadata(str(release.get("body") or ""))
     artifacts: dict[str, dict[str, str]] = {}
-    stable_dmg = [name for name in ("Omi.dmg", "omi.dmg") if name in files]
-    if len(stable_dmg) != 1:
-        _fail("requires exactly one stable DMG file")
-    required = {"Omi.zip", stable_dmg[0]}
+    required = {"Omi.zip", "omi.dmg"}
     if set(files) != required:
-        _fail("does not contain the exact qualified ZIP and DMG")
+        _fail("does not contain the exact qualified Omi.zip and omi.dmg")
     for name, path in files.items():
         if not path.is_file():
             _fail(f"is missing downloaded {name}")
