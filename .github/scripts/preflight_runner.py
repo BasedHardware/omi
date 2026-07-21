@@ -157,7 +157,9 @@ def run_owned(
     started = time.monotonic()
     started_wall = time.time()
     phase = "starting"
+    last_phase = phase
     child: subprocess.Popen[str] | None = None
+    received_signal: int | None = None
 
     def write_status() -> None:
         atomic_json(
@@ -166,6 +168,8 @@ def run_owned(
                 "pid": os.getpid(),
                 "fingerprint": wanted_fingerprint,
                 "phase": phase,
+                "last_phase": last_phase,
+                "received_signal": received_signal,
                 "elapsed_seconds": round(time.monotonic() - started, 1),
                 "log": str(log_path),
                 "started_at_epoch": started_wall,
@@ -173,6 +177,15 @@ def run_owned(
         )
 
     def forward_signal(signum: int, _frame: object) -> None:
+        nonlocal received_signal
+        received_signal = signum
+        print(
+            f"FAIL: preflight runner received signal {signal.Signals(signum).name} "
+            f"during phase={phase}; forwarding it to the child.",
+            file=sys.stderr,
+            flush=True,
+        )
+        write_status()
         if child is not None and child.poll() is None:
             try:
                 os.killpg(child.pid, signum)
@@ -210,10 +223,27 @@ def run_owned(
                 log.flush()
                 if line.startswith("==> "):
                     phase = line[4:].strip()
+                    last_phase = phase
                     write_status()
         exit_code = child.wait()
         phase = "passed" if exit_code == 0 else "failed"
         write_status()
+        if exit_code != 0:
+            if exit_code < 0:
+                child_failure = f"child terminated by {signal.Signals(-exit_code).name}"
+            else:
+                child_failure = f"child exited with status {exit_code}"
+            signal_note = (
+                f"; runner received {signal.Signals(received_signal).name}"
+                if received_signal is not None
+                else ""
+            )
+            print(
+                f"FAIL: preflight {child_failure} during phase={last_phase}{signal_note}; "
+                f"inspect {log_path}",
+                file=sys.stderr,
+                flush=True,
+            )
         atomic_json(
             result_path,
             {
@@ -222,6 +252,8 @@ def run_owned(
                 "elapsed_seconds": round(time.monotonic() - started, 1),
                 "finished_at_epoch": time.time(),
                 "log": str(log_path),
+                "last_phase": last_phase,
+                "received_signal": received_signal,
             },
         )
         return exit_code
