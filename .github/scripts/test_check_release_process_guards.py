@@ -476,24 +476,69 @@ def test_global_document_lock_rejects_invalid_utf8_security_bound_inputs(tmp_pat
     assert any(expected in error for error in errors), errors
 
 
-def test_global_document_lock_uses_the_same_open_codemagic_bytes_after_path_replacement(tmp_path, monkeypatch):
+@pytest.mark.parametrize("target", ("codemagic", "fixture"))
+@pytest.mark.parametrize("seam", ("after-open", "after-final-fstat"))
+def test_global_document_lock_rejects_security_bound_path_replacement_at_every_read_seam(
+    tmp_path, monkeypatch, target, seam
+):
+    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    path = codemagic if target == "codemagic" else _fixture_path(tmp_path)
+    original_open = GUARDS.os.open
+    original_fstat = GUARDS.os.fstat
+    protected_fds: set[int] = set()
+    fstat_calls: dict[int, int] = {}
+    replacements = 0
+
+    def replace_path() -> None:
+        nonlocal replacements
+        replacement = tmp_path / f"replacement-{target}"
+        replacement.write_text("workflows: {}\n", encoding="utf-8")
+        os.replace(replacement, path)
+        replacements += 1
+
+    def replace_path_after_open(opened_path, flags, *args):
+        fd = original_open(opened_path, flags, *args)
+        if Path(opened_path) == path:
+            protected_fds.add(fd)
+            if seam == "after-open":
+                replace_path()
+        return fd
+
+    def replace_path_after_final_fstat(fd):
+        result = original_fstat(fd)
+        if fd in protected_fds:
+            fstat_calls[fd] = fstat_calls.get(fd, 0) + 1
+            if seam == "after-final-fstat" and fstat_calls[fd] == 2:
+                replace_path()
+        return result
+
+    monkeypatch.setattr(GUARDS.os, "open", replace_path_after_open)
+    monkeypatch.setattr(GUARDS.os, "fstat", replace_path_after_final_fstat)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert replacements == 1
+    assert any("changed while being read" in error and str(path) in error for error in errors), errors
+
+
+def test_global_document_lock_rejects_path_replacement_without_o_nofollow(tmp_path, monkeypatch):
     codemagic = _copy_contract_tree(tmp_path, monkeypatch)
     original_open = GUARDS.os.open
-    opens: list[Path] = []
 
     def replace_path_after_open(path, flags, *args):
         fd = original_open(path, flags, *args)
         if Path(path) == codemagic:
-            opens.append(codemagic)
             replacement = tmp_path / "replacement-codemagic.yaml"
             replacement.write_text("workflows: {}\n", encoding="utf-8")
             os.replace(replacement, codemagic)
         return fd
 
+    monkeypatch.setattr(GUARDS.os, "O_NOFOLLOW", 0)
     monkeypatch.setattr(GUARDS.os, "open", replace_path_after_open)
 
-    assert GUARDS.check_codemagic_release_publishers() == []
-    assert opens == [codemagic]
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("changed while being read" in error and "codemagic.yaml" in error for error in errors), errors
 
 
 def _write_contract(tmp_path: Path, contract: object) -> None:
