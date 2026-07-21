@@ -38,7 +38,7 @@
 #   # …exercise the flow; assert the app surfaces a structured error, not a crash/silent no-op…
 #   desktop/macos/scripts/omi-fault-inject.sh stop
 #
-# NEVER point a production bundle (com.omi.computer-macos or com.omi.computer-macos.beta) at a fault URL.
+# NEVER point the production bundle (com.omi.computer-macos) at a fault URL.
 set -euo pipefail
 
 STATE_DIR="${OMI_FAULT_STATE_DIR:-${TMPDIR:-/tmp}/omi-fault-inject}"

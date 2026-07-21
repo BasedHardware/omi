@@ -1063,6 +1063,9 @@ environments:
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
               version: latest
+            BETA_PROMOTION_TOKEN:
+              secret: BETA_PROMOTION_TOKEN
+              version: latest
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest

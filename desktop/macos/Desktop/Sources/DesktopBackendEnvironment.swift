@@ -29,9 +29,8 @@ enum DesktopBackendEnvironment {
 
     // Named/dev bundles route to the dev backend by default. Explicit launch
     // URLs still win below so local harnesses and intentionally-targeted tests
-    // remain possible. The Omi Beta app is a production-family artifact, not a
-    // dev bundle: it falls through to channel-based routing like stable.
-    if !AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier) {
+    // remain possible.
+    if bundleIdentifier != AppBuild.productionBundleIdentifier {
       return true
     }
 

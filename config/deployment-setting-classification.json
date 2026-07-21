@@ -3,6 +3,7 @@
     "secret": [
       "ADMIN_KEY",
       "ANTHROPIC_API_KEY",
+      "BETA_PROMOTION_TOKEN",
       "CLAUDE_API_KEY",
       "CODEMAGIC_API_TOKEN",
       "DD_API_KEY",
