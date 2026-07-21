@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -8,12 +6,7 @@ import 'package:omi/services/wals/wal.dart';
 void main() {
   group('Wal PCM codec support', () {
     test('PCM16 WAL filename contains pcm16 codec', () {
-      final wal = Wal(
-        timerStart: 1710000000,
-        codec: BleAudioCodec.pcm16,
-        seconds: 60,
-        device: 'phone-mic',
-      );
+      final wal = Wal(timerStart: 1710000000, codec: BleAudioCodec.pcm16, seconds: 60, device: 'phone-mic');
       final filename = wal.getFileName();
       expect(filename, contains('pcm16'));
       expect(filename, contains('phonemic')); // device name sanitized: hyphens removed
@@ -22,23 +15,13 @@ void main() {
     });
 
     test('PCM8 WAL filename contains pcm8 codec', () {
-      final wal = Wal(
-        timerStart: 1710000000,
-        codec: BleAudioCodec.pcm8,
-        seconds: 60,
-        device: 'phone-mic',
-      );
+      final wal = Wal(timerStart: 1710000000, codec: BleAudioCodec.pcm8, seconds: 60, device: 'phone-mic');
       final filename = wal.getFileName();
       expect(filename, contains('pcm8'));
     });
 
     test('Opus WAL filename contains opus codec', () {
-      final wal = Wal(
-        timerStart: 1710000000,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-        device: 'omi',
-      );
+      final wal = Wal(timerStart: 1710000000, codec: BleAudioCodec.opus, seconds: 60, device: 'omi');
       final filename = wal.getFileName();
       expect(filename, contains('opus'));
     });

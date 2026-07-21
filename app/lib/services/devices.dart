@@ -14,24 +14,6 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/mutex.dart';
 
-abstract class IDeviceService {
-  void start();
-  void stop();
-  Future<void> discover({String? desirableDeviceId, int timeout = 5});
-
-  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false});
-
-  void subscribe(IDeviceServiceSubsciption subscription, Object context);
-  void unsubscribe(Object context);
-
-  DateTime? getFirstConnectedAt();
-
-  Future<void> disconnectDevice();
-
-  /// Fully tear down connection + transport for a device being forgotten/unpaired.
-  Future<void> forgetDevice(String deviceId);
-}
-
 enum DeviceServiceStatus { init, ready, scanning, stop }
 
 enum DeviceConnectionState { connected, connecting, disconnected }
@@ -56,7 +38,7 @@ abstract class IDeviceServiceSubsciption {
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
 }
 
-class DeviceService implements IDeviceService {
+class DeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
 
@@ -75,7 +57,6 @@ class DeviceService implements IDeviceService {
 
   DateTime? _firstConnectedAt;
 
-  @override
   Future<void> discover({String? desirableDeviceId, int timeout = 5}) async {
     Logger.debug("Device discovering...");
     if (_status != DeviceServiceStatus.ready) {
@@ -156,7 +137,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  @override
   void subscribe(IDeviceServiceSubsciption subscription, Object context) {
     _subscriptions.remove(context.hashCode);
     _subscriptions.putIfAbsent(context.hashCode, () => subscription);
@@ -166,19 +146,16 @@ class DeviceService implements IDeviceService {
     subscription.onStatusChanged(_status);
   }
 
-  @override
   void unsubscribe(Object context) {
     _subscriptions.remove(context.hashCode);
   }
 
-  @override
   void start() {
     _status = DeviceServiceStatus.ready;
 
     // TODO: Start watchdog to discover automatically, re-connect automatically
   }
 
-  @override
   void stop() {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
@@ -213,7 +190,7 @@ class DeviceService implements IDeviceService {
   }
 
   final Mutex _mutex = Mutex();
-  @override
+
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     await _mutex.acquire();
     try {
@@ -248,7 +225,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  @override
   DateTime? getFirstConnectedAt() {
     return _firstConnectedAt;
   }
@@ -266,7 +242,6 @@ class DeviceService implements IDeviceService {
     return null;
   }
 
-  @override
   Future<void> disconnectDevice() async {
     if (_connection != null) {
       Logger.debug("DeviceService: Disconnecting device...");
@@ -275,7 +250,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  @override
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
     if (_connection != null) {

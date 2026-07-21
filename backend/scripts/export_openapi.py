@@ -108,6 +108,10 @@ AUDITED_PUBLIC_PREFIXES = (
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'POST',
+        '/v1/conversations/shared/chat',
+    ): 'Trusted frontend service OIDC route; it is not a browser or Developer API surface.',
+    (
+        'POST',
         '/v1/conversations',
     ): 'Firebase-authenticated first-party app route; public docs expose Developer API key conversation creation.',
     (
@@ -187,6 +191,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/transcripts',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'GET',
+        '/v1/conversations/{conversation_id}/finalization',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'PATCH',
         '/v1/conversations/{conversation_id}/events',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -197,6 +205,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'GET',
         '/v1/conversations/{conversation_id}/action-items',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/action-items/count',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'PATCH',

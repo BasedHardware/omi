@@ -1,7 +1,7 @@
 use super::*;
 
 impl FirestoreService {
-    pub async fn upsert_screen_activity(
+    pub(crate) async fn upsert_screen_activity(
         &self,
         uid: &str,
         rows: &[crate::models::screen_activity::ScreenActivityRow],
@@ -16,27 +16,38 @@ impl FirestoreService {
             let writes: Vec<Value> = chunk
                 .iter()
                 .map(|row| {
+                    // Truncate OCR text to 1000 chars
+                    let ocr_truncated: String = row.ocr_text.chars().take(1000).collect();
+                    let mut fields = json!({
+                        "timestamp": {"stringValue": &row.timestamp},
+                        "appName": {"stringValue": &row.app_name},
+                        "windowTitle": {"stringValue": &row.window_title},
+                        "ocrText": {"stringValue": ocr_truncated},
+                    });
+                    if let Some(device_name) = &row.device_name {
+                        fields["deviceName"] = json!({"stringValue": device_name});
+                    }
+                    if let Some(client_device_id) = &row.client_device_id {
+                        fields["clientDeviceId"] = json!({"stringValue": client_device_id});
+                    }
+
+                    // SQLite screenshot IDs are local to an installation. Prefixing
+                    // them with the canonical client device ID prevents one Mac from
+                    // overwriting another user's screen-activity row.
+                    let document_id = row.storage_id();
                     let doc_name = format!(
                         "projects/{}/databases/(default)/documents/{}/{}/{}/{}",
                         self.project_id,
                         USERS_COLLECTION,
                         uid,
                         SCREEN_ACTIVITY_SUBCOLLECTION,
-                        row.id
+                        document_id
                     );
-
-                    // Truncate OCR text to 1000 chars
-                    let ocr_truncated: String = row.ocr_text.chars().take(1000).collect();
 
                     json!({
                         "update": {
                             "name": doc_name,
-                            "fields": {
-                                "timestamp": {"stringValue": &row.timestamp},
-                                "appName": {"stringValue": &row.app_name},
-                                "windowTitle": {"stringValue": &row.window_title},
-                                "ocrText": {"stringValue": ocr_truncated},
-                            }
+                            "fields": fields
                         }
                     })
                 })

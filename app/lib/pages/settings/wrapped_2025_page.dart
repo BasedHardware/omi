@@ -633,6 +633,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
               ),
               const Spacer(),
               GestureDetector(
+                key: const ValueKey('wrapped_generate_button'),
                 onTap: _generateWrapped,
                 child: Container(
                   width: double.infinity,
@@ -807,13 +808,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     );
   }
 
-  Widget _buildCardBase({
-    required Color backgroundColor,
-    required Widget child,
-    Color textColor = Colors.white,
-    bool isDark = true,
-    EdgeInsets? customPadding,
-  }) {
+  Widget _buildCardBase({required Color backgroundColor, required Widget child, EdgeInsets? customPadding}) {
     return Container(
       color: backgroundColor,
       child: SafeArea(
@@ -1246,109 +1241,6 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       ),
     );
   }
-
-  Widget _buildSummaryStat(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900),
-        ),
-        Text(
-          label,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildShareableImage(dynamic totalHours, int totalConvs, int totalActions) {
-    final hours = totalHours is num ? totalHours.toStringAsFixed(0) : '0';
-
-    return Container(
-      width: 1080,
-      height: 1920,
-      color: WrappedColors.blue,
-      child: Padding(
-        padding: const EdgeInsets.all(80),
-        child: Column(
-          children: [
-            const Spacer(),
-            Text(
-              context.l10n.wrappedMy2025,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 80,
-                fontWeight: FontWeight.w900,
-                decoration: TextDecoration.none,
-              ),
-            ),
-            Text(
-              context.l10n.wrappedRememberedByOmi,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 36,
-                fontWeight: FontWeight.w500,
-                decoration: TextDecoration.none,
-              ),
-            ),
-            const SizedBox(height: 100),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildShareStat(hours, context.l10n.wrappedHours),
-                _buildShareStat('$totalConvs', context.l10n.wrappedConvos),
-                _buildShareStat('$totalActions', context.l10n.wrappedActions),
-              ],
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: const Text(
-                'omi.me/wrapped',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w600,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 60),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildShareStat(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 64,
-            fontWeight: FontWeight.w900,
-            decoration: TextDecoration.none,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 28,
-            fontWeight: FontWeight.w500,
-            decoration: TextDecoration.none,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 // Animated Year in Numbers card
@@ -1359,7 +1251,6 @@ class _YearInNumbersAnimated extends StatefulWidget {
   final double percentile;
   final bool isActive;
   final VoidCallback? onShare;
-  final GlobalKey? shareKey;
 
   const _YearInNumbersAnimated({
     required this.totalMinutes,
@@ -1368,7 +1259,6 @@ class _YearInNumbersAnimated extends StatefulWidget {
     required this.percentile,
     required this.isActive,
     this.onShare,
-    this.shareKey,
   });
 
   @override
@@ -1649,6 +1539,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                       scale: shareButtonScale == 0 ? 0 : (0.5 + shareButtonScale * 0.5),
                       alignment: Alignment.centerLeft,
                       child: GestureDetector(
+                        key: const ValueKey('wrapped_share_button'),
                         onTap: () {
                           HapticFeedback.mediumImpact();
                           widget.onShare?.call();
@@ -2006,8 +1897,9 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
               final isFirst = index == 0;
 
               // Label appears when its slice starts animating
-              final labelOpacity =
-                  index < _sliceAnimations.length ? _sliceAnimations[index].value.clamp(0.0, 1.0) : 0.0;
+              final labelOpacity = index < _sliceAnimations.length
+                  ? _sliceAnimations[index].value.clamp(0.0, 1.0)
+                  : 0.0;
 
               return Opacity(
                 opacity: labelOpacity,
@@ -2264,8 +2156,9 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                               color: WrappedColors.indigo,
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              decoration:
-                                  strikethroughProgress > 0.9 ? TextDecoration.lineThrough : TextDecoration.none,
+                              decoration: strikethroughProgress > 0.9
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
                               decorationColor: WrappedColors.indigo,
                               decorationThickness: 2,
                             ),
@@ -2462,8 +2355,8 @@ class _MemorableDayData {
     required this.title,
     required this.description,
     required this.dateStr,
-  })  : month = _parseMonth(dateStr),
-        day = _parseDay(dateStr);
+  }) : month = _parseMonth(dateStr),
+       day = _parseDay(dateStr);
 
   static int _parseMonth(String dateStr) {
     final months = {
@@ -2504,8 +2397,6 @@ class _MemorableDaysAnimated extends StatefulWidget {
   final String headerLine2;
   final String summaryBadgeText;
   final Color badgeColor;
-  final bool isSingleMoment;
-  final String? badgeEmoji;
   final VoidCallback? onShare;
 
   const _MemorableDaysAnimated({
@@ -2516,8 +2407,6 @@ class _MemorableDaysAnimated extends StatefulWidget {
     this.summaryBadgeText = 'Your Top Days',
     this.onShare,
     this.badgeColor = WrappedColors.teal,
-    this.isSingleMoment = false,
-    this.badgeEmoji,
   });
 
   @override
@@ -2744,8 +2633,9 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     return AnimatedBuilder(
       animation: _introAnimation,
       builder: (context, child) {
-        final currentDay =
-            widget.days.isNotEmpty && _currentDayIndex < widget.days.length ? widget.days[_currentDayIndex] : null;
+        final currentDay = widget.days.isNotEmpty && _currentDayIndex < widget.days.length
+            ? widget.days[_currentDayIndex]
+            : null;
 
         return Column(
           children: [
@@ -2809,18 +2699,9 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (widget.badgeEmoji != null) ...[
-                    Text(widget.badgeEmoji!, style: const TextStyle(fontSize: 18)),
-                    const SizedBox(width: 6),
-                  ],
-                  Text(
-                    widget.summaryBadgeText,
-                    style: TextStyle(color: widget.badgeColor, fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                ],
+              child: Text(
+                widget.summaryBadgeText,
+                style: TextStyle(color: widget.badgeColor, fontSize: 16, fontWeight: FontWeight.w700),
               ),
             ),
           ),
@@ -2857,68 +2738,56 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
   }
 
   Widget _buildSummaryDayItem(_MemorableDayData day, double progress) {
-    final isSingle = widget.isSingleMoment;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // For single moments (funniest/cringe), just show date since emoji is in badge
-        // For multi-day (Your Top Days), show emoji + label + date
-        if (isSingle) ...[
-          // Just date for single moments (emoji is in the badge)
-          Text(
-            day.dateStr,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 14, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 12),
-        ] else ...[
-          // Label with emoji and date in same row for multi-day
-          Row(
-            children: [
-              Text(day.emoji, style: const TextStyle(fontSize: 20)),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  day.label.toUpperCase(),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
-                  ),
+        // Label with emoji and date in same row
+        Row(
+          children: [
+            Text(day.emoji, style: const TextStyle(fontSize: 20)),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                day.label.toUpperCase(),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                '·',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                day.dateStr,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10, fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-        ],
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '·',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              day.dateStr,
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
         // Title as text
         Text(
           day.title,
-          style: TextStyle(color: Colors.white, fontSize: isSingle ? 32 : 20, fontWeight: FontWeight.w700, height: 1.3),
+          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, height: 1.3),
         ),
         // Description if available
         if (day.description.isNotEmpty) ...[
-          SizedBox(height: isSingle ? 16 : 6),
+          const SizedBox(height: 6),
           Text(
             day.description,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.85),
-              fontSize: isSingle ? 18 : 14,
+              fontSize: 14,
               fontWeight: FontWeight.w400,
               height: 1.4,
             ),
@@ -4028,16 +3897,6 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
 
     // Phrases
     final phrases = widget.result['top_phrases'] as List<dynamic>? ?? [];
-
-    // Actions
-    final totalActions = widget.result['total_action_items'] ?? 0;
-    final completedActions = widget.result['completed_action_items'] ?? 0;
-    final completionRate = (((widget.result['action_items_completion_rate'] ?? 0.0) as num) * 100).toInt();
-
-    // Signature + archetype
-    final archetype = (widget.result['decision_style'] as Map<String, dynamic>?)?['name'] ?? 'Thinker';
-    final signaturePhrase = (widget.result['signature_phrase'] as Map<String, dynamic>?)?['phrase'] ?? 'okay';
-    final signatureCount = (widget.result['signature_phrase'] as Map<String, dynamic>?)?['count'] ?? 0;
 
     // Struggle + Win
     final struggle = (widget.result['struggle'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedTheHardPart;

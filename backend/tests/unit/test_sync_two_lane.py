@@ -3,6 +3,8 @@ import hashlib
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from google.cloud import firestore
+
 from database import sync_ledger, user_usage
 from scripts.render_cloud_run_clone_env import clone_environment
 from utils.sync import backfill, capture_manifest, content_id, lanes
@@ -117,6 +119,68 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
     assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in secrets
 
 
+def test_cloud_run_clone_removes_retired_source_env():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {'name': 'HOSTED_PUSHER_API_URL', 'value': 'http://retired-pusher.local'},
+                                {'name': 'REDIS_DB_HOST', 'value': '10.0.0.1'},
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, secrets = clone_environment(
+        service,
+        'HOSTED_PUSHER_API_URL=http://overlay-should-not-survive.local',
+        'HOSTED_PUSHER_API_URL=HOSTED_PUSHER_API_URL:latest',
+        remove_env_vars='HOSTED_PUSHER_API_URL',
+    )
+
+    assert 'HOSTED_PUSHER_API_URL' not in env_vars
+    assert 'HOSTED_PUSHER_API_URL' not in secrets
+    assert 'REDIS_DB_HOST=10.0.0.1' in env_vars
+
+
+def test_cloud_run_clone_escapes_inherited_literals_without_reencoding_renderer_overlay():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'STT_PRERECORDED_MODEL',
+                                    'value': r'modulate-velma-2,parakeet\primary',
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, _ = clone_environment(
+        service,
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        '',
+    )
+
+    assert env_vars.splitlines() == [
+        r'RENDERED_STT=modulate-velma-2\,parakeet',
+        r'STT_PRERECORDED_MODEL=modulate-velma-2\,parakeet\\primary',
+    ]
+
+
 def test_deploy_contract_routes_both_backfill_budget_alerts():
     action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
     manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
@@ -180,13 +244,79 @@ def test_cloud_run_default_service_lists_include_sync_backfill():
     assert manual.index('repair-traffic:') < manual.index('--cloud-run-service backend-sync-backfill')
 
 
-def test_processed_segment_marker_follows_partial_result_checkpoint():
+def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_candidates():
+    """Static deployment-contract guard for the two P0 rollout boundaries."""
+    root = Path(__file__).resolve().parents[3]
+    manual = (root / '.github/workflows/gcp_backend.yml').read_text()
+    auto_dev = (root / '.github/workflows/gcp_backend_auto_dev.yml').read_text()
+
+    for workflow in (manual, auto_dev):
+        assert 'verify_sync_ledger_fence_transition.py' in workflow
+        assert '--desired-mode="$SYNC_LEDGER_FENCE_MODE"' in workflow
+        assert workflow.count("SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}") >= 2
+
+    assert "TRANSCRIPTION_CANDIDATE_TAG: stt-gate-${{ github.run_id }}-${{ github.run_attempt }}" in manual
+    assert "format('--tag={0}', env.TRANSCRIPTION_CANDIDATE_TAG)" in manual
+    assert 'resolve_cloud_run_tagged_url.py' in manual
+    assert 'uses: ./.github/actions/transcription-release-candidate-probe' in manual
+    assert 'candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}' in manual
+    assert 'project_id: ${{ vars.GCP_PROJECT_ID }}' in manual
+    assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
+    assert 'Remove passed transcription candidate tag' in manual
+    assert 'Remove failed transcription candidate tag' in manual
+    assert (
+        'if: ${{ failure() && steps.deploy-backend.outcome == \'success\''
+        " && (github.event.inputs.environment == 'development'"
+        " || github.event.inputs.deploy_targets == 'cloud-run-only') }}" in manual
+    )
+    assert manual.index('Gate backend candidate on known audio') < manual.index(
+        'Shift Cloud Run traffic to validated revisions'
+    )
+
+
+def test_production_cloud_run_only_uses_internal_authenticated_candidate_probe():
+    """Prod Cloud Run promotion uses the VPC probe; full-stack prod rejects early."""
+    import yaml
+
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / '.github/workflows/gcp_backend.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    by_name = {step.get('name'): step for step in steps}
+
+    public_probe = by_name['Gate backend candidate on known audio']
+    assert public_probe['if'] == "${{ github.event.inputs.environment == 'development' }}"
+
+    internal_probe = by_name['Gate internal production candidate on known audio from Cloud Run VPC']
+    assert "github.event.inputs.environment == 'prod'" in internal_probe['if']
+    assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in internal_probe['if']
+    assert 'probe-transcription-candidate-from-cloud-run.sh' in internal_probe['run']
+
+    for name in (
+        'Resolve transcription candidate URL',
+        'Remove passed transcription candidate tag',
+        'Remove failed transcription candidate tag',
+    ):
+        condition = by_name[name].get('if') or ''
+        assert "github.event.inputs.environment == 'development'" in condition
+        assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in condition
+
+    deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
+    assert "github.event.inputs.environment == 'development'" in deploy_flags
+    assert "github.event.inputs.deploy_targets == 'cloud-run-only'" in deploy_flags
+    assert steps.index(internal_probe) < steps.index(by_name['Shift Cloud Run traffic to validated revisions'])
+
+
+def test_static_processed_segment_marker_follows_partial_result_checkpoint():
+    """Static ordering contract for retry-safe partial-result persistence."""
     pipeline = (Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py').read_text()
-    checkpoint = pipeline.index("update_sync_job(job_id, {'partial_result': partial})")
-    durable_checkpoint = pipeline.index('checkpoint_sync_content_partial_result(uid, content_id, job_id, partial)')
-    marker = pipeline.index('add_processed_segment(job_id, path)', checkpoint)
+    checkpoint = pipeline.index("_update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})")
+    durable_checkpoint = pipeline.index('checkpoint_sync_content_partial_result(', checkpoint)
+    marker = pipeline.index('_add_processed_segment_for_run(job_id, active_run_lock_token, path)', checkpoint)
 
     assert checkpoint < durable_checkpoint < marker
+    durable_call = pipeline[durable_checkpoint:marker]
+    assert 'run_token=active_run_lock_token' in durable_call
+    assert 'run_epoch=active_run_lock_epoch' in durable_call
     assert "set(partial_result.get('new_memories') or [])" in pipeline
     assert 'get_sync_content_partial_result' in pipeline
 
@@ -253,6 +383,9 @@ def test_server_manifest_allows_only_one_content_set_per_conversation(monkeypatc
 
 
 def test_backfill_reservation_maps_user_and_global_caps(monkeypatch):
+    # Admission caps are opt-in now (Cloud Tasks queue is the pacer); enable them
+    # to exercise the user/global cap → reason mapping.
+    monkeypatch.setenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'true')
     redis = MagicMock()
     monkeypatch.setattr(backfill, 'redis_client', redis)
     monkeypatch.setattr(backfill, 'retry_after_next_utc_day', lambda: 123)
@@ -302,15 +435,62 @@ class _Transaction:
         self.writes.append((ref, data, merge))
 
 
+def test_fresh_ledger_claim_omits_delete_field_for_missing_keys():
+    """First-time claims must not DELETE absent ledger fields.
+
+    Real Firestore no-ops missing deletes; hermetic fakes raise KeyError. Keep
+    the write sparse so both stay green.
+    """
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    claim = sync_ledger._claim_transaction.to_wrap(transaction, _Ref(None), 'job-fresh', 'fresh', now)
+
+    assert claim == {'outcome': 'owned'}
+    assert len(transaction.writes) == 1
+    payload, merge = transaction.writes[0][1], transaction.writes[0][2]
+    assert merge is True
+    assert payload['status'] == 'processing'
+    assert payload['job_id'] == 'job-fresh'
+    assert 'ledger_run_token' not in payload
+    assert 'ledger_run_epoch' not in payload
+
+
+def test_retryable_ledger_claim_clears_existing_run_binding():
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    claim = sync_ledger._claim_transaction.to_wrap(
+        transaction,
+        _Ref(
+            {
+                'status': 'retryable',
+                'job_id': 'old-job',
+                'ledger_run_token': '1:token-a',
+                'ledger_run_epoch': 1,
+                'updated_at': now - timedelta(days=3),
+            }
+        ),
+        'job-2',
+        'fresh',
+        now,
+    )
+
+    assert claim == {'outcome': 'owned'}
+    payload = transaction.writes[0][1]
+    assert payload['job_id'] == 'job-2'
+    assert payload['ledger_run_token'] == firestore.DELETE_FIELD
+    assert payload['ledger_run_epoch'] == firestore.DELETE_FIELD
+
+
 def test_durable_ledger_replays_completion_and_blocks_recent_duplicate():
     now = datetime.now(timezone.utc)
-    completed_ref = _Ref({'status': 'completed', 'result': {'total_segments': 2}})
+    completed_result = {'failed_segments': 0, 'total_segments': 2, 'errors': [], 'outcome': 'success'}
+    completed_ref = _Ref({'status': 'completed', 'result': completed_result})
     busy_ref = _Ref({'status': 'processing', 'job_id': 'other', 'updated_at': now - timedelta(minutes=1)})
 
     completed = sync_ledger._claim_transaction.to_wrap(_Transaction(), completed_ref, 'new-job', 'backfill', now)
     busy = sync_ledger._claim_transaction.to_wrap(_Transaction(), busy_ref, 'new-job', 'backfill', now)
 
-    assert completed == {'outcome': 'completed', 'result': {'total_segments': 2}}
+    assert completed == {'outcome': 'completed', 'result': completed_result}
     assert busy == {'outcome': 'busy'}
 
 
@@ -319,19 +499,31 @@ def test_durable_ledger_side_effect_is_once_only():
     transaction = _Transaction()
     first = sync_ledger._side_effect_transaction.to_wrap(
         transaction,
-        _Ref({'job_id': 'job-1'}),
+        _Ref({'status': 'processing', 'job_id': 'job-1', 'ledger_run_token': '1:token-a', 'ledger_run_epoch': 1}),
         'job-1',
         'speech_ms',
         1000,
         now,
+        '1:token-a',
+        1,
     )
     duplicate = sync_ledger._side_effect_transaction.to_wrap(
         _Transaction(),
-        _Ref({'job_id': 'job-1', 'metered_at': now}),
+        _Ref(
+            {
+                'status': 'processing',
+                'job_id': 'job-1',
+                'ledger_run_token': '1:token-a',
+                'ledger_run_epoch': 1,
+                'metered_at': now,
+            }
+        ),
         'job-1',
         'speech_ms',
         1000,
         now,
+        '1:token-a',
+        1,
     )
 
     assert first is True
@@ -340,14 +532,246 @@ def test_durable_ledger_side_effect_is_once_only():
 
 
 def test_release_preserves_once_only_side_effect_markers():
-    ref = _Ref({'status': 'processing', 'job_id': 'job-1', 'metered_at': datetime.now(timezone.utc)})
-    client = MagicMock()
-    client.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+    ref = _Ref(
+        {
+            'status': 'processing',
+            'job_id': 'job-1',
+            'ledger_run_token': '1:token-a',
+            'ledger_run_epoch': 1,
+            'metered_at': datetime.now(timezone.utc),
+        }
+    )
+    transaction = _Transaction()
 
-    sync_ledger.release_sync_content_claim('uid', 'content', 'job-1', firestore_client=client)
+    released = sync_ledger._release_claim_transaction.to_wrap(
+        transaction,
+        ref,
+        'job-1',
+        datetime.now(timezone.utc),
+        '1:token-a',
+        1,
+    )
 
-    assert ref.writes[0][0]['status'] == 'retryable'
-    assert ref.writes[0][1] is True
+    assert released is True
+    assert transaction.writes[0][1]['status'] == 'retryable'
+    assert transaction.writes[0][2] is True
+
+
+def test_stale_claim_release_cannot_clear_a_newer_job_after_transaction_retry():
+    """A release retry re-reads the ledger and leaves a newer owner's claim intact."""
+    ref = _Ref(
+        {
+            'status': 'processing',
+            'job_id': 'job-new',
+            'ledger_run_token': '2:token-new',
+            'ledger_run_epoch': 2,
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    transaction = _Transaction()
+
+    released = sync_ledger._release_claim_transaction.to_wrap(
+        transaction,
+        ref,
+        'job-old',
+        datetime.now(timezone.utc),
+        '1:token-old',
+        1,
+    )
+
+    assert released is False
+    assert transaction.writes == []
+
+
+def test_stale_ledger_completion_and_partial_checkpoint_cannot_overwrite_new_owner():
+    """Every ledger write rechecks job ownership inside its Firestore transaction."""
+    now = datetime.now(timezone.utc)
+    ref = _Ref(
+        {
+            'status': 'processing',
+            'job_id': 'job-new',
+            'ledger_run_token': '2:token-new',
+            'ledger_run_epoch': 2,
+            'updated_at': now,
+        }
+    )
+
+    completed = sync_ledger._mark_completed_transaction.to_wrap(
+        _Transaction(),
+        ref,
+        'job-old',
+        {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+        now,
+        '1:token-old',
+        1,
+    )
+    checkpointed = sync_ledger._checkpoint_partial_result_transaction.to_wrap(
+        _Transaction(),
+        ref,
+        'job-old',
+        {'new_memories': ['conversation-old']},
+        now,
+        '1:token-old',
+        1,
+    )
+
+    assert completed is False
+    assert checkpointed is False
+
+
+def test_delayed_lower_epoch_bind_and_mutations_cannot_displace_newer_owner():
+    """A late A Firestore request cannot overwrite B's higher Redis epoch."""
+    now = datetime.now(timezone.utc)
+    ref = _Ref(
+        {
+            'status': 'processing',
+            'job_id': 'job-1',
+            'ledger_run_token': '2:token-b',
+            'ledger_run_epoch': 2,
+            'processed_segment_ids': [],
+        }
+    )
+    valid_result = {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'}
+
+    delayed_bind = sync_ledger._bind_run_token_transaction.to_wrap(_Transaction(), ref, 'job-1', '1:token-a', 1, now)
+    checkpointed = sync_ledger._checkpoint_partial_result_transaction.to_wrap(
+        _Transaction(), ref, 'job-1', {'new_memories': ['old']}, now, '1:token-a', 1
+    )
+    completed = sync_ledger._mark_completed_transaction.to_wrap(
+        _Transaction(), ref, 'job-1', valid_result, now, '1:token-a', 1
+    )
+    marked_segment = sync_ledger._processed_segment_transaction.to_wrap(
+        _Transaction(), ref, 'job-1', 'segment-old', now, '1:token-a', 1
+    )
+    released = sync_ledger._release_claim_transaction.to_wrap(_Transaction(), ref, 'job-1', now, '1:token-a', 1)
+
+    assert delayed_bind.outcome is sync_ledger.SyncContentRunBindingOutcome.LOST
+    assert checkpointed is False
+    assert completed is False
+    assert marked_segment is False
+    assert released is False
+
+
+def test_higher_epoch_bind_supersedes_old_owner_without_discarding_retry_material():
+    now = datetime.now(timezone.utc)
+    ref = _Ref(
+        {
+            'status': 'processing',
+            'job_id': 'job-1',
+            'ledger_run_token': '1:token-a',
+            'ledger_run_epoch': 1,
+            'partial_result': {'new_memories': ['conversation-a']},
+            'processed_segment_ids': ['segment-a'],
+        }
+    )
+    transaction = _Transaction()
+
+    binding = sync_ledger._bind_run_token_transaction.to_wrap(transaction, ref, 'job-1', '2:token-b', 2, now)
+
+    assert binding.bound is True
+    update = transaction.writes[0][1]
+    assert update['ledger_run_token'] == '2:token-b'
+    assert update['ledger_run_epoch'] == 2
+    assert 'partial_result' not in update
+    assert 'processed_segment_ids' not in update
+
+
+def test_retryable_claim_preserves_partial_and_processed_segment_checkpoints():
+    now = datetime.now(timezone.utc)
+    ref = _Ref(
+        {
+            'status': 'retryable',
+            'partial_result': {'new_memories': ['conversation-a']},
+            'processed_segment_ids': ['segment-a'],
+            'ledger_run_token': '1:token-a',
+            'ledger_run_epoch': 1,
+        }
+    )
+    transaction = _Transaction()
+
+    claim = sync_ledger._claim_transaction.to_wrap(transaction, ref, 'job-2', 'fresh', now)
+
+    assert claim == {'outcome': 'owned'}
+    update = transaction.writes[0][1]
+    assert update['status'] == 'processing'
+    assert 'partial_result' not in update
+    assert 'processed_segment_ids' not in update
+
+
+def test_completed_result_validation_accepts_legacy_nonzero_success_but_rejects_ambiguous_zero():
+    assert sync_ledger.is_valid_completed_sync_content_result({'failed_segments': 0, 'total_segments': 2, 'errors': []})
+    assert not sync_ledger.is_valid_completed_sync_content_result(
+        {'failed_segments': 0, 'total_segments': 0, 'errors': []}
+    )
+    assert not sync_ledger.is_valid_completed_sync_content_result({})
+
+
+def test_completion_transaction_rejects_invalid_results_without_a_write():
+    """The Firestore boundary cannot publish malformed, partial, or ambiguous legacy completion."""
+    now = datetime.now(timezone.utc)
+    invalid_results = (
+        {},
+        {'failed_segments': 1, 'total_segments': 2, 'errors': ['stt_timeout'], 'outcome': 'success'},
+        {'failed_segments': 0, 'total_segments': 0, 'errors': []},
+    )
+
+    for result in invalid_results:
+        transaction = _Transaction()
+        ref = _Ref(
+            {
+                'status': 'processing',
+                'job_id': 'job-1',
+                'ledger_run_token': '1:token-a',
+                'ledger_run_epoch': 1,
+            }
+        )
+
+        completed = sync_ledger._mark_completed_transaction.to_wrap(
+            transaction,
+            ref,
+            'job-1',
+            result,
+            now,
+            '1:token-a',
+            1,
+        )
+
+        assert completed is False
+        assert transaction.writes == []
+
+
+def test_completion_transaction_accepts_success_and_expected_silence():
+    """New terminal success contracts still commit at the same transaction boundary."""
+    now = datetime.now(timezone.utc)
+    valid_results = (
+        {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+        {'failed_segments': 0, 'total_segments': 0, 'errors': [], 'outcome': 'expected_silence'},
+    )
+
+    for result in valid_results:
+        transaction = _Transaction()
+        ref = _Ref(
+            {
+                'status': 'processing',
+                'job_id': 'job-1',
+                'ledger_run_token': '1:token-a',
+                'ledger_run_epoch': 1,
+            }
+        )
+
+        completed = sync_ledger._mark_completed_transaction.to_wrap(
+            transaction,
+            ref,
+            'job-1',
+            result,
+            now,
+            '1:token-a',
+            1,
+        )
+
+        assert completed is True
+        assert transaction.writes[0][1]['status'] == 'completed'
+        assert transaction.writes[0][1]['result'] == result
 
 
 def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
@@ -380,17 +804,37 @@ def test_durable_processed_segment_is_not_added_twice():
 
     added = sync_ledger._processed_segment_transaction.to_wrap(
         transaction,
-        _Ref({'job_id': 'job-1', 'processed_segment_ids': []}),
+        _Ref(
+            {
+                'status': 'processing',
+                'job_id': 'job-1',
+                'ledger_run_token': '1:token-a',
+                'ledger_run_epoch': 1,
+                'processed_segment_ids': [],
+            }
+        ),
         'job-1',
         'segment-1',
         now,
+        '1:token-a',
+        1,
     )
     duplicate = sync_ledger._processed_segment_transaction.to_wrap(
         _Transaction(),
-        _Ref({'job_id': 'job-1', 'processed_segment_ids': ['segment-1']}),
+        _Ref(
+            {
+                'status': 'processing',
+                'job_id': 'job-1',
+                'ledger_run_token': '1:token-a',
+                'ledger_run_epoch': 1,
+                'processed_segment_ids': ['segment-1'],
+            }
+        ),
         'job-1',
         'segment-1',
         now,
+        '1:token-a',
+        1,
     )
 
     assert added is True

@@ -1483,7 +1483,7 @@
     "exportConfiguration": "Экспартаваць канфігурацыю",
     "bringYourOwn": "Прынясіце ваше",
     "payYourSttProvider": "Свабодна выкарыстоўвайце omi. Вы плаціце толькі вашаму паставальніку STT прама.",
-    "freeMinutesMonth": "600 свабодных мінут/месяц уключана. Неабмежавана з ",
+    "freeMinutesMonth": "300 свабодных мінут/месяц уключана. Неабмежавана з ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Хост абавязаны",
     "validPortRequired": "Абавязаны сапраўдны порт",
@@ -7281,7 +7281,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.",
+    "premiumMinutesInfo": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7392,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ",
+    "premiumMinutesMonth": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10521,7 +10521,7 @@
     "upgradePlan": "Абнавіць план",
     "billingMonthly": "Штомесяц",
     "billingYearly": "Штогод",
-    "savePercent": "Зэканомце ~17%",
+    "savePercent": "Зэканомце ~{percent}%",
     "popular": "Папулярны",
     "currentPlan": "Бягучы",
     "neoSubtitle": "{count} пытанняў у месяц",
@@ -10633,7 +10633,7 @@
     "syncCustomSttWarningMessage": "Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу.",
     "transcribeLaterTitle": "Транскрыпцыя пазней",
     "transcribeLaterDescription": "Запісвайце аўдыя зараз, а транскрыбуйце яго пры неабходнасці, а не ў рэжыме рэальнага часу. Запісы захоўваюцца на тэлефоне, а потым вы загружаеце іх, каб стварыць размовы.",
-    "transcribeLaterNote": "Пакуль працуе з прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.",
+    "transcribeLaterNote": "Працуе з мікрафонам тэлефона, прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.",
     "transcribeLaterStorageFull": "На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.",
     "unmute": "Уключыць гук",
     "newRecording": "Новы запіс",
@@ -10721,5 +10721,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Сховішча прылады",
+    "deviceStoragePercentFull": "запоўнена {percent}%",
+    "deviceStorageUsedOfTotal": "{used} з {total} выкарыстана",
+    "deviceStorageFree": "{free} вольна",
+    "deviceStorageNearlyFull": "Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца.",
+    "phoneMicOfflineFallbackMessage": "Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы.",
+    "dataEncryptedBanner": "Вашы даныя па змаўчанні абаронены моцным шыфраваннем, і вы кантралюеце, як яны захоўваюцца і выкарыстоўваюцца.",
+    "rayBanMetaMicPickerTitle": "Выберыце мікрафон Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Выберыце Bluetooth-мікрафон акуляраў. Музыка прыпыніцца, пакуль Omi яго выкарыстоўвае.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth-мікрафоны не знойдзены. Падключыце акуляры ў наладах iPhone і паўтарыце спробу.",
+    "rayBanMetaMicPickerLoadError": "Не ўдалося загрузіць Bluetooth-мікрафоны. Праверце, ці ўключаны Bluetooth, і паўтарыце спробу.",
+    "rayBanMetaMicPickerConnectError": "Не ўдалося падключыцца да гэтага мікрафона. Праверце, ці падключаны ён у наладах iPhone."
 }

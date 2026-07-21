@@ -213,6 +213,17 @@ def remove_app_access_for_tester(app_id: str, uid: str) -> None:
 # ********************************
 
 
+def _clamp_review_score(score: Any) -> float:
+    # App reviews are a 0-5 scale. Clamp so a drifted or abusive out-of-range score cannot skew
+    # rating_avg and the marketplace ranking (weighted_rating / compute_app_score) that reads it.
+    # The read path already bounds score with Field(ge=0, le=5); this closes the same bound on the
+    # write and aggregation paths, where the request model leaves score unbounded.
+    try:
+        return max(0.0, min(5.0, float(score)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def weighted_rating(app: App) -> float:
     C = 3.0  # Assume 3.0 is the mean rating across all apps
     m = 5  # Minimum number of ratings required to be considered
@@ -234,7 +245,9 @@ def compute_app_score(app: App) -> float:
     """
     rating_avg = app.rating_avg or 0
     rating_count = app.rating_count or 0
-    installs = app.installs or 0
+    # Clamp negative install counts (counter drift) so math.log(1 + installs) below never hits a domain
+    # error; the source is also floored in redis_db.get_apps_installs_count.
+    installs = max(0, app.installs or 0)
 
     rating_factor = (rating_avg / 5) ** 2  # Steep drop for low ratings
     score = rating_factor * math.log(1 + rating_count) * math.sqrt(math.log(1 + installs))
@@ -289,7 +302,11 @@ def get_popular_apps() -> List[App]:
             app_dict['installs'] = apps_install.get(app['id'], 0)
             reviews = apps_reviews.get(app['id'], {})
             sorted_reviews = reviews.values()
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+            rating_avg = (
+                sum([_clamp_review_score(x['score']) for x in sorted_reviews]) / len(sorted_reviews)
+                if reviews
+                else None
+            )
             app_dict['rating_avg'] = rating_avg
             app_dict['rating_count'] = len(sorted_reviews)
             built_app = _safe_build_app(app_dict)
@@ -361,7 +378,11 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         if include_reviews:
             reviews = apps_review.get(app['id'], {})
             sorted_reviews = reviews.values()
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+            rating_avg = (
+                sum([_clamp_review_score(x['score']) for x in sorted_reviews]) / len(sorted_reviews)
+                if reviews
+                else None
+            )
             app_dict['reviews'] = [details for details in reviews.values() if details['review']]
             app_dict['user_review'] = reviews.get(uid)
             app_dict['rating_avg'] = rating_avg
@@ -372,6 +393,17 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     if include_reviews:
         apps.sort(key=weighted_rating, reverse=True)
     return apps
+
+
+def get_available_app_model_by_id(app_id: str, uid: str | None) -> Optional[App]:
+    """`get_available_app_by_id` as a validated App model.
+
+    This is the same availability authority the set-preferred-app route uses
+    (routers/users.py), for readers that must honor what that route admitted
+    rather than re-deciding availability with a different check (#10074).
+    """
+    raw_app = get_available_app_by_id(app_id, uid)
+    return _safe_build_app(dict(raw_app)) if raw_app else None
 
 
 def get_available_app_by_id(app_id: str, uid: str | None) -> Dict[str, Any] | None:
@@ -400,7 +432,9 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> Dict[s
     app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
     reviews = get_app_reviews(app['id'])
     sorted_reviews = reviews.values()
-    rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+    rating_avg = (
+        sum([_clamp_review_score(x['score']) for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+    )
     app['reviews'] = [details for details in reviews.values() if details['review']]
     app['rating_avg'] = rating_avg
     app['rating_count'] = len(sorted_reviews)
@@ -489,7 +523,11 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
             if include_reviews:
                 reviews = apps_reviews.get(app['id'], {})
                 sorted_reviews = reviews.values()
-                rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+                rating_avg = (
+                    sum([_clamp_review_score(x['score']) for x in sorted_reviews]) / len(sorted_reviews)
+                    if reviews
+                    else None
+                )
                 app_dict['reviews'] = []
                 app_dict['rating_avg'] = rating_avg
                 app_dict['rating_count'] = len(sorted_reviews)
@@ -505,6 +543,8 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
 
 
 def set_app_review(app_id: str, uid: str, review: Dict[str, Any]) -> Dict[str, str]:
+    if 'score' in review:
+        review['score'] = _clamp_review_score(review['score'])
     set_app_review_in_db(app_id, uid, review)
     set_app_review_cache(app_id, uid, review)
     return {'status': 'ok'}
@@ -537,12 +577,31 @@ def get_app_money_made_amount(app_id: str) -> float:
     return amount
 
 
+def _safe_usage_history_items(usage: List[Dict[str, Any]], app_id: str) -> List[UsageHistoryItem]:
+    """Build UsageHistoryItem records from raw usage docs, skipping (not raising on) a malformed one.
+
+    get_app_usage_history / get_app_money_made are Redis/process-cached and shared, so one legacy or
+    malformed usage document (a bad type enum, a missing timestamp) must not 500 the whole enrichment.
+    """
+    items: List[UsageHistoryItem] = []
+    for x in usage:
+        try:
+            items.append(UsageHistoryItem(**x))
+        except ValidationError as e:
+            logger.warning(
+                "Skipping malformed usage history item for app %s: %s",
+                app_id,
+                [err['loc'][0] for err in e.errors()],
+            )
+    return items
+
+
 def get_app_usage_history(app_id: str) -> List[Dict[str, Any]]:
     cached_usage = get_app_usage_history_cache(app_id)
     if cached_usage:
         return cached_usage
     usage = get_app_usage_history_db(app_id)
-    usage = [UsageHistoryItem(**x) for x in usage]
+    usage = _safe_usage_history_items(usage, app_id)
     # return usage by date grouped count
     by_date: 'defaultdict[Any, int]' = defaultdict(int)
     for item in usage:
@@ -561,7 +620,7 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     if cached_money:
         return cached_money
     usage = get_app_usage_history_db(app_id)
-    usage = [UsageHistoryItem(**x) for x in usage]
+    usage = _safe_usage_history_items(usage, app_id)
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
@@ -586,7 +645,7 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
 
 
 def upsert_app_payment_link(
-    app_id: str, is_paid_app: bool, price: float, payment_plan: str, uid: str, previous_price: float | None = None
+    app_id: str, is_paid_app: bool, price: Any, payment_plan: str, uid: str, previous_price: float | None = None
 ):
     if not is_paid_app:
         logger.info(f"App is not a paid app, app_id: {app_id}")
@@ -607,8 +666,12 @@ def upsert_app_payment_link(
         logger.info(f"App price is existing, app_id: {app_id}")
         return app
 
-    if price == 0:
-        logger.error(f"App price is not invalid, app_id: {app_id}")
+    # A paid app needs a positive numeric price before we can build a Stripe link. update_app passes the
+    # raw request price straight through, so a null price (is_paid toggled on without a price) or a
+    # non-numeric value would reach int(price * 100) below and raise, 500ing the update. Treat any
+    # non-positive or non-numeric price like the existing price==0 case: skip link creation, no crash.
+    if not isinstance(price, (int, float)) or isinstance(price, bool) or price <= 0:
+        logger.error(f"App price is missing or not a positive number, app_id: {app_id}")
         return app
 
     # create recurring payment link
@@ -621,7 +684,7 @@ def upsert_app_payment_link(
             app.payment_product_id = payment_product.id
 
         # price
-        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(price * 100))
+        payment_price = stripe.create_app_monthly_recurring_price(app.payment_product_id, int(round(price * 100)))
         app.payment_price_id = payment_price.id
 
         # payment link
@@ -669,7 +732,6 @@ def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> 
         Dictionary representation of the subscription or None if not found
     """
     try:
-
         cached_customer_id = get_user_app_subscription_customer_id(app_id, uid)
         latest_subscription = None
 
@@ -1558,7 +1620,7 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
         'name': name.strip(),
         'description': description.strip(),
         'endpoint': endpoint.strip(),
-        'method': typed_tool.get('method', 'POST').upper(),
+        'method': (typed_tool.get('method') or 'POST').upper(),
         'auth_required': typed_tool.get('auth_required', True),
     }
 

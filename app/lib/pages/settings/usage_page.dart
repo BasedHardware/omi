@@ -320,7 +320,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData = provider.todayUsage != null ||
+          final hasAnyData =
+              provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -425,7 +426,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     final plan = provider.subscription!.subscription.plan;
-    final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+    final isPaid = plan.isPaid;
+    // Plan names are product names; only the free/unlimited labels are localized.
+    final planLabel = plan == PlanType.plus ? 'Plus' : (isPaid ? context.l10n.unlimitedPlan : context.l10n.basicPlan);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -441,11 +444,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                isUnlimited ? context.l10n.unlimitedPlan : context.l10n.basicPlan,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              if (isUnlimited)
+              Text(planLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              if (isPaid)
                 GestureDetector(
                   onTap: _isUpgrading ? null : _showPlansSheet,
                   child: Row(
@@ -458,7 +458,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 ),
             ],
           ),
-          if (!isUnlimited) ...[
+          if (!isPaid) ...[
             const SizedBox(height: 4),
             Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
             const SizedBox(height: 16),
@@ -1154,8 +1154,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage =
-                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
+                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
+                      .clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

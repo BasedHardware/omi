@@ -16,6 +16,11 @@ on:
         required: false
         default: ''
 
+# Serialize Helm writers to this environment's NLLB translation release.
+concurrency:
+  group: deploy-gke-nllb-translation-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: nllb-translation
   SERVICE_UNDERSCORE: nllb_translation
@@ -41,18 +46,18 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.branch }}
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - run: gcloud auth configure-docker
 
@@ -63,10 +68,13 @@ jobs:
       - name: Build and Push Docker image
         run: |
           docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }} -f backend/${{ env.SERVICE_UNDERSCORE }}/Dockerfile backend/${{ env.SERVICE_UNDERSCORE }}/
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/nllb_translation/Dockerfile \
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }}
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }}
 
       - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
+        uses: google-github-actions/get-gke-credentials@v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
@@ -74,7 +82,7 @@ jobs:
 
       - name: Deploy NLLB Translation to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE_UNDERSCORE }}_values.yaml --set "image.tag=${{ steps.vars.outputs.short_sha }}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE_UNDERSCORE }}_values.yaml --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
 
       - name: Verify rollout
         run: |

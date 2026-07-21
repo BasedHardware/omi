@@ -26,6 +26,7 @@ from models.chat_session import (
 from models.shared import StatusResponse
 from utils.chat import initial_message_util
 from utils.llm.clients import get_llm
+from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ class SaveMessageRequest(BaseModel):
     metadata: str | None = None
     client_message_id: str | None = Field(None, pattern=r'^[A-Za-z0-9_-]{1,128}$')
     message_source: str = Field('desktop_chat', pattern=r'^(desktop_chat|realtime_voice)$')
+    journal_revision: int | None = Field(None, ge=1, le=9_007_199_254_740_991)
 
 
 class RateMessageRequest(BaseModel):
@@ -85,6 +87,12 @@ class GenerateTitleRequest(BaseModel):
 
 class ChatMessageCountResponse(BaseModel):
     count: int
+
+
+class DesktopMessageReconcilePageResponse(BaseModel):
+    messages: list[Message]
+    next_cursor: str | None
+    has_more: bool
 
 
 # ============================================================================
@@ -156,16 +164,20 @@ def save_message(
     x_app_platform: str | None = Header(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    saved = chat_db.save_message(
-        uid,
-        text=request.text,
-        sender=request.sender,
-        app_id=request.app_id,
-        session_id=request.session_id,
-        metadata=request.metadata,
-        client_message_id=request.client_message_id,
-        message_source=request.message_source,
-    )
+    try:
+        saved = chat_db.save_message(
+            uid,
+            text=request.text,
+            sender=request.sender,
+            app_id=request.app_id,
+            session_id=request.session_id,
+            metadata=request.metadata,
+            client_message_id=request.client_message_id,
+            message_source=request.message_source,
+            journal_revision=request.journal_revision,
+        )
+    except chat_db.ClientMessageIdPayloadConflict as exc:
+        raise HTTPException(status_code=409, detail='client_message_id payload conflict') from exc
     if request.sender == 'human' and request.message_source == 'desktop_chat':
         try:
             llm_usage_db.record_chat_quota_question(
@@ -190,6 +202,35 @@ def get_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     return chat_db.get_messages(uid, app_id=app_id, chat_session_id=session_id, limit=limit, offset=offset)
+
+
+@router.get(
+    '/v2/desktop/messages/reconcile',
+    tags=['chat-sessions'],
+    response_model=DesktopMessageReconcilePageResponse,
+)
+def reconcile_messages(
+    app_id: str | None = Query(None),
+    session_id: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=100),
+    cursor: str | None = Query(None, min_length=1, max_length=200),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    try:
+        messages, next_cursor, has_more = chat_db.get_messages_reconcile_page(
+            uid,
+            app_id=app_id,
+            chat_session_id=session_id,
+            limit=limit,
+            cursor_message_id=cursor,
+        )
+    except chat_db.MessageReconcileCursorError as exc:
+        raise HTTPException(status_code=400, detail='invalid message reconciliation cursor') from exc
+    return {
+        'messages': messages,
+        'next_cursor': next_cursor,
+        'has_more': has_more,
+    }
 
 
 @router.delete('/v2/desktop/messages', tags=['chat-sessions'], response_model=DeleteMessagesResponse)
@@ -257,7 +298,8 @@ def generate_session_title(
     # `BaseChatModel.invoke(...).content` is typed `str | list[str | dict]` by
     # langchain's stubs; session-title responses are plain strings, so reach
     # the response through `Any` and annotate the result as `str`.
-    response = cast(Any, get_llm('session_titles').invoke(prompt))
+    with track_usage(uid, Features.CHAT):
+        response = cast(Any, get_llm('session_titles').invoke(prompt))
     title: str = response.content.strip().strip('"\'')
     if not title:
         title = 'New Chat'

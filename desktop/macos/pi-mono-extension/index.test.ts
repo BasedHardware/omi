@@ -29,13 +29,16 @@ import {
   isSafeSkillName,
   __connectOmiPipeForTest,
   __callSwiftToolForTest,
-  __omiRelayCorrelationForTest,
+  __omiRelayCapabilityRefForTest,
   __omiPendingCallsForTest,
   __registerOmiToolsForTest,
   __resetOmiPipeForTest,
+  omiRequestIdFromRelayContext,
+  omiReasoningEffortFromRelayContext,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
+import { discoverSkillCatalog, searchSkills } from "../agent/src/runtime/node-tools.ts";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
@@ -45,6 +48,21 @@ import {
 // ---------------------------------------------------------------------------
 // classifyBash — allow-by-default for normal dev commands
 // ---------------------------------------------------------------------------
+
+test("request correlation: accepts only opaque bounded relay ids", () => {
+  assert.equal(omiRequestIdFromRelayContext('{"requestId":"req_01AB-cd"}'), "req_01AB-cd");
+  assert.equal(omiRequestIdFromRelayContext('{"requestId":"has space"}'), undefined);
+  assert.equal(omiRequestIdFromRelayContext(JSON.stringify({ requestId: "x".repeat(129) })), undefined);
+  assert.equal(omiRequestIdFromRelayContext("not json"), undefined);
+});
+
+test("reasoning effort relay: strict two-token allowlist", () => {
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"adaptive"}'), "adaptive");
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"fast"}'), "fast");
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"max"}'), undefined);
+  assert.equal(omiReasoningEffortFromRelayContext('{"requestId":"req_1"}'), undefined);
+  assert.equal(omiReasoningEffortFromRelayContext("not json"), undefined);
+});
 
 test("classifyBash: allows normal dev commands", () => {
   const allowed = [
@@ -941,6 +959,24 @@ function createMockBridge(): { server: Server; sockPath: string } {
   return { server, sockPath };
 }
 
+async function installRelayCapabilityContext(
+  capabilityRef = "cap_test_relay",
+): Promise<{ cleanup: () => Promise<void>; path: string }> {
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-capability-"));
+  const contextPath = pathJoin(dir, "context.json");
+  const previous = process.env.OMI_CONTEXT_FILE;
+  await writeFile(contextPath, JSON.stringify({ capabilityRef }));
+  process.env.OMI_CONTEXT_FILE = contextPath;
+  return {
+    path: contextPath,
+    cleanup: async () => {
+      if (previous === undefined) delete process.env.OMI_CONTEXT_FILE;
+      else process.env.OMI_CONTEXT_FILE = previous;
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+
 function firstTypedSchema(schema: any): any {
   if (schema?.type) return schema;
   return schema?.anyOf?.find((candidate: any) => candidate.type) ?? {};
@@ -1100,13 +1136,16 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     inspect_agent_artifacts: [],
     update_agent_artifact_lifecycle: ["artifactId", "state"],
     load_skill: ["name"],
-    send_agent_message: ["sessionId", "prompt"],
+    search_skills: ["query"],
+    send_agent_message: ["sessionId", "originSurfaceKind", "prompt"],
     spawn_agent: ["objective"],
-    run_agent_and_wait: ["objective", "parentRunId"],
+    run_agent_and_wait: ["objective", "originSurfaceKind", "parentRunId"],
     set_desktop_attention_override: ["subjectKind", "subjectId"],
     search_tasks: ["query"],
     complete_task: ["task_id"],
     delete_task: ["task_id"],
+    read_tool_output: ["artifactId"],
+    search_tool_output: ["artifactId", "query"],
     save_knowledge_graph: ["nodes", "edges"],
     get_conversations: [],
     search_conversations: ["query"],
@@ -1423,7 +1462,7 @@ test("load_skill: refuses symlink escapes from the skills root", async () => {
     const result = await tool.execute("call-1", { name: skillName }, new AbortController().signal);
 
     assert.equal(result.content[0].type, "text");
-    assert.match(result.content[0].text, /not found/i);
+    assert.match(result.content[0].text, /not available/i);
     assert.doesNotMatch(result.content[0].text, /secret instructions/);
   } finally {
     if (previousWorkspace === undefined) {
@@ -1436,34 +1475,74 @@ test("load_skill: refuses symlink escapes from the skills root", async () => {
   }
 });
 
+test("skill catalog: project skills override globals and search returns compact matching metadata", async () => {
+  const workspace = await mkdtemp(pathJoin(tmpdir(), "omi-skill-workspace-"));
+  const globalRoot = await mkdtemp(pathJoin(tmpdir(), "omi-skill-global-"));
+  try {
+    await mkdir(pathJoin(workspace, ".claude", "skills", "research"), { recursive: true });
+    await writeFile(
+      pathJoin(workspace, ".claude", "skills", "research", "SKILL.md"),
+      "---\ndescription: Project-specific research workflow\n---\nProject research details"
+    );
+    await mkdir(pathJoin(globalRoot, "research"), { recursive: true });
+    await writeFile(
+      pathJoin(globalRoot, "research", "SKILL.md"),
+      "---\ndescription: Global fallback workflow\n---\nGlobal details"
+    );
+    await mkdir(pathJoin(workspace, ".claude", "skills", "release-notes"), { recursive: true });
+    await writeFile(
+      pathJoin(workspace, ".claude", "skills", "release-notes", "SKILL.md"),
+      "---\ndescription: Prepare customer-facing release notes\n---\nRelease notes details"
+    );
+
+    const catalog = await discoverSkillCatalog([pathJoin(workspace, ".claude", "skills"), globalRoot]);
+    assert.deepEqual(catalog.map((skill) => skill.name), ["release-notes", "research"]);
+    assert.equal(catalog.find((skill) => skill.name === "research")?.description, "Project-specific research workflow");
+
+    const previousWorkspace = process.env.OMI_WORKSPACE;
+    process.env.OMI_WORKSPACE = workspace;
+    try {
+      const results = await searchSkills("customer release");
+      assert.match(results, /release-notes: Prepare customer-facing release notes/);
+      assert.doesNotMatch(results, /Project research details/);
+    } finally {
+      if (previousWorkspace === undefined) delete process.env.OMI_WORKSPACE;
+      else process.env.OMI_WORKSPACE = previousWorkspace;
+    }
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+    await rm(globalRoot, { recursive: true, force: true });
+  }
+});
+
 test("callSwiftTool: returns error when not connected", async () => {
   __resetOmiPipeForTest();
   const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
   assert.equal(result, "Error: not connected to Omi bridge");
 });
 
-test("callSwiftTool: rechecks abort after async correlation before writing to Swift", async () => {
+test("callSwiftTool: rechecks abort after async capability lookup before writing to Swift", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const callSwiftToolBody = source.slice(
     source.indexOf("async function callSwiftTool"),
-    source.indexOf("async function omiRelayCorrelation"),
+    source.indexOf("async function omiRelayCapabilityRef"),
   );
-  assert.match(callSwiftToolBody, /const correlation = await omiRelayCorrelation\(\);[\s\S]*if \(signal\?\.aborted\)/);
+  assert.match(callSwiftToolBody, /const capabilityRef = await omiRelayCapabilityRef\(\);[\s\S]*if \(signal\?\.aborted\)/);
   assert.ok(
-    callSwiftToolBody.indexOf("if (signal?.aborted)", callSwiftToolBody.indexOf("await omiRelayCorrelation()")) <
+    callSwiftToolBody.indexOf("if (signal?.aborted)", callSwiftToolBody.indexOf("await omiRelayCapabilityRef()")) <
       callSwiftToolBody.indexOf("connection.write"),
     "abort must be rechecked before emitting tool_use to Swift",
   );
 });
 
-test("callSwiftTool: disables Swift-backed tools when relay context requests it", async () => {
+test("callSwiftTool: requires a kernel-issued capability before emitting tool_use", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
   const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-disable-tools-"));
   const contextPath = pathJoin(dir, "context.json");
   const previousContextFile = process.env.OMI_CONTEXT_FILE;
   process.env.OMI_CONTEXT_FILE = contextPath;
-  await writeFile(contextPath, JSON.stringify({ disableSwiftBackedTools: true }));
+  await writeFile(contextPath, JSON.stringify({ requestId: "untrusted-request" }));
   let sawToolUse = false;
 
   try {
@@ -1474,9 +1553,9 @@ test("callSwiftTool: disables Swift-backed tools when relay context requests it"
 
     await __connectOmiPipeForTest(sockPath);
     const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
-    assert.equal(result, "Error: Swift-backed Omi tools are disabled for this control-created run");
+    assert.equal(result, "Error: missing active Omi run capability for tool relay");
     assert.equal(__omiPendingCallsForTest.size, 0);
-    assert.equal(sawToolUse, false, "disabled tools must not emit tool_use to Swift");
+    assert.equal(sawToolUse, false, "missing capabilities must not emit tool_use to Swift");
   } finally {
     __resetOmiPipeForTest();
     server.close();
@@ -1493,6 +1572,7 @@ test("callSwiftTool: disables Swift-backed tools when relay context requests it"
 test("callSwiftTool: receives result via pipe", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
+  const capabilityContext = await installRelayCapabilityContext();
 
   try {
     await new Promise<void>((resolve) => server.listen(sockPath, resolve));
@@ -1527,35 +1607,17 @@ test("callSwiftTool: receives result via pipe", async () => {
   } finally {
     __resetOmiPipeForTest();
     server.close();
+    await capabilityContext.cleanup();
     try { await unlink(sockPath); } catch {}
   }
 });
 
-test("callSwiftTool: propagates Omi request correlation over the relay", async () => {
+test("callSwiftTool: emits only the kernel-issued capability and invocation identity", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
-  const previousEnv = {
-    OMI_CONTEXT_FILE: process.env.OMI_CONTEXT_FILE,
-    OMI_ADAPTER_ID: process.env.OMI_ADAPTER_ID,
-    OMI_REQUEST_ID: process.env.OMI_REQUEST_ID,
-    OMI_CLIENT_ID: process.env.OMI_CLIENT_ID,
-    OMI_PROTOCOL_VERSION: process.env.OMI_PROTOCOL_VERSION,
-    OMI_SESSION_ID: process.env.OMI_SESSION_ID,
-    OMI_RUN_ID: process.env.OMI_RUN_ID,
-    OMI_ATTEMPT_ID: process.env.OMI_ATTEMPT_ID,
-    OMI_ADAPTER_SESSION_ID: process.env.OMI_ADAPTER_SESSION_ID,
-  };
-  delete process.env.OMI_CONTEXT_FILE;
-  Object.assign(process.env, {
-    OMI_ADAPTER_ID: "pi-mono",
-    OMI_REQUEST_ID: "request-relay",
-    OMI_CLIENT_ID: "client-relay",
-    OMI_PROTOCOL_VERSION: "2",
-    OMI_SESSION_ID: "ses_relay",
-    OMI_RUN_ID: "run_relay",
-    OMI_ATTEMPT_ID: "att_relay",
-    OMI_ADAPTER_SESSION_ID: "native_relay",
-  });
+  const capabilityContext = await installRelayCapabilityContext("cap_exact_relay");
+  const previousRequestId = process.env.OMI_REQUEST_ID;
+  process.env.OMI_REQUEST_ID = "must-not-cross-relay";
 
   try {
     await new Promise<void>((resolve) => server.listen(sockPath, resolve));
@@ -1577,72 +1639,34 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
     await __connectOmiPipeForTest(sockPath);
     const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
     assert.equal(result, "ok");
-    assert.deepEqual(await __omiRelayCorrelationForTest(), {
-      adapterId: "pi-mono",
-      requestId: "request-relay",
-      clientId: "client-relay",
-      sessionId: "ses_relay",
-      runId: "run_relay",
-      attemptId: "att_relay",
-      adapterSessionId: "native_relay",
-      protocolVersion: 2,
-    });
+    assert.equal(await __omiRelayCapabilityRefForTest(), "cap_exact_relay");
     const msg = await received;
     assert.match(msg.callId, /^omi-ext-/);
     assert.deepEqual(msg, {
       type: "tool_use",
       callId: msg.callId,
+      invocationId: msg.callId,
       name: "execute_sql",
       input: { query: "SELECT 1" },
-      adapterId: "pi-mono",
-      requestId: "request-relay",
-      clientId: "client-relay",
       protocolVersion: 2,
-      sessionId: "ses_relay",
-      runId: "run_relay",
-      attemptId: "att_relay",
-      adapterSessionId: "native_relay",
+      capabilityRef: "cap_exact_relay",
     });
   } finally {
     __resetOmiPipeForTest();
     server.close();
-    for (const [key, value] of Object.entries(previousEnv)) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
+    if (previousRequestId === undefined) delete process.env.OMI_REQUEST_ID;
+    else process.env.OMI_REQUEST_ID = previousRequestId;
+    await capabilityContext.cleanup();
     try { await unlink(sockPath); } catch {}
   }
 });
 
-test("callSwiftTool: reads per-attempt Omi correlation from the context file", async () => {
+test("callSwiftTool: ignores forged correlation fields in the capability context", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
-  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-relay-"));
-  const contextPath = pathJoin(dir, "context.json");
-  const previousEnv = {
-    OMI_CONTEXT_FILE: process.env.OMI_CONTEXT_FILE,
-    OMI_REQUEST_ID: process.env.OMI_REQUEST_ID,
-    OMI_CLIENT_ID: process.env.OMI_CLIENT_ID,
-    OMI_PROTOCOL_VERSION: process.env.OMI_PROTOCOL_VERSION,
-    OMI_SESSION_ID: process.env.OMI_SESSION_ID,
-    OMI_RUN_ID: process.env.OMI_RUN_ID,
-    OMI_ATTEMPT_ID: process.env.OMI_ATTEMPT_ID,
-    OMI_ADAPTER_SESSION_ID: process.env.OMI_ADAPTER_SESSION_ID,
-  };
-  for (const key of Object.keys(previousEnv)) {
-    delete process.env[key];
-  }
-  process.env.OMI_CONTEXT_FILE = contextPath;
-  process.env.OMI_REQUEST_ID = "stale-env-request";
-  process.env.OMI_CLIENT_ID = "stale-env-client";
-  process.env.OMI_RUN_ID = "stale-env-run";
-  process.env.OMI_ATTEMPT_ID = "stale-env-attempt";
-  await writeFile(contextPath, JSON.stringify({
-    adapterId: "pi-mono",
-    protocolVersion: 2,
+  const capabilityContext = await installRelayCapabilityContext("cap_file");
+  await writeFile(capabilityContext.path, JSON.stringify({
+    capabilityRef: "cap_file",
     requestId: "request-file",
     clientId: "client-file",
     sessionId: "ses_file",
@@ -1670,47 +1694,16 @@ test("callSwiftTool: reads per-attempt Omi correlation from the context file", a
     await __connectOmiPipeForTest(sockPath);
     const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
     assert.equal(result, "ok");
-    assert.deepEqual(await __omiRelayCorrelationForTest(), {
-      adapterId: "pi-mono",
-      protocolVersion: 2,
-      requestId: "request-file",
-      clientId: "client-file",
-      sessionId: "ses_file",
-      runId: "run_file",
-      attemptId: "att_file",
-      adapterSessionId: "native_file",
-    });
+    assert.equal(await __omiRelayCapabilityRefForTest(), "cap_file");
     const msg = await received;
-    assert.deepEqual({
-      adapterId: msg.adapterId,
-      protocolVersion: msg.protocolVersion,
-      requestId: msg.requestId,
-      clientId: msg.clientId,
-      sessionId: msg.sessionId,
-      runId: msg.runId,
-      attemptId: msg.attemptId,
-      adapterSessionId: msg.adapterSessionId,
-    }, {
-      adapterId: "pi-mono",
-      protocolVersion: 2,
-      requestId: "request-file",
-      clientId: "client-file",
-      sessionId: "ses_file",
-      runId: "run_file",
-      attemptId: "att_file",
-      adapterSessionId: "native_file",
-    });
+    assert.deepEqual(Object.keys(msg).sort(), [
+      "callId", "capabilityRef", "input", "invocationId", "name", "protocolVersion", "type",
+    ]);
+    assert.equal(msg.capabilityRef, "cap_file");
   } finally {
     __resetOmiPipeForTest();
     server.close();
-    for (const [key, value] of Object.entries(previousEnv)) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-    await rm(dir, { recursive: true, force: true });
+    await capabilityContext.cleanup();
     try { await unlink(sockPath); } catch {}
   }
 });
@@ -1718,6 +1711,7 @@ test("callSwiftTool: reads per-attempt Omi correlation from the context file", a
 test("callSwiftTool: disconnect resolves pending calls with error", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
+  const capabilityContext = await installRelayCapabilityContext();
 
   try {
     await new Promise<void>((resolve) => server.listen(sockPath, resolve));
@@ -1736,6 +1730,7 @@ test("callSwiftTool: disconnect resolves pending calls with error", async () => 
   } finally {
     __resetOmiPipeForTest();
     server.close();
+    await capabilityContext.cleanup();
     try { await unlink(sockPath); } catch {}
   }
 });
@@ -1744,6 +1739,7 @@ test("callSwiftTool: stale socket close does not clear active connection pending
   __resetOmiPipeForTest();
   const first = createMockBridge();
   const second = createMockBridge();
+  const capabilityContext = await installRelayCapabilityContext();
   let firstSocket: import("node:net").Socket | undefined;
 
   try {
@@ -1780,6 +1776,7 @@ test("callSwiftTool: stale socket close does not clear active connection pending
     __resetOmiPipeForTest();
     first.server.close();
     second.server.close();
+    await capabilityContext.cleanup();
     try { await unlink(first.sockPath); } catch {}
     try { await unlink(second.sockPath); } catch {}
   }
@@ -1788,6 +1785,7 @@ test("callSwiftTool: stale socket close does not clear active connection pending
 test("callSwiftTool: malformed messages don't wedge pending map", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
+  const capabilityContext = await installRelayCapabilityContext();
 
   try {
     await new Promise<void>((resolve) => server.listen(sockPath, resolve));
@@ -1823,6 +1821,7 @@ test("callSwiftTool: malformed messages don't wedge pending map", async () => {
   } finally {
     __resetOmiPipeForTest();
     server.close();
+    await capabilityContext.cleanup();
     try { await unlink(sockPath); } catch {}
   }
 });
@@ -1855,6 +1854,7 @@ test("callSwiftTool: already-aborted signal returns error immediately", async ()
 test("callSwiftTool: abort after enqueue resolves with error and cleans up", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
+  const capabilityContext = await installRelayCapabilityContext();
 
   try {
     await new Promise<void>((resolve) => server.listen(sockPath, resolve));
@@ -1874,6 +1874,7 @@ test("callSwiftTool: abort after enqueue resolves with error and cleans up", asy
   } finally {
     __resetOmiPipeForTest();
     server.close();
+    await capabilityContext.cleanup();
     try { await unlink(sockPath); } catch {}
   }
 });
@@ -1881,6 +1882,7 @@ test("callSwiftTool: abort after enqueue resolves with error and cleans up", asy
 test("callSwiftTool: normal result after abort signal is not double-resolved", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
+  const capabilityContext = await installRelayCapabilityContext();
 
   try {
     await new Promise<void>((resolve) => server.listen(sockPath, resolve));
@@ -1921,6 +1923,7 @@ test("callSwiftTool: normal result after abort signal is not double-resolved", a
   } finally {
     __resetOmiPipeForTest();
     server.close();
+    await capabilityContext.cleanup();
     try { await unlink(sockPath); } catch {}
   }
 });

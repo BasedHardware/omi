@@ -241,7 +241,12 @@ def _restore_developer_module():
 
 def _auth_context():
     return ProductAuthorizationContext(
-        uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
+        uid='uid1',
+        consumer='developer_api',
+        surface='developer_api',
+        app_id='test-app',
+        key_id='test-key',
+        scopes=('memories.read',),
     )
 
 
@@ -368,6 +373,97 @@ def test_get_memories_allowed_grant_canonical_lists():
     assert resp.status_code == 200
     assert len(resp.json()) == 1
     assert resp.json()[0]['id'] == 'canon-1'
+
+
+def _denied_memory_result(fallback_reason):
+    return type(
+        'DeniedMemoryResult',
+        (),
+        {
+            'read_decision': developer_module.MemoryReadDecision.DENY_MEMORY,
+            'memories': [],
+            'fallback_reason': fallback_reason,
+            'should_use_legacy_fallback': False,
+        },
+    )()
+
+
+def test_get_memories_missing_rollout_state_falls_back_to_legacy():
+    """A legacy-cohort account with no rollout doc reads legacy memories, not 403 (#9892).
+
+    pin_memory_system already resolved the account to LEGACY, so an absent
+    memory_control/state doc is the expected un-enrolled state — the route must
+    serve the authoritative legacy `memories` collection instead of failing closed.
+    """
+    client = _build()
+
+    developer_module.search_memory_default_developer_memories = MagicMock(
+        return_value=_denied_memory_result('missing_rollout_state')
+    )
+
+    legacy_memory = {
+        'id': 'legacy-1',
+        'content': 'a legacy memory',
+        'category': _VALID_CATEGORY,
+        'visibility': 'private',
+        'tags': [],
+        'manually_added': False,
+        'reviewed': False,
+        'edited': False,
+    }
+    with __import__('unittest.mock', fromlist=['patch']).patch.object(
+        developer_module.memories_db, 'get_memories', return_value=[legacy_memory]
+    ):
+        resp = client.get('/v1/dev/user/memories')
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]['id'] == 'legacy-1'
+    assert developer_module.authorize_memory_external_default_memory_read.called
+
+
+def test_get_memories_other_deny_reason_still_403():
+    """Deny reasons other than missing_rollout_state keep the fail-closed contract."""
+    client = _build()
+
+    developer_module.search_memory_default_developer_memories = MagicMock(
+        return_value=_denied_memory_result('missing_developer_default_memory_grant')
+    )
+
+    resp = client.get('/v1/dev/user/memories')
+
+    assert resp.status_code == 403
+    detail = resp.json()['detail']
+    assert detail['code'] == 'developer_memory_access_not_ready'
+    assert detail['reason'] == 'missing_developer_default_memory_grant'
+    assert 'key can be valid and correctly scoped' in detail['message']
+
+
+def test_search_memories_vector_missing_rollout_state_has_actionable_contract():
+    """Vector search uses the same account-readiness error after a valid key grant."""
+    client = _build()
+
+    developer_module.search_memory_default_developer_memories_vector = MagicMock(
+        return_value=type(
+            'DeniedVectorMemoryResult',
+            (),
+            {
+                'read_decision': developer_module.MemoryReadDecision.DENY_MEMORY,
+                'memories': [],
+                'fallback_reason': 'missing_rollout_state',
+                'should_use_legacy_fallback': False,
+            },
+        )()
+    )
+
+    resp = client.get('/v1/dev/user/memories/vector/search', params={'query': 'memory'})
+
+    assert resp.status_code == 403
+    detail = resp.json()['detail']
+    assert detail['code'] == 'developer_memory_access_not_ready'
+    assert detail['reason'] == 'missing_rollout_state'
+    assert 'key can be valid and correctly scoped' in detail['message']
 
 
 # =============================================================================

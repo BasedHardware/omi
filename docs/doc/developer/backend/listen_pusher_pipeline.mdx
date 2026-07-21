@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-09 (recording-scoped desktop listen lifecycle binding)
+> Last updated: 2026-07-15 (durable recording-session bindings, fenced late-content recovery, and ordered lifecycle envelopes)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -15,10 +15,15 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 ## 1. Connection + Streaming + Transcription
 
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
-(e.g., `modulate-velma-2,dg-nova-3`). The first provider supporting the
-requested language wins. Listen startup loads transcription preferences once and
-reuses the embedded user language for translation targeting, avoiding a second
-user-preference read on WebSocket startup. All providers implement the
+(e.g., `modulate-velma-2,parakeet`). The first provider whose deployed model
+supports the requested mode wins: Parakeet's live RNNT model is English-only,
+so multilingual sessions and non-English single-language sessions use Modulate.
+Listen startup loads transcription preferences once and uses its
+multi-language setting to request Modulate auto-detection, avoiding a second
+user-preference read on WebSocket startup. The separately deployed Parakeet
+batch model retains its multilingual capability. A client Parakeet preference
+can prioritize Parakeet only when that live-model capability matches; it never
+overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
@@ -26,11 +31,12 @@ before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
 
-When `/v4/listen` receives a client-generated `client_conversation_id`, that
-UUID is the authoritative identity for the recording. The backend creates or
-resumes that exact conversation and **does not** fall back to the legacy
-user-global in-progress pointer. This prevents a stale Redis or Firestore row
-from being rebound to a new desktop recording.
+Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
+resource before it creates or resumes a conversation. A client-generated
+`client_conversation_id` remains that resource's ID when present; legacy
+clients receive a server-generated UUID. The resource atomically binds the
+recording to exactly one conversation, so reconnects return the original
+canonical mapping rather than falling back to a user-global Redis pointer.
 
 The backend emits a `conversation_session` event carrying that recording
 identity:
@@ -40,15 +46,41 @@ identity:
   "type": "conversation_session",
   "conversation_id": "<uuid>",
   "recording_session_id": "<client_conversation_id>",
-  "status": "in_progress"
+  "status": "in_progress",
+  "lifecycle_version": 1,
+  "lifecycle_phase": "in_progress",
+  "lifecycle_sequence": 0
 }
 ```
 
-Clients that persist local recording sessions must bind only when the returned
-`conversation_id` and `recording_session_id` match their persisted client UUID.
-For an identified session, lifecycle/finalization uses that exact identity; it
-must not timestamp-match or force-process a nearby user-global conversation.
-Timestamp/source matching is legacy-only compatibility behavior.
+`conversation_session`, `memory_processing_started`, and `memory_created`
+carry the same versioned envelope. Clients must accept an envelope only when
+the recording and conversation IDs match their local session and the sequence
+is higher than the last accepted sequence. The phase is part of the contract:
+`in_progress`, then `processing`, then a terminal `completed`/`failed`/
+`discarded`. Older events without the envelope retain the legacy identity and
+timestamp compatibility path only.
+
+`RECORDING_SESSION_MODE=dual_write` is the safe default: it persists and
+compares the durable binding while preserving the legacy proposed route on a
+mismatch. `shadow` has the same routing behavior for validation-only rollout;
+`enforce` promotes the canonical durable binding and rejects durable-store
+failures. Mapping conflicts, stale-event discards, and legacy fallback paths
+use shared fallback telemetry for the cutover gate.
+The resource contains only IDs, phase, sequence, schema version, and
+timestamps; it never stores transcript content, credentials, or raw WebSocket
+payloads.
+
+The same recording ID is always a retry of its original generation: after a
+terminal result the backend returns that canonical binding and its terminal
+envelope instead of rebinding it. A silence or status rollover on a live
+WebSocket receives a fresh server-generated recording ID and can therefore
+bind a new conversation without mutating the terminal generation. If an
+empty-generation cleanup wins the Firestore transaction race against buffered
+STT segments or photos, the late write is fenced rather than recreating the
+terminal parent; the listen handler opens one fresh generation and replays that
+buffer once. The first-segment `started_at` value commits in that same content
+transaction, so this recovery cannot leave a timestamp-only write behind.
 
 ## Capture-device provenance
 
@@ -65,15 +97,15 @@ assigned to a different device.
 sequenceDiagram
     participant Client
     participant Backend as Backend (/v4/listen)
-    participant STT as STT Provider (Deepgram / Modulate)
+    participant STT as STT Provider (Parakeet / Modulate)
     participant Pusher
     participant Firestore
 
     Client->>Backend: WS connect (uid, language, sample_rate, codec, client_conversation_id, device headers)
     Backend->>Backend: Auth check (dev-token or Firebase)
     Backend->>Backend: Select STT provider (STT_SERVICE_MODELS + language)
-    Backend->>Firestore: Create/resume exact client conversation (status=in_progress)
-    Backend-->>Client: {type: "conversation_session", conversation_id, recording_session_id, status: "in_progress"}
+    Backend->>Firestore: Create/resume recording session → canonical conversation (status=in_progress)
+    Backend-->>Client: {type: "conversation_session", conversation_id, recording_session_id, lifecycle_version, lifecycle_phase, lifecycle_sequence}
     Backend->>STT: Open STT WebSocket
     Backend->>Pusher: Open Pusher WebSocket
     Backend-->>Client: {type: "service_status", status: "ready"}
@@ -91,14 +123,56 @@ sequenceDiagram
     end
 ```
 
+### Terminal STT provider failure
+
+Provider initialization failure, a latched dead provider socket, or an audio
+send failure is terminal for the current client WebSocket. The backend first
+awaits a bounded `service_status` event (`status=stt_failed`, semantic
+`outcome`, provider, retryability, and one of the documented reason codes), then
+closes the client with code 1011 and reason
+`transcription_service_unavailable`.
+
+The send boundary clears its local audio buffer only after the provider socket
+accepts the chunk. On failure, the bytes remain in that buffer until normal
+session teardown frees it; they are never cleared while the client connection
+stays open and appears healthy. The client close is the recovery signal for
+mobile and desktop reconnect/fallback logic. The backend deliberately does not
+replace a provider socket in-session because maintaining transcript timestamp
+continuity across that handoff requires a separate state model.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend as Backend (/v4/listen)
+    participant STT as STT Provider
+
+    Client->>Backend: Audio bytes
+    Backend->>STT: Send buffered audio
+    STT--xBackend: Socket dies or send fails
+    Backend-->>Client: service_status(status=stt_failed, outcome, provider, retryable, reason)
+    Backend--xClient: Close 1011 (transcription_service_unavailable)
+    Note over Client: Reconnect or activate local recovery
+```
+
 ## 2. Conversation Lifecycle (Silence Timeout Path)
 
 This is the normal path when the client stays connected but stops speaking.
 
 **Key design rule (#6061):** Listen NEVER processes conversations locally.
-All conversation processing routes through pusher via `request_conversation_processing()`.
-When pusher is unavailable, conversations stay buffered in `pending_conversation_requests`
-and are flushed when pusher reconnects.
+All conversation processing routes through pusher or the dedicated durable
+finalizer worker. Before either handoff, listen persists a Firestore
+finalization job. The legacy live pusher path claims that same job and
+transfers it to pusher process-scoped ownership, so closing the originating
+listener after the opcode-104 handoff cannot cancel it. When the durable
+dispatch flag is enabled, Cloud Tasks wakes the worker using only the opaque
+job id and generation. `pending_conversation_requests` remains a low-latency
+reconnect aid, not the durable source of truth.
+
+Before a job can become `completed`, the finalizer atomically claims a durable
+fanout boundary with a persistent idempotency key. It passes that key to the
+integration endpoint and records `fanout_status=completed` only after the
+call returns. Lease recovery retries the same key, so a crash after an
+integration call cannot silently drop fanout or create an unkeyed duplicate.
 
 ```mermaid
 sequenceDiagram
@@ -116,9 +190,14 @@ sequenceDiagram
     end
 
     Backend->>Backend: _process_conversation(conversation_id)
-    alt Pusher available (request_conversation_processing != None)
-        Backend->>Firestore: Set status=processing
-        Backend->>Pusher: Send process_conversation request (opcode 104)
+    alt Finalizer configured
+        Backend->>Firestore: Transaction: finalization job queued + status=processing
+        alt LISTEN_FINALIZATION_DISPATCH_MODE=inline
+            Backend->>Pusher: Send process_conversation request + job lease (opcode 104)
+        else LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks
+            Backend->>Cloud Tasks: Named task {job_id, dispatch_generation}
+            Cloud Tasks->>Finalizer: OIDC-protected run handler
+        end
         Backend->>Firestore: Create new stub conversation
     else Pusher not configured (HOSTED_PUSHER_API_URL unset)
         Note over Backend: Skip processing — conversation stays in_progress permanently.<br/>Pusher is required for conversation processing in production.
@@ -131,12 +210,41 @@ sequenceDiagram
         Pusher->>OpenAI: Extract memories
         Pusher->>Firestore: Save embedding vector
         Pusher-->>Backend: Opcode 201 (conversation processed callback)
-        Backend-->>Client: {type: "memory_processing_started", recording_session_id, memory: {...}}
-        Backend-->>Client: {type: "memory_created", recording_session_id, memory: {...}}
+        Backend-->>Client: {type: "memory_processing_started", recording_session_id, conversation_id, lifecycle_version, lifecycle_phase, lifecycle_sequence, memory: {...}}
+        Backend-->>Client: {type: "memory_created", recording_session_id, conversation_id, lifecycle_version, lifecycle_phase, lifecycle_sequence, memory: {...}}
     else Pusher disconnected (RECONNECT_BACKOFF / DEGRADED)
-        Note over Backend: Request buffered in pending_conversation_requests<br/>Resent automatically when pusher reconnects
+        Note over Backend: Live request buffered in pending_conversation_requests;<br/>durable job remains recoverable by the reconciler
     end
 ```
+
+### 2.1 Durable finalization ownership
+
+`conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
+created atomically with the `in_progress → processing` transition and is keyed
+by `(uid, conversation_id, finalization_revision)`. A task is a named,
+at-least-once wake-up only; duplicate delivery, reconnect replay, and manual
+reconciliation must first acquire the Firestore lease.
+
+```mermaid
+stateDiagram-v2
+    [*] --> queued: persisted conversation + platform key
+    [*] --> blocked_byok: BYOK key required
+    queued --> leased: task or pusher claims generation
+    leased --> completed: persisted conversation is completed
+    leased --> queued: retryable error / lease expires
+    leased --> dead_letter: final task attempt fails
+    blocked_byok --> queued: live request presents validated BYOK key (inline only)
+    completed --> [*]
+    dead_letter --> [*]
+```
+
+The job and task payload never contain transcript text, raw BYOK keys, headers,
+or raw exception text. `blocked_byok` is an explicit recovery state: durable
+offline BYOK is not supported without a separately reviewed credential broker;
+the worker must never silently use Omi keys.
+
+See [Listen finalization jobs](./listen_finalization_jobs) for configuration,
+replay, metrics, and the operational runbook.
 
 ## 3. Disconnect Path
 
@@ -279,7 +387,7 @@ sequenceDiagram
 
 ### Conversation playback artifact
 
-At conversation completion (`process_conversation`, and `_finalize_sync_audio_files` for offline sync), an `audio-merge` Cloud Task (schema_version 2, name `amc-{conversation_id}-{fingerprint}`) builds **one dense per-conversation MP3** — `playback/{uid}/{conversation_id}/conversation.mp3` — containing only captured audio: intra-part gaps (<90s) stay silence-filled, inter-part gaps (>90s) are collapsed. The handler stamps the conversation doc with `conversation_audio`: a spans manifest (`{file_id, wall_offset, artifact_offset, len}` per part, wall offsets relative to `started_at` — the `TranscriptSegment.start` basis), both durations (`duration` = wall clock, `captured_duration` = audio only), and the `audio_files_fingerprint` it was built from.
+At conversation completion (`process_conversation`, and `_finalize_sync_audio_files` for offline sync), an `audio-merge` Cloud Task (schema_version 2, name `amc-{conversation_id}-{fingerprint}`) builds **one dense per-conversation MP3** — `playback/{uid}/{conversation_id}/conversation.mp3` — containing only captured audio: intra-part gaps (&lt;90s) stay silence-filled, inter-part gaps (&gt;90s) are collapsed. The handler stamps the conversation doc with `conversation_audio`: a spans manifest (`{file_id, wall_offset, artifact_offset, len}` per part, wall offsets relative to `started_at` — the `TranscriptSegment.start` basis), both durations (`duration` = wall clock, `captured_duration` = audio only), and the `audio_files_fingerprint` it was built from.
 
 Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher batch flush after completion, offline sync, conversation merge), the stamped fingerprint no longer matches and both the call sites and the `/v1/sync/audio/{id}/urls` poll re-enqueue a rebuild under a new task name (defeating the named-task tombstone). `/urls` returns the artifact as a top-level `conversation_audio` object alongside the per-part `audio_files` list, which remains for older app versions.
 
@@ -314,23 +422,23 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 | Constant | Value | Location | Purpose |
 |----------|-------|----------|---------|
-| `conversation_timeout` | 120s (min) | transcribe.py | Silence before lifecycle triggers |
-| `last_activity_time` timeout | 90s | transcribe.py | WS inactivity disconnect |
+| `conversation_timeout` | 120s (min) | `routers/listen/runtime.py` | Silence before lifecycle triggers |
+| `last_activity_time` timeout | 90s | `routers/listen/runtime.py` | WS inactivity disconnect |
 | `SPEAKER_SAMPLE_MIN_AGE` | 120s | pusher.py | Wait before extracting embedding (skipped on shutdown) |
 | `SPEAKER_SAMPLE_PROCESS_INTERVAL` | 15s | pusher.py | Queue poll interval |
-| `WS_RECEIVE_TIMEOUT` | 300s | pusher.py, transcribe.py | No-data timeout on WebSocket receive; detects dead connections |
-| `BG_DRAIN_TIMEOUT` | 30s | pusher.py, transcribe.py | Grace period for background tasks to drain after disconnect before force-cancel |
-| `lifecycle_manager` poll | 5s | transcribe.py:1683 | Check `finished_at` interval |
+| `WS_RECEIVE_TIMEOUT` | 300s | `pusher.py`, `routers/listen/contracts.py` | No-data timeout on WebSocket receive; detects dead connections |
+| `BG_DRAIN_TIMEOUT` | 30s | `pusher.py`, `routers/listen/contracts.py` | Grace period for background tasks to drain after disconnect before force-cancel |
+| `lifecycle_manager` poll | 5s | `routers/listen/conversations.py` | Check `finished_at` interval |
 | Pusher audio batch | 60s | pusher | GCS upload batch size |
-| Speaker match threshold | 0.45 | transcribe.py | Cosine distance cutoff |
-| `PENDING_REQUEST_TIMEOUT` | 120s | transcribe.py | Timeout before retrying a pending request |
-| `MAX_RETRIES_PER_REQUEST` | 3 | transcribe.py | Max retries before keeping buffered |
-| `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | transcribe.py | Reconnect attempts before DEGRADED |
-| `MAX_PENDING_REQUESTS` | 100 | transcribe.py | Max buffered conversations per session |
+| Speaker match threshold | 0.45 | `routers/listen/speakers.py` | Cosine distance cutoff |
+| `PENDING_REQUEST_TIMEOUT` | 120s | `routers/listen/conversations.py` | Timeout before retrying a pending request |
+| `MAX_RETRIES_PER_REQUEST` | 3 | `routers/listen/conversations.py` | Max retries before keeping buffered |
+| `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | `utils/listen_pusher_session.py` | Reconnect attempts before DEGRADED |
+| `MAX_PENDING_REQUESTS` | 100 | `routers/listen/contracts.py` | Max buffered conversations per session |
 
 ## 8. WebSocket Task Supervision
 
-Both `transcribe.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supervisor loop instead of `asyncio.gather()` to manage background tasks. This prevents ghost connections where a hung background task blocks cleanup forever.
+`routers/listen/runtime.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supervisor loop instead of `asyncio.gather()` to manage background tasks. This prevents ghost connections where a hung background task blocks cleanup forever.
 
 **Supervisor exits on:**
 - Client disconnect (receive task completes)

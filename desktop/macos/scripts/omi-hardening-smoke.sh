@@ -173,6 +173,56 @@ token_file() { printf '%s/omi-automation-%s.token' "${TMPDIR:-/tmp}" "$PORT"; }
 
 bridge() { OMI_AUTOMATION_PORT="$PORT" "$OMI_CTL" "$@"; }
 
+bridge_active_log_path() {
+  # The bridge owns the running named bundle's identity. Never infer its log
+  # from a shared filename: another QA bundle may be running concurrently.
+  local advertised_bundle path
+  advertised_bundle="$(bridge health 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin).get("bundleIdentifier", ""))
+except Exception:
+    print("")
+' 2>/dev/null || true)"
+  path="$(bridge log-path 2>/dev/null || true)"
+  [ "$advertised_bundle" = "$BUNDLE_ID" ] || return 1
+  case "$path" in
+    /private/tmp/omi/*/*.log) printf '%s\n' "$path" ;;
+    *) return 1 ;;
+  esac
+}
+
+action_json() {
+  # action_json <action-name> — raw JSON of the action's `detail` object.
+  # If the bridge/action returns an error outside detail, preserve it as
+  # {"error": "..."} so probes report the real blocked cause.
+  bridge action "$1" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    payload = json.load(sys.stdin)
+    result = payload.get("result", {})
+    detail = result.get("detail")
+    if isinstance(detail, dict):
+        print(json.dumps(detail))
+    else:
+        error = payload.get("error") or result.get("error")
+        print(json.dumps({"error": str(error)} if error else {}))
+except Exception:
+    print("{}")
+' 2>/dev/null || printf '{}'
+}
+
+json_field() {
+  # json_field <json> <key> — empty string if absent
+  printf '%s' "$1" | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin).get(sys.argv[1], ""))
+except Exception:
+    print("")
+' "$2" 2>/dev/null || printf ''
+}
+
 bridge_state_field() {
   # bridge_state_field <jsonKey> — empty string if unavailable
   bridge state 2>/dev/null | python3 -c '
@@ -277,10 +327,14 @@ probe_auth_06() {
 }
 
 probe_set_04() {
-  local t0 f total=0 hits status scanned=0 scan_errors=0
+  local t0 f active_log total=0 hits status scanned=0 scan_errors=0
   t0=$(now_s)
+  if ! active_log="$(bridge_active_log_path)"; then
+    record set-04 BLOCKED $(( $(now_s) - t0 )) "named bundle health did not provide its matching log path"
+    return
+  fi
   {
-    for f in /private/tmp/omi-dev.log /private/tmp/omi.log; do
+    for f in "$active_log" /private/tmp/omi.log; do
       if [ ! -r "$f" ]; then echo "$f: not present/readable"; continue; fi
       set +e
       hits="$(grep -cE "$CRED_PATTERNS" "$f" 2>/dev/null)"
@@ -399,36 +453,70 @@ probe_chat_03() {
 
 probe_auth_03() {
   # Destructive: relaunches the app. Requires launch mode.
-  local t0 signed pre_expiry post_expiry latency
+  #
+  # Tokens are keychain-backed, so the old trick of `defaults write <bundle>
+  # auth_tokenExpiry -float 1000` tampered a key the app no longer reads: the probe
+  # measured nothing and reported a false regression while the app was healthy. Drive
+  # the expiry through the app's OWN storage path instead (`expire_auth_token`), and
+  # read the result back the same way (`auth_token_status`) — correct for both the
+  # keychain and the UserDefaults fallback, and inert if storage changes again.
+  local t0 pre_status expired post_status signed_before signed_after expired_after storage error
   t0=$(now_s)
-  signed="$(defaults_read_raw "$BUNDLE_ID" auth_isSignedIn)"
-  if [ "$signed" != "1" ]; then
-    record auth-03 BLOCKED $(( $(now_s) - t0 )) "auth-stale: bundle not signed in — reseed via omi-auth-dump.sh + omi-auth-seed.sh $BUNDLE_ID "/Applications/${BUNDLE_ID#com.omi.}.app""
+
+  pre_status="$(action_json auth_token_status)"
+  error="$(json_field "$pre_status" error)"
+  if [ -n "$error" ]; then
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "auth_token_status error before expiry: $error"
     return
   fi
-  latency="$(stop_app)" || true
-  pre_expiry="$(defaults_read_raw "$BUNDLE_ID" auth_tokenExpiry)"
-  if ! defaults write "$BUNDLE_ID" auth_tokenExpiry -float 1000; then
-    record auth-03 BLOCKED $(( $(now_s) - t0 )) "defaults write failed (could not tamper expiry)"
+  signed_before="$(json_field "$pre_status" signed_in)"
+  storage="$(json_field "$pre_status" storage)"
+  if [ "$signed_before" != "true" ]; then
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "auth-stale: bundle not signed in — reseed via omi-auth-dump.sh + omi-auth-seed.sh $BUNDLE_ID \"/Applications/${BUNDLE_ID#com.omi.}.app\""
     return
   fi
+
+  expired="$(action_json expire_auth_token)"
+  error="$(json_field "$expired" error)"
+  if [ -n "$error" ]; then
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "expire_auth_token error: $error (storage=$storage)"
+    return
+  fi
+  if [ "$(json_field "$expired" is_token_expired)" != "true" ]; then
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "could not force token expiry via expire_auth_token (storage=$storage)"
+    return
+  fi
+
+  stop_app >/dev/null 2>&1 || true
   if ! launch_app; then
     record auth-03 BLOCKED $(( $(now_s) - t0 )) "relaunch failed (bridge never came up)"
     return
   fi
-  sleep 3
-  post_expiry="$(defaults_read_raw "$BUNDLE_ID" auth_tokenExpiry)"
-  signed="$(defaults_read_raw "$BUNDLE_ID" auth_isSignedIn)"
+  sleep 5
+
+  post_status="$(action_json auth_token_status)"
+  error="$(json_field "$post_status" error)"
+  if [ -n "$error" ]; then
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "auth_token_status error after relaunch: $error (storage=$storage)"
+    return
+  fi
+  signed_after="$(json_field "$post_status" signed_in)"
+  expired_after="$(json_field "$post_status" is_token_expired)"
   {
-    echo "pre-tamper expiry present: $(printf '%s' "$pre_expiry" | wc -c | tr -d ' ') chars (value redacted)"
-    echo "tampered expiry to epoch 1000; relaunched"
-    echo "post-launch signed_in=$signed"
-    python3 -c "import time; e=float('${post_expiry:-0}'); print('post-launch expiry is', 'FUTURE (refreshed)' if e > time.time() else 'still past (no refresh)')"
+    echo "storage backend in use: $storage"
+    echo "pre:  signed_in=$signed_before"
+    echo "forced expiry via expire_auth_token -> is_token_expired=true"
+    echo "relaunched app"
+    echo "post: signed_in=$signed_after is_token_expired=$expired_after"
+    echo "(expected: signed_in=true AND is_token_expired=false — refreshed, no sign-out)"
   } >"$REPORT_DIR/auth-03.log"
-  if [ "$signed" = "1" ] && python3 -c "import time,sys; sys.exit(0 if float('${post_expiry:-0}') > time.time() else 1)"; then
-    record auth-03 PASS $(( $(now_s) - t0 )) "expired token refreshed on relaunch; session preserved"
+
+  if [ "$signed_after" = "true" ] && [ "$expired_after" = "false" ]; then
+    record auth-03 PASS $(( $(now_s) - t0 )) "expired token refreshed on relaunch; session preserved (storage=$storage)"
+  elif [ "$signed_after" != "true" ]; then
+    record auth-03 FAIL $(( $(now_s) - t0 )) "expired token SIGNED THE USER OUT (storage=$storage, see auth-03.log)"
   else
-    record auth-03 FAIL $(( $(now_s) - t0 )) "signed_in=$signed, expiry not refreshed (see auth-03.log)"
+    record auth-03 FAIL $(( $(now_s) - t0 )) "session preserved but token still expired after relaunch (storage=$storage, see auth-03.log)"
   fi
 }
 

@@ -20,6 +20,22 @@ def _capture_confidence(signals: dict[str, Any]) -> float:
     return 0.0
 
 
+def _ownership_confidence(signals: dict[str, Any]) -> float:
+    raw = signals.get('ownership_confidence')
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    return 0.0
+
+
+def _meets_user_capture_floor(signals: dict[str, Any]) -> bool:
+    return (
+        signals.get('owner') == 'user'
+        and signals.get('concrete_deliverable') is True
+        and _capture_confidence(signals) >= MINIMUM_CAPTURE_CONFIDENCE
+        and _ownership_confidence(signals) >= MINIMUM_CAPTURE_CONFIDENCE
+    )
+
+
 def run_capture_policy(signals: dict[str, Any]) -> CapturePolicyResult:
     if signals.get('already_done'):
         return CapturePolicyResult('propose_completion', 'inline_review')
@@ -32,11 +48,18 @@ def run_capture_policy(signals: dict[str, Any]) -> CapturePolicyResult:
     if signals.get('explicit_command'):
         return CapturePolicyResult('create_direct', 'invoking_surface_only')
     if signals.get('clear_commitment') and signals.get('owner') == 'user':
-        if signals.get('concrete_deliverable') and _capture_confidence(signals) >= MINIMUM_CAPTURE_CONFIDENCE:
+        if signals.get('concrete_deliverable') is not True:
+            return CapturePolicyResult('ignore', 'none')
+        if _meets_user_capture_floor(signals):
             return CapturePolicyResult('auto_accept_silent', 'none')
-        # Clear commitments that fail deliverable or confidence stay quiet pending review.
+        # A concrete first-person commitment may remain in the canonical sidecar at low confidence,
+        # but product projections apply the same confidence floors before showing it.
         return CapturePolicyResult('pending_candidate', 'none')
-    if signals.get('direct_request') or signals.get('inferred_next_step'):
+    if signals.get('direct_request') and _meets_user_capture_floor(signals):
+        return CapturePolicyResult('pending_candidate', 'none')
+    # Inferred work has no weaker path than a directly addressed request. This deliberately rejects
+    # vague, unowned, or low-confidence model suggestions before they become Candidate noise.
+    if signals.get('inferred_next_step') and _meets_user_capture_floor(signals):
         return CapturePolicyResult('pending_candidate', 'none')
     return CapturePolicyResult('ignore', 'none')
 

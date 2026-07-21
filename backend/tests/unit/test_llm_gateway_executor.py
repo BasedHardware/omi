@@ -11,6 +11,7 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
 )
+from llm_gateway.gateway.accounting import AttemptTrace
 from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, selected_serving_route_artifact_id
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
@@ -136,6 +137,32 @@ async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
     # Primary tried 3 times (max_attempts), then fallback once
     assert [call.model for call in provider.calls] == ['gpt-5.4-nano', 'gpt-5.4-nano', 'gpt-5.4-nano', 'gpt-4o-mini']
     assert result.response['choices'][0]['message']['content'] == '{"answer":"fallback"}'
+
+
+@pytest.mark.asyncio
+async def test_executor_attempt_trace_retains_each_retry_and_fallback() -> None:
+    fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
+    route = active_route_with_fallbacks([fallback_ref]).model_copy(
+        update={'retry': type(load_gateway_config().route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=2)}
+    )
+    resolved = resolve_chat_completion_route(config_with_active_route(route), valid_request())
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            fake_success_response(fallback_ref),
+        ]
+    )
+    trace = AttemptTrace()
+
+    await execute_chat_completion(
+        resolved, omi_credentials(), ProviderRegistry({'openai': provider}), attempt_trace=trace
+    )
+
+    assert [attempt.outcome for attempt in trace.attempts] == ['error', 'error', 'success']
+    assert [attempt.retry_ordinal for attempt in trace.attempts] == [1, 2, 1]
+    assert trace.attempts[-1].configured_model == 'gpt-4o-mini'
+    assert trace.attempts[-1].fallback_reason == FailureClass.TIMEOUT_BEFORE_OUTPUT.value
 
 
 @pytest.mark.asyncio

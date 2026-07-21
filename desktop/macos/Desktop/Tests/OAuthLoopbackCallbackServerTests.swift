@@ -1,5 +1,6 @@
-import XCTest
 import Darwin
+import XCTest
+
 @testable import Omi_Computer
 
 final class OAuthLoopbackCallbackServerTests: XCTestCase {
@@ -40,7 +41,8 @@ final class OAuthLoopbackCallbackServerTests: XCTestCase {
     let mismatchedResponse = try sendLoopbackRequest(port: server.port, target: "/callback?code=bad&state=wrong-state")
     XCTAssertTrue(mismatchedResponse.hasPrefix("HTTP/1.1 400 Bad Request"))
 
-    let validResponse = try sendLoopbackRequest(port: server.port, target: "/callback?code=good-code&state=expected-state")
+    let validResponse = try sendLoopbackRequest(
+      port: server.port, target: "/callback?code=good-code&state=expected-state")
     XCTAssertTrue(validResponse.hasPrefix("HTTP/1.1 200 OK"))
     XCTAssertTrue(validResponse.contains("You're signed in"))
 

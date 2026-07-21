@@ -63,73 +63,70 @@ class _HostState extends State<_Host> {
 }
 
 void main() {
-  testWidgets(
-    'confirming delete after the sheet is removed from the tree does not throw',
-    (tester) async {
-      final memory = Memory(
-        id: 'test-memory-id',
-        uid: 'test-uid',
-        content: 'Test memory content',
-        category: MemoryCategory.manual,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        visibility: MemoryVisibility.private,
-      );
-      final provider = _FakeMemoriesProvider();
-      addTearDown(provider.dispose);
+  testWidgets('confirming delete after the sheet is removed from the tree does not throw', (tester) async {
+    final memory = Memory(
+      id: 'test-memory-id',
+      uid: 'test-uid',
+      content: 'Test memory content',
+      category: MemoryCategory.manual,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      visibility: MemoryVisibility.private,
+    );
+    final provider = _FakeMemoriesProvider();
+    addTearDown(provider.dispose);
 
-      final hostKey = GlobalKey<_HostState>();
-      bool onDeleteCalled = false;
+    final hostKey = GlobalKey<_HostState>();
+    bool onDeleteCalled = false;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: _Host(key: hostKey, memory: memory, provider: provider, onDelete: () => onDeleteCalled = true),
-        ),
-      );
-      await tester.pump();
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: _Host(key: hostKey, memory: memory, provider: provider, onDelete: () => onDeleteCalled = true),
+      ),
+    );
+    await tester.pump();
 
-      expect(find.byType(MemoryEditSheet), findsOneWidget);
+    expect(find.byType(MemoryEditSheet), findsOneWidget);
 
-      // Open the delete-confirmation dialog. This starts the await inside
-      // _showDeleteConfirmation; the Future does not resolve until the
-      // dialog's own button is tapped below.
-      await tester.tap(find.byIcon(Icons.delete_outline));
-      await tester.pump();
+    // Open the delete-confirmation dialog. This starts the await inside
+    // _showDeleteConfirmation; the Future does not resolve until the
+    // dialog's own button is tapped below.
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pump();
 
-      expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(AlertDialog), findsOneWidget);
 
-      // Remove MemoryEditSheet from the tree while the confirmation dialog
-      // is still open — the dialog itself lives in the root Navigator's
-      // overlay, independent of the sheet's own subtree, so this disposes
-      // the sheet's State without touching the open dialog route. Driven
-      // directly through the host's State (not a tap) because the dialog's
-      // modal barrier blocks hit-testing anything behind it.
-      hostKey.currentState!.removeSheet();
-      await tester.pump();
+    // Remove MemoryEditSheet from the tree while the confirmation dialog
+    // is still open — the dialog itself lives in the root Navigator's
+    // overlay, independent of the sheet's own subtree, so this disposes
+    // the sheet's State without touching the open dialog route. Driven
+    // directly through the host's State (not a tap) because the dialog's
+    // modal barrier blocks hit-testing anything behind it.
+    hostKey.currentState!.removeSheet();
+    await tester.pump();
 
-      expect(find.byType(MemoryEditSheet), findsNothing);
-      expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(MemoryEditSheet), findsNothing);
+    expect(find.byType(AlertDialog), findsOneWidget);
 
-      // Confirm the delete. This resumes _showDeleteConfirmation after the
-      // await with the sheet's State already disposed. Before the fix, the
-      // unconditional `Navigator.pop(context)` / `widget.onDelete!(...)`
-      // calls here would throw ("Looking up a deactivated widget's ancestor
-      // is unsafe"); the mounted guard must make this a clean no-op instead.
-      await tester.tap(find.text('Delete'));
-      await tester.pump();
+    // Confirm the delete. This resumes _showDeleteConfirmation after the
+    // await with the sheet's State already disposed. Before the fix, the
+    // unconditional `Navigator.pop(context)` / `widget.onDelete!(...)`
+    // calls here would throw ("Looking up a deactivated widget's ancestor
+    // is unsafe"); the mounted guard must make this a clean no-op instead.
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
 
-      expect(provider.deleteCalled, isTrue, reason: 'delete still runs regardless of mount state');
-      expect(onDeleteCalled, isFalse, reason: 'onDelete/Navigator.pop must be skipped once unmounted');
+    expect(provider.deleteCalled, isTrue, reason: 'delete still runs regardless of mount state');
+    expect(onDeleteCalled, isFalse, reason: 'onDelete/Navigator.pop must be skipped once unmounted');
 
-      // Reaching here without flutter_test raising an unhandled exception
-      // (from the FlutterError.onError hook) is the actual assertion.
-    },
-  );
+    // Reaching here without flutter_test raising an unhandled exception
+    // (from the FlutterError.onError hook) is the actual assertion.
+  });
 }

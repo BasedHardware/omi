@@ -20,9 +20,36 @@ from utils.mcp_memories import (
     McpMemoryListResult,
     McpMemorySearchResult,
     list_default_mcp_memories,
+    mcp_legacy_read_authorized,
     search_default_mcp_memories,
     search_default_mcp_memories_vector,
 )
+
+
+def test_mcp_legacy_read_authorized_only_for_explicit_or_unenrolled():
+    """#9892: only an explicit legacy-safe decision or a never-enrolled account
+    (absent memory_control/state doc) may reach the legacy read; every other
+    deny reason stays fail-closed."""
+
+    def result(read_decision, fallback_reason=None):
+        return McpMemorySearchResult(memories=[], read_decision=read_decision, fallback_reason=fallback_reason)
+
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.USE_LEGACY_SAFE)) is True
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.DENY_MEMORY, 'missing_rollout_state')) is True
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.DENY_MEMORY, 'malformed_rollout_state')) is False
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.DENY_MEMORY, 'rollout_read_failed')) is False
+    assert (
+        mcp_legacy_read_authorized(result(MemoryReadDecision.DENY_MEMORY, 'missing_mcp_default_memory_grant')) is False
+    )
+    assert mcp_legacy_read_authorized(result(MemoryReadDecision.SHADOW_ONLY, 'shadow_only')) is False
+    assert (
+        mcp_legacy_read_authorized(
+            McpMemoryListResult(
+                memories=[], read_decision=MemoryReadDecision.DENY_MEMORY, fallback_reason='missing_rollout_state'
+            )
+        )
+        is True
+    )
 
 
 def _legacy_branch_after_canonical(route_contents: str, *, marker: str | None = None) -> str:
@@ -62,17 +89,18 @@ def test_mcp_rest_search_route_wires_app_key_scope_grant_before_memory_vector_ad
     )
 
 
-def test_mcp_rest_uid_only_routes_keep_legacy_mcp_api_key_dependency():
+def test_mcp_rest_memory_list_derives_uid_from_single_authorization_context():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
     profile_route = contents[contents.index('@router.get("/v1/mcp/profile"') : contents.index('class CleanerMemory')]
     list_route = contents[contents.index('@router.get("/v1/mcp/memories"') : contents.index('class SimpleStructured')]
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in profile_route
-    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in list_route
+    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' not in list_route
     assert 'get_mcp_memory_default_memory_read_context' not in profile_route
     assert (
         'auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context)' in list_route
     )
+    assert 'uid = auth_context.uid' in list_route
 
 
 def test_mcp_sse_search_tool_wires_app_key_scope_grant_before_memory_vector_adapter_and_legacy_search():
@@ -129,7 +157,8 @@ def test_mcp_sse_transport_authenticates_full_mcp_api_key_context_without_inferr
         in contents
     )
     assert 'def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:' in contents
-    assert 'mcp_api_key_db.get_user_and_scopes_by_api_key(token)' in contents
+    assert 'mcp_api_key_db.get_api_key_auth_result(token)' in contents
+    assert 'record_api_key_repairs(key_kind="mcp", operation="auth"' in contents
     assert 'McpVerifiedAuth(' in contents
     assert 'scopes=tuple(user_data.get("scopes") or ())' in contents
     assert 'memory_context=_mcp_memory_context_from_api_key_user_data(user_data)' in contents
@@ -141,49 +170,49 @@ def test_mcp_sse_transport_authenticates_full_mcp_api_key_context_without_inferr
     )
 
 
-def test_mcp_rest_search_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
+def test_mcp_rest_search_route_only_reaches_legacy_through_authorized_decision():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
     search_route = contents[
         contents.index('@router.get("/v1/mcp/memories/search"') : contents.index('@router.get("/v1/mcp/memories"')
     ]
     assert 'MemoryReadDecision.USE_MEMORY' in search_route
-    assert 'MemoryReadDecision.USE_LEGACY_SAFE' in search_route
+    assert 'mcp_legacy_read_authorized' in search_route
     assert 'if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:' in search_route
-    assert 'if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:' in search_route
-    assert search_route.index(
-        'if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:'
-    ) < search_route.rindex('return memory_service.search_mcp(uid, query, limit=limit)')
+    assert 'if not mcp_legacy_read_authorized(vector_search_results):' in search_route
+    assert search_route.index('if not mcp_legacy_read_authorized(vector_search_results):') < search_route.rindex(
+        'return memory_service.search_mcp(uid, query, limit=limit)'
+    )
 
 
-def test_mcp_rest_get_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
+def test_mcp_rest_get_route_only_reaches_legacy_through_authorized_decision():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
     get_route = contents[contents.index('@router.get("/v1/mcp/memories"') : contents.index('class SimpleStructured')]
     assert 'list_default_mcp_memories(' in get_route
     assert 'if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:' in get_route
-    assert 'if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:' in get_route
+    assert 'if not mcp_legacy_read_authorized(memory_list_results):' in get_route
     assert get_route.index("read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')") < get_route.index(
         'list_default_mcp_memories('
     )
-    assert get_route.index(
-        'if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:'
-    ) < get_route.index('memories_db.get_memories(')
+    assert get_route.index('if not mcp_legacy_read_authorized(memory_list_results):') < get_route.index(
+        'memories_db.get_memories('
+    )
 
 
-def test_mcp_sse_search_tool_only_reaches_legacy_after_explicit_legacy_safe_decision():
+def test_mcp_sse_search_tool_only_reaches_legacy_through_authorized_decision():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
     assert 'MemoryReadDecision.USE_MEMORY' in contents
-    assert 'MemoryReadDecision.USE_LEGACY_SAFE' in contents
+    assert 'mcp_legacy_read_authorized' in contents
     assert 'if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:' in contents
-    assert 'if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:' in contents
-    assert contents.index(
-        'if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:'
-    ) < contents.index('vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)')
+    assert 'if not mcp_legacy_read_authorized(vector_search_results):' in contents
+    assert contents.index('if not mcp_legacy_read_authorized(vector_search_results):') < contents.index(
+        'vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)'
+    )
 
 
-def test_mcp_sse_get_tool_only_reaches_legacy_after_explicit_legacy_safe_decision():
+def test_mcp_sse_get_tool_only_reaches_legacy_through_authorized_decision():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
     get_tool = contents[
@@ -191,13 +220,13 @@ def test_mcp_sse_get_tool_only_reaches_legacy_after_explicit_legacy_safe_decisio
     ]
     assert 'list_default_mcp_memories(' in get_tool
     assert 'if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:' in get_tool
-    assert 'if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:' in get_tool
+    assert 'if not mcp_legacy_read_authorized(memory_list_results):' in get_tool
     assert get_tool.index("read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')") < get_tool.index(
         'list_default_mcp_memories('
     )
-    assert get_tool.index(
-        'if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:'
-    ) < get_tool.index('memories_db.get_memories(')
+    assert get_tool.index('if not mcp_legacy_read_authorized(memory_list_results):') < get_tool.index(
+        'memories_db.get_memories('
+    )
 
 
 def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
@@ -363,7 +392,7 @@ def test_mcp_default_memory_rollout_reader_fails_closed_for_missing_malformed_or
 
 
 def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout_enabled():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -390,7 +419,7 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
 
 
 def test_mcp_default_memory_adapter_excludes_pending_admission_text():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     pending = _memory_item(
         'pending-explicit',
         now=now,
@@ -407,7 +436,7 @@ def test_mcp_default_memory_adapter_excludes_pending_admission_text():
 
 
 def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_grant_disabled():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
     assert (
@@ -437,7 +466,7 @@ def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_
 
 
 def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -512,6 +541,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
         rollout_capabilities=_read_capabilities(),
         vector_query=vector_query,
         required_projection_commit_id='projection-1',
+        now=now,
     )
     assert isinstance(result, McpMemorySearchResult)
     assert result.read_decision == MemoryReadDecision.USE_MEMORY
@@ -527,7 +557,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
 
 
 def test_mcp_vector_adapter_returns_explicit_denial_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
     vector_calls = []
@@ -590,7 +620,7 @@ def test_mcp_vector_adapter_preserves_only_explicit_legacy_safe_classification()
 
 
 def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_review_manual_fields():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term)})
     rollout = read_default_read_rollout(
@@ -633,7 +663,7 @@ def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_r
 
 
 def test_mcp_memory_list_adapter_applies_category_review_manual_filters_to_explicit_compatibility_fields():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term)})
     rollout = read_default_read_rollout(
@@ -693,7 +723,7 @@ def test_mcp_rest_and_sse_get_paths_pass_filters_into_memory_list_adapter_and_re
 
 
 def test_mcp_list_adapter_uses_same_rollout_decisions_as_search_and_preserves_default_visibility():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'

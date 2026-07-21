@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/utils/logger.dart';
@@ -126,19 +124,19 @@ class CustomSttConfig {
   }
 
   Map<String, dynamic> toJson() => {
-        'provider': provider.name,
-        'api_key': apiKey,
-        'language': language,
-        'model': model,
-        'url': url,
-        'host': host,
-        'port': port,
-        'request_type': requestType,
-        'headers': headers,
-        'params': params,
-        'audio_field_name': audioFieldName,
-        'schema': schemaJson,
-      };
+    'provider': provider.name,
+    'api_key': apiKey,
+    'language': language,
+    'model': model,
+    'url': url,
+    'host': host,
+    'port': port,
+    'request_type': requestType,
+    'headers': headers,
+    'params': params,
+    'audio_field_name': audioFieldName,
+    'schema': schemaJson,
+  };
 
   factory CustomSttConfig.fromJson(Map<String, dynamic> json) {
     // Safely cast maps to Map<String, String> by converting all values to strings

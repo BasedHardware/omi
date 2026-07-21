@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 extension AppState {
@@ -110,12 +110,14 @@ extension AppState {
   }
 
   func bindActiveSessionToBackendConversation(_ backendId: String) {
-    guard DesktopConversationMatchPolicy.shouldBindConversationSession(
-      incomingBackendId: backendId,
-      expectedBackendId: currentClientConversationId,
-      activeBackendId: currentBackendConversationId,
-      ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds
-    ) else {
+    guard
+      DesktopConversationMatchPolicy.shouldBindConversationSession(
+        incomingBackendId: backendId,
+        expectedBackendId: currentClientConversationId,
+        activeBackendId: currentBackendConversationId,
+        ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds
+      )
+    else {
       pendingBackendConversationId = nil
       if let currentBackendConversationId, currentBackendConversationId != backendId {
         ignoredRotatedBackendConversationIds.insert(backendId)
@@ -138,9 +140,45 @@ extension AppState {
       do {
         try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
       } catch {
-        logError("Transcription: Failed to bind DB session \(sessionId) to backend conversation \(backendId)", error: error)
+        logError(
+          "Transcription: Failed to bind DB session \(sessionId) to backend conversation \(backendId)", error: error)
       }
     }
+  }
+
+  /// Reject out-of-order versioned lifecycle events before they can mutate UI
+  /// or local-session display state. Events without the additive envelope keep
+  /// the established legacy identity/timestamp compatibility behavior.
+  func acceptsLifecycleEnvelope(
+    _ event: TranscriptionService.ListenEvent,
+    conversationId: String,
+    expectedLifecyclePhase: String,
+    expectedBackendId: String?
+  ) -> Bool {
+    let recordingSessionId = event.raw["recording_session_id"] as? String
+    let lifecycleVersion = event.raw["lifecycle_version"] as? Int
+    let lifecyclePhase = event.raw["lifecycle_phase"] as? String
+    let lifecycleSequence = event.raw["lifecycle_sequence"] as? Int
+    let lastAcceptedSequence = recordingSessionId.flatMap { lifecycleSequenceByRecordingSession[$0] }
+    guard
+      DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+        recordingSessionId: recordingSessionId,
+        conversationId: conversationId,
+        lifecycleVersion: lifecycleVersion,
+        lifecyclePhase: lifecyclePhase,
+        lifecycleSequence: lifecycleSequence,
+        expectedLifecyclePhase: expectedLifecyclePhase,
+        expectedBackendId: expectedBackendId,
+        lastAcceptedSequence: lastAcceptedSequence
+      )
+    else {
+      log("Transcription: Ignoring stale or misbound versioned lifecycle event for \(conversationId)")
+      return false
+    }
+    if let recordingSessionId, let lifecycleSequence {
+      lifecycleSequenceByRecordingSession[recordingSessionId] = lifecycleSequence
+    }
+    return true
   }
 
   /// Handle message events from Python backend `/v4/listen`
@@ -148,11 +186,29 @@ extension AppState {
     switch event.type {
     case "service_status":
       let status = event.raw["status"] as? String ?? "unknown"
+      if status == "stt_failed" {
+        // The socket is closed immediately after this status. Keep a
+        // user-visible truth state through reconnects; only a subsequent
+        // ready status proves that live transcription recovered.
+        transcriptionServiceError = "Transcription unavailable"
+      } else if status == "ready" {
+        transcriptionServiceError = nil
+      }
       log("Transcription: Backend service status: \(status)")
 
     case "conversation_session":
       guard let backendId = event.raw["conversation_id"] as? String, !backendId.isEmpty else {
         log("Transcription: Ignoring conversation_session event without conversation_id")
+        break
+      }
+      guard
+        acceptsLifecycleEnvelope(
+          event,
+          conversationId: backendId,
+          expectedLifecyclePhase: "in_progress",
+          expectedBackendId: currentClientConversationId
+        )
+      else {
         break
       }
       bindActiveSessionToBackendConversation(backendId)
@@ -162,11 +218,24 @@ extension AppState {
       let memory = event.raw["memory"] as? [String: Any]
       let processingId = memory?["id"] as? String ?? "?"
       let recordingSessionId = event.raw["recording_session_id"] as? String
-      guard DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
-        memoryId: processingId,
-        recordingSessionId: recordingSessionId,
-        expectedBackendId: currentClientConversationId
-      ) else {
+      let conversationId = event.raw["conversation_id"] as? String ?? processingId
+      guard conversationId == processingId,
+        acceptsLifecycleEnvelope(
+          event,
+          conversationId: conversationId,
+          expectedLifecyclePhase: "processing",
+          expectedBackendId: currentClientConversationId
+        )
+      else {
+        break
+      }
+      guard
+        DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+          memoryId: processingId,
+          recordingSessionId: recordingSessionId,
+          expectedBackendId: currentClientConversationId
+        )
+      else {
         log("Transcription: Ignoring stale memory_processing_started \(processingId) for current recording")
         break
       }
@@ -187,6 +256,17 @@ extension AppState {
       let targetClientConversationId = finishedClientConversationId
       let targetStartTime = finishedRecordingStartTime
       let didBindLocalSession: Bool
+      let conversationId = event.raw["conversation_id"] as? String ?? memoryId
+      guard conversationId == memoryId,
+        acceptsLifecycleEnvelope(
+          event,
+          conversationId: conversationId,
+          expectedLifecyclePhase: "completed",
+          expectedBackendId: targetClientConversationId
+        )
+      else {
+        break
+      }
       if !DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
         memoryId: memoryId,
         recordingSessionId: recordingSessionId,
@@ -199,12 +279,14 @@ extension AppState {
       // New desktop sessions carry an exact client-generated recording id, so
       // they must never fall back to a timestamp guess. Timestamp matching is
       // retained only for legacy sessions without that identity.
-      let matchesFinishedRecording = targetClientConversationId != nil
+      let matchesFinishedRecording =
+        targetClientConversationId != nil
         || DesktopConversationMatchPolicy.memoryEventMatchesFinishedSession(
           memory, sessionStartedAt: targetStartTime ?? .distantPast)
       if let sessionId = targetSessionId,
-         memoryId != "?",
-         matchesFinishedRecording {
+        memoryId != "?",
+        matchesFinishedRecording
+      {
         finishedSessionId = nil  // Consume once
         finishedClientConversationId = nil
         finishedRecordingStartTime = nil
@@ -223,16 +305,23 @@ extension AppState {
         didBindLocalSession = false
         if memoryId != "?" {
           if targetSessionId == nil || targetStartTime == nil {
-            log("Transcription: Ignoring memory_created \(memoryId); no finished local session is awaiting backend binding")
+            log(
+              "Transcription: Ignoring memory_created \(memoryId); no finished local session is awaiting backend binding"
+            )
           } else if let sessionId = targetSessionId, let startTime = targetStartTime {
             if let memoryStartedAt = DesktopConversationMatchPolicy.parseMemoryEventDate(
-              memory?["started_at"] ?? memory?["startedAt"]) {
+              memory?["started_at"] ?? memory?["startedAt"])
+            {
               let delta = abs(memoryStartedAt.timeIntervalSince(startTime))
               if delta >= DesktopConversationMatchPolicy.startedAtTolerance {
-                log("Transcription: Ignoring memory_created event; started_at delta \(String(format: "%.1f", delta))s exceeds session match tolerance")
+                log(
+                  "Transcription: Ignoring memory_created event; started_at delta \(String(format: "%.1f", delta))s exceeds session match tolerance"
+                )
               }
             }
-            log("Transcription: Waiting for API reconciliation before binding memory_created \(memoryId) to local session \(sessionId)")
+            log(
+              "Transcription: Waiting for API reconciliation before binding memory_created \(memoryId) to local session \(sessionId)"
+            )
           }
         }
       }

@@ -11,7 +11,7 @@ import { createInterface } from "readline";
 import { createConnection } from "net";
 import { readFileSync, writeFileSync } from "fs";
 import { isAgentControlToolName } from "./runtime/control-tools.js";
-import { loadSkillInstructions } from "./runtime/node-tools.js";
+import { loadSkillInstructions, searchSkills } from "./runtime/node-tools.js";
 import {
   buildToolAvailabilitySnapshot,
   mcpToolDefinitionsForAdapter,
@@ -43,45 +43,27 @@ function logErr(msg: string): void {
   process.stderr.write(`[omi-tools-stdio] ${msg}\n`);
 }
 
-function activeOmiContext(): Record<string, unknown> {
-  const envBase = {
-    protocolVersion: PROTOCOL_VERSION,
-    adapterId: process.env.OMI_ADAPTER_ID,
-  };
+function activeRunCapability(): { capabilityRef?: string; contextError?: string } {
   if (process.env.OMI_CONTEXT_FILE) {
     try {
       const parsed = JSON.parse(readFileSync(process.env.OMI_CONTEXT_FILE, "utf8"));
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return {
-          ...envBase,
-          ...parsed,
-        };
+        return typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
+          ? { capabilityRef: parsed.capabilityRef }
+          : { contextError: "OMI context file did not contain a capabilityRef" };
       }
       return {
-        ...envBase,
         contextError: "OMI context file did not contain an object",
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logErr(`Failed to read OMI context file: ${message}`);
       return {
-        ...envBase,
         contextError: message,
       };
     }
   }
-  return {
-    ...envBase,
-    requestId: process.env.OMI_REQUEST_ID,
-    clientId: process.env.OMI_CLIENT_ID,
-    sessionId: process.env.OMI_SESSION_ID,
-    runId: process.env.OMI_RUN_ID,
-    attemptId: process.env.OMI_ATTEMPT_ID,
-    surfaceKind: process.env.OMI_SURFACE_KIND,
-    externalRefKind: process.env.OMI_EXTERNAL_REF_KIND,
-    externalRefId: process.env.OMI_EXTERNAL_REF_ID,
-    adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
-  };
+  return { contextError: "OMI_CONTEXT_FILE is not configured" };
 }
 
 // --- Communication with parent bridge ---
@@ -147,9 +129,9 @@ async function requestSwiftTool(
     return "Error: not connected to bridge";
   }
 
-  const context = activeOmiContext();
-  if (context.contextError || !context.requestId || !context.clientId) {
-    return `Error: missing active Omi request context for tool relay${context.contextError ? `: ${context.contextError}` : ""}`;
+  const capability = activeRunCapability();
+  if (capability.contextError || !capability.capabilityRef) {
+    return `Error: missing active Omi run capability for tool relay${capability.contextError ? `: ${capability.contextError}` : ""}`;
   }
 
   return new Promise<string>((resolve) => {
@@ -157,9 +139,11 @@ async function requestSwiftTool(
     const msg = JSON.stringify({
       type: "tool_use",
       callId,
+      invocationId: callId,
       name,
       input,
-      ...context,
+      protocolVersion: PROTOCOL_VERSION,
+      capabilityRef: capability.capabilityRef,
     });
     pipeConnection!.write(msg + "\n");
   });
@@ -266,7 +250,9 @@ async function handleJsonRpc(
             return;
           }
         }
-        const result = await requestSwiftTool("execute_sql", { query });
+        const input: Record<string, unknown> = { query };
+        if (args.parameters !== undefined) input.parameters = args.parameters;
+        const result = await requestSwiftTool("execute_sql", input);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
@@ -332,6 +318,22 @@ async function handleJsonRpc(
       } else if (toolName === "load_skill") {
         const name = (args.name as string || "").trim();
         const content = await loadSkillInstructions(name);
+
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              content: [{
+                type: "text",
+                text: content,
+              }],
+            },
+          });
+        }
+      } else if (toolName === "search_skills") {
+        const query = (args.query as string || "").trim();
+        const content = await searchSkills(query);
 
         if (!isNotification) {
           send({

@@ -66,6 +66,7 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | Change area | Minimum tier |
 | --- | --- |
 | Transcription / audio capture | T2 |
+| Rewind artifact persistence / recovery / privacy admission | T2 |
 | ChatProvider / agent runtime | T0 + T3 |
 | Sidebar / navigation | T1 |
 | Redesigned Home stage (hub/chat/connect) | T2 (`home-stage.yaml`) |
@@ -86,6 +87,7 @@ healthy enough to boot the hermetic T2 stack. Stable nomination and production p
 | `navigation` | v2 | typed bridge | 1 | Sidebar navigation |
 | `claude-guidance-overlay` | v2 | typed bridge + visual | 2 | Overlay dogfood |
 | `capture-lifecycle` | v2 | typed bridge | 2 | STT seam via `capture_test_transcript` |
+| `rewind-artifact-recovery` | v2 | typed bridge | 2 | Synthetic Rewind → HEVC → SQLite → finalized-video readback, privacy admission, and database reopen |
 | `chat-hermetic` | v2 | typed bridge | 2 | Rust `OMI_LLM_STUB=1` |
 | `floating-bar-functional` | v2 | typed bridge | 2 | Ask Omi open + stubbed turn |
 | `memories` | v2 | typed bridge | 2 | Navigate + snapshot + search step |
@@ -179,7 +181,10 @@ Release-candidate agent QA: launch a named bundle, then run
 `cd desktop/macos && ./scripts/agent-continuity-gauntlet.sh --suite resilience`
 for startup/bad-state bridge and subagent probes. Follow with
 `./scripts/agent-continuity-gauntlet.sh --suite all` for the full continuity,
-prompt, owner, and resilience pass. Evidence is written under
+prompt, owner, and resilience pass. The agents lane includes issue #9515's exact
+PTT request, proves one new owner-scoped child, inspects its durable tool ledger
+for a successful `get_memories`, then continues the same child session and
+requires a second successful memory-tool invocation. Evidence is written under
 `.harness/agent-continuity-gauntlet/`.
 
 See also `desktop/macos/e2e/SKILL.md`, `desktop/macos/e2e/feature-vector.md`, and `scripts/dev-harness/`.

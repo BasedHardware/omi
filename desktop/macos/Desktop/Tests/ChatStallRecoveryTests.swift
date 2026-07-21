@@ -51,7 +51,7 @@ final class ChatStallRecoveryTests: XCTestCase {
   func testExplicitResumeCancelsPendingAutoResume() {
     let (control, box) = makeControl()
     let gen = control.arm(pid: 5)
-    XCTAssertEqual(control.resume(), 5)          // advances generation
+    XCTAssertEqual(control.resume(), 5)  // advances generation
     XCTAssertNil(control.autoResume(generation: gen), "auto-resume after explicit resume must no-op")
     XCTAssertEqual(box.signalled, [5], "only the explicit resume signals")
   }
@@ -124,12 +124,14 @@ private final class SignalBox: @unchecked Sendable {
   var succeed = true
   /// Records the pid and returns whether the (simulated) SIGCONT succeeded.
   func record(_ pid: pid_t) -> Bool {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     pids.append(pid)
     return succeed
   }
   var signalled: [pid_t] {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     return pids
   }
 }

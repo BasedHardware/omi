@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingTrustStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator
@@ -15,15 +15,16 @@ struct OnboardingTrustStepView: View {
       graphViewModel: graphViewModel,
       stepIndex: stepIndex,
       totalSteps: totalSteps,
-      eyebrow: "Before we continue",
+      eyebrow: "Before I continue",
       title: "I’m going to ask for a few permissions.",
-      description:
-        "Omi is open source and private by design. During setup, we’ll ask for these permissions to understand your work and help in the right places:",
+      description: "",
       layoutMode: .centered,
       onForceComplete: onForceComplete
     ) {
-      VStack(spacing: 18) {
-        VStack(alignment: .leading, spacing: 12) {
+      VStack(spacing: OmiSpacing.lg) {
+        openSourceChip
+
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           permissionRow(
             icon: "display", title: "Screen + files",
             detail: "Build context from what you’re working on.")
@@ -36,21 +37,15 @@ struct OnboardingTrustStepView: View {
         }
         .frame(maxWidth: 560, alignment: .leading)
 
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
           Button("Continue") {
             coordinator.clearLastActionError()
             onContinue()
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .buttonStyle(OmiButtonStyle(.primary))
           .keyboardShortcut(.defaultAction)
-
-          Button("Read the source code") {
-            guard let url = URL(string: "https://github.com/BasedHardware/omi") else { return }
-            NSWorkspace.shared.open(url)
-          }
-          .buttonStyle(.plain)
-          .foregroundColor(OmiColors.textSecondary)
-          .font(.system(size: 13, weight: .medium))
         }
       }
       .frame(maxWidth: .infinity, alignment: .center)
@@ -60,31 +55,63 @@ struct OnboardingTrustStepView: View {
     }
   }
 
+  /// Pill chip from the mock: octocat-style mark + "Open source & private by
+  /// design" + ↗, opening the public repo.
+  private var openSourceChip: some View {
+    Button {
+      guard let url = URL(string: "https://github.com/BasedHardware/omi") else { return }
+      NSWorkspace.shared.open(url)
+    } label: {
+      HStack(spacing: 9) {
+        Image(systemName: "chevron.left.forwardslash.chevron.right")
+          .font(.system(size: 13, weight: .semibold))
+        Text("Open source & private by design")
+          .font(.system(size: 14, weight: .semibold))
+        Text("↗")
+          .font(.system(size: 12))
+          .foregroundColor(OmiColors.textTertiary)
+      }
+      .foregroundColor(OmiColors.textSecondary)
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, 9)
+      .background(Capsule().fill(OmiColors.backgroundSecondary))
+      .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { inside in
+      if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+    }
+    .accessibilityLabel("Open source and private by design — view the code on GitHub")
+  }
+
   private func permissionRow(icon: String, title: String, detail: String) -> some View {
-    HStack(alignment: .top, spacing: 12) {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .semibold))
         .foregroundColor(.white.opacity(0.85))
         .frame(width: 28, height: 28)
         .background(
-          RoundedRectangle(cornerRadius: 8, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
             .fill(OmiColors.backgroundSecondary)
         )
 
-      VStack(alignment: .leading, spacing: 2) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
           .font(.system(size: 14, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
-        Text(detail)
-          .font(.system(size: 13))
-          .foregroundColor(OmiColors.textSecondary)
+        if !detail.isEmpty {
+          Text(detail)
+            .font(.system(size: 13))
+            .foregroundColor(OmiColors.textSecondary)
+        }
       }
 
       Spacer()
     }
-    .padding(14)
+    .padding(OmiSpacing.md)
     .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
         .fill(OmiColors.backgroundTertiary.opacity(0.55))
     )
   }

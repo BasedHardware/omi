@@ -17,6 +17,7 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    ConversationFinalizationStatusResponse,
     ConversationMutationResponse,
     CreateConversationResponse,
     DeleteActionItemRequest,
@@ -43,10 +44,11 @@ from models.other import Person
 from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
-from utils.memory.canonical_activation import canonical_write_enabled
+from utils import byok
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -104,9 +106,8 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
             try:
-                conversations_db.update_conversation(
-                    uid, conversation_id, {'deferred': True, 'status': ConversationStatus.completed.value}
-                )
+                conversations_db.update_conversation(uid, conversation_id, {'deferred': True})
+                lifecycle_service.complete(uid, conversation_id)
             except Exception:
                 pass
 
@@ -163,7 +164,6 @@ def process_in_progress_conversation(
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
-    redis_db.remove_in_progress_conversation_id(uid)
 
     conversation = deserialize_conversation(conversation)
 
@@ -179,8 +179,36 @@ def process_in_progress_conversation(
         geolocation = Geolocation(**geolocation)
         conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
-    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    if not lifecycle_service.admit_processing(uid, conversation.id):
+        latest = _get_valid_conversation_by_id(uid, conversation.id)
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+
+    current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+    if current_in_progress_id == conversation.id:
+        redis_db.remove_in_progress_conversation_id(uid)
+
+    conversation.status = ConversationStatus.processing
+    persisted = False
+
+    def record_persistence(current: bool) -> None:
+        nonlocal persisted
+        persisted = current
+
+    # This synchronous path has no durable job for the reconciler to replay, so
+    # a processing failure must return the admission to in_progress — otherwise
+    # the conversation is stranded on "processing" forever and the client shows
+    # a stuck Processing card it can never resolve.
+    with lifecycle_service.processing_admission_guard(uid, conversation.id):
+        conversation = process_conversation(
+            uid,
+            conversation.language,
+            conversation,
+            force_process=True,
+            persistence_observer=record_persistence,
+        )
+    if not persisted:
+        latest = _get_valid_conversation_by_id(uid, conversation.id)
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -206,23 +234,46 @@ def finalize_conversation(
     if conversation.status != ConversationStatus.in_progress:
         return CreateConversationResponse(conversation=conversation, messages=[])
 
-    claim_updates = {}
+    extra_updates = {}
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
-        claim_updates['external_data'] = conversation.external_data
+        extra_updates['external_data'] = conversation.external_data
 
-    if not conversations_db.claim_conversation_status(
-        uid,
-        conversation.id,
-        ConversationStatus.in_progress,
-        ConversationStatus.processing,
-        extra_updates=claim_updates or None,
-    ):
+    # The durable Cloud Tasks worker cannot inherit this request's BYOK
+    # context: the task payload is the opaque {job_id, dispatch_generation}
+    # schema, so the worker runs without the X-BYOK-* keys the middleware
+    # validated for this request. Admitting a BYOK request here would silently
+    # process the conversation with platform credentials. Reject before any
+    # mutation so BYOK clients fail fast instead of being processed as Omi keys.
+    if byok.has_byok_keys():
+        raise HTTPException(
+            status_code=409,
+            detail='BYOK finalization is not supported on this route; use the live listen session',
+        )
+
+    try:
+        finalization = lifecycle_service.request_finalization(
+            uid,
+            conversation.id,
+            has_byok_keys=False,
+            force_process=True,
+            extra_updates=extra_updates or None,
+            require_cloud_tasks=True,
+        )
+    except lifecycle_service.FinalizationDispatchUnavailable as error:
+        raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
+
+    if finalization['route'] == 'noop':
         latest = _get_valid_conversation_by_id(uid, conversation_id)
-        latest = deserialize_conversation(latest)
-        return CreateConversationResponse(conversation=latest, messages=[])
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+
+    # Requiring Cloud Tasks keeps REST finalization off the pusher-only route.
+    # The only accepted outcomes are an enqueued task or an outbox row retained
+    # for reconciler retry after an uncertain task-create acknowledgement.
+    if finalization['route'] not in {'cloud_tasks', 'queued'}:
+        raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable')
 
     conversation.status = ConversationStatus.processing
 
@@ -230,17 +281,26 @@ def finalize_conversation(
     if current_in_progress_id == conversation_id:
         redis_db.remove_in_progress_conversation_id(uid)
 
-    geolocation = redis_db.get_cached_user_geolocation(uid)
-    if geolocation:
-        geolocation = Geolocation(**geolocation)
-        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+    # The Cloud Tasks worker owns expensive processing, memory extraction, and
+    # integration fanout under the persisted job lease. Returning this snapshot
+    # is intentionally prompt; clients may poll the status projection below.
+    return CreateConversationResponse(conversation=conversation, messages=[])
 
-    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
-    if conversation.status:
-        conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
-    messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
-    return CreateConversationResponse(conversation=conversation, messages=messages)
+@router.get(
+    '/v1/conversations/{conversation_id}/finalization',
+    response_model=ConversationFinalizationStatusResponse,
+    tags=['conversations'],
+)
+def get_conversation_finalization_status(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    _get_valid_conversation_by_id(uid, conversation_id)
+    status = lifecycle_service.get_finalization_status(uid, conversation_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail='Conversation finalization job not found')
+    return status
 
 
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
@@ -276,6 +336,18 @@ def _ensure_aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+# Firestore 'in' filters accept at most 30 values (see database/apps.py, database/chat.py). Reject
+# an oversized status/source filter before it reaches the query so a caller cannot turn a
+# comma-separated filter into an unhandled 500. ConversationStatus and the source set are both
+# tiny, so a cap of 20 can never reject a request a real client would send.
+MAX_IN_FILTER_VALUES = 20
+
+
+def _reject_oversized_filter(values: List[str], field_name: str) -> None:
+    if len(values) > MAX_IN_FILTER_VALUES:
+        raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
+
+
 @router.get(
     '/v1/conversations',
     response_model=List[Conversation],
@@ -303,12 +375,15 @@ def get_conversations(
     if len(statuses) == 0:
         statuses = "processing,completed"
 
+    status_filter = statuses.split(",") if len(statuses) > 0 else []
+    _reject_oversized_filter(status_filter, "statuses")
+
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
         offset,
         include_discarded=include_discarded,
-        statuses=statuses.split(",") if len(statuses) > 0 else [],
+        statuses=status_filter,
         start_date=start_date,
         end_date=end_date,
         folder_id=folder_id,
@@ -334,6 +409,8 @@ def get_conversations_count(
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
     source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
+    _reject_oversized_filter(status_list, "statuses")
+    _reject_oversized_filter(source_list, "sources")
     if status_list and source_list:
         # Combining status+source `in` filters would need a composite index; keep them exclusive.
         raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
@@ -612,7 +689,7 @@ def delete_conversation(
         # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_system = pin_memory_system(uid, db_client=db_client)
-        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+        if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
         else:
             deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
@@ -1106,9 +1183,12 @@ def search_conversations_endpoint(
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
-    search_results['total_pages'] = (
-        search_request.page + 1 if len(conversations) >= search_request.per_page else search_request.page
-    )
+    # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
+    # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
+    # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
+    effective_page = search_results.get('current_page', 1)
+    effective_per_page = search_results.get('per_page', 10)
+    search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
     return search_results
 
 
@@ -1219,7 +1299,7 @@ def merge_conversations(
 
     # Set all source conversations to 'merging' status so user knows they're being processed
     for conv_id in request.conversation_ids:
-        conversations_db.update_conversation_status(uid, conv_id, ConversationStatus.merging)
+        lifecycle_service.begin_merge(uid, conv_id)
 
     # Start background merge task
     background_tasks.add_task(

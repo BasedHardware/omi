@@ -1,3 +1,0 @@
-{
-  "change": "Improved macOS reliability around sign-out cleanup, capture lifecycle recovery, Bluetooth audio, and local storage persistence."
-}

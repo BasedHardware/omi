@@ -1,0 +1,4 @@
+{
+  "permissionDecision": {"decision": "approved", "invocationId": "other-invocation"},
+  "expectedError": "$.permissionDecision.invocationId: does not match envelope provenance"
+}

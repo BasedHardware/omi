@@ -15,9 +15,9 @@ is unavailable.
 
 ## Surfaces
 
-- `utils.memory.v3_control_reader_contract` route decisions
+- `utils.memory.v3.control_reader_contract` route decisions
 - `utils.memory.default_read_rollout` rollout wiring
-- `utils.memory.v3_memory_read_service` canonical read service
+- `utils.memory.v3.memory_read_service` canonical read service
 
 ## Guard tests
 
@@ -27,10 +27,10 @@ is unavailable.
 
 ## Path globs
 
-- `backend/utils/memory/v3_control_reader_contract.py`
+- `backend/utils/memory/v3/control_reader_contract.py`
 - `backend/utils/memory/default_read_rollout.py`
-- `backend/utils/memory/v3_memory_read_service.py`
-- `backend/utils/memory/v3_production_runtime.py`
+- `backend/utils/memory/v3/memory_read_service.py`
+- `backend/utils/memory/v3/production_runtime.py`
 
 ## PR rule
 

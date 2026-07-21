@@ -2940,7 +2940,7 @@
     "upgradePlan": "Nâng cấp gói",
     "billingMonthly": "Hàng tháng",
     "billingYearly": "Hàng năm",
-    "savePercent": "Tiết kiệm ~17%",
+    "savePercent": "Tiết kiệm ~{percent}%",
     "popular": "Phổ biến",
     "currentPlan": "Hiện tại",
     "neoSubtitle": "{count} câu hỏi mỗi tháng",
@@ -3060,7 +3060,7 @@
     "syncCustomSttWarningMessage": "Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.",
     "transcribeLaterTitle": "Phiên âm sau",
     "transcribeLaterDescription": "Ghi âm ngay bây giờ và phiên âm khi cần thay vì xử lý trực tiếp. Bản ghi được lưu trên điện thoại của bạn, sau đó bạn tải lên để tạo cuộc trò chuyện.",
-    "transcribeLaterNote": "Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
+    "transcribeLaterNote": "Hoạt động với micrô của điện thoại cùng các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
     "transcribeLaterStorageFull": "Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục.",
     "unmute": "Bật tiếng",
     "newRecording": "Ghi âm mới",
@@ -3148,5 +3148,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Bộ nhớ thiết bị",
+    "deviceStoragePercentFull": "Đã đầy {percent}%",
+    "deviceStorageUsedOfTotal": "Đã dùng {used} trong {total}",
+    "deviceStorageFree": "Còn trống {free}",
+    "deviceStorageNearlyFull": "Thiết bị gần đầy — đồng bộ để giải phóng dung lượng.",
+    "phoneMicOfflineFallbackMessage": "Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại.",
+    "dataEncryptedBanner": "Dữ liệu của bạn được bảo mật mặc định bằng mã hóa mạnh, và bạn kiểm soát cách nó được lưu trữ và sử dụng.",
+    "rayBanMetaMicPickerTitle": "Chọn micrô Ray-Ban Meta của bạn",
+    "rayBanMetaMicPickerDescription": "Chọn micrô Bluetooth của kính. Nhạc sẽ tạm dừng khi Omi sử dụng micrô.",
+    "rayBanMetaMicPickerEmpty": "Không tìm thấy micrô Bluetooth. Hãy kết nối kính trong Cài đặt iPhone rồi thử lại.",
+    "rayBanMetaMicPickerLoadError": "Không thể tải micrô Bluetooth. Hãy kiểm tra Bluetooth đã bật rồi thử lại.",
+    "rayBanMetaMicPickerConnectError": "Không thể kết nối với micrô đó. Hãy đảm bảo micrô đã được kết nối trong Cài đặt iPhone."
 }

@@ -11,6 +11,12 @@ DMG_PATH=""
 RELEASE_TAG=""
 EXPECTED_CHANNEL="${OMI_SIGNED_ARTIFACT_SMOKE_CHANNEL:-beta}"
 EXPECTED_TEAM_ID="${OMI_SIGNED_ARTIFACT_SMOKE_TEAM_ID:-9536L8KLMP}"
+EXPECTED_BUNDLE_ID="${OMI_SIGNED_ARTIFACT_SMOKE_BUNDLE_ID:-com.omi.computer-macos}"
+EXPECTED_URL_SCHEME="${OMI_SIGNED_ARTIFACT_SMOKE_URL_SCHEME:-omi-computer}"
+EXPECTED_FEED_URL="${OMI_SIGNED_ARTIFACT_SMOKE_FEED_URL:-https://api.omi.me/v2/desktop/appcast.xml}"
+EXPECTED_PYTHON_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_PYTHON_API_URL:-https://api.omi.me}"
+EXPECTED_DESKTOP_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_DESKTOP_API_URL:-https://desktop-backend-hhibjajaja-uc.a.run.app/}"
+IS_EXTERNAL_PREVIEW=false
 RUN_LAUNCH=false
 RUN_NETWORK=false
 RUN_AUTH=false
@@ -18,6 +24,7 @@ RUN_AUTH_STORAGE_CANARY=false
 RUN_CHAT=false
 RUN_PERMISSIONS=false
 RUN_STORAGE=false
+RUN_NOTIFICATION_CALLBACK_CANARY=false
 APPLY_QUARANTINE=false
 INSTALL_DIR=""
 KEEP_INSTALL=false
@@ -27,6 +34,9 @@ ZIP_EXTRACT_DIR=""
 DMG_MOUNTPOINT=""
 SMOKE_CHECKS=()
 SMOKE_ARTIFACTS=()
+NOTIFICATION_CALLBACK_MARKER=""
+NOTIFICATION_CALLBACK_MARKER_IS_TEMP=false
+NOTIFICATION_CALLBACK_PROOF=""
 
 usage() {
   cat <<'USAGE'
@@ -43,12 +53,26 @@ Options:
   --dmg PATH                 DMG artifact to verify/mount when available
   --tag TAG                  Expected release tag, vX.Y.Z+BUILD-macos
   --expected-channel NAME    Expected channel label for result metadata (default: beta)
+  --expected-bundle-id ID    Expected app bundle identifier
+  --expected-url-scheme URL  Expected app URL scheme
+  --expected-feed-url URL    Expected SUFeedURL (default: plain shared appcast;
+                             the Omi Beta variant passes its identity-scoped feed)
+  --expected-python-api-url URL
+                             Expected OMI_PYTHON_API_URL in the artifact
+  --expected-desktop-api-url URL
+                             Expected OMI_DESKTOP_API_URL in the artifact
+  --preview                  Assert external-preview isolation (no Sparkle feed)
   --launch                   Launch the app and assert it stays alive briefly
   --network                  Probe configured backend/appcast URLs
   --auth                     Run auth persistence probe (requires env below)
   --auth-storage-canary      Run synthetic Keychain round trip in the signed app
   --chat                     Run minimal chat probe (requires --auth env)
   --permissions             Verify permission surface/fail-graceful live path
+  --notification-callback-canary
+                             Require the launched app to prove its
+                             UserNotifications settings callback completed
+  --notification-callback-marker PATH
+                             Callback-proof path (a unique temporary path by default)
   --storage                  Verify local storage opens in live path
   --quarantine              Apply download quarantine to launch copy before launch
   --result-json PATH         Write machine-readable smoke result JSON
@@ -59,7 +83,7 @@ Options:
 
 Optional live-probe environment:
   OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1
-      Required before --launch can launch com.omi.computer-macos.
+      Required before --launch can launch a production-family bundle id.
   OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND='...'
       Required for --auth. Runs after --launch and must prove app-level auth
       persistence/Keychain restore/restart behavior for the launched artifact.
@@ -67,6 +91,10 @@ Optional live-probe environment:
       Required for --chat until a dedicated release canary OAuth fixture exists.
   OMI_SIGNED_ARTIFACT_SMOKE_CHAT_URL='https://...'
       Chat API URL to probe; defaults to https://api.omi.me/v2/chat/completions.
+  OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH
+      Passed to the app only with --notification-callback-canary. The app must
+      atomically write the callback result after its
+      UserNotifications callback has run; staying alive is not sufficient.
 
 Smoke paths covered:
   - Launch + identity
@@ -74,6 +102,7 @@ Smoke paths covered:
   - Signed Keychain canary
   - Backend routing
   - Sparkle/update metadata
+  - External-preview isolation
   - Native helper/runtime bundle integrity
   - Minimal chat path
   - Recording permission surface sanity
@@ -124,12 +153,20 @@ parse_args() {
       --dmg) require_option_value "$1" "${2:-}"; DMG_PATH="$2"; shift 2 ;;
       --tag) require_option_value "$1" "${2:-}"; RELEASE_TAG="$2"; shift 2 ;;
       --expected-channel) require_option_value "$1" "${2:-}"; EXPECTED_CHANNEL="$2"; shift 2 ;;
+      --expected-bundle-id) require_option_value "$1" "${2:-}"; EXPECTED_BUNDLE_ID="$2"; shift 2 ;;
+      --expected-url-scheme) require_option_value "$1" "${2:-}"; EXPECTED_URL_SCHEME="$2"; shift 2 ;;
+      --expected-feed-url) require_option_value "$1" "${2:-}"; EXPECTED_FEED_URL="$2"; shift 2 ;;
+      --expected-python-api-url) require_option_value "$1" "${2:-}"; EXPECTED_PYTHON_API_URL="$2"; shift 2 ;;
+      --expected-desktop-api-url) require_option_value "$1" "${2:-}"; EXPECTED_DESKTOP_API_URL="$2"; shift 2 ;;
+      --preview) IS_EXTERNAL_PREVIEW=true; shift ;;
       --launch) RUN_LAUNCH=true; shift ;;
       --network) RUN_NETWORK=true; shift ;;
       --auth) RUN_AUTH=true; shift ;;
       --auth-storage-canary) RUN_AUTH_STORAGE_CANARY=true; shift ;;
       --chat) RUN_CHAT=true; shift ;;
       --permissions) RUN_PERMISSIONS=true; shift ;;
+      --notification-callback-canary) RUN_NOTIFICATION_CALLBACK_CANARY=true; shift ;;
+      --notification-callback-marker) require_option_value "$1" "${2:-}"; NOTIFICATION_CALLBACK_MARKER="$2"; shift 2 ;;
       --storage) RUN_STORAGE=true; shift ;;
       --quarantine) APPLY_QUARANTINE=true; shift ;;
       --result-json) require_option_value "$1" "${2:-}"; RESULT_JSON="$2"; shift 2 ;;
@@ -205,6 +242,9 @@ cleanup() {
   if [[ "$KEEP_INSTALL" != true && -n "$INSTALL_DIR" && "$INSTALL_DIR" == "${TMPDIR:-/tmp}"/omi-signed-smoke-install.* ]]; then
     rm -rf "$INSTALL_DIR"
   fi
+  if [[ "$NOTIFICATION_CALLBACK_MARKER_IS_TEMP" == true && -n "$NOTIFICATION_CALLBACK_MARKER" ]]; then
+    rm -f "$NOTIFICATION_CALLBACK_MARKER"
+  fi
 }
 trap cleanup EXIT
 
@@ -271,6 +311,7 @@ write_result_json() {
     RESULT_BUILD="$build" \
     RESULT_TEAM_ID="$team_id" \
     RESULT_APP_EXECUTABLE_SHA256="$app_sha" \
+    RESULT_NOTIFICATION_CALLBACK_PROOF="$NOTIFICATION_CALLBACK_PROOF" \
     python3 - <<'PY' > "$RESULT_JSON"
 import json
 import os
@@ -288,6 +329,11 @@ for line in os.environ.get("ARTIFACTS_JOINED", "").splitlines():
         artifact["sha256"] = sha
     artifacts.append(artifact)
 
+notification_callback_canary = None
+proof = os.environ.get("RESULT_NOTIFICATION_CALLBACK_PROOF", "")
+if proof:
+    notification_callback_canary = json.loads(proof)
+
 print(json.dumps({
     "ok": True,
     "finished_at": datetime.now(timezone.utc).isoformat(),
@@ -298,6 +344,7 @@ print(json.dumps({
     "build": os.environ.get("RESULT_BUILD") or None,
     "team_id": os.environ.get("RESULT_TEAM_ID") or None,
     "app_executable_sha256": os.environ.get("RESULT_APP_EXECUTABLE_SHA256") or None,
+    "notification_callback_canary": notification_callback_canary,
     "artifacts": artifacts,
     "checks": [line for line in os.environ.get("CHECKS_JOINED", "").splitlines() if line],
 }, indent=2, sort_keys=True))
@@ -307,17 +354,34 @@ PY
 assert_bundle_identity() {
   [[ -d "$APP_BUNDLE/Contents" ]] || fail "app bundle not found: $APP_BUNDLE"
 
-  local bundle_id version build executable url_scheme feed_url
+  local bundle_id version build executable url_scheme feed_url external_preview_marker automatic_checks
   bundle_id="$(plist_read CFBundleIdentifier)"
   version="$(plist_read CFBundleShortVersionString)"
   build="$(plist_read CFBundleVersion)"
   executable="$(plist_read CFBundleExecutable)"
   feed_url="$(plist_read SUFeedURL)"
   url_scheme="$(/usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes:0:CFBundleURLSchemes:0" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true)"
+  external_preview_marker="$(plist_read OMIExternalPreview)"
+  automatic_checks="$(plist_read SUEnableAutomaticChecks)"
 
-  [[ "$bundle_id" == "com.omi.computer-macos" ]] || fail "bundle id must be com.omi.computer-macos, got ${bundle_id:-missing}"
-  [[ "$url_scheme" == "omi-computer" ]] || fail "URL scheme must be omi-computer, got ${url_scheme:-missing}"
-  [[ "$feed_url" == "https://api.omi.me/v2/desktop/appcast.xml" ]] || fail "SUFeedURL mismatch: ${feed_url:-missing}"
+  [[ "$bundle_id" == "$EXPECTED_BUNDLE_ID" ]] || fail "bundle id must be $EXPECTED_BUNDLE_ID, got ${bundle_id:-missing}"
+  [[ "$url_scheme" == "$EXPECTED_URL_SCHEME" ]] || fail "URL scheme must be $EXPECTED_URL_SCHEME, got ${url_scheme:-missing}"
+  if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
+    [[ "$bundle_id" =~ ^com[.]omi[.]preview[.][a-z0-9-]+$ ]] \
+      || fail "external preview bundle id must use the preview namespace"
+    [[ "$url_scheme" =~ ^omi-preview-[a-z0-9-]+$ ]] \
+      || fail "external preview URL scheme must use the preview namespace"
+    [[ "$external_preview_marker" == "true" || "$external_preview_marker" == "1" ]] \
+      || fail "external preview marker must be enabled"
+    [[ -z "$feed_url" ]] || fail "external preview must not carry a shared Sparkle feed"
+    [[ "$automatic_checks" == "false" || "$automatic_checks" == "0" ]] \
+      || fail "external preview must disable automatic update checks"
+  else
+    # The Omi Beta variant carries an identity-scoped feed; the expected URL is
+    # passed per artifact (default: the plain shared feed).
+    [[ "$feed_url" == "$EXPECTED_FEED_URL" ]] \
+      || fail "SUFeedURL mismatch: expected $EXPECTED_FEED_URL, got ${feed_url:-missing}"
+  fi
   [[ -n "$executable" && -x "$APP_BUNDLE/Contents/MacOS/$executable" ]] || fail "main executable missing or not executable"
 
   if [[ -n "$RELEASE_TAG" ]]; then
@@ -328,7 +392,11 @@ assert_bundle_identity() {
     [[ "$build" == "$expected_build" ]] || fail "build mismatch: expected $expected_build, got ${build:-missing}"
   fi
 
-  pass "Launch + identity metadata is aligned"
+  if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
+    pass "External-preview identity and update isolation are aligned"
+  else
+    pass "Launch + identity metadata is aligned"
+  fi
 }
 
 assert_signing_and_entitlements() {
@@ -342,7 +410,10 @@ assert_signing_and_entitlements() {
   [[ -n "$runtime" ]] || fail "signed app is missing hardened runtime metadata"
 
   local entitlements
-  entitlements="$(mktemp "${TMPDIR:-/tmp}/omi-entitlements.XXXXXX.plist")"
+  # macOS mktemp does not substitute X's followed by a suffix — the literal
+  # template file then collides when the smoke runs twice in one build
+  # (stable + Omi Beta). Templates must end with XXXXXX.
+  entitlements="$(mktemp "${TMPDIR:-/tmp}/omi-entitlements.XXXXXX")"
   codesign -d --entitlements :- "$APP_BUNDLE" >"$entitlements" 2>/dev/null || fail "could not read app entitlements"
 
   if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$entitlements" >/dev/null 2>&1; then
@@ -352,12 +423,12 @@ assert_signing_and_entitlements() {
   local app_identifier
   app_identifier="$(/usr/libexec/PlistBuddy -c "Print :com.apple.application-identifier" "$entitlements" 2>/dev/null || true)"
   if [[ -n "$app_identifier" ]]; then
-    [[ "$app_identifier" == "$EXPECTED_TEAM_ID.com.omi.computer-macos" ]] \
-      || fail "application identifier entitlement mismatch: expected $EXPECTED_TEAM_ID.com.omi.computer-macos, got $app_identifier"
+    [[ "$app_identifier" == "$EXPECTED_TEAM_ID.$EXPECTED_BUNDLE_ID" ]] \
+      || fail "application identifier entitlement mismatch: expected $EXPECTED_TEAM_ID.$EXPECTED_BUNDLE_ID, got $app_identifier"
   fi
   if /usr/libexec/PlistBuddy -c "Print :keychain-access-groups" "$entitlements" >/dev/null 2>&1; then
-    /usr/libexec/PlistBuddy -c "Print :keychain-access-groups" "$entitlements" | grep -q "$EXPECTED_TEAM_ID.com.omi.computer-macos" \
-      || fail "keychain-access-groups must include $EXPECTED_TEAM_ID.com.omi.computer-macos when present"
+    /usr/libexec/PlistBuddy -c "Print :keychain-access-groups" "$entitlements" | grep -q "$EXPECTED_TEAM_ID.$EXPECTED_BUNDLE_ID" \
+      || fail "keychain-access-groups must include $EXPECTED_TEAM_ID.$EXPECTED_BUNDLE_ID when present"
   fi
 
   if command -v spctl >/dev/null 2>&1; then
@@ -372,18 +443,24 @@ assert_backend_routing_config() {
   local env_file="$APP_BUNDLE/Contents/Resources/.env"
   [[ -f "$env_file" ]] || fail "release .env missing"
 
-  grep -Eq '^OMI_PYTHON_API_URL=https://api[.]omi[.]me/?$' "$env_file" \
-    || fail "release .env must point OMI_PYTHON_API_URL at https://api.omi.me"
-  grep -q '^OMI_DESKTOP_API_URL=https://desktop-backend-' "$env_file" \
-    || fail "release .env must include hosted OMI_DESKTOP_API_URL"
+  grep -Fqx "OMI_PYTHON_API_URL=$EXPECTED_PYTHON_API_URL" "$env_file" \
+    || fail "artifact .env must use expected OMI_PYTHON_API_URL"
+  grep -Fqx "OMI_DESKTOP_API_URL=$EXPECTED_DESKTOP_API_URL" "$env_file" \
+    || fail "artifact .env must use expected OMI_DESKTOP_API_URL"
   ! grep -Eq 'localhost|127[.]0[.]0[.]1|0[.]0[.]0[.]0|ngrok|dev-serve' "$env_file" \
-    || fail "release .env contains local/dev tunnel backend reference"
+    || fail "artifact .env contains a local/dev tunnel backend reference"
 
-  pass "Backend routing config has no local/dev leakage"
+  pass "Backend routing config matches the declared external backend"
 }
 
 assert_sparkle_and_artifacts() {
-  [[ "$EXPECTED_CHANNEL" =~ ^(beta|stable|staging)$ ]] || fail "unexpected release channel: $EXPECTED_CHANNEL"
+  [[ "$EXPECTED_CHANNEL" =~ ^(beta|stable|staging|preview)$ ]] || fail "unexpected release channel: $EXPECTED_CHANNEL"
+  if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
+    [[ "$EXPECTED_CHANNEL" == "preview" ]] || fail "external preview artifacts must use the preview channel label"
+    [[ -z "$SPARKLE_ZIP" ]] || fail "external previews must not publish a shared Sparkle ZIP"
+  else
+    [[ "$EXPECTED_CHANNEL" != "preview" ]] || fail "only external previews may use the preview channel label"
+  fi
   pass "Expected channel label recorded as $EXPECTED_CHANNEL"
   if [[ -n "$SOURCE_APP_BUNDLE" ]]; then
     assert_bundle_matches_current "$SOURCE_APP_BUNDLE" "source --app"
@@ -418,7 +495,9 @@ assert_sparkle_and_artifacts() {
   fi
 
   [[ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]] || fail "Sparkle.framework missing"
-  if [[ -n "$SPARKLE_ZIP" ]]; then
+  if [[ "$IS_EXTERNAL_PREVIEW" == true ]]; then
+    pass "External preview is excluded from shared Sparkle publishing"
+  elif [[ -n "$SPARKLE_ZIP" ]]; then
     pass "Sparkle/update metadata and authoritative ZIP artifacts are present"
   else
     pass "Sparkle framework metadata is present"
@@ -471,8 +550,21 @@ run_launch_probe() {
   executable="$APP_BUNDLE/Contents/MacOS/$(plist_read CFBundleExecutable)"
   [[ -x "$executable" ]] || fail "executable missing before launch"
 
+  # The callback-only probe deliberately exits after atomically recording its
+  # result. Run the bundle executable directly so its opt-in result-path
+  # environment is deterministic; LaunchServices does not guarantee that it
+  # propagates shell environment variables into a newly launched app.
+  if [[ "$RUN_NOTIFICATION_CALLBACK_CANARY" == true ]]; then
+    OMI_NOTIFICATION_CALLBACK_SMOKE_RESULT_PATH="$NOTIFICATION_CALLBACK_MARKER" \
+      "$executable" >/tmp/omi-signed-artifact-smoke.out 2>/tmp/omi-signed-artifact-smoke.err &
+    SMOKE_PID=$!
+    pass "Signed app launched for UserNotifications callback canary"
+    return 0
+  fi
+
   open -n "$APP_BUNDLE" >/tmp/omi-signed-artifact-smoke.out 2>/tmp/omi-signed-artifact-smoke.err \
     || fail "LaunchServices failed to open signed app"
+
   sleep 8
   SMOKE_PID="$(pgrep -f "$executable" | head -1 || true)"
   [[ -n "$SMOKE_PID" ]] || {
@@ -485,6 +577,67 @@ run_launch_probe() {
   }
 
   pass "Signed app launches and remains alive"
+}
+
+prepare_notification_callback_canary() {
+  [[ "$RUN_NOTIFICATION_CALLBACK_CANARY" == true ]] || return 0
+  [[ "$RUN_LAUNCH" == true ]] || fail "--notification-callback-canary requires --launch"
+
+  if [[ -z "$NOTIFICATION_CALLBACK_MARKER" ]]; then
+    NOTIFICATION_CALLBACK_MARKER="$(mktemp "${TMPDIR:-/tmp}/omi-notification-callback.XXXXXX")"
+    NOTIFICATION_CALLBACK_MARKER_IS_TEMP=true
+  fi
+  rm -f "$NOTIFICATION_CALLBACK_MARKER"
+}
+
+run_notification_callback_canary() {
+  [[ "$RUN_NOTIFICATION_CALLBACK_CANARY" == true ]] || return 0
+  [[ -n "$NOTIFICATION_CALLBACK_MARKER" ]] \
+    || fail "notification callback canary was not prepared"
+
+  local deadline=$((SECONDS + TIMEOUT_SECONDS))
+  while (( SECONDS < deadline )); do
+    if [[ -f "$NOTIFICATION_CALLBACK_MARKER" && ! -L "$NOTIFICATION_CALLBACK_MARKER" ]] \
+      && [[ "$(stat -f '%Lp' "$NOTIFICATION_CALLBACK_MARKER")" == "600" ]]; then
+      break
+    fi
+    if [[ -n "${SMOKE_PID:-}" ]] && ! kill -0 "$SMOKE_PID" >/dev/null 2>&1; then
+      fail "signed app exited before the UserNotifications callback completed"
+    fi
+    sleep 1
+  done
+
+  [[ -f "$NOTIFICATION_CALLBACK_MARKER" && ! -L "$NOTIFICATION_CALLBACK_MARKER" ]] \
+    && [[ "$(stat -f '%Lp' "$NOTIFICATION_CALLBACK_MARKER")" == "600" ]] \
+    || fail "UserNotifications callback marker was not securely written within ${TIMEOUT_SECONDS}s"
+
+  NOTIFICATION_CALLBACK_PROOF="$(python3 - "$NOTIFICATION_CALLBACK_MARKER" "$EXPECTED_BUNDLE_ID" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+marker_path, expected_bundle_id = sys.argv[1:]
+try:
+    marker = Path(marker_path).read_text(encoding="utf-8").strip()
+except OSError as error:
+    raise SystemExit(f"invalid UserNotifications callback marker: {error}")
+match = re.fullmatch(r"main_actor=true authorization_status=(\d+)", marker)
+if match is None:
+    raise SystemExit("UserNotifications callback marker must prove main_actor=true and an authorization status")
+
+print(json.dumps({
+    "schema": 1,
+    "event": "user-notifications-settings-callback-completed",
+    "bundle_id": expected_bundle_id,
+    "main_actor": True,
+    "authorization_status": int(match.group(1)),
+    "validated": True,
+}, sort_keys=True))
+PY
+)" || fail "UserNotifications callback marker did not prove callback completion"
+
+  pass "UserNotifications settings callback completion canary passed"
 }
 
 run_auth_probe() {
@@ -593,9 +746,11 @@ main() {
   record_artifact "app_executable" "$APP_BUNDLE/Contents/MacOS/$(plist_read CFBundleExecutable)"
 
   maybe_copy_for_launch
+  prepare_notification_callback_canary
   [[ "$RUN_NETWORK" == true ]] && run_network_probes
   [[ "$RUN_AUTH_STORAGE_CANARY" == true ]] && run_auth_storage_canary
   [[ "$RUN_LAUNCH" == true ]] && run_launch_probe
+  run_notification_callback_canary
   [[ "$RUN_AUTH" == true ]] && run_auth_probe
   [[ "$RUN_CHAT" == true ]] && run_chat_probe
   [[ "$RUN_PERMISSIONS" == true ]] && run_permission_surface_probe

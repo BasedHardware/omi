@@ -9,8 +9,10 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from scripts.deploy_status_report import (
     Finding,
+    candidate_acceptance_tracker,
     load_json,
     parse_expected_traffic,
+    render_candidate_acceptance_report,
     render_cloud_run_report,
     render_gke_report,
 )
@@ -178,3 +180,35 @@ def test_cloud_run_report_uses_state_project_region_when_cli_project_missing() -
 
 def test_secret_key_verifier_reads_expected_keys_without_secret_values() -> None:
     assert expected_keys(FIXTURES / 'backend_secrets_values.yaml') == {'OPENAI_API_KEY', 'SENTINEL_FAKE_ONLY'}
+
+
+def test_candidate_tracker_records_the_failed_contract_without_candidate_url(tmp_path) -> None:
+    manifest = tmp_path / 'manifest.json'
+    evidence = tmp_path / 'evidence.json'
+    manifest.write_text('{"schema_version":1,"services":{"backend":{"contract":"what_matters_now"}}}', encoding='utf-8')
+    evidence.write_text(
+        '{"schema_version":1,"status":"FAIL","checks":[{"service":"backend","contract":"what_matters_now","status":"FAIL"}]}',
+        encoding='utf-8',
+    )
+
+    tracker = candidate_acceptance_tracker(manifest_path=manifest, evidence_path=evidence)
+    report, findings = render_candidate_acceptance_report(tracker)
+
+    assert tracker['status'] == 'FAIL'
+    assert tracker['failed_contract_category'] == 'what_matters_now'
+    assert 'candidate contract what_matters_now failed before traffic promotion' in findings[0].message
+    assert 'candidate.example' not in report
+
+
+def test_candidate_tracker_marks_missing_evidence_not_run(tmp_path) -> None:
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text('{"schema_version":1,"services":{"backend-sync":{"contract":"health"}}}', encoding='utf-8')
+
+    tracker = candidate_acceptance_tracker(manifest_path=manifest, evidence_path=tmp_path / 'missing.json')
+
+    assert tracker == {
+        'schema_version': 1,
+        'status': 'NOT_RUN',
+        'failed_contract_category': None,
+        'checks': [{'service': 'backend-sync', 'contract': 'health', 'status': 'NOT_RUN'}],
+    }

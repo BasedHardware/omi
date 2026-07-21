@@ -1,12 +1,10 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct TryAskingPopupView: View {
   let suggestions: [String]
   let onAsk: (String) -> Void
   let onDismiss: () -> Void
-
-  private let calloutAmber = Color(hex: 0xE3BF63)
 
   var body: some View {
     GeometryReader { proxy in
@@ -22,20 +20,20 @@ struct TryAskingPopupView: View {
           popupContent
         }
         .frame(width: popupWidth, height: popupHeight)
-        .padding(26)
+        .padding(OmiSpacing.xxl)
         .background(
           RoundedRectangle(cornerRadius: 28, style: .continuous)
             .fill(OmiColors.backgroundSecondary.opacity(0.98))
         )
         .overlay(
           RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .stroke(calloutAmber.opacity(0.18), lineWidth: 1)
+            .stroke(Color.white.opacity(0.10), lineWidth: 1)
         )
         .overlay(alignment: .topLeading) {
           RoundedRectangle(cornerRadius: 28, style: .continuous)
             .fill(
               LinearGradient(
-                colors: [calloutAmber.opacity(0.12), .clear],
+                colors: [Color.white.opacity(0.06), .clear],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
               )
@@ -54,7 +52,7 @@ struct TryAskingPopupView: View {
               )
           }
           .buttonStyle(.plain)
-          .padding(18)
+          .padding(OmiSpacing.lg)
         }
         .shadow(color: .black.opacity(0.4), radius: 30, x: 0, y: 16)
       }
@@ -62,19 +60,19 @@ struct TryAskingPopupView: View {
   }
 
   private var popupContent: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      HStack(spacing: 8) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "sparkles")
           .font(.system(size: 11, weight: .semibold))
         Text("Suggested first ask")
           .font(.system(size: 12, weight: .semibold))
       }
-      .foregroundColor(calloutAmber)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
+      .foregroundColor(OmiColors.textSecondary)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
       .background(
         Capsule()
-          .fill(calloutAmber.opacity(0.14))
+          .fill(Color.white.opacity(0.08))
       )
 
       Text("What would you like to ask omi first?")
@@ -86,15 +84,15 @@ struct TryAskingPopupView: View {
         .foregroundColor(OmiColors.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
 
-      VStack(spacing: 14) {
+      VStack(spacing: OmiSpacing.md) {
         ForEach(suggestions, id: \.self) { suggestion in
           Button {
             onAsk(suggestion)
           } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "sparkles")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(calloutAmber)
+                .foregroundColor(OmiColors.textSecondary)
 
               Text(suggestion)
                 .font(.system(size: 15, weight: .medium))
@@ -108,14 +106,14 @@ struct TryAskingPopupView: View {
             }
             .contentShape(Rectangle())
             .foregroundColor(OmiColors.textPrimary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.lg)
             .background(
-              RoundedRectangle(cornerRadius: 16, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                 .fill(OmiColors.backgroundTertiary.opacity(0.82))
             )
             .overlay(
-              RoundedRectangle(cornerRadius: 16, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
                 .stroke(OmiColors.backgroundQuaternary.opacity(0.9), lineWidth: 1)
             )
           }
@@ -124,7 +122,7 @@ struct TryAskingPopupView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    .padding(12)
+    .padding(OmiSpacing.md)
   }
 }
 
@@ -134,10 +132,9 @@ struct PromptSuggestionBanner: View {
   let onAsk: (String) -> Void
   let onDismiss: () -> Void
 
-  private let calloutAmber = Color(hex: 0xE3BF63)
   private let bannerSurface = OmiColors.backgroundSecondary
-  private let bannerSurfaceShadow = Color(hex: 0x22201C)
-  private let bannerStroke = Color(hex: 0x4E4535)
+  private let bannerSurfaceShadow = Color(hex: 0x1C1C1E)
+  private let bannerStroke = Color(hex: 0x3A3A3C)
   private let bannerPrimaryText = OmiColors.textPrimary
   private let bannerSecondaryText = OmiColors.textSecondary
   private let bannerChipFill = OmiColors.backgroundTertiary
@@ -166,22 +163,24 @@ struct PromptSuggestionBanner: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Button(action: onOpen) {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           Text("Next step -> Ask omi")
             .font(.system(size: 20, weight: .semibold, design: .serif))
             .foregroundColor(bannerPrimaryText)
 
-          Text("Use your real screen and your existing context to get value quickly. Tap to open a few suggested questions.")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(bannerSecondaryText)
+          Text(
+            "Use your real screen and your existing context to get value quickly. Tap to open a few suggested questions."
+          )
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(bannerSecondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
       .buttonStyle(.plain)
 
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         ForEach(Array(suggestions.prefix(3)), id: \.self) { suggestion in
           Button {
             onAsk(suggestion)
@@ -190,8 +189,8 @@ struct PromptSuggestionBanner: View {
               .font(.system(size: 12, weight: .semibold))
               .foregroundColor(bannerPrimaryText)
               .lineLimit(1)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 9)
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.sm)
               .background(
                 Capsule()
                   .fill(bannerChipFill)
@@ -206,10 +205,10 @@ struct PromptSuggestionBanner: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 22)
-    .padding(.vertical, 18)
+    .padding(.horizontal, OmiSpacing.xl)
+    .padding(.vertical, OmiSpacing.lg)
     .background(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .fill(
           LinearGradient(
             colors: [bannerSurface, bannerSurfaceShadow],
@@ -219,14 +218,14 @@ struct PromptSuggestionBanner: View {
         )
     )
     .overlay(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .stroke(bannerStroke.opacity(0.9), lineWidth: 1)
     )
     .overlay(alignment: .topLeading) {
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .fill(
           LinearGradient(
-            colors: [calloutAmber.opacity(0.15), .clear],
+            colors: [Color.white.opacity(0.06), .clear],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
           )
@@ -236,7 +235,7 @@ struct PromptSuggestionBanner: View {
     .overlay(alignment: .topTrailing) {
       ZStack(alignment: .topTrailing) {
         Circle()
-          .fill(calloutAmber.opacity(0.08))
+          .fill(Color.white.opacity(0.05))
           .frame(width: 120, height: 120)
           .blur(radius: 34)
           .offset(x: 34, y: -42)
@@ -253,7 +252,7 @@ struct PromptSuggestionBanner: View {
             )
         }
         .buttonStyle(.plain)
-        .padding(14)
+        .padding(OmiSpacing.md)
       }
     }
     .shadow(color: .black.opacity(0.28), radius: 22, x: 0, y: 14)

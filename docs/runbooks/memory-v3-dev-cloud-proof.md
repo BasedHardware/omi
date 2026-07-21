@@ -140,6 +140,37 @@ The proof checks:
 - canonical lifecycle fields such as `layer`/`memory_tier` are present when items are returned;
 - unauthenticated `/v3/memories` fails 401/403.
 
+## Repair a legacy-shaped V3 state head
+
+If `/v3/memories` fails because `users/{uid}/memory_state/head` still has
+legacy-ledger fields but no valid trusted V3 fields, use the scoped repair
+after the backend containing it is deployed. It reads the canonical
+`memory_state/apply_control` document and writes only the six trusted head
+metadata fields; it does not read or write memory content, projection items,
+rollout gates, or vectors.
+
+```bash
+cd backend
+python3 scripts/repair_memory_state_head.py \
+  --uid <uid> \
+  --firestore-project based-hardware
+```
+
+The default command is a dry run. Confirm that it reports `repair_required`,
+then use the explicit confirmation to apply and revalidate the V3 trust
+contract:
+
+```bash
+python3 scripts/repair_memory_state_head.py \
+  --uid <uid> \
+  --firestore-project based-hardware \
+  --apply \
+  --confirm-uid <uid>
+```
+
+If it reports `blocked_invalid_apply_control`, stop: the canonical apply
+control state is not trustworthy enough to derive a repair.
+
 Search, vector, MCP/developer, and other default-read surfaces are reported as `not_checked` unless a route-specific harness is added. Do not treat a passing first-user `/v3/memories` proof as full Gate 2 GO.
 
 Prepare a local evidence-bundle skeleton for the deployed dev-cloud CI/proof job to fill:

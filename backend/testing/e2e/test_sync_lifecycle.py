@@ -118,7 +118,7 @@ def _patch_sync_pipeline(
             status=ConversationStatus.completed,
             is_locked=conversation.is_locked,
         )
-        conversations_db.upsert_conversation(uid, conversation_obj.dict())
+        conversations_db.upsert_conversation_with_lifecycle(uid, conversation_obj.dict())
         return conversation_obj
 
     def fake_reprocess_after_update(uid, conversation_id, language):

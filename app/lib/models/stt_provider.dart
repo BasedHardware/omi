@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/models/stt_response_schema.dart';
@@ -402,22 +400,21 @@ class SttProviderConfig {
 
   /// Available request config templates for custom STT configuration
   static Map<String, Map<String, dynamic>> get requestTemplates => {
-        'OpenAI':
-            get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
-        'Deepgram': get(
-          SttProvider.deepgramLive,
-        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
-        'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
-        'Google Gemini': get(
-          SttProvider.geminiLive,
-        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
-        'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
-      };
+    'OpenAI': get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
+    'Deepgram': get(
+      SttProvider.deepgramLive,
+    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
+    'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
+    'Google Gemini': get(
+      SttProvider.geminiLive,
+    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
+    'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
+  };
 
   Map<String, dynamic> getFullTemplateJson() => {
-        'request_type': requestType,
-        'response_schema': responseSchema.toJson(),
-      };
+    'request_type': requestType,
+    'response_schema': responseSchema.toJson(),
+  };
 
   /// Build complete request config with API key, language, and model
   /// Returns unified structure: url, request_type, headers, params, audio_field_name

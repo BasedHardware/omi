@@ -7,11 +7,10 @@
  * the Omi Agent feature. This bridge runs locally on the user's Mac.
  *
  * Session lifecycle:
- * 1. warmup  → session/new (system prompt applied here, once)
- * 2. query   → session reused; systemPrompt field in the message is ignored
- *              unless the session was invalidated (cwd change → new session/new)
- * 3. The ACP SDK owns conversation history after session/new — do not inject
- *    it into the system prompt.
+ * 1. resolve_surface_session pins an immutable kernel-owned execution profile.
+ * 2. warmup validates that session/profile generation without configuring it.
+ * 3. query names only the session and user input; the kernel supplies provider,
+ *    model, working directory, system policy, and the admitted context snapshot.
  *
  * Token counts:
  * session/prompt drives one or more internal Anthropic API calls (initial
@@ -28,9 +27,9 @@
  */
 
 import { createInterface } from "readline";
+import packageMetadata from "../package.json" with { type: "json" };
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { randomUUID } from "crypto";
 import { createServer as createNetServer, type Socket } from "net";
 import { homedir, tmpdir } from "os";
 import { unlinkSync, appendFileSync } from "fs";
@@ -38,54 +37,125 @@ import type {
   InboundMessage,
   ControlToolRequestMessage,
   DirectControlToolRequestMessage,
+  ExternalSurfaceRunBeginMessage,
+  ExternalSurfaceToolInvokeMessage,
+  ExternalSurfaceRunCompleteMessage,
   OutboundMessage,
   OutboundMessageDraft,
-  QueryScopedOutbound,
   QueryMessage,
   WarmupMessage,
+  AuthorizedToolExecutionResultMessage,
+  ConfigureDefaultExecutionProfileMessage,
+  ResolveSurfaceSessionMessage,
+  MigrateSessionExecutionProfileMessage,
+  ContextSourceUpdateMessage,
+  ImportLegacyMainChatSessionsMessage,
+  InvalidateSessionMessage,
+  JournalRecordTurnMessage,
+  JournalRecordExchangeMessage,
+  JournalImportRemoteTurnMessage,
+  JournalUpdateTurnMessage,
+  JournalTerminalizeTurnMessage,
+  JournalListTurnsMessage,
+  JournalClearTurnsMessage,
+  EnsureAgentSpawnJournalMessage,
+  JournalBackendSyncResultMessage,
+  JournalBackendDeleteResultMessage,
+  JournalBackendReconcileResultMessage,
+  RefreshOwnerMessage,
+  RevokeOwnerRuntimeMessage,
   RefreshTokenMessage,
-  RecordSurfaceTurnMessage,
-  GetVoiceSeedContextMessage,
-  GetKernelTurnTailMessage,
-  ClearOwnerSurfaceStateMessage,
-  ProjectCrossSurfaceTurnMessage,
-  MergeFloatingChatIntoMainChatMessage,
   AuthMethod,
 } from "./protocol.js";
-import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
+import {
+  PROTOCOL_VERSION,
+  RUNTIME_CAPABILITIES,
+  assertJournalRemoteTurnInput,
+  assertPublicJournalRecordAuthority,
+  assertPublicJournalUpdateAuthority,
+  ensureOutboundProtocolVersion,
+  isInboundResponseMessage,
+  journalTerminalizationDisposition,
+} from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
-import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
+import { isProductionAdapterId, type PromptBlock, type RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter, isRecoverableAcpAuthError } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
-import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
 import {
   adapterActivationError,
   adapterIdForHarnessMode,
   ensureRegisteredAdapter,
 } from "./runtime/adapter-selection.js";
 import {
-  activeControlToolOwnerId,
-  AGENT_CONTROL_TOOL_NAMES,
   SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
-  controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
-  registerSignedDirectControlOwner,
-  resolveControlRequestContext,
-  withMergedOwnerGuard,
   DEFAULT_LOCAL_OWNER_ID,
   type AgentControlToolContext,
-  type ResolvedControlRequestContext,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
-import { failureFromError } from "./runtime/failures.js";
-import type { ConversationTurnImportEntry } from "./runtime/conversation-turns.js";
+import {
+  failureFromError,
+  sanitizeProcessDiagnostic,
+  unexpectedQueryErrorDiagnostic,
+} from "./runtime/failures.js";
 import { providerBoundaryForAdapter } from "./runtime/execution-policy.js";
+import { executionRoleForSurface } from "./runtime/execution-policy.js";
+import type { AuthorizedRunToolInvocation, RunToolExecutionLease } from "./runtime/run-tool-capability.js";
+import {
+  compactRealtimeSpawnToolResult,
+  parseAgentSpawnProducerJournalDescriptor,
+} from "./runtime/agent-spawn-journal.js";
+import {
+  finalizeRelayToolResult,
+  finalizedToolResultOutcome,
+  type RelayToolResultIdentity,
+} from "./runtime/relay-tool-result.js";
+import { LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY } from "./runtime/surface-session.js";
+import {
+  ackBackendConversationDeleteOutbox,
+  ackBackendTurnOutboxWithWakes,
+  applyBackendReconcilePage,
+  beginBackendReconcilesForOwner,
+  clearJournalConversation,
+  classifyBackendTurnResultDisposition,
+  drainBackendConversationDeleteOutbox,
+  drainBackendTurnOutbox,
+  failBackendConversationDeleteOutbox,
+  failBackendReconcile,
+  failBackendTurnOutbox,
+  journalTurnForSurfaceProjection,
+  journalTurnChangedWakes,
+  importRemoteJournalTurn,
+  listJournalTurns,
+  recordJournalExchange,
+  recordJournalTurn,
+  settleClearedBackendTurnClaim,
+  assertPublicJournalUpdatePolicy,
+  terminalizeJournalTurn,
+  updateJournalTurn,
+} from "./runtime/conversation-journal.js";
+import { DirectControlExecutionBroker } from "./runtime/direct-control-execution.js";
+import {
+  authorizeRuntimeTokenRefresh,
+  establishRuntimeOwner,
+  requireActiveRuntimeOwner,
+  runRuntimeOwnerRevocationBarrier,
+  runtimeOwnerForEffects,
+} from "./runtime/runtime-owner-authority.js";
+import type {
+  ConversationContentBlock,
+  AgentEvent,
+  ConversationResource,
+  ConversationTurn,
+  ConversationTurnOrigin,
+  ConversationTurnStatus,
+} from "./runtime/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -111,30 +181,15 @@ function send(msg: OutboundMessageDraft): void {
   }
 }
 
-function withQueryCorrelation<T extends OutboundMessageDraft>(
-  msg: T,
-  query: QueryMessage,
-  adapterSessionId?: string
-): T {
-  return {
-    ...msg,
-    protocolVersion: PROTOCOL_VERSION,
-    requestId: query.requestId,
-    clientId: query.clientId,
-    sessionId: query.sessionId,
-    runId: query.runId,
-    attemptId: query.attemptId,
-    eventId: query.eventId,
-    adapterSessionId,
-  };
-}
-
 function runtimeErrorEnvelope(error: unknown): { message: string; failure: ReturnType<typeof failureFromError> } {
-  const failure = failureFromError(error, {
+  const message = sanitizeProcessDiagnostic(error instanceof Error ? error.message : String(error))
+    || "Runtime request rejected";
+  const failure = {
     code: "runtime_error",
-    source: "runtime",
-    userMessage: error instanceof Error ? error.message : String(error),
-  });
+    source: "runtime" as const,
+    retryable: false,
+    userMessage: message,
+  };
   return { message: failure.userMessage, failure };
 }
 
@@ -161,54 +216,371 @@ function agentArtifactsDir(): string {
 let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
-const activeControlToolOwnersByRequest = new Map<string, string>();
-const activeControlToolOwnersByRun = new Map<string, string>();
-const activeControlToolOwnersByAttempt = new Map<string, string>();
-const activeControlToolRequestKeyByRun = new Map<string, string>();
-const activeControlToolAttemptIdsByRun = new Map<string, Set<string>>();
-let toolCallCorrelation:
-  | ((input: { requestId?: string; clientId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
-  | undefined;
+let runtimeKernel: AgentRuntimeKernel | undefined;
+let currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
+let ownerAuthorityEstablished = false;
+interface OwnerRuntimeRevocationReceipt {
+  ownerId: string;
+  revokedRunIds: string[];
+  invalidatedBindingIds: string[];
+}
+let lastOwnerRuntimeRevocation: OwnerRuntimeRevocationReceipt | null = null;
+const establishedOwnerId = () => runtimeOwnerForEffects({
+  ownerId: currentOwnerId,
+  established: ownerAuthorityEstablished,
+});
+const directControlExecutions = new DirectControlExecutionBroker({
+  activeOwnerId: establishedOwnerId,
+});
+const capabilityRejectionCounts = new Map<string, number>();
 
-// Pending tool call promises — resolved when Swift sends back results
+function resolveActiveOwner(requestedOwnerId: string | undefined): string {
+  return requireActiveRuntimeOwner(
+    { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
+    requestedOwnerId,
+  );
+}
+
+function journalOrigin(raw: unknown): ConversationTurnOrigin {
+  switch (raw) {
+    case "typed_chat":
+    case "floating_chat":
+    case "realtime_voice":
+    case "agent_runtime":
+    case "notification":
+    case "tool_runtime":
+    case "task_chat":
+    case "workstream":
+    case "swift_backfill":
+    case "legacy":
+      return raw;
+    case "proactive_notification":
+      return "notification";
+    case "floating_spawn":
+      return "agent_runtime";
+    case "floating_provider_unavailable":
+    case "floating_invalid_brief":
+      return "floating_chat";
+    default:
+      throw new Error("Unknown journal turn origin");
+  }
+}
+
+// Pending Swift execution is keyed only by the canonical run capability tuple.
 const pendingToolCalls = new Map<
   string,
   {
     client: Socket;
     callId: string;
-    clientId?: string;
-    requestId?: string;
-    resolve: (result: string) => void;
+    invocation: AuthorizedRunToolInvocation;
     timeout: ReturnType<typeof setTimeout>;
   }
 >();
-const TERMINAL_RUN_EVENT_TYPES = new Set(["run.succeeded", "run.failed", "run.cancelled", "run.timed_out", "run.orphaned"]);
-const TERMINAL_ATTEMPT_EVENT_TYPES = new Set(["attempt.failed", "attempt.cancelled", "attempt.timed_out", "attempt.orphaned"]);
 
-function registerActiveControlOwner(requestKey: string, ownerId: string): boolean {
-  const existingOwnerId = activeControlToolOwnersByRequest.get(requestKey);
-  if (existingOwnerId && existingOwnerId !== ownerId) {
-    throw new Error("Request owner context already active for clientId/requestId");
+const pendingExternalToolCalls = new Map<
+  string,
+  {
+    request: ExternalSurfaceToolInvokeMessage;
+    invocation: AuthorizedRunToolInvocation;
+    timeout: ReturnType<typeof setTimeout>;
   }
-  const inserted = !existingOwnerId;
-  activeControlToolOwnersByRequest.set(requestKey, ownerId);
-  return inserted;
+>();
+
+const TERMINAL_RUN_TOOL_EVENTS = new Set([
+  "run.succeeded",
+  "run.failed",
+  "run.cancelled",
+  "run.timed_out",
+  "run.orphaned",
+  "attempt.succeeded",
+  "attempt.failed",
+  "attempt.cancelled",
+  "attempt.timed_out",
+  "attempt.orphaned",
+]);
+
+function toolCallPendingKey(input: {
+  invocationId: string;
+}): string {
+  return input.invocationId;
 }
 
-function toolCallPendingKey(input: { callId: string; clientId?: string; requestId?: string }): string {
-  return `scoped\0${input.clientId ?? ""}\0${input.requestId ?? ""}\0${input.callId}`;
+function relayResultIdentity(
+  callId: string,
+  invocation?: AuthorizedRunToolInvocation,
+): RelayToolResultIdentity {
+  if (invocation) {
+    return {
+      invocationId: invocation.invocationId,
+      ownerId: invocation.ownerId,
+      sessionId: invocation.sessionId,
+      runId: invocation.runId,
+      attemptId: invocation.attemptId,
+      toolName: invocation.canonicalToolName,
+    };
+  }
+  // Capability rejection occurs before a kernel-owned invocation exists. It
+  // still receives a canonical envelope, but cannot claim a fabricated run.
+  return {
+    invocationId: `relay:${callId}`,
+    ownerId: currentOwnerId,
+    sessionId: "unknown",
+    runId: "unknown",
+    attemptId: "unknown",
+    toolName: "unknown_relay_tool",
+  };
+}
+
+function finalizeRelayResult(
+  callId: string,
+  result: string,
+  invocation?: AuthorizedRunToolInvocation,
+  outcome?: "succeeded" | "failed",
+): string {
+  return finalizeRelayToolResult({
+    identity: relayResultIdentity(callId, invocation),
+    result,
+    outcome,
+    kernel: runtimeKernel,
+    artifactRoot: agentArtifactsDir(),
+  });
 }
 
 /** Resolve a pending tool call with a result from Swift */
-function resolveToolCall(msg: { callId: string; result: string; clientId?: string; requestId?: string }): void {
+function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
   const key = toolCallPendingKey(msg);
   const pending = pendingToolCalls.get(key);
   if (pending) {
+    try {
+      const result = finalizeRelayResult(pending.callId, msg.result, pending.invocation, msg.outcome);
+      const finalizedOutcome = controlToolInvocationOutcome(result);
+      runtimeKernel?.completeRunToolInvocation({
+        invocationId: msg.invocationId,
+        ownerId: msg.ownerId,
+        sessionId: msg.sessionId,
+        runId: msg.runId,
+        attemptId: msg.attemptId,
+        profileGeneration: msg.profileGeneration,
+        manifestVersion: msg.manifestVersion,
+        manifestDigest: msg.manifestDigest,
+        daemonBootEpoch: msg.daemonBootEpoch,
+        executionGeneration: msg.executionGeneration,
+        inputHash: msg.inputHash,
+        capabilityRef: pending.invocation.capabilityRef,
+        activeOwnerId: currentOwnerId,
+        outcome: finalizedOutcome,
+        result,
+      });
+      pendingToolCalls.delete(key);
+      clearTimeout(pending.timeout);
+      writeFinalizedRelayToolResult(pending.client, pending.callId, result);
+    } catch (error) {
+      logErr(`Rejected authorized tool execution result invocation=${msg.invocationId}: ${error}`);
+    }
+    return;
+  }
+  const external = pendingExternalToolCalls.get(key);
+  if (external) {
+    try {
+      const result = finalizeRelayResult(external.request.requestId, msg.result, external.invocation, msg.outcome);
+      const finalizedOutcome = controlToolInvocationOutcome(result);
+      runtimeKernel?.completeRunToolInvocation({
+        invocationId: msg.invocationId,
+        ownerId: msg.ownerId,
+        sessionId: msg.sessionId,
+        runId: msg.runId,
+        attemptId: msg.attemptId,
+        profileGeneration: msg.profileGeneration,
+        manifestVersion: msg.manifestVersion,
+        manifestDigest: msg.manifestDigest,
+        daemonBootEpoch: msg.daemonBootEpoch,
+        executionGeneration: msg.executionGeneration,
+        inputHash: msg.inputHash,
+        capabilityRef: external.invocation.capabilityRef,
+        activeOwnerId: currentOwnerId,
+        outcome: finalizedOutcome,
+        result,
+      });
+      pendingExternalToolCalls.delete(key);
+      clearTimeout(external.timeout);
+      send({
+        type: "external_surface_tool_result",
+        requestId: external.request.requestId,
+        clientId: external.request.clientId,
+        ownerId: external.invocation.ownerId,
+        sessionId: external.invocation.sessionId,
+        runId: external.invocation.runId,
+        attemptId: external.invocation.attemptId,
+        invocationId: external.invocation.invocationId,
+        // This acknowledges the correlated protocol request. The model-facing
+        // tool outcome remains in the canonical `result` envelope; Swift
+        // requires this transport acknowledgement to read that typed failure.
+        ok: true,
+        result,
+      });
+    } catch (error) {
+      logErr(`Rejected external authorized tool result invocation=${msg.invocationId}: ${error}`);
+    }
+    return;
+  }
+  logErr(`Warning: no pending tool invocation for invocation=${msg.invocationId}`);
+}
+
+function externalAuthorityError(error: unknown, fallbackCode: string): { code: string; message: string } {
+  const rawCode = error && typeof error === "object" && "code" in error
+    ? String((error as { code: unknown }).code)
+    : fallbackCode;
+  const code = /^[a-z0-9_]{1,64}$/.test(rawCode) ? rawCode : fallbackCode;
+  return {
+    code,
+    message: error instanceof Error ? error.message : "External surface authority rejected the request",
+  };
+}
+
+function registerPendingExternalToolCall(
+  request: ExternalSurfaceToolInvokeMessage,
+  invocation: AuthorizedRunToolInvocation,
+): { request: ExternalSurfaceToolInvokeMessage; invocation: AuthorizedRunToolInvocation; timeout: ReturnType<typeof setTimeout> } {
+  const key = toolCallPendingKey(invocation);
+  if (pendingExternalToolCalls.has(key) || pendingToolCalls.has(key)) {
+    throw Object.assign(new Error("Duplicate tool invocation"), { code: "invocation_replayed" });
+  }
+  const pending = {
+    request,
+    invocation,
+    timeout: setTimeout(() => {
+      const active = pendingExternalToolCalls.get(key);
+      if (!active) return;
+      pendingExternalToolCalls.delete(key);
+      try {
+        runtimeKernel?.markRunToolInvocationOutcomeUnknown(active.invocation, "swift_tool_timeout");
+      } catch (error) {
+        logErr(`Failed to mark external invocation outcome unknown: ${error}`);
+      }
+      send({
+        type: "external_surface_tool_result",
+        requestId: active.request.requestId,
+        clientId: active.request.clientId,
+        ownerId: active.invocation.ownerId,
+        sessionId: active.invocation.sessionId,
+        runId: active.invocation.runId,
+        attemptId: active.invocation.attemptId,
+        invocationId: active.invocation.invocationId,
+        ok: false,
+        error: { code: "swift_tool_timeout", message: "Timed out waiting for the authorized tool executor" },
+      });
+    }, 120_000),
+  };
+  pendingExternalToolCalls.set(key, pending);
+  return pending;
+}
+
+function cancelPendingExternalToolCallsForAttempt(input: {
+  ownerId: string;
+  runId: string;
+  attemptId: string;
+  errorCode: string;
+}): void {
+  for (const [key, pending] of pendingExternalToolCalls) {
+    if (
+      pending.invocation.ownerId !== input.ownerId
+      || pending.invocation.runId !== input.runId
+      || pending.invocation.attemptId !== input.attemptId
+    ) continue;
+    pendingExternalToolCalls.delete(key);
+    clearTimeout(pending.timeout);
+    try {
+      runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, input.errorCode);
+    } catch (error) {
+      logErr(`Failed to terminalize external invocation: ${error}`);
+    }
+    send({
+      type: "external_surface_tool_result",
+      requestId: pending.request.requestId,
+      clientId: pending.request.clientId,
+      ownerId: pending.invocation.ownerId,
+      sessionId: pending.invocation.sessionId,
+      runId: pending.invocation.runId,
+      attemptId: pending.invocation.attemptId,
+      invocationId: pending.invocation.invocationId,
+      ok: false,
+      error: { code: input.errorCode, message: "External surface run terminated during tool execution" },
+    });
+  }
+}
+
+function rejectPendingToolCallsForOwner(
+  ownerId: string,
+  errorCode = "owner_changed",
+  message = "Active owner changed during tool execution",
+): void {
+  for (const [key, pending] of pendingToolCalls) {
+    if (pending.invocation.ownerId !== ownerId) continue;
     pendingToolCalls.delete(key);
     clearTimeout(pending.timeout);
-    pending.resolve(msg.result);
-  } else {
-    logErr(`Warning: no pending tool call for callId=${msg.callId} clientId=${msg.clientId ?? "<missing>"} requestId=${msg.requestId ?? "<missing>"}`);
+    writeRelayToolResult(
+      pending.client,
+      pending.callId,
+      relayError(errorCode, message),
+      pending.invocation,
+      "failed",
+    );
+  }
+  for (const [key, pending] of pendingExternalToolCalls) {
+    if (pending.invocation.ownerId !== ownerId) continue;
+    pendingExternalToolCalls.delete(key);
+    clearTimeout(pending.timeout);
+    send({
+      type: "external_surface_tool_result",
+      requestId: pending.request.requestId,
+      clientId: pending.request.clientId,
+      ownerId: pending.invocation.ownerId,
+      sessionId: pending.invocation.sessionId,
+      runId: pending.invocation.runId,
+      attemptId: pending.invocation.attemptId,
+      invocationId: pending.invocation.invocationId,
+      ok: false,
+      error: { code: errorCode, message },
+    });
+  }
+}
+
+/** The broker terminalizes the ledger before subscribers see terminal events. */
+function rejectPendingToolCallsForKernelEvent(event: AgentEvent): void {
+  if (!TERMINAL_RUN_TOOL_EVENTS.has(event.type)) return;
+  const matches = (invocation: AuthorizedRunToolInvocation): boolean =>
+    !!event.runId
+    && invocation.runId === event.runId
+    && (!event.attemptId || invocation.attemptId === event.attemptId);
+  const errorCode = event.type.startsWith("attempt.") ? "attempt_terminal" : "run_terminal";
+  for (const [key, pending] of pendingToolCalls) {
+    if (!matches(pending.invocation)) continue;
+    pendingToolCalls.delete(key);
+    clearTimeout(pending.timeout);
+    writeRelayToolResult(
+      pending.client,
+      pending.callId,
+      relayError(errorCode, "Run tool authority ended before Swift returned a result"),
+      pending.invocation,
+      "failed",
+    );
+  }
+  for (const [key, pending] of pendingExternalToolCalls) {
+    if (!matches(pending.invocation)) continue;
+    pendingExternalToolCalls.delete(key);
+    clearTimeout(pending.timeout);
+    send({
+      type: "external_surface_tool_result",
+      requestId: pending.request.requestId,
+      clientId: pending.request.clientId,
+      ownerId: pending.invocation.ownerId,
+      sessionId: pending.invocation.sessionId,
+      runId: pending.invocation.runId,
+      attemptId: pending.invocation.attemptId,
+      invocationId: pending.invocation.invocationId,
+      ok: false,
+      error: { code: errorCode, message: "Run tool authority ended before Swift returned a result" },
+    });
   }
 }
 
@@ -217,7 +589,40 @@ function resolveClientToolCalls(client: Socket, result: string): void {
     if (pending.client !== client) continue;
     pendingToolCalls.delete(key);
     clearTimeout(pending.timeout);
-    pending.resolve(result);
+    try {
+      runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "relay_client_disconnected");
+    } catch (error) {
+      logErr(`Failed to mark disconnected tool invocation outcome unknown: ${error}`);
+    }
+    writeRelayToolResult(client, pending.callId, result, pending.invocation, "failed");
+  }
+}
+
+function relayError(code: string, message: string): string {
+  return JSON.stringify({ ok: false, error: { code, message } });
+}
+
+function controlToolInvocationOutcome(result: string): "succeeded" | "failed" {
+  return finalizedToolResultOutcome(result);
+}
+
+function writeRelayToolResult(
+  client: Socket,
+  callId: string,
+  result: string,
+  invocation?: AuthorizedRunToolInvocation,
+  outcome?: "succeeded" | "failed",
+): string {
+  const finalized = finalizeRelayResult(callId, result, invocation, outcome);
+  writeFinalizedRelayToolResult(client, callId, finalized);
+  return finalized;
+}
+
+function writeFinalizedRelayToolResult(client: Socket, callId: string, result: string): void {
+  try {
+    client.write(JSON.stringify({ type: "tool_result", callId, result }) + "\n");
+  } catch (error) {
+    logErr(`Failed to write relay tool result: ${error}`);
   }
 }
 
@@ -249,159 +654,204 @@ function startOmiToolsRelay(): Promise<string> {
             const msg = JSON.parse(line) as {
               type: string;
               callId: string;
+              invocationId?: string;
               name: string;
               input: Record<string, unknown>;
-              requestId?: string;
-              clientId?: string;
-              sessionId?: string;
-              runId?: string;
-              attemptId?: string;
-              adapterSessionId?: string;
-              adapterId?: string;
+              capabilityRef?: string;
             };
 
             if (msg.type === "tool_use") {
-              const requestId = msg.requestId?.trim();
-              const clientId = msg.clientId?.trim();
-              if (!requestId || !clientId) {
-                client.write(
-                  JSON.stringify({
-                    type: "tool_result",
-                    callId: msg.callId,
-                    result: "Error: missing active Omi request context for tool relay",
-                  }) + "\n"
+              const capabilityRef = msg.capabilityRef?.trim();
+              const invocationId = msg.invocationId?.trim() || msg.callId?.trim();
+              if (!runtimeKernel || !capabilityRef || !invocationId) {
+                writeRelayToolResult(
+                  client,
+                  msg.callId,
+                  relayError("missing_run_capability", "Tool relay requires an active run capability"),
                 );
                 continue;
               }
-              const resolvedCorrelation =
-                toolCallCorrelation?.({ requestId, clientId, adapterId: msg.adapterId }) ?? {};
-              const messageRequestIsActive =
-                resolvedCorrelation.requestId === requestId && resolvedCorrelation.clientId === clientId;
-              if (!messageRequestIsActive) {
-                client.write(
-                  JSON.stringify({
-                    type: "tool_result",
-                    callId: msg.callId,
-                    result: "Error: missing active Omi request context for tool relay",
-                  }) + "\n"
+              let authorized;
+              let routedProposal;
+              try {
+                routedProposal = runtimeKernel.routeRelayedRunToolProposal({
+                  capabilityRef,
+                  toolName: msg.name,
+                  toolInput: msg.input ?? {},
+                  activeOwnerId: currentOwnerId,
+                });
+                authorized = runtimeKernel.authorizeRelayedRunToolInvocation({
+                  capabilityRef,
+                  invocationId,
+                  toolName: routedProposal.toolName,
+                  toolInput: routedProposal.toolInput,
+                  activeOwnerId: currentOwnerId,
+                });
+              } catch (error) {
+                const code = error && typeof error === "object" && "code" in error
+                  ? String((error as { code: unknown }).code)
+                  : "capability_rejected";
+                writeRelayToolResult(
+                  client,
+                  msg.callId,
+                  relayError(code, error instanceof Error ? error.message : "Tool capability rejected"),
                 );
                 continue;
               }
-              if (isAgentControlToolName(msg.name)) {
+
+              if (isAgentControlToolName(authorized.canonicalToolName)) {
                 void (async () => {
-                  const controlOwnerId = activeControlToolOwnerId({
-                    requestKey: controlRequestKey({ requestId, clientId }),
-                    ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
-                  });
                   let result: string;
+                  let outcome: "succeeded" | "failed" = "succeeded";
+                  let executionLease: RunToolExecutionLease | undefined;
                   try {
+                    runtimeKernel?.markRunToolInvocationDispatched(authorized);
+                    executionLease = runtimeKernel?.acquireRunToolExecutionLease(
+                      authorized,
+                      establishedOwnerId,
+                    );
                     if (!agentControlToolContext) {
                       throw new Error("Agent runtime kernel is not ready");
                     }
                     const activeSession = requireControlSessionPolicy(
-                      resolvedCorrelation.sessionId,
-                      controlOwnerId,
+                      authorized.sessionId,
+                      authorized.ownerId,
                     );
+                    const preparedSpawn = authorized.canonicalToolName === "spawn_agent"
+                      ? runtimeKernel?.prepareAuthorizedSpawnAgentControlInvocation({
+                          ownerId: authorized.ownerId,
+                          sessionId: authorized.sessionId,
+                          runId: authorized.runId,
+                          attemptId: authorized.attemptId,
+                          invocationId: authorized.invocationId,
+                          surfaceKind: authorized.surfaceKind,
+                          toolInput: routedProposal.toolInput,
+                        })
+                      : undefined;
                     result = await handleAgentControlToolCall(
                       {
                         ...agentControlToolContext,
-                        callerSessionId: resolvedCorrelation.sessionId,
+                        callerSessionId: authorized.sessionId,
                         executionRole: activeSession.executionRole,
                         providerBoundary: activeSession.providerBoundary,
                         defaultAdapterId: activeSession.defaultAdapterId,
-                        getOwnerId: () => controlOwnerId,
+                        authorizedProducerJournal: preparedSpawn?.producerJournal,
+                        authorizedCallerRunId: preparedSpawn?.parentRunId,
+                        authorizedToolInvocation: {
+                          invocationId: authorized.invocationId,
+                          runId: authorized.runId,
+                          attemptId: authorized.attemptId,
+                          toolName: authorized.canonicalToolName,
+                        },
+                        getOwnerId: establishedOwnerId,
+                        executionLease,
                       },
-                      msg.name,
-                      msg.input ?? {},
+                      authorized.canonicalToolName,
+                      preparedSpawn?.toolInput ?? routedProposal.toolInput,
                     );
+                    outcome = controlToolInvocationOutcome(result);
                   } catch (error) {
-                    result = JSON.stringify({
-                      ok: false,
-                      error: {
-                        code: error instanceof Error && error.message === "Agent runtime kernel is not ready"
-                          ? "runtime_not_ready"
-                          : "control_tool_failed",
-                        message: error instanceof Error ? error.message : String(error),
-                      },
-                    });
-                  }
-                  try {
-                    client.write(
-                      JSON.stringify({
-                        type: "tool_result",
-                        callId: msg.callId,
-                        result,
-                      }) + "\n"
+                    outcome = "failed";
+                    const authorityError = externalAuthorityError(error, "control_tool_failed");
+                    result = relayError(
+                      error instanceof Error && error.message === "Agent runtime kernel is not ready"
+                        ? "runtime_not_ready"
+                        : authorityError.code,
+                      authorityError.message,
                     );
-                  } catch (err) {
-                    logErr(`Failed to send control tool result to omi-tools: ${err}`);
                   }
+                  executionLease?.release();
+                  const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
+                  const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+                  try {
+                    runtimeKernel?.completeRunToolInvocation({
+                      invocationId: authorized.invocationId,
+                      ownerId: authorized.ownerId,
+                      sessionId: authorized.sessionId,
+                      runId: authorized.runId,
+                      attemptId: authorized.attemptId,
+                      profileGeneration: authorized.profileGeneration,
+                      manifestVersion: authorized.manifestVersion,
+                      manifestDigest: authorized.manifestDigest,
+                      daemonBootEpoch: authorized.daemonBootEpoch,
+                      executionGeneration: authorized.executionGeneration,
+                      inputHash: authorized.inputHash,
+                      capabilityRef: authorized.capabilityRef,
+                      activeOwnerId: currentOwnerId,
+                      outcome: finalizedOutcome,
+                      result: finalizedResult,
+                    });
+                  } catch (error) {
+                    logErr(`Failed to complete runtime control invocation ${authorized.invocationId}: ${error}`);
+                  }
+                  writeFinalizedRelayToolResult(client, msg.callId, finalizedResult);
                 })();
                 continue;
               }
 
-              const correlation = {
-                ...resolvedCorrelation,
-                protocolVersion: PROTOCOL_VERSION,
-                requestId,
-                clientId,
-                ...(msg.sessionId ? { sessionId: msg.sessionId } : {}),
-                ...(msg.runId ? { runId: msg.runId } : {}),
-                ...(msg.attemptId ? { attemptId: msg.attemptId } : {}),
-                ...(msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
-              };
-
               const callId = msg.callId;
               const pendingKey = toolCallPendingKey({
-                callId,
-                clientId,
-                requestId,
+                invocationId,
               });
               if (pendingToolCalls.has(pendingKey)) {
-                client.write(
-                  JSON.stringify({
-                    type: "tool_result",
-                    callId,
-                    result: "Error: duplicate tool call id",
-                  }) + "\n"
+                writeRelayToolResult(
+                  client,
+                  callId,
+                  relayError("invocation_replayed", "Duplicate tool invocation"),
+                  authorized,
+                  "failed",
                 );
                 continue;
               }
 
-              // Create a promise that will be resolved when Swift responds.
               const timeout = setTimeout(() => {
                 const pending = pendingToolCalls.get(pendingKey);
                 if (!pending) return;
                 pendingToolCalls.delete(pendingKey);
-                pending.resolve("Error: timed out waiting for Swift tool result");
+                try {
+                  runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, "swift_tool_timeout");
+                } catch (error) {
+                  logErr(`Failed to mark timed-out tool invocation outcome unknown: ${error}`);
+                }
+                writeRelayToolResult(
+                  pending.client,
+                  pending.callId,
+                  relayError("swift_tool_timeout", "Timed out waiting for the Swift tool executor"),
+                  pending.invocation,
+                  "failed",
+                );
               }, 120_000);
               pendingToolCalls.set(pendingKey, {
                 client,
                 callId,
-                clientId: typeof correlation.clientId === "string" ? correlation.clientId : undefined,
-                requestId: typeof correlation.requestId === "string" ? correlation.requestId : undefined,
+                invocation: authorized,
                 timeout,
-                resolve: (result: string) => {
-                  // Send result back to the omi-tools stdio process
-                  try {
-                    client.write(
-                      JSON.stringify({
-                        type: "tool_result",
-                        callId,
-                        result,
-                      }) + "\n"
-                    );
-                  } catch (err) {
-                    logErr(`Failed to send tool result to omi-tools: ${err}`);
-                  }
-                },
               });
+              runtimeKernel.markRunToolInvocationDispatched(authorized);
               send({
-                type: "tool_use",
-                callId,
-                name: msg.name,
-                input: msg.input,
-                ...correlation,
+                type: "authorized_tool_execution",
+                invocationId,
+                ownerId: authorized.ownerId,
+                sessionId: authorized.sessionId,
+                runId: authorized.runId,
+                attemptId: authorized.attemptId,
+                profileGeneration: authorized.profileGeneration,
+                manifestVersion: authorized.manifestVersion,
+                manifestDigest: authorized.manifestDigest,
+                daemonBootEpoch: authorized.daemonBootEpoch,
+                executionGeneration: authorized.executionGeneration,
+                toolName: authorized.canonicalToolName,
+                input: routedProposal.toolInput,
+                inputHash: authorized.inputHash,
+                effectClass: authorized.effectClass,
+                retryPolicy: authorized.retryPolicy,
+                surfaceKind: authorized.surfaceKind,
+                externalRefKind: authorized.externalRefKind,
+                externalRefId: authorized.externalRefId,
+                originatingUserText: authorized.originatingUserText,
+                precedingAssistantText: authorized.precedingAssistantText,
+                runMode: authorized.runMode,
+                chatMode: authorized.chatMode,
               });
             }
           } catch {
@@ -473,7 +923,6 @@ acpAdapter.onProcessExit = () => {
 
 let isInitialized = false;
 let authMethods: AuthMethod[] = [];
-let authResolve: (() => void) | null = null;
 let activeAuthPromise: Promise<void> | null = null;
 let activeOAuthFlow: OAuthFlowHandle | null = null;
 
@@ -623,33 +1072,6 @@ function buildMcpServers(
       { name: "OMI_QUERY_MODE", value: mode },
       { name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" },
     ];
-    if (context) {
-      omiToolsEnv.push(
-        { name: "OMI_REQUEST_ID", value: context.requestId },
-        { name: "OMI_CLIENT_ID", value: context.clientId }
-      );
-      if (context.protocolVersion) {
-        omiToolsEnv.push({ name: "OMI_PROTOCOL_VERSION", value: String(context.protocolVersion) });
-      }
-      if (context.sessionId) {
-        omiToolsEnv.push({ name: "OMI_SESSION_ID", value: context.sessionId });
-      }
-      if (context.runId) {
-        omiToolsEnv.push({ name: "OMI_RUN_ID", value: context.runId });
-      }
-      if (context.attemptId) {
-        omiToolsEnv.push({ name: "OMI_ATTEMPT_ID", value: context.attemptId });
-      }
-      if (context.surfaceKind) {
-        omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: context.surfaceKind });
-      }
-      if (context.externalRefKind) {
-        omiToolsEnv.push({ name: "OMI_EXTERNAL_REF_KIND", value: context.externalRefKind });
-      }
-      if (context.externalRefId) {
-        omiToolsEnv.push({ name: "OMI_EXTERNAL_REF_ID", value: context.externalRefId });
-      }
-    }
     if (cwd) {
       omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
     }
@@ -697,64 +1119,11 @@ function buildMcpServers(
   return servers;
 }
 
-function withControlRunCorrelation(
-  name: string,
-  input: Record<string, unknown>,
-  fallbackClientId: string | undefined
-): { input: Record<string, unknown>; requestId?: string; clientId?: string } {
-  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "spawn_agent" && name !== "run_agent_and_wait") {
-    return { input };
-  }
-  const requestId = randomUUID();
-  const clientId = fallbackClientId ?? "omi-control-tools";
-  return {
-    input: {
-      ...input,
-      requestId,
-      clientId,
-    },
-    requestId,
-    clientId,
-  };
-}
-
-function controlRunAdapterId(name: string, input: Record<string, unknown>, defaultAdapterId: string): string | undefined {
-  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "spawn_agent" && name !== "run_agent_and_wait") {
-    return undefined;
-  }
-  const adapterId = typeof input.adapterId === "string" && input.adapterId.trim() ? input.adapterId.trim() : undefined;
-  const defaultFromInput =
-    typeof input.defaultAdapterId === "string" && input.defaultAdapterId.trim() ? input.defaultAdapterId.trim() : undefined;
-  return adapterId ?? defaultFromInput ?? defaultAdapterId;
-}
-
 function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
   if (!sessionId || !ownerId || !agentControlToolContext) {
     throw new Error("missing active control session policy");
   }
   return agentControlToolContext.kernel.executionPolicyForOwnedSession(sessionId, ownerId);
-}
-
-function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
-  return name === "spawn_background_agent" || name === "spawn_agent";
-}
-
-function controlToolResultOk(result: string): boolean {
-  try {
-    const parsed = JSON.parse(result) as { ok?: unknown };
-    return parsed.ok === true;
-  } catch {
-    return false;
-  }
-}
-
-function payloadObject(payloadJson: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(payloadJson) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
 }
 
 // --- Error handling ---
@@ -865,12 +1234,9 @@ async function main(): Promise<void> {
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
-  // ACP reads the user's local Claude Code credential.  Do not even expose it
-  // to managed Omi runs; switching to User Claude restarts the bridge with
-  // `defaultAdapterId === "acp"` and registers it there.
-  if (defaultAdapterId === "acp") {
-    registry.register("acp", () => acpAdapter, 1);
-  }
+  // Adapter registration is availability, not execution authority. Immutable
+  // session profiles decide which registered adapter a run may use.
+  registry.register("acp", () => acpAdapter, 1);
   const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
   const recoverRunInput = (adapterId: string) => {
@@ -887,59 +1253,19 @@ async function main(): Promise<void> {
       },
     };
   };
-  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage, recoverRunInput });
-  kernel.subscribe((event) => {
-    if (!event.runId) return;
-    if (event.type === "run.queued") {
-      const payload = payloadObject(event.payloadJson);
-      const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined;
-      const clientId = typeof payload.clientId === "string" ? payload.clientId : undefined;
-      const requestKey = controlRequestKey({ requestId, clientId });
-      const ownerId = requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined;
-      if (requestKey && ownerId) {
-        activeControlToolRequestKeyByRun.set(event.runId, requestKey);
-        activeControlToolOwnersByRun.set(event.runId, ownerId);
-      }
-    }
-    const runOwnerId = activeControlToolOwnersByRun.get(event.runId);
-    if (event.attemptId && runOwnerId) {
-      if (event.type === "attempt.created" || event.type === "attempt.started") {
-        const previousAttemptIds = activeControlToolAttemptIdsByRun.get(event.runId);
-        if (previousAttemptIds) {
-          for (const attemptId of previousAttemptIds) {
-            if (attemptId !== event.attemptId) {
-              activeControlToolOwnersByAttempt.delete(attemptId);
-            }
-          }
-          previousAttemptIds.clear();
-        }
-      }
-      activeControlToolOwnersByAttempt.set(event.attemptId, runOwnerId);
-      const attemptIds = activeControlToolAttemptIdsByRun.get(event.runId) ?? new Set<string>();
-      attemptIds.add(event.attemptId);
-      activeControlToolAttemptIdsByRun.set(event.runId, attemptIds);
-    }
-    if (event.attemptId && TERMINAL_ATTEMPT_EVENT_TYPES.has(event.type)) {
-      activeControlToolOwnersByAttempt.delete(event.attemptId);
-      const attemptIds = activeControlToolAttemptIdsByRun.get(event.runId);
-      attemptIds?.delete(event.attemptId);
-    }
-    if (TERMINAL_RUN_EVENT_TYPES.has(event.type)) {
-      const requestKey = activeControlToolRequestKeyByRun.get(event.runId);
-      if (requestKey) {
-        activeControlToolOwnersByRequest.delete(requestKey);
-        activeControlToolRequestKeyByRun.delete(event.runId);
-      }
-      activeControlToolOwnersByRun.delete(event.runId);
-      const attemptIds = activeControlToolAttemptIdsByRun.get(event.runId);
-      if (attemptIds) {
-        for (const attemptId of attemptIds) {
-          activeControlToolOwnersByAttempt.delete(attemptId);
-        }
-        activeControlToolAttemptIdsByRun.delete(event.runId);
-      }
-    }
+  const kernel = new AgentRuntimeKernel({
+    store,
+    registry,
+    artifactStorage,
+    recoverRunInput,
+    onToolCapabilityRejected: (code) => {
+      const count = (capabilityRejectionCounts.get(code) ?? 0) + 1;
+      capabilityRejectionCounts.set(code, count);
+      logErr(`run_tool_capability_rejected code=${code} count=${count}`);
+    },
   });
+  kernel.subscribe(rejectPendingToolCallsForKernelEvent);
+  runtimeKernel = kernel;
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
@@ -947,7 +1273,6 @@ async function main(): Promise<void> {
   const stopLocalAcpAdapters = async (): Promise<void> => {
     await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
   };
-  let currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
     if (!authToken) return false;
     piMonoAuthToken = authToken;
@@ -1008,7 +1333,7 @@ async function main(): Promise<void> {
     defaultAdapterId,
     providerBoundary: providerBoundaryForAdapter(defaultAdapterId),
     executionRole: "coordinator",
-    getOwnerId: () => currentOwnerId,
+    getOwnerId: establishedOwnerId,
     buildMcpServers,
     recoverRunInput,
   };
@@ -1025,21 +1350,169 @@ async function main(): Promise<void> {
       await startAuthFlow();
     },
     maxRecoverableRetries: 2,
+    activeOwnerId: establishedOwnerId,
   });
-  toolCallCorrelation = ({ requestId, clientId, adapterId }) => {
-    return resolveToolCallCorrelation(
-      { requestId, clientId, adapterId },
-      {
-        forRequest: (scopedRequestId, scopedClientId) =>
-          transport.toolCallCorrelationForRequest(scopedRequestId, scopedClientId),
-        forAdapter: (scopedAdapterId) => transport.toolCallCorrelationForAdapter(scopedAdapterId),
-        unscoped: () => transport.unscopedToolCallCorrelation(),
+  const revokeOwnerRuntimeWork = (
+    ownerId: string,
+    reason: "owner_changed" | "owner_state_cleared",
+  ): { errors: unknown[]; revokedRunIds: string[] } => {
+    const errors: unknown[] = [];
+    let revokedRunIds: string[] = [];
+    const attempt = (work: () => void): void => {
+      try {
+        work();
+      } catch (error) {
+        errors.push(error);
       }
+    };
+    attempt(() => { directControlExecutions.abortOwner(ownerId, reason); });
+    attempt(() => { revokedRunIds = transport.revokeOwner(ownerId, reason); });
+    attempt(() => { kernel.revokeRunToolCapabilitiesForOwner(ownerId, "owner_changed"); });
+    attempt(() => {
+      rejectPendingToolCallsForOwner(
+        ownerId,
+        reason,
+        reason === "owner_changed"
+          ? "Active owner changed during tool execution"
+          : "Owner runtime state was cleared during tool execution",
+      );
+    });
+    return { errors, revokedRunIds };
+  };
+  const throwOwnerRevocationErrors = (errors: readonly unknown[]): void => {
+    if (errors.length === 0) return;
+    const first = errors[0];
+    throw new Error(
+      `Owner runtime revocation failed at ${errors.length} boundary(s): ${first instanceof Error ? first.message : String(first)}`,
+      { cause: first },
     );
   };
-
+  const terminalizeAndClearOwnerRuntime = (
+    ownerId: string,
+    reason: "owner_changed" | "owner_state_cleared",
+  ): OwnerRuntimeRevocationReceipt => {
+    lastOwnerRuntimeRevocation = null;
+    const revocation = revokeOwnerRuntimeWork(ownerId, reason);
+    let result: ReturnType<AgentRuntimeKernel["clearOwnerState"]> | undefined;
+    try {
+      result = kernel.clearOwnerState(ownerId);
+    } catch (error) {
+      revocation.errors.push(error);
+    }
+    throwOwnerRevocationErrors(revocation.errors);
+    const receipt = {
+      ownerId,
+      revokedRunIds: revocation.revokedRunIds,
+      invalidatedBindingIds: result!.invalidatedBindingIds,
+    };
+    lastOwnerRuntimeRevocation = receipt;
+    return receipt;
+  };
+  const preferenceForOwner = (ownerId: string) => kernel.defaultExecutionProfilePreference(ownerId)
+    ?? kernel.configureDefaultExecutionProfile({
+      ownerId,
+      adapterId: defaultAdapterId,
+      modelProfile: defaultAdapterId === "pi-mono"
+        ? "omi-sonnet"
+        : defaultAdapterId === "acp" ? "claude-sonnet-4-6" : null,
+      workingDirectory: agentArtifactsDir(),
+    });
+  const resolveJournalSurface = (input: {
+    ownerId: string;
+    surfaceKind: string;
+    externalRefKind: string;
+    externalRefId: string;
+  }) => {
+    const preference = preferenceForOwner(input.ownerId);
+    return kernel.resolveSurfaceSession({
+      ownerId: input.ownerId,
+      surfaceRef: {
+        surfaceKind: input.surfaceKind,
+        externalRefKind: input.externalRefKind,
+        externalRefId: input.externalRefId,
+      },
+      defaultAdapterId: preference.adapterId,
+      providerBoundary: providerBoundaryForAdapter(preference.adapterId),
+      modelProfile: preference.modelProfile,
+      defaultCwd: preference.workingDirectory,
+      executionRole: executionRoleForSurface(input),
+    });
+  };
+  const journalTurnProjection = (turn: ConversationTurn) => ({ ...turn });
+  const sendBackendReconcile = (request: ReturnType<typeof beginBackendReconcilesForOwner>[number]) => {
+    send({
+      type: "journal_backend_reconcile",
+      requestId: request.reconcileId,
+      clientId: "kernel-journal",
+      ...request,
+    });
+  };
+  const triggerBackendReconcile = (input: { ownerId: string; conversationId?: string }) => {
+    for (const reconcile of beginBackendReconcilesForOwner(store, {
+      ownerId: input.ownerId,
+      conversationId: input.conversationId,
+      limit: input.conversationId ? 1 : 5,
+    })) {
+      sendBackendReconcile(reconcile);
+    }
+  };
+  let pumpingJournalOutbox = false;
+  const pumpJournalOutbox = () => {
+    if (!ownerAuthorityEstablished || pumpingJournalOutbox) return;
+    pumpingJournalOutbox = true;
+    try {
+      const activeOwnerId = currentOwnerId;
+      for (const deletion of drainBackendConversationDeleteOutbox(store, {
+        ownerId: activeOwnerId,
+        limit: 20,
+      })) {
+        send({
+          type: "journal_backend_delete",
+          requestId: `journal-delete:${deletion.operationId}:${deletion.deliveryGeneration}`,
+          clientId: "kernel-journal",
+          ownerId: deletion.ownerId,
+          operationId: deletion.operationId,
+          conversationId: deletion.conversationId,
+          conversationGeneration: deletion.conversationGeneration,
+          attemptCount: deletion.attemptCount,
+          deliveryGeneration: deletion.deliveryGeneration,
+          payloadHash: deletion.payloadHash,
+          targetKind: deletion.targetKind,
+          targetId: deletion.targetId,
+        });
+      }
+      for (const delivery of drainBackendTurnOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
+        send({
+          type: "journal_backend_sync",
+          requestId: `journal:${delivery.turnId}:${delivery.deliveryGeneration}`,
+          clientId: "kernel-journal",
+          ownerId: delivery.ownerId,
+          ...delivery.payload,
+          turnId: delivery.turnId,
+          conversationId: delivery.conversationId,
+          conversationGeneration: delivery.conversationGeneration,
+          attemptCount: delivery.attemptCount,
+          deliveryGeneration: delivery.deliveryGeneration,
+          payloadHash: delivery.payloadHash,
+        });
+      }
+    } catch (error) {
+      logErr(`Journal outbox pump failed: ${error}`);
+    } finally {
+      pumpingJournalOutbox = false;
+    }
+  };
+  const journalPumpTimer = setInterval(pumpJournalOutbox, 1_000);
+  journalPumpTimer.unref();
   // 3. Signal readiness
-  send({ type: "init", sessionId: "", agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES });
+  send({
+    type: "init",
+    sessionId: "",
+    agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
+    runtimeVersion: packageMetadata.version,
+    runtimeCapabilities: [...RUNTIME_CAPABILITIES],
+    runtimeAdapterIds: registry.adapterIds(),
+  });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift
@@ -1056,47 +1529,39 @@ async function main(): Promise<void> {
       return;
     }
 
-    switch (msg.type) {
+    try {
+      switch (msg.type) {
       case "query":
         (async () => {
           const query = msg as QueryMessage;
-          const adapterId = query.adapterId ?? defaultAdapterId;
           if (!query.clientId?.trim()) {
             throw new Error("query requires clientId");
           }
           if (!query.requestId?.trim()) {
             throw new Error("query requires requestId");
           }
-          const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
+          const queryOwnerId = resolveActiveOwner(query.ownerId);
           query.ownerId = queryOwnerId;
           query.requestId = query.requestId.trim();
-          const queryRequestId = query.requestId;
-          const queryOwnerKey = controlRequestKey({ requestId: queryRequestId, clientId: query.clientId });
-          const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
-          currentOwnerId = queryOwnerId;
-          try {
-            if (adapterId === "acp") {
-              await startAcpProcess();
-              await initializeAcp();
-            } else if (adapterId === "pi-mono") {
-              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
-            } else if (adapterId === "hermes") {
-              if (!(await ensureHermesAdapter())) {
-                throw new Error(adapterActivationError("hermes"));
-              }
-            } else if (adapterId === "openclaw") {
-              if (!(await ensureOpenClawAdapter())) {
-                throw new Error(adapterActivationError("openclaw"));
-              }
+          const adapterId = kernel.sessionExecutionProfile(query.sessionId, queryOwnerId).adapterId;
+          if (adapterId === "acp") {
+            await startAcpProcess();
+            await initializeAcp();
+          } else if (adapterId === "pi-mono") {
+            await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+          } else if (adapterId === "hermes") {
+            if (!(await ensureHermesAdapter())) {
+              throw new Error(adapterActivationError("hermes"));
             }
-            await transport.handleQuery(query);
-          } finally {
-            if (queryOwnerKey && insertedOwner) {
-              activeControlToolOwnersByRequest.delete(queryOwnerKey);
+          } else if (adapterId === "openclaw") {
+            if (!(await ensureOpenClawAdapter())) {
+              throw new Error(adapterActivationError("openclaw"));
             }
           }
+          await transport.handleQuery(query);
         })().catch((err) => {
-          logErr(`Unhandled query error: ${err}`);
+          const diagnostic = unexpectedQueryErrorDiagnostic(err);
+          if (diagnostic) logErr(diagnostic);
           const query = msg as QueryMessage;
           const envelope = runtimeErrorEnvelope(err);
           send({
@@ -1112,616 +1577,1346 @@ async function main(): Promise<void> {
 
       case "warmup": {
         const wm = msg as WarmupMessage;
+        wm.ownerId = resolveActiveOwner(wm.ownerId);
         transport.handleWarmup(wm);
         break;
       }
 
-      case "tool_result":
+      case "configure_default_execution_profile": {
+        const config = msg as ConfigureDefaultExecutionProfileMessage;
+        const ownerId = resolveActiveOwner(config.ownerId);
+        const preference = kernel.configureDefaultExecutionProfile({
+          ownerId,
+          adapterId: config.adapterId,
+          modelProfile: config.modelProfile,
+          workingDirectory: config.workingDirectory,
+          expectedPreferenceGeneration: config.expectedPreferenceGeneration,
+        });
+        send({
+          type: "default_execution_profile_configured",
+          protocolVersion: config.protocolVersion,
+          requestId: config.requestId,
+          clientId: config.clientId,
+          preferenceGeneration: preference.generation,
+          adapterId: preference.adapterId,
+          credentialScope: preference.credentialScope,
+          modelProfile: preference.modelProfile,
+          workingDirectory: preference.workingDirectory,
+          appliesTo: "new_sessions",
+        });
+        break;
+      }
+
+      case "resolve_surface_session": {
+        const resolve = msg as ResolveSurfaceSessionMessage;
+        const ownerId = resolveActiveOwner(resolve.ownerId);
+        const existing = store.getOptionalRow(
+          `SELECT agent_session_id FROM surface_conversations
+           WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+          [ownerId, resolve.surfaceKind, resolve.externalRefKind, resolve.externalRefId],
+        );
+        const preference = kernel.defaultExecutionProfilePreference(ownerId)
+          ?? kernel.configureDefaultExecutionProfile({
+            ownerId,
+            adapterId: defaultAdapterId,
+            modelProfile: defaultAdapterId === "pi-mono"
+              ? "omi-sonnet"
+              : defaultAdapterId === "acp" ? "claude-sonnet-4-6" : null,
+            workingDirectory: agentArtifactsDir(),
+          });
+        const creationProfile = existing ? undefined : resolve.creationProfile;
+        if (creationProfile) {
+          if (!isProductionAdapterId(creationProfile.adapterId)) {
+            throw new Error(`Unknown production adapter ${creationProfile.adapterId}`);
+          }
+          if (!kernel.isAdapterRegistered(creationProfile.adapterId)) {
+            throw new Error(`Requested creation adapter is unavailable: ${creationProfile.adapterId}`);
+          }
+          if (!creationProfile.workingDirectory.trim()) {
+            throw new Error("Session creation profile requires workingDirectory");
+          }
+        }
+        const selectedProfile = creationProfile ?? preference;
+        const resolved = kernel.resolveSurfaceSession({
+          ownerId,
+          surfaceRef: {
+            surfaceKind: resolve.surfaceKind,
+            externalRefKind: resolve.externalRefKind,
+            externalRefId: resolve.externalRefId,
+          },
+          defaultAdapterId: selectedProfile.adapterId,
+          providerBoundary: providerBoundaryForAdapter(selectedProfile.adapterId),
+          modelProfile: selectedProfile.modelProfile,
+          defaultCwd: selectedProfile.workingDirectory,
+          executionRole: executionRoleForSurface(resolve),
+          title: resolve.title ?? null,
+        });
+        const profile = kernel.sessionExecutionProfile(resolved.agentSessionId, ownerId);
+        send({
+          type: "surface_session_resolved",
+          protocolVersion: resolve.protocolVersion,
+          requestId: resolve.requestId,
+          clientId: resolve.clientId,
+          created: !existing,
+          conversationId: resolved.conversationId,
+          sessionId: resolved.agentSessionId,
+          profile: {
+            profileGeneration: profile.generation,
+            adapterId: profile.adapterId,
+            credentialScope: profile.credentialScope,
+            modelProfile: profile.modelProfile,
+            workingDirectory: profile.workingDirectory,
+            executionRole: profile.executionRole,
+          },
+        });
+        if (resolve.surfaceKind === "main_chat") {
+          triggerBackendReconcile({ ownerId, conversationId: resolved.conversationId });
+        }
+        break;
+      }
+
+      case "migrate_session_execution_profile": {
+        const migrate = msg as MigrateSessionExecutionProfileMessage;
+        const ownerId = resolveActiveOwner(migrate.ownerId);
+        const result = kernel.migrateSessionExecutionProfile({
+          sessionId: migrate.sessionId,
+          ownerId,
+          expectedProfileGeneration: migrate.expectedProfileGeneration,
+          adapterId: migrate.adapterId,
+          modelProfile: migrate.modelProfile,
+          workingDirectory: migrate.workingDirectory,
+          reason: migrate.reason,
+        });
+        send({
+          type: "session_execution_profile_migrated",
+          protocolVersion: migrate.protocolVersion,
+          requestId: migrate.requestId,
+          clientId: migrate.clientId,
+          sessionId: migrate.sessionId,
+          previousProfileGeneration: result.previous.generation,
+          profile: {
+            profileGeneration: result.profile.generation,
+            adapterId: result.profile.adapterId,
+            credentialScope: result.profile.credentialScope,
+            modelProfile: result.profile.modelProfile,
+            workingDirectory: result.profile.workingDirectory,
+            executionRole: result.profile.executionRole,
+          },
+          staleBindingIds: result.staleBindingIds,
+        });
+        break;
+      }
+
+      case "context_source_update": {
+        const update = msg as ContextSourceUpdateMessage;
+        const ownerId = resolveActiveOwner(update.ownerId);
+        const result = kernel.updateContextSource({
+          ownerId,
+          sessionId: update.sessionId,
+          surfaceKind: update.surfaceKind,
+          source: update.source,
+          sourceRevision: update.sourceRevision,
+          outcome: update.outcome,
+          capturedAtMs: update.capturedAtMs,
+          expiresAtMs: update.expiresAtMs,
+          payload: update.payload,
+        });
+        send({
+          type: "context_source_updated",
+          protocolVersion: update.protocolVersion,
+          requestId: update.requestId,
+          clientId: update.clientId,
+          sessionId: update.sessionId,
+          source: update.source,
+          sourceRevision: update.sourceRevision,
+          changed: result.changed,
+          snapshotVersion: result.snapshot.version,
+          snapshotGeneration: result.snapshot.snapshotGeneration,
+          rendererFingerprint: result.snapshot.rendererFingerprint,
+          capabilityVersion: result.snapshot.capabilityVersion,
+        });
+        break;
+      }
+
+      case "get_context_snapshot": {
+        const ownerId = resolveActiveOwner(msg.ownerId);
+        send({
+          type: "context_snapshot",
+          protocolVersion: msg.protocolVersion,
+          requestId: msg.requestId,
+          clientId: msg.clientId,
+          snapshot: kernel.contextSnapshot(msg.sessionId, ownerId, msg.surfaceKind),
+        });
+        break;
+      }
+
+      case "authorized_tool_execution_result":
         resolveToolCall(msg);
         break;
 
-      case "control_tool": {
-        const control = msg as ControlToolRequestMessage;
-        const requestId = control.requestId.trim();
-        const requestKey = controlRequestKey({ requestId, clientId: control.clientId });
-        const activeOwnerId = requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined;
-        let controlContext;
+      case "external_surface_run_begin": {
+        const request = msg as ExternalSurfaceRunBeginMessage;
+        const requestId = request.requestId?.trim();
+        const clientId = request.clientId?.trim();
         try {
-          controlContext = resolveControlRequestContext({
-            ownerGuard: control.ownerId,
-            activeOwnerId,
-            requireActiveOwner: true,
-            requireOwnerGuard: true,
+          if (!requestId || !clientId) throw new Error("External surface begin requires requestId and clientId");
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const result = kernel.beginExternalSurfaceRun({
+            ownerId,
+            sessionId: request.sessionId,
+            turnId: request.turnId,
+            prompt: request.prompt,
+            mode: request.mode,
+            clientId,
             requestId,
-            clientId: control.clientId,
+          });
+          send({
+            type: "external_surface_run_begin_result",
+            requestId,
+            clientId,
+            ownerId,
+            sessionId: result.sessionId,
+            turnId: result.turnId,
+            ok: true,
+            runId: result.runId,
+            attemptId: result.attemptId,
+            duplicate: result.duplicate,
           });
         } catch (error) {
           send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
+            type: "external_surface_run_begin_result",
             requestId,
-            clientId: control.clientId,
-            name: control.name,
-            result: JSON.stringify({
-              ok: false,
-              error: {
-                code: "invalid_owner_id",
-                message: error instanceof Error ? error.message : String(error),
-              },
-            }),
+            clientId,
+            ownerId: request.ownerId ?? "",
+            sessionId: request.sessionId ?? "",
+            turnId: request.turnId ?? "",
+            ok: false,
+            error: externalAuthorityError(error, "external_run_begin_rejected"),
           });
-          break;
         }
-        const controlOwnerKey = controlContext.requestKey;
-        let controlInput;
-        let controlRunCorrelation: { requestId?: string; clientId?: string } = {};
-        let controlRunOwnerKey: string | undefined;
-        let preserveControlRunOwner = false;
-        let controlRunOwnerInserted = false;
+        break;
+      }
+
+      case "external_surface_tool_invoke": {
+        const request = msg as ExternalSurfaceToolInvokeMessage;
+        const requestId = request.requestId?.trim();
+        const clientId = request.clientId?.trim();
         try {
-          controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
-          const correlated = withControlRunCorrelation(control.name, controlInput, control.clientId);
-          controlInput = correlated.input;
-          controlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
-          const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
-          if (adapterId && correlated.requestId && correlated.clientId) {
-            controlRunOwnerKey = controlRequestKey({ requestId: correlated.requestId, clientId: correlated.clientId });
-            if (controlRunOwnerKey) {
-              controlRunOwnerInserted = registerActiveControlOwner(controlRunOwnerKey, controlContext.activeOwnerId);
+          if (!requestId || !clientId) throw new Error("External tool invocation requires requestId and clientId");
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (!request.input || typeof request.input !== "object" || Array.isArray(request.input)) {
+            throw new Error("External tool invocation input must be an object");
+          }
+          const routed = kernel.routeExternalSurfaceToolInvocation({
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            invocationId: request.invocationId,
+            toolName: request.toolName,
+            toolInput: request.input,
+          });
+          const authorized = kernel.authorizeExternalSurfaceToolInvocation({
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            invocationId: request.invocationId,
+            toolName: routed.toolName,
+            toolInput: routed.toolInput,
+            activeOwnerId: currentOwnerId,
+          });
+          if (isAgentControlToolName(authorized.canonicalToolName)) {
+            kernel.markRunToolInvocationDispatched(authorized);
+            const spawnDescriptor = routed.toolName === "spawn_agent"
+              ? parseAgentSpawnProducerJournalDescriptor(
+                  ((routed.toolInput.metadata as Record<string, unknown> | undefined) ?? {}).producerJournal,
+                )
+              : undefined;
+            let result: string;
+            let outcome: "succeeded" | "failed" = "succeeded";
+            let executionLease: RunToolExecutionLease | undefined;
+            try {
+              executionLease = kernel.acquireRunToolExecutionLease(authorized, establishedOwnerId);
+              if (!agentControlToolContext) throw new Error("Agent runtime kernel is not ready");
+              const activeSession = requireControlSessionPolicy(authorized.sessionId, authorized.ownerId);
+              result = await handleAgentControlToolCall(
+                {
+                  ...agentControlToolContext,
+                  callerSessionId: authorized.sessionId,
+                  executionRole: activeSession.executionRole,
+                  providerBoundary: activeSession.providerBoundary,
+                  defaultAdapterId: activeSession.defaultAdapterId,
+                  authorizedProducerJournal: spawnDescriptor,
+                  authorizedCallerRunId: routed.toolName === "spawn_agent" ? request.runId : undefined,
+                  authorizedToolInvocation: {
+                    invocationId: authorized.invocationId,
+                    runId: authorized.runId,
+                    attemptId: authorized.attemptId,
+                    toolName: authorized.canonicalToolName,
+                  },
+                  getOwnerId: establishedOwnerId,
+                  executionLease,
+                },
+                authorized.canonicalToolName,
+                routed.toolInput,
+              );
+              outcome = controlToolInvocationOutcome(result);
+            } catch (error) {
+              outcome = "failed";
+              const authorityError = externalAuthorityError(error, "control_tool_failed");
+              result = relayError(
+                authorityError.code,
+                authorityError.message,
+              );
             }
-            transport.registerExternalRequestContext({
-              requestId: correlated.requestId,
-              clientId: correlated.clientId,
-              ownerId: controlContext.activeOwnerId,
-              adapterId,
+            executionLease?.release();
+            if (outcome === "succeeded" && spawnDescriptor) {
+              result = compactRealtimeSpawnToolResult(result, spawnDescriptor);
+              // A parent journal acknowledgement without a durable child
+              // receipt is an external-spawn failure, not a successful tool
+              // invocation. Keep the control ledger aligned with the exact
+              // compact semantic result we return to Swift/provider.
+              outcome = controlToolInvocationOutcome(result);
+            }
+            const finalizedResult = finalizeRelayResult(requestId, result, authorized, outcome);
+            const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+            kernel.completeRunToolInvocation({
+              invocationId: authorized.invocationId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              profileGeneration: authorized.profileGeneration,
+              manifestVersion: authorized.manifestVersion,
+              manifestDigest: authorized.manifestDigest,
+              daemonBootEpoch: authorized.daemonBootEpoch,
+              executionGeneration: authorized.executionGeneration,
+              inputHash: authorized.inputHash,
+              capabilityRef: authorized.capabilityRef,
+              activeOwnerId: currentOwnerId,
+              outcome: finalizedOutcome,
+              result: finalizedResult,
+            });
+            send({
+              type: "external_surface_tool_result",
+              requestId,
+              clientId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              invocationId: authorized.invocationId,
+              // `ok` means the correlated external protocol request was
+              // processed. A failed tool result is carried in its canonical
+              // envelope so Swift can return it to the provider unchanged.
+              ok: true,
+              result: finalizedResult,
+            });
+            break;
+          }
+
+          kernel.markRunToolInvocationDispatched(authorized);
+          registerPendingExternalToolCall(request, authorized);
+          send({
+            type: "authorized_tool_execution",
+            invocationId: authorized.invocationId,
+            ownerId: authorized.ownerId,
+            sessionId: authorized.sessionId,
+            runId: authorized.runId,
+            attemptId: authorized.attemptId,
+            profileGeneration: authorized.profileGeneration,
+            manifestVersion: authorized.manifestVersion,
+            manifestDigest: authorized.manifestDigest,
+            daemonBootEpoch: authorized.daemonBootEpoch,
+            executionGeneration: authorized.executionGeneration,
+            toolName: authorized.canonicalToolName,
+            input: routed.toolInput,
+            inputHash: authorized.inputHash,
+            effectClass: authorized.effectClass,
+            retryPolicy: authorized.retryPolicy,
+            surfaceKind: authorized.surfaceKind,
+            externalRefKind: authorized.externalRefKind,
+            externalRefId: authorized.externalRefId,
+            originatingUserText: authorized.originatingUserText,
+            precedingAssistantText: authorized.precedingAssistantText,
+            runMode: authorized.runMode,
+            chatMode: authorized.chatMode,
+            ...(routed.recoveredFromDelegation
+              ? { policyRecovery: "permission_delegation_to_native" as const }
+              : {}),
+          });
+        } catch (error) {
+          send({
+            type: "external_surface_tool_result",
+            requestId,
+            clientId,
+            ownerId: request.ownerId ?? "",
+            sessionId: request.sessionId ?? "",
+            runId: request.runId ?? "",
+            attemptId: request.attemptId ?? "",
+            invocationId: request.invocationId ?? "",
+            ok: false,
+            error: externalAuthorityError(error, "external_tool_rejected"),
+          });
+        }
+        break;
+      }
+
+      case "external_surface_run_complete": {
+        const request = msg as ExternalSurfaceRunCompleteMessage;
+        const requestId = request.requestId?.trim();
+        const clientId = request.clientId?.trim();
+        try {
+          if (!requestId || !clientId) throw new Error("External surface completion requires requestId and clientId");
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (request.terminalStatus === "failed" || request.terminalStatus === "cancelled") {
+            cancelPendingExternalToolCallsForAttempt({
+              ownerId,
+              runId: request.runId,
+              attemptId: request.attemptId,
+              errorCode: "external_run_terminal",
             });
           }
-        } catch (error) {
-          if (controlRunOwnerKey && controlRunOwnerInserted) {
-            activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
-          }
-          if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-            transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
-          }
-          send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
-            requestId,
-            clientId: control.clientId,
-            name: control.name,
-            result: JSON.stringify({
-              ok: false,
-              error: {
-                code: "invalid_owner_id",
-                message: error instanceof Error ? error.message : String(error),
-              },
-            }),
+          const result = kernel.completeExternalSurfaceRun({
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            terminalStatus: request.terminalStatus,
+            errorCode: request.errorCode,
           });
-          break;
+          send({
+            type: "external_surface_run_complete_result",
+            requestId,
+            clientId,
+            ownerId,
+            sessionId: result.sessionId,
+            runId: result.runId,
+            attemptId: result.attemptId,
+            ok: true,
+            terminalStatus: result.terminalStatus,
+            duplicate: result.duplicate,
+          });
+        } catch (error) {
+          send({
+            type: "external_surface_run_complete_result",
+            requestId,
+            clientId,
+            ownerId: request.ownerId ?? "",
+            sessionId: request.sessionId ?? "",
+            runId: request.runId ?? "",
+            attemptId: request.attemptId ?? "",
+            ok: false,
+            error: externalAuthorityError(error, "external_run_complete_rejected"),
+          });
         }
+        break;
+      }
+
+      case "journal_record_turn": {
+        const request = msg as JournalRecordTurnMessage;
+        const ownerId = resolveActiveOwner(request.ownerId);
+        const resolved = resolveJournalSurface({
+          ownerId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+        });
+        const turn = request.turn ?? {};
+        assertPublicJournalRecordAuthority(turn);
+        const result = recordJournalTurn(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          turnId: typeof turn.turnId === "string" ? turn.turnId : undefined,
+          producerId: typeof turn.producerId === "string" ? turn.producerId : undefined,
+          role: turn.role === "assistant" ? "assistant" : "user",
+          surfaceKind: request.surfaceKind,
+          origin: journalOrigin(turn.origin ?? "typed_chat"),
+          status: (typeof turn.status === "string" ? turn.status : "pending") as ConversationTurnStatus,
+          content: typeof turn.content === "string" ? turn.content : "",
+          contentBlocks: Array.isArray(turn.contentBlocks)
+            ? turn.contentBlocks as ConversationContentBlock[]
+            : [],
+          resources: Array.isArray(turn.resources) ? turn.resources as ConversationResource[] : [],
+          metadataJson: typeof turn.metadataJson === "string" ? turn.metadataJson : "{}",
+          createdAtMs: typeof turn.createdAtMs === "number" ? turn.createdAtMs : undefined,
+        });
+        const range = listJournalTurns(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          afterTurnSeq: Math.max(0, result.turn.turnSeq - 1),
+          limit: 1,
+        });
+        send({
+          type: "journal_operation_result",
+          protocolVersion: request.protocolVersion,
+          requestId: request.requestId,
+          clientId: request.clientId,
+          operation: "record",
+          conversationId: resolved.conversationId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+          turn: journalTurnProjection(result.turn),
+          turns: [],
+          clearedCount: 0,
+          highWaterTurnSeq: range.highWaterTurnSeq,
+          generationBaseTurnSeq: range.generationBaseTurnSeq,
+          conversationGeneration: range.generation,
+        });
+        if (result.created) {
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: journalTurnProjection(result.turn),
+          });
+        }
+        pumpJournalOutbox();
+        break;
+      }
+
+      case "journal_record_exchange": {
+        const request = msg as JournalRecordExchangeMessage;
         try {
-          if (controlOwnerKey && activeControlToolOwnersByRequest.get(controlOwnerKey) !== controlContext.activeOwnerId) {
-            throw new Error("Request owner context is not active for clientId/requestId");
-          }
-        } catch (error) {
-          if (controlRunOwnerKey && controlRunOwnerInserted) {
-            activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
-          }
-          if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-            transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
-          }
-          send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
-            requestId,
-            clientId: control.clientId,
-            name: control.name,
-            result: JSON.stringify({
-              ok: false,
-              error: {
-                code: "control_context_conflict",
-                message: error instanceof Error ? error.message : String(error),
-              },
-            }),
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const resolved = resolveJournalSurface({
+            ownerId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
           });
+          const turns = Array.isArray(request.turns) ? request.turns : [];
+          turns.forEach(assertPublicJournalRecordAuthority);
+          const result = recordJournalExchange(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            turns: turns.map((turn) => ({
+              turnId: typeof turn.turnId === "string" ? turn.turnId : undefined,
+              producerId: typeof turn.producerId === "string" ? turn.producerId : undefined,
+              role: turn.role === "assistant" ? "assistant" as const : "user" as const,
+              surfaceKind: request.surfaceKind,
+              origin: journalOrigin(turn.origin ?? "typed_chat"),
+              status: (typeof turn.status === "string" ? turn.status : "pending") as ConversationTurnStatus,
+              content: typeof turn.content === "string" ? turn.content : "",
+              contentBlocks: Array.isArray(turn.contentBlocks)
+                ? turn.contentBlocks as ConversationContentBlock[]
+                : [],
+              resources: Array.isArray(turn.resources) ? turn.resources as ConversationResource[] : [],
+              metadataJson: typeof turn.metadataJson === "string" ? turn.metadataJson : "{}",
+              createdAtMs: typeof turn.createdAtMs === "number" ? turn.createdAtMs : undefined,
+            })),
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            afterTurnSeq: 0,
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "record_exchange",
+            conversationId: resolved.conversationId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turns: result.turns.map(journalTurnProjection),
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          // recordJournalExchange has returned, so its outer transaction is
+          // committed before any observer can see either half.
+          for (const turn of result.createdTurns) {
+            send({
+              type: "journal_turn_changed",
+              ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: request.surfaceKind,
+              externalRefKind: request.externalRefKind,
+              externalRefId: request.externalRefId,
+              turn: journalTurnProjection(turn),
+            });
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "journal_import_remote_turn": {
+        const request = msg as JournalImportRemoteTurnMessage;
+        const ownerId = resolveActiveOwner(request.ownerId);
+        const resolved = resolveJournalSurface({
+          ownerId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+        });
+        assertJournalRemoteTurnInput(request.turn);
+        const imported = importRemoteJournalTurn(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          remoteId: request.turn.remoteId,
+          canonicalTurnId: request.turn.canonicalTurnId,
+          role: request.turn.role,
+          surfaceKind: request.surfaceKind,
+          content: request.turn.content,
+          contentBlocks: request.turn.contentBlocks as ConversationContentBlock[],
+          resources: request.turn.resources as ConversationResource[],
+          metadataJson: request.turn.metadataJson,
+          createdAtMs: request.turn.createdAtMs,
+          source: "legacy_upgrade",
+        });
+        const range = listJournalTurns(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          afterTurnSeq: Math.max(0, imported.turn.turnSeq - 1),
+          limit: 1,
+        });
+        send({
+          type: "journal_operation_result",
+          protocolVersion: request.protocolVersion,
+          requestId: request.requestId,
+          clientId: request.clientId,
+          operation: "import_remote",
+          conversationId: resolved.conversationId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+          turn: journalTurnProjection(imported.turn),
+          turns: [],
+          clearedCount: 0,
+          highWaterTurnSeq: range.highWaterTurnSeq,
+          generationBaseTurnSeq: range.generationBaseTurnSeq,
+          conversationGeneration: range.generation,
+        });
+        if (imported.imported) {
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: journalTurnProjection(imported.turn),
+          });
+        }
+        break;
+      }
+
+      case "journal_update_turn": {
+        const request = msg as JournalUpdateTurnMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const resolved = resolveJournalSurface({
+            ownerId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+          });
+          const update = request.update ?? {};
+          assertPublicJournalUpdateAuthority(update);
+          const turnId = typeof update.turnId === "string" ? update.turnId : "";
+          const before = store.getRow(
+            `SELECT turn_seq, producing_run_id
+             FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?`,
+            [resolved.conversationId, turnId],
+          );
+          if (
+            before.producing_run_id != null
+            && (update.status === "completed" || update.status === "failed")
+          ) {
+            throw new Error("Runtime-produced journal turns require kernel-authoritative terminalization");
+          }
+          const parsedUpdate = {
+            ownerId,
+            conversationId: resolved.conversationId,
+            turnId,
+            status: typeof update.status === "string" ? update.status as ConversationTurnStatus : undefined,
+            content: typeof update.content === "string" ? update.content : undefined,
+            replaceContentBlocks: Array.isArray(update.replaceContentBlocks)
+              ? update.replaceContentBlocks as ConversationContentBlock[]
+              : undefined,
+            appendContentBlocks: Array.isArray(update.appendContentBlocks)
+              ? update.appendContentBlocks as ConversationContentBlock[]
+              : undefined,
+            replaceResources: Array.isArray(update.replaceResources)
+              ? update.replaceResources as ConversationResource[]
+              : undefined,
+            appendResources: Array.isArray(update.appendResources)
+              ? update.appendResources as ConversationResource[]
+              : undefined,
+            metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
+          };
+          assertPublicJournalUpdatePolicy(store, parsedUpdate);
+          const turn = updateJournalTurn(store, parsedUpdate);
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "update",
+            conversationId: resolved.conversationId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          if (turn.turnSeq !== Number(before.turn_seq)) {
+            send({
+              type: "journal_turn_changed",
+              ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: request.surfaceKind,
+              externalRefKind: request.externalRefKind,
+              externalRefId: request.externalRefId,
+              turn: journalTurnProjection(turn),
+            });
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "journal_terminalize_turn": {
+        const request = msg as JournalTerminalizeTurnMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const resolved = resolveJournalSurface({
+            ownerId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+          });
+          const terminalization = request.terminalization;
+          const disposition = journalTerminalizationDisposition(terminalization);
+          const turnId = typeof terminalization?.turnId === "string" ? terminalization.turnId : "";
+          const before = store.getRow(
+            "SELECT turn_seq FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
+            [resolved.conversationId, turnId],
+          );
+          const turn = terminalizeJournalTurn(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            turnId,
+            producingRunId: typeof terminalization?.producingRunId === "string"
+              ? terminalization.producingRunId
+              : "",
+            producingAttemptId: typeof terminalization?.producingAttemptId === "string"
+              ? terminalization.producingAttemptId
+              : "",
+            disposition,
+            content: typeof terminalization?.content === "string" ? terminalization.content : undefined,
+            replaceContentBlocks: Array.isArray(terminalization?.replaceContentBlocks)
+              ? terminalization.replaceContentBlocks as ConversationContentBlock[]
+              : undefined,
+            replaceResources: Array.isArray(terminalization?.replaceResources)
+              ? terminalization.replaceResources as ConversationResource[]
+              : undefined,
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: resolved.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "update",
+            conversationId: resolved.conversationId,
+            surfaceKind: request.surfaceKind,
+            externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          if (turn.turnSeq !== Number(before.turn_seq)) {
+            send({
+              type: "journal_turn_changed",
+              ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: request.surfaceKind,
+              externalRefKind: request.externalRefKind,
+              externalRefId: request.externalRefId,
+              turn: journalTurnProjection(turn),
+            });
+          }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "journal_list_turns": {
+        const request = msg as JournalListTurnsMessage;
+        const ownerId = resolveActiveOwner(request.ownerId);
+        const resolved = resolveJournalSurface({
+          ownerId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+        });
+        const range = listJournalTurns(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          afterTurnSeq: request.afterTurnSeq,
+          limit: request.limit,
+        });
+        send({
+          type: "journal_operation_result",
+          protocolVersion: request.protocolVersion,
+          requestId: request.requestId,
+          clientId: request.clientId,
+          operation: "list",
+          conversationId: resolved.conversationId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+          turns: range.turns.map((turn) => journalTurnProjection(
+            journalTurnForSurfaceProjection(turn, request.surfaceKind),
+          )),
+          clearedCount: 0,
+          highWaterTurnSeq: range.highWaterTurnSeq,
+          generationBaseTurnSeq: range.generationBaseTurnSeq,
+          conversationGeneration: range.generation,
+        });
+        if (request.surfaceKind === "main_chat") {
+          triggerBackendReconcile({ ownerId, conversationId: resolved.conversationId });
+        }
+        break;
+      }
+
+      case "journal_clear_turns": {
+        const request = msg as JournalClearTurnsMessage;
+        const ownerId = resolveActiveOwner(request.ownerId);
+        const resolved = resolveJournalSurface({
+          ownerId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+        });
+        const result = clearJournalConversation(store, {
+          ownerId,
+          conversationId: resolved.conversationId,
+          expectedGeneration: request.expectedGeneration,
+        });
+        send({
+          type: "journal_operation_result",
+          protocolVersion: request.protocolVersion,
+          requestId: request.requestId,
+          clientId: request.clientId,
+          operation: "clear",
+          conversationId: resolved.conversationId,
+          surfaceKind: request.surfaceKind,
+          externalRefKind: request.externalRefKind,
+          externalRefId: request.externalRefId,
+          turns: [],
+          clearedCount: result.deletedTurns,
+          highWaterTurnSeq: result.highWaterTurnSeq,
+          generationBaseTurnSeq: result.generationBaseTurnSeq,
+          conversationGeneration: result.generation,
+          backendDeleteOperationId: result.backendDeleteOperationId ?? undefined,
+        });
+        pumpJournalOutbox();
+        break;
+      }
+
+      case "ensure_agent_spawn_journal": {
+        const request = msg as EnsureAgentSpawnJournalMessage;
+        const ownerId = resolveActiveOwner(request.ownerId);
+        const result = kernel.ensureAgentSpawnJournal({
+          ownerId,
+          sessionId: request.sessionId,
+          runId: request.runId,
+        });
+        send({
+          type: "agent_spawn_journal_ensured",
+          protocolVersion: request.protocolVersion,
+          requestId: request.requestId,
+          clientId: request.clientId,
+          ownerId,
+          sessionId: result.sessionId,
+          runId: result.runId,
+          conversationId: result.conversationId,
+          userTurn: result.userTurn ? journalTurnProjection(result.userTurn) : null,
+          assistantTurn: journalTurnProjection(result.assistantTurn),
+        });
+        for (const turn of [result.userTurn, result.assistantTurn]) {
+          if (!turn) continue;
+          for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+            send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
+          }
+        }
+        pumpJournalOutbox();
+        break;
+      }
+
+      case "journal_backend_sync_result": {
+        const result = msg as JournalBackendSyncResultMessage;
+        resolveActiveOwner(result.ownerId);
+        const claimOwner = store.getOptionalRow(
+          "SELECT owner_id, conversation_id FROM backend_turn_outbox WHERE turn_id = ?",
+          [result.turnId],
+        );
+        if (!claimOwner) {
+          const settled = settleClearedBackendTurnClaim(store, {
+            ownerId: result.ownerId,
+            turnId: result.turnId,
+            conversationId: result.conversationId,
+            attemptCount: result.attemptCount,
+            deliveryGeneration: result.deliveryGeneration,
+            conversationGeneration: result.conversationGeneration,
+            payloadHash: result.payloadHash,
+            ok: result.ok,
+          });
+          if (!settled) throw new Error("Backend sync result has no active or preserved claim");
+          pumpJournalOutbox();
           break;
         }
-        const result = agentControlToolContext
-          ? await (async () => {
-              try {
-                const toolResult = await handleAgentControlToolCall(
-                  {
-                    ...agentControlToolContext,
-                    trustedUserControl: false,
-                    getOwnerId: () =>
-                      activeControlToolOwnerId({
-                        requestKey: controlOwnerKey,
-                        ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
-                      }),
-                  },
-                  control.name,
-                  controlInput,
-                );
-                preserveControlRunOwner = isLongLivedControlRun(control.name, controlInput) && controlToolResultOk(toolResult);
-                return toolResult;
-              } finally {
-                if (controlRunOwnerKey && !preserveControlRunOwner && controlRunOwnerInserted) {
-                  activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
-                }
-                if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-                  transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
-                }
-              }
-            })()
-          : (() => {
-              if (controlRunOwnerKey && !preserveControlRunOwner && controlRunOwnerInserted) {
-                activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
-              }
-              if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-                transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
-              }
-              return JSON.stringify({
-                ok: false,
-                error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
-              });
-            })();
+        if (String(claimOwner.conversation_id) !== result.conversationId) {
+          throw new Error("Backend sync result conversation does not match the active claim");
+        }
+        const ownerId = String(claimOwner.owner_id);
+        if (result.ownerId !== ownerId) throw new Error("Backend sync result owner does not match the claim owner");
+        const disposition = classifyBackendTurnResultDisposition(store, {
+          ownerId,
+          turnId: result.turnId,
+          conversationId: result.conversationId,
+          attemptCount: result.attemptCount,
+          deliveryGeneration: result.deliveryGeneration,
+          conversationGeneration: result.conversationGeneration,
+          payloadHash: result.payloadHash,
+          ok: result.ok,
+          remoteId: result.remoteId,
+          errorCode: result.errorCode,
+        });
+        if (disposition !== "active") {
+          logErr(
+            `Ignoring ${disposition} backend sync result turn=${result.turnId} delivery=${result.deliveryGeneration}`,
+          );
+          pumpJournalOutbox();
+          break;
+        }
+        if (result.ok && result.remoteId) {
+          if (ownerId !== currentOwnerId) throw new Error("Backend sync success is outside the active owner");
+          const acknowledged = ackBackendTurnOutboxWithWakes(store, {
+            ownerId,
+            turnId: result.turnId,
+            remoteId: result.remoteId,
+            attemptCount: result.attemptCount,
+            deliveryGeneration: result.deliveryGeneration,
+            conversationGeneration: result.conversationGeneration,
+            payloadHash: result.payloadHash,
+          });
+          for (const wake of acknowledged.wakes) {
+            send({ type: "journal_turn_changed", ...wake });
+          }
+        } else {
+          failBackendTurnOutbox(store, {
+            ownerId,
+            turnId: result.turnId,
+            attemptCount: result.attemptCount,
+            deliveryGeneration: result.deliveryGeneration,
+            conversationGeneration: result.conversationGeneration,
+            payloadHash: result.payloadHash,
+            errorCode: result.errorCode ?? "backend_sync_failed",
+            retryAtMs: result.attemptCount < 5
+              && [
+                "backend_sync_failed",
+                "backend_sync_owner_changed",
+                "backend_sync_http_retryable",
+                "network_unavailable",
+                "timeout",
+                "connection_lost",
+              ].includes(
+                result.errorCode ?? "backend_sync_failed",
+              )
+              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
+              : undefined,
+          });
+        }
+        pumpJournalOutbox();
+        break;
+      }
+
+      case "journal_backend_delete_result": {
+        const result = msg as JournalBackendDeleteResultMessage;
+        resolveActiveOwner(result.ownerId);
+        const claim = store.getRow(
+          `SELECT owner_id, conversation_id
+           FROM backend_conversation_delete_outbox WHERE operation_id = ?`,
+          [result.operationId],
+        );
+        const claimOwnerId = String(claim.owner_id);
+        if (result.ownerId !== claimOwnerId || String(claim.conversation_id) !== result.conversationId) {
+          throw new Error("Backend conversation delete result does not match the active owner or conversation");
+        }
+        if (result.ok) {
+          if (claimOwnerId !== currentOwnerId) throw new Error("Backend delete success is outside the active owner");
+          ackBackendConversationDeleteOutbox(store, {
+            ownerId: claimOwnerId,
+            operationId: result.operationId,
+            conversationGeneration: result.conversationGeneration,
+            attemptCount: result.attemptCount,
+            deliveryGeneration: result.deliveryGeneration,
+            payloadHash: result.payloadHash,
+          });
+        } else {
+          const errorCode = result.errorCode ?? "backend_delete_failed";
+          failBackendConversationDeleteOutbox(store, {
+            ownerId: claimOwnerId,
+            operationId: result.operationId,
+            conversationGeneration: result.conversationGeneration,
+            attemptCount: result.attemptCount,
+            deliveryGeneration: result.deliveryGeneration,
+            payloadHash: result.payloadHash,
+            errorCode,
+            retryAtMs: result.attemptCount < 5
+              && [
+                "backend_delete_failed",
+                "backend_sync_owner_changed",
+                "backend_sync_http_retryable",
+                "network_unavailable",
+                "timeout",
+                "connection_lost",
+              ].includes(errorCode)
+              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
+              : undefined,
+          });
+        }
+        pumpJournalOutbox();
+        if (result.ok && claimOwnerId === currentOwnerId) {
+          triggerBackendReconcile({ ownerId: claimOwnerId, conversationId: result.conversationId });
+        }
+        break;
+      }
+
+      case "journal_backend_reconcile_result": {
+        const result = msg as JournalBackendReconcileResultMessage;
+        resolveActiveOwner(result.ownerId);
+        const claim = store.getOptionalRow(
+          `SELECT owner_id, in_flight_id, status FROM backend_reconcile_state
+           WHERE conversation_id = ?`,
+          [result.conversationId],
+        );
+        if (
+          !claim
+          || String(claim.owner_id) !== result.ownerId
+          || String(claim.status) !== "fetching"
+          || String(claim.in_flight_id) !== result.reconcileId
+        ) {
+          logErr(`Dropping stale backend reconcile result reconcile=${result.reconcileId}`);
+          break;
+        }
+        if (!result.ok) {
+          failBackendReconcile(store, {
+            ownerId: result.ownerId,
+            reconcileId: result.reconcileId,
+            conversationId: result.conversationId,
+            errorCode: result.errorCode ?? "backend_reconcile_failed",
+          });
+          pumpJournalOutbox();
+          break;
+        }
+        if (result.ownerId !== currentOwnerId) {
+          throw new Error("Backend reconcile success is outside the active owner");
+        }
+        const page = applyBackendReconcilePage(store, {
+          ownerId: result.ownerId,
+          reconcileId: result.reconcileId,
+          conversationId: result.conversationId,
+          pageCursor: result.pageCursor,
+          nextCursor: result.nextCursor,
+          turns: (result.turns ?? []).map((turn) => ({
+            remoteId: typeof turn.remoteId === "string" ? turn.remoteId : "",
+            canonicalTurnId: typeof turn.canonicalTurnId === "string" ? turn.canonicalTurnId : null,
+            role: turn.role === "assistant" ? "assistant" : "user",
+            content: typeof turn.content === "string" ? turn.content : "",
+            contentBlocks: Array.isArray(turn.contentBlocks)
+              ? turn.contentBlocks as ConversationContentBlock[]
+              : [],
+            resources: Array.isArray(turn.resources) ? turn.resources as ConversationResource[] : [],
+            metadataJson: typeof turn.metadataJson === "string" ? turn.metadataJson : "{}",
+            createdAtMs: typeof turn.createdAtMs === "number" ? turn.createdAtMs : Date.now(),
+          })),
+          hasMore: result.hasMore === true,
+        });
+        for (const turn of page.importedTurns) {
+          for (const wake of journalTurnChangedWakes(store, result.ownerId, turn)) {
+            send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
+          }
+        }
+        if (page.nextRequest) sendBackendReconcile(page.nextRequest);
+        break;
+      }
+
+      case "control_tool": {
+        const control = msg as ControlToolRequestMessage;
         send({
           type: "control_tool_result",
           protocolVersion: control.protocolVersion,
-          requestId,
+          requestId: control.requestId?.trim(),
           clientId: control.clientId,
           name: control.name,
-          result,
+          result: relayError(
+            "legacy_control_tool_removed",
+            "Agent-originated control tools require a registered run capability",
+          ),
         });
         break;
       }
 
       case "direct_control_tool": {
         const control = msg as DirectControlToolRequestMessage;
-        if (!control.clientId?.trim()) {
+        const requestId = control.requestId?.trim();
+        const clientId = control.clientId?.trim();
+        const ownerGuard = control.ownerId?.trim() ?? "";
+        if (!requestId || !clientId) {
           send({
             type: "control_tool_result",
             protocolVersion: PROTOCOL_VERSION,
-            requestId: control.requestId?.trim(),
-            clientId: control.clientId,
-            name: control.name,
-            result: JSON.stringify({
-              ok: false,
-              error: { code: "invalid_request", message: "direct control requires clientId" },
-            }),
-          });
-          break;
-        }
-        if (!control.requestId?.trim()) {
-          send({
-            type: "control_tool_result",
-            protocolVersion: PROTOCOL_VERSION,
-            requestId: control.requestId?.trim(),
-            clientId: control.clientId,
-            name: control.name,
-            result: JSON.stringify({
-              ok: false,
-              error: { code: "invalid_request", message: "direct control requires requestId" },
-            }),
-          });
-          break;
-        }
-        const requestId = control.requestId.trim();
-        if (!isAgentControlToolName(control.name)) {
-          send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
             requestId,
-            clientId: control.clientId,
+            clientId,
+            ownerId: ownerGuard,
             name: control.name,
-            result: JSON.stringify({
-              ok: false,
-              error: {
-                code: "unsupported_direct_control_tool",
-                message: `Direct app control cannot execute ${control.name}`,
-              },
-            }),
+            result: relayError("invalid_request", "Direct control requires tracing requestId and clientId"),
           });
           break;
         }
-
-        const requestKey = controlRequestKey({ requestId, clientId: control.clientId });
-        let directControlOwnerInserted = registerSignedDirectControlOwner({
-          requestKey,
-          ownerGuard: control.ownerId,
-          ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
-          registerOwner: registerActiveControlOwner,
-        });
-        const releaseDirectControlOwner = () => {
-          if (requestKey && directControlOwnerInserted) {
-            activeControlToolOwnersByRequest.delete(requestKey);
-            directControlOwnerInserted = false;
-          }
-        };
-
-        let controlContext: ResolvedControlRequestContext;
-        let controlInput: Record<string, unknown>;
-        try {
-          controlContext = resolveControlRequestContext({
-            ownerGuard: control.ownerId,
-            activeOwnerId: requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined,
-            requireActiveOwner: true,
-            requireOwnerGuard: true,
-            requestId,
-            clientId: control.clientId,
-          });
-          controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
-        } catch (error) {
-          releaseDirectControlOwner();
-          send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
-            requestId,
-            clientId: control.clientId,
-            name: control.name,
-            result: JSON.stringify({
-              ok: false,
-              error: {
-                code: "invalid_owner_id",
-                message: error instanceof Error ? error.message : String(error),
-              },
-            }),
-          });
-          break;
-        }
-
-        let directControlRunCorrelation: { requestId?: string; clientId?: string } = {};
-        let directControlRunOwnerKey: string | undefined;
-        let preserveDirectControlRunOwner = false;
-        let directControlRunOwnerInserted = false;
-        try {
-          // A direct Swift spawn does not have a model-owned query context to
-          // inherit. Mint and retain a run-scoped context so the leaf worker's
-          // Swift-backed tools can relay through the shared daemon.
-          const directRunClientId =
-            typeof controlInput.clientId === "string" && controlInput.clientId.trim()
-              ? controlInput.clientId.trim()
-              : control.clientId;
-          const correlated = withControlRunCorrelation(control.name, controlInput, directRunClientId);
-          controlInput = correlated.input;
-          directControlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
-          const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
-          if (adapterId && correlated.requestId && correlated.clientId) {
-            directControlRunOwnerKey = controlRequestKey({ requestId: correlated.requestId, clientId: correlated.clientId });
-            if (directControlRunOwnerKey) {
-              directControlRunOwnerInserted = registerActiveControlOwner(
-                directControlRunOwnerKey,
-                controlContext.activeOwnerId,
-              );
-            }
-            transport.registerExternalRequestContext({
-              requestId: correlated.requestId,
-              clientId: correlated.clientId,
-              ownerId: controlContext.activeOwnerId,
-              adapterId,
-            });
-          }
-        } catch (error) {
-          if (directControlRunOwnerKey && directControlRunOwnerInserted) {
-            activeControlToolOwnersByRequest.delete(directControlRunOwnerKey);
-          }
-          if (
-            directControlRunCorrelation.requestId &&
-            directControlRunCorrelation.clientId &&
-            directControlRunOwnerInserted
-          ) {
-            transport.releaseExternalRequestContext(
-              directControlRunCorrelation.requestId,
-              directControlRunCorrelation.clientId,
-            );
-          }
-          releaseDirectControlOwner();
-          send({
-            type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
-            requestId,
-            clientId: control.clientId,
-            name: control.name,
-            result: JSON.stringify({
-              ok: false,
-              error: {
-                code: "control_context_conflict",
-                message: error instanceof Error ? error.message : String(error),
-              },
-            }),
-          });
-          break;
-        }
-
-        const result = await (async () => {
-          try {
-            const toolResult = agentControlToolContext
-              ? await handleAgentControlToolCall(
-                  {
-                    ...agentControlToolContext,
-                    trustedUserControl: true,
-                    getOwnerId: () => controlContext.activeOwnerId,
-                  },
-                  control.name,
-                  controlInput,
-                )
-              : JSON.stringify({
-                  ok: false,
-                  error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
-                });
-            preserveDirectControlRunOwner =
-              isLongLivedControlRun(control.name, controlInput) && controlToolResultOk(toolResult);
-            return toolResult;
-          } finally {
-            if (directControlRunOwnerKey && !preserveDirectControlRunOwner && directControlRunOwnerInserted) {
-              activeControlToolOwnersByRequest.delete(directControlRunOwnerKey);
-            }
-            if (
-              !preserveDirectControlRunOwner &&
-              directControlRunCorrelation.requestId &&
-              directControlRunCorrelation.clientId &&
-              directControlRunOwnerInserted
-            ) {
-              transport.releaseExternalRequestContext(
-                directControlRunCorrelation.requestId,
-                directControlRunCorrelation.clientId,
-              );
-            }
-            releaseDirectControlOwner();
-          }
-        })();
+        const execution = agentControlToolContext
+          ? await directControlExecutions.execute({
+              ownerId: ownerGuard,
+              clientId,
+              requestId,
+              name: control.name,
+              input: control.input ?? {},
+            }, agentControlToolContext)
+          : {
+              ownerId: ownerGuard,
+              name: control.name,
+              result: relayError("runtime_not_ready", "Agent runtime kernel is not ready"),
+            };
         send({
           type: "control_tool_result",
           protocolVersion: control.protocolVersion,
           requestId,
-          clientId: control.clientId,
-          name: control.name,
-          result,
+          clientId,
+          ownerId: execution.ownerId,
+          name: execution.name,
+          result: execution.result,
         });
         break;
       }
 
       case "interrupt":
         logErr("Interrupt requested by user");
-        transport.handleInterrupt(msg).catch((err) => {
+        transport.handleInterrupt({ ...msg, ownerId: resolveActiveOwner(msg.ownerId) }).catch((err) => {
           logErr(`Interrupt error: ${err}`);
         });
         break;
 
-      case "clear_owner_state": {
-        const ownerId = msg.ownerId?.trim() || currentOwnerId;
-        const result = kernel.clearOwnerState(ownerId);
-        logErr(
-          `Cleared owner state for ${ownerId}: invalidated ${result.invalidatedBindingIds.length} binding(s)`,
-        );
+      case "revoke_owner_runtime": {
+        const request = msg as RevokeOwnerRuntimeMessage;
+        const requestId = request.requestId?.trim();
+        const clientId = request.clientId?.trim();
+        const requestedOwnerId = request.ownerId?.trim() ?? "";
+        try {
+          if (!requestId || !clientId) {
+            throw new Error("Owner runtime revocation requires requestId and clientId");
+          }
+          const barrier = runRuntimeOwnerRevocationBarrier({
+            state: { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
+            requestedOwnerId,
+            inertOwnerId: DEFAULT_LOCAL_OWNER_ID,
+            lastReceipt: lastOwnerRuntimeRevocation,
+            // Authority is made inert before any abort/terminalization boundary.
+            // No new A or B work can be admitted while the correlated barrier runs.
+            commitAuthority: (state) => {
+              currentOwnerId = state.ownerId;
+              ownerAuthorityEstablished = state.established;
+            },
+            revokeAndClear: (previousOwnerId) => terminalizeAndClearOwnerRuntime(
+              previousOwnerId,
+              "owner_state_cleared",
+            ),
+          });
+          const receipt = barrier.receipt;
+          send({
+            type: "owner_runtime_revoked",
+            protocolVersion: request.protocolVersion,
+            requestId,
+            clientId,
+            ownerId: receipt.ownerId,
+            ok: true,
+            duplicate: barrier.duplicate,
+            revokedRunIds: receipt.revokedRunIds,
+            invalidatedBindingIds: receipt.invalidatedBindingIds,
+          });
+        } catch (error) {
+          send({
+            type: "owner_runtime_revoked",
+            protocolVersion: request.protocolVersion,
+            requestId,
+            clientId,
+            ownerId: requestedOwnerId,
+            ok: false,
+            duplicate: false,
+            revokedRunIds: [],
+            invalidatedBindingIds: [],
+            error: externalAuthorityError(error, "owner_runtime_revoke_failed"),
+          });
+        }
         break;
       }
 
       case "import_legacy_main_chat_sessions": {
-        // TODO(desktop-agent-platonic-gap-closure G6): delete handler two desktop releases after platonic ships.
-        const ownerId = msg.ownerId?.trim() || currentOwnerId;
-        const entries = Array.isArray(msg.entries) ? msg.entries : [];
-        const imported = kernel.importLegacyMainChatSessions({ ownerId, entries });
-        logErr(`Imported ${imported} main-chat surface session(s) for ${ownerId}`);
-        break;
-      }
-
-      case "import_conversation_turns": {
-        const ownerId = msg.ownerId?.trim() || currentOwnerId;
-        const surfaceKind = typeof msg.surfaceKind === "string" ? msg.surfaceKind : "";
-        const externalRefKind = typeof msg.externalRefKind === "string" ? msg.externalRefKind : "";
-        const externalRefId = typeof msg.externalRefId === "string" ? msg.externalRefId : "";
-        if (surfaceKind === "workstream" && externalRefKind === "workstream" && externalRefId.trim()) {
-          kernel.resolveWorkstreamSession({ ownerId, workstreamId: externalRefId });
-        }
-        const turns = Array.isArray(msg.turns) ? msg.turns : [];
-        const imported = kernel.importConversationTurns({
-          ownerId,
-          surfaceRef: { surfaceKind, externalRefKind, externalRefId },
-          turns: turns
-            .map((turn): ConversationTurnImportEntry | null => {
-              if (!turn || typeof turn !== "object") return null;
-              const record = turn as Record<string, unknown>;
-              const role = record.role === "assistant" ? "assistant" : record.role === "user" ? "user" : null;
-              const content = typeof record.content === "string" ? record.content : "";
-              if (!role || !content.trim()) return null;
-              return {
-                role,
-                content,
-                surfaceKind: typeof record.surfaceKind === "string" ? record.surfaceKind : undefined,
-                createdAtMs: typeof record.createdAtMs === "number" ? record.createdAtMs : undefined,
-                metadataJson: typeof record.metadataJson === "string" ? record.metadataJson : undefined,
-              };
-            })
-            .filter((turn): turn is ConversationTurnImportEntry => turn !== null),
-        });
-        logErr(`Imported ${imported} conversation turn(s) for ${ownerId}/${surfaceKind}`);
-        break;
-      }
-
-      case "merge_floating_chat_into_main_chat": {
-        const merge = msg as MergeFloatingChatIntoMainChatMessage;
-        const ownerId = merge.ownerId?.trim() || currentOwnerId;
-        const chatId = typeof merge.chatId === "string" ? merge.chatId : "default";
-        const result = kernel.mergeFloatingChatIntoMainChat({ ownerId, chatId });
-        logErr(
-          `Merged floating_chat into main_chat for ${ownerId}/${chatId}: `
-            + `${result.mergedTurns} turn(s), removedMapping=${result.removedFloatingMapping}`,
-        );
-        break;
-      }
-
-      case "record_surface_turn": {
-        const record = msg as RecordSurfaceTurnMessage;
-        const ownerId = record.ownerId?.trim() || currentOwnerId;
-        const surfaceKind = typeof record.surfaceKind === "string" ? record.surfaceKind : "";
-        const externalRefKind = typeof record.externalRefKind === "string" ? record.externalRefKind : "";
-        const externalRefId = typeof record.externalRefId === "string" ? record.externalRefId : "";
-        const userText = typeof record.userText === "string" ? record.userText : "";
-        const assistantText = typeof record.assistantText === "string" ? record.assistantText : "";
-        const origin = typeof record.origin === "string" ? record.origin : "surface";
-        const result = kernel.recordSurfaceTurn({
-          ownerId,
-          surfaceRef: { surfaceKind, externalRefKind, externalRefId },
-          userText,
-          assistantText,
-          origin,
-          interrupted: record.interrupted === true,
-          idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
-        });
-        send({
-          type: "turn_recorded",
-          protocolVersion: record.protocolVersion,
-          requestId: record.requestId,
-          clientId: record.clientId,
-          conversationId: result.conversationId,
-          surfaceKind,
-          externalRefKind,
-          externalRefId,
-          userText: userText.trim(),
-          assistantText: assistantText.trim(),
-          origin,
-          interrupted: record.interrupted === true,
-          idempotencyKey: typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined,
-          userTurnId: result.userTurn?.turnId,
-          assistantTurnId: result.assistantTurn?.turnId,
-          recorded: result.recorded,
-          duplicate: result.duplicate,
-        });
-        break;
-      }
-
-      case "get_voice_seed_context": {
-        const seed = msg as GetVoiceSeedContextMessage;
-        const ownerId = seed.ownerId?.trim() || currentOwnerId;
-        const requestId = seed.requestId.trim();
-        let conversationId = typeof seed.conversationId === "string" ? seed.conversationId : "";
-        let context = "";
-        let idempotencyKeys: string[] = [];
-        if (conversationId) {
-          const snapshot = kernel.getVoiceSeedSnapshot({ conversationId });
-          context = snapshot.context;
-          idempotencyKeys = snapshot.idempotencyKeys;
-        } else {
-          const surfaceKind = typeof seed.surfaceKind === "string" ? seed.surfaceKind : "main_chat";
-          const externalRefKind = typeof seed.externalRefKind === "string" ? seed.externalRefKind : "chat";
-          const externalRefId = typeof seed.externalRefId === "string" ? seed.externalRefId : "default";
-          const resolved = kernel.getVoiceSeedContextForSurface({
-            ownerId,
-            surfaceRef: { surfaceKind, externalRefKind, externalRefId },
-          });
-          conversationId = resolved.conversationId;
-          context = resolved.context;
-          idempotencyKeys = resolved.idempotencyKeys;
-        }
-        send({
-          type: "voice_seed_context",
-          protocolVersion: seed.protocolVersion,
-          requestId,
-          clientId: seed.clientId,
-          conversationId,
-          context,
-          idempotencyKeys,
-        });
-        break;
-      }
-
-      case "clear_owner_surface_state": {
-        const clear = msg as ClearOwnerSurfaceStateMessage;
-        const ownerId = clear.ownerId?.trim() || currentOwnerId;
-        const chatId = typeof clear.chatId === "string" ? clear.chatId : "default";
-        const result = kernel.clearOwnerMainChatTurns(ownerId, chatId);
-        logErr(
-          `Cleared main_chat kernel turns for ${ownerId}/${chatId}: `
-            + `conversation=${result.conversationId ?? "none"}, deleted=${result.deletedTurns}`,
-        );
-        break;
-      }
-
-      case "get_kernel_turn_tail": {
-        const tail = msg as GetKernelTurnTailMessage;
-        const ownerId = tail.ownerId?.trim() || currentOwnerId;
-        const requestId = tail.requestId.trim();
-        const limit = typeof tail.limit === "number" ? tail.limit : 8;
-        const chatId = typeof tail.chatId === "string" ? tail.chatId : "default";
-        const resolved = kernel.getMainChatTurnTail(ownerId, limit, chatId);
-        const turns = resolved.turns.map((turn) => {
-          let origin = "";
-          try {
-            const metadata = JSON.parse(turn.metadataJson || "{}") as { origin?: unknown };
-            origin = typeof metadata.origin === "string" ? metadata.origin : "";
-          } catch {
-            origin = "";
+        // Compatibility contract is owner-scoped and removal-bounded in
+        // LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY; this handler owns no fallback authority.
+        const request = msg as ImportLegacyMainChatSessionsMessage;
+        try {
+          if (!request.requestId?.trim() || !request.clientId?.trim()) {
+            throw new Error("legacy_main_chat_session_import_requires_correlation");
           }
-          return {
-            role: turn.role,
-            content: turn.content,
-            surfaceKind: turn.surfaceKind,
-            createdAtMs: turn.createdAtMs,
-            metadataJson: turn.metadataJson,
-            origin,
-          };
-        });
-        send({
-          type: "kernel_turn_tail",
-          protocolVersion: tail.protocolVersion,
-          requestId,
-          clientId: tail.clientId,
-          conversationId: resolved.conversationId ?? "",
-          turns,
-        });
-        break;
-      }
-
-      case "project_cross_surface_turn": {
-        const project = msg as ProjectCrossSurfaceTurnMessage;
-        const ownerId = project.ownerId?.trim() || currentOwnerId;
-        const surfaceKind = typeof project.surfaceKind === "string" ? project.surfaceKind : "main_chat";
-        const externalRefKind = typeof project.externalRefKind === "string" ? project.externalRefKind : "chat";
-        const externalRefId = typeof project.externalRefId === "string" ? project.externalRefId : "default";
-        const userText = typeof project.userText === "string" ? project.userText : "";
-        const assistantText = typeof project.assistantText === "string" ? project.assistantText : "";
-        const origin = typeof project.origin === "string" ? project.origin : "surface";
-        const result = kernel.projectCrossSurfaceTurn({
-          ownerId,
-          targetSurfaceRef: { surfaceKind, externalRefKind, externalRefId },
-          userText,
-          assistantText,
-          origin,
-          idempotencyKey: typeof project.idempotencyKey === "string" ? project.idempotencyKey : undefined,
-        });
-        if (result.recorded) {
+          if (!Array.isArray(request.entries) || request.entries.length === 0) {
+            throw new Error("legacy_main_chat_session_import_requires_entries");
+          }
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const receipt = kernel.importLegacyMainChatSessions({ ownerId, entries: request.entries });
           send({
-            type: "turn_recorded",
-            protocolVersion: project.protocolVersion,
-            requestId: project.requestId,
-            clientId: project.clientId,
-            conversationId: result.conversationId,
-            surfaceKind,
-            externalRefKind,
-            externalRefId,
-            userText: userText.trim(),
-            assistantText: assistantText.trim(),
-            origin,
-            interrupted: false,
-            idempotencyKey: typeof project.idempotencyKey === "string" ? project.idempotencyKey : undefined,
-            userTurnId: result.userTurn?.turnId,
-            assistantTurnId: result.assistantTurn?.turnId,
-            recorded: true,
-            duplicate: false,
+            type: "legacy_main_chat_sessions_imported",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            ownerId,
+            acceptedEntries: receipt.acceptedEntries,
+            acceptedCount: receipt.acceptedEntries.length,
+            importedCount: receipt.importedCount,
+          });
+          logErr(
+            `Accepted ${receipt.acceptedEntries.length} legacy main-chat alias(es); `
+            + `imported ${receipt.importedCount} (compat-owner=${LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY.owner})`,
+          );
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
           });
         }
         break;
       }
 
-      case "invalidate_session":
-        transport.handleInvalidateSession(msg);
+      case "invalidate_session": {
+        const invalidate = msg as InvalidateSessionMessage;
+        invalidate.ownerId = resolveActiveOwner(invalidate.ownerId);
+        transport.handleInvalidateSession(invalidate);
         break;
+      }
+
+      case "refresh_owner": {
+        const owner = msg as RefreshOwnerMessage;
+        const transition = establishRuntimeOwner(
+          { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
+          owner.ownerId,
+        );
+        if (transition.changed && !transition.firstEstablishment) {
+          currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
+          ownerAuthorityEstablished = false;
+          terminalizeAndClearOwnerRuntime(transition.previousOwnerId, "owner_changed");
+        }
+        currentOwnerId = transition.ownerId;
+        ownerAuthorityEstablished = true;
+        lastOwnerRuntimeRevocation = null;
+        if (transition.changed || transition.firstEstablishment) {
+          triggerBackendReconcile({ ownerId: currentOwnerId });
+          pumpJournalOutbox();
+        }
+        break;
+      }
 
       case "refresh_token": {
         const rtm = msg as RefreshTokenMessage;
-        process.env.OMI_AUTH_TOKEN = rtm.token;
-        currentOwnerId = rtm.ownerId ?? DEFAULT_LOCAL_OWNER_ID;
+        const transition = authorizeRuntimeTokenRefresh(
+          { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
+          rtm.ownerId,
+          () => { process.env.OMI_AUTH_TOKEN = rtm.token; },
+        );
+        if (transition.changed) {
+          directControlExecutions.transitionOwner(transition.previousOwnerId, transition.ownerId);
+          kernel.revokeRunToolCapabilitiesForOwner(transition.previousOwnerId, "owner_changed");
+          rejectPendingToolCallsForOwner(transition.previousOwnerId);
+        }
+        currentOwnerId = transition.ownerId;
+        ownerAuthorityEstablished = true;
+        lastOwnerRuntimeRevocation = null;
+        if (transition.changed || transition.firstEstablishment) {
+          triggerBackendReconcile({ ownerId: currentOwnerId });
+          pumpJournalOutbox();
+        }
         try {
           await ensurePiMonoAdapter(rtm.token);
           for (const adapter of piMonoAdapters) {
@@ -1736,18 +2931,16 @@ async function main(): Promise<void> {
         break;
       }
 
-      case "authenticate": {
-        logErr(`Authentication message received from Swift`);
-        send({ type: "auth_success" });
-        if (authResolve) {
-          authResolve();
-          authResolve = null;
-        }
-        break;
-      }
-
       case "stop":
         logErr("Received stop signal, exiting");
+        directControlExecutions.abortAll();
+        kernel.revokeRunToolCapabilities("runtime_stopped");
+        rejectPendingToolCallsForOwner(
+          currentOwnerId,
+          "runtime_stopped",
+          "Agent runtime stopped during tool execution",
+        );
+        clearInterval(journalPumpTimer);
         store.close();
         await acpAdapter.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
@@ -1757,12 +2950,41 @@ async function main(): Promise<void> {
 
       default:
         logErr(`Unknown message type: ${(msg as any).type}`);
+      }
+    } catch (error) {
+      const request = msg as { protocolVersion?: unknown; requestId?: unknown; clientId?: unknown };
+      const requestId = typeof request.requestId === "string" ? request.requestId : undefined;
+      const clientId = typeof request.clientId === "string" ? request.clientId : undefined;
+      const envelope = runtimeErrorEnvelope(error);
+      if (isInboundResponseMessage(msg)) {
+        logErr(`Unhandled runtime response error type=${msg.type}: ${envelope.message}`);
+        return;
+      }
+      if (requestId && clientId) {
+        send({
+          type: "error",
+          protocolVersion: PROTOCOL_VERSION,
+          requestId,
+          clientId,
+          message: envelope.message,
+          failure: envelope.failure,
+        });
+      } else {
+        logErr(`Unhandled uncorrelated runtime request error: ${envelope.message}`);
+      }
     }
   });
 
   rl.on("close", () => {
     logErr("stdin closed, exiting");
     logCrash("stdin closed, exiting");
+    directControlExecutions.abortAll();
+    kernel.revokeRunToolCapabilities("runtime_stopped");
+    rejectPendingToolCallsForOwner(
+      currentOwnerId,
+      "runtime_stopped",
+      "Agent runtime stopped during tool execution",
+    );
     store.close();
     void acpAdapter.stop();
     void Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));

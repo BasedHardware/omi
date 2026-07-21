@@ -47,15 +47,5 @@ pub struct ProvisionAgentResponse {
     pub agent_status: AgentVmStatus,
 }
 
-/// Response for GET /v2/agent/status
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentStatusResponse {
-    pub vm_name: String,
-    pub zone: String,
-    pub ip: Option<String>,
-    pub status: AgentVmStatus,
-    pub auth_token: String,
-    pub created_at: String,
-    pub last_query_at: Option<String>,
-}
+/// Response for GET /v2/agent/status — identical shape to AgentVm.
+pub type AgentStatusResponse = AgentVm;

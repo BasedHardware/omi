@@ -2,13 +2,17 @@
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from pydantic import ValidationError
 
 from database._client import get_firestore_client
+from database.firestore_index_registry import ACTIVE_ATTENTION_OVERRIDE_QUERY
+from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from models.task_recommendation import (
     DecisionRecord,
     FeedbackCreate,
@@ -23,6 +27,9 @@ from models.task_recommendation import (
     WhatMattersNowProjection,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 FEEDBACK_COLLECTION = 'task_feedback'
 OUTCOMES_COLLECTION = 'task_outcomes'
@@ -86,7 +93,7 @@ def _validate_generation(
 ) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
-        control = TaskWorkflowControl.model_validate(_snapshot_dict(snapshot))
+        control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise RecommendationGenerationMismatchError('account generation mismatch')
     if control.workflow_mode not in (allowed_modes or {TaskWorkflowMode.read}):
@@ -104,6 +111,23 @@ def _without_generation(payload: dict[str, Any]) -> dict[str, Any]:
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
     payload = snapshot.to_dict()
     return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
+
+
+def _record_malformed_embedded_payload(*, evaluation_id: str, error: ValidationError) -> None:
+    error_types = [
+        str(item.get('type', 'unknown')) for item in error.errors(include_input=False, include_url=False)[:5]
+    ]
+    logger.warning(
+        'Malformed embedded Firestore payload evaluation_id=%s validation_types=%s', evaluation_id, error_types
+    )
+    record_fallback(
+        component='firestore_read',
+        from_mode='firestore_document',
+        to_mode='skip_malformed_document',
+        reason='malformed_doc',
+        outcome='degraded',
+        log=logger,
+    )
 
 
 def _stable_id(prefix: str, *parts: object) -> str:
@@ -176,7 +200,12 @@ def create_intervention(
         if stored.get('_request_hash') != payload['_request_hash']:
             raise IdempotencyConflictError('idempotency key was used for a different intervention')
         stored.pop('_request_hash', None)
-        return InterventionRecord.model_validate(_without_generation(stored)), False
+        return (
+            parse_snapshot_strict(
+                InterventionRecord, existing, payload_from_snapshot=lambda _snapshot: _without_generation(stored)
+            ),
+            False,
+        )
 
     return apply(transaction)
 
@@ -208,7 +237,11 @@ def save_projection(
         )
         current_snapshot = projection_ref.get(transaction=write_transaction)
         if current_snapshot.exists:
-            current = WhatMattersNowProjection.model_validate(_without_generation(_snapshot_dict(current_snapshot)))
+            current = parse_snapshot_strict(
+                WhatMattersNowProjection,
+                current_snapshot,
+                payload_from_snapshot=lambda _snapshot: _without_generation(_snapshot_dict(current_snapshot)),
+            )
             if current.generated_at > projection.generated_at or (
                 current.material_version == projection.material_version and current.expires_at > projection.generated_at
             ):
@@ -305,8 +338,31 @@ def get_projection(
     payload = _snapshot_dict(snapshot)
     if payload.get('account_generation') != account_generation:
         return None
-    projection = WhatMattersNowProjection.model_validate(_without_generation(payload))
+    projection = parse_snapshot_or_none(
+        WhatMattersNowProjection,
+        snapshot,
+        payload_from_snapshot=lambda _snapshot: _without_generation(payload),
+    )
+    if projection is None:
+        return None
     return projection if include_expired or projection.expires_at > now else None
+
+
+def _decision_records(raw_records: list[Any], evaluation_id: str) -> list[DecisionRecord]:
+    """Build DecisionRecord objects from stored decision dicts, skipping a malformed one.
+
+    DecisionRecord is extra='forbid', so a legacy or schema-drifted audit record would raise
+    ValidationError and 500 the whole recommendation read. Skip such a record rather than fail the
+    batch; unexpected errors still propagate. Sorted by subject_id to match the caller.
+    """
+    records: list[DecisionRecord] = []
+    for record in raw_records:
+        try:
+            records.append(DecisionRecord.model_validate(record))
+        except ValidationError as e:
+            _record_malformed_embedded_payload(evaluation_id=evaluation_id, error=e)
+    records.sort(key=lambda record: record.subject_id)
+    return records
 
 
 def get_decisions(
@@ -341,9 +397,28 @@ def get_decisions(
     raw_records = payload.get('decisions')
     if not isinstance(raw_records, list):
         return []
-    records = [DecisionRecord.model_validate(record) for record in raw_records]
-    records.sort(key=lambda record: record.subject_id)
-    return records
+    return _decision_records(raw_records, evaluation_id)
+
+
+def _valid_evaluation_projection(
+    raw_projection: Any, evaluation_id: str, now: datetime
+) -> Optional[WhatMattersNowProjection]:
+    """Build a WhatMattersNowProjection from a stored projection dict, or None if unusable.
+
+    The stored projection was validated with no guard, so a legacy or schema-drifted doc would raise
+    ValidationError and 500 the recommendation read. Treat a malformed (or non-dict, stale, or
+    id-mismatched) projection as absent, consistent with this reader's other None returns.
+    """
+    if not isinstance(raw_projection, dict):
+        return None
+    try:
+        projection = WhatMattersNowProjection.model_validate(raw_projection)
+    except ValidationError as e:
+        _record_malformed_embedded_payload(evaluation_id=evaluation_id, error=e)
+        return None
+    if projection.evaluation_id != evaluation_id or projection.expires_at <= now:
+        return None
+    return projection
 
 
 def get_evaluation_projection(
@@ -376,13 +451,7 @@ def get_evaluation_projection(
     payload = _snapshot_dict(snapshot)
     if payload.get('account_generation') != account_generation:
         return None
-    raw_projection = payload.get('projection')
-    if not isinstance(raw_projection, dict):
-        return None
-    projection = WhatMattersNowProjection.model_validate(raw_projection)
-    if projection.evaluation_id != evaluation_id or projection.expires_at <= now:
-        return None
-    return projection
+    return _valid_evaluation_projection(payload.get('projection'), evaluation_id, now)
 
 
 def create_feedback(
@@ -470,7 +539,12 @@ def create_feedback(
                         },
                     )
             stored.pop('_request_hash', None)
-            return FeedbackRecord.model_validate(_without_generation(stored)), False
+            return (
+                parse_snapshot_strict(
+                    FeedbackRecord, existing, payload_from_snapshot=lambda _snapshot: _without_generation(stored)
+                ),
+                False,
+            )
         write_transaction.set(ref, payload)
         if override_expires_at is not None and dedupe_key is not None:
             override_id = _stable_id('override', uid, account_generation, dedupe_key)
@@ -500,11 +574,10 @@ def list_active_override_dedupe_keys(
     account_generation: int = 0,
     firestore_client: Any = None,
 ) -> set[str]:
-    query = (
-        _user_ref(uid, firestore_client=firestore_client)
-        .collection(ATTENTION_OVERRIDES_COLLECTION)
-        .where('account_generation', '==', account_generation)
-        .where('expires_at', '>', now)
+    query = ACTIVE_ATTENTION_OVERRIDE_QUERY.build(
+        _user_ref(uid, firestore_client=firestore_client).collection(ATTENTION_OVERRIDES_COLLECTION),
+        {'account_generation': account_generation, 'now': now},
+        field_filter_factory=FieldFilter,
     )
     return {
         str(payload['dedupe_key'])
@@ -648,7 +721,12 @@ def create_outcome(
         if stored.get('_request_hash') != payload['_request_hash']:
             raise IdempotencyConflictError('idempotency key was used for a different outcome')
         stored.pop('_request_hash', None)
-        return OutcomeRecord.model_validate(_without_generation(stored)), False
+        return (
+            parse_snapshot_strict(
+                OutcomeRecord, existing, payload_from_snapshot=lambda _snapshot: _without_generation(stored)
+            ),
+            False,
+        )
 
     return apply(transaction)
 
@@ -693,7 +771,11 @@ def replace_context_snapshot(
         replaced = stored_snapshot.exists
         if replaced:
             stored_payload = _snapshot_dict(stored_snapshot)
-            stored = NormalizedContextSnapshot.model_validate(_without_generation(stored_payload))
+            stored = parse_snapshot_strict(
+                NormalizedContextSnapshot,
+                stored_snapshot,
+                payload_from_snapshot=lambda _snapshot: _without_generation(stored_payload),
+            )
             if snapshot.generated_at < stored.generated_at:
                 raise StaleSnapshotError('context snapshot is older than stored state')
             if snapshot.generated_at == stored.generated_at and snapshot != stored:
@@ -738,7 +820,13 @@ def get_context_snapshot(
     payload = _snapshot_dict(snapshot)
     if payload.get('account_generation') != account_generation:
         return None
-    record = NormalizedContextSnapshot.model_validate(_without_generation(payload))
+    record = parse_snapshot_or_none(
+        NormalizedContextSnapshot,
+        snapshot,
+        payload_from_snapshot=lambda _snapshot: _without_generation(payload),
+    )
+    if record is None:
+        return None
     if record.expires_at <= now:
         ref.delete()
         receipt_id = payload.get('_receipt_id')
@@ -790,7 +878,11 @@ def replace_open_loop_snapshot(
         replaced = stored_snapshot.exists
         if replaced:
             stored_payload = _snapshot_dict(stored_snapshot)
-            stored = OpenLoopSnapshot.model_validate(_without_generation(stored_payload))
+            stored = parse_snapshot_strict(
+                OpenLoopSnapshot,
+                stored_snapshot,
+                payload_from_snapshot=lambda _snapshot: _without_generation(stored_payload),
+            )
             if snapshot.generated_at < stored.generated_at:
                 raise StaleSnapshotError('open-loop snapshot is older than stored state')
             if snapshot.generated_at == stored.generated_at and snapshot != stored:
@@ -829,7 +921,13 @@ def list_open_loop_snapshots(
     records: list[OpenLoopSnapshot] = []
     for snapshot in query.stream():
         payload = _snapshot_dict(snapshot)
-        record = OpenLoopSnapshot.model_validate(_without_generation(payload))
+        record = parse_snapshot_or_none(
+            OpenLoopSnapshot,
+            snapshot,
+            payload_from_snapshot=lambda _snapshot: _without_generation(payload),
+        )
+        if record is None:
+            continue
         if record.expires_at <= now:
             snapshot.reference.delete()
             receipt_id = payload.get('_receipt_id')

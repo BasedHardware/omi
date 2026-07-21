@@ -16,7 +16,20 @@ service:
   port: 8080
 
 ingress:
-  enabled: false
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: "gce-internal"
+    kubernetes.io/ingress.regional-static-ip-name: "dev-nllb-translation-ilb-ip-address"
+    kubernetes.io/ingress.allow-http: "true"
+  hosts:
+    - host: nllb.omiapi.com
+      paths:
+        - path: /v1/translate
+          pathType: Prefix
+        - path: /health
+          pathType: Prefix
+  tls: []
 
 env:
   - name: NLLB_MODEL_DIR
@@ -73,6 +86,10 @@ metrics:
   serviceMonitor:
     enabled: true
     interval: "15s"
+    labels:
+      release: dev-kube-prometheus-stack
+  prometheusRule:
+    enabled: true
     labels:
       release: dev-kube-prometheus-stack
 

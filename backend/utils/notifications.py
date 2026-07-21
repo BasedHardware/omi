@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from database.redis_db import (
     set_credit_limit_notification_sent,
     has_credit_limit_notification_been_sent,
@@ -144,6 +144,30 @@ def _build_message(
     )
 
 
+def _send_messages(messages: List[messaging.Message]) -> Any:
+    """Send one FCM batch through the synchronous Firebase Admin SDK."""
+    return cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]
+
+
+def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[str]]:
+    """Return the successful-send count and permanently invalid tokens."""
+    invalid_tokens: List[str] = []
+    success_count = 0
+
+    for idx, result in enumerate(response.responses):
+        if result.success:
+            success_count += 1
+        elif result.exception:
+            error_code = getattr(result.exception, 'code', None)
+            if error_code in PERMANENT_FAILURE_CODES:
+                invalid_tokens.append(tokens[idx])
+                logger.error(f'Invalid token removed - Error: {error_code}')
+            else:
+                logger.error(f'FCM send failed: {result.exception}({error_code})')
+
+    return success_count, invalid_tokens
+
+
 def _send_to_user(
     user_id: str,
     tag: str,
@@ -164,22 +188,8 @@ def _send_to_user(
     messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
 
     try:
-        response = cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]  # firebase_admin send_each untyped
-
-        # Collect invalid tokens and count successes
-        invalid_tokens: List[str] = []
-        success_count = 0
-
-        for idx, result in enumerate(response.responses):
-            if result.success:
-                success_count += 1
-            elif result.exception:
-                error_code = getattr(result.exception, 'code', None)
-                if error_code in PERMANENT_FAILURE_CODES:
-                    invalid_tokens.append(tokens[idx])
-                    logger.error(f'Invalid token removed - Error: {error_code}')
-                else:
-                    logger.error(f'FCM send failed: {result.exception}({error_code})')
+        response = _send_messages(messages)
+        success_count, invalid_tokens = _collect_send_results(response, tokens)
 
         # Remove invalid tokens in bulk
         if invalid_tokens:
@@ -188,6 +198,38 @@ def _send_to_user(
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
 
+    except Exception as e:
+        logger.error(f'FCM batch send error: {e}')
+        return 0
+
+
+async def _send_to_user_async(
+    user_id: str,
+    tag: str,
+    notification: Optional[messaging.Notification] = None,
+    data: Optional[Dict[str, Any]] = None,
+    is_background: bool = False,
+    priority: str = 'normal',
+    tokens: Optional[List[str]] = None,
+) -> int:
+    """Async boundary for the synchronous token store and Firebase Admin SDK."""
+    if tokens is None:
+        tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
+    if not tokens:
+        logger.info(f"No tokens found for user {user_id}")
+        return 0
+
+    messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
+
+    try:
+        response = await run_blocking(postprocess_executor, _send_messages, messages)
+        success_count, invalid_tokens = _collect_send_results(response, tokens)
+
+        if invalid_tokens:
+            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
+
+        logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
+        return success_count
     except Exception as e:
         logger.error(f'FCM batch send error: {e}')
         return 0
@@ -203,12 +245,22 @@ def send_notification(
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
 
 
+async def send_notification_async(
+    user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
+) -> None:
+    """Async counterpart used by event-loop callers while preserving the sync public API."""
+    logger.info(f'send_notification to user {user_id}')
+    tag = _generate_notification_tag(user_id, title, body, data)
+    notification = messaging.Notification(title=title, body=body)
+    await _send_to_user_async(user_id, tag, notification=notification, data=data, tokens=tokens)
+
+
 async def send_subscription_paid_personalized_notification(user_id: str, data: Optional[Dict[str, Any]] = None) -> None:
     """Send a personalized notification to all user's devices when unlimited subscription is purchased"""
     # Get user name from Firebase Auth
     name: str = "there"
     try:
-        user = _get_user(user_id)
+        user = await run_blocking(postprocess_executor, _get_user, user_id)
         name = user.display_name
         if not name and user.email:
             name = user.email.split('@')[0].capitalize()
@@ -221,7 +273,7 @@ async def send_subscription_paid_personalized_notification(user_id: str, data: O
     # Generate welcome message for unlimited plan with user context
     title, body = await generate_notification_message(user_id, name, "unlimited")
 
-    send_notification(user_id, title, body, data)
+    await send_notification_async(user_id, title, body, data)
 
 
 async def send_credit_limit_notification(user_id: str) -> None:
@@ -234,7 +286,7 @@ async def send_credit_limit_notification(user_id: str) -> None:
 
     name: str = "there"
     try:
-        user = _get_user(user_id)
+        user = await run_blocking(postprocess_executor, _get_user, user_id)
         name = user.display_name
         if not name and user.email:
             name = user.email.split('@')[0].capitalize()
@@ -248,7 +300,7 @@ async def send_credit_limit_notification(user_id: str) -> None:
     title, body = await generate_credit_limit_notification(user_id, name)
 
     # Send notification
-    send_notification(user_id, title, body)
+    await send_notification_async(user_id, title, body)
 
     # Cache that notification was sent (6 hours TTL). Offloaded: the Redis write is sync and blocks
     # the event loop in this async path.
@@ -266,7 +318,7 @@ async def send_silent_user_notification(user_id: str) -> None:
 
     name: str = "there"
     try:
-        user = _get_user(user_id)
+        user = await run_blocking(postprocess_executor, _get_user, user_id)
         name = user.display_name
         if not name and user.email:
             name = user.email.split('@')[0].capitalize()
@@ -280,7 +332,7 @@ async def send_silent_user_notification(user_id: str) -> None:
     title, body = generate_silent_user_notification(name)
 
     # Send notification
-    send_notification(user_id, title, body)
+    await send_notification_async(user_id, title, body)
 
     # Cache that notification was sent (24 hours TTL). Offloaded: the Redis write is sync and blocks
     # the event loop in this async path.
@@ -320,7 +372,7 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
 
         def send_batch(batch_tokens: List[str]) -> Tuple[Any, List[str]]:
             messages = [_build_message(token, tag, notification=notification) for token in batch_tokens]
-            response = cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]  # firebase_admin send_each untyped
+            response = _send_messages(messages)
 
             # Collect permanently invalid tokens
             invalid_tokens: List[str] = []
@@ -334,7 +386,7 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
             return response, invalid_tokens
 
         tasks = [
-            run_blocking(db_executor, send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
+            run_blocking(postprocess_executor, send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
             for i in range(num_batches)
         ]
         results = await asyncio.gather(*tasks)
@@ -354,7 +406,7 @@ def send_app_review_reply_notification(
 ):
     """Sends a notification to a user when their app review receives a reply."""
     app_owner = get_user_from_uid(app_owner_uid)
-    owner_name = app_owner.get('display_name', 'The developer') if app_owner else 'The developer'
+    owner_name = (app_owner or {}).get('display_name') or 'The developer'
     title = f'{owner_name} ({app_name})'
     body = reply_body
     data = {'app_id': app_id, 'type': 'app_review_reply', 'navigate_to': f'/apps/{app_id}'}
@@ -366,7 +418,7 @@ def send_new_app_review_notification(
 ):
     """Sends a notification to the app owner when a new review is submitted."""
     reviewer = get_user_from_uid(reviewer_uid)
-    reviewer_name = reviewer.get('display_name', 'A user') if reviewer else 'A user'
+    reviewer_name = (reviewer or {}).get('display_name') or 'A user'
     title = f'{reviewer_name} reviewed {app_name}'
     body = review_body
     data = {'app_id': app_id, 'type': 'new_app_review', 'navigate_to': f'/apps/{app_id}'}
@@ -389,22 +441,12 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
-def send_apple_reminders_sync_push(user_id: str, action_items: List[Dict[str, Any]]) -> bool:
-    """
-    Sends a single silent push notification with a batch of action items to sync to Apple Reminders.
-    This avoids iOS throttling that occurs when sending multiple rapid silent pushes.
-
-    Args:
-        user_id: The user's Firebase UID
-        action_items: List of dicts, each with 'id', 'description', and optional 'due_at'
-
-    Returns:
-        bool: True if notification was sent successfully
-    """
+def _build_apple_reminders_sync_message(
+    user_id: str, action_items: List[Dict[str, Any]]
+) -> Optional[Tuple[str, Dict[str, str]]]:
+    """Build the shared Apple Reminders payload and collapse tag."""
     if not action_items:
-        return False
-
-    logger.info(f'send_apple_reminders_sync_push to user {user_id}, {len(action_items)} items')
+        return None
 
     items_payload: List[Dict[str, Any]] = []
     for item in action_items:
@@ -440,7 +482,40 @@ def send_apple_reminders_sync_push(user_id: str, action_items: List[Dict[str, An
     # Use a unique tag per batch based on all item IDs to avoid collapsing different batches
     item_ids = ':'.join(item['id'] for item in action_items)
     tag = _generate_tag(f"{user_id}:apple_reminders_sync:{item_ids}")
+    return tag, data
+
+
+def send_apple_reminders_sync_push(user_id: str, action_items: List[Dict[str, Any]]) -> bool:
+    """
+    Sends a single silent push notification with a batch of action items to sync to Apple Reminders.
+    This avoids iOS throttling that occurs when sending multiple rapid silent pushes.
+
+    Args:
+        user_id: The user's Firebase UID
+        action_items: List of dicts, each with 'id', 'description', and optional 'due_at'
+
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    message = _build_apple_reminders_sync_message(user_id, action_items)
+    if message is None:
+        return False
+
+    logger.info(f'send_apple_reminders_sync_push to user {user_id}, {len(action_items)} items')
+    tag, data = message
     success_count = _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
+    return success_count > 0
+
+
+async def send_apple_reminders_sync_push_async(user_id: str, action_items: List[Dict[str, Any]]) -> bool:
+    """Async Apple Reminders push boundary for event-loop callers."""
+    message = _build_apple_reminders_sync_message(user_id, action_items)
+    if message is None:
+        return False
+
+    logger.info(f'send_apple_reminders_sync_push to user {user_id}, {len(action_items)} items')
+    tag, data = message
+    success_count = await _send_to_user_async(user_id, tag, data=data, is_background=True, priority='high')
     return success_count > 0
 
 

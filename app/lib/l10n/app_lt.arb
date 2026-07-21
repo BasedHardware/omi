@@ -1586,7 +1586,7 @@
     "port": "Prievadas",
     "preferences": "Nuostatos",
     "premiumMinsLeft": "Liko {count} premium minučių.",
-    "premiumMinutesMonth": "600 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ",
+    "premiumMinutesMonth": "300 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ",
     "premiumMinutesUsed": "Premium minutės išnaudotos.",
     "preparingAudioCapture": "Ruošiamas garso įrašymas",
     "preparingFormForYou": "Ruošiama forma jums...",
@@ -2935,7 +2935,7 @@
     "upgradePlan": "Atnaujinti planą",
     "billingMonthly": "Mėnesinis",
     "billingYearly": "Metinis",
-    "savePercent": "Sutaupykite ~17%",
+    "savePercent": "Sutaupykite ~{percent}%",
     "popular": "Populiarus",
     "currentPlan": "Dabartinis",
     "neoSubtitle": "{count} klausimų per mėnesį",
@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.",
     "transcribeLaterTitle": "Transkribuoti vėliau",
     "transcribeLaterDescription": "Įrašykite garsą dabar, o transkribuokite vėliau, kai patogu, užuot tai darę tiesiogiai. Įrašai saugomi telefone, o juos įkėlę sukursite pokalbius.",
-    "transcribeLaterNote": "Kol kas veikia su Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
+    "transcribeLaterNote": "Veikia su telefono mikrofonu bei Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
     "transcribeLaterStorageFull": "Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.",
     "unmute": "Įjungti garsą",
     "newRecording": "Naujas įrašas",
@@ -3143,5 +3143,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Įrenginio saugykla",
+    "deviceStoragePercentFull": "užpildyta {percent}%",
+    "deviceStorageUsedOfTotal": "panaudota {used} iš {total}",
+    "deviceStorageFree": "{free} laisva",
+    "deviceStorageNearlyFull": "Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos.",
+    "phoneMicOfflineFallbackMessage": "Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę.",
+    "dataEncryptedBanner": "Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami.",
+    "rayBanMetaMicPickerTitle": "Pasirinkite „Ray-Ban Meta“ mikrofoną",
+    "rayBanMetaMicPickerDescription": "Pasirinkite akinių Bluetooth mikrofoną. Kol „Omi“ jį naudoja, muzika pristabdoma.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth mikrofonų nerasta. Prijunkite akinius iPhone nustatymuose ir bandykite dar kartą.",
+    "rayBanMetaMicPickerLoadError": "Nepavyko įkelti Bluetooth mikrofonų. Patikrinkite, ar Bluetooth įjungtas, ir bandykite dar kartą.",
+    "rayBanMetaMicPickerConnectError": "Nepavyko prisijungti prie šio mikrofono. Įsitikinkite, kad jis prijungtas iPhone nustatymuose."
 }

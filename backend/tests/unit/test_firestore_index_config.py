@@ -27,18 +27,13 @@ def test_firestore_config_declares_memory_items_canary_read_index():
     )
 
 
-def test_firestore_config_declares_v3_compatibility_projection_index():
-    required_fields = [
-        ('created_at', 'DESCENDING'),
-        ('__name__', 'DESCENDING'),
-    ]
-
-    assert any(
-        index.get('collectionGroup') == 'v3_compatibility_projection_items'
-        and index.get('queryScope') == 'COLLECTION'
-        and _fields(index) == required_fields
-        for index in _index_specs()
-    )
+def test_firestore_config_does_not_declare_single_field_composite_indexes():
+    # Firestore manages single-field indexes itself. A declared index with only
+    # one real field plus the document-id tie breaker is rejected at deploy
+    # time as redundant (HTTP 400: configure using single field index controls).
+    for index in _index_specs():
+        indexed_fields = [field for field, _ in _fields(index) if field != '__name__']
+        assert len(indexed_fields) > 1, index
 
 
 def test_firestore_config_declares_mcp_conversation_category_filter_index():

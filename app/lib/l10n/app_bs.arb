@@ -10521,7 +10521,7 @@
     "upgradePlan": "Nadogradi plan",
     "billingMonthly": "Mjesečno",
     "billingYearly": "Godišnje",
-    "savePercent": "Uštedite ~17%",
+    "savePercent": "Uštedite ~{percent}%",
     "popular": "Popularno",
     "currentPlan": "Trenutni",
     "neoSubtitle": "{count} pitanja mjesečno",
@@ -10633,7 +10633,7 @@
     "syncCustomSttWarningMessage": "Koristite vlastiti provajder transkripcije. Sinkronizacija ovih snimaka transkribuje ih na Omi serverima i broje se u limit transkripcije vašeg plana.",
     "transcribeLaterTitle": "Transkripcija kasnije",
     "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kasnije po potrebi umjesto uživo. Snimci se čuvaju na vašem telefonu, a zatim ih otpremite da biste kreirali razgovore.",
-    "transcribeLaterNote": "Za sada radi s Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.",
+    "transcribeLaterNote": "Radi s mikrofonom telefona te Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.",
     "transcribeLaterStorageFull": "Vašem telefonu ponestaje prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i snimanje će se automatski nastaviti.",
     "unmute": "Uključi zvuk",
     "newRecording": "Novi snimak",
@@ -10721,5 +10721,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Pohrana uređaja",
+    "deviceStoragePercentFull": "{percent}% popunjeno",
+    "deviceStorageUsedOfTotal": "{used} od {total} iskorišteno",
+    "deviceStorageFree": "{free} slobodno",
+    "deviceStorageNearlyFull": "Uređaj je gotovo pun — sinkronizirajte da oslobodite prostor.",
+    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kada ponovo budete na mreži.",
+    "dataEncryptedBanner": "Vaši podaci su prema zadanim postavkama zaštićeni jakom enkripcijom, a vi kontrolišete kako se pohranjuju i koriste.",
+    "rayBanMetaMicPickerTitle": "Odaberite Ray-Ban Meta mikrofon",
+    "rayBanMetaMicPickerDescription": "Odaberite Bluetooth mikrofon svojih naočala. Muzika se pauzira dok ga Omi koristi.",
+    "rayBanMetaMicPickerEmpty": "Nije pronađen nijedan Bluetooth mikrofon. Povežite naočale u postavkama iPhonea pa pokušajte ponovo.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth mikrofoni se nisu mogli učitati. Provjerite je li Bluetooth uključen pa pokušajte ponovo.",
+    "rayBanMetaMicPickerConnectError": "Povezivanje s tim mikrofonom nije uspjelo. Provjerite je li povezan u postavkama iPhonea."
 }

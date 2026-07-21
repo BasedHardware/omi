@@ -6,6 +6,8 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/UpdateRelaunchWindowPolicy.swift
   - desktop/macos/Desktop/Sources/UpdaterViewModel.swift
+  - desktop/macos/Desktop/Sources/DesktopUpdatePolicyManager.swift
+  - desktop/macos/Desktop/Sources/Startup/AppInstaller.swift
 preconditions:
   - isolated_release_test_host
   - signed_older_beta_installed
