@@ -11,7 +11,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
@@ -93,6 +93,8 @@ class DesktopChannelPromotionRequest(BaseModel):
 
 class QualifiedMacOSBetaPromotionRequest(BaseModel):
     """The sole request shape accepted by automatic macOS Beta promotion."""
+
+    model_config = ConfigDict(extra='forbid')
 
     manifest: DesktopReleaseManifestRequest
     expected_generation: Optional[int] = Field(default=None, ge=0)
@@ -1008,6 +1010,11 @@ async def promote_qualified_macos_beta(
     manifest_data = request.manifest.model_dump()
     if manifest_data["platform"] != "macos":
         raise HTTPException(status_code=422, detail="automatic beta promotion requires a macos manifest")
+    qualification = manifest_data["qualification"]
+    if qualification.get("passed") is not True or str(qualification.get("tier", "")).upper() != "T2":
+        raise HTTPException(
+            status_code=422, detail="automatic beta promotion requires passed T2 qualification evidence"
+        )
 
     try:
         manifest = await run_blocking(db_executor, register_release_manifest, manifest_data)
