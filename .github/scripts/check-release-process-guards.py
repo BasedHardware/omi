@@ -47,27 +47,112 @@ def _load_codemagic_with_duplicates(path: Path) -> tuple[dict[str, object], list
     return document, duplicates, []
 
 
-def _script_commands(script: str) -> list[str]:
-    """Return shell-command lines, deliberately excluding comments and quoted decoys."""
-    commands: list[str] = []
-    pending = ""
-    for raw_line in script.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
+_ShellCommand = tuple[str, ...]
+
+
+_SHELL_SEPARATORS = {";", "&&", "||", "|", "&", "\n"}
+_SHELL_CONTROL_WORDS = {"then", "do", "else", "elif", "fi", "done", "esac", "{", "}"}
+_ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_RELEASE_CREATE_GRAMMAR = re.compile(r"\bgh\s+release\s+create\b")
+
+
+def _script_commands(script: str) -> list[_ShellCommand]:
+    """Split a small safe shell-command stream without treating output as authority.
+
+    This is intentionally not a shell parser.  It only needs enough grammar to
+    find direct executable commands after control separators and continuations;
+    dynamic shell evaluation is rejected below instead of being interpreted.
+    """
+    lexer = shlex.shlex(script.replace("\\\n", ""), posix=True, punctuation_chars=";&|()\n")
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    commands: list[_ShellCommand] = []
+    words: list[str] = []
+    for word in lexer:
+        if word in _SHELL_SEPARATORS:
+            if words:
+                commands.append(tuple(words))
+                words = []
             continue
-        # A quoted command printed for a log/assertion is never publisher
-        # authority, but ordinary shell output remains an ordering boundary.
-        if line.startswith(("echo ", "printf ")) and "gh release create" in line:
+        if word in _SHELL_CONTROL_WORDS:
+            if words:
+                commands.append(tuple(words))
+                words = []
             continue
-        pending = f"{pending} {line}".strip() if pending else line
-        if pending.endswith("\\"):
-            pending = pending[:-1].rstrip()
+        if word in {"(", ")"}:
             continue
-        commands.append(pending)
-        pending = ""
-    if pending:
-        commands.append(pending)
+        words.append(word)
+    if words:
+        commands.append(tuple(words))
     return commands
+
+
+def _executable_words(command: _ShellCommand) -> tuple[str, ...]:
+    """Remove assignment and `command`/`env` wrappers before classifying a command."""
+    words = command
+    index = 0
+    while index < len(words) and _ENV_ASSIGNMENT.match(words[index]):
+        index += 1
+    while index < len(words):
+        if words[index] == "command":
+            index += 1
+            while index < len(words) and words[index].startswith("-"):
+                index += 1
+            continue
+        if words[index] == "env":
+            index += 1
+            while index < len(words):
+                word = words[index]
+                if _ENV_ASSIGNMENT.match(word):
+                    index += 1
+                elif word in {"-u", "--unset", "-C", "--chdir"}:
+                    index += 2
+                elif word.startswith("-"):
+                    index += 1
+                else:
+                    break
+            continue
+        break
+    return words[index:]
+
+
+def _release_create_tag(command: _ShellCommand) -> str | None:
+    """Return the tag for a direct, wrapper-normalized gh release-create command."""
+    words = _executable_words(command)
+    if len(words) >= 4 and words[:3] == ("gh", "release", "create"):
+        return words[3]
+    return None
+
+
+def _is_dynamic_release_create(command: _ShellCommand) -> bool:
+    """Fail closed when a shell would parse release authority dynamically."""
+    words = _executable_words(command)
+    if not words:
+        return False
+    if words[0] == "eval":
+        return any(_RELEASE_CREATE_GRAMMAR.search(argument) for argument in words[1:])
+    if words[0] in {"bash", "sh", "zsh", "dash"}:
+        for index, word in enumerate(words[:-1]):
+            if word == "-c" or (word.startswith("-") and "c" in word[1:]):
+                return bool(_RELEASE_CREATE_GRAMMAR.search(words[index + 1]))
+    return False
+
+
+def _has_embedded_release_create(command: _ShellCommand) -> bool:
+    """Reject command substitutions that this deliberately small scanner cannot model."""
+    if _release_create_tag(command) is not None:
+        return False
+    words = command
+    if _executable_words(command)[:1] in {("echo",), ("printf",)} and "$" not in words:
+        return False
+    return any(words[index : index + 3] == ("gh", "release", "create") for index in range(len(words) - 2))
+
+
+def _is_candidate_reservation(command: _ShellCommand) -> bool:
+    """Recognize only a real curl reservation request, never echoed text."""
+    words = _executable_words(command)
+    return bool(words and words[0] == "curl" and any("/v2/desktop/beta/candidates/reserve" in word for word in words))
 
 
 def _contains_live_release_marker(value: object) -> bool:
@@ -80,17 +165,6 @@ def _contains_live_release_marker(value: object) -> bool:
     if isinstance(value, str):
         return bool(re.search(r"(?m)^\s*isLive:\s*true\s*$", value))
     return False
-
-
-def _release_create_tag(command: str) -> str | None:
-    """Return the tag only for a direct gh release-create invocation."""
-    try:
-        words = shlex.split(command)
-    except ValueError:
-        return None
-    if len(words) >= 4 and words[:3] == ["gh", "release", "create"]:
-        return words[3]
-    return None
 
 
 def _is_isolated_preview_workflow(workflow: dict[str, object]) -> bool:
@@ -116,6 +190,7 @@ def check_codemagic_release_publishers() -> list[str]:
     for workflow_name, workflow in workflows.items():
         if not isinstance(workflow, dict):
             continue
+        isolated_preview = _is_isolated_preview_workflow(workflow)
         if _contains_live_release_marker(workflow):
             errors.append(f"Codemagic workflow {workflow_name} contains isLive: true")
         steps = workflow.get("scripts")
@@ -126,11 +201,21 @@ def check_codemagic_release_publishers() -> list[str]:
                 continue
             step_name = step.get("name") if isinstance(step.get("name"), str) else "unnamed script"
             for command in _script_commands(step["script"]):
+                if _is_dynamic_release_create(command) or _has_embedded_release_create(command):
+                    errors.append(
+                        f"Codemagic workflow {workflow_name} has a dynamic shell command that cannot safely interpret "
+                        "release-create authority"
+                    )
                 tag = _release_create_tag(command)
                 if tag is not None:
-                    publisher_commands.append((str(workflow_name), step_name, tag))
+                    # The preview workflow deliberately shares the script anchor,
+                    # but PREVIEW_MODE exits before this command can execute.
+                    if not isolated_preview:
+                        publisher_commands.append((str(workflow_name), step_name, tag))
 
     canonical_commands = [tag for workflow, _, tag in publisher_commands if workflow == canonical_name]
+    if len(publisher_commands) != 1:
+        errors.append("Codemagic must contain exactly one executable gh release create publisher")
     if canonical_commands != ["$CM_TAG"]:
         errors.append(
             "canonical workflow must contain the exact canonical gh release create \"$CM_TAG\" and no alternate release-create path"
@@ -174,7 +259,7 @@ def check_codemagic_release_publishers() -> list[str]:
         (index for index, command in enumerate(commands) if _release_create_tag(command) == "$CM_TAG"), None
     )
     reservation_index = next(
-        (index for index, command in enumerate(commands) if "/v2/desktop/beta/candidates/reserve" in command), None
+        (index for index, command in enumerate(commands) if _is_candidate_reservation(command)), None
     )
     if create_index is None or reservation_index is None or reservation_index + 1 != create_index:
         errors.append(

@@ -108,3 +108,108 @@ def test_codemagic_publisher_guard_requires_reservation_after_smoke_immediately_
     assert GUARDS.check_codemagic_release_publishers() == [
         "canonical candidate reservation must be immediately before the exact canonical gh release create"
     ]
+
+
+def test_codemagic_publisher_guard_scans_executable_shell_command_streams(tmp_path, monkeypatch):
+    alternate_publishers = (
+        'GH_TOKEN=x gh release create "$TAG_NAME"',
+        'command gh release create "$TAG_NAME"',
+        'env GH_TOKEN=x gh release create "$TAG_NAME"',
+        'if true; then gh release create "$TAG_NAME"; fi',
+        'true; gh release create "$TAG_NAME"',
+        'gh release \\\n          create "$TAG_NAME"',
+    )
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    for alternate_publisher in alternate_publishers:
+        indented_publisher = alternate_publisher.replace("\n", "\n          ")
+        _write_codemagic(
+            tmp_path,
+            f'''  omi-desktop-swift-release:
+    scripts:
+      - name: Smoke signed desktop artifact
+        script: echo smoke
+      - name: Create GitHub release
+        script: |
+          curl --request POST /v2/desktop/beta/candidates/reserve
+          gh release create "$CM_TAG"
+  alternate:
+    scripts:
+      - name: Publish
+        script: |
+          {indented_publisher}
+''',
+        )
+
+        errors = GUARDS.check_codemagic_release_publishers()
+
+        assert any("legacy $TAG_NAME publisher" in error for error in errors), alternate_publisher
+
+
+def test_codemagic_publisher_guard_rejects_extra_create_and_reservation_decoys(tmp_path, monkeypatch):
+    _write_codemagic(
+        tmp_path,
+        '''  omi-desktop-swift-release:
+    scripts:
+      - name: Smoke signed desktop artifact
+        script: echo smoke
+      - name: Create GitHub release
+        script: |
+          echo /v2/desktop/beta/candidates/reserve
+          gh release create "$CM_TAG"
+          true; gh release create "$CM_TAG"
+''',
+    )
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("exactly one executable" in error for error in errors)
+    assert any("exact canonical gh release create" in error for error in errors)
+    assert any("canonical candidate reservation" in error for error in errors)
+
+
+def test_codemagic_publisher_guard_ignores_comments_and_echo_decoys(tmp_path, monkeypatch):
+    _write_codemagic(
+        tmp_path,
+        '''  omi-desktop-swift-release:
+    scripts:
+      - name: Smoke signed desktop artifact
+        script: echo smoke
+      - name: Create GitHub release
+        script: |
+          # gh release create "$TAG_NAME"
+          echo 'gh release create "$TAG_NAME"'
+          printf '%s\\n' 'gh release create "$TAG_NAME"'
+          curl --request POST /v2/desktop/beta/candidates/reserve
+          gh release create "$CM_TAG"
+''',
+    )
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    assert GUARDS.check_codemagic_release_publishers() == []
+
+
+def test_codemagic_publisher_guard_rejects_dynamic_release_create(tmp_path, monkeypatch):
+    _write_codemagic(
+        tmp_path,
+        '''  omi-desktop-swift-release:
+    scripts:
+      - name: Smoke signed desktop artifact
+        script: echo smoke
+      - name: Create GitHub release
+        script: |
+          curl --request POST /v2/desktop/beta/candidates/reserve
+          gh release create "$CM_TAG"
+  alternate:
+    scripts:
+      - name: Publish
+        script: |
+          eval 'gh release create "$TAG_NAME"'
+          bash -c 'gh release create "$TAG_NAME"'
+          echo $(gh release create "$TAG_NAME")
+''',
+    )
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    assert any("cannot safely interpret" in error for error in GUARDS.check_codemagic_release_publishers())
