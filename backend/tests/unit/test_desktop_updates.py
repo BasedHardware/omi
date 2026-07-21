@@ -846,53 +846,83 @@ class TestDesktopUpdateAdminEndpoints:
         assert "immutable" in resp.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_beta_promotion_key_can_register_macos_manifest_only(self):
+    async def test_beta_promotion_token_performs_only_normal_macos_beta_promotion(self):
         payload = _pointer_release()["manifest"]
+        pointer = {
+            "platform": "macos",
+            "channel": "beta",
+            "release_id": payload["release_id"],
+            "generation": 2,
+        }
         with (
-            patch.dict("os.environ", {"BETA_PROMOTION_KEY": "beta-secret"}, clear=True),
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "beta-token"}, clear=True),
             patch("routers.updates.register_release_manifest", return_value=payload) as register,
-        ):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                allowed = await client.post(
-                    "/v2/desktop/releases",
-                    headers={"secret-key": "beta-secret"},
-                    json=payload,
-                )
-                denied = await client.post(
-                    "/v2/desktop/releases",
-                    headers={"secret-key": "beta-secret"},
-                    json={**payload, "platform": "windows"},
-                )
-
-        assert allowed.status_code == 201
-        assert denied.status_code == 403
-        register.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_beta_promotion_key_cannot_promote_stable_or_other_platform(self):
-        with patch.dict("os.environ", {"BETA_PROMOTION_KEY": "beta-secret"}, clear=True):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                for platform, channel in (("macos", "stable"), ("windows", "beta")):
-                    response = await client.post(
-                        "/v2/desktop/channels/promote",
-                        headers={"secret-key": "beta-secret"},
-                        json={"platform": platform, "channel": channel, "release_id": "v1.0.0+200-macos"},
-                    )
-                    assert response.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_beta_promotion_key_clears_only_macos_beta_cache(self):
-        with (
-            patch.dict("os.environ", {"BETA_PROMOTION_KEY": "beta-secret"}, clear=True),
+            patch("routers.updates.promote_channel", return_value=pointer) as promote,
             patch("routers.updates.delete_generic_cache") as delete_cache,
         ):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 response = await client.post(
-                    "/v2/desktop/channels/beta/clear-cache", headers={"secret-key": "beta-secret"}
+                    "/v2/desktop/channels/promote-qualified-beta",
+                    headers={"secret-key": "beta-token"},
+                    json={"manifest": payload, "expected_generation": 1},
                 )
 
         assert response.status_code == 200
+        assert response.json()["pointer"] == pointer
+        register.assert_called_once_with(payload)
+        promote.assert_called_once_with(
+            "macos",
+            "beta",
+            payload["release_id"],
+            expected_generation=1,
+            expected_current_release_id=None,
+            operation="promote",
+        )
         delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
+
+    @pytest.mark.asyncio
+    async def test_beta_promotion_rejects_non_macos_manifest_before_any_write(self):
+        payload = {**_pointer_release()["manifest"], "platform": "windows"}
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "beta-token"}, clear=True),
+            patch("routers.updates.register_release_manifest") as register,
+            patch("routers.updates.promote_channel") as promote,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.post(
+                    "/v2/desktop/channels/promote-qualified-beta",
+                    headers={"secret-key": "beta-token"},
+                    json={"manifest": payload},
+                )
+
+        assert response.status_code == 422
+        register.assert_not_called()
+        promote.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_beta_promotion_token_cannot_use_generic_admin_routes(self):
+        payload = _pointer_release()["manifest"]
+        with patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "beta-token"}, clear=True):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                generic_manifest = await client.post(
+                    "/v2/desktop/releases",
+                    headers={"secret-key": "beta-token"},
+                    json=payload,
+                )
+                generic_pointer = await client.post(
+                    "/v2/desktop/channels/promote",
+                    headers={"secret-key": "beta-token"},
+                    json={"platform": "macos", "channel": "beta", "release_id": payload["release_id"]},
+                )
+                promotion_without_token = await client.post(
+                    "/v2/desktop/channels/promote-qualified-beta",
+                    headers={"secret-key": "not-the-token"},
+                    json={"manifest": payload},
+                )
+
+        assert generic_manifest.status_code == 403
+        assert generic_pointer.status_code == 403
+        assert promotion_without_token.status_code == 403
 
     @pytest.mark.asyncio
     async def test_reads_the_retained_manifest_with_a_canonical_identity(self):

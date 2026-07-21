@@ -91,6 +91,13 @@ class DesktopChannelPromotionRequest(BaseModel):
     operation: Literal["promote", "repoint"] = "promote"
 
 
+class QualifiedMacOSBetaPromotionRequest(BaseModel):
+    """The sole request shape accepted by automatic macOS Beta promotion."""
+
+    manifest: DesktopReleaseManifestRequest
+    expected_generation: Optional[int] = Field(default=None, ge=0)
+
+
 class DesktopPreviewPublishRequest(BaseModel):
     """Immutable metadata for a signed desktop preview artifact."""
 
@@ -118,20 +125,10 @@ class DesktopPreviewDelistRequest(BaseModel):
 VALID_CHANNELS = {"beta", "stable"}
 
 
-def _matches_secret(secret_key: str, environment_name: str) -> bool:
-    expected = os.getenv(environment_name, "")
-    return bool(expected) and hmac.compare_digest(secret_key, expected)
-
-
-def _is_beta_promotion_key(secret_key: str) -> bool:
-    return _matches_secret(secret_key, "BETA_PROMOTION_KEY")
-
-
-def _require_beta_macos_scope(secret_key: str, platform: str, channel: str | None = None) -> None:
-    if _matches_secret(secret_key, "ADMIN_KEY"):
-        return
-    if not _is_beta_promotion_key(secret_key) or platform != "macos" or (channel is not None and channel != "beta"):
-        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+def _has_beta_promotion_authorization(secret_key: str) -> bool:
+    """Match the dedicated automatic-promotion capability without widening admin auth."""
+    token = os.getenv("BETA_PROMOTION_TOKEN", "")
+    return bool(token) and hmac.compare_digest(secret_key, token)
 
 
 DESKTOP_RELEASE_TAG_PATTERN = re.compile(
@@ -978,7 +975,7 @@ def clear_desktop_cache(secret_key: str = Header(...)):
     This forces the next appcast.xml request to fetch fresh data from GitHub.
     Last-known-good entries are deliberately preserved for incident recovery.
     """
-    if not _matches_secret(secret_key, "ADMIN_KEY"):
+    if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_generic_cache("github_releases_desktop")
     for platform in ("macos", "windows", "linux"):
@@ -987,24 +984,48 @@ def clear_desktop_cache(secret_key: str = Header(...)):
     return {"success": True, "message": "Desktop releases cache cleared successfully"}
 
 
-@router.post("/v2/desktop/channels/beta/clear-cache", response_model=ClearCacheResponse)
-def clear_macos_beta_desktop_cache(secret_key: str = Header(...)):
-    """Clear only the macOS Beta pointer cache for a scoped promotion identity."""
-    if not _is_beta_promotion_key(secret_key):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    delete_generic_cache(live_cache_key("macos", "beta"))
-    return {"success": True, "message": "macOS Beta desktop pointer cache cleared successfully"}
-
-
 @router.post("/v2/desktop/releases", status_code=201)
 async def register_desktop_release(request: DesktopReleaseManifestRequest, secret_key: str = Header(...)):
     """Register an immutable release manifest without making it user-visible."""
-    _require_beta_macos_scope(secret_key, request.platform)
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
         manifest = await run_blocking(db_executor, register_release_manifest, request.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"success": True, "manifest": manifest}
+
+
+@router.post("/v2/desktop/channels/promote-qualified-beta")
+async def promote_qualified_macos_beta(
+    request: QualifiedMacOSBetaPromotionRequest,
+    secret_key: str = Header(...),
+):
+    """Register and advance one passed-T2 macOS Beta candidate with one dedicated capability."""
+    if not _has_beta_promotion_authorization(secret_key):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    manifest_data = request.manifest.model_dump()
+    if manifest_data["platform"] != "macos":
+        raise HTTPException(status_code=422, detail="automatic beta promotion requires a macos manifest")
+
+    try:
+        manifest = await run_blocking(db_executor, register_release_manifest, manifest_data)
+        pointer = await run_blocking(
+            db_executor,
+            promote_channel,
+            "macos",
+            "beta",
+            manifest["release_id"],
+            expected_generation=request.expected_generation,
+            expected_current_release_id=None,
+            operation="promote",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    return {"success": True, "manifest": manifest, "pointer": pointer}
 
 
 @router.get("/v2/desktop/releases/{release_id}")
@@ -1022,7 +1043,8 @@ async def get_desktop_release_manifest(release_id: str, secret_key: str = Header
 @router.post("/v2/desktop/channels/promote")
 async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secret_key: str = Header(...)):
     """Atomically advance or repoint one explicit qualified channel pointer."""
-    _require_beta_macos_scope(secret_key, request.platform, request.channel)
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
         pointer = await run_blocking(
             db_executor,
