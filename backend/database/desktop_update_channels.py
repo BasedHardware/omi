@@ -1,64 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import re
 from typing import Any, cast
-from urllib.parse import urlparse
 
 from google.cloud.firestore import transactional
 
 from database._client import get_firestore_client
+from desktop_release_manifest import ManifestError, validate_manifest
 
 CHANNELS_COLLECTION = "desktop_update_channels"
 MANIFESTS_COLLECTION = "desktop_release_manifests"
 VALID_CHANNELS = frozenset({"stable", "beta"})
-VALID_PLATFORMS = frozenset({"macos", "windows", "linux"})
-SHA40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
-SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
-
-
-def _required_string(data: dict[str, Any], key: str) -> str:
-    value = data.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{key} is required")
-    return value.strip()
-
-
-def _optional_string(data: dict[str, Any], key: str) -> str | None:
-    value = data.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError(f"{key} must be a string")
-    return value.strip() or None
-
-
-def _https_url(data: dict[str, Any], key: str, *, required: bool) -> str | None:
-    value = _required_string(data, key) if required else _optional_string(data, key)
-    if value is None:
-        return None
-    parsed = urlparse(value)
-    if parsed.scheme != "https" or not parsed.netloc:
-        raise ValueError(f"{key} must be an https URL")
-    return value
-
-
-def _positive_int(data: dict[str, Any], key: str) -> int:
-    value = data.get(key)
-    if isinstance(value, bool):
-        raise ValueError(f"{key} must be a positive integer")
-    if isinstance(value, int):
-        result = value
-    elif isinstance(value, str):
-        try:
-            result = int(value)
-        except ValueError as exc:
-            raise ValueError(f"{key} must be a positive integer") from exc
-    else:
-        raise ValueError(f"{key} must be a positive integer")
-    if result <= 0:
-        raise ValueError(f"{key} must be a positive integer")
-    return result
 
 
 def _generation(value: object) -> int:
@@ -69,58 +21,12 @@ def _generation(value: object) -> int:
     raise ValueError("pointer generation must be a non-negative integer")
 
 
-def _digest(data: dict[str, Any], key: str, pattern: re.Pattern[str], *, required: bool) -> str | None:
-    value = _required_string(data, key) if required else _optional_string(data, key)
-    if value is not None and not pattern.fullmatch(value):
-        raise ValueError(f"{key} has an invalid digest")
-    return value.lower() if value is not None else None
-
-
 def normalize_release_manifest(data: dict[str, Any]) -> dict[str, Any]:
-    """Validate and narrow the immutable release manifest contract."""
-    platform = _required_string(data, "platform").lower()
-    if platform not in VALID_PLATFORMS:
-        raise ValueError("platform must be macos, windows, or linux")
-
-    changelog_raw = data.get("changelog", [])
-    if not isinstance(changelog_raw, list):
-        raise ValueError("changelog must be a list of strings")
-    changelog_values = cast(list[object], changelog_raw)
-    if any(not isinstance(item, str) for item in changelog_values):
-        raise ValueError("changelog must be a list of strings")
-    changelog = [item for item in changelog_values if isinstance(item, str)]
-
-    qualification = data.get("qualification", {})
-    if not isinstance(qualification, dict):
-        raise ValueError("qualification must be an object")
-
-    published_at = _required_string(data, "published_at")
+    """Use the one v1 executable contract for every persisted manifest."""
     try:
-        datetime.fromisoformat(published_at.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ValueError("published_at must be an ISO-8601 timestamp") from exc
-
-    release_id = _required_string(data, "release_id")
-    if "/" in release_id:
-        raise ValueError("release_id must not contain a slash")
-
-    manifest = {
-        "release_id": release_id,
-        "platform": platform,
-        "version": _required_string(data, "version"),
-        "build_number": _positive_int(data, "build_number"),
-        "zip_url": _https_url(data, "zip_url", required=True),
-        "dmg_url": _https_url(data, "dmg_url", required=platform == "macos"),
-        "ed_signature": _required_string(data, "ed_signature"),
-        "published_at": published_at,
-        "changelog": [item.strip() for item in changelog if item.strip()],
-        "mandatory": data.get("mandatory") is True,
-        "source_sha": _digest(data, "source_sha", SHA40_RE, required=True),
-        "zip_sha256": _digest(data, "zip_sha256", SHA256_RE, required=False),
-        "dmg_sha256": _digest(data, "dmg_sha256", SHA256_RE, required=False),
-        "qualification": cast(dict[str, Any], qualification),
-    }
-    return manifest
+        return validate_manifest(data)
+    except ManifestError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = None) -> dict[str, Any]:
@@ -173,8 +79,7 @@ def _build_pointer(
     if manifest["platform"] != platform:
         raise ValueError("release manifest platform does not match pointer platform")
     if policy["require_qualified"]:
-        qualification = cast(dict[str, Any], manifest["qualification"])
-        if qualification.get("passed") is not True or str(qualification.get("tier", "")).upper() != "T2":
+        if manifest["qualification_passed"] is not True or manifest["qualification_tier"] != "T2":
             raise ValueError("release manifest is missing passed T2 qualification evidence")
 
     current_release_id = current.get("release_id")
@@ -267,7 +172,7 @@ def promote_channel(
     platform = platform.strip().lower()
     channel = channel.strip().lower()
     release_id = release_id.strip()
-    if platform not in VALID_PLATFORMS:
+    if platform != "macos":
         raise ValueError("invalid platform")
     if channel not in VALID_CHANNELS:
         raise ValueError("invalid channel")
@@ -297,7 +202,7 @@ def promote_channel(
 
 def get_channel_release(platform: str, channel: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Resolve one explicit channel pointer to its immutable manifest."""
-    if platform not in VALID_PLATFORMS or channel not in VALID_CHANNELS:
+    if platform != "macos" or channel not in VALID_CHANNELS:
         raise ValueError("invalid platform or channel")
     client = firestore_client if firestore_client is not None else get_firestore_client()
     pointer_snapshot = client.collection(CHANNELS_COLLECTION).document(f"{platform}-{channel}").get()

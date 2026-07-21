@@ -19,6 +19,7 @@ def main() -> int:
     errors.extend(check_desktop_codemagic_release())
     errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
+    errors.extend(check_desktop_update_docs())
     errors.extend(check_no_unprovisioned_beta_backend_hosts())
     errors.extend(check_mobile_codemagic_release_triggers())
     errors.extend(check_docs_workflow_scripts())
@@ -294,7 +295,7 @@ def check_desktop_qualification_runner() -> list[str]:
         "self-hosted",
         "macos",
         "omi-desktop-qualification",
-        "ref: main",
+        "ref: ${{ inputs.release_tag }}",
         "docker info",
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
@@ -319,6 +320,27 @@ def check_desktop_qualification_runner() -> list[str]:
             errors.append(
                 f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}"
             )
+    return errors
+
+
+def check_desktop_update_docs() -> list[str]:
+    """Keep operator docs aligned with the single retained artifact identity."""
+    path = ROOT / "docs/doc/developer/desktop-updates.mdx"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    errors: list[str] = []
+    required = ("Omi.app", "com.omi.computer-macos", "Omi.zip", "`omi.dmg`", "independent pointers")
+    forbidden = (
+        "separately installable",
+        "own bundle identity",
+        "all four artifacts",
+        "Stable/Beta URLs",
+    )
+    for fragment in required:
+        if fragment not in text:
+            errors.append(f"desktop update docs are missing single-artifact contract: {fragment}")
+    for fragment in forbidden:
+        if fragment in text:
+            errors.append(f"desktop update docs retain forbidden dual-identity claim: {fragment}")
     return errors
 
 

@@ -115,7 +115,17 @@
       "type": "string",
       "format": "date-time",
       "pattern": "Z$"
-    }
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "changelog": {
+      "type": "array",
+      "items": { "type": "string", "pattern": ".*\\S.*" }
+    },
+    "mandatory": { "type": "boolean" }
   },
   "allOf": [
     {

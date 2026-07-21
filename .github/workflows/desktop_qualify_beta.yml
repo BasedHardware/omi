@@ -31,9 +31,9 @@ jobs:
       - name: Checkout qualification controls
         uses: actions/checkout@v7
         with:
-          # Manual workflow dispatch permits choosing a ref. Never execute
-          # branch-controlled scripts on this privileged self-hosted runner.
-          ref: main
+          # Codemagic dispatches the immutable candidate tag. Qualification
+          # controls and source must resolve to that same reviewed tag.
+          ref: ${{ inputs.release_tag }}
           fetch-depth: 0
 
       - name: Generate Omi Bot token
@@ -80,7 +80,7 @@ jobs:
             --pattern 'desktop-smoke-result.json' \
             --dir /tmp/desktop-beta-qualification
           gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg' \
+            --pattern 'Omi.zip' --pattern 'omi.dmg' \
             --dir /tmp/desktop-beta-qualification/assets
 
           python3 .github/scripts/check-desktop-auto-beta-candidate.py \
@@ -115,14 +115,14 @@ jobs:
         run: |
           set -euo pipefail
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          STABLE_DMG=$(find /tmp/desktop-beta-qualification/assets -maxdepth 1 -type f \( -name Omi.dmg -o -name omi.dmg \) -print -quit)
+          STABLE_DMG=/tmp/desktop-beta-qualification/assets/omi.dmg
           test -n "$STABLE_DMG"
           python3 .github/scripts/desktop_qualification_evidence.py build \
             --release-json /tmp/desktop-beta-qualification/release.json \
             --release-tag "$RELEASE_TAG" --source-sha "$TARGET_SHA" \
             --candidate-gate /tmp/desktop-beta-qualification/candidate-gate.json \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
-            --asset "$(basename "$STABLE_DMG")=$STABLE_DMG" \
+            --asset "omi.dmg=$STABLE_DMG" \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
 
       - name: Upload immutable qualification evidence
@@ -142,6 +142,7 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run desktop_promote_beta.yml --repo "$REPO" \
+            --ref "$RELEASE_TAG" \
             -f release_tag="$RELEASE_TAG" \
             -f automatic=true \
             -f qualification_run_id="$GITHUB_RUN_ID"
