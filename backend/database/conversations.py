@@ -452,9 +452,20 @@ def persist_processing_result_with_lifecycle(
             return False
 
         # Generated processing content never owns user-managed fields.
+        # A null existing value means "never user-set" (stub docs dump None
+        # fields), so only non-null values are preserved — otherwise the
+        # stub's folder_id: None would revert every AI folder assignment.
         for field in ('starred', 'folder_id', 'visibility', 'user_title'):
-            if field in existing:
+            if existing.get(field) is not None:
                 write_data[field] = existing[field]
+
+        # folder_id is user-owned even when explicitly cleared: the folder
+        # move endpoints stamp folder_user_set, so "no folder" chosen by the
+        # user (folder_id None + marker) must survive processing output.
+        # Only a stub's never-user-touched None may be overwritten by the
+        # AI folder assignment above.
+        if existing.get('folder_user_set'):
+            write_data['folder_id'] = existing.get('folder_id')
 
         user_title = existing.get('user_title')
         if isinstance(user_title, str):

@@ -172,7 +172,7 @@ def test_processing_upsert_fills_user_fields_the_stub_left_null(monkeypatch):
         'data_protection_level': 'standard',
     }
 
-    conversations_db.upsert_conversation('user-1', incoming)
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
 
     written, options = ref.set_calls[0]
     assert options == {'merge': True}
@@ -391,7 +391,7 @@ def test_processing_upsert_preserves_explicit_user_unfile_on_completed_conversat
         'data_protection_level': 'standard',
     }
 
-    conversations_db.upsert_conversation('user-1', incoming)
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
 
     written, options = ref.set_calls[0]
     assert options == {'merge': True}
@@ -423,7 +423,7 @@ def test_processing_upsert_preserves_unfile_raced_against_in_flight_processing(m
         'data_protection_level': 'standard',
     }
 
-    conversations_db.upsert_conversation('user-1', incoming)
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
 
     written, options = ref.set_calls[0]
     assert options == {'merge': True}
@@ -452,7 +452,7 @@ def test_processing_upsert_still_fills_stub_null_when_user_never_touched_folder(
         'data_protection_level': 'standard',
     }
 
-    conversations_db.upsert_conversation('user-1', incoming)
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
 
     written, _ = ref.set_calls[0]
     assert written['folder_id'] == 'ai-assigned-folder'
