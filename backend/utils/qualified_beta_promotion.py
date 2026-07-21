@@ -29,6 +29,7 @@ QUALIFICATION_ARTIFACT_PREFIX = "desktop-qualification-evidence-"
 QUALIFICATION_EVIDENCE_FILE = "qualification-evidence.json"
 MAX_QUALIFICATION_ARTIFACT_BYTES = 1_048_576
 MAX_QUALIFICATION_EVIDENCE_BYTES = 262_144
+_EXACT_DATETIME_TYPE = datetime
 
 
 class QualifiedBetaAdmissionError(ValueError):
@@ -59,16 +60,15 @@ def _current_time(value: object) -> datetime:
             value = datetime.now(timezone.utc)
         except Exception:
             _fail("candidate admission clock is invalid")
-    if not isinstance(value, datetime):
-        _fail("candidate admission clock is invalid")
-    if value.tzinfo is None:
+    if type(value) is not _EXACT_DATETIME_TYPE:
         _fail("candidate admission clock is invalid")
     try:
-        offset = value.utcoffset()
+        if value.tzinfo is None or value.utcoffset() is None:
+            _fail("candidate admission clock is invalid")
         normalized = value.astimezone(timezone.utc)
     except Exception:
         _fail("candidate admission clock is invalid")
-    if offset is None:
+    if type(normalized) is not _EXACT_DATETIME_TYPE or normalized.tzinfo is not timezone.utc:
         _fail("candidate admission clock is invalid")
     return normalized
 

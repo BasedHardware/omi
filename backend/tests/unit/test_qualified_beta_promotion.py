@@ -37,9 +37,14 @@ class RaisingTZ(tzinfo):
 
 
 class HostileAdmissionClock(datetime):
+    """Return an apparently-normal datetime whose tzinfo fails only when freshness reads it."""
+
     @classmethod
     def now(cls, tz=None):
-        return cls(2026, 7, 21, 12, 2, tzinfo=RaisingTZ())
+        return cls(2026, 7, 21, 12, 2, tzinfo=timezone.utc)
+
+    def astimezone(self, tz=None):
+        return datetime(2026, 7, 21, 12, 2, tzinfo=RaisingTZ())
 
 
 class FakeQualifiedBetaReader:
@@ -254,6 +259,55 @@ async def test_naive_admission_clock_is_a_typed_rejection_and_aware_offsets_norm
         reader=reader,
         now=datetime(2026, 7, 21, 8, 2, tzinfo=timezone(timedelta(hours=-4))),
     )
+
+    assert manifest["release_id"] == TAG
+
+
+def test_current_time_returns_exact_utc_datetimes_and_normalizes_fixed_offsets():
+    utc = datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc)
+    fixed_offset = datetime(2026, 7, 21, 8, 2, tzinfo=timezone(timedelta(hours=-4)))
+    current = _current_time(None)
+    normalized_fixed_offset = _current_time(fixed_offset)
+
+    assert type(current) is datetime
+    assert current.tzinfo is timezone.utc
+    assert _current_time(utc) is utc
+    assert normalized_fixed_offset == utc
+    assert type(normalized_fixed_offset) is datetime
+
+
+@pytest.mark.asyncio
+async def test_datetime_subclass_astimezone_escape_is_a_typed_direct_rejection():
+    release, evidence, run = _candidate()
+
+    with pytest.raises(QualifiedBetaAdmissionError, match="candidate admission clock is invalid"):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=FakeQualifiedBetaReader(release, evidence, run),
+            now=HostileAdmissionClock(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+
+
+@pytest.mark.asyncio
+async def test_freshness_accepts_exact_maximum_age_and_rejects_one_second_older():
+    release, evidence, run = _candidate()
+    release["published_at"] = "2026-07-21T12:00:00Z"
+    run["updated_at"] = "2026-07-21T12:00:00Z"
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+
+    with patch.dict("os.environ", {"QUALIFIED_BETA_MAX_AGE_SECONDS": "60"}):
+        manifest = await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 1, tzinfo=timezone.utc),
+        )
+
+        with pytest.raises(QualifiedBetaAdmissionError, match="candidate release is stale"):
+            await build_qualified_beta_manifest(
+                TAG,
+                reader=reader,
+                now=datetime(2026, 7, 21, 12, 1, 1, tzinfo=timezone.utc),
+            )
 
     assert manifest["release_id"] == TAG
 
