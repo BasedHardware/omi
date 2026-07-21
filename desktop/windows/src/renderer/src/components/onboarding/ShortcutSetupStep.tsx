@@ -35,6 +35,19 @@ export function ShortcutSetupStep({
   const [worked, setWorked] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const litTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Track recording in a ref so an unmount cleanup can resume the global summon
+  // shortcut if the step is left mid-record (e.g. Skip while recording) — else it
+  // stays suspended for the rest of the session and the next step is unusable.
+  const recordingRef = useRef(false)
+  useEffect(() => {
+    recordingRef.current = recording
+  }, [recording])
+  useEffect(
+    () => () => {
+      if (recordingRef.current) void window.omiOverlay?.resumeShortcut()
+    },
+    []
+  )
 
   // Enable + warm the overlay here (not before), apply the current accelerator,
   // and light up the keys whenever the shortcut fires.

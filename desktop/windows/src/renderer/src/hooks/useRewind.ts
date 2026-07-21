@@ -72,10 +72,15 @@ export function useRewind(): RewindState {
     }
   }, [])
 
-  // Playback advances the cursor frame-by-frame.
+  // Playback advances the cursor frame-by-frame. Depend only on whether frames
+  // exist (not the array itself): live capture replaces `frames` about once a
+  // second, and depending on the array would tear down and restart this 700ms
+  // timer on every append, slowing playback. The body reads framesRef.current, so
+  // it always sees the latest frames.
+  const hasFrames = frames.length > 0
   useEffect(() => {
     if (playTimer.current) clearInterval(playTimer.current)
-    if (!playing || frames.length === 0) return
+    if (!playing || !hasFrames) return
     playTimer.current = setInterval(() => {
       setCursorTs((cur) => {
         const idx = framesRef.current.findIndex((f) => f.ts >= cur)
@@ -86,7 +91,7 @@ export function useRewind(): RewindState {
     return () => {
       if (playTimer.current) clearInterval(playTimer.current)
     }
-  }, [playing, frames])
+  }, [playing, hasFrames])
 
   const search = useCallback(async (q: string) => {
     setResults(await window.omi.rewindSearch(q))

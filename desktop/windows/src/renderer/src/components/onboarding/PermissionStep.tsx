@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { StepScaffold } from './StepScaffold'
 
 export type PermissionStatus = 'idle' | 'waiting' | 'granted'
@@ -45,6 +45,13 @@ export function PermissionStep({
   onSkip
 }: PermissionStepProps): React.JSX.Element {
   const [status, setStatus] = useState<PermissionStatus>('idle')
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current)
+    },
+    []
+  )
 
   const handleActivate = async (): Promise<void> => {
     setStatus('waiting')
@@ -52,8 +59,10 @@ export function PermissionStep({
       await onActivate()
     } finally {
       setStatus('granted')
-      // Brief confirmation of the granted state, then auto-advance.
-      setTimeout(onContinue, 1000)
+      // Brief confirmation of the granted state, then auto-advance. Track the timer
+      // so unmounting (e.g. the user hits Skip in the 1s window) cancels it instead
+      // of firing onContinue again and skipping the following step.
+      advanceTimer.current = setTimeout(onContinue, 1000)
     }
   }
 

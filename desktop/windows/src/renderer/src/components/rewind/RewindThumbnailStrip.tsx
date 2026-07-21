@@ -37,9 +37,16 @@ const Thumb = memo(function Thumb({
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
           io.disconnect()
-          void window.omi.rewindFrameImage(frame.imagePath).then((d) => {
-            if (alive) setSrc(d)
-          })
+          window.omi
+            .rewindFrameImage(frame.imagePath)
+            .then((d) => {
+              if (alive) setSrc(d)
+            })
+            .catch(() => {
+              // The frame's JPEG may have been pruned by retention since the strip
+              // loaded; leave the thumb blank instead of an unhandled rejection.
+              if (alive) setSrc(null)
+            })
         }
       },
       { root: root.current, rootMargin: '400px' }
@@ -127,7 +134,13 @@ export function RewindThumbnailStrip({
     const t = setTimeout(() => {
       programmaticRef.current = false
     }, 200)
-    return () => clearTimeout(t)
+    return () => {
+      clearTimeout(t)
+      // Reset the flag here too: if `width` changes within the 200ms window the
+      // effect re-runs and can early-return without rescheduling the reset, which
+      // would otherwise leave programmaticRef stuck true and kill scroll->cursor.
+      programmaticRef.current = false
+    }
   }, [activeIdx, width])
 
   // Scroll → cursor: move the shared cursor to whatever item is centred.

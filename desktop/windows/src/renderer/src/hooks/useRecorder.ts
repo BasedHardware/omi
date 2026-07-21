@@ -67,6 +67,14 @@ export function useRecorder(): UseRecorder {
 
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  // Mirror screenStream into a ref so the unmount cleanup (empty deps) and the
+  // async pickScreen see the latest stream, not a stale closure value.
+  const screenStreamRef = useRef<MediaStream | null>(null)
+  useEffect(() => {
+    screenStreamRef.current = screenStream
+  }, [screenStream])
+  // Guards start() against a rapid double-invoke opening two mic sessions.
+  const startingRef = useRef(false)
 
   // Attach/detach the MediaStream when screenStream changes. We can't do this
   // imperatively inside pickScreen() because the <video> element is
@@ -82,7 +90,27 @@ export function useRecorder(): UseRecorder {
     }
   }, [screenStream])
 
+  // If the view unmounts while a session is live (the user navigates away instead
+  // of pressing stop), nothing would otherwise tear it down — the mic stays hot,
+  // the transcription socket stays open, and the screen-capture stream keeps
+  // running. Mirror stop()'s teardown on unmount.
+  useEffect(() => {
+    return () => {
+      micRef.current?.stop()
+      micRef.current = null
+      systemRef.current?.stop()
+      systemRef.current = null
+      screenStreamRef.current?.getTracks().forEach((t) => t.stop())
+      screenStreamRef.current = null
+    }
+  }, [])
+
   const start = async (opts?: { system?: boolean }): Promise<void> => {
+    // Bail if a session is already starting or running so a rapid double-click (or
+    // a StrictMode double-invoke) doesn't open a second mic session whose handle
+    // then leaks past the one stored in micRef.
+    if (startingRef.current || state !== 'idle') return
+    startingRef.current = true
     const withSystem = opts?.system ?? false
     startSession()
     setMicLines([])
@@ -127,6 +155,8 @@ export function useRecorder(): UseRecorder {
           : ''
       alert(`Recording failed: ${err.message}${hint}`)
       stopSession()
+    } finally {
+      startingRef.current = false
     }
   }
 
@@ -149,6 +179,9 @@ export function useRecorder(): UseRecorder {
           }
         }
       })
+      // Stop a previously-picked stream before replacing it, otherwise re-picking
+      // a different screen/window leaves the old desktop capture running.
+      screenStreamRef.current?.getTracks().forEach((t) => t.stop())
       setScreenStream(stream)
     } catch (e) {
       const err = e as Error

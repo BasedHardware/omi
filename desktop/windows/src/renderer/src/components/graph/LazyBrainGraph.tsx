@@ -6,9 +6,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary'
 // d3-force-3d, ~1MB) is code-split out of the initial renderer bundle and only
 // downloaded/evaluated when a brain map actually mounts (Memories / Onboarding).
 // This shrinks window:created→renderer:eval, the dominant startup phase.
-const BrainGraphImpl = lazy(() =>
-  import('./BrainGraph').then((m) => ({ default: m.BrainGraph }))
-)
+const BrainGraphImpl = lazy(() => import('./BrainGraph').then((m) => ({ default: m.BrainGraph })))
 
 // The 3D brain map is the only WebGL surface in the app, so it's the first thing
 // to fail if the GPU process is unhealthy (e.g. a contended/locked Chromium GPU
@@ -17,7 +15,14 @@ const BrainGraphImpl = lazy(() =>
 // crashing the whole screen (onboarding has no other error boundary above it).
 export function BrainGraph(props: BrainGraphProps): React.JSX.Element {
   return (
-    <ErrorBoundary label="BrainGraph" fallback={<div className="h-full w-full" aria-hidden />}>
+    <ErrorBoundary
+      label="BrainGraph"
+      fallback={<div className="h-full w-full" aria-hidden />}
+      // Re-attempt rendering when the graph data or layout changes (new memories,
+      // an onboarding step) so a transient GPU failure recovers, without churning a
+      // retry on every unrelated re-render.
+      resetKeys={[props.graph.nodes.length, props.graph.edges.length, props.shuffleKey]}
+    >
       <Suspense fallback={<div className="h-full w-full" aria-hidden />}>
         <BrainGraphImpl {...props} />
       </Suspense>
