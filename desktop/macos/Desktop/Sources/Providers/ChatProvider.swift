@@ -4989,16 +4989,20 @@ class ChatProvider: ObservableObject {
   /// and typing a new draft while acceptance is pending is never overwritten.
   @discardableResult
   func sendMainDraft(_ text: String) async -> String? {
-    let submittedRevision = draftRevision
-    return await sendMessage(
+    // Clear the composer synchronously, in the same run loop as the send, so the
+    // sent text can't linger in the field or resurface when the chat context
+    // drifts to a new session key mid-turn. Clearing here also writes the empty
+    // draft to the store under the key it was typed against. Restore the text
+    // only if the send never enters the timeline (usage limit, offline, busy).
+    draftText = ""
+    var accepted = false
+    let result = await sendMessage(
       text,
-      onAccepted: { [weak self] in
-        guard let self,
-          self.draftRevision == submittedRevision,
-          self.draftText == text
-        else { return }
-        self.draftText = ""
-      })
+      onAccepted: { accepted = true })
+    if !accepted, draftText.isEmpty {
+      draftText = text
+    }
+    return result
   }
 
   nonisolated static func chatTelemetrySurface(

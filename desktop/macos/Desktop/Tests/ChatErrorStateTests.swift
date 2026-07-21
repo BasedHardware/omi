@@ -248,12 +248,17 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertFalse(snippet.contains("\"AI not available: Please sign in"))
   }
 
-  func testSendPreservesDraftUntilTurnIsAccepted() throws {
+  // omi-test-quality: source-inspection -- static contract: sendMainDraft's
+  // clear/restore ordering runs through sendMessage's live bridge and can't be
+  // driven hermetically; this pins the contract shape.
+  func testSendClearsDraftAndRestoresOnlyIfNotAccepted() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("onAccepted: (@MainActor () -> Void)? = nil"))
     XCTAssertTrue(source.contains("onAccepted?()"))
-    XCTAssertTrue(source.contains("self.draftRevision == submittedRevision"))
-    XCTAssertTrue(source.contains("self.draftText == text\n        else { return }"))
+    // The draft is cleared up front (so it can't linger or resurface) and put
+    // back only if the send never enters the timeline and no new draft was typed.
+    XCTAssertTrue(source.contains("onAccepted: { accepted = true }"))
+    XCTAssertTrue(source.contains("if !accepted, draftText.isEmpty"))
     XCTAssertFalse(source.contains("draftText = trimmedText"))
   }
 
