@@ -12,15 +12,8 @@ void main() {
       seen = request;
       return http.Response(jsonEncode({'memories': []}), 200);
     });
-    final client = OmiIntegrationClient(
-      apiKey: 'test-key',
-      appId: 'app-123',
-      httpClient: mock,
-    );
-    final body = await client.listMemories(
-      uid: 'user-1',
-      limit: 10,
-    );
+    final client = OmiIntegrationClient(apiKey: 'test-key', appId: 'app-123', httpClient: mock);
+    final body = await client.listMemories(uid: 'user-1', limit: 10);
     expect(body, isA<MemoriesResponse>());
     expect(seen.headers['Authorization'], 'Bearer test-key');
     expect(seen.url.path, '/v2/integrations/app-123/memories');
@@ -32,15 +25,8 @@ void main() {
     final mock = MockClient((request) async {
       return http.Response(jsonEncode({'detail': 'nope'}), 401);
     });
-    final client = OmiIntegrationClient(
-      apiKey: 'test-key',
-      appId: 'app-123',
-      httpClient: mock,
-    );
-    expect(
-      () => client.listMemories(uid: 'user-1'),
-      throwsA(isA<OmiIntegrationException>()),
-    );
+    final client = OmiIntegrationClient(apiKey: 'test-key', appId: 'app-123', httpClient: mock);
+    expect(() => client.listMemories(uid: 'user-1'), throwsA(isA<OmiIntegrationException>()));
     client.close();
   });
 }
