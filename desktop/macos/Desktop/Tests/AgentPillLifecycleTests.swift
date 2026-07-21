@@ -368,12 +368,18 @@ import XCTest
     // omi-test-quality: source-inspection -- static contract: UI must not pre-parse user wording into a provider spawn.
     let windowSource = try floatingControlBarWindowSource()
     let source = try floatingControlBarViewSource()
+    let pillSource = try agentPillSource()
 
     XCTAssertFalse(windowSource.contains("providerDirective"))
     XCTAssertFalse(windowSource.contains("resolveDelegationAndDispatch"))
     XCTAssertTrue(windowSource.contains("await dispatchChatQuery("))
     XCTAssertFalse(source.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(source.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+    // The typed "Ask this agent" field left the floating bar (4a8244742d);
+    // agent follow-ups now enter only through AgentPillsManager.continueAgent,
+    // which must hand the prompt to the coordinator model loop untouched.
+    XCTAssertFalse(pillSource.contains("AgentPillFollowUpRoutingPolicy"))
+    XCTAssertFalse(pillSource.contains("providerDirective"))
+    XCTAssertTrue(pillSource.contains("try await DesktopCoordinatorService.shared.continueAgent("))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -832,11 +838,14 @@ import XCTest
     XCTAssertFalse(body.contains("FloatingControlBarGeometry.targetFrame("))
   }
 
-  func testSubagentComposerOnlyContinuesItsCanonicalSession() throws {
-    let viewSource = try floatingControlBarViewSource()
+  func testAgentFollowUpOnlyContinuesItsCanonicalSession() throws {
+    // omi-test-quality: source-inspection -- static contract: a pill follow-up must target the pill's
+    // canonical session (never spawn a sibling or re-route), including after the continue-agent await.
+    let pillSource = try agentPillSource()
 
-    XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+    XCTAssertFalse(pillSource.contains("AgentPillFollowUpRoutingPolicy"))
+    XCTAssertTrue(pillSource.contains("guard let sessionId = pill.canonicalSessionId"))
+    XCTAssertTrue(pillSource.contains("guard pill.canonicalSessionId == sessionId else { return }"))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {
@@ -921,7 +930,6 @@ import XCTest
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    XCTAssertTrue(viewSource.contains("state.archiveCurrentExchange(using: floatingChatProvider)"))
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
