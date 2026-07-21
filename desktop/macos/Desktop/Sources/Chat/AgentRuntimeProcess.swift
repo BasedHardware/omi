@@ -274,14 +274,6 @@ final class DebugSuspendControl: @unchecked Sendable {
 }
 
 actor AgentRuntimeProcess {
-  /// Shape-only receipt from the local/offline E2E path that dispatches the
-  /// actual Chat-first block tool through the normal authorized-tool channel.
-  struct ChatFirstHarnessExecutorReceipt: Equatable, Sendable {
-    let executorInvoked: Bool
-    let validated: Bool
-    let journalBlockRendered: Bool
-  }
-
   static let shared = AgentRuntimeProcess()
   nonisolated static let expectedProtocolVersion = 2
   nonisolated static let requiredRuntimeCapabilities: Set<String> = [
@@ -872,7 +864,7 @@ actor AgentRuntimeProcess {
     }
   }
 
-  private func assertAuthorization(
+  func assertAuthorization(
     _ snapshot: RuntimeOwnerAuthorizationSnapshot,
     expectedOwnerID: String? = nil
   ) throws {
@@ -1051,62 +1043,6 @@ actor AgentRuntimeProcess {
       throw BridgeError.agentError("Kernel returned an invalid context snapshot")
     }
     return snapshot
-  }
-
-  /// Local/offline-only E2E seam for the real Swift Chat-first block executor.
-  /// The caller supplies an already-resolved main-Chat session and immutable
-  /// server projection; Node derives and rechecks that projection from the
-  /// mounted session rather than accepting it from this message.
-  func invokeChatFirstFixtureTaskCard(
-    clientId: String,
-    ownerID: String,
-    sessionID: String,
-    producingTurnID: String,
-    controlGeneration: Int,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) async throws -> ChatFirstHarnessExecutorReceipt {
-    let stage = ProcessInfo.processInfo.environment["OMI_ENV_STAGE"]
-    let isLocalOrOfflineStage = stage == "local" || stage == "offline"
-    guard AppBuild.allowsLocalAutomation, isLocalOrOfflineStage else {
-      throw BridgeError.agentError("Chat-first executor fixture is unavailable outside local/offline builds")
-    }
-    guard controlGeneration >= 0 else {
-      throw BridgeError.agentError("Chat-first executor fixture requires a valid control generation")
-    }
-    try assertAuthorization(authorizationSnapshot, expectedOwnerID: ownerID)
-    let requestID = UUID().uuidString
-    let result = try await kernelContractRequest(
-      payload: Self.chatFirstHarnessExecutorBeginWireMessage(
-        clientId: clientId,
-        requestId: requestID,
-        ownerID: ownerID,
-        sessionID: sessionID,
-        producingTurnID: producingTurnID,
-        controlGeneration: controlGeneration
-      ),
-      expectedKind: .chatFirstHarnessExecutorResult,
-      authorizationSnapshot: authorizationSnapshot
-    )
-    guard
-      result["ownerId"] as? String == ownerID,
-      result["sessionId"] as? String == sessionID,
-      let runID = result["runId"] as? String, !runID.isEmpty,
-      let attemptID = result["attemptId"] as? String, !attemptID.isEmpty,
-      let ok = result["ok"] as? Bool,
-      let executorInvoked = result["executorInvoked"] as? Bool,
-      let validated = result["validated"] as? Bool,
-      let journalBlockRendered = result["journalBlockRendered"] as? Bool
-    else {
-      throw BridgeError.agentError("Kernel returned an invalid Chat-first executor fixture receipt")
-    }
-    guard ok == (executorInvoked && validated && journalBlockRendered) else {
-      throw BridgeError.agentError("Kernel returned an inconsistent Chat-first executor fixture receipt")
-    }
-    return ChatFirstHarnessExecutorReceipt(
-      executorInvoked: executorInvoked,
-      validated: validated,
-      journalBlockRendered: journalBlockRendered
-    )
   }
 
   func setAuthorizedRealtimeToolHandler(_ handler: AuthorizedRealtimeToolHandler?) {
@@ -1594,29 +1530,6 @@ actor AgentRuntimeProcess {
     return message
   }
 
-  static func chatFirstHarnessExecutorBeginWireMessage(
-    clientId: String,
-    requestId: String,
-    ownerID: String,
-    sessionID: String,
-    producingTurnID: String,
-    controlGeneration: Int
-  ) -> [String: Any] {
-    var message = protocolEnvelope(
-      type: "chat_first_harness_executor_begin",
-      clientId: clientId,
-      requestId: requestId,
-      ownerId: ownerID
-    )
-    message["sessionId"] = sessionID
-    message["producingTurnId"] = producingTurnID
-    message["controlGeneration"] = controlGeneration
-    // This is deliberately the sole fixture payload accepted by Node. It is
-    // server-validated before the normal journal append can happen.
-    message["input"] = ["blocks": [["type": "taskCard", "taskId": "chat-first-e2e-task-v1"]]]
-    return message
-  }
-
   static func importLegacyMainChatSessionsWireMessage(
     clientId: String,
     requestId: String,
@@ -1734,7 +1647,7 @@ actor AgentRuntimeProcess {
     return message
   }
 
-  private static func protocolEnvelope(
+  static func protocolEnvelope(
     type: String,
     clientId: String,
     requestId: String,
@@ -1750,7 +1663,7 @@ actor AgentRuntimeProcess {
     return message
   }
 
-  private func kernelContractRequest(
+  func kernelContractRequest(
     payload: [String: Any],
     expectedKind: RuntimeMessage.Kind,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
