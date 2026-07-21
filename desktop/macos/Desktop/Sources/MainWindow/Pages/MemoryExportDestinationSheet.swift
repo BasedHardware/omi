@@ -1001,6 +1001,11 @@ struct MemoryExportDestinationSheet: View {
       }
 
     case .obsidian:
+      let obsidianSteps = [
+        "Choose your vault folder",
+        "Omi writes your memories to Omi/Memories.md and opens Obsidian. Hit Sync anytime to refresh",
+        "If Obsidian asks “Do you trust the author of this vault?”, pick either option. Omi only adds a Markdown note",
+      ]
       VStack(alignment: .leading, spacing: OmiSpacing.md) {
         selectedLocationCard(
           title: model.obsidianVaultPath.isEmpty ? "No vault selected yet" : "Selected vault",
@@ -1016,9 +1021,20 @@ struct MemoryExportDestinationSheet: View {
         .foregroundColor(OmiColors.textSecondary)
         .scaledFont(size: OmiType.caption, weight: .medium)
 
-        Text("Omi writes a refreshed `Omi/Memories.md` file inside the selected vault.")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          ForEach(Array(obsidianSteps.enumerated()), id: \.offset) { index, step in
+            HStack(alignment: .top, spacing: OmiSpacing.sm) {
+              Text("\(index + 1).")
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(OmiColors.textTertiary)
+              Text(step)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
+        }
+        .padding(.top, OmiSpacing.hairline)
       }
 
     case .chatgpt, .claude, .gemini:
