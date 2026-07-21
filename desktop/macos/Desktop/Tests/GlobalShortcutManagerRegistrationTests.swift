@@ -27,25 +27,45 @@ import XCTest
 
     // MARK: - Registration outcome classifier (pure; no Carbon)
 
-    func testClassifyNoErrIsRegistered() {
-      XCTAssertEqual(GlobalShortcutManager.classifyRegistration(noErr), .registered)
+    func testClassifyNoErrWithRefIsRegistered() {
+      // The only success path: Carbon reports noErr AND stores a non-nil ref.
+      XCTAssertEqual(GlobalShortcutManager.classifyRegistration(noErr, refPresent: true), .registered)
+    }
+
+    // MARK: - noErr / nil-ref boundary (the exact regression this suite guards)
+
+    func testClassifyNoErrWithNilRefIsOtherFailure() {
+      // Carbon can report noErr without storing an EventHotKeyRef. This is the
+      // boundary an independent review flagged: previously classifyRegistration(noErr)
+      // returned .registered, so registerHotKey returned .registered and
+      // registerAskOmi logged "Registered" for a shortcut that will never fire,
+      // even though the else branch had just recorded a registration failure. The
+      // prior code treated status==noErr with a nil ref as failure; a registration
+      // is successful ONLY when BOTH the status is noErr AND a non-nil ref exists.
+      // Driving the pure controllable seam is the prescribed verification — the real
+      // Carbon call cannot be made to return noErr with a nil ref hermetically.
+      XCTAssertEqual(
+        GlobalShortcutManager.classifyRegistration(noErr, refPresent: false), .otherFailure)
     }
 
     func testClassifyEventHotKeyExistsErrIsConflict() {
       // eventHotKeyExistsErr == -9878 (CarbonEvents.h): another app — or a macOS
       // System Settings > Keyboard > Shortcuts entry, even a disabled one — already
-      // owns this (keyCode, modifiers) pair globally. Pure machine axis.
+      // owns this (keyCode, modifiers) pair globally. Pure machine axis. The ref is
+      // nil on conflict, but the conflict flavor is preserved regardless so the
+      // isConflict telemetry discrimination holds.
       XCTAssertEqual(
-        GlobalShortcutManager.classifyRegistration(OSStatus(-9878)), .alreadyInUse)
+        GlobalShortcutManager.classifyRegistration(OSStatus(-9878), refPresent: false), .alreadyInUse)
     }
 
     func testClassifyOtherNonZeroStatusIsOtherFailure() {
       // paramErr (-50) / eventInternalErr (-9870): programmer/runtime errors, not a
-      // machine-axis conflict, so they must NOT classify as .alreadyInUse.
+      // machine-axis conflict, so they must NOT classify as .alreadyInUse. A nil ref
+      // is the norm for these statuses, but the outcome is .otherFailure either way.
       XCTAssertEqual(
-        GlobalShortcutManager.classifyRegistration(OSStatus(-50)), .otherFailure)
+        GlobalShortcutManager.classifyRegistration(OSStatus(-50), refPresent: false), .otherFailure)
       XCTAssertEqual(
-        GlobalShortcutManager.classifyRegistration(OSStatus(-9870)), .otherFailure)
+        GlobalShortcutManager.classifyRegistration(OSStatus(-9870), refPresent: false), .otherFailure)
     }
 
     // MARK: - Telemetry contract (incident path, NOT recordFallback)

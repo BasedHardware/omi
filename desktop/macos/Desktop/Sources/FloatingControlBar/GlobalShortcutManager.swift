@@ -90,16 +90,24 @@ class GlobalShortcutManager: @unchecked Sendable {
     case otherFailure
   }
 
-  /// Pure classifier over the `OSStatus` returned by `RegisterEventHotKey`.
+  /// Pure classifier over a `RegisterEventHotKey` result pair: the Carbon
+  /// `OSStatus` and whether a non-nil `EventHotKeyRef` was stored. This is the
+  /// controllable test seam — the real Carbon call cannot be made to return a
+  /// conflict status (or noErr with a nil ref) hermetically, so the registration
+  /// decision is unit-tested through this pure function instead.
   ///
-  /// Extracted from `registerHotKey` so the registration-failure decision is
-  /// unit-testable without driving the real Carbon call, which cannot be made to
-  /// return a conflict status hermetically. `eventHotKeyExistsErr` (-9878,
-  /// CarbonEvents.h) means another app — or a macOS System Settings > Keyboard >
-  /// Shortcuts entry, even a disabled one — already owns this (keyCode, modifiers)
-  /// pair in the global Carbon hotkey namespace; the shortcut is dead on that machine.
-  static func classifyRegistration(_ status: OSStatus) -> HotKeyRegistrationOutcome {
-    if status == noErr { return .registered }
+  /// A registration is successful ONLY when the status is `noErr` AND a non-nil
+  /// `EventHotKeyRef` was stored. Carbon can report `noErr` without filling the
+  /// out-ref; the prior code treated `status == noErr` with a nil ref as failure,
+  /// and this must stay failure — otherwise `registerHotKey` returns `.registered`
+  /// and `registerAskOmi` logs "Registered" for a shortcut that will never fire.
+  /// `eventHotKeyExistsErr` (-9878, CarbonEvents.h) means another app — or a macOS
+  /// System Settings > Keyboard > Shortcuts entry, even a disabled one — already
+  /// owns this (keyCode, modifiers) pair in the global Carbon hotkey namespace;
+  /// the shortcut is dead on that machine (its ref is nil, but the conflict flavor
+  /// is preserved for telemetry regardless of ref presence).
+  static func classifyRegistration(_ status: OSStatus, refPresent: Bool) -> HotKeyRegistrationOutcome {
+    if status == noErr, refPresent { return .registered }
     if Int(status) == eventHotKeyExistsErr { return .alreadyInUse }
     return .otherFailure
   }
@@ -113,7 +121,7 @@ class GlobalShortcutManager: @unchecked Sendable {
       GetApplicationEventTarget(), 0, &hotKeyRef
     )
 
-    let outcome = Self.classifyRegistration(status)
+    let outcome = Self.classifyRegistration(status, refPresent: hotKeyRef != nil)
     if outcome == .registered, let ref = hotKeyRef {
       hotKeyRefs[id] = ref
     } else {
