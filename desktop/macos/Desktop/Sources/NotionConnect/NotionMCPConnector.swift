@@ -152,9 +152,13 @@ final class NotionMCPConnector: @unchecked Sendable {
       expiresAt: Date().addingTimeInterval(expiresIn),
       clientID: clientID)
     let data = try JSONEncoder().encode(auth)
-    _ = DesktopKeychainStore.setString(
-      String(decoding: data, as: UTF8.self),
-      service: Self.keychainService, account: Self.keychainAccount)
+    guard
+      DesktopKeychainStore.setString(
+        String(decoding: data, as: UTF8.self),
+        service: Self.keychainService, account: Self.keychainAccount)
+    else {
+      throw ConnectError.badResponse("could not store Notion credentials in Keychain")
+    }
   }
 
   private func loadAuth() -> StoredAuth? {
