@@ -296,6 +296,21 @@ export type OmiBridgeApi = {
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>
   screenSynthAdvanceWatermark: (ts: number) => Promise<void>
   screenSynthRecordRun: (run: ScreenSynthRun) => Promise<void>
+  // AI Clone: main owns the Beeper connection + responder loop; the renderer
+  // configures it, supplies Firebase ID tokens for /v2/messages, and renders
+  // the draft inbox. Every mutation resolves with the fresh state.
+  aiCloneGetState: () => Promise<AiCloneState>
+  aiCloneConnect: (beeperToken: string) => Promise<AiCloneState>
+  aiCloneDisconnect: () => Promise<AiCloneState>
+  aiCloneSetEnabled: (enabled: boolean, auth?: AiCloneAuth) => Promise<AiCloneState>
+  aiCloneListChats: () => Promise<AiCloneChat[]>
+  aiCloneSetChatMode: (chatId: string, mode: AiCloneChatMode) => Promise<void>
+  aiCloneApproveDraft: (draftId: string, editedText?: string) => Promise<AiCloneState>
+  aiCloneDiscardDraft: (draftId: string) => Promise<AiCloneState>
+  /** Push a fresh Firebase ID token (on enable and on token-expired events). */
+  aiCloneProvideAuthToken: (auth: AiCloneAuth) => void
+  /** Subscribe to clone state broadcasts + token-expired requests. */
+  onAiCloneEvent: (cb: (e: AiCloneEvent) => void) => () => void
 }
 
 // --- Screen activity → memories (Rewind OCR synthesis) ---
@@ -563,6 +578,81 @@ export type FetchNewResult<T> = {
   ok: boolean
   items: T[]
   error?: string
+}
+
+// --- AI Clone: auto-respond to chat apps via the Beeper Desktop API ---
+
+/** Per-chat responder mode. `draft` queues replies for approval; `auto` sends. */
+export type AiCloneChatMode = 'off' | 'draft' | 'auto'
+
+/** One Beeper chat, decorated with the user's responder mode for it. */
+export type AiCloneChat = {
+  id: string
+  title: string
+  /** Source network, e.g. 'whatsapp' | 'telegram' | 'signal'. */
+  network: string
+  type: 'single' | 'group'
+  mode: AiCloneChatMode
+  /** ms epoch of the latest message, for sorting. */
+  lastActivityAt?: number
+}
+
+/** A drafted reply awaiting the user's approval in the inbox. */
+export type AiCloneDraft = {
+  id: string
+  chatId: string
+  chatTitle: string
+  network: string
+  senderName: string
+  incomingText: string
+  /** Beeper message id the reply threads to (when the network supports it). */
+  incomingMessageId?: string
+  replyText: string
+  createdAt: number
+}
+
+/** One line in the recent-activity feed. */
+export type AiCloneActivityItem = {
+  id: string
+  at: number
+  kind: 'auto_sent' | 'draft_sent' | 'draft_dismissed' | 'error'
+  chatTitle: string
+  text: string
+}
+
+/** Full clone state; broadcast to every window on any change. */
+export type AiCloneState = {
+  /** A Beeper token is saved (survives restarts). */
+  beeperConnected: boolean
+  /** Beeper Desktop is currently responding on localhost. */
+  beeperReachable: boolean
+  /** Master toggle — the responder only listens while this is on. */
+  enabled: boolean
+  /** Main holds a Firebase ID token for /v2/messages calls. */
+  authTokenPresent: boolean
+  pendingDrafts: AiCloneDraft[]
+  activity: AiCloneActivityItem[]
+  /** Auto-sends in the current hourly window (capped). */
+  autoSentThisHour: number
+  error?: string
+}
+
+export type AiCloneEvent =
+  | { kind: 'state'; state: AiCloneState }
+  /** /v2/messages returned 401 — the renderer should supply a fresh token. */
+  | { kind: 'token-expired' }
+
+/** What main needs from the renderer to call /v2/messages as the user. */
+export type AiCloneAuth = {
+  /** Fresh Firebase ID token. */
+  token: string
+  /** VITE_OMI_API_BASE (main can't read renderer env). */
+  apiBase?: string
+  /** VITE_OMI_DESKTOP_API_BASE — fallback chat-completions lane when the
+   *  memory-grounded chat is quota-limited (mirrors agentLLM.ts). */
+  desktopApiBase?: string
+  /** Name the persona prompt replies as. */
+  displayName?: string
 }
 
 // --- Windows OCR helper (win-ocr-helper) ---
