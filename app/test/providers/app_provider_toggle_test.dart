@@ -29,14 +29,11 @@ void main() {
 
       final result = await provider.toggleApp('app_123', true, null);
 
-      // The entire purpose of the #10100 fix: the caller can now
-      // distinguish failure from success instead of assuming success.
       expect(result, isFalse);
     });
 
     test('returns true when enableAppServer succeeds', () async {
       provider = AppProvider();
-      // Set up local app so the success path can find and update it.
       provider.apps = [
         App(
             id: 'app_123',
@@ -80,8 +77,8 @@ void main() {
 
       final result = await provider.toggleApp('app_456', false, null);
 
-      expect(result, isTrue); // disable always reports success
-      expect(enableCalled, isFalse); // only disableAppOverride was used
+      expect(result, isTrue);
+      expect(enableCalled, isFalse);
     });
   });
 }
