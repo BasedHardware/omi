@@ -84,6 +84,26 @@ def _fixture_path(root: Path) -> Path:
     return root / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json"
 
 
+def _approve_current_codemagic_document(root: Path) -> None:
+    codemagic = root / "codemagic.yaml"
+    raw_bytes = codemagic.read_bytes()
+    document = yaml.safe_load(raw_bytes.decode("utf-8"))
+    contract = json.loads(_fixture_path(root).read_text(encoding="utf-8"))
+    contract["codemagic_raw_sha256"] = hashlib.sha256(raw_bytes).hexdigest()
+    contract["codemagic_semantic_sha256"] = hashlib.sha256(
+        json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    for workflow_name in ("omi-desktop-swift-release", "omi-desktop-swift-preview"):
+        workflow_json = json.dumps(
+            document["workflows"][workflow_name],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        contract[workflow_name]["semantic_sha256"] = hashlib.sha256(workflow_json.encode("utf-8")).hexdigest()
+    _fixture_path(root).write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
+
+
 def _parent_bypass_workflow(extra: str) -> str:
     return f'''workflows:
   omi-desktop-swift-release:
@@ -269,6 +289,45 @@ def test_reviewed_parent_accepts_preview_alias_without_early_exit(tmp_path):
 
 
 def test_codemagic_workflow_contract_accepts_current_production_configuration():
+    assert GUARDS.check_codemagic_release_publishers() == []
+
+
+@pytest.mark.parametrize(
+    "forbidden_authority",
+    (
+        "GCP_SERVICE_ACCOUNT_KEY",
+        "Cloud Run Admin",
+        "roles/run.admin",
+        "Storage Object Admin",
+        "roles/storage.objectAdmin",
+        "GCR push",
+    ),
+)
+def test_normal_release_rejects_forbidden_broad_gcp_authority_even_after_lock_update(
+    tmp_path, monkeypatch, forbidden_authority
+):
+    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    _mutate(
+        codemagic,
+        '        GCP_PROJECT: "based-hardware"\n',
+        f'        GCP_PROJECT: "based-hardware"\n        FORBIDDEN_GCP_AUTHORITY: "{forbidden_authority}"\n',
+    )
+    _approve_current_codemagic_document(tmp_path)
+
+    errors = GUARDS.check_codemagic_release_publishers()
+
+    assert any("forbidden broad GCP authority" in error and forbidden_authority in error for error in errors), errors
+
+
+def test_normal_release_gcp_authority_guard_ignores_harmless_source_comments(tmp_path, monkeypatch):
+    codemagic = _copy_contract_tree(tmp_path, monkeypatch)
+    _mutate(
+        codemagic,
+        "  # OMI DESKTOP SWIFT RELEASE\n",
+        "  # OMI DESKTOP SWIFT RELEASE (historical prose may mention roles/run.admin)\n",
+    )
+    _approve_current_codemagic_document(tmp_path)
+
     assert GUARDS.check_codemagic_release_publishers() == []
 
 
