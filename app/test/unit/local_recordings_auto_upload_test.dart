@@ -45,7 +45,11 @@ void main() {
 
   group('selectNextAutoPhoneUpload — selection', () {
     test('picks only auto-fallback recordings, in list order', () {
-      final next = selectNextAutoPhoneUpload([explicit, auto1, auto2], busyNames: {}, failureCounts: {});
+      final next = selectNextAutoPhoneUpload(
+        [explicit, auto1, auto2],
+        busyNames: {},
+        failureCounts: {},
+      );
       expect(next, auto1);
     });
 
@@ -59,12 +63,20 @@ void main() {
     });
 
     test('skips files that are uploading or processing (busy)', () {
-      final next = selectNextAutoPhoneUpload([auto1, auto2], busyNames: {auto1}, failureCounts: {});
+      final next = selectNextAutoPhoneUpload(
+        [auto1, auto2],
+        busyNames: {auto1},
+        failureCounts: {},
+      );
       expect(next, auto2);
     });
 
     test('returns null when every auto file is busy', () {
-      final next = selectNextAutoPhoneUpload([auto1, auto2], busyNames: {auto1, auto2}, failureCounts: {});
+      final next = selectNextAutoPhoneUpload(
+        [auto1, auto2],
+        busyNames: {auto1, auto2},
+        failureCounts: {},
+      );
       expect(next, isNull);
     });
   });
