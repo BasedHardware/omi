@@ -19,6 +19,7 @@ struct ChatBubble: View {
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
   @State private var isTimestampHovering = false
+  @State private var isRowHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
@@ -89,35 +90,22 @@ struct ChatBubble: View {
     )
 
     HStack(alignment: .top, spacing: OmiSpacing.md) {
-      if message.sender == .ai {
-        // App avatar
-        if let app = app {
-          AsyncImage(url: URL(string: app.image)) { phase in
-            switch phase {
-            case .success(let image):
-              image
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-            default:
-              Circle()
-                .fill(OmiColors.backgroundTertiary)
-            }
-          }
-          .frame(width: 32, height: 32)
-          .clipShape(Circle())
-        } else {
-          if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-            let logoImage = NSImage(contentsOf: logoURL)
-          {
-            Image(nsImage: logoImage)
+      // Default omi replies render avatar-free for a quieter timeline; only
+      // app personas keep their identity mark.
+      if message.sender == .ai, let app = app {
+        AsyncImage(url: URL(string: app.image)) { phase in
+          switch phase {
+          case .success(let image):
+            image
               .resizable()
-              .scaledToFit()
-              .frame(width: 20, height: 20)
-              .frame(width: 32, height: 32)
-              .background(OmiColors.backgroundTertiary)
-              .clipShape(Circle())
+              .aspectRatio(contentMode: .fill)
+          default:
+            Circle()
+              .fill(OmiColors.backgroundTertiary)
           }
         }
+        .frame(width: 32, height: 32)
+        .clipShape(Circle())
       }
 
       VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
@@ -136,6 +124,7 @@ struct ChatBubble: View {
     }
     .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
     .contentShape(Rectangle())
+    .onHover { isRowHovering = $0 }
   }
 
   @ViewBuilder
@@ -201,9 +190,16 @@ struct ChatBubble: View {
             .padding(.vertical, OmiSpacing.sm)
             .background(
               message.sender == .user
-                ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
+                ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
             )
             .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+            .overlay(
+              RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+                .stroke(
+                  message.sender == .user ? Color.clear : OmiColors.border.opacity(0.4),
+                  lineWidth: 1
+                )
+            )
             .padding(.top, OmiSpacing.hairline)
         }
 
@@ -259,8 +255,12 @@ struct ChatBubble: View {
         SelectableMarkdown(text: text, sender: .ai)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.sm)
-          .background(OmiColors.backgroundTertiary.opacity(0.92))
+          .background(OmiColors.backgroundTertiary.opacity(0.42))
           .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+              .stroke(OmiColors.border.opacity(0.4), lineWidth: 1)
+          )
           .padding(.top, OmiSpacing.hairline)
       )
     case .toolCalls(_, let calls):
@@ -332,7 +332,11 @@ struct ChatBubble: View {
           .transition(.opacity)
       }
     }
+    // Quiet timeline: actions and timestamps only surface while the reader
+    // is on the message (or mid-interaction with them).
+    .opacity(isRowHovering || showRatingFeedback || showCopied || showInfoPopover ? 1 : 0)
     .omiAnimation(.easeInOut(duration: 0.12), value: isTimestampHovering)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
   }
 
   @ViewBuilder

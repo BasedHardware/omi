@@ -223,6 +223,8 @@ struct DashboardPage: View {
   @ObservedObject private var deviceProvider = DeviceProvider.shared
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
+  @State private var dismissedKnowsTaskIDs: Set<String> = []
+  @State private var didAutoOpenChatForHistory = false
   @Binding var selectedIndex: Int
   @State private var citedConversation: ServerConversation? = nil
   @State private var selectedCatalogApp: OmiApp?
@@ -465,6 +467,7 @@ struct DashboardPage: View {
           NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
         }
         syncCaptureState()
+        autoOpenChatForExistingHistoryIfNeeded()
         reportHomeAutomationMode()
         intelligenceStore.setRecommendationActionHandler { recommendation in
           await openRecommendation(recommendation)
@@ -511,6 +514,11 @@ struct DashboardPage: View {
       }
       .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
         syncCaptureState()
+      }
+      // Chat history is the home surface: as soon as the (async) history
+      // load shows prior messages, land on the chat panel, not the greeting.
+      .onChange(of: chatProvider.messages.count) { _, _ in
+        autoOpenChatForExistingHistoryIfNeeded()
       }
       // Clicking into the ask bar reveals the inline chat; the same is true
       // when focus lands there via keyboard (Tab / Full Keyboard Access).
@@ -649,13 +657,14 @@ struct DashboardPage: View {
 
         // Clicking anywhere outside the chat / connect panel collapses
         // back to the hub (panels and the ask bar consume their own
-        // clicks above this catcher).
-        if homeMode != .hub {
+        // clicks above this catcher). When chat history exists, chat IS the
+        // resting Home surface, so no catcher is mounted over it.
+        if homeMode != homeRestingMode {
           Color.black.opacity(0.001)
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .onTapGesture {
-              closeHomeStagePanel()
+              collapseHomeStagePanel()
             }
         }
 
@@ -685,11 +694,13 @@ struct DashboardPage: View {
           panelTop: panelTop
         )
 
-        // Esc collapses the inline chat / connect tray back to the hub —
-        // but only while no modal overlay owns the key.
-        if homeMode != .hub && !isHomeModalPresented {
+        // Esc collapses the connect tray (and, with no chat history, the
+        // inline chat) back to the resting surface — but only while no modal
+        // overlay owns the key. Chat with history is Home itself and cannot
+        // be escaped.
+        if homeMode != homeRestingMode && !isHomeModalPresented {
           OverlayModalEscapeCatcher {
-            closeHomeStagePanel()
+            collapseHomeStagePanel()
           }
         }
       }
@@ -707,7 +718,7 @@ struct DashboardPage: View {
 
     return Group {
       if homeMode == .hub {
-        homeHubStage(askBarWidth: askBarWidth, stageHeight: stageHeight)
+        homeHubStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
       } else {
         homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
       }
@@ -716,50 +727,25 @@ struct DashboardPage: View {
     .padding(.bottom, Self.homeStageBottomPadding)
   }
 
-  /// Hub layout: the omi wordmark centered in the full screen, with the stats
-  /// ribbon, ask bar, and suggestions docked as one column at the bottom.
-  ///
-  /// Built as a plain VStack (wordmark, flexible gap, cluster) so the two can
-  /// never overlap. The wordmark's top inset is computed so it lands on the
-  /// true stage center when the window is tall enough, and lifts to sit just
-  /// above the cluster (with a minimum gap) when it isn't.
-  private func homeHubStage(askBarWidth: CGFloat, stageHeight: CGFloat) -> some View {
-    // Wordmark height and a deliberately generous estimate of the docked
-    // cluster height (ribbon + gap + ask bar + gap + three suggestion rows).
-    // Overestimating only lifts the wordmark slightly early; it never lets
-    // the cluster clip.
-    let wordmarkHeight: CGFloat = 76
-    let clusterHeight: CGFloat = intelligenceStore.recommendations.isEmpty ? 390 : 570
-    let minGap: CGFloat = 24
-    let contentHeight = stageHeight - Self.homeStageTopPadding - Self.homeStageBottomPadding
-
-    let trueCenterInset = (contentHeight - wordmarkHeight) / 2
-    let maxInset = contentHeight - wordmarkHeight - clusterHeight - minGap
-    let topInset = max(0, min(trueCenterInset, maxInset))
+  /// Hub layout: the greeting headline and knows-list rows centered on the
+  /// stage over the memory constellation, with the goals/error surfaces and
+  /// the ask bar docked as one column at the bottom.
+  private func homeHubStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View {
+    let columnWidth = min(CGFloat(620), homeStageContentWidth(for: stageWidth))
 
     return VStack(spacing: 0) {
       Spacer(minLength: 0)
-        .frame(height: topInset)
 
-      if intelligenceStore.recommendations.isEmpty {
-        homeHubWordmark
-          .transition(.homeHubFade)
+      homeHubHeadline
+        .transition(.homeHubFade)
 
-        // Flexible gap absorbs the remaining height, docking the cluster at
-        // the bottom while keeping at least `minGap` below the wordmark.
-        Spacer(minLength: minGap)
-      } else {
-        Spacer(minLength: 0)
-      }
+      homeKnowsList(width: columnWidth)
+        .padding(.top, OmiSpacing.xxl)
+        .transition(.homeSuggestionsFade)
+
+      Spacer(minLength: 0)
 
       VStack(spacing: 0) {
-        WhatMattersNowSection(
-          store: intelligenceStore,
-          onOpen: { recommendation in await openRecommendation(recommendation) }
-        )
-        .frame(width: askBarWidth)
-        .padding(.bottom, intelligenceStore.recommendations.isEmpty ? 0 : OmiSpacing.sm)
-
         dashboardIntelligenceError
           .frame(width: askBarWidth)
           .padding(.bottom, intelligenceStore.error == nil ? 0 : OmiSpacing.sm)
@@ -770,22 +756,17 @@ struct DashboardPage: View {
           onShowAll: { showingAllGoals = true }
         )
         .frame(width: askBarWidth)
-        .padding(.bottom, intelligenceStore.goals.isEmpty ? 0 : OmiSpacing.sm)
-
-        homeStatRibbon
-          .frame(width: askBarWidth)
-          .padding(.bottom, OmiSpacing.md)
+        .padding(.bottom, hasFocusedGoalsSurface ? OmiSpacing.md : 0)
 
         homeAskBar
           .frame(width: askBarWidth)
-
-        homeSuggestionList
-          .frame(width: askBarWidth)
-          .padding(.top, OmiSpacing.md)
-          .transition(.homeSuggestionsFade)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private var hasFocusedGoalsSurface: Bool {
+    !intelligenceStore.focusedGoals.isEmpty || intelligenceStore.accountGeneration != nil
   }
 
   /// Panel layout (chat / connect): the surface fills the height with the ask
@@ -818,43 +799,141 @@ struct DashboardPage: View {
 
   // MARK: Hub centerpiece
 
-  private var homeHubWordmark: some View {
-    Text("omi.")
-      .font(.system(size: 58, weight: .bold, design: .rounded))
-      .foregroundStyle(HomePalette.ink)
-      .lineLimit(1)
-      .shadow(color: HomePalette.stageGlow.opacity(0.46), radius: 26)
-      .frame(maxWidth: .infinity, alignment: .center)
+  private var homeHubHeadline: some View {
+    VStack(spacing: OmiSpacing.sm) {
+      Text(homeHubGreeting)
+        .scaledFont(size: OmiType.title, weight: .semibold)
+        .foregroundStyle(HomePalette.ink)
+        .multilineTextAlignment(.center)
+
+      Text("Here's what it already knows to do:")
+        .scaledFont(size: OmiType.subheading)
+        .foregroundStyle(HomePalette.muted)
+    }
+    .frame(maxWidth: .infinity, alignment: .center)
   }
 
-  /// Stat summary strip that docks directly above the ask bar.
-  private var homeStatRibbon: some View {
-    HomeStatRibbon(items: [
-      HomeStatItem(
-        title: "Conversations",
-        value: conversationMetricValue,
-        systemImage: "text.bubble.fill",
-        action: { navigate(to: .conversations) }
-      ),
-      HomeStatItem(
-        title: "Tasks",
-        value: taskMetricValue,
-        systemImage: "checklist",
-        action: { navigate(to: .tasks) }
-      ),
-      HomeStatItem(
-        title: "Memories",
-        value: memoryMetricValue,
-        systemImage: "brain",
-        action: { navigate(to: .memories) }
-      ),
-      HomeStatItem(
-        title: "Screenshots",
-        value: screenshotMetricValue,
-        systemImage: "photo.on.rectangle.angled",
-        action: { navigate(to: .rewind) }
-      ),
-    ])
+  private var homeHubGreeting: String {
+    let name = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    return name.isEmpty ? "Your 2nd brain is ready." : "Your 2nd brain is ready, \(name)."
+  }
+
+  // MARK: Knows list
+
+  private var homeKnowsRows: [HomeKnowsRow] {
+    HomeKnowsListComposer.compose(
+      tasks: homeKnowsTaskCandidates,
+      insights: intelligenceStore.recommendations.map {
+        HomeKnowsInsightCandidate(id: $0.id, text: $0.headline)
+      },
+      questions: homeSuggestedQuestions,
+      dismissedTaskIDs: dismissedKnowsTaskIDs
+    )
+  }
+
+  private var homeKnowsTaskCandidates: [HomeKnowsTaskCandidate] {
+    (viewModel.overdueTasks + viewModel.todaysTasks + viewModel.recentTasks)
+      .filter { !$0.completed && $0.deleted != true }
+      .map { HomeKnowsTaskCandidate(id: $0.id, text: $0.description) }
+  }
+
+  private func homeKnowsList(width: CGFloat) -> some View {
+    VStack(spacing: OmiSpacing.sm) {
+      ForEach(homeKnowsRows) { row in
+        HomeKnowsRowView(
+          row: row,
+          onOpen: { openKnowsRow(row) },
+          onDismiss: knowsDismissHandler(for: row),
+          onLater: knowsLaterHandler(for: row)
+        )
+      }
+    }
+    .frame(width: width)
+    .accessibilityIdentifier("home-knows-list")
+  }
+
+  private func openKnowsRow(_ row: HomeKnowsRow) {
+    switch row.kind {
+    case .task(let id):
+      if let task = (viewModel.overdueTasks + viewModel.todaysTasks + viewModel.recentTasks)
+        .first(where: { $0.id == id })
+      {
+        TaskNavigationRequestStore.shared.request(task: task)
+      }
+      navigate(to: .tasks)
+    case .insight(let id):
+      guard let recommendation = intelligenceStore.recommendations.first(where: { $0.id == id })
+      else { return }
+      Task {
+        if await openRecommendation(recommendation) {
+          await intelligenceStore.recordPrimaryAction(recommendation)
+        }
+      }
+    case .question:
+      askHomeSuggestion(row.text)
+    }
+  }
+
+  private func knowsDismissHandler(for row: HomeKnowsRow) -> ((OmiAPI.TaskIntelligenceFeedbackReason?) -> Void)? {
+    switch row.kind {
+    case .task(let id):
+      return { _ in dismissedKnowsTaskIDs.insert(id) }
+    case .insight(let id):
+      return { reason in
+        guard let recommendation = intelligenceStore.recommendations.first(where: { $0.id == id })
+        else { return }
+        Task { await intelligenceStore.dismiss(recommendation, reason: reason) }
+      }
+    case .question:
+      return nil
+    }
+  }
+
+  private func knowsLaterHandler(for row: HomeKnowsRow) -> (() -> Void)? {
+    guard case .insight(let id) = row.kind else { return nil }
+    return {
+      guard let recommendation = intelligenceStore.recommendations.first(where: { $0.id == id })
+      else { return }
+      Task { await intelligenceStore.later(recommendation) }
+    }
+  }
+
+  /// Inline stat strip pinned to the header's leading edge: bare counts, no
+  /// card chrome, each navigating to its page.
+  private var homeStatTextStrip: some View {
+    HStack(spacing: OmiSpacing.lg) {
+      HomeStatTextCell(
+        count: conversationStatCount, singular: "conversation", plural: "conversations",
+        action: { navigate(to: .conversations) })
+      HomeStatTextCell(
+        count: taskStatCount, singular: "task", plural: "tasks",
+        action: { navigate(to: .tasks) })
+      HomeStatTextCell(
+        count: memoryStatCount, singular: "memory", plural: "memories",
+        action: { navigate(to: .memories) })
+      HomeStatTextCell(
+        count: screenshotStatCount, singular: "screenshot", plural: "screenshots",
+        action: { navigate(to: .rewind) })
+    }
+  }
+
+  private var conversationStatCount: Int? {
+    homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
+  }
+
+  private var taskStatCount: Int? {
+    homeStatusStore.taskCount ?? incompleteTaskCount
+  }
+
+  private var memoryStatCount: Int? {
+    homeStatusStore.memoryCount
+      ?? (memoriesViewModel.totalMemoriesCount > 0
+        ? memoriesViewModel.totalMemoriesCount
+        : memoriesViewModel.memories.count)
+  }
+
+  private var screenshotStatCount: Int? {
+    homeStatusStore.screenshotCount
   }
 
   // MARK: Inline chat panel
@@ -907,30 +986,9 @@ struct DashboardPage: View {
       .padding(.vertical, OmiSpacing.xs)
 
     }
-    // Barely-there card so the chat reads as a bounded surface while still
-    // dissolving into the ambient Home canvas.
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-        .fill(
-          LinearGradient(
-            colors: [
-              Color.white.opacity(0.018),
-              HomePalette.stageGlow.opacity(0.014),
-              Color.white.opacity(0.006),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-          )
-        )
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-        .stroke(HomePalette.stageGlow.opacity(0.10), lineWidth: 1)
-        .blur(radius: 2.5)
-        .opacity(0.65)
-    )
-    .shadow(color: HomePalette.stageGlow.opacity(0.055), radius: 28, y: 8)
-    .frame(width: homeStagePanelWidth(for: stageWidth))
+    // Chat is the Home surface itself — no card chrome, it sits directly on
+    // the ambient canvas. Width is capped for a readable measure.
+    .frame(width: min(900, homeStagePanelWidth(for: stageWidth)))
   }
 
   // MARK: Connect tray
@@ -970,7 +1028,7 @@ struct DashboardPage: View {
     )
     .overlay(alignment: .topTrailing) {
       HomeIconActionButton(title: "Close connect", systemImage: "xmark") {
-        closeHomeStagePanel()
+        collapseHomeStagePanel()
       }
       .padding(OmiSpacing.md)
     }
@@ -1038,16 +1096,6 @@ struct DashboardPage: View {
     )
   }
 
-  private var homeSuggestionList: some View {
-    VStack(spacing: OmiSpacing.sm) {
-      ForEach(homeSuggestedQuestions, id: \.self) { question in
-        HomeSuggestionRow(text: question) {
-          askHomeSuggestion(question)
-        }
-      }
-    }
-  }
-
   private func homeStageSideInset(for stageWidth: CGFloat) -> CGFloat {
     min(Self.homeStageMaxSideInset, max(Self.homeStageMinSideInset, stageWidth * 0.06))
   }
@@ -1092,6 +1140,17 @@ struct DashboardPage: View {
     }
   }
 
+  /// Chat with history is the default Home surface: whenever prior messages
+  /// exist, the hub greeting yields to the chat panel. Runs once per page
+  /// visit so an explicit Esc back to the hub is respected afterwards.
+  private func autoOpenChatForExistingHistoryIfNeeded() {
+    guard !didAutoOpenChatForHistory else { return }
+    guard !useLegacyHomeDesign, homeMode == .hub, !chatProvider.messages.isEmpty else { return }
+    didAutoOpenChatForHistory = true
+    homeMode = .chat
+    reportHomeAutomationMode()
+  }
+
   private func openHomeChat(focusInput: Bool = true) {
     guard homeMode != .chat else { return }
     OmiMotion.withGated(Self.homeStageAnimation) {
@@ -1110,8 +1169,25 @@ struct DashboardPage: View {
     }
   }
 
+  /// The surface Home rests on when no panel is explicitly open: the chat
+  /// timeline once any history exists, otherwise the greeting hub.
+  private var homeRestingMode: HomeStageMode {
+    chatProvider.messages.isEmpty ? .hub : .chat
+  }
+
+  /// User-facing collapse (click outside, Esc, connect ×): returns to the
+  /// resting surface. The automation bridge's `home_close_panel` keeps the
+  /// unconditional hub jump via `closeHomeStagePanel`.
+  private func collapseHomeStagePanel() {
+    homeAskFieldFocused = false
+    OmiMotion.withGated(Self.homeStageAnimation) {
+      homeMode = homeRestingMode
+    }
+    reportHomeAutomationMode()
+  }
+
   private func toggleHomeConnectPanel() {
-    let target: HomeStageMode = homeMode == .connect ? .hub : .connect
+    let target: HomeStageMode = homeMode == .connect ? homeRestingMode : .connect
     if target == .connect {
       homeAskFieldFocused = false
     }
@@ -1338,6 +1414,8 @@ struct DashboardPage: View {
     let transcriptionUnavailable = appState.transcriptionServiceError != nil
 
     return HStack {
+      homeStatTextStrip
+
       Spacer()
       HStack(spacing: OmiSpacing.sm) {
         HomeStatusButton(
@@ -1440,29 +1518,6 @@ struct DashboardPage: View {
         openAppsPopup(initialSection: .exports)
       }
     }
-  }
-
-  private var conversationMetricValue: String {
-    formattedCount(
-      homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
-    )
-  }
-
-  private var taskMetricValue: String {
-    formattedCount(homeStatusStore.taskCount ?? incompleteTaskCount)
-  }
-
-  private var memoryMetricValue: String {
-    let count =
-      homeStatusStore.memoryCount
-      ?? (memoriesViewModel.totalMemoriesCount > 0
-        ? memoriesViewModel.totalMemoriesCount
-        : memoriesViewModel.memories.count)
-    return formattedCount(count)
-  }
-
-  private var screenshotMetricValue: String {
-    homeStatusStore.screenshotCount.map(formattedCount) ?? "—"
   }
 
   private func navigate(to item: SidebarNavItem) {
@@ -1637,10 +1692,6 @@ struct DashboardPage: View {
     isCaptureMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
   }
 
-  private func formattedCount(_ count: Int) -> String {
-    count.formatted()
-  }
-
   /// Welcome message shown when there are no chat messages yet.
   /// Transparent — no card chrome — so it morphs into the dashboard background.
   private var dashboardChatWelcome: some View {
@@ -1794,11 +1845,6 @@ struct DashboardPage: View {
           onDismiss: dismissSuggestionBanner
         )
       }
-
-      WhatMattersNowSection(
-        store: intelligenceStore,
-        onOpen: { recommendation in await openRecommendation(recommendation) }
-      )
 
       dashboardIntelligenceError
 
@@ -2045,14 +2091,15 @@ private enum HomePalette {
   static let paper = Color(red: 0.018, green: 0.019, blue: 0.021)
   static let panel = Color(red: 0.045, green: 0.046, blue: 0.052)
   static let tile = Color(red: 0.078, green: 0.078, blue: 0.088)
-  static let tileHover = Color(red: 0.115, green: 0.103, blue: 0.142)
+  static let tileHover = Color(red: 0.108, green: 0.110, blue: 0.122)
   static let ink = Color(red: 0.94, green: 0.925, blue: 0.89)
   static let secondary = Color(red: 0.78, green: 0.765, blue: 0.725)
   static let muted = Color(red: 0.49, green: 0.47, blue: 0.43)
   static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
   static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
   static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-  static let stageGlow = Color(red: 0.48, green: 0.30, blue: 0.95)
+  // Neutral cool-grey key light (INV-UI-1: no purple accents).
+  static let stageGlow = Color(red: 0.72, green: 0.74, blue: 0.78)
   static let glow = stageGlow
 }
 
@@ -2369,46 +2416,162 @@ private struct HomeAskBarConnectButton: View {
   }
 }
 
-private struct HomeSuggestionRow: View {
-  let text: String
-  let action: () -> Void
+/// One knows-list row: leading kind icon, single-line text, and either a
+/// dismiss × (task/insight) or an ask ↗ (question) on the trailing edge.
+private struct HomeKnowsRowView: View {
+  let row: HomeKnowsRow
+  let onOpen: () -> Void
+  let onDismiss: ((OmiAPI.TaskIntelligenceFeedbackReason?) -> Void)?
+  let onLater: (() -> Void)?
 
   @State private var isHovering = false
+  @State private var showDismissReasons = false
+  @State private var choseReason = false
+
+  private var leadingIcon: String {
+    switch row.kind {
+    case .task: return "circle"
+    case .insight: return "lightbulb"
+    case .question: return "bubble.left"
+    }
+  }
 
   var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.sm) {
-        Image(systemName: "sparkles")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundStyle(isHovering ? Color(hex: 0xE3BF63) : HomePalette.muted)
+    Button(action: onOpen) {
+      HStack(spacing: OmiSpacing.md) {
+        Image(systemName: leadingIcon)
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.muted)
+          .frame(width: 18)
 
-        Text(text)
+        Text(row.text)
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
           .lineLimit(1)
 
         Spacer(minLength: 8)
 
-        Image(systemName: "arrow.up.right")
-          .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
+        trailingAccessory
       }
       .padding(.horizontal, OmiSpacing.lg)
-      .frame(height: 42)
+      .frame(height: 46)
       .frame(maxWidth: .infinity)
       .background(
-        RoundedRectangle(cornerRadius: 21, style: .continuous)
-          .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.55))
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+          .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.62))
       )
       .overlay(
-        RoundedRectangle(cornerRadius: 21, style: .continuous)
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
           .stroke(HomePalette.hairline.opacity(isHovering ? 1 : 0.55), lineWidth: 1)
       )
-      .contentShape(.rect(cornerRadius: 21))
+      .contentShape(.rect(cornerRadius: 13))
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
-    .accessibilityLabel(text)
+    .contextMenu {
+      if let onLater {
+        Button("Later") { onLater() }
+      }
+      if onDismiss != nil {
+        Button("Dismiss") { handleDismissTap() }
+      }
+    }
+    .accessibilityLabel(row.text)
+    .accessibilityIdentifier("home-knows-\(row.id)")
+  }
+
+  @ViewBuilder
+  private var trailingAccessory: some View {
+    if onDismiss != nil {
+      Button(action: handleDismissTap) {
+        Image(systemName: "xmark")
+          .scaledFont(size: OmiType.micro, weight: .bold)
+          .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.faint)
+          .frame(width: 20, height: 20)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help("Dismiss")
+      .accessibilityLabel("Dismiss")
+      .popover(isPresented: $showDismissReasons) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          Text("Optional reason")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+          ForEach(Self.reasonChoices, id: \.label) { choice in
+            Button(choice.label) {
+              choseReason = true
+              onDismiss?(choice.reason)
+              showDismissReasons = false
+            }
+            .buttonStyle(.bordered)
+          }
+        }
+        .padding(OmiSpacing.md)
+        .frame(width: 210)
+      }
+      .onChange(of: showDismissReasons) { wasShowing, isShowing in
+        guard wasShowing, !isShowing, !choseReason else { return }
+        onDismiss?(nil)
+      }
+    } else {
+      Image(systemName: "arrow.up.right")
+        .scaledFont(size: OmiType.micro, weight: .bold)
+        .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
+    }
+  }
+
+  /// Insight dismissals offer the same optional feedback reasons the old
+  /// What-matters-now cards recorded; task rows just hide for the session.
+  private func handleDismissTap() {
+    if case .insight = row.kind {
+      choseReason = false
+      showDismissReasons = true
+    } else {
+      onDismiss?(nil)
+    }
+  }
+
+  private static let reasonChoices: [(label: String, reason: OmiAPI.TaskIntelligenceFeedbackReason)] = [
+    ("Already handled", .already_handled),
+    ("Not mine", .not_mine),
+    ("Not useful", .not_useful),
+  ]
+}
+
+/// Bare "12 conversations" header stat: bold count, muted label, no chrome.
+private struct HomeStatTextCell: View {
+  let count: Int?
+  let singular: String
+  let plural: String
+  let action: () -> Void
+
+  @State private var isHovering = false
+
+  private var valueText: String {
+    count.map { $0.formatted() } ?? "—"
+  }
+
+  private var labelText: String {
+    count == 1 ? singular : plural
+  }
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: OmiSpacing.xxs) {
+        Text(valueText)
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundStyle(isHovering ? Color.white : HomePalette.ink)
+
+        Text(labelText)
+          .scaledFont(size: OmiType.body)
+          .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.muted)
+      }
+      .lineLimit(1)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .accessibilityLabel("\(valueText) \(labelText)")
   }
 }
 
@@ -3276,83 +3439,6 @@ private struct HomeSourceTile: View {
         .scaledFont(size: OmiType.caption, weight: .bold)
         .foregroundStyle(HomePalette.secondary)
     }
-  }
-}
-
-private struct HomeStatItem: Identifiable {
-  let id = UUID()
-  let title: String
-  let value: String
-  let systemImage: String
-  let action: () -> Void
-}
-
-/// Slim summary strip: the four Home metrics fused into a single
-/// hairline-divided bar so they read as one glanceable object instead of
-/// four heavy widgets. Each cell still hovers and navigates.
-private struct HomeStatRibbon: View {
-  let items: [HomeStatItem]
-
-  var body: some View {
-    HStack(spacing: 0) {
-      ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-        if index > 0 {
-          Rectangle()
-            .fill(HomePalette.hairline.opacity(0.7))
-            .frame(width: 1)
-            .padding(.vertical, OmiSpacing.lg)
-        }
-        HomeStatRibbonCell(item: item)
-      }
-    }
-    // Pin the height so the hairline dividers (greedy Rectangles) size to the
-    // content instead of stretching the whole strip in taller windows.
-    .frame(height: 76)
-    .background(HomePalette.tile.opacity(0.88))
-    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-        .stroke(HomePalette.hairline.opacity(0.8), lineWidth: 1)
-    )
-    .shadow(color: .black.opacity(0.16), radius: 10, y: 8)
-  }
-}
-
-private struct HomeStatRibbonCell: View {
-  let item: HomeStatItem
-
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: item.action) {
-      VStack(spacing: OmiSpacing.xxs) {
-        HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
-          Image(systemName: item.systemImage)
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
-
-          Text(item.value)
-            .font(.system(size: 22, weight: .medium, design: .serif))
-            .foregroundStyle(HomePalette.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-        }
-
-        Text(item.title)
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.muted)
-          .lineLimit(1)
-          .minimumScaleFactor(0.78)
-      }
-      .frame(maxWidth: .infinity)
-      .padding(.vertical, OmiSpacing.md)
-      .padding(.horizontal, OmiSpacing.sm)
-      .background(isHovering ? HomePalette.tileHover : Color.clear)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .accessibilityLabel("\(item.title), \(item.value)")
   }
 }
 
