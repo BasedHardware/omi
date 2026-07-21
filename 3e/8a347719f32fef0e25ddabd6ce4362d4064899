@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
+  s_77f2b8dfbc2e90::t_2a211024dd235c 38-42,44,49,60-61,66-67,69-81,83-86,89-91,94
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_d546b0aefe6799 881-890
+  s_77f2b8dfbc2e90::t_edd0fb699971b4 842,848-860
+  s_77f2b8dfbc2e90::t_16bbae6e8852f6 861-862
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "3e8a347719f32fef0e25ddabd6ce4362d4064899",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
