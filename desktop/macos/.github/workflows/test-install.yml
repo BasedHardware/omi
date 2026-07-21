@@ -45,24 +45,48 @@ jobs:
           echo "Testing release: $TAG"
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
-          # Download DMG
+          DOWNLOAD_DIR="$RUNNER_TEMP/omi-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          DMG_PATH="$DOWNLOAD_DIR/omi.dmg"
+          mkdir -p "$DOWNLOAD_DIR"
+
+          # Download only the canonical disk image, never another release asset.
           gh release download "$TAG" \
             --repo BasedHardware/omi \
-            --dir .
+            --pattern "omi.dmg" \
+            --dir "$DOWNLOAD_DIR"
+          test -f "$DMG_PATH"
+          echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT
 
           echo "## Release Under Test" >> $GITHUB_STEP_SUMMARY
           echo "**Tag:** \`$TAG\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Add quarantine attribute to simulate browser download
-
       - name: Mount DMG and Install
         run: |
-          VOLUME=$(ls -d /Volumes/Omi* | head -1)
-          echo "Volume: $VOLUME"
+          set -euo pipefail
+          DMG_PATH="${{ steps.download.outputs.dmg_path }}"
+          MOUNTPOINT="$RUNNER_TEMP/omi-install-mount-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          DEVICE=""
 
-          # Use ditto to preserve extended attributes
-          ditto "$VOLUME/Omi.app" "/Applications/Omi.app"
+          cleanup() {
+            local exit_code=$?
+            if [[ -n "$DEVICE" ]]; then
+              hdiutil detach "$DEVICE" -quiet || true
+            fi
+            rm -rf "$MOUNTPOINT" "$(dirname "$DMG_PATH")"
+            exit "$exit_code"
+          }
+          trap cleanup EXIT
+
+          mkdir -p "$MOUNTPOINT"
+          xattr -d com.apple.quarantine "$DMG_PATH" 2>/dev/null || true
+          DEVICE=$(hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MOUNTPOINT" | awk '/^\/dev\// { print $1; exit }')
+          [[ -n "$DEVICE" ]]
+          [[ -d "$MOUNTPOINT/Omi.app" ]]
+          echo "Mounted $DMG_PATH at $MOUNTPOINT ($DEVICE)"
+
+          # Use ditto to preserve extended attributes from the exact mounted image.
+          ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"
 
           echo "App installed to /Applications"
 
@@ -184,6 +208,4 @@ jobs:
         if: always()
         run: |
           pkill -9 "Omi Computer" 2>/dev/null || true
-          hdiutil detach "/Volumes/Omi Beta" -quiet 2>/dev/null || true
-          hdiutil detach /Volumes/Omi* -quiet 2>/dev/null || true
           rm -rf "/Applications/Omi.app"
