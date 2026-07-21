@@ -567,8 +567,8 @@ import XCTest
     XCTAssertTrue(windowSource.contains("state.isNotchHoverMenuVisible ? .openMenuRetention : .activationOnly"))
     XCTAssertTrue(source.contains("isChatChromePinned || shouldShowNotchHoverMenu"))
     XCTAssertTrue(source.contains("static let maxAgents = FloatingControlBarWindow.notchAgentListMaxVisibleAgents"))
-    XCTAssertTrue(source.contains("static let dotDiameterRatio: CGFloat = 0.18"))
-    XCTAssertTrue(source.contains("static let ringRadiusRatio: CGFloat = 0.33"))
+    // The Omi dot-ring mark itself moved to the shared
+    // Notch/NotchOmiMarkView.swift (used by legacy and notch v2 chrome).
     XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentMorphField("))
@@ -1140,10 +1140,10 @@ import XCTest
   func testVoiceHandoffCloseDoesNotCancelAnAdmittedPTTTurn() throws {
     XCTAssertTrue(FloatingConversationCloseIntent.userDismissal.cancelsInFlightWork)
     XCTAssertFalse(FloatingConversationCloseIntent.voiceHandoff.cancelsInFlightWork)
-
-    // omi-test-quality: source-inspection -- static contract: the AppKit voice handoff passes the non-cancelling intent.
-    let source = try floatingControlBarWindowSource()
-    XCTAssertTrue(source.contains("window.closeAIConversation(intent: .voiceHandoff)"))
+    // The notch-v2 voice path never closes a surface on handoff (the chat
+    // panel persists and the turn streams into the shared timeline), so the
+    // old close-with-voiceHandoff-intent wiring no longer exists; the intent
+    // contract above is the surviving invariant.
   }
 
   func testBeginTurnStopsQueuedLocalSpeechOnBargeIn() throws {
@@ -1394,7 +1394,9 @@ import XCTest
     XCTAssertTrue(windowSource.contains("state.hideConversationSurface()"))
     XCTAssertTrue(windowSource.contains("openNotchHoverMenuUntilExit()"))
     XCTAssertTrue(windowSource.contains("resizeForMainInputAfterAgentExit()"))
-    XCTAssertTrue(windowSource.contains("window.leaveAgentConversation()"))
+    // Manager back-from-agent now clears the notch drill-in instead of the
+    // legacy window's agent surface.
+    XCTAssertTrue(windowSource.contains("clearAgentDrillIn(pillID:"))
     XCTAssertTrue(windowSource.contains("let expectsRows = !AgentPillsManager.shared.pills.isEmpty"))
     XCTAssertTrue(windowSource.contains("\"mode\": expectsRows ? \"rows\" : \"main\""))
     XCTAssertFalse(viewSource.contains("let onBackToOmi: () -> Void"))
