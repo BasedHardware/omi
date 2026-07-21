@@ -1,0 +1,3 @@
+{
+  "change": "Improved release reliability so new Omi Beta builds complete signed-artifact verification before they are published."
+}

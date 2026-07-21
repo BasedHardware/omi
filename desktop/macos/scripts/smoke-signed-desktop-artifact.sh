@@ -410,7 +410,7 @@ assert_signing_and_entitlements() {
   [[ -n "$runtime" ]] || fail "signed app is missing hardened runtime metadata"
 
   local entitlements
-  entitlements="$(mktemp "${TMPDIR:-/tmp}/omi-entitlements.XXXXXX.plist")"
+  entitlements="$(mktemp "${TMPDIR:-/tmp}/omi-entitlements.plist.XXXXXX")"
   codesign -d --entitlements :- "$APP_BUNDLE" >"$entitlements" 2>/dev/null || fail "could not read app entitlements"
 
   if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$entitlements" >/dev/null 2>&1; then

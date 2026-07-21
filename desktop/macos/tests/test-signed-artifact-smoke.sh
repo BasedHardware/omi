@@ -71,6 +71,27 @@ grep -q -- "--expected-bundle-id requires a value" /tmp/omi-smoke-preview-missin
 
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/omi-smoke-test.XXXXXX")"
 TMP_ROOTS+=("$tmp_root")
+
+# omi-test-quality: source-inspection -- static contract: this native mktemp
+# template must end in Xs, because only the macOS implementation can exercise
+# its suffix handling deterministically in this hermetic script test.
+entitlements_template="$tmp_root/$(python3 - "$SMOKE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'entitlements="\$\(mktemp "\$\{TMPDIR:-/tmp\}/([^"/]+)"\)"', source)
+if match is None:
+    raise SystemExit("entitlements mktemp template is missing")
+print(match.group(1))
+PY
+)"
+first_entitlements_path="$(mktemp "$entitlements_template")"
+second_entitlements_path="$(mktemp "$entitlements_template")"
+[[ "$first_entitlements_path" != "$second_entitlements_path" ]] \
+  || fail "entitlements mktemp template must create a distinct path for each signed artifact smoke"
+
 tmp_app="$tmp_root/omi.app"
 mkdir -p "$tmp_app/Contents/MacOS" "$tmp_app/Contents/Resources" "$tmp_app/Contents/Frameworks"
 cat > "$tmp_app/Contents/Info.plist" <<'PLIST'
