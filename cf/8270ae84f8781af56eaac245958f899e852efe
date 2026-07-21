@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_2204722b151ea4::t_4f7f13965c2341 775-776,778,787
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "cf8270ae84f8781af56eaac245958f899e852efe",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
