@@ -40,6 +40,21 @@ struct SBOnboardingView: View {
         .frame(width: 540, height: min(640, 900))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+    .overlay(alignment: .topTrailing) {
+      Button(action: { model.skip() }) {
+        Text("Skip")
+          .geist(size: 13).foregroundStyle(sb.ink(.w45))
+          .padding(.horizontal, 14).padding(.vertical, 7)
+          .background(
+            Capsule().fill(Color.white.opacity(0.06))
+              .background(.ultraThinMaterial, in: Capsule())
+          )
+          .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+      }
+      .buttonStyle(.plain)
+      .help("Skip onboarding and go to your second brain")
+      .padding(.top, 20).padding(.trailing, 24)
+    }
     .onAppear { model.begin() }
   }
 

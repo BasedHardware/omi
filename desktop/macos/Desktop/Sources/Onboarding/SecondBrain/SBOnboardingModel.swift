@@ -382,6 +382,26 @@ final class SBOnboardingModel: ObservableObject {
     complete(startListening: false)
   }
 
+  /// Skip the rest of onboarding: mark it complete and drop straight to the home,
+  /// without force-enabling capture, launch-at-login, or screen analysis the user
+  /// chose to bypass. They can turn those on later from Settings / the notch.
+  func skip() {
+    streamTask?.cancel()
+    pollTask?.cancel()
+    wowTimeout?.cancel()
+    wowCancellable = nil
+    AnalyticsManager.shared.onboardingCompleted()
+    chatProvider.stopAgent(owner: .mainChat)
+    UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
+    chatProvider.isOnboarding = false
+    ChatToolExecutor.onboardingAppState = nil
+    OnboardingChatPersistence.clear()
+    ChatDraftStore.shared.clear(.onboardingMain)
+    ChatDraftStore.shared.clear(.onboardingFloating)
+    onComplete?()
+    DispatchQueue.main.async { [appState] in appState.hasCompletedOnboarding = true }
+  }
+
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
   private func complete(startListening: Bool) {
     streamTask?.cancel()
