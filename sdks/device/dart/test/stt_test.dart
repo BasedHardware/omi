@@ -1,5 +1,5 @@
+import 'package:flutter_test/flutter_test.dart';
 import 'package:omi_device/omi_device.dart';
-import 'package:test/test.dart';
 
 void main() {
   test('parakeetWsUrl', () {

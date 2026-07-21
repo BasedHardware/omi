@@ -27,6 +27,11 @@ __all__ = [
     "PCM_SAMPLE_RATE_HZ",
     "print_devices",
     "listen_to_omi",
+    "scan",
+    "listen",
+    "listen_payload",
+    "read_codec",
+    "Device",
     "OmiOpusDecoder",
     "transcribe",
     "__version__",
@@ -39,6 +44,10 @@ def __getattr__(name: str):
         from . import bluetooth as bluetooth
 
         return getattr(bluetooth, name)
+    if name in {"scan", "listen", "listen_payload", "read_codec", "Device"}:
+        from . import ble as ble
+
+        return getattr(ble, name)
     if name == "OmiOpusDecoder":
         from .decoder import OmiOpusDecoder
 
