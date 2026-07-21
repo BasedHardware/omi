@@ -918,6 +918,19 @@ enum ChatTurnOwner: Equatable {
   case taskChat(String)
   case agentPill(UUID)
 
+  /// Per-turn reasoning-effort lane relayed to the desktop gateway.
+  /// Typed chat runs "adaptive": the model decides how much to think per
+  /// question (including explicit "think properly / take 5 minutes" asks).
+  /// PTT/voice runs "fast": thinking off, low effort, latency-optimized.
+  /// Background surfaces (task chat, agent pills) keep the legacy behavior.
+  var reasoningEffort: String? {
+    switch self {
+    case .floatingVoice: return "fast"
+    case .mainChat, .floatingDefault: return "adaptive"
+    case .taskChat, .agentPill: return nil
+    }
+  }
+
   func canInterrupt(_ activeOwner: ChatTurnOwner) -> Bool {
     switch (self, activeOwner) {
     case (.floatingDefault, .floatingDefault),
@@ -4429,6 +4442,7 @@ class ChatProvider: ObservableObject {
           attachments: Self.queryAttachments(attachmentsForMessage),
           producingTurnId: aiMessageId,
           expectedContext: kernelContext.snapshot.freshness,
+          reasoningEffort: turnOwner.reasoningEffort,
           onTextDelta: textDeltaHandler,
           onToolActivity: toolActivityHandler,
           onThinkingDelta: thinkingDeltaHandler,

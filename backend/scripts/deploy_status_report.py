@@ -46,7 +46,7 @@ class CloudRunFetchError:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Read-only deploy rollout/status reporter for Omi services.')
-    parser.add_argument('--env', choices=('dev', 'beta', 'prod'), required=True)
+    parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument('--project', help='GCP project id for live Cloud Run reads.')
     parser.add_argument('--region', default=DEFAULT_REGION)
     parser.add_argument('--namespace', help='Kubernetes namespace. Defaults to <env>-omi-backend.')

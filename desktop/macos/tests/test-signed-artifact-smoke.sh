@@ -135,4 +135,12 @@ fi
 grep -q "SUFeedURL mismatch" /tmp/omi-smoke-beta-feed.err \
   && fail "--expected-feed-url should accept the identity-scoped feed"
 
+# Regression (v0.12.91 build failure): macOS mktemp creates the LITERAL template
+# file when characters follow the final XXXXXX, so the second smoke invocation
+# in one build (stable then Omi Beta) dies with "File exists". Every template
+# must end with XXXXXX.
+if grep -nE 'mktemp (-d )?"[^"]*XXXXXX[^"]+"' "$SMOKE"; then
+  fail "mktemp template with a suffix after XXXXXX breaks repeat smoke invocations"
+fi
+
 echo "signed artifact smoke tests passed"

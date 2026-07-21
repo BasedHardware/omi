@@ -1006,6 +1006,7 @@ def _load_sync_router_for_fast_path():
 
     sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
     sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
+    sys.modules['utils.fair_use'].is_daily_audio_ceiling_exceeded = MagicMock(return_value=False)
     sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
     sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
     sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
@@ -2008,6 +2009,89 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
         module.create_sync_job.assert_called_once()
         module.enqueue_sync_job.assert_called_once()
         assert module.create_sync_job.call_args.kwargs['dispatch_mode'] == 'cloud_tasks'
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
+    """A fresh V2 upload over the hard ceiling must leave its WAL audio untouched."""
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
+    module._fair_use_restriction_response = AsyncMock(
+        return_value=module.JSONResponse(status_code=429, content={'code': 'fair_use_restricted'})
+    )
+    module.start_background_task = MagicMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='device_bound'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 429
+        assert json.loads(response.body) == {'code': 'fair_use_restricted'}
+        module.is_daily_audio_ceiling_exceeded.assert_called_once_with('test-uid')
+        module._fair_use_restriction_response.assert_awaited_once()
+        restriction_kwargs = module._fair_use_restriction_response.await_args.kwargs
+        assert restriction_kwargs['uid'] == 'test-uid'
+        assert restriction_kwargs['retry_after'] > 0
+        module._retrieve_file_paths_v2.assert_not_called()
+        mock_sync_jobs.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+        module.start_background_task.assert_not_called()
+        module.has_transcription_credits.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
+    """Historical recovery keeps its independent pacing policy, even above the live ceiling."""
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
+    module.start_background_task = MagicMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.BACKFILL,
+            trust=types.SimpleNamespace(value='legacy'),
+            reason='historical_recovery',
+            maximum_age_seconds=24 * 60 * 60,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 202
+        module.is_daily_audio_ceiling_exceeded.assert_not_called()
+        mock_sync_jobs.create_sync_job.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

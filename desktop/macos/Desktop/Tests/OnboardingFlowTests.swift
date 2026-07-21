@@ -387,6 +387,43 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
+  // Regression: arrow navigation must be computed from persisted step state and
+  // applied by the mounted view — the NSEvent monitor's captured view copy drops
+  // @AppStorage writes on some macOS versions. These cover the extracted
+  // decision + validation seam the monitor and .onReceive now route through.
+  func testArrowNavigationDecisions() {
+    // Left/up go back one step; blocked at the first step.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 123, step: 10, furthestStep: 15), .jump(to: 9))
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 126, step: 1, furthestStep: 1), .jump(to: 0))
+    XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 123, step: 0, furthestStep: 5))
+    // Right/down jump when the next step is cleared or skippable.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 124, step: 10, furthestStep: 15), .jump(to: 11))
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 125, step: 5, furthestStep: 5), .jump(to: 6))
+    // At an uncleared required step, defer to the step's own Continue gating.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 124, step: 1, furthestStep: 1),
+      .forwardDefaultAction)
+    // Non-arrow keys navigate nothing.
+    XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 36, step: 5, furthestStep: 10))
+  }
+
+  func testValidatedNavigationTargetPolicy() {
+    // Backward always allowed, forward gated by canJump, range clamped.
+    XCTAssertEqual(
+      OnboardingFlow.validatedNavigationTarget(9, currentStep: 10, furthestStep: 15), 9)
+    XCTAssertEqual(
+      OnboardingFlow.validatedNavigationTarget(11, currentStep: 10, furthestStep: 15), 11)
+    XCTAssertNil(OnboardingFlow.validatedNavigationTarget(2, currentStep: 1, furthestStep: 1))
+    XCTAssertNil(OnboardingFlow.validatedNavigationTarget(-1, currentStep: 0, furthestStep: 0))
+    XCTAssertNil(
+      OnboardingFlow.validatedNavigationTarget(
+        OnboardingFlow.lastStepIndex + 1, currentStep: 5, furthestStep: 17))
+  }
+
   @MainActor
   func testHowDidYouHearKeepsOtherLast() {
     XCTAssertEqual(OnboardingHowDidYouHearStepView.sources.last?.name, "Other")

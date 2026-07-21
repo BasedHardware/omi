@@ -38,7 +38,7 @@ class RuntimeBindingContract:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Preflight checks for backend Cloud Run deploys.')
-    parser.add_argument('--env', choices=('dev', 'beta', 'prod'), required=True)
+    parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument('--project', required=True)
     parser.add_argument('--region', default=DEFAULT_REGION)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)

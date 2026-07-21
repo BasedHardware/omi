@@ -16,7 +16,7 @@ use crate::routes::rate_limit::{requires_server_metering, RateDecision};
 use crate::routes::retrieval_policy::{caller_disabled_tools, retrieval_policy, RetrievalSource};
 use crate::AppState;
 
-use super::request_translation::{translate_request_inner, web_search_enabled};
+use super::request_translation::{translate_request_inner, web_search_enabled, ReasoningEffort};
 use super::response_or_500;
 use super::streaming::{handle_server_tool_streaming, handle_streaming};
 use super::transport::{handle_non_streaming, new_anthropic_client};
@@ -61,6 +61,22 @@ const CHAT_COMPLETIONS_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
 
 const OMI_REQUEST_ID_HEADER: &str = "x-omi-request-id";
 const RESPONSE_REQUEST_ID_HEADER: &str = "x-request-id";
+/// Per-turn effort directive from the desktop app (relayed by the pi-mono
+/// extension). Header wins over the OpenAI-compatible body field.
+const OMI_REASONING_EFFORT_HEADER: &str = "x-omi-reasoning-effort";
+
+fn inbound_reasoning_effort(headers: &HeaderMap, req: &ChatCompletionRequest) -> ReasoningEffort {
+    headers
+        .get(OMI_REASONING_EFFORT_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(ReasoningEffort::parse)
+        .or_else(|| {
+            req.reasoning_effort
+                .as_deref()
+                .and_then(ReasoningEffort::parse)
+        })
+        .unwrap_or_default()
+}
 
 fn inbound_request_id(headers: &HeaderMap) -> String {
     headers
@@ -96,6 +112,7 @@ async fn chat_completions(
         event = "chat_completion_request",
         request_id = %request_id,
         streaming = req.stream,
+        reasoning_effort = ?inbound_reasoning_effort(&headers, &req),
         "chat completion received"
     );
     let response = chat_completions_inner(state, user, headers, req).await;
@@ -202,11 +219,17 @@ async fn chat_completions_inner(
     };
 
     // Translate request
-    let anthropic_req = translate_request_inner(&req, route.upstream_model, web_search_enabled)
-        .map_err(|e| {
-            tracing::warn!("chat_completions: request translation error: {}", e);
-            StatusCode::BAD_REQUEST
-        })?;
+    let reasoning_effort = inbound_reasoning_effort(&headers, &req);
+    let anthropic_req = translate_request_inner(
+        &req,
+        route.upstream_model,
+        web_search_enabled,
+        reasoning_effort,
+    )
+    .map_err(|e| {
+        tracing::warn!("chat_completions: request translation error: {}", e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     // Bound connection establishment so a network blip can't hang the request; the
     // total-response timeout is applied per-call (non-streaming only) inside the retry

@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Notch resizing across Spaces, kept tool progress in compact collapsed groups, added a clear Home control to main chat, made regular and Notch chat fade naturally into a lighter composer, reduced main-chat header whitespace, made discovered skills compact and searchable without injecting CLAUDE.md, let active tools reach their own progress timeout before recovering a silent chat bridge, and kept Push-to-Talk speaking when current-screen capture is temporarily unavailable."
-}

@@ -1,5 +1,7 @@
 from html import escape as html_escape
 import hmac
+import hashlib
+import json
 import logging
 import os
 import random
@@ -13,9 +15,9 @@ from pydantic import BaseModel, Field
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
+    get_release_manifest,
     promote_channel,
     register_release_manifest,
-    rollback_macos_beta_channel,
 )
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
@@ -65,13 +67,18 @@ class DesktopReleaseManifestRequest(BaseModel):
     build_number: int = Field(gt=0)
     zip_url: str
     dmg_url: Optional[str] = None
+    beta_zip_url: Optional[str] = None
+    beta_dmg_url: Optional[str] = None
     ed_signature: str
+    beta_ed_signature: Optional[str] = None
     published_at: str
     changelog: List[str] = Field(default_factory=list)
     mandatory: bool = False
     source_sha: str
     zip_sha256: Optional[str] = None
     dmg_sha256: Optional[str] = None
+    beta_zip_sha256: Optional[str] = None
+    beta_dmg_sha256: Optional[str] = None
     qualification: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -81,19 +88,7 @@ class DesktopChannelPromotionRequest(BaseModel):
     release_id: str
     expected_generation: Optional[int] = Field(default=None, ge=0)
     expected_current_release_id: Optional[str] = None
-    #: Beta-only break-glass: skip the T2 qualification gate. Requires both
-    #: compare-and-swap fields above so the bypass cannot race normal promotion.
-    emergency: bool = False
-
-
-class DesktopBetaRollbackRequest(BaseModel):
-    """Emergency-only rollback request; the literal fields prevent cross-channel reuse."""
-
-    platform: Literal["macos"]
-    channel: Literal["beta"]
-    release_id: str = Field(min_length=1)
-    expected_current_release_id: str = Field(min_length=1)
-    expected_generation: int = Field(ge=0)
+    operation: Literal["promote", "repoint"] = "promote"
 
 
 class DesktopPreviewPublishRequest(BaseModel):
@@ -282,14 +277,7 @@ async def _find_desktop_release_by_tag(tag_name: str) -> Optional[Dict]:
 async def _resolve_beta_identity_dmg(entry: Dict) -> Optional[str]:
     """Beta-identity DMG URL for this entry's release, or None when it predates
     the dual-identity pipeline."""
-    url = _get_asset_download_url(entry["release"], {BETA_IDENTITY_DMG_ASSET})
-    if url:
-        return url
-    tag = (entry.get("version_info") or {}).get("tag_name") or entry["release"].get("tag_name", "")
-    gh_release = await _find_desktop_release_by_tag(tag)
-    if not gh_release:
-        return None
-    return _get_asset_download_url(gh_release, {BETA_IDENTITY_DMG_ASSET})
+    return _get_asset_download_url(entry["release"], {BETA_IDENTITY_DMG_ASSET})
 
 
 async def _resolve_beta_identity_enclosure(entry: Dict) -> Optional[tuple]:
@@ -303,13 +291,6 @@ async def _resolve_beta_identity_enclosure(entry: Dict) -> Optional[tuple]:
     metadata = entry.get("metadata") or {}
     url = _get_asset_download_url(release, {BETA_IDENTITY_SPARKLE_ASSET})
     signature = (metadata.get("betaEdSignature") or "").strip()
-    if not url:
-        tag = (entry.get("version_info") or {}).get("tag_name") or release.get("tag_name", "")
-        gh_release = await _find_desktop_release_by_tag(tag)
-        if not gh_release:
-            return None
-        url = _get_asset_download_url(gh_release, {BETA_IDENTITY_SPARKLE_ASSET})
-        signature = (extract_key_value_pairs(gh_release.get("body", "")).get("betaEdSignature") or "").strip()
     if not url or not signature:
         return None
     return url, signature
@@ -376,6 +357,10 @@ def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str
     assets = [{"name": "Omi.zip", "browser_download_url": manifest["zip_url"]}]
     if manifest.get("dmg_url"):
         assets.append({"name": "Omi.dmg", "browser_download_url": manifest["dmg_url"]})
+    if manifest.get("beta_zip_url"):
+        assets.append({"name": "Omi.Beta.zip", "browser_download_url": manifest["beta_zip_url"]})
+    if manifest.get("beta_dmg_url"):
+        assets.append({"name": "omi-beta.dmg", "browser_download_url": manifest["beta_dmg_url"]})
     return {
         "channel": channel,
         "source": source,
@@ -392,6 +377,9 @@ def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str
         },
         "metadata": {
             "edSignature": manifest["ed_signature"],
+            "betaEdSignature": manifest["beta_ed_signature"],
+            "betaZipSha256": manifest.get("beta_zip_sha256"),
+            "betaDmgSha256": manifest.get("beta_dmg_sha256"),
             "changelog": manifest.get("changelog", []),
             "mandatory": "true" if manifest.get("mandatory") else "false",
             "sourceSha": manifest["source_sha"],
@@ -993,15 +981,21 @@ async def register_desktop_release(request: DesktopReleaseManifestRequest, secre
     return {"success": True, "manifest": manifest}
 
 
+@router.get("/v2/desktop/releases/{release_id}")
+async def get_desktop_release_manifest(release_id: str, secret_key: str = Header(...)):
+    """Return the retained manifest used for a pointer transition, not GitHub metadata."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    manifest = await run_blocking(db_executor, get_release_manifest, release_id)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail='desktop release manifest not found')
+    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {"success": True, "manifest": manifest, "manifest_sha256": hashlib.sha256(canonical).hexdigest()}
+
+
 @router.post("/v2/desktop/channels/promote")
 async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secret_key: str = Header(...)):
-    """Atomically advance one explicit channel pointer to a registered release.
-
-    ``emergency`` is the beta-only break-glass path: it skips the T2
-    qualification gate and requires an explicit compare-and-swap on both the
-    current release id and generation, so a concurrent normal promotion cannot
-    be silently clobbered.
-    """
+    """Atomically advance or repoint one explicit qualified channel pointer."""
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     try:
@@ -1013,7 +1007,7 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
             request.release_id,
             expected_generation=request.expected_generation,
             expected_current_release_id=request.expected_current_release_id,
-            emergency=request.emergency,
+            operation=request.operation,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1023,22 +1017,3 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
         live_cache_key(request.platform, request.channel),
     )
     return {"success": True, "pointer": pointer}
-
-
-@router.post("/v2/desktop/channels/rollback")
-async def rollback_macos_beta_channel_endpoint(request: DesktopBetaRollbackRequest, secret_key: str = Header(...)):
-    """Emergency-only, compare-and-swap rollback for the macOS beta pointer."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    try:
-        result = await run_blocking(
-            db_executor,
-            rollback_macos_beta_channel,
-            request.release_id,
-            expected_current_release_id=request.expected_current_release_id,
-            expected_generation=request.expected_generation,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
-    return {"success": True, **result}

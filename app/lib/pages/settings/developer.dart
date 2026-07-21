@@ -387,34 +387,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
-  void _showApiSwitchDialog(BuildContext context, String targetEnvironment) {
-    final targetName = targetEnvironment == 'production' ? context.l10n.production : context.l10n.staging;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
-        title: Text(context.l10n.switchApiConfirmTitle, style: const TextStyle(color: Colors.white)),
-        content: Text(context.l10n.switchApiConfirmBody(targetName), style: const TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              final message = context.l10n.apiEnvSavedRestartRequired;
-              await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
-              if (!context.mounted) return;
-              AppSnackbar.showSnackbar(message, duration: const Duration(seconds: 5));
-            },
-            child: Text(context.l10n.switchAndRestart, style: const TextStyle(color: Colors.orange)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildManualFirmwareFlash(DeviceProvider provider) {
     return _buildSectionContainer(
       children: [
@@ -514,8 +486,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   _buildNavItem(
                     icon: FontAwesomeIcons.list,
                     title: context.l10n.conversationDisplay,
-                    onTap: () => Navigator.of(context)
-                        .push(MaterialPageRoute(builder: (context) => const ConversationDisplaySettings())),
+                    onTap: () => Navigator.of(
+                      context,
+                    ).push(MaterialPageRoute(builder: (context) => const ConversationDisplaySettings())),
                   ),
                   const SizedBox(height: 12),
 
@@ -1758,151 +1731,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                       ],
                     ),
                   ),
-
-                  // API Environment Section (TestFlight only, requires STAGING_API_URL env var)
-                  if (Env.isTestFlight && Env.isStagingConfigured) ...[
-                    const SizedBox(height: 32),
-                    _buildSectionHeader(context.l10n.apiEnvironment, subtitle: context.l10n.apiEnvironmentDescription),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      if (!SharedPreferencesUtil().testFlightUseStagingApi) return;
-                                      _showApiSwitchDialog(context, 'production');
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: !SharedPreferencesUtil().testFlightUseStagingApi
-                                            ? const Color(0xFF22C55E)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Text(
-                                            context.l10n.production,
-                                            style: TextStyle(
-                                              color: !SharedPreferencesUtil().testFlightUseStagingApi
-                                                  ? Colors.white
-                                                  : Colors.grey.shade400,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            'api.omi.me',
-                                            style: TextStyle(
-                                              color: !SharedPreferencesUtil().testFlightUseStagingApi
-                                                  ? Colors.white70
-                                                  : Colors.grey.shade600,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      if (SharedPreferencesUtil().testFlightUseStagingApi) return;
-                                      _showApiSwitchDialog(context, 'staging');
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: SharedPreferencesUtil().testFlightUseStagingApi
-                                            ? Colors.orange.shade800
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Text(
-                                            context.l10n.staging,
-                                            style: TextStyle(
-                                              color: SharedPreferencesUtil().testFlightUseStagingApi
-                                                  ? Colors.white
-                                                  : Colors.grey.shade400,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            Uri.parse(Env.stagingApiUrl!).host,
-                                            style: TextStyle(
-                                              color: SharedPreferencesUtil().testFlightUseStagingApi
-                                                  ? Colors.white70
-                                                  : Colors.grey.shade600,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey.shade600, size: 12),
-                              const SizedBox(width: 6),
-                              Text(
-                                context.l10n.switchRequiresRestart,
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (SharedPreferencesUtil().testFlightUseStagingApi) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade900.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.orange.shade700.withValues(alpha: 0.5)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade300, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                context.l10n.stagingDisclaimer,
-                                style: TextStyle(color: Colors.orange.shade300, fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
 
                   // Manual Firmware Flash (only when device connected)
                   Builder(

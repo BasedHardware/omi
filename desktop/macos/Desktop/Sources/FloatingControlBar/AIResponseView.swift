@@ -1,6 +1,5 @@
 import OmiTheme
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
@@ -8,10 +7,6 @@ struct AIResponseView: View {
   @Binding var isLoading: Bool
   let currentMessage: ChatMessage?
   @State private var isQuestionExpanded = false
-  @Binding var followUpText: String
-  @State private var attachments: [ChatAttachment] = []
-  @State private var isDropTargeted = false
-  @FocusState private var isFollowUpFocused: Bool
 
   let userInput: String
   let chatHistory: [FloatingChatExchange]
@@ -20,7 +15,8 @@ struct AIResponseView: View {
 
   var onClearVisibleConversation: (() -> Void)?
   var onEscape: (() -> Void)?
-  var onSendFollowUp: ((String) -> Void)?
+  /// Typing lives in the main app now — the bar only offers a jump there.
+  var onOpenMainApp: (() -> Void)?
   var onRate: ((String, Int?) -> Void)?
   var onShareLink: (() async -> String?)?
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
@@ -75,22 +71,6 @@ struct AIResponseView: View {
     .omiAnimation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
     .onExitCommand {
       onEscape?()
-    }
-    .onAppear {
-      if !isLoading {
-        // Restored conversation: focus follow-up field immediately
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          isFollowUpFocused = true
-        }
-      }
-    }
-    .onChange(of: isLoading) {
-      if !isLoading {
-        // Auto-focus follow-up field when loading finishes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          isFollowUpFocused = true
-        }
-      }
     }
   }
 
@@ -443,54 +423,38 @@ struct AIResponseView: View {
   @State private var isSharingLink = false
 
   private var followUpInputView: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      if !attachments.isEmpty {
-        AttachmentPreviewRow(
-          attachments: attachments,
-          onRemove: removeAttachment
-        )
-        .environment(\.colorScheme, .dark)
-      }
-
-      VStack(spacing: 0) {
-        HStack(spacing: OmiSpacing.xs) {
-          Button(action: { shareLink() }) {
-            Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(showShareFeedback ? .green : .secondary)
-          }
-          .buttonStyle(.plain)
-          .help("Copy share link")
-          .disabled(isSharingLink)
-
-          TextField("Ask follow up...", text: $followUpText)
-            .textFieldStyle(.plain)
+    VStack(spacing: 0) {
+      HStack(spacing: OmiSpacing.xs) {
+        Button(action: { shareLink() }) {
+          Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
             .scaledFont(size: OmiType.body)
-            .padding(.horizontal, OmiSpacing.sm)
-            .padding(.vertical, OmiSpacing.xs)
-            .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
-            .cornerRadius(OmiChrome.elementRadius)
-            .focused($isFollowUpFocused)
-            .onSubmit {
-              sendFollowUp()
-            }
-
-          Button(action: { sendFollowUp() }) {
-            Image(systemName: "arrow.up.circle.fill")
-              .scaledFont(size: OmiType.heading)
-              .foregroundColor(canSendFollowUp ? .white : .secondary)
-          }
-          .disabled(!canSendFollowUp)
-          .buttonStyle(.plain)
+            .foregroundColor(showShareFeedback ? .green : .secondary)
         }
-        .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(0.82))
-      }
-    }
-    .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
-  }
+        .buttonStyle(.plain)
+        .help("Copy share link")
+        .disabled(isSharingLink)
 
-  private var canSendFollowUp: Bool {
-    !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+        Button(action: { onOpenMainApp?() }) {
+          HStack(spacing: OmiSpacing.xs) {
+            Text("Continue in Omi")
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(.white.opacity(0.85))
+            Spacer(minLength: 0)
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(.secondary)
+          }
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xs)
+          .background(Color.white.opacity(0.10))
+          .cornerRadius(OmiChrome.elementRadius)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open the Omi app to keep chatting")
+      }
+      .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(0.82))
+    }
   }
 
   private var shareFeedbackBanner: some View {
@@ -546,35 +510,6 @@ struct AIResponseView: View {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
   }
 
-  private func sendFollowUp() {
-    let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let staged = attachments
-    guard !trimmed.isEmpty || !staged.isEmpty else { return }
-    followUpText = trimmed
-    attachments = []
-    if !staged.isEmpty {
-      FloatingControlBarManager.shared.sharedFloatingProvider?.addAttachments(staged)
-    }
-    onSendFollowUp?(trimmed)
-  }
-
-  private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
-    ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
-      addAttachmentURLs(urls)
-    }
-  }
-
-  private func addAttachmentURLs(_ urls: [URL]) {
-    let remaining = max(0, kMaxChatAttachments - attachments.count)
-    guard remaining > 0 else { return }
-    let staged = urls.prefix(remaining).compactMap(ChatAttachment.from(url:))
-    guard !staged.isEmpty else { return }
-    attachments.append(contentsOf: staged)
-  }
-
-  private func removeAttachment(_ id: String) {
-    attachments.removeAll { $0.id == id }
-  }
 }
 
 // MARK: - Message Hover Overlay

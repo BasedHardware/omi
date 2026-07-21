@@ -55,6 +55,8 @@ interface PiMonoRelayContext {
   capabilityRef: string;
   /** Omi-owned opaque correlation id. Never contains prompt or account data. */
   requestId: string;
+  /** Per-turn effort lane ("adaptive" | "fast") relayed to the gateway. */
+  reasoningEffort?: string;
 }
 
 interface PiAssistantMessageEvent {
@@ -836,7 +838,11 @@ export class PiMonoAdapter implements HarnessAdapter {
     mkdirSync(dirname(this.contextFilePath), { recursive: true });
     writeFileSync(
       this.contextFilePath,
-      JSON.stringify({ capabilityRef: context.capabilityRef, requestId: context.requestId })
+      JSON.stringify({
+        capabilityRef: context.capabilityRef,
+        requestId: context.requestId,
+        ...(context.reasoningEffort ? { reasoningEffort: context.reasoningEffort } : {}),
+      })
     );
   }
 
@@ -1196,6 +1202,12 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 }
 
+/** Allowlisted per-turn effort lane from run metadata — anything else is dropped. */
+function relayReasoningEffort(metadata: Record<string, unknown> | undefined): string | undefined {
+  const raw = metadata?.reasoningEffort;
+  return raw === "adaptive" || raw === "fast" ? raw : undefined;
+}
+
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId = "pi-mono";
   readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor("pi-mono");
@@ -1255,6 +1267,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         {
           capabilityRef: context.toolCapabilityRef,
           requestId: context.requestId,
+          reasoningEffort: relayReasoningEffort(context.metadata),
         }
       );
 

@@ -373,10 +373,35 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "  deploy:\n    needs: firestore_readiness\n    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy'\n",
-            "  deploy:\n    needs: firestore_readiness\n    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' || true\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness]\n    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy'\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness]\n    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' || true\n",
         )
         self.assertIn("manual deployment must use exactly the main-ref deploy condition", CHECKER.validate(root))
+
+    def test_manual_workflow_rejects_boundary_dependency_bypasses(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "    needs: validate-production-boundary\n",
+            "",
+        )
+        self.assertIn(
+            "manual source admission must wait for production-boundary validation",
+            CHECKER.validate(root),
+        )
+
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "needs: [validate-production-boundary, firestore_readiness]",
+            "needs: firestore_readiness",
+        )
+        self.assertIn(
+            "manual deployment must depend on production-boundary validation and source admission",
+            CHECKER.validate(root),
+        )
 
     def test_auto_workflow_rejects_github_sha_or_incomplete_source_binding(self) -> None:
         root = self.fixture_root()

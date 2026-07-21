@@ -40,8 +40,8 @@ import XCTest
       // Same diagnostics builder the real Sentry attachment uses — the dry-run
       // returns the identical JSON, not a parallel reimplementation.
       XCTAssertTrue(
-        block.contains("DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment()"),
-        "dry-run must build the diagnostics JSON via the shared attachment builder")
+        block.contains("DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment("),
+        "dry-run must build the redacted incident diagnostics via the shared attachment builder")
       // Same title builder the real submit uses.
       XCTAssertTrue(
         block.contains("feedbackReportTitle(for:"),
@@ -61,21 +61,14 @@ import XCTest
         "dry-run must declare that no Sentry capture happened")
     }
 
-    func testDryRunReturnsLogMetadataOnlyNotContents() throws {
+    func testDryRunReturnsRedactedDiagnosticsInsteadOfRawLogMetadata() throws {
       let block = try dryRunActionBlock()
-      // The raw log is attached unredacted to Sentry by design; the dry-run must
-      // surface only metadata so the bridge response can't leak the log itself.
-      XCTAssertTrue(block.contains("log_attachment_filename"))
-      XCTAssertTrue(block.contains("log_attachment_exists"))
-      // Targeted guard: reject the common ways of reading the log *contents* keyed
-      // on logPath. Not exhaustive (a FileHandle read would slip past), but paired
-      // with the positive metadata-only assertions above it pins the intent.
-      XCTAssertFalse(
-        block.contains("contentsOfFile: logPath"),
-        "dry-run must not read the raw log contents into its response")
-      XCTAssertFalse(
-        block.contains("contentsOf: URL(fileURLWithPath: logPath)"),
-        "dry-run must not read the raw log contents into its response")
+      XCTAssertFalse(block.contains("log_attachment_filename"))
+      XCTAssertFalse(block.contains("log_attachment_exists"))
+      XCTAssertFalse(block.contains("omiLogFilePath()"))
+      XCTAssertTrue(
+        block.contains("writeIncidentDiagnosticsAttachment("),
+        "dry-run must inspect the same redacted attachment used by submitFeedback")
     }
 
     func testRealSubmitSharesTheSameBuilders() throws {
@@ -92,9 +85,9 @@ import XCTest
 
     // MARK: - Behavioral: shared title builder + payload shape
 
-    func testReportTitleBuilderMatchesTheShippedStrings() {
-      XCTAssertEqual(feedbackReportTitle(for: ""), "User Report (logs only)")
-      XCTAssertEqual(feedbackReportTitle(for: "mic dropped"), "User Report: mic dropped")
+    func testReportTitleBuilderNeverIncludesUserProvidedText() {
+      XCTAssertEqual(feedbackReportTitle(for: ""), "User Report")
+      XCTAssertEqual(feedbackReportTitle(for: "mic dropped"), "User Report")
     }
 
     func testDiagnosticsPayloadIsParseableAndCarriesPrivacyMarker() throws {

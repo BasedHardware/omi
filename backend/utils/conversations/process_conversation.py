@@ -61,7 +61,7 @@ from models.structured import Structured
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_persona_prompt
+from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
 from utils.executors import db_executor, llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
@@ -418,8 +418,26 @@ def _trigger_apps(
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = cast(App, all_apps_dict.get(preferred_app_id))
             logger.info(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
-        else:
-            # Only run suggestion LLM call when no preferred app is set
+        elif preferred_app_id:
+            # The set-preferred route admits any app `get_available_app_by_id`
+            # can see (routers/users.py); it never requires the enabled-installed
+            # slice this dict is built from. A default whose enablement never
+            # landed (e.g. the template create flow's enable call failed) was
+            # therefore accepted by the setter and silently ignored here (#10074).
+            # Resolve through the setter's own authority instead of re-deciding.
+            candidate = get_available_app_model_by_id(preferred_app_id, uid)
+            if candidate and candidate.works_with_memories():
+                app_to_run = candidate
+                logger.info(
+                    f"Using user's preferred app outside the installed slice: {candidate.name} (id: {preferred_app_id})"
+                )
+            else:
+                logger.warning(
+                    f"Preferred app {preferred_app_id} is set but unusable "
+                    f"(missing={candidate is None}); falling back to suggestions {uid}"
+                )
+        if app_to_run is None:
+            # Only run suggestion LLM call when no usable preferred app is set
             if not conversation.suggested_summarization_apps:
                 with track_usage(uid, Features.CONVERSATION_APPS):
                     suggested_apps, _reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)

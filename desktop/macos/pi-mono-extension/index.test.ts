@@ -34,6 +34,7 @@ import {
   __registerOmiToolsForTest,
   __resetOmiPipeForTest,
   omiRequestIdFromRelayContext,
+  omiReasoningEffortFromRelayContext,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
@@ -53,6 +54,14 @@ test("request correlation: accepts only opaque bounded relay ids", () => {
   assert.equal(omiRequestIdFromRelayContext('{"requestId":"has space"}'), undefined);
   assert.equal(omiRequestIdFromRelayContext(JSON.stringify({ requestId: "x".repeat(129) })), undefined);
   assert.equal(omiRequestIdFromRelayContext("not json"), undefined);
+});
+
+test("reasoning effort relay: strict two-token allowlist", () => {
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"adaptive"}'), "adaptive");
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"fast"}'), "fast");
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"max"}'), undefined);
+  assert.equal(omiReasoningEffortFromRelayContext('{"requestId":"req_1"}'), undefined);
+  assert.equal(omiReasoningEffortFromRelayContext("not json"), undefined);
 });
 
 test("classifyBash: allows normal dev commands", () => {
