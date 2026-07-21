@@ -3,7 +3,7 @@ import io
 import json
 import zipfile
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +16,7 @@ from utils.qualified_beta_promotion import (
     REPOSITORY,
     GitHubQualifiedBetaReader,
     QualifiedBetaAdmissionError,
+    _timestamp,
     build_qualified_beta_manifest,
 )
 
@@ -192,6 +193,157 @@ async def _assert_direct_and_endpoint_rejection(reader):
     assert response.json() == {"detail": "Qualified Beta candidate rejected"}
     admit.assert_not_called()
     invalidate.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-07-21Z",
+        "2026-07-21T12:00Z",
+        "2026-07-21T12:00:00.Z",
+        "2026-07-21T12:00:00.1234567Z",
+        "2026-07-21T12:00:00,1Z",
+        "2026-07-21T12:00:00",
+        "2026-07-21T12:00:00+00:00",
+        "2026-07-21T12:00:00+00:00Z",
+        "2026-02-30T12:00:00Z",
+        "2026-07-21T24:00:00Z",
+        "2026-07-21T12:00:60Z",
+    ],
+)
+def test_timestamp_requires_canonical_utc_rfc3339(value):
+    with pytest.raises(QualifiedBetaAdmissionError):
+        _timestamp(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["2026-07-21T12:00:00Z", "2026-07-21T12:00:00.1Z", "2026-07-21T12:00:00.123456Z"],
+)
+def test_timestamp_accepts_canonical_utc_rfc3339_seconds_and_bounded_fractions(value):
+    parsed = _timestamp(value)
+
+    assert parsed.tzinfo == timezone.utc
+
+
+@pytest.mark.asyncio
+async def test_naive_admission_clock_is_a_typed_rejection_and_aware_offsets_normalize_to_utc():
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+
+    with pytest.raises(QualifiedBetaAdmissionError):
+        await build_qualified_beta_manifest(TAG, reader=reader, now=datetime(2026, 7, 21, 12, 2))
+
+    manifest = await build_qualified_beta_manifest(
+        TAG,
+        reader=reader,
+        now=datetime(2026, 7, 21, 8, 2, tzinfo=timezone(timedelta(hours=-4))),
+    )
+
+    assert manifest["release_id"] == TAG
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field",
+    ["published_at", "updated_at"],
+)
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-07-21Z",
+        "2026-07-21T12:00Z",
+        "2026-07-21T12:00:00.Z",
+        "2026-07-21T12:00:00.1234567Z",
+        "2026-07-21T12:00:00,1Z",
+        "2026-07-21T12:00:00",
+        "2026-07-21T12:00:00+00:00",
+        "2026-07-21T12:00:00+00:00Z",
+        "2026-02-30T12:00:00Z",
+        "2026-07-21T24:00:00Z",
+        "2026-07-21T12:00:60Z",
+    ],
+)
+async def test_noncanonical_freshness_timestamps_reject_directly_and_at_endpoint_before_mutation(field, value):
+    release, evidence, run = _candidate()
+    if field == "published_at":
+        release[field] = value
+    else:
+        run[field] = value
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+
+    with pytest.raises(QualifiedBetaAdmissionError):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+
+    with (
+        patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+        patch("utils.qualified_beta_promotion.GitHubQualifiedBetaReader", return_value=reader),
+        patch("routers.updates.admit_qualified_beta_manifest") as admit,
+        patch("routers.updates.delete_generic_cache") as invalidate,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=_test_app, raise_app_exceptions=False), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/v2/desktop/beta/promote-qualified",
+                headers={"Authorization": "Bearer promotion-token"},
+                json={"tag": TAG},
+            )
+
+    assert (response.status_code, admit.call_count, invalidate.call_count) == (422, 0, 0)
+
+
+@pytest.mark.asyncio
+async def test_date_only_z_run_timestamp_is_a_typed_direct_rejection_not_a_raw_type_error():
+    release, evidence, run = _candidate()
+    run["updated_at"] = "2026-07-21Z"
+
+    with pytest.raises(QualifiedBetaAdmissionError):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=FakeQualifiedBetaReader(release, evidence, run),
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["published_at", "updated_at"])
+async def test_future_freshness_timestamps_reject_directly_and_at_endpoint_before_mutation(field):
+    release, evidence, run = _candidate()
+    if field == "published_at":
+        release[field] = "2027-07-21T12:01:00Z"
+    else:
+        run[field] = "2027-07-21T12:01:00Z"
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+
+    with pytest.raises(QualifiedBetaAdmissionError):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+
+    receipt = {"manifest": {"release_id": TAG}, "pointer": {"generation": 1}, "idempotent": False}
+    with (
+        patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+        patch("utils.qualified_beta_promotion.GitHubQualifiedBetaReader", return_value=reader),
+        patch("routers.updates.admit_qualified_beta_manifest", return_value=receipt) as admit,
+        patch("routers.updates.delete_generic_cache") as invalidate,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=_test_app, raise_app_exceptions=False), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/v2/desktop/beta/promote-qualified",
+                headers={"Authorization": "Bearer promotion-token"},
+                json={"tag": TAG},
+            )
+
+    assert (response.status_code, admit.call_count, invalidate.call_count) == (422, 0, 0)
 
 
 def _corrupt_deflated_artifact(evidence):

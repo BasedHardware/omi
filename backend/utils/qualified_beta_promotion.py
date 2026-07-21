@@ -22,6 +22,7 @@ from utils.http_client import get_web_fetch_client
 REPOSITORY = "BasedHardware/omi"
 TAG_RE = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+(?:\.[0-9]+)?)\+(?P<build>[1-9][0-9]*)-macos$")
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+UTC_RFC3339_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$")
 RETIRED_ASSET_NAMES = frozenset({"Omi.Beta.zip", "omi-beta.dmg", "Omi Beta.zip", "Omi Beta.dmg"})
 QUALIFICATION_WORKFLOW = "desktop_qualify_beta.yml"
 QUALIFICATION_ARTIFACT_PREFIX = "desktop-qualification-evidence-"
@@ -39,12 +40,40 @@ def _fail(message: str) -> NoReturn:
 
 
 def _timestamp(value: object) -> datetime:
-    if not isinstance(value, str) or not value.endswith("Z"):
+    """Parse the sole accepted GitHub freshness timestamp representation."""
+    if not isinstance(value, str) or not UTC_RFC3339_RE.fullmatch(value):
         _fail("candidate freshness is missing")
     try:
-        return datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
-    except ValueError:
+        parsed = datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+    except (OverflowError, ValueError):
         _fail("candidate freshness is invalid")
+    if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
+        _fail("candidate freshness is invalid")
+    return parsed.astimezone(timezone.utc)
+
+
+def _current_time(value: object) -> datetime:
+    """Use an aware UTC clock value so admission never subtracts naive datetimes."""
+    if value is None:
+        return datetime.now(timezone.utc)
+    if not isinstance(value, datetime):
+        _fail("candidate freshness clock is invalid")
+    try:
+        if value.tzinfo is None or value.utcoffset() is None:
+            _fail("candidate freshness clock is invalid")
+        return value.astimezone(timezone.utc)
+    except (OverflowError, TypeError, ValueError):
+        _fail("candidate freshness clock is invalid")
+
+
+def _is_fresh(timestamp: datetime, now: datetime) -> bool:
+    """Require every admission freshness timestamp to be present, current, and bounded."""
+    try:
+        age = now - timestamp
+        maximum_age = timedelta(seconds=_max_age_seconds())
+    except (OverflowError, TypeError):
+        _fail("candidate freshness is invalid")
+    return timedelta(0) <= age <= maximum_age
 
 
 def _max_age_seconds() -> int:
@@ -189,7 +218,7 @@ def _select_qualification_run(runs: object, tag: str, source_sha: str, now: date
         except ValueError:
             continue
         run_id, completed_at = _validate_selected_qualification_run(run)
-        if now - completed_at > timedelta(seconds=_max_age_seconds()):
+        if not _is_fresh(completed_at, now):
             continue
         acceptable.append((completed_at, run_id, run))
     if not acceptable:
@@ -362,6 +391,7 @@ async def build_qualified_beta_manifest(
     match = TAG_RE.fullmatch(tag)
     if not match:
         _fail("candidate tag is invalid")
+    current_time = _current_time(now)
     source = reader or GitHubQualifiedBetaReader()
     release = _github_object(await _read_github(source, "release", tag), "candidate GitHub evidence is invalid")
     if (
@@ -376,7 +406,7 @@ async def build_qualified_beta_manifest(
     published = _timestamp(published_at)
     if not isinstance(release.get("body"), str):
         _fail("candidate release metadata is invalid")
-    if (now or datetime.now(timezone.utc)) - published > timedelta(seconds=_max_age_seconds()):
+    if not _is_fresh(published, current_time):
         _fail("candidate release is stale")
 
     assets = _release_assets(release.get("assets"))
@@ -402,7 +432,6 @@ async def build_qualified_beta_manifest(
     merged_source = await _read_github(source, "is_merged_source", source_sha)
     if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or merged_source is not True:
         _fail("candidate source is not a trusted merged source")
-    current_time = now or datetime.now(timezone.utc)
     _, run_id = _select_qualification_run(await _read_github(source, "runs"), tag, source_sha, current_time)
     artifact_id = _qualification_artifact_id(await _read_github(source, "artifacts", run_id), tag)
     trusted_evidence_bytes = _evidence_from_artifact(await _read_github(source, "download_artifact", artifact_id))
