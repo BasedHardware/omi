@@ -373,7 +373,10 @@ import XCTest
     XCTAssertFalse(windowSource.contains("resolveDelegationAndDispatch"))
     XCTAssertTrue(windowSource.contains("await dispatchChatQuery("))
     XCTAssertFalse(source.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(source.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+    // The view-level manager.continueAgent call moved into AgentPillsManager
+    // itself (upstream: remove typing from the floating bar). The view now
+    // exposes a Continue in Omi affordance instead of an inline follow-up field.
+    XCTAssertTrue(source.contains("Continue in Omi"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -836,7 +839,10 @@ import XCTest
     let viewSource = try floatingControlBarViewSource()
 
     XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed, attachments: staged)"))
+    // The inline follow-up composer was replaced by a Continue in Omi button
+    // (upstream: remove typing from the floating bar). Verify the replacement
+    // exists rather than the removed manager.continueAgent view-level call.
+    XCTAssertTrue(viewSource.contains("Continue in Omi"))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {
@@ -921,7 +927,10 @@ import XCTest
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    XCTAssertTrue(viewSource.contains("state.archiveCurrentExchange(using: floatingChatProvider)"))
+    // The view delegates exchange archiving to the window's beginVisibleMainQuery
+    // (upstream: remove typing from the floating bar). The old view-level
+    // state.archiveCurrentExchange(using: floatingChatProvider) call was removed.
+    XCTAssertFalse(viewSource.contains("state.archiveCurrentExchange(using: floatingChatProvider)"))
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))

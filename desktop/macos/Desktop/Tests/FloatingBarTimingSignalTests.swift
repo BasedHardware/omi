@@ -37,9 +37,12 @@ final class FloatingBarTimingSignalTests: XCTestCase {
     let source = try floatingBarViewSource()
     XCTAssertTrue(
       source.contains(".task {"),
-      "follow-up focus should be driven by the view lifecycle (.task), not asyncAfter")
+      "view-lifecycle transitions should be driven by .task, not asyncAfter")
+    // The follow-up text field was replaced by a "Continue in Omi" affordance
+    // (upstream: remove typing from the floating bar). Assert the replacement
+    // exists instead of the removed isFollowUpFocused state variable.
     XCTAssertTrue(
-      source.contains("isFollowUpFocused = true"), "the field must still be focused on appear")
+      source.contains("Continue in Omi"), "follow-up affordance should be the Continue in Omi button")
   }
 
   /// Anti-regression: no new fixed-delay `asyncAfter` may be added under
