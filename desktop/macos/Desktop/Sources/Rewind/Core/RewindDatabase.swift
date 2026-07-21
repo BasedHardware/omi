@@ -35,19 +35,10 @@ actor RewindDatabase {
   /// (recovery replaces the pool) — kept distinct from `initGeneration` so bumping it
   /// on open does not break the in-flight-close detection in `initialize()`.
   private var poolEpoch: Int = 0
-  /// Lock-protected storage backing `currentUserId`. `OSAllocatedUnfairLock` is
-  /// `Sendable` and its critical section is synchronous (no actor hop, no
-  /// suspension), so reads/writes from the `RewindDatabase` actor, `MainActor`
-  /// (`AgentVMService`), and the `nonisolated` `markCleanShutdown()` termination
-  /// path are all atomic — replacing the prior `nonisolated(unsafe)` data race
-  /// on `String?`'s refcounted heap storage (SCA-8).
-  private static let currentUserIdLock = OSAllocatedUnfairLock<String?>(initialState: nil)
 
-  /// The user ID this database is configured for (nil = not yet configured →
-  /// "anonymous"). Set by `configure(userId:)` / `retargetEffectiveOwner(to:)`
-  /// and read synchronously during termination (`markCleanShutdown`) and from
-  /// `MainActor` (`AgentVMService`). Lock-gated, so concurrent access from any
-  /// executor is race-free.
+  /// Lock-gated (`OSAllocatedUnfairLock`) so concurrent access from the actor,
+  /// `MainActor` (`AgentVMService`), and nonisolated shutdown is race-free (SCA-8).
+  private static let currentUserIdLock = OSAllocatedUnfairLock<String?>(initialState: nil)
   static var currentUserId: String? {
     get { currentUserIdLock.withLock { $0 } }
     set { currentUserIdLock.withLock { $0 = newValue } }
