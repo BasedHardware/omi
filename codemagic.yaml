@@ -80,6 +80,7 @@ workflows:
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=https://api.omi.me/ >> .env
+          echo STAGING_API_URL=https://api.omiapi.com/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -519,6 +520,7 @@ workflows:
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=https://api.omi.me/ >> .env
+          echo STAGING_API_URL=https://api.omiapi.com/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1073,6 +1075,7 @@ workflows:
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=https://api.omi.me/ >> .env
+          echo STAGING_API_URL=https://api.omiapi.com/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1915,6 +1918,11 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
+  #   GITHUB_TOKEN                    — repo-scoped fine-grained token used only to dispatch
+  #                                     desktop_qualify_beta.yml; requires GitHub Actions: write.
+  #                                     Add Contents: write only if this credential is also used for
+  #                                     candidate-release publishing. Do not reuse the legacy
+  #                                     appstore_credentials GH_TOKEN for qualification dispatch.
   #   DESKTOP_AUTO_BETA_ENABLED       — optional emergency pause; set to false to leave candidates non-live
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
@@ -2923,8 +2931,13 @@ workflows:
           set -euo pipefail
           # Per-tag GitHub concurrency and immutable qualification evidence own
           # duplicate dispatches; this bounded retry only handles dispatch I/O.
+          # Codemagic also loads appstore_credentials, whose legacy GH_TOKEN
+          # takes precedence over GITHUB_TOKEN in the GitHub CLI. Bind this
+          # handoff explicitly to the desktop_secrets token that is scoped for
+          # candidate-release and Actions-dispatch access.
           for attempt in 1 2 3; do
-            if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
+            if GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}" \
+              gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
               -f release_tag="$CM_TAG"; then
               echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
               exit 0
