@@ -33,3 +33,49 @@ def test_beta_backend_guard_ignores_fixtures_but_rejects_shipped_source(tmp_path
         "shipped release source references unprovisioned beta backend host "
         "agent-beta.omi.me: app/lib/env.dart"
     ]
+
+
+def _write_promote_workflow(root, body: str) -> None:
+    path = root / ".github/workflows/desktop_promote_beta.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def test_beta_promotion_gate_requires_terminal_status_wait_before_conclusion(tmp_path, monkeypatch):
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    # Race: reads .conclusion of the dispatched qualification_run_id with no wait.
+    _write_promote_workflow(
+        tmp_path,
+        'inputs:\n  qualification_run_id:\n'
+        'run: |\n'
+        '  run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")\n'
+        '  test "$(jq -r .conclusion <<<"$run")" = success\n',
+    )
+    assert GUARDS.check_desktop_beta_promotion_qualification_gate() == [
+        "beta promotion must wait for the qualification run to reach a terminal "
+        "status (completed) before checking its conclusion (#10186 race)"
+    ]
+
+    # Fixed: polls for status=completed before checking conclusion.
+    _write_promote_workflow(
+        tmp_path,
+        'inputs:\n  qualification_run_id:\n'
+        'run: |\n'
+        '  for _ in $(seq 1 60); do\n'
+        '    run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")\n'
+        '    [ "$(jq -r .status <<<"$run")" = completed ] && break\n'
+        '    sleep 10\n'
+        '  done\n'
+        '  test "$(jq -r .status <<<"$run")" = completed || exit 1\n'
+        '  test "$(jq -r .conclusion <<<"$run")" = success\n',
+    )
+    assert GUARDS.check_desktop_beta_promotion_qualification_gate() == []
+
+
+def test_beta_promotion_gate_is_na_without_a_dispatched_run_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    # A workflow_run-triggered promotion removes the race by construction (no
+    # qualification_run_id input) — the gate does not apply.
+    _write_promote_workflow(tmp_path, "on:\n  workflow_run:\n    workflows: [desktop_qualify_beta]\n")
+    assert GUARDS.check_desktop_beta_promotion_qualification_gate() == []

@@ -19,6 +19,7 @@ def main() -> int:
     errors.extend(check_desktop_codemagic_release())
     errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
+    errors.extend(check_desktop_beta_promotion_qualification_gate())
     errors.extend(check_no_unprovisioned_beta_backend_hosts())
     errors.extend(check_mobile_codemagic_release_triggers())
     errors.extend(check_docs_workflow_scripts())
@@ -320,6 +321,45 @@ def check_desktop_qualification_runner() -> list[str]:
                 f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}"
             )
     return errors
+
+
+def check_desktop_beta_promotion_qualification_gate() -> list[str]:
+    """Beta promotion must wait for the qualification run's terminal status
+    before trusting its conclusion.
+
+    desktop_qualify_beta.yml dispatches desktop_promote_beta.yml as its final
+    step, passing its own GITHUB_RUN_ID. At dispatch time that run's status is
+    still `in_progress` and `.conclusion` is null, so a bare
+    `conclusion == success` check races: it rejects a legitimate qualification,
+    or (if read once, later) could accept one whose post-dispatch steps failed
+    (#10186). The promotion must poll for `status == completed` first.
+    """
+    path = ROOT / ".github/workflows/desktop_promote_beta.yml"
+    if not path.exists():
+        return ["desktop release is missing the beta promotion workflow"]
+    text = path.read_text(encoding="utf-8")
+
+    # Gate applies only while promotion consumes a dispatched qualification run
+    # id. A future move to a workflow_run trigger (conclusion-filtered) removes
+    # the race by construction and drops this input.
+    if "qualification_run_id" not in text:
+        return []
+
+    conclusion_marker = "jq -r .conclusion"
+    status_marker = "jq -r .status"
+    if conclusion_marker not in text:
+        return ["beta promotion must verify the qualification run conclusion"]
+    if status_marker not in text or "completed" not in text:
+        return [
+            "beta promotion must wait for the qualification run to reach a terminal "
+            "status (completed) before checking its conclusion (#10186 race)"
+        ]
+    if text.index(status_marker) > text.index(conclusion_marker):
+        return [
+            "beta promotion checks the qualification run conclusion before waiting "
+            "for its terminal status (#10186 race)"
+        ]
+    return []
 
 
 def check_no_unprovisioned_beta_backend_hosts() -> list[str]:

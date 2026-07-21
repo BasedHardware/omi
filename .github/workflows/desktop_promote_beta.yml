@@ -90,7 +90,21 @@ jobs:
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
           [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
-          run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
+          # The qualification run dispatches this promotion as its final step, so
+          # at dispatch time its status is still in_progress and .conclusion is
+          # null. Wait for the run to reach a terminal state before trusting its
+          # conclusion — otherwise a bare `conclusion == success` check either
+          # rejects a legitimate qualification (null != success) or, checked once
+          # too early, could accept one whose post-dispatch steps still fail
+          # (#10186). Poll for status=completed up to 10 minutes, then require
+          # success.
+          run=""
+          for _ in $(seq 1 60); do
+            run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
+            [ "$(jq -r .status <<<"$run")" = completed ] && break
+            sleep 10
+          done
+          test "$(jq -r .status <<<"$run")" = completed || { echo 'qualification run did not reach a terminal state within the poll window' >&2; exit 1; }
           test "$(jq -r .conclusion <<<"$run")" = success
           test "$(jq -r .repository.full_name <<<"$run")" = "$REPO"
           test "$(jq -r .head_repository.full_name <<<"$run")" = "$REPO"
