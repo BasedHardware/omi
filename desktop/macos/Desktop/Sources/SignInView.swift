@@ -40,9 +40,10 @@ struct SignInView: View {
         SBWallpaper()
       }
 
-      // Glassmorphic sign-in card — content-sized + centered so nothing clips.
+      // Clean, centered, symmetric sign-in — the way premium apps do it:
+      // brand on the backdrop, one primary + one frosted-glass secondary button,
+      // generous whitespace, no floating box.
       VStack(spacing: 0) {
-        // Breathing logo.
         Group {
           if let logo = Self.logoImage {
             Image(nsImage: logo).resizable().renderingMode(.template).scaledToFit()
@@ -51,26 +52,27 @@ struct SignInView: View {
           }
         }
         .foregroundStyle(sb.ink)
-        .frame(width: 40, height: 40)
+        .frame(width: 42, height: 42)
         .scaleEffect(breathe ? 1.08 : 1.0)
         .opacity(breathe ? 1.0 : 0.85)
         .animation(SBMotion.breathe, value: breathe)
 
         Text("A second brain you trust\nmore than your first")
-          .geist(size: 29, weight: .semibold, tracking: 29 * -0.03)
+          .geist(size: 32, weight: .semibold, tracking: 32 * -0.03)
           .foregroundStyle(sb.ink)
           .multilineTextAlignment(.center)
+          .lineSpacing(3)
           .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 22)
+          .padding(.top, 28)
 
         Text("It remembers every conversation — and does the follow-ups.")
-          .geist(size: 14.5)
-          .foregroundStyle(sb.ink(.w6))
+          .geist(size: 15)
+          .foregroundStyle(sb.ink(.w55))
           .multilineTextAlignment(.center)
           .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 8)
+          .padding(.top, 10)
 
-        VStack(spacing: 10) {
+        VStack(spacing: 11) {
           signInButton(
             title: "Continue with Apple",
             filled: true,
@@ -81,43 +83,36 @@ struct SignInView: View {
           signInButton(
             title: "Continue with Google",
             filled: false,
-            leading: { GoogleLogo().frame(width: 14, height: 14) },
+            leading: { GoogleLogo().frame(width: 15, height: 15) },
             action: { signIn(apple: false) })
+        }
+        .frame(width: 320)
+        .padding(.top, 34)
 
-          if authState.isLoading {
-            ProgressView().scaleEffect(0.7).tint(sb.ink(.w6)).padding(.top, 6)
+        if authState.isLoading {
+          HStack(spacing: 10) {
+            ProgressView().scaleEffect(0.7).tint(sb.ink(.w6))
             Button { AuthService.shared.cancelSignIn() } label: {
-              Text("Cancel").geist(size: 12).foregroundStyle(sb.ink(.w4))
+              Text("Cancel").geist(size: 12.5).foregroundStyle(sb.ink(.w45))
             }
             .buttonStyle(.plain)
           }
-          if let error = authState.error {
-            Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
-              .geist(size: 12).foregroundStyle(sb.ink(.w6))
-              .multilineTextAlignment(.center).padding(.top, 4)
-          }
+          .padding(.top, 14)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 26)
+        if let error = authState.error {
+          Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
+            .geist(size: 12.5).foregroundStyle(sb.ink(.w6))
+            .multilineTextAlignment(.center)
+            .frame(width: 320)
+            .padding(.top, 12)
+        }
 
         Text("open source · runs on your mac · pause anytime")
-          .geistMono(size: 11.5)
-          .foregroundStyle(sb.ink(.w38))
-          .padding(.top, 24)
+          .geistMono(size: 12)
+          .foregroundStyle(sb.ink(.w35))
+          .padding(.top, 28)
       }
-      .padding(.horizontal, 40)
-      .padding(.vertical, 40)
-      .frame(width: 440)
-      .background(
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-          .fill(Color.white.opacity(0.05))
-          .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-          .stroke(Color.white.opacity(0.14), lineWidth: 1)
-      )
-      .shadow(color: .black.opacity(0.5), radius: 50, y: 24)
+      .frame(maxWidth: 460)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear { breathe = true }
@@ -131,20 +126,27 @@ struct SignInView: View {
         leading()
         Text(title).geist(size: 15, weight: filled ? .semibold : .medium)
       }
-      .foregroundStyle(filled ? sb.inkInverted : sb.ink(.w85))
+      .foregroundStyle(filled ? sb.inkInverted : sb.ink(.w9))
       .frame(maxWidth: .infinity)
-      .padding(.vertical, 11)
-      .background(
-        RoundedRectangle(cornerRadius: 11, style: .continuous)
-          .fill(filled ? sb.ink : sb.ink(.w04))
-      )
+      .padding(.vertical, 12.5)
+      .background(buttonBackground(filled: filled))
       .overlay(
-        RoundedRectangle(cornerRadius: 11, style: .continuous)
-          .stroke(filled ? .clear : sb.ink(.w18), lineWidth: 1)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .stroke(filled ? .clear : Color.white.opacity(0.16), lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
     .disabled(authState.isLoading)
+  }
+
+  @ViewBuilder private func buttonBackground(filled: Bool) -> some View {
+    let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+    if filled {
+      shape.fill(sb.ink)
+    } else {
+      shape.fill(Color.white.opacity(0.08))
+        .background(.ultraThinMaterial, in: shape)
+    }
   }
 
   private func signIn(apple: Bool) {
