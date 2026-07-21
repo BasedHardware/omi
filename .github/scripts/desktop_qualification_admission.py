@@ -14,6 +14,7 @@ def validate_qualification_run(run: object, repository: str, release_tag: str, c
     if not isinstance(run, dict):
         raise ValueError("qualification run must be an object")
     required = {
+        "status": "completed",
         "conclusion": "success",
         "event": "workflow_dispatch",
         "path": ".github/workflows/desktop_qualify_beta.yml",
