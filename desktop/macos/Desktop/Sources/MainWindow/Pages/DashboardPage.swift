@@ -676,8 +676,13 @@ struct DashboardPage: View {
           // Full Keyboard Access.
           .accessibilityHidden(isHomeModalPresented)
 
+        // Header hugs the same column as the chat/ask bar: its edges align
+        // with the 900px measure whenever the window is wide enough.
         homeHeader
-          .padding(.horizontal, sideInset)
+          .padding(
+            .horizontal,
+            max(sideInset, (proxy.size.width - Self.homeChatColumnMaxWidth) / 2)
+          )
           .padding(.top, OmiSpacing.xxl)
           .accessibilityHidden(isHomeModalPresented)
 
