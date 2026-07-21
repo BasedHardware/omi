@@ -5,7 +5,7 @@
     "backend/utils/memory_ingestion/pipeline.py": 1711,
     "backend/utils/other/storage.py": 1584,
     "backend/utils/retrieval/tools/calendar_tools.py": 1513,
-    "backend/utils/sync/pipeline.py": 2384
+    "backend/utils/sync/pipeline.py": 2389
   },
   "raise_justifications": {
     "backend/utils/apps.py": "get_available_app_model_by_id: the set-preferred-app availability authority as a validated App model, so the summary path honors what the setter admitted instead of re-deciding with the installed slice (#10074).",
