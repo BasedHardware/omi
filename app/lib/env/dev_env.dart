@@ -21,10 +21,6 @@ final class DevEnv implements EnvFields {
   final String? apiBaseUrl = _DevEnv.apiBaseUrl;
 
   @override
-  @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
-  final String? stagingApiUrl = _DevEnv.stagingApiUrl;
-
-  @override
   @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
   final String? googleMapsApiKey = _DevEnv.googleMapsApiKey;
 
