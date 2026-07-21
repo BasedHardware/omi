@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/MemoryExportService.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Integrations.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
+  - desktop/macos/Desktop/Sources/Telemetry/BetaEnhancedDiagnosticsConfiguration.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/AppRuleEditorView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SearchableDropdown.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift
