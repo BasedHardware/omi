@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from typing import Any, cast
 
 from google.cloud.firestore import transactional
@@ -11,6 +12,20 @@ from desktop_release_manifest import ManifestError, validate_manifest
 CHANNELS_COLLECTION = "desktop_update_channels"
 MANIFESTS_COLLECTION = "desktop_release_manifests"
 VALID_CHANNELS = frozenset({"stable", "beta"})
+BETA_ADMISSION_COLLECTION = "desktop_beta_admission"
+BETA_ADMISSION_DOCUMENT = "control"
+_BETA_TAG_RE = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+(?:\.[0-9]+)?)\+(?P<build>[1-9][0-9]*)-macos$")
+_BETA_ADMISSION_FIELDS = frozenset(
+    {
+        "schema_version",
+        "promotion_enabled",
+        "latest_reserved_tag",
+        "latest_reserved_build_number",
+        "control_generation",
+        "latest_reserved_at",
+        "admission_updated_at",
+    }
+)
 
 
 def _generation(value: object) -> int:
@@ -19,6 +34,163 @@ def _generation(value: object) -> int:
     if isinstance(value, str) and value.isdigit():
         return int(value)
     raise ValueError("pointer generation must be a non-negative integer")
+
+
+def _canonical_beta_tag(tag: object) -> tuple[str, tuple[int, int, int], int]:
+    if not isinstance(tag, str):
+        raise ValueError("candidate tag must be a canonical macOS tag")
+    match = _BETA_TAG_RE.fullmatch(tag)
+    if match is None:
+        raise ValueError("candidate tag must be a canonical macOS tag")
+    raw_version = match.group("version").split(".")
+    version = tuple(int(part) for part in (*raw_version, "0")[:3])
+    return tag, cast(tuple[int, int, int], version), int(match.group("build"))
+
+
+def _timestamp(value: object) -> datetime:
+    # Firestore returns native datetime values (including its datetime subclass).
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("beta admission control timestamps are invalid")
+    return value
+
+
+def _validate_beta_admission_control(data: object) -> dict[str, Any]:
+    """Decode the sole Beta admission document exactly; unknown schemas fail closed."""
+    if not isinstance(data, dict) or frozenset(data.keys()) != _BETA_ADMISSION_FIELDS:
+        raise ValueError("beta admission control schema is invalid")
+    schema_version = data.get("schema_version")
+    enabled = data.get("promotion_enabled")
+    generation = data.get("control_generation")
+    tag = data.get("latest_reserved_tag")
+    build = data.get("latest_reserved_build_number")
+    if isinstance(schema_version, bool) or schema_version != 1:
+        raise ValueError("beta admission control schema is invalid")
+    if not isinstance(enabled, bool):
+        raise ValueError("beta admission control schema is invalid")
+    if not isinstance(generation, int) or isinstance(generation, bool) or generation < 0:
+        raise ValueError("beta admission control schema is invalid")
+    if tag is None:
+        if build is not None or data.get("latest_reserved_at") is not None:
+            raise ValueError("beta admission control schema is invalid")
+        _timestamp(data.get("admission_updated_at"))
+    else:
+        _, _, parsed_build = _canonical_beta_tag(tag)
+        if not isinstance(build, int) or isinstance(build, bool) or build <= 0 or build != parsed_build:
+            raise ValueError("beta admission control schema is invalid")
+        _timestamp(data.get("latest_reserved_at"))
+        _timestamp(data.get("admission_updated_at"))
+    return cast(dict[str, Any], data)
+
+
+def _beta_admission_ref(client: Any) -> Any:
+    return client.collection(BETA_ADMISSION_COLLECTION).document(BETA_ADMISSION_DOCUMENT)
+
+
+def _control_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+@transactional
+def _reserve_beta_candidate_transaction(transaction: Any, control_ref: Any, tag: str) -> dict[str, Any]:
+    snapshot = control_ref.get(transaction=transaction)
+    target_tag, target_version, target_build = _canonical_beta_tag(tag)
+    now = _control_now()
+    if not getattr(snapshot, "exists", False):
+        control = {
+            "schema_version": 1,
+            "promotion_enabled": False,
+            "latest_reserved_tag": target_tag,
+            "latest_reserved_build_number": target_build,
+            "control_generation": 1,
+            "latest_reserved_at": now,
+            "admission_updated_at": now,
+        }
+        transaction.set(control_ref, control)
+        return control
+    raw: object = snapshot.to_dict()
+    current = _validate_beta_admission_control(raw)
+    current_tag = current["latest_reserved_tag"]
+    if current_tag == target_tag:
+        return current
+    if current_tag is not None:
+        _, current_version, current_build = _canonical_beta_tag(current_tag)
+        if target_build <= current_build or target_version < current_version:
+            raise ValueError("candidate reservation must roll forward")
+    control = {
+        **current,
+        "latest_reserved_tag": target_tag,
+        "latest_reserved_build_number": target_build,
+        "control_generation": current["control_generation"] + 1,
+        "latest_reserved_at": now,
+        "admission_updated_at": now,
+    }
+    transaction.set(control_ref, control)
+    return control
+
+
+def reserve_beta_candidate(tag: str, *, firestore_client: Any = None) -> dict[str, Any]:
+    """Reserve one higher immutable candidate without enabling its promotion."""
+    _canonical_beta_tag(tag)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return _reserve_beta_candidate_transaction(client.transaction(), _beta_admission_ref(client), tag)
+
+
+@transactional
+def _set_beta_admission_enabled_transaction(transaction: Any, control_ref: Any, enabled: bool) -> dict[str, Any]:
+    snapshot = control_ref.get(transaction=transaction)
+    if not getattr(snapshot, "exists", False):
+        if enabled:
+            raise ValueError("beta admission cannot resume without a reservation")
+        # An explicit initial pause is a state transition, even before a candidate.
+        now = _control_now()
+        control = {
+            "schema_version": 1,
+            "promotion_enabled": False,
+            "latest_reserved_tag": None,
+            "latest_reserved_build_number": None,
+            "control_generation": 1,
+            "latest_reserved_at": None,
+            "admission_updated_at": now,
+        }
+        transaction.set(control_ref, control)
+        return control
+    raw: object = snapshot.to_dict()
+    current = _validate_beta_admission_control(raw)
+    if current["promotion_enabled"] is enabled:
+        return current
+    if enabled and current["latest_reserved_tag"] is None:
+        raise ValueError("beta admission cannot resume without a reservation")
+    control = {
+        **current,
+        "promotion_enabled": enabled,
+        "control_generation": current["control_generation"] + 1,
+        "admission_updated_at": _control_now(),
+    }
+    transaction.set(control_ref, control)
+    return control
+
+
+def set_beta_admission_enabled(enabled: bool, *, firestore_client: Any = None) -> dict[str, Any]:
+    if type(enabled) is not bool:
+        raise ValueError("beta admission enabled must be a boolean")
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return _set_beta_admission_enabled_transaction(client.transaction(), _beta_admission_ref(client), enabled)
+
+
+def capture_beta_admission(tag: str, *, firestore_client: Any = None) -> dict[str, Any]:
+    """Capture the server-owned generation before untrusted, expensive GitHub reads."""
+    tag, _, build = _canonical_beta_tag(tag)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = _beta_admission_ref(client).get()
+    if not getattr(snapshot, "exists", False):
+        raise ValueError("beta admission control is unavailable")
+    raw: object = snapshot.to_dict()
+    control = _validate_beta_admission_control(raw)
+    if not control["promotion_enabled"]:
+        raise ValueError("beta admission is disabled")
+    if control["latest_reserved_tag"] != tag or control["latest_reserved_build_number"] != build:
+        raise ValueError("beta admission reservation does not match candidate")
+    return control
 
 
 def normalize_release_manifest(data: dict[str, Any]) -> dict[str, Any]:
@@ -176,6 +348,8 @@ def promote_channel(
     release_id = release_id.strip()
     if platform != "macos":
         raise ValueError("invalid platform")
+    if channel != "stable":
+        raise ValueError("generic channel promotion is stable-only")
     if channel not in VALID_CHANNELS:
         raise ValueError("invalid channel")
     if not release_id:
@@ -204,9 +378,29 @@ def promote_channel(
 
 @transactional
 def _admit_qualified_beta_transaction(
-    transaction: Any, pointer_ref: Any, manifest_ref: Any, manifest: dict[str, Any]
+    transaction: Any,
+    control_ref: Any,
+    pointer_ref: Any,
+    manifest_ref: Any,
+    manifest: dict[str, Any],
+    control_generation: int,
 ) -> dict[str, Any]:
     """Atomically retain one canonical manifest and advance only macOS Beta."""
+    # Firestore requires every read before the first write. Read the control
+    # document first so a reservation/pause committed during evidence validation
+    # necessarily conflicts or fails this generation check before any mutation.
+    control_snapshot = control_ref.get(transaction=transaction)
+    if not getattr(control_snapshot, "exists", False):
+        raise ValueError("beta admission control is unavailable")
+    control_raw: object = control_snapshot.to_dict()
+    control = _validate_beta_admission_control(control_raw)
+    tag, _, build = _canonical_beta_tag(manifest["release_id"])
+    if not control["promotion_enabled"]:
+        raise ValueError("beta admission is disabled")
+    if control["control_generation"] != control_generation:
+        raise ValueError("beta admission generation changed")
+    if control["latest_reserved_tag"] != tag or control["latest_reserved_build_number"] != build:
+        raise ValueError("beta admission reservation does not match candidate")
     manifest_snapshot = manifest_ref.get(transaction=transaction)
     manifest_exists = getattr(manifest_snapshot, "exists", False)
     if manifest_exists:
@@ -235,13 +429,20 @@ def _admit_qualified_beta_transaction(
     return {"manifest": manifest, "pointer": pointer, "idempotent": manifest_exists and pointer is current}
 
 
-def admit_qualified_beta_manifest(data: dict[str, Any], *, firestore_client: Any = None) -> dict[str, Any]:
+def admit_qualified_beta_manifest(
+    data: dict[str, Any], *, control_generation: int, firestore_client: Any = None
+) -> dict[str, Any]:
     """Commit the narrow server-owned Beta transaction after admission succeeds."""
     manifest = normalize_release_manifest(data)
     client = firestore_client if firestore_client is not None else get_firestore_client()
+    if type(control_generation) is not int or control_generation < 0:
+        raise ValueError("beta admission generation is invalid")
+    control_ref = _beta_admission_ref(client)
     pointer_ref = client.collection(CHANNELS_COLLECTION).document("macos-beta")
     manifest_ref = client.collection(MANIFESTS_COLLECTION).document(manifest["release_id"])
-    return _admit_qualified_beta_transaction(client.transaction(), pointer_ref, manifest_ref, manifest)
+    return _admit_qualified_beta_transaction(
+        client.transaction(), control_ref, pointer_ref, manifest_ref, manifest, control_generation
+    )
 
 
 def get_channel_release(platform: str, channel: str, *, firestore_client: Any = None) -> dict[str, Any] | None:

@@ -1915,7 +1915,7 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
-  #   DESKTOP_AUTO_BETA_ENABLED       — optional emergency pause; set to false to leave candidates non-live
+  #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and qualified Beta promotion
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
@@ -2827,6 +2827,19 @@ workflows:
             echo "External previews do not create GitHub releases."
             exit 0
           fi
+          set -euo pipefail
+          test -n "${BETA_PROMOTION_TOKEN:-}" || {
+            echo "ERROR: BETA_PROMOTION_TOKEN is required to reserve a canonical candidate" >&2
+            exit 1
+          }
+          # The backend reservation is the authoritative Beta fence. It runs
+          # only after package, signature, notarization, and signed smoke pass,
+          # immediately before this workflow can create the immutable candidate.
+          curl --fail-with-body --silent --show-error \
+            --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/candidates/reserve" \
+            --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data "{\"tag\":\"${CM_TAG}\"}"
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2868,10 +2881,6 @@ workflows:
         script: |
           if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
             echo "External previews do not enter beta or stable qualification."
-            exit 0
-          fi
-          if [[ "${DESKTOP_AUTO_BETA_ENABLED:-true}" == "false" ]]; then
-            echo "Automatic desktop beta qualification paused by DESKTOP_AUTO_BETA_ENABLED=false; candidate remains non-live."
             exit 0
           fi
           set -euo pipefail

@@ -47,6 +47,12 @@ class HostileAdmissionClock(datetime):
         return datetime(2026, 7, 21, 12, 2, tzinfo=RaisingTZ())
 
 
+@pytest.fixture(autouse=True)
+def _qualified_beta_endpoint_has_a_captured_admission_generation(monkeypatch):
+    """Keep GitHub-evidence tests focused; control races live in channel tests."""
+    monkeypatch.setattr("routers.updates.capture_beta_admission", lambda tag: {"control_generation": 1})
+
+
 class FakeQualifiedBetaReader:
     def __init__(self, release, evidence, run):
         self.release_payload = release

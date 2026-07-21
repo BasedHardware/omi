@@ -11,14 +11,17 @@ from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
     admit_qualified_beta_manifest,
+    capture_beta_admission,
     get_release_manifest,
     promote_channel,
     register_release_manifest,
+    reserve_beta_candidate,
+    set_beta_admission_enabled,
 )
 from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
@@ -77,6 +80,14 @@ class QualifiedBetaPromotionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tag: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
+
+
+class BetaAdmissionControlRequest(BaseModel):
+    """The operator can pause/resume only the one server-owned Beta fence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    promotion_enabled: StrictBool
 
 
 class DesktopPreviewPublishRequest(BaseModel):
@@ -888,15 +899,22 @@ async def promote_qualified_beta(
     if not _has_beta_promotion_authorization(authorization):
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
+        control = await run_blocking(db_executor, capture_beta_admission, request.tag)
         manifest = await build_qualified_beta_manifest(request.tag)
-        receipt = await run_blocking(db_executor, admit_qualified_beta_manifest, manifest)
+        receipt = await run_blocking(
+            db_executor,
+            admit_qualified_beta_manifest,
+            manifest,
+            control_generation=control["control_generation"],
+        )
     except QualifiedBetaAdmissionError:
         logger.info("qualified_beta_promotion tag=%s result=rejected", request.tag)
         raise HTTPException(status_code=422, detail="Qualified Beta candidate rejected") from None
     except ValueError:
         logger.info("qualified_beta_promotion tag=%s result=conflict", request.tag)
         raise HTTPException(status_code=409, detail="Qualified Beta promotion conflict") from None
-    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    if not receipt["idempotent"]:
+        await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
     logger.info(
         "qualified_beta_promotion tag=%s result=%s", request.tag, "idempotent" if receipt["idempotent"] else "promoted"
     )
@@ -906,6 +924,44 @@ async def promote_qualified_beta(
         "generation": receipt["pointer"]["generation"],
         "idempotent": receipt["idempotent"],
     }
+
+
+@router.post("/v2/desktop/beta/candidates/reserve")
+async def reserve_beta_candidate_endpoint(
+    request: QualifiedBetaPromotionRequest,
+    authorization: str | None = Header(default=None),
+):
+    """Fence an immutable candidate before GitHub makes it canonical."""
+    if not _has_beta_promotion_authorization(authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        control = await run_blocking(db_executor, reserve_beta_candidate, request.tag)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    logger.info("beta_candidate_reservation tag=%s generation=%s", request.tag, control["control_generation"])
+    return {"tag": control["latest_reserved_tag"], "generation": control["control_generation"]}
+
+
+@router.put("/v2/desktop/beta/admission")
+async def set_beta_admission(
+    request: BetaAdmissionControlRequest,
+    secret_key: str | None = Header(default=None),
+):
+    """Allow only ADMIN_KEY operators to pause or resume the Beta fence."""
+    if secret_key != os.getenv("ADMIN_KEY") or not secret_key:
+        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+    try:
+        control = await run_blocking(db_executor, set_beta_admission_enabled, request.promotion_enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # The established admin-key surface has no principal header. Record only its
+    # bounded actor class, never the supplied credential.
+    logger.info(
+        "beta_admission_control actor=admin_key promotion_enabled=%s generation=%s",
+        control["promotion_enabled"],
+        control["control_generation"],
+    )
+    return {"promotion_enabled": control["promotion_enabled"], "generation": control["control_generation"]}
 
 
 @router.get("/v2/desktop/releases/{release_id}")
@@ -925,6 +981,10 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
     """Atomically advance or repoint one explicit qualified channel pointer."""
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if request.channel != "stable":
+        # This generic ADMIN_KEY route is deliberately unable to reach Beta's
+        # database transaction or cache. Beta has one admission-only path.
+        raise HTTPException(status_code=409, detail="generic channel promotion is stable-only")
     try:
         pointer = await run_blocking(
             db_executor,

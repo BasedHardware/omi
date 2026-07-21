@@ -164,6 +164,49 @@ def test_beta_workflow_has_only_the_narrow_server_owned_promotion_capability():
         assert forbidden not in workflow
 
 
+# omi-test-quality: source-inspection -- static contract: a CI shell publication path cannot be exercised hermetically.
+def _canonical_candidate_reservation_contract(workflow: str) -> bool:
+    """Recognize only an executable reserve immediately before canonical publication."""
+    start = workflow.find("      - name: Create GitHub release\n")
+    end = workflow.find("      - name: Dispatch trusted macOS beta qualification\n", start)
+    if start < 0 or end < 0:
+        return False
+    publish = workflow[start:end]
+    reserve = publish.find("/v2/desktop/beta/candidates/reserve")
+    create = publish.find('gh release create "$CM_TAG"')
+    return (
+        "set -euo pipefail" in publish
+        and 'Authorization: Bearer ${BETA_PROMOTION_TOKEN}' in publish
+        and '--data "{\\"tag\\":\\"${CM_TAG}\\"}"' in publish
+        and reserve >= 0
+        and create >= 0
+        and reserve < create
+    )
+
+
+def test_codemagic_reserves_the_exact_candidate_before_every_canonical_publish_and_rejects_bypasses():
+    workflow = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
+    assert _canonical_candidate_reservation_contract(workflow)
+
+    publication = 'gh release create "$CM_TAG"'
+    reserve = "/v2/desktop/beta/candidates/reserve"
+    assert not _canonical_candidate_reservation_contract(
+        workflow.replace(reserve, "/v2/desktop/beta/promote-qualified")
+    )
+    assert not _canonical_candidate_reservation_contract(
+        workflow.replace(reserve, "reserve-placeholder").replace(publication, f"{publication}\n{reserve}")
+    )
+    assert not _canonical_candidate_reservation_contract(
+        workflow.replace(
+            '          set -euo pipefail\n          test -n "${BETA_PROMOTION_TOKEN:-}"',
+            '          set +e\n          test -n "${BETA_PROMOTION_TOKEN:-}"',
+        )
+    )
+    assert not _canonical_candidate_reservation_contract(
+        workflow.replace('{\\"tag\\":\\"${CM_TAG}\\"}', '{\\"tag\\":\\"${CM_TAG}\\",\\"channel\\":\\"beta\\"}')
+    )
+
+
 def test_qualification_workflow_binds_immutable_controls_and_candidate_identity():
     """A later main commit cannot replace controls or invalidate tag-bound evidence."""
     admission = _load("desktop_qualification_admission", "desktop_qualification_admission.py")

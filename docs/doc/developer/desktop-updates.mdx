@@ -13,18 +13,25 @@ storage, Keychain/TCC identity, package names, and backend identity do not.
 ## Release model
 
 One Codemagic build signs and notarizes one `Omi.zip`/`omi.dmg` pair from one
-source revision, then creates an immutable, non-live GitHub candidate. The
+source revision, then reserves its exact immutable `v...-macos` tag before
+creating an immutable, non-live GitHub candidate. The
 trusted macOS qualifier is dispatched on that immutable candidate tag, checks
 out the same tag, and records qualification evidence bound to its exact source
 SHA and the two signed artifact digests in its exact GitHub Actions artifact.
 It may attach a byte-identical `qualification-evidence-<tag>.json` release
-copy for operator convenience, but that copy is never authority. The Beta workflow
-then supplies only the tag and its `BETA_PROMOTION_TOKEN` bearer capability to
-`POST /v2/desktop/beta/promote-qualified`. The backend independently reads the
+copy for operator convenience, but that copy is never authority. The one narrow
+`BETA_PROMOTION_TOKEN` bearer capability authorizes both reservation at
+`POST /v2/desktop/beta/candidates/reserve` and the later tag-only
+`POST /v2/desktop/beta/promote-qualified`; it cannot control Stable or pause
+admission. Before expensive GitHub evidence reads, the backend captures the
+server-derived generation from `desktop_beta_admission/control`. It independently reads the
 release, immutable tag, newest acceptable trusted completed qualification run,
 and that run's exact Actions artifact before comparing the current signed assets
-and optional release evidence copy to it. It then atomically registers one immutable
-manifest and advances only `macos-beta`. The manifest retains the exact asset
+and optional release evidence copy to it. Its final Firestore transaction reads
+the control document first, then all manifest/pointer documents, and writes only
+when enabled state, exact tag/build, and the captured generation still match.
+It then atomically registers one immutable manifest and advances only `macos-beta`.
+The manifest retains the exact asset
 URLs and digests, Sparkle signature, qualification evidence identity/digest,
 source SHA, and compatibility/backend requirements.
 
@@ -39,12 +46,22 @@ The machine-readable evidence explicitly separates two modalities. `source_quali
 | Stable | `macos-stable` later points at that same retained release ID/artifact | Stable feed/channel |
 
 The normal candidate-to-Beta path uses non-cancelling per-tag GitHub concurrency.
-The backend capability is fail-closed when `BETA_PROMOTION_TOKEN` is absent and
-is not accepted by any other endpoint. Qualification evidence and pointer
-idempotency make lost-response retries safe; there is no separate
-claim/running/complete release-body state machine and no unqualified emergency
-route. Beta promotion never invokes GCP, GCS, legacy Rust, cache-wide, Stable,
-rollback, or emergency mutation paths from GitHub.
+The capability is fail-closed when `BETA_PROMOTION_TOKEN` is absent.
+`desktop_beta_admission/control` is the sole separate v1 control document: it
+holds enabled state, the latest reserved canonical tag/build, a generation, and
+native Firestore timestamps. Missing or malformed state fails closed. A higher
+reservation and every effective pause/resume increment the generation; exact
+same-tag/state retries do not write. Only ADMIN_KEY can call
+`PUT /v2/desktop/beta/admission` with `{"promotion_enabled": bool}`. Bootstrap
+by deploying the backend first (missing state fails closed), reserving a
+candidate (which creates paused state), then enabling admission with ADMIN_KEY.
+For recovery, pause with the same admin
+endpoint; any in-flight promotion rejects in its final transaction. Resuming
+requires an existing reservation. There is no unreserve/rollback control.
+Qualification evidence and pointer idempotency make lost-response retries safe;
+there is no separate claim/running/complete release-body state machine and no
+unqualified emergency route. Beta promotion never invokes GCP, GCS, legacy Rust,
+cache-wide, Stable, rollback, or emergency mutation paths from GitHub.
 
 ## Stable promotion and repoint
 

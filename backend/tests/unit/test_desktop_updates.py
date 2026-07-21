@@ -823,6 +823,68 @@ class TestClearCacheEndpoint:
 
 class TestDesktopUpdateAdminEndpoints:
     @pytest.mark.asyncio
+    async def test_beta_reservation_and_promotion_share_only_the_narrow_bearer_capability(self):
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token", "ADMIN_KEY": "admin-key"}),
+            patch(
+                "routers.updates.reserve_beta_candidate",
+                return_value={"control_generation": 1, "latest_reserved_tag": "v0.12.93+12093-macos"},
+            ) as reserve,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                admin = await client.post(
+                    "/v2/desktop/beta/candidates/reserve",
+                    headers={"secret-key": "admin-key"},
+                    json={"tag": "v0.12.93+12093-macos"},
+                )
+                accepted = await client.post(
+                    "/v2/desktop/beta/candidates/reserve",
+                    headers={"Authorization": "Bearer promotion-token"},
+                    json={"tag": "v0.12.93+12093-macos"},
+                )
+                extra = await client.post(
+                    "/v2/desktop/beta/candidates/reserve",
+                    headers={"Authorization": "Bearer promotion-token"},
+                    json={"tag": "v0.12.93+12093-macos", "generation": 3},
+                )
+
+        assert admin.status_code == 401
+        assert accepted.status_code == 200
+        assert extra.status_code == 422
+        reserve.assert_called_once_with("v0.12.93+12093-macos")
+
+    @pytest.mark.asyncio
+    async def test_admission_control_is_admin_only_and_strict(self):
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token", "ADMIN_KEY": "admin-key"}),
+            patch(
+                "routers.updates.set_beta_admission_enabled",
+                return_value={"promotion_enabled": False, "control_generation": 2},
+            ) as set_enabled,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                beta = await client.put(
+                    "/v2/desktop/beta/admission",
+                    headers={"Authorization": "Bearer promotion-token"},
+                    json={"promotion_enabled": False},
+                )
+                accepted = await client.put(
+                    "/v2/desktop/beta/admission",
+                    headers={"secret-key": "admin-key"},
+                    json={"promotion_enabled": False},
+                )
+                extra = await client.put(
+                    "/v2/desktop/beta/admission",
+                    headers={"secret-key": "admin-key"},
+                    json={"promotion_enabled": False, "tag": "v0.12.93+12093-macos"},
+                )
+
+        assert beta.status_code == 403
+        assert accepted.status_code == 200
+        assert extra.status_code == 422
+        set_enabled.assert_called_once_with(False)
+
+    @pytest.mark.asyncio
     async def test_qualified_beta_promotion_requires_the_narrow_bearer_capability(self):
         """The promotion capability is endpoint-scoped and accepts only a tag."""
         with patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}):
@@ -868,6 +930,7 @@ class TestDesktopUpdateAdminEndpoints:
         }
         with (
             patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+            patch("routers.updates.capture_beta_admission", return_value={"control_generation": 7}),
             patch("routers.updates.build_qualified_beta_manifest", new_callable=AsyncMock, return_value=manifest),
             patch("routers.updates.admit_qualified_beta_manifest", return_value=receipt) as admit,
             patch("routers.updates.delete_generic_cache") as invalidate,
@@ -886,7 +949,7 @@ class TestDesktopUpdateAdminEndpoints:
             "generation": 7,
             "idempotent": False,
         }
-        admit.assert_called_once_with(manifest)
+        admit.assert_called_once_with(manifest, control_generation=7)
         invalidate.assert_called_once_with("desktop_update_pointer:macos:beta")
 
     @pytest.mark.asyncio
@@ -895,6 +958,7 @@ class TestDesktopUpdateAdminEndpoints:
 
         with (
             patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+            patch("routers.updates.capture_beta_admission", return_value={"control_generation": 7}),
             patch(
                 "routers.updates.build_qualified_beta_manifest",
                 new_callable=AsyncMock,
@@ -912,6 +976,27 @@ class TestDesktopUpdateAdminEndpoints:
 
         assert response.status_code == 422
         admit.assert_not_called()
+        invalidate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_qualified_beta_idempotent_receipt_does_not_invalidate_cache_without_a_commit(self):
+        manifest = {"release_id": "v0.12.93+12093-macos"}
+        receipt = {"manifest": manifest, "pointer": {"generation": 7}, "idempotent": True}
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+            patch("routers.updates.capture_beta_admission", return_value={"control_generation": 7}),
+            patch("routers.updates.build_qualified_beta_manifest", new_callable=AsyncMock, return_value=manifest),
+            patch("routers.updates.admit_qualified_beta_manifest", return_value=receipt),
+            patch("routers.updates.delete_generic_cache") as invalidate,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.post(
+                    "/v2/desktop/beta/promote-qualified",
+                    headers={"Authorization": "Bearer promotion-token"},
+                    json={"tag": manifest["release_id"]},
+                )
+
+        assert response.status_code == 200
         invalidate.assert_not_called()
 
     @pytest.mark.asyncio
@@ -967,7 +1052,7 @@ class TestDesktopUpdateAdminEndpoints:
         read_manifest.assert_called_once_with(payload["release_id"])
 
     @pytest.mark.asyncio
-    async def test_promotes_pointer_and_clears_only_live_pointer_cache(self):
+    async def test_generic_admin_route_rejects_beta_before_db_or_cache(self):
         pointer = {
             "platform": "macos",
             "channel": "beta",
@@ -991,16 +1076,9 @@ class TestDesktopUpdateAdminEndpoints:
                     },
                 )
 
-        assert resp.status_code == 200
-        promote.assert_called_once_with(
-            "macos",
-            "beta",
-            "v1.0.0+200-macos",
-            expected_generation=1,
-            expected_current_release_id=None,
-            operation="promote",
-        )
-        delete_cache.assert_called_once_with("desktop_update_pointer:macos:beta")
+        assert resp.status_code == 409
+        promote.assert_not_called()
+        delete_cache.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_repoint_routes_through_the_shared_pointer_authority(self):
