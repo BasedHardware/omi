@@ -35,27 +35,21 @@ struct HomeKnowsInsightCandidate: Equatable {
   let text: String
 }
 
-/// Builds the hub rows shown under the greeting — a relevant mix Omi predicts
-/// from recent context: the live focus signal first, then an interleaved run of
-/// tasks and insights (varied, actionable), with a suggested question reserved
-/// for the last slot so the list always ends with something to ask.
+/// Builds the hub rows under the greeting as a deliberately DIVERSE set — one
+/// pressing task, a tip (a real insight if there is one, otherwise a composed,
+/// high-agency nudge you can hand Omi), a second task, and a prefilled ask.
+/// Fixed typed slots keep it from collapsing into an all-tasks list when one
+/// source (usually insights) is thin.
 enum HomeKnowsListComposer {
-  static let maxRows = 5
+  static let maxRows = 4
 
   static func compose(
     tasks: [HomeKnowsTaskCandidate],
     insights: [HomeKnowsInsightCandidate],
-    focus: String? = nil,
+    tip: String? = nil,
     questions: [String],
     dismissedTaskIDs: Set<String> = []
   ) -> [HomeKnowsRow] {
-    var rows: [HomeKnowsRow] = []
-
-    // The live focus signal leads — it's the "right now" context.
-    if let focus = focus?.trimmingCharacters(in: .whitespacesAndNewlines), !focus.isEmpty {
-      rows.append(HomeKnowsRow(kind: .focus, text: focus))
-    }
-
     let freshTasks = tasks.filter { candidate in
       !dismissedTaskIDs.contains(candidate.id)
         && !candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -63,40 +57,40 @@ enum HomeKnowsListComposer {
     let cleanInsights = insights.filter {
       !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+    let trimmedTip = tip?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let cleanTip = (trimmedTip?.isEmpty == false) ? trimmedTip : nil
     let cleanQuestions =
       questions
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty }
+    // The ask never duplicates the composed tip.
+    let ask = cleanQuestions.first { $0 != cleanTip }
 
-    // Keep the last slot for a question whenever one exists.
-    let reserve = cleanQuestions.isEmpty ? 0 : 1
+    var rows: [HomeKnowsRow] = []
 
-    // Interleave tasks and insights so the middle reads as a varied mix rather
-    // than a block of one kind.
-    var taskIndex = 0
-    var insightIndex = 0
-    while rows.count < maxRows - reserve
-      && (taskIndex < freshTasks.count || insightIndex < cleanInsights.count)
-    {
-      if taskIndex < freshTasks.count {
-        let task = freshTasks[taskIndex]
-        rows.append(HomeKnowsRow(kind: .task(id: task.id), text: task.text))
-        taskIndex += 1
-      }
-      if rows.count >= maxRows - reserve { break }
-      if insightIndex < cleanInsights.count {
-        let insight = cleanInsights[insightIndex]
-        rows.append(HomeKnowsRow(kind: .insight(id: insight.id), text: insight.text))
-        insightIndex += 1
-      }
+    // 1) The single most pressing task.
+    if let task = freshTasks.first {
+      rows.append(HomeKnowsRow(kind: .task(id: task.id), text: task.text))
     }
 
-    // Questions fill the remaining slots (including the reserved one).
-    for question in cleanQuestions {
-      guard rows.count < maxRows else { break }
-      rows.append(HomeKnowsRow(kind: .question, text: question))
+    // 2) A tip — a real server insight, else a composed nudge that prefills chat.
+    if let insight = cleanInsights.first {
+      rows.append(HomeKnowsRow(kind: .insight(id: insight.id), text: insight.text))
+    } else if let cleanTip {
+      rows.append(HomeKnowsRow(kind: .question, text: cleanTip))
     }
 
-    return rows
+    // 3) A second concrete task — but only if the prefilled ask can still follow.
+    if freshTasks.count > 1, ask == nil || rows.count < maxRows - 1 {
+      let task = freshTasks[1]
+      rows.append(HomeKnowsRow(kind: .task(id: task.id), text: task.text))
+    }
+
+    // 4) A prefilled ask, so there's always a distinct thing to hand Omi.
+    if let ask, rows.count < maxRows {
+      rows.append(HomeKnowsRow(kind: .question, text: ask))
+    }
+
+    return Array(rows.prefix(maxRows))
   }
 }

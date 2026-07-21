@@ -839,9 +839,25 @@ struct DashboardPage: View {
       insights: intelligenceStore.recommendations.map {
         HomeKnowsInsightCandidate(id: $0.id, text: $0.headline)
       },
+      tip: homeActionTip,
       questions: homeSuggestedQuestions,
       dismissedTaskIDs: dismissedKnowsTaskIDs
     )
+  }
+
+  /// A composed, high-agency nudge for the tip slot when there's no server
+  /// insight — one thing you can hand Omi with a tap (it prefills the chat).
+  private var homeActionTip: String? {
+    if focusStorage.currentStatus == .distracted {
+      return "Help me get back on track"
+    }
+    let openCount = homeKnowsTaskCandidates
+      .filter { !dismissedKnowsTaskIDs.contains($0.id) }
+      .count
+    if openCount >= 5 {
+      return "Sort my open tasks — which 3 actually matter today?"
+    }
+    return "Recap what I got done today"
   }
 
   /// A short, conversational read on the day — what you've been doing and how
@@ -862,8 +878,16 @@ struct DashboardPage: View {
     if let status = focusStorage.currentStatus {
       let rawApp = focusStorage.currentApp ?? focusStorage.detectedAppName
       let appName = rawApp?.trimmingCharacters(in: .whitespacesAndNewlines)
-      if status == .focused, let appName, !appName.isEmpty {
-        lead = "Deep in \(appName) today"
+      let namedApp: String? = {
+        guard let appName, !appName.isEmpty,
+          !appName.lowercased().contains("unknown")
+        else { return nil }
+        return appName
+      }()
+      if status == .focused, let namedApp {
+        lead = "Deep in \(namedApp) today"
+      } else if status == .focused {
+        lead = "Heads-down today"
       } else if status == .distracted {
         lead = "A scattered stretch just now"
       }
