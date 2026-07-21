@@ -1059,9 +1059,9 @@ def process_segment(
         # attach segments to it directly instead of searching by timestamp.
         if target_conversation_id:
             closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
-            if not closest_memory:
+            if not conversations_db.eligible_merge_target(closest_memory):
                 logger.warning(
-                    f'Target conversation {target_conversation_id} not found, falling back to timestamp lookup'
+                    f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
                 )
                 closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         else:

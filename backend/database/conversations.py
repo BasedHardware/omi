@@ -1524,6 +1524,34 @@ def store_conversation_photos(
 # ********************************
 
 
+def eligible_merge_target(conversation: Optional[dict]) -> bool:
+    """Whether synced audio may merge into this conversation (#10033).
+
+    A soft-deleted tombstone must never absorb new segments: the user cannot
+    see it, so merged audio disappears — recordings that "never create a
+    conversation". Discarded rows stay eligible; the merge path reprocesses
+    and revives them.
+    """
+    return bool(conversation) and not conversation.get('deleted')
+
+
+def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
+    """Pure closest-by-boundary choice among eligible merge targets (#10033)."""
+    closest_conversation = None
+    min_diff = float('inf')
+    for conversation in conversations:
+        if not eligible_merge_target(conversation):
+            continue
+        conversation_start_timestamp = conversation['started_at'].timestamp()
+        conversation_end_timestamp = conversation['finished_at'].timestamp()
+        diff1 = abs(conversation_start_timestamp - start_timestamp)
+        diff2 = abs(conversation_end_timestamp - end_timestamp)
+        if diff1 < min_diff or diff2 < min_diff:
+            min_diff = min(diff1, diff2)
+            closest_conversation = conversation
+    return closest_conversation
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
@@ -1548,17 +1576,10 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     for conversation in conversations:
         logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
 
-    # get the conversation that has the closest start timestamp or end timestamp
-    closest_conversation = None
-    min_diff = float('inf')
-    for conversation in conversations:
-        conversation_start_timestamp = conversation['started_at'].timestamp()
-        conversation_end_timestamp = conversation['finished_at'].timestamp()
-        diff1 = abs(conversation_start_timestamp - start_timestamp)
-        diff2 = abs(conversation_end_timestamp - end_timestamp)
-        if diff1 < min_diff or diff2 < min_diff:
-            min_diff = min(diff1, diff2)
-            closest_conversation = conversation
+    closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
+    if closest_conversation is None:
+        logger.info('get_closest_conversation_to_timestamps: no eligible merge target (deleted rows excluded)')
+        return None
 
     logger.info(f"get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}")
     return closest_conversation
