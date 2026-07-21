@@ -1822,6 +1822,32 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "send_main_draft",
+      summary: "Send the main composer via the draft path (sendMainDraft), exactly like the notch/main text composer",
+      params: ["text"],
+      category: "chat",
+      surfaces: ["main_chat", "ask_omi"],
+      safety: "local",
+      sideEffects: ["local_storage", "network"],
+      examples: ["./scripts/omi-ctl action send_main_draft text='what did I do today?'"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "send_main_draft is disabled on production bundles"]
+      }
+      let text = (params["text"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !text.isEmpty else { return ["error": "missing 'text'"] }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      provider.draftText = text
+      let tracer = QueryTracer(query: text, inputMode: .text)
+      await QueryTracerContext.$current.withValue(tracer) {
+        _ = await provider.sendMainDraft(text)
+      }
+      return ["sent": text, "draft_after": provider.draftText]
+    }
+
+    register(
       name: "chat_drafts_snapshot",
       summary: "Read current main and floating composer drafts (non-prod persistence harness)",
       category: "chat",
