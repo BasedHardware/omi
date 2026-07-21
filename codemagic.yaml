@@ -1829,8 +1829,6 @@ workflows:
   # Required CodeMagic secret group "desktop_secrets":
   #   SPARKLE_PRIVATE_KEY             — EdDSA private key for Sparkle auto-update signing
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
-  #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
-  #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
   #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded .env bundled into .app at build time
   #                                     Contains only secrets (not URLs):
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
