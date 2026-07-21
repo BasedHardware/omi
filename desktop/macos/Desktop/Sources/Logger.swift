@@ -459,9 +459,10 @@ func logError(_ message: String, error: Error? = nil) {
     error: error,
     enabled: enhancedBetaDiagnostics)
 
-  // Stable keeps the existing low-volume transient-error behavior. Beta captures
-  // these typed failures with the expanded diagnostic trail for release triage.
-  if isNonActionableTransient(error), !enhancedBetaDiagnostics { return }
+  // Transient network/IO errors (offline, timeouts, cancellations, socket resets)
+  // remain local-only. A beta trail entry can join a later authoritative incident,
+  // but a transient alone must not create a new Sentry event.
+  if isNonActionableTransient(error) { return }
 
   guard !isDevBuild else { return }
 
