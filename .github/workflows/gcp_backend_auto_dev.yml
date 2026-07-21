@@ -56,53 +56,57 @@ jobs:
           # read-only GitHub API proofs bind the current main and comparison
           # identities. Any API, JSON, or identity ambiguity falls through to
           # the privileged current-main source-admission guard below.
-          api_base="${GITHUB_API_URL:-https://api.github.com}"
-          ref_path="$(mktemp)"
-          compare_path="$(mktemp)"
-          trap 'rm -f "$ref_path" "$compare_path"' EXIT
-          api_headers=(
-            -H "Authorization: Bearer $GH_TOKEN"
-            -H "Accept: application/vnd.github+json"
-            -H "X-GitHub-Api-Version: 2022-11-28"
-          )
-          ref_status="$(curl --silent --show-error --output "$ref_path" --write-out '%{http_code}' \
-            "${api_headers[@]}" \
-            "$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main" || true)"
-          if [[ "$ref_status" != "200" ]] || ! main_sha="$(jq -er '
-            if .ref == "refs/heads/main" and .object.type == "commit" and (.object.sha | test("^[0-9a-f]{40}$"))
-            then .object.sha else error("unexpected main ref identity") end
-          ' "$ref_path" 2>/dev/null)"; then
-            echo "applies=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Backend development deploy scope"
-              echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          compare_status="$(curl --silent --show-error --output "$compare_path" --write-out '%{http_code}' \
-            "${api_headers[@]}" \
-            "$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha" || true)"
-          if [[ "$compare_status" != "200" ]] || ! comparison="$(jq -er \
-            --arg release_sha "$RELEASE_SHA" \
-            --arg main_sha "$main_sha" '
-              if .base_commit.sha == $release_sha and .head_commit.sha == $main_sha and
-                (.status == "behind" or .status == "ahead" or .status == "identical" or .status == "diverged")
-              then .status else error("unexpected comparison identity") end
-            ' "$compare_path" 2>/dev/null)"; then
-            echo "applies=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Backend development deploy scope"
-              echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if [[ "$comparison" == "behind" ]]; then
-            echo "applies=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Backend development deploy superseded no-op"
-              echo "Green no-op: GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha."
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+          # Hermetic unit coverage exercises the parent-diff path without a
+          # GitHub token. CI always injects GH_TOKEN for supersession proofs.
+          if [[ -n "${GH_TOKEN:-}" && -n "${GITHUB_REPOSITORY:-}" ]]; then
+            api_base="${GITHUB_API_URL:-https://api.github.com}"
+            ref_path="$(mktemp)"
+            compare_path="$(mktemp)"
+            trap 'rm -f "$ref_path" "$compare_path"' EXIT
+            api_headers=(
+              -H "Authorization: Bearer ${GH_TOKEN}"
+              -H "Accept: application/vnd.github+json"
+              -H "X-GitHub-Api-Version: 2022-11-28"
+            )
+            ref_status="$(curl --silent --show-error --output "$ref_path" --write-out '%{http_code}' \
+              "${api_headers[@]}" \
+              "$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main" || true)"
+            if [[ "$ref_status" != "200" ]] || ! main_sha="$(jq -er '
+              if .ref == "refs/heads/main" and .object.type == "commit" and (.object.sha | test("^[0-9a-f]{40}$"))
+              then .object.sha else error("unexpected main ref identity") end
+            ' "$ref_path" 2>/dev/null)"; then
+              echo "applies=true" >> "$GITHUB_OUTPUT"
+              {
+                echo "### Backend development deploy scope"
+                echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            compare_status="$(curl --silent --show-error --output "$compare_path" --write-out '%{http_code}' \
+              "${api_headers[@]}" \
+              "$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha" || true)"
+            if [[ "$compare_status" != "200" ]] || ! comparison="$(jq -er \
+              --arg release_sha "$RELEASE_SHA" \
+              --arg main_sha "$main_sha" '
+                if .base_commit.sha == $release_sha and .head_commit.sha == $main_sha and
+                  (.status == "behind" or .status == "ahead" or .status == "identical" or .status == "diverged")
+                then .status else error("unexpected comparison identity") end
+              ' "$compare_path" 2>/dev/null)"; then
+              echo "applies=true" >> "$GITHUB_OUTPUT"
+              {
+                echo "### Backend development deploy scope"
+                echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [[ "$comparison" == "behind" ]]; then
+              echo "applies=false" >> "$GITHUB_OUTPUT"
+              {
+                echo "### Backend development deploy superseded no-op"
+                echo "Green no-op: GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
           fi
 
           if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
