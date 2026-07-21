@@ -352,6 +352,11 @@ export class PiMonoAdapter implements HarnessAdapter {
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
   private currentExecutionRole: "coordinator" | "leaf" = "coordinator";
+  private currentToolProjection: {
+    surfaceKind?: string;
+    chatFirstUi: boolean;
+    controlGeneration: number | null;
+  } = { chatFirstUi: false, controlGeneration: null };
   private readonly sessionPrefix: string;
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false;
@@ -433,6 +438,20 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     env.OMI_ADAPTER_ID = "pi-mono";
     env.OMI_EXECUTION_ROLE = this.currentExecutionRole;
+    if (
+      this.currentToolProjection.surfaceKind === "main_chat"
+      && this.currentToolProjection.chatFirstUi
+      && Number.isSafeInteger(this.currentToolProjection.controlGeneration)
+      && (this.currentToolProjection.controlGeneration ?? -1) >= 0
+    ) {
+      env.OMI_SURFACE_KIND = "main_chat";
+      env.OMI_CHAT_FIRST_UI = "true";
+      env.OMI_CHAT_FIRST_CONTROL_GENERATION = String(this.currentToolProjection.controlGeneration);
+    } else {
+      delete env.OMI_SURFACE_KIND;
+      delete env.OMI_CHAT_FIRST_UI;
+      delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
+    }
     env.OMI_CONTEXT_FILE = this.contextFilePath;
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
@@ -547,6 +566,34 @@ export class PiMonoAdapter implements HarnessAdapter {
     if (this.process) {
       await this.stop();
     }
+  }
+
+  async setToolProjection(projection: {
+    surfaceKind?: string;
+    chatFirstUi: boolean;
+    controlGeneration: number | null;
+  }): Promise<void> {
+    const normalized: {
+      surfaceKind?: string;
+      chatFirstUi: boolean;
+      controlGeneration: number | null;
+    } = projection.surfaceKind === "main_chat"
+      && projection.chatFirstUi
+      && Number.isSafeInteger(projection.controlGeneration)
+      && (projection.controlGeneration ?? -1) >= 0
+      ? {
+          surfaceKind: "main_chat" as const,
+          chatFirstUi: true,
+          controlGeneration: projection.controlGeneration,
+        }
+      : { chatFirstUi: false, controlGeneration: null };
+    if (
+      normalized.surfaceKind === this.currentToolProjection.surfaceKind
+      && normalized.chatFirstUi === this.currentToolProjection.chatFirstUi
+      && normalized.controlGeneration === this.currentToolProjection.controlGeneration
+    ) return;
+    this.currentToolProjection = normalized;
+    if (this.process) await this.stop();
   }
 
   async sendPrompt(
@@ -1208,6 +1255,21 @@ function relayReasoningEffort(metadata: Record<string, unknown> | undefined): st
   return raw === "adaptive" || raw === "fast" ? raw : undefined;
 }
 
+function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefined): {
+  surfaceKind?: string;
+  chatFirstUi: boolean;
+  controlGeneration: number | null;
+} {
+  const generation = Number(metadata?.chatFirstControlGeneration);
+  const enabled = metadata?.surfaceKind === "main_chat"
+    && metadata?.chatFirstUi === true
+    && Number.isSafeInteger(generation)
+    && generation >= 0;
+  return enabled
+    ? { surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: generation }
+    : { chatFirstUi: false, controlGeneration: null };
+}
+
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId = "pi-mono";
   readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor("pi-mono");
@@ -1228,6 +1290,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
+    await this.harness.setToolProjection(toolProjectionFromMetadata(input.metadata));
     const adapterNativeSessionId = await this.harness.createSession({
       cwd: input.cwd,
       model: input.model,
@@ -1239,6 +1302,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
+    await this.harness.setToolProjection(toolProjectionFromMetadata(input.metadata));
     await this.harness.setExecutionRole(input.metadata?.executionRole === "leaf" ? "leaf" : "coordinator");
     await this.start();
     // pi-mono has no native resume after daemon/process loss, but while this

@@ -461,14 +461,16 @@ export class KernelSessions extends KernelArtifacts {
     if (capability && (!Number.isSafeInteger(capability.controlGeneration) || capability.controlGeneration < 0)) {
       throw new Error("chat-first capability requires a non-negative control generation");
     }
+    // Capability-less lookups can happen while auth and root-shell control are
+    // still converging (for example, a journal projection read during startup).
+    // They remain capability-off for that read, but must not consume the one
+    // immutable server-derived sample for the runtime session.
+    if (capability === undefined) return resolved;
     const key = `${input.ownerId}:${resolved.agentSessionId}`;
     const previous = this.chatFirstCapabilities.get(key);
-    const sampled: ChatFirstCapabilityProjection = capability?.chatFirstUi === true
-      ? capability
-      : { chatFirstUi: false, controlGeneration: capability?.controlGeneration ?? 0 };
+    const sampled: ChatFirstCapabilityProjection = capability;
     if (
       previous
-      && previous.chatFirstUi
       && (previous.chatFirstUi !== sampled.chatFirstUi || previous.controlGeneration !== sampled.controlGeneration)
     ) {
       throw new Error("chat-first capability is immutable for the runtime session");

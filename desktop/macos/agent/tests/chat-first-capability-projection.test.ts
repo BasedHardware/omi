@@ -9,13 +9,53 @@ import { RunToolCapabilityRejectedError } from "../src/runtime/run-tool-capabili
 import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const roots: string[] = [];
-const CHAT_FIRST_DYNAMIC_TOOLS = ["render_chat_blocks", "search_chat_history"] as const;
+const CHAT_FIRST_DYNAMIC_TOOLS = [
+  "render_chat_blocks",
+  "search_chat_history",
+  "show_rewind_evidence",
+] as const;
 
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
 describe("chat-first admitted capability projection", () => {
+  it("forwards the enabled projection when opening and resuming an adapter binding", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
+    const resolved = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "binding-projection" },
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: true, controlGeneration: 23 },
+    });
+    const admittedContextSnapshot = kernel.contextSnapshot(resolved.agentSessionId, "owner", "main_chat");
+    const runInput = {
+      ownerId: "owner",
+      sessionId: resolved.agentSessionId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "binding-projection",
+      defaultAdapterId: "acp",
+      adapterId: "acp",
+      clientId: "binding-client",
+      prompt: "Use a rich Chat card.",
+      cwd: "/tmp/chat-first-binding-projection",
+      admittedContextSnapshot,
+    } as const;
+
+    await kernel.executeRun({ ...runInput, requestId: "binding-request-1" });
+    await kernel.executeRun({ ...runInput, requestId: "binding-request-2" });
+
+    const expected = {
+      surfaceKind: "main_chat",
+      chatFirstUi: true,
+      chatFirstControlGeneration: 23,
+    };
+    expect(adapter.opened[0]?.metadata).toMatchObject(expected);
+    expect(adapter.resumed[0]?.metadata).toMatchObject(expected);
+    store.close();
+  });
+
   it("preserves the enabled main-Chat generation through run admission for both dynamic tools", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
     const resolved = kernel.resolveSurfaceSession({
@@ -132,6 +172,29 @@ describe("chat-first admitted capability projection", () => {
     ]) {
       expect(JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio", projection))).toBe(legacy);
     }
+  });
+
+  it("leaves chat block payloads open for the backend's authoritative validator", () => {
+    const projected = mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat",
+      chatFirstUi: true,
+      controlGeneration: 19,
+    });
+    const render = projected.find((tool) => tool.name === "render_chat_blocks");
+    expect(render?.inputSchema.properties?.blocks?.items).toMatchObject({
+      type: "object",
+      additionalProperties: true,
+    });
+  });
+
+  it("adds canonical goal retrieval only to the enabled main-chat projection", () => {
+    const enabled = mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 19,
+    });
+    expect(enabled.find((tool) => tool.name === "get_canonical_goals")?.description).toContain(
+      "Do not use execute_sql, legacy local goals, memories, or inferred goals",
+    );
+    expect(JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio"))).not.toContain("get_canonical_goals");
   });
 });
 

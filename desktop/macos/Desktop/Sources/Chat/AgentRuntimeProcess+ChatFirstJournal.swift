@@ -124,6 +124,53 @@ extension AgentRuntimeProcess {
     return turn
   }
 
+  /// Attach one locally stored Rewind image to precisely the assistant turn
+  /// produced by the authorized Chat-first run. The local kernel owns the
+  /// turn selection and durability; Swift supplies only the evidence metadata.
+  func appendChatFirstEvidence(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    runID: String,
+    attemptID: String,
+    capabilityRef: String,
+    controlGeneration: Int,
+    resource: ChatResource,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> KernelJournalTurn {
+    guard surface.surfaceKind == "main_chat", controlGeneration >= 0, resource.isImage,
+      let resourceJSON =
+        ChatResource.encodeResourcesForPersistence([resource]),
+      let resourceData = resourceJSON.data(using: .utf8),
+      let resources = try JSONSerialization.jsonObject(with: resourceData) as? [[String: Any]],
+      let wireResource = resources.first
+    else {
+      throw BridgeError.agentError("Invalid chat-first evidence append")
+    }
+    let result = try await journalOperation(
+      type: "append_chat_first_evidence",
+      operation: "append_chat_first_evidence",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: [
+        "sessionId": sessionID,
+        "runId": runID,
+        "attemptId": attemptID,
+        "capabilityRef": capabilityRef,
+        "controlGeneration": controlGeneration,
+        "resource": wireResource,
+      ],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    guard let turn = result.turn else {
+      throw BridgeError.agentError("Chat-first evidence append returned no turn")
+    }
+    recordLifecycleJournalMutation(turn)
+    return turn
+  }
+
   /// The journal derives the stored question payload and only accepts the
   /// current main-Chat tail. Swift cannot send an answer string or select an
   /// arbitrary parent row through this operation.

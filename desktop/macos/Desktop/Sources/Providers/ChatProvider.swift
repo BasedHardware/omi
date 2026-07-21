@@ -337,6 +337,7 @@ enum ChatContentBlock: Identifiable {
   case taskCard(id: String, taskId: String)
   case goalLink(id: String, goalId: String, summary: String)
   case captureLink(id: String, conversationId: String, momentTimestampMs: Int?, summary: String)
+  case memoryLink(id: String, memoryId: String, summary: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -367,6 +368,7 @@ enum ChatContentBlock: Identifiable {
     case .taskCard(let id, _): return id
     case .goalLink(let id, _, _): return id
     case .captureLink(let id, _, _, _): return id
+    case .memoryLink(let id, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -973,7 +975,7 @@ extension ChatContentBlock {
       return trimmed.isEmpty ? nil : trimmed
     case .taskCard:
       return nil
-    case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary):
+    case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary), .memoryLink(_, _, let summary):
       let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? nil : trimmed
     case .agentSpawn(_, _, _, _, let title, let objective, _):
@@ -1937,7 +1939,10 @@ class ChatProvider: ObservableObject {
     )
     let workspacePath = session.profile.workingDirectory
     let memoryText = formatMemoriesSection()
-    let goalText = formatGoalSection()
+    // Canonical goals are retrieved through the capability-scoped tool. An
+    // enabled Chat-first session must not quietly inject legacy GoalStorage
+    // rows into the model context.
+    let goalText = isChatFirstEnabled(for: surface) ? "" : formatGoalSection()
     let taskText = formatTasksSection()
     let identityText = formatAIProfileSection()
     var surfacePayload: [String: Any] = [
@@ -2564,6 +2569,16 @@ class ChatProvider: ObservableObject {
     }
   }
 
+  private var isChatFirstMainChatEnabled: Bool {
+    guard let ownerID = runtimeOwnerId else { return false }
+    return chatFirstMainChatProjectionGate.capability(for: mainChatSurfaceReference(), ownerID: ownerID) != nil
+  }
+
+  private func isChatFirstEnabled(for surface: AgentSurfaceReference) -> Bool {
+    guard let ownerID = runtimeOwnerId else { return false }
+    return chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil
+  }
+
   /// Formats goals into a prompt section
   private func formatGoalSection() -> String {
     let activeGoals = cachedGoals.filter { $0.isActive }
@@ -2886,7 +2901,9 @@ class ChatProvider: ObservableObject {
   /// Warm local prompt context used by first send / bridge startup.
   func warmupPromptContext() async {
     await refreshMemoriesForPrompt()
-    await loadGoalsIfNeeded()
+    if !isChatFirstMainChatEnabled {
+      await loadGoalsIfNeeded()
+    }
     await loadTasksIfNeeded()
     await loadAIProfileIfNeeded()
     await loadSchemaIfNeeded()
@@ -5985,8 +6002,14 @@ class ChatProvider: ObservableObject {
 
   private func localFileResources(fromToolName name: String, texts: [String]) -> [ChatResource] {
     let normalizedName = Self.normalizedToolNameHead(name)
-    guard ["write", "edit", "multiedit"].contains(normalizedName) else { return [] }
-    return localFileURLs(from: texts.joined(separator: "\n")).map { url in
+    // Rewind evidence is appended through its capability-bound journal
+    // operation; treating the returned cache path as a generic artifact would
+    // create a second, unbound resource on the assistant turn.
+    let supportedFileTools = ["write", "edit", "multiedit", "capture_screen"]
+    guard supportedFileTools.contains(normalizedName) else { return [] }
+    let urls = localFileURLs(from: texts.joined(separator: "\n"))
+    let displayURLs = normalizedName == "capture_screen" ? Array(urls.prefix(1)) : urls
+    return displayURLs.map { url in
       let mimeType = mimeType(forLocalFile: url)
       return ChatResource.localGeneratedFile(
         id: "generated-file:\(url.path)",

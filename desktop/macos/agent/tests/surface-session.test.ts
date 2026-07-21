@@ -471,10 +471,12 @@ describe("surface_conversations", () => {
     expect(floatingSnapshot.capabilities.chatFirstControlGeneration).toBeNull();
   });
 
-  it("cannot turn chat-first on after the main-chat session was sampled off", () => {
+  it("does not let an early capability-less lookup consume the server-derived main-chat sample", () => {
     const kernel = new AgentRuntimeKernel({ store, registry: new AdapterRegistry() });
-    const surfaceRef = { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "sampled-off" };
+    const surfaceRef = { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "pending-sample" };
     const resolved = kernel.resolveSurfaceSession({ ownerId: "owner-a", surfaceRef, defaultAdapterId: "acp" });
+    expect(kernel.contextSnapshot(resolved.agentSessionId, "owner-a", "main_chat").capabilities.chatFirstUi).toBe(false);
+
     kernel.resolveSurfaceSession({
       ownerId: "owner-a",
       surfaceRef,
@@ -482,7 +484,27 @@ describe("surface_conversations", () => {
       chatFirstCapability: { chatFirstUi: true, controlGeneration: 7 },
     });
 
-    expect(kernel.contextSnapshot(resolved.agentSessionId, "owner-a", "main_chat").capabilities.chatFirstUi).toBe(false);
+    const sampled = kernel.contextSnapshot(resolved.agentSessionId, "owner-a", "main_chat");
+    expect(sampled.capabilities.chatFirstUi).toBe(true);
+    expect(sampled.capabilities.chatFirstControlGeneration).toBe(7);
+  });
+
+  it("keeps an explicit main-chat capability sample immutable", () => {
+    const kernel = new AgentRuntimeKernel({ store, registry: new AdapterRegistry() });
+    const surfaceRef = { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "sampled-off" };
+    kernel.resolveSurfaceSession({
+      ownerId: "owner-a",
+      surfaceRef,
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: false, controlGeneration: 7 },
+    });
+
+    expect(() => kernel.resolveSurfaceSession({
+      ownerId: "owner-a",
+      surfaceRef,
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: true, controlGeneration: 7 },
+    })).toThrow(/immutable/);
   });
 
 });

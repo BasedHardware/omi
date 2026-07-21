@@ -457,9 +457,21 @@ def get_conversations_count(
         "may include an empty transcript_segments array even though transcript data exists."
     ),
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_by_id(
+    conversation_id: str,
+    source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
+    include_discarded: bool = Query(True),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    if source is not None:
+        if source != 'omi':
+            raise HTTPException(
+                status_code=400, detail="Only source=omi is supported for provenance-constrained detail reads"
+            )
+        if conversation.get('source') != 'omi' or (not include_discarded and conversation.get('discarded', False)):
+            raise HTTPException(status_code=404, detail="Conversation not found")
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred'):

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from utils.env_loader import (
+    firebase_admin_options,
     STAGE_ENV_FILENAMES,
     load_backend_env,
     resolve_stage_from_env,
@@ -13,6 +14,11 @@ from utils.env_loader import (
     stage_env_path,
     stage_from_env,
 )
+
+
+def test_firebase_admin_options_uses_explicit_auth_project_only() -> None:
+    assert firebase_admin_options({"FIREBASE_AUTH_PROJECT_ID": " based-hardware "}) == {"projectId": "based-hardware"}
+    assert firebase_admin_options({"FIREBASE_PROJECT_ID": "data-project"}) is None
 
 
 def test_stage_from_env_explicit() -> None:

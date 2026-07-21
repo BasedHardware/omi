@@ -13958,6 +13958,36 @@
         "title": "MemoryLayer",
         "type": "string"
       },
+      "MemoryLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "memory_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "memoryLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "memory_id",
+          "summary"
+        ],
+        "title": "MemoryLinkSpec",
+        "type": "object"
+      },
       "MemoryMutationResponse": {
         "properties": {
           "status": {
@@ -15789,6 +15819,7 @@
                 "mapping": {
                   "captureLink": "#/components/schemas/CaptureLinkSpec",
                   "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
                   "questionCard": "#/components/schemas/QuestionCardSpec",
                   "taskCard": "#/components/schemas/TaskCardSpec"
                 },
@@ -15806,6 +15837,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryLinkSpec"
                 }
               ]
             },
@@ -31905,6 +31939,34 @@
             }
           },
           {
+            "description": "Optional provenance constraint for a detail read",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional provenance constraint for a detail read",
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_discarded",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Discarded",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -37649,6 +37711,98 @@
           }
         ],
         "summary": "Create Canonical Goal",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
+    "/v1/goals/canonical/list": {
+      "get": {
+        "description": "List goals for enrolled canonical-memory task-system clients only.",
+        "operationId": "get_canonical_goals_v1_goals_canonical_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_ended",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Ended",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GoalResponse"
+                  },
+                  "title": "Response Get Canonical Goals V1 Goals Canonical List Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Canonical Goals",
         "tags": [
           "goals"
         ]

@@ -834,6 +834,39 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
     await adapter.stop();
   });
+
+  it("projects chat-first tools into the child env only for an enabled main Chat", async () => {
+    const adapter = new PiMonoAdapter({ authToken: "test-token" }, "/fake/pi", "/fake/ext.ts");
+    await adapter.setToolProjection({
+      surfaceKind: "main_chat",
+      chatFirstUi: true,
+      controlGeneration: 7,
+    });
+    await adapter.start();
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [string, string[], { env: Record<string, string> }];
+    expect(options.env.OMI_SURFACE_KIND).toBe("main_chat");
+    expect(options.env.OMI_CHAT_FIRST_UI).toBe("true");
+    expect(options.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBe("7");
+    await adapter.stop();
+
+    vi.mocked(spawn).mockClear();
+    await adapter.setToolProjection({
+      surfaceKind: "floating_chat",
+      chatFirstUi: true,
+      controlGeneration: 7,
+    });
+    await adapter.start();
+    const [, , legacyOptions] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> },
+    ];
+    expect(legacyOptions.env.OMI_SURFACE_KIND).toBeUndefined();
+    expect(legacyOptions.env.OMI_CHAT_FIRST_UI).toBeUndefined();
+    expect(legacyOptions.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBeUndefined();
+    await adapter.stop();
+  });
 });
 
 describe("PiMonoAdapter capabilities", () => {

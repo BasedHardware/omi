@@ -84,6 +84,72 @@ def test_chat_first_validate_rejects_the_entire_receipt_when_any_reference_is_un
     assert response.json() == {'accepted': False, 'code': 'entity_unavailable', 'blocks': []}
 
 
+def test_chat_first_validate_admits_a_canonical_memory_link(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(
+        chat_first_router,
+        'fetch_memory_dict',
+        lambda uid, memory_id, **kwargs: {'id': memory_id, 'content': 'private-content-not-returned'},
+    )
+
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(blocks=[{'type': 'memoryLink', 'memory_id': 'memory-1', 'summary': 'A useful memory'}]),
+    )
+
+    assert response.status_code == 200
+    assert response.json()['accepted'] is True
+    assert response.json()['blocks'][0] == {
+        'id': response.json()['blocks'][0]['id'],
+        'type': 'memoryLink',
+        'memory_id': 'memory-1',
+        'summary': 'A useful memory',
+    }
+
+
+def test_chat_first_validate_admits_only_an_active_omi_capture_link(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(
+        chat_first_router.conversations_db,
+        'get_conversation',
+        lambda uid, conversation_id: {
+            'id': conversation_id,
+            'source': 'omi',
+            'discarded': False,
+        },
+    )
+
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(blocks=[{'type': 'captureLink', 'conversation_id': 'capture-1', 'summary': 'Planning'}]),
+    )
+
+    assert response.status_code == 200
+    assert response.json()['accepted'] is True
+    assert response.json()['blocks'][0]['type'] == 'captureLink'
+
+
+def test_chat_first_validate_rejects_non_omi_or_discarded_capture_links(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(
+        chat_first_router.conversations_db,
+        'get_conversation',
+        lambda uid, conversation_id: {
+            'id': conversation_id,
+            'source': 'desktop',
+            'discarded': False,
+        },
+    )
+
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(blocks=[{'type': 'captureLink', 'conversation_id': 'desktop-1', 'summary': 'Wrong source'}]),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {'accepted': False, 'code': 'entity_unavailable', 'blocks': []}
+
+
 def test_chat_first_validate_fails_closed_before_entity_resolution_outside_the_cohort(monkeypatch):
     monkeypatch.setattr(
         chat_first_router.task_control_db,

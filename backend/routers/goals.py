@@ -58,6 +58,16 @@ def get_all_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
+@router.get('/v1/goals/canonical/list', tags=['goals'], response_model=List[GoalResponse])
+def get_canonical_goals(
+    include_ended: bool = Query(False),
+    uid: str = Depends(require_canonical_task_user),
+) -> List[dict]:
+    """List goals for enrolled canonical-memory task-system clients only."""
+    goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
+    return [normalize_goal_response(goal) for goal in goals]
+
+
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a durable goal without changing any other goal's focus or lifecycle."""

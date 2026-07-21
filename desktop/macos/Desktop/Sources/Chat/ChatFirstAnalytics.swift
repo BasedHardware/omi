@@ -25,6 +25,7 @@ enum ChatFirstAnalyticsEvent: Equatable, Sendable {
     case taskCard = "task_card"
     case goalLink = "goal_link"
     case captureLink = "capture_link"
+    case memoryLink = "memory_link"
     case questionCard = "question_card"
   }
 

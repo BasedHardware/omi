@@ -32,14 +32,15 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
-import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/src/runtime/node-tools.ts";
+import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/dist/runtime/node-tools.js";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
   toolsForAdapter,
   type OmiToolInputSchema,
   type OmiToolManifestEntry,
-} from "../agent/src/runtime/omi-tool-manifest.ts";
+  type OmiToolProjectionContext,
+} from "../agent/dist/runtime/omi-tool-manifest.js";
 
 /**
  * Opaque, request-scoped correlation ids are the only context forwarded to
@@ -733,17 +734,29 @@ function searchSkillsTool() {
 }
 
 const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
-const projectionContext = { executionRole } as const;
+const chatFirstControlGeneration = Number(process.env.OMI_CHAT_FIRST_CONTROL_GENERATION);
+const projectionContext = {
+  executionRole,
+  surfaceKind: process.env.OMI_SURFACE_KIND,
+  chatFirstUi: process.env.OMI_CHAT_FIRST_UI === "true" && process.env.OMI_SURFACE_KIND === "main_chat",
+  controlGeneration: Number.isSafeInteger(chatFirstControlGeneration) && chatFirstControlGeneration >= 0
+    ? chatFirstControlGeneration
+    : null,
+} as const;
 
 export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
-  return toolsForAdapter("pi-mono", { executionRole: role }).map((tool) => {
+  return omiToolsForProjectionContext({ executionRole: role });
+}
+
+export function omiToolsForProjectionContext(context: OmiToolProjectionContext) {
+  return toolsForAdapter("pi-mono", context).map((tool) => {
     if (tool.name === "load_skill") return loadSkillTool();
     if (tool.name === "search_skills") return searchSkillsTool();
     return omiManifestTool(tool);
   });
 }
 
-export const OMI_TOOLS = omiToolsForExecutionRole(executionRole);
+export const OMI_TOOLS = omiToolsForProjectionContext(projectionContext);
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   const pipePath = process.env.OMI_BRIDGE_PIPE;

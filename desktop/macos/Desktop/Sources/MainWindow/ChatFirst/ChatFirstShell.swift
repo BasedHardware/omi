@@ -141,7 +141,12 @@ struct ChatFirstShell: View {
         graphViewModel: viewModelContainer.memoryGraphViewModel
       )
       .accessibilityIdentifier("chat-first-route-memories")
-      .onAppear { navigation.markRouteVisible(.memories) }
+      .onAppear {
+        navigation.markRouteVisible(.memories)
+        if case .memory(let id) = navigation.pendingFocus {
+          _ = navigation.acknowledgeFocus(.memory(id: id))
+        }
+      }
     case .more(let page):
       moreDestination(page)
         .accessibilityIdentifier("chat-first-route-more-\(page.stableName)")

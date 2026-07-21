@@ -394,6 +394,22 @@ export interface AppendChatFirstBlocksMessage extends ProtocolEnvelope {
   blocks: unknown[];
 }
 
+/**
+ * Privileged local-only append for one Rewind evidence resource. The same
+ * capability/run binding prevents a tool from attaching an image to an
+ * arbitrary Chat turn.
+ */
+export interface AppendChatFirstEvidenceMessage extends ProtocolEnvelope {
+  type: "append_chat_first_evidence";
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  capabilityRef: string;
+  controlGeneration: number;
+  resource: unknown;
+}
+
 /** Kernel-owned selection for one persisted, tail-actionable question card. */
 export interface RecordQuestionInteractionReplyMessage extends ProtocolEnvelope {
   type: "record_question_interaction_reply";
@@ -575,6 +591,7 @@ export type InboundMessage =
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
   | AppendChatFirstBlocksMessage
+  | AppendChatFirstEvidenceMessage
   | RecordQuestionInteractionReplyMessage
   | MaterializeChatFirstIntentsMessage
   | ListChatFirstMaterializationReceiptsMessage
@@ -1024,7 +1041,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear" | "append_chat_first_blocks" | "record_question_interaction_reply" | "materialize_chat_first_intents" | "list_chat_first_materialization_receipts" | "acknowledge_chat_first_materialization_receipts";
+  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear" | "append_chat_first_blocks" | "append_chat_first_evidence" | "record_question_interaction_reply" | "materialize_chat_first_intents" | "list_chat_first_materialization_receipts" | "acknowledge_chat_first_materialization_receipts";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;

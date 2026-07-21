@@ -101,6 +101,7 @@ struct TaskCardView: View {
 
   @State private var isToggling = false
   @State private var showCompletionAcknowledgement = false
+  @State private var hydrationFinished = false
 
   init(taskID: String, tasksStore: TasksStore, navigation: ChatFirstShellNavigation) {
     self.taskID = taskID
@@ -121,16 +122,26 @@ struct TaskCardView: View {
               .richBlock(kind: .taskCard, outcome: .rendered, action: .none)
             )
           }
-      } else {
+      } else if hydrationFinished {
         ChatFirstUnavailableBlockView(entityName: "Task")
           .onAppear {
             AnalyticsManager.shared.chatFirst(
               .richBlock(kind: .taskCard, outcome: .stalePlaceholder, action: .none)
             )
           }
+      } else {
+        ChatFirstLoadingBlockView(entityName: "Task")
       }
     }
     .accessibilityIdentifier("chat-first-task-\(taskID)")
+    .task(id: taskID) {
+      guard task == nil else {
+        hydrationFinished = true
+        return
+      }
+      _ = await tasksStore.resolveCanonicalTask(id: taskID)
+      hydrationFinished = true
+    }
   }
 
   @ViewBuilder
@@ -357,7 +368,7 @@ struct CaptureLinkView: View {
     Task { @MainActor in
       defer { isOpening = false }
       do {
-        _ = try await APIClient.shared.getConversation(id: conversationID)
+        _ = try await APIClient.shared.getOmiCapture(id: conversationID)
         let moment = momentTimestampMs.map { TimeInterval($0) / 1_000 }
         AnalyticsManager.shared.chatFirst(
           .richBlock(kind: .captureLink, outcome: .acted, action: .open)
@@ -369,6 +380,33 @@ struct CaptureLinkView: View {
           .richBlock(kind: .captureLink, outcome: .stalePlaceholder, action: .open)
         )
       }
+    }
+  }
+}
+
+struct MemoryLinkView: View {
+  let memoryID: String
+  let summary: String
+  let navigation: ChatFirstShellNavigation
+
+  var body: some View {
+    ChatFirstLinkBlockView(
+      eyebrow: "Memory",
+      systemImage: "brain.head.profile",
+      summary: summary,
+      actionTitle: "Open in Memories",
+      isOpening: false,
+      accessibilityID: "chat-first-memory-\(memoryID)-open"
+    ) {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .memoryLink, outcome: .acted, action: .open)
+      )
+      navigation.open(focus: .memory(id: memoryID))
+    }
+    .onAppear {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .memoryLink, outcome: .rendered, action: .none)
+      )
     }
   }
 }
@@ -477,5 +515,31 @@ struct ChatFirstUnavailableBlockView: View {
       )
       .accessibilityLabel("\(entityName) is no longer available")
       .accessibilityIdentifier("chat-first-\(entityName.lowercased())-unavailable")
+  }
+}
+
+private struct ChatFirstLoadingBlockView: View {
+  let entityName: String
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      ProgressView()
+        .controlSize(.small)
+      Text("Loading \(entityName.lowercased())")
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundStyle(OmiColors.textTertiary)
+    }
+    .padding(OmiSpacing.md)
+    .frame(maxWidth: 560, alignment: .leading)
+    .omiPanel(
+      fill: OmiColors.backgroundTertiary.opacity(0.7),
+      radius: OmiChrome.sectionRadius,
+      stroke: OmiColors.border.opacity(0.45),
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowY: 0
+    )
+    .accessibilityLabel("Loading \(entityName.lowercased())")
+    .accessibilityIdentifier("chat-first-\(entityName.lowercased())-loading")
   }
 }

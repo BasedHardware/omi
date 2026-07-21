@@ -66,7 +66,7 @@ struct LiveCaptureArchiveRemoteDataSource: CaptureArchiveRemoteDataSource {
   }
 
   func detail(id: String) async throws -> ServerConversation {
-    try await APIClient.shared.getConversation(id: id)
+    try await APIClient.shared.getOmiCapture(id: id)
   }
 }
 

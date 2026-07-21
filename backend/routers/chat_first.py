@@ -13,6 +13,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import ValidationError
 
 import database.action_items as action_items_db
+import database._client as db_client_module
 import database.chat_first_intents as chat_first_intents_db
 import database.conversations as conversations_db
 import database.goals as goals_db
@@ -28,10 +29,12 @@ from models.chat_first import (
     GoalLinkSpec,
     MaterializePromptsRequest,
     MaterializePromptsResponse,
+    MemoryLinkSpec,
     TaskCardSpec,
     stable_block_id,
 )
 from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
+from utils.memory.memory_service import fetch_memory_dict
 from utils.other import endpoints as auth
 from utils.task_intelligence.chat_first_eligibility import resolve_chat_first_eligibility
 from utils.task_intelligence.proactive_engine import (
@@ -165,6 +168,11 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
     if isinstance(block, CaptureLinkSpec):
         capture = conversations_db.get_conversation(uid, block.conversation_id)
         return bool(capture and capture.get('source') == 'omi' and not capture.get('discarded', False))
+    if isinstance(block, MemoryLinkSpec):
+        try:
+            return bool(fetch_memory_dict(uid, block.memory_id, db_client=getattr(db_client_module, 'db', None)))
+        except HTTPException:
+            return False
     subject = block.subject
     if subject.kind == 'cold_start':
         # Synthetic cold-start subjects are admitted only through the

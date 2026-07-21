@@ -786,6 +786,7 @@ extension ChatContentBlock {
     case .taskCard(let id, _): return "t:\(id)"
     case .goalLink(let id, _, _): return "g:\(id)"
     case .captureLink(let id, _, _, _): return "c:\(id)"
+    case .memoryLink(let id, _, _): return "m:\(id)"
     case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
     case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
     }

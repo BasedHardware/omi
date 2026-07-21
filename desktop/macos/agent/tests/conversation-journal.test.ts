@@ -9,6 +9,7 @@ import {
   ackBackendTurnOutboxWithWakes,
   applyBackendReconcilePage,
   appendChatFirstBlocksToProducingTurn,
+  appendChatFirstEvidenceToProducingTurn,
   acknowledgeChatFirstMaterializationReceipts,
   beginBackendReconcile,
   beginBackendReconcilesForOwner,
@@ -201,6 +202,61 @@ describe("kernel conversation journal", () => {
       ownerId: fixture.ownerId,
       conversationId: fixture.conversationId,
     }).turns.at(-1)).toMatchObject({ contentBlocks: blocks });
+    fixture.store.close();
+  });
+
+  it("attaches only a ready local generated image to the producing Chat-first turn", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-evidence");
+    const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-evidence");
+    recordStreamingAssistantPlaceholder(fixture, "turn-chat-first-evidence");
+    const resource: ConversationResource = {
+      id: "rewind-evidence:abc",
+      origin: "generatedArtifact",
+      title: "Rewind evidence",
+      state: "ready",
+      mimeType: "image/jpeg",
+      uri: "file:///tmp/rewind-evidence.jpg",
+    };
+
+    const appended = appendChatFirstEvidenceToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      resource,
+    });
+    expect(appended).toMatchObject({
+      turnId: "turn-chat-first-evidence",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      resources: [{ ...resource, runId: run.runId }],
+    });
+    const before = journalStorageSnapshot(fixture.store);
+    expect(() => appendChatFirstEvidenceToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      resource: { ...resource, id: "remote", uri: "https://example.com/evidence.jpg" },
+    })).toThrow(/local file URI/i);
+    expect(journalStorageSnapshot(fixture.store)).toEqual(before);
+
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: appended.turnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      nowMs: 20,
+    });
+    const delivery = drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 21 })
+      .find((candidate) => candidate.turnId === appended.turnId);
+    const projectedResources = JSON.parse(delivery!.payload.metadata!).resources;
+    expect(projectedResources).toEqual([{ ...resource, uri: undefined, runId: run.runId }]);
+    expect(delivery!.payload.metadata).not.toContain("/tmp/rewind-evidence.jpg");
     fixture.store.close();
   });
 

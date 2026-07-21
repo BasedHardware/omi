@@ -23,14 +23,16 @@ final class ChatFirstRichBlockTests: XCTestCase {
           "blocks": [
             ["type": "taskCard", "taskId": "task-1"],
             ["type": "goalLink", "goalId": "goal-1", "summary": "Ship the plan"],
+            ["type": "memoryLink", "memoryId": "memory-1", "summary": "Remember the launch constraint"],
           ]
         ]
       )
     )
 
-    XCTAssertEqual(converted.count, 2)
+    XCTAssertEqual(converted.count, 3)
     XCTAssertEqual(converted[0]["task_id"] as? String, "task-1")
     XCTAssertEqual(converted[1]["goal_id"] as? String, "goal-1")
+    XCTAssertEqual(converted[2]["memory_id"] as? String, "memory-1")
   }
 
   func testCodecRoundTripsEveryChatFirstBlock() throws {
@@ -58,6 +60,7 @@ final class ChatFirstRichBlockTests: XCTestCase {
         momentTimestampMs: 42_000,
         summary: "Planning conversation"
       ),
+      .memoryLink(id: "memory-link", memoryId: "memory-1", summary: "Launch constraint"),
     ]
 
     let encoded = try XCTUnwrap(ChatContentBlockCodec.encode(blocks))
@@ -92,6 +95,12 @@ final class ChatFirstRichBlockTests: XCTestCase {
     XCTAssertEqual(captureID, "capture-1")
     XCTAssertEqual(timestamp, 42_000)
     XCTAssertEqual(captureSummary, "Planning conversation")
+
+    guard case .memoryLink(_, let memoryID, let memorySummary) = restored[4] else {
+      return XCTFail("memory link should survive persisted replay")
+    }
+    XCTAssertEqual(memoryID, "memory-1")
+    XCTAssertEqual(memorySummary, "Launch constraint")
   }
 
   func testQuestionSelectionReceiptRoundTripsAndRetiresTheOptions() throws {
@@ -149,6 +158,7 @@ final class ChatFirstRichBlockTests: XCTestCase {
       .taskCard(id: "task", taskId: "task-1"),
       .goalLink(id: "goal", goalId: "goal-1", summary: "Goal"),
       .captureLink(id: "capture", conversationId: "capture-1", momentTimestampMs: nil, summary: "Capture"),
+      .memoryLink(id: "memory", memoryId: "memory-1", summary: "Memory"),
     ]
 
     XCTAssertTrue(
@@ -161,7 +171,7 @@ final class ChatFirstRichBlockTests: XCTestCase {
       isStreaming: false,
       richBlockRenderingEnabled: true
     )
-    XCTAssertEqual(enabled.count, 4)
+    XCTAssertEqual(enabled.count, 5)
     XCTAssertTrue(
       enabled.contains {
         if case .questionCard = $0 { return true }
@@ -180,6 +190,11 @@ final class ChatFirstRichBlockTests: XCTestCase {
     XCTAssertTrue(
       enabled.contains {
         if case .captureLink = $0 { return true }
+        return false
+      })
+    XCTAssertTrue(
+      enabled.contains {
+        if case .memoryLink = $0 { return true }
         return false
       })
   }

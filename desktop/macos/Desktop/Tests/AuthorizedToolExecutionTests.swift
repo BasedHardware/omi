@@ -37,6 +37,18 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     XCTAssertEqual(command.canonicalToolName, "render_chat_blocks")
     XCTAssertEqual(command.chatFirstControlGeneration, 7)
 
+    let ordinaryChatFirstTool = try AuthorizedToolExecution.parse(
+      payload(
+        toolName: "get_memories",
+        overrides: [
+          "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+          "surfaceKind": "main_chat",
+          "chatFirstControlGeneration": 7,
+        ]),
+      currentOwnerID: "owner-1")
+    XCTAssertEqual(ordinaryChatFirstTool.canonicalToolName, "get_memories")
+    XCTAssertEqual(ordinaryChatFirstTool.chatFirstControlGeneration, 7)
+
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(
         payload(
@@ -51,7 +63,12 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     }
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(
-        payload(overrides: ["chatFirstControlGeneration": 7]),
+        payload(
+          overrides: [
+            "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+            "surfaceKind": "floating_chat",
+            "chatFirstControlGeneration": 7,
+          ]),
         currentOwnerID: "owner-1")
     ) { error in
       XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)

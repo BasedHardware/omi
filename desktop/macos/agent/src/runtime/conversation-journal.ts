@@ -108,6 +108,14 @@ export interface AppendChatFirstBlocksInput {
   blocks: readonly ConversationContentBlock[];
 }
 
+export interface AppendChatFirstEvidenceInput {
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  resource: ConversationResource;
+}
+
 /**
  * The sole durable answer path for a chat-first question card. Swift supplies
  * only opaque IDs; this journal transaction re-derives the prepared answer,
@@ -823,6 +831,63 @@ export function appendChatFirstBlocksToProducingTurn(
       producingRunId: input.runId,
       producingAttemptId: input.attemptId,
       appendContentBlocks: input.blocks,
+    });
+  });
+}
+
+/** Appends one capability-bound local evidence resource to the producing turn. */
+export function appendChatFirstEvidenceToProducingTurn(
+  store: AgentStore,
+  input: AppendChatFirstEvidenceInput,
+): ConversationTurn {
+  return store.withTransaction(() => {
+    const activeAttempt = store.getOptionalRow(
+      `SELECT 1
+       FROM run_attempts a
+       JOIN runs r ON r.run_id = a.run_id
+       JOIN sessions s ON s.session_id = r.session_id
+       WHERE a.attempt_id = ? AND a.run_id = ? AND s.owner_id = ? AND s.session_id = ?
+         AND r.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval')
+         AND a.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval')
+         AND a.attempt_no = (
+           SELECT MAX(latest.attempt_no) FROM run_attempts latest WHERE latest.run_id = r.run_id
+         )`,
+      [input.attemptId, input.runId, input.ownerId, input.sessionId],
+    );
+    if (!activeAttempt) throw new Error("Chat-first evidence requires the current owner-bound run attempt");
+    const bound = store.allRows(
+      `SELECT conversation_id, turn_id FROM conversation_turns
+       WHERE producing_run_id = ? AND producing_attempt_id = ? AND role = 'assistant'
+         AND surface_kind = 'main_chat' AND status = 'streaming'`,
+      [input.runId, input.attemptId],
+    );
+    if (bound.length > 1) throw new Error("Chat-first evidence found multiple producing assistant turns");
+    const producing = bound[0] ?? (() => {
+      // The assistant placeholder is created before the runtime publishes its
+      // run/attempt IDs. Resolve it exactly as rich blocks do: owner/session
+      // scoped and only while there is one live main-Chat target.
+      const pending = store.allRows(
+        `SELECT DISTINCT ct.conversation_id, ct.turn_id
+         FROM surface_conversations sc
+         JOIN conversation_turns ct ON ct.conversation_id = sc.conversation_id
+         WHERE sc.owner_id = ? AND sc.agent_session_id = ? AND sc.surface_kind = 'main_chat'
+           AND ct.role = 'assistant' AND ct.surface_kind = 'main_chat' AND ct.status = 'streaming'
+           AND ct.producing_run_id IS NULL AND ct.producing_attempt_id IS NULL`,
+        [input.ownerId, input.sessionId],
+      );
+      if (pending.length !== 1) {
+        throw new Error("Chat-first evidence requires exactly one live producing assistant turn");
+      }
+      return pending[0]!;
+    })();
+    const resource = validateChatFirstEvidenceResource(input.resource);
+    return updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: String(producing.conversation_id),
+      turnId: String(producing.turn_id),
+      producingRunId: input.runId,
+      producingAttemptId: input.attemptId,
+      appendResources: [{ ...resource, runId: input.runId }],
     });
   });
 }
@@ -3753,6 +3818,29 @@ function validateResources(resources: readonly ConversationResource[]): Conversa
   });
 }
 
+function validateChatFirstEvidenceResource(resource: ConversationResource): ConversationResource {
+  const [validated] = validateResources([resource]);
+  if (
+    validated.origin !== "generatedArtifact"
+    || validated.state !== "ready"
+    || typeof validated.mimeType !== "string"
+    || !validated.mimeType.startsWith("image/")
+    || typeof validated.uri !== "string"
+  ) {
+    throw new Error("Chat-first evidence requires one ready generated image resource");
+  }
+  let uri: URL;
+  try {
+    uri = new URL(validated.uri);
+  } catch {
+    throw new Error("Chat-first evidence requires a valid local file URI");
+  }
+  if (uri.protocol !== "file:") {
+    throw new Error("Chat-first evidence requires a valid local file URI");
+  }
+  return validated;
+}
+
 function mergeById<T extends { id: string }>(current: readonly T[], updates: readonly T[]): T[] {
   const result = current.map((value) => structuredClone(value));
   const indexes = new Map(result.map((value, index) => [value.id, index]));
@@ -3855,10 +3943,21 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
   const isChatFirstMaterialization = typeof metadata.chatFirstIntentId === "string"
     && metadata.chatFirstIntentId.length > 0;
+  // Rewind evidence is a device-local journal resource. The backend receives
+  // enough metadata to preserve the card, but never the user's absolute local
+  // filesystem path. Same-device reconciliation keeps the authoritative local
+  // resource by ID through monotonicAcceptResources.
+  const backendResources = turn.resources.map((resource) => {
+    if (!resource.id.startsWith("rewind-evidence:") || resource.uri === undefined) {
+      return resource;
+    }
+    const { uri: _localFileURI, ...pathless } = resource;
+    return pathless;
+  });
   const backendMetadata = {
     ...metadata,
     ...(turn.contentBlocks.length > 0 ? { content_blocks: turn.contentBlocks } : {}),
-    ...(turn.resources.length > 0 ? { resources: turn.resources } : {}),
+    ...(backendResources.length > 0 ? { resources: backendResources } : {}),
   };
   const projectedText = turn.content.trim()
     ? turn.content

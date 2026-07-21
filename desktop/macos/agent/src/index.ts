@@ -59,6 +59,7 @@ import type {
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
   AppendChatFirstBlocksMessage,
+  AppendChatFirstEvidenceMessage,
   RecordQuestionInteractionReplyMessage,
   MaterializeChatFirstIntentsMessage,
   ListChatFirstMaterializationReceiptsMessage,
@@ -128,6 +129,7 @@ import {
   ackBackendConversationDeleteOutbox,
   ackBackendTurnOutboxWithWakes,
   appendChatFirstBlocksToProducingTurn,
+  appendChatFirstEvidenceToProducingTurn,
   applyBackendReconcilePage,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
@@ -1121,8 +1123,7 @@ function startOmiToolsRelay(): Promise<string> {
                 precedingAssistantText: authorized.precedingAssistantText,
                 runMode: authorized.runMode,
                 chatMode: authorized.chatMode,
-                ...(authorized.canonicalToolName === "render_chat_blocks"
-                  && authorized.chatFirstControlGeneration !== null
+                ...(authorized.chatFirstControlGeneration !== null
                   ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
                   : {}),
               });
@@ -2128,8 +2129,7 @@ async function main(): Promise<void> {
             precedingAssistantText: authorized.precedingAssistantText,
             runMode: authorized.runMode,
             chatMode: authorized.chatMode,
-            ...(authorized.canonicalToolName === "render_chat_blocks"
-              && authorized.chatFirstControlGeneration !== null
+            ...(authorized.chatFirstControlGeneration !== null
               ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
               : {}),
           });
@@ -2345,8 +2345,7 @@ async function main(): Promise<void> {
             precedingAssistantText: authorized.precedingAssistantText,
             runMode: authorized.runMode,
             chatMode: authorized.chatMode,
-            ...(authorized.canonicalToolName === "render_chat_blocks"
-              && authorized.chatFirstControlGeneration !== null
+            ...(authorized.chatFirstControlGeneration !== null
               ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
               : {}),
             ...(routed.recoveredFromDelegation
@@ -2773,6 +2772,87 @@ async function main(): Promise<void> {
             requestId: request.requestId,
             clientId: request.clientId,
             operation: "append_chat_first_blocks",
+            conversationId: turn.conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+          });
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "append_chat_first_evidence": {
+        const request = msg as AppendChatFirstEvidenceMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (!request.resource || typeof request.resource !== "object") {
+            throw new Error("Chat-first evidence append requires one resource");
+          }
+          if (!Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0) {
+            throw new Error("Chat-first evidence append requires a valid control generation");
+          }
+          const capability = kernel.assertLiveRunToolCapability({
+            capabilityRef: request.capabilityRef,
+            activeOwnerId: ownerId,
+          });
+          if (
+            capability.ownerId !== ownerId
+            || capability.sessionId !== request.sessionId
+            || capability.runId !== request.runId
+            || capability.attemptId !== request.attemptId
+            || capability.surfaceKind !== "main_chat"
+            || capability.chatFirstUi !== true
+            || capability.chatFirstControlGeneration !== request.controlGeneration
+            || !capability.allowedToolNames.includes("show_rewind_evidence")
+          ) {
+            throw new Error("Chat-first evidence capability does not match the producing run");
+          }
+          const turn = appendChatFirstEvidenceToProducingTurn(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            resource: request.resource as ConversationResource,
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: turn.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "append_chat_first_evidence",
             conversationId: turn.conversationId,
             surfaceKind: "main_chat",
             externalRefKind: capability.externalRefKind ?? "",

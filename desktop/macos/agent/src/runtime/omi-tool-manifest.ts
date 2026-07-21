@@ -1571,12 +1571,38 @@ export const omiToolManifest: OmiToolManifestEntry[] = [
  */
 export const chatFirstToolManifest: OmiToolManifestEntry[] = [
   {
+    name: "get_canonical_goals",
+    label: "Get Canonical Goals",
+    description: "Retrieve canonical goals for this Chat-first user. For any question about the user's goals, goal progress, or focus, call this first. It returns opaque canonical goal IDs that must be rendered as goalLink blocks with render_chat_blocks. Do not use execute_sql, legacy local goals, memories, or inferred goals as a substitute.",
+    promptSnippet: "get_canonical_goals - Retrieve canonical goals with IDs for native goal links",
+    promptGuidelines: [
+      "For goal questions, call this before answering and use only returned canonical goals.",
+      "Render every returned goal the user should act on as a goalLink in the same response.",
+      "If it returns no goals, state that plainly; do not infer goals from memories or local SQL.",
+    ],
+    latency: "fast network",
+    inputSchema: schema({ include_ended: { type: "boolean", description: "Include completed or archived canonical goals." } }),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Get Canonical Goals", "Read canonical goal records for a Chat-first response.", [
+      "Only available to the server-enabled chat-first main Chat cohort.",
+    ]),
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
+    adapters: piAndStdio(),
+  },
+  {
     name: "render_chat_blocks",
     label: "Render Chat Blocks",
-    description: "Render validated question, task, goal, and Omi-capture blocks on the producing main Chat turn.",
-    promptSnippet: "render_chat_blocks - Add validated structured cards to this main Chat response",
+    description: "Render native, interactive Omi components on the producing main Chat turn. In Chat-first UI, call this in the same turn whenever you retrieve, create, or summarize tasks, goals, memories, or captured conversations; do not leave those entities as a Markdown table/list or ask whether the user wants cards. For taskCard, taskId MUST be the opaque canonical ID returned by get_action_items or create_action_item; never use a local SQLite/execute_sql numeric row ID. If another lookup found task text, call get_action_items before rendering. Supported shapes include {type:'taskCard', taskId:'...'}, {type:'goalLink', goalId:'...', summary:'...'}, {type:'memoryLink', memoryId:'...', summary:'...'}, and {type:'captureLink', conversationId:'...', summary:'...'}.",
+    promptSnippet: "render_chat_blocks - Render native interactive Omi components in this main Chat response; use by default for entity results",
     promptGuidelines: [
-      "Use only for a compact actionable question, task, goal, or Omi-device capture reference.",
+      "After reading or mutating tasks, goals, memories, or captured conversations, render the relevant native components before finishing the same response.",
+      "Do not ask whether the user wants cards and do not substitute Markdown tables or lists for entities that have canonical IDs.",
+      "For task cards, obtain opaque canonical task IDs from get_action_items or create_action_item; execute_sql numeric row IDs are invalid.",
+      "Use only for a compact actionable question, task, goal, memory, or Omi-device capture reference.",
       "Never invent entity identifiers or URLs; the server validates every requested reference.",
     ],
     latency: "fast network",
@@ -1584,14 +1610,14 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
       blocks: {
         type: "array",
         description: "1-8 declarative chat blocks validated by the Omi backend.",
-        items: { type: "object" },
+        items: { type: "object", additionalProperties: true },
       },
     }, ["blocks"]),
     mcpInputSchema: schema({
       blocks: {
         type: "array",
         description: "1-8 declarative chat blocks validated by the Omi backend.",
-        items: { type: "object" },
+        items: { type: "object", additionalProperties: true },
       },
     }, ["blocks"]),
     annotations: localWrite,
@@ -1606,7 +1632,40 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
       "Requires a server-authoritative chat-first capability on the current main Chat run.",
       "Every entity reference is revalidated by the backend before journal admission.",
     ],
-    adapters: stdioOnly(),
+    adapters: piAndStdio(),
+  },
+  {
+    name: "show_rewind_evidence",
+    label: "Show Rewind Evidence",
+    description: "Attach one local Rewind screenshot to the producing main Chat turn as visual evidence.",
+    promptSnippet: "show_rewind_evidence - Show a Rewind screenshot as evidence in this Chat response",
+    promptGuidelines: [
+      "Use a screenshot_id returned by a local screen-history search; never invent an id.",
+      "Attach only evidence that materially supports the answer, and explain what it demonstrates.",
+      "This exposes raw screenshot pixels in Chat and requires the user's screenshot-sharing setting.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      screenshot_id: {
+        type: "number",
+        description: "Screenshot ID returned by search_screen_history or the local screenshots table.",
+      },
+    }, ["screenshot_id"]),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Show Rewind Evidence",
+      "Attach one local historical screenshot as evidence on the current main Chat response.",
+      ["Only available to the server-enabled chat-first main Chat cohort."],
+    ),
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires a server-authoritative chat-first capability on the current main Chat run.",
+      "Requires a valid local Rewind screenshot and screenshot sharing enabled.",
+    ],
+    adapters: piAndStdio(),
   },
   {
     name: "search_chat_history",
@@ -1651,7 +1710,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
       "Requires a server-authoritative chat-first capability on the current main Chat run.",
       "Search is authorized by the parent kernel before it reads local journal state.",
     ],
-    adapters: stdioOnly(),
+    adapters: piAndStdio(),
   },
 ] satisfies OmiToolManifestEntry[];
 

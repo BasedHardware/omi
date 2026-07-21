@@ -76,8 +76,14 @@ class CaptureLinkSpec(_StrictModel):
     summary: str = Field(min_length=1, max_length=200)
 
 
+class MemoryLinkSpec(_StrictModel):
+    type: Literal['memoryLink']
+    memory_id: StableId
+    summary: str = Field(min_length=1, max_length=200)
+
+
 ChatFirstBlockSpec = Annotated[
-    Union[QuestionCardSpec, TaskCardSpec, GoalLinkSpec, CaptureLinkSpec],
+    Union[QuestionCardSpec, TaskCardSpec, GoalLinkSpec, CaptureLinkSpec, MemoryLinkSpec],
     Field(discriminator='type'),
 ]
 
@@ -274,6 +280,7 @@ __all__ = [
     'GoalLinkSpec',
     'MaterializePromptsRequest',
     'MaterializePromptsResponse',
+    'MemoryLinkSpec',
     'ProactiveBudgetReservation',
     'ProactiveBudgetState',
     'ProactiveDeferral',

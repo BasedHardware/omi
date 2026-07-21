@@ -345,6 +345,15 @@ struct ChatBubble: View {
           navigation: chatFirstRichBlockContext.navigation
         )
       )
+    case .memoryLink(_, let memoryID, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        MemoryLinkView(
+          memoryID: memoryID,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
     case .agentSpawn(
       _, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):
@@ -942,6 +951,7 @@ enum ContentBlockGroup: Identifiable {
   case taskCard(id: String, taskID: String)
   case goalLink(id: String, goalID: String, summary: String)
   case captureLink(id: String, conversationID: String, momentTimestampMs: Int?, summary: String)
+  case memoryLink(id: String, memoryID: String, summary: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -972,6 +982,7 @@ enum ContentBlockGroup: Identifiable {
     case .taskCard(let id, _): return id
     case .goalLink(let id, _, _): return id
     case .captureLink(let id, _, _, _): return id
+    case .memoryLink(let id, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -1030,6 +1041,10 @@ enum ContentBlockGroup: Identifiable {
             summary: summary
           )
         )
+      case .memoryLink(let id, let memoryID, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.memoryLink(id: id, memoryID: memoryID, summary: summary))
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -1101,7 +1116,8 @@ enum ContentBlockGroup: Identifiable {
       switch group {
       case .text(_, let text):
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : group
-      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .agentSpawn, .agentCompletion:
+      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink, .agentSpawn,
+        .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil

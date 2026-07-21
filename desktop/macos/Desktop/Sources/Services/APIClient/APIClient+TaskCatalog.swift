@@ -449,7 +449,7 @@ extension APIClient {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async throws -> [OmiAPI.GoalResponse] {
     try await get(
-      "v1/goals/all?include_ended=\(includeEnded ? "true" : "false")",
+      "v1/goals/canonical/list?include_ended=\(includeEnded ? "true" : "false")",
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )

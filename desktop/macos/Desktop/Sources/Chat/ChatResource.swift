@@ -571,6 +571,8 @@ private struct ChatResourceCard: View {
   private var resourceImage: some View {
     if let data = resource.imageData, let img = NSImage(data: data) {
       Image(nsImage: img).resizable().scaledToFill()
+    } else if let fileURL = resource.fileURL, let image = NSImage(contentsOf: fileURL) {
+      Image(nsImage: image).resizable().scaledToFill()
     } else if let urlString = resource.thumbnailURL, let url = URL(string: urlString) {
       AsyncImage(url: url) { phase in
         switch phase {

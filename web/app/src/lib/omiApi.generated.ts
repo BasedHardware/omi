@@ -2267,6 +2267,12 @@ export interface MemoryDB {
 
 export type MemoryLayer = "short_term" | "long_term" | "archive";
 
+export interface MemoryLinkSpec {
+  memory_id: string;
+  summary: string;
+  type: "memoryLink";
+}
+
 export interface MemoryMutationResponse {
   status: string;
 }
@@ -2606,7 +2612,7 @@ export interface PrivateCloudSyncResponse {
 
 export interface ProactiveIntent {
   account_generation: number;
-  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec>;
+  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | MemoryLinkSpec>;
   cold_start_sequence_terminal_receipt_id?: string | null;
   cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
   continuity_key: string;
@@ -4098,6 +4104,7 @@ export interface OmiApiSchemas {
   "MemoryCategory": MemoryCategory;
   "MemoryDB": MemoryDB;
   "MemoryLayer": MemoryLayer;
+  "MemoryLinkSpec": MemoryLinkSpec;
   "MemoryMutationResponse": MemoryMutationResponse;
   "MemoryReviewItemResponse": MemoryReviewItemResponse;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
@@ -5999,6 +6006,16 @@ export interface OmiApiPaths {
       operationId: "create_canonical_goal_v1_goals_canonical_post";
       responses: {
         "200": GoalResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/goals/canonical/list": {
+    get: {
+      operationId: "get_canonical_goals_v1_goals_canonical_list_get";
+      responses: {
+        "200": Array<GoalResponse>;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10109,10 +10126,13 @@ export async function search_conversations_endpoint_v1_conversations_search_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+export async function get_conversation_by_id_v1_conversations__conversation_id__get(path: { conversation_id: string }, query: { source?: string | null, include_discarded?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
     headers: {
@@ -11464,6 +11484,28 @@ export async function create_canonical_goal_v1_goals_canonical_post(header: { Id
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_canonical_goals_v1_goals_canonical_list_get(query: { include_ended?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<GoalResponse>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/goals/canonical/list`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -15715,4 +15757,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 382 client methods generated.
+// Total: 384 client methods generated.

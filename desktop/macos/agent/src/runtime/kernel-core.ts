@@ -142,6 +142,18 @@ import type {
 import { ExternalSurfaceAuthorityError, StaleAdapterBindingError } from "./kernel-types.js";
 import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
+
+function runtimeAdapterMetadata(input: ExecuteAgentRunInput, session: AgentSession): Record<string, unknown> {
+  return {
+    ...(input.metadata ?? {}),
+    executionRole: session.executionRole,
+    providerBoundary: session.providerBoundary,
+    surfaceKind: session.surfaceKind,
+    chatFirstUi: input.admittedContextSnapshot?.capabilities.chatFirstUi === true,
+    chatFirstControlGeneration:
+      input.admittedContextSnapshot?.capabilities.chatFirstControlGeneration ?? null,
+  };
+}
 import {
   RunToolCapabilityBroker,
   type AuthorizedRunToolInvocation,
@@ -1702,11 +1714,7 @@ export class KernelCore {
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
         mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
-        metadata: {
-          ...(input.input.metadata ?? {}),
-          executionRole: input.session.executionRole,
-          providerBoundary: input.session.providerBoundary,
-        },
+        metadata: runtimeAdapterMetadata(input.input, input.session),
       });
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
@@ -1762,11 +1770,7 @@ export class KernelCore {
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
       mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
-      metadata: {
-        ...(input.input.metadata ?? {}),
-        executionRole: input.session.executionRole,
-        providerBoundary: input.session.providerBoundary,
-      },
+      metadata: runtimeAdapterMetadata(input.input, input.session),
     });
     const binding = this.withTransaction(() => {
       this.closeConflictingNativeBinding(

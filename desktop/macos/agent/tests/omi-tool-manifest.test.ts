@@ -184,6 +184,7 @@ describe("omi tool manifest", () => {
     expect(capabilityOffBytes).toBe(legacyBytes);
     expect(nonMainBytes).toBe(legacyBytes);
     expect(capabilityOffBytes).not.toContain("render_chat_blocks");
+    expect(capabilityOffBytes).not.toContain("get_canonical_goals");
     expect(capabilityOffBytes).not.toContain("search_chat_history");
   });
 
@@ -196,13 +197,22 @@ describe("omi tool manifest", () => {
     });
 
     expect(enabled.map((tool) => tool.name)).toContain("render_chat_blocks");
+    expect(enabled.map((tool) => tool.name)).toContain("get_canonical_goals");
     expect(enabled.map((tool) => tool.name)).toContain("search_chat_history");
     expect(snapshot.advertisedToolNames).toContain("render_chat_blocks");
+    expect(snapshot.advertisedToolNames).toContain("get_canonical_goals");
     expect(snapshot.advertisedToolNames).toContain("search_chat_history");
+    expect(snapshot.advertisedToolNames).toContain("show_rewind_evidence");
     expect(snapshot.manifestDigest).not.toBe(buildToolAvailabilitySnapshot("omi-tools-stdio").manifestDigest);
     expect(toolNamesForAdapter("pi-mono", {
       surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
-    })).not.toContain("render_chat_blocks");
+    })).toEqual(expect.arrayContaining(["get_canonical_goals", "render_chat_blocks", "search_chat_history", "show_rewind_evidence"]));
+    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
+      "call this in the same turn whenever you retrieve, create, or summarize tasks",
+    );
+    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
+      "never use a local SQLite/execute_sql numeric row ID",
+    );
   });
 
   it("keeps schemas expressive enough for nested onboarding tools", () => {

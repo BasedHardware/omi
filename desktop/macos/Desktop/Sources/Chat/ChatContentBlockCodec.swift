@@ -110,6 +110,9 @@ enum ChatContentBlockCodec {
           .captureLink(
             id: id, conversationId: conversationId, momentTimestampMs: dict["momentTimestampMs"] as? Int,
             summary: summary))
+      case "memoryLink":
+        guard let memoryId = dict["memoryId"] as? String, let summary = dict["summary"] as? String else { continue }
+        blocks.append(.memoryLink(id: id, memoryId: memoryId, summary: summary))
       case "agentSpawn":
         guard let sessionId = dict["sessionId"] as? String,
           !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -241,6 +244,8 @@ enum ChatContentBlockCodec {
       var dict: [String: Any] = ["type": "captureLink", "id": id, "conversationId": conversationId, "summary": summary]
       if let momentTimestampMs { dict["momentTimestampMs"] = momentTimestampMs }
       return dict
+    case .memoryLink(let id, let memoryId, let summary):
+      return ["type": "memoryLink", "id": id, "memoryId": memoryId, "summary": summary]
     case .agentSpawn(
       let id, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):

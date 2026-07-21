@@ -669,6 +669,13 @@ extension APIClient {
     return try await get("v1/conversations/\(id)")
   }
 
+  /// Reads a capture detail through the archive's strict Omi-device provenance
+  /// contract. This is intentionally separate from the legacy mixed-source
+  /// conversation detail API.
+  func getOmiCapture(id: String) async throws -> ServerConversation {
+    try await get("v1/conversations/\(id)?source=omi&include_discarded=false")
+  }
+
   /// Deletes a conversation by ID
   func deleteConversation(id: String) async throws {
     try await delete("v1/conversations/\(id)?cascade=true")

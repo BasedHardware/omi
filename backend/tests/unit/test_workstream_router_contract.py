@@ -302,6 +302,33 @@ def test_all_goals_preserves_active_default_and_can_include_unbounded_history(mo
     assert captured == {'uid': 'u1', 'include_inactive': True}
 
 
+def test_canonical_goal_list_blocks_nonmembers_without_changing_legacy_reads(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        goals_router.goals_db,
+        'get_all_goals',
+        lambda uid, include_inactive=False: calls.append((uid, include_inactive)) or [],
+    )
+    client = _canonical_task_router_client()
+
+    legacy = client.get('/v1/goals/all')
+    strict = client.get('/v1/goals/canonical/list')
+
+    assert legacy.status_code == 200
+    assert legacy.json() == []
+    assert strict.status_code == 404
+    assert strict.json() == {'detail': 'Not found'}
+    assert calls == [('not-enrolled', False)]
+
+
+def test_canonical_goal_list_projects_enrolled_users(monkeypatch):
+    expected = [{'goal_id': 'goal_1'}]
+    monkeypatch.setattr(goals_router.goals_db, 'get_all_goals', lambda uid, include_inactive=False: expected)
+    monkeypatch.setattr(goals_router, 'normalize_goal_response', lambda goal: goal)
+
+    assert goals_router.get_canonical_goals(include_ended=True, uid='enrolled') == expected
+
+
 def test_goal_update_rejects_null_required_fields():
     with pytest.raises(ValueError):
         GoalUpdate.model_validate({'title': None})
