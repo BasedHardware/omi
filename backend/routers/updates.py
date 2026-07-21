@@ -82,6 +82,12 @@ class DesktopReleaseManifestRequest(BaseModel):
     qualification: Dict[str, Any] = Field(default_factory=dict)
 
 
+class StrictDesktopReleaseManifestRequest(DesktopReleaseManifestRequest):
+    """Extra-forbidden manifest shape for the dedicated automatic Beta promotion endpoint."""
+
+    model_config = ConfigDict(extra='forbid')
+
+
 class DesktopChannelPromotionRequest(BaseModel):
     platform: str = Field(pattern="^(macos|windows|linux)$")
     channel: str = Field(pattern="^(beta|stable)$")
@@ -96,7 +102,7 @@ class QualifiedMacOSBetaPromotionRequest(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
-    manifest: DesktopReleaseManifestRequest
+    manifest: StrictDesktopReleaseManifestRequest
     expected_generation: Optional[int] = Field(default=None, ge=0)
 
 

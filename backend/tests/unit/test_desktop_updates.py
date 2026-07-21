@@ -933,6 +933,27 @@ class TestDesktopUpdateAdminEndpoints:
         delete_cache.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_beta_promotion_rejects_nested_unknown_manifest_fields_before_any_write(self):
+        payload = {**_pointer_release()["manifest"], "emergency": True}
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "beta-token"}, clear=True),
+            patch("routers.updates.register_release_manifest") as register,
+            patch("routers.updates.promote_channel") as promote,
+            patch("routers.updates.delete_generic_cache") as delete_cache,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.post(
+                    "/v2/desktop/channels/promote-qualified-beta",
+                    headers={"secret-key": "beta-token"},
+                    json={"manifest": payload},
+                )
+
+        assert response.status_code == 422
+        register.assert_not_called()
+        promote.assert_not_called()
+        delete_cache.assert_not_called()
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "qualification",
         (
