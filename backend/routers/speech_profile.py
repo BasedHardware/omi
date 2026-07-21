@@ -19,13 +19,14 @@ from utils.other.storage import (
     get_user_person_speech_samples,
     get_user_has_speech_profile,
 )
+from utils.multipart import MultipartMaxPartSizeRoute, SPEECH_PROFILE_MAX_PART_SIZE, max_part_size
 from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile
 import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
 class HasSpeechProfileResponse(BaseModel):
@@ -63,6 +64,7 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v3/upload-audio', tags=['v3'], response_model=SpeechProfileUploadResponse)
+@max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
     file_path = f"_temp/{uid}/{file.filename}"

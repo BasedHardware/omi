@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Modal overlay shown when the user hits a free-tier usage cap
 /// (transcription minutes, monthly chat/floating-bar messages, etc).
@@ -48,91 +48,91 @@ struct UsageLimitPopupView: View {
           Spacer()
           Button(action: onDismiss) {
             Image(systemName: "xmark")
-              .scaledFont(size: 14, weight: .semibold)
+              .scaledFont(size: OmiType.body, weight: .semibold)
               .foregroundColor(OmiColors.textTertiary)
-              .padding(8)
+              .padding(OmiSpacing.sm)
               .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 8)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.top, OmiSpacing.sm)
 
-        VStack(spacing: 20) {
+        VStack(spacing: OmiSpacing.xl) {
           // Icon
           ZStack {
             Circle()
-              .fill(OmiColors.purplePrimary.opacity(0.15))
+              .fill(OmiColors.accent.opacity(0.15))
               .frame(width: 64, height: 64)
             Image(systemName: "exclamationmark.triangle.fill")
-              .scaledFont(size: 28, weight: .semibold)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.title, weight: .semibold)
+              .foregroundColor(OmiColors.accent)
           }
 
-          VStack(spacing: 8) {
+          VStack(spacing: OmiSpacing.sm) {
             Text(headline)
-              .scaledFont(size: 20, weight: .bold)
+              .scaledFont(size: OmiType.heading, weight: .bold)
               .foregroundColor(OmiColors.textPrimary)
               .multilineTextAlignment(.center)
 
             Text(body_text)
-              .scaledFont(size: 14)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
               .multilineTextAlignment(.center)
               .fixedSize(horizontal: false, vertical: true)
-              .padding(.horizontal, 16)
+              .padding(.horizontal, OmiSpacing.lg)
           }
 
-          VStack(spacing: 10) {
+          VStack(spacing: OmiSpacing.sm) {
             Button(action: onUpgrade) {
               Text("Upgrade")
-                .scaledFont(size: 15, weight: .semibold)
-                .foregroundColor(.white)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(OmiColors.backgroundPrimary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
                 .background(
-                  RoundedRectangle(cornerRadius: 10)
-                    .fill(OmiColors.purplePrimary)
+                  RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+                    .fill(OmiColors.accent)
                 )
             }
             .buttonStyle(.plain)
 
             Button(action: onBringYourOwnKeys) {
               Text("Bring your own keys")
-                .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.purplePrimary)
+                .scaledFont(size: OmiType.body, weight: .medium)
+                .foregroundColor(OmiColors.accent)
                 .frame(maxWidth: .infinity)
                 .frame(height: 32)
             }
             .buttonStyle(.plain)
           }
-          .padding(.horizontal, 24)
+          .padding(.horizontal, OmiSpacing.xxl)
         }
-        .padding(.bottom, 28)
+        .padding(.bottom, OmiSpacing.xxl)
       }
       .frame(width: 380)
       .background(
-        RoundedRectangle(cornerRadius: 16)
+        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
           .fill(OmiColors.backgroundRaised)
           .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
               .stroke(OmiColors.border, lineWidth: 1)
           )
       )
       .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
     }
-    .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+    .transition(.opacity.animation(OmiMotion.gated(.easeInOut(duration: 0.2))))
   }
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  UsageLimitPopupView(
-    reason: "transcription",
-    onUpgrade: {},
-    onDismiss: {},
-    onBringYourOwnKeys: {}
-  )
-  .frame(width: 900, height: 600)
-}
+  #Preview {
+    UsageLimitPopupView(
+      reason: "transcription",
+      onUpgrade: {},
+      onDismiss: {},
+      onBringYourOwnKeys: {}
+    )
+    .frame(width: 900, height: 600)
+  }
 #endif

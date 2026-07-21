@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 /// Users often paste one key and miss the banner saying all four are required
 /// at the same time. Non-nil while 1–3 keys (in `BYOKProvider.allCases` order)
@@ -16,7 +16,7 @@ func byokMissingKeysHint(_ keys: [String]) -> String? {
 
 extension SettingsContentView {
   var developerKeysSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       byokStatusBanner
 
       developerKeyField(
@@ -65,7 +65,7 @@ extension SettingsContentView {
             Spacer()
             Button(action: clearAllBYOKKeys) {
               Text("Clear All Custom Keys")
-                .scaledFont(size: 13, weight: .medium)
+                .scaledFont(size: OmiType.body, weight: .medium)
                 .foregroundColor(.red)
             }
             .buttonStyle(.plain)
@@ -86,11 +86,11 @@ extension SettingsContentView {
 
   func byokWarningCard(_ text: String, settingId: String) -> some View {
     settingsCard(settingId: settingId) {
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "exclamationmark.triangle.fill")
           .foregroundColor(OmiColors.warning)
         Text(text)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.warning)
       }
     }
@@ -109,19 +109,19 @@ extension SettingsContentView {
   @ViewBuilder
   var byokStatusBanner: some View {
     settingsCard(settingId: "advanced.devkeys.info") {
-      HStack(alignment: .top, spacing: 12) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
         Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
           .foregroundColor(hasAllBYOKKeys ? OmiColors.success : OmiColors.textTertiary)
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
-            .scaledFont(size: 14, weight: .semibold)
+            .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
           Text(
             hasAllBYOKKeys
               ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
               : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
           )
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
         }
         Spacer()
@@ -197,10 +197,10 @@ extension SettingsContentView {
     title: String, subtitle: String, settingId: String, value: Binding<String>
   ) -> some View {
     settingsCard(settingId: settingId) {
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         HStack {
           Text(title)
-            .scaledFont(size: 14, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
           Spacer()
           if let provider, let status = byokKeyStatuses[provider] {
@@ -208,14 +208,14 @@ extension SettingsContentView {
           }
         }
         Text(subtitle)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
         SecureField("Leave blank for default", text: value)
           .textFieldStyle(.roundedBorder)
-          .scaledFont(size: 13)
+          .scaledFont(size: OmiType.body)
         if let provider, case .failed(let msg) = byokKeyStatuses[provider] ?? .notChecked {
           Text(msg)
-            .scaledFont(size: 11)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.warning)
         }
       }
@@ -228,14 +228,14 @@ extension SettingsContentView {
     case .notChecked:
       EmptyView()
     case .checking:
-      HStack(spacing: 4) {
+      HStack(spacing: OmiSpacing.xxs) {
         ProgressView().controlSize(.mini)
-        Text("Checking…").scaledFont(size: 11).foregroundColor(OmiColors.textTertiary)
+        Text("Checking…").scaledFont(size: OmiType.caption).foregroundColor(OmiColors.textTertiary)
       }
     case .ok:
-      Text("Valid").scaledFont(size: 11, weight: .semibold).foregroundColor(OmiColors.success)
+      Text("Valid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(OmiColors.success)
     case .failed:
-      Text("Invalid").scaledFont(size: 11, weight: .semibold).foregroundColor(OmiColors.warning)
+      Text("Invalid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(OmiColors.warning)
     }
   }
 

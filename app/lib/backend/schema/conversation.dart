@@ -96,9 +96,11 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status:
+          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model:
+          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -287,12 +289,14 @@ class ConversationAudioInfo {
       duration: generated.duration,
       capturedDuration: generated.capturedDuration,
       spans: generated.spans
-          .map((s) => ConversationAudioSpan(
-                fileId: s.fileId,
-                wallOffset: s.wallOffset,
-                artifactOffset: s.artifactOffset,
-                len: s.len,
-              ))
+          .map(
+            (s) => ConversationAudioSpan(
+              fileId: s.fileId,
+              wallOffset: s.wallOffset,
+              artifactOffset: s.artifactOffset,
+              len: s.len,
+            ),
+          )
           .toList(),
     );
   }
@@ -364,6 +368,17 @@ class ServerConversation {
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
     }
+    // Legacy caches (< toJson wire-format fix) wrote plugins_results entries as
+    // {'appId', 'content'}; the wire parser requires the plugin_id key.
+    final rawPluginResults = normalized['plugins_results'];
+    if (rawPluginResults is List) {
+      normalized['plugins_results'] = rawPluginResults.map((entry) {
+        if (entry is Map<String, dynamic> && !entry.containsKey('plugin_id')) {
+          return {...entry, 'plugin_id': entry['appId'] ?? entry['app_id']};
+        }
+        return entry;
+      }).toList();
+    }
     final generated = wire.GeneratedConversation.fromJson(normalized);
     return ServerConversation.fromGenerated(
       generated,
@@ -386,7 +401,9 @@ class ServerConversation {
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
       transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
-      appResults: generated.appsResults.map(AppResponse.fromGenerated).toList(),
+      appResults: generated.appsResults.isNotEmpty
+          ? generated.appsResults.map(AppResponse.fromGenerated).toList()
+          : generated.pluginsResults.map((result) => AppResponse(result.content, appId: result.pluginId)).toList(),
       suggestedSummarizationApps: generated.suggestedSummarizationApps,
       geolocation:
           geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
@@ -396,12 +413,14 @@ class ServerConversation {
           ? null
           : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
-      source:
-          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
+      source: generated.source != null
+          ? ConversationSource.values.asNameMap()[generated.source]
+          : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
-      externalIntegration:
-          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      externalIntegration: generated.externalData != null
+          ? ConversationExternalData.fromJson(generated.externalData!)
+          : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
           ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
@@ -421,7 +440,10 @@ class ServerConversation {
       'started_at': startedAt?.toUtc().toIso8601String(),
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
-      'plugins_results': appResults.map((result) => result.toJson()).toList(),
+      'apps_results': appResults.map((result) => result.toGenerated().toJson()).toList(),
+      'plugins_results': appResults.map((result) {
+        return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content).toJson();
+      }).toList(),
       'suggested_summarization_apps': suggestedSummarizationApps,
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
@@ -564,12 +586,18 @@ class SyncLocalFilesResponse {
   int totalSegments;
   List<String> errors;
 
+  /// Client-side batches that could not be uploaded. Unlike [failedSegments],
+  /// these failures leave WALs retryable locally and must re-arm foreground
+  /// recovery rather than presenting a completed sync.
+  int localUploadFailures;
+
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
     this.failedSegments = 0,
     this.totalSegments = 0,
     this.errors = const [],
+    this.localUploadFailures = 0,
   });
 
   bool get hasPartialFailure => failedSegments > 0;

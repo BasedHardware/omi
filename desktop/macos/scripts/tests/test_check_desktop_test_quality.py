@@ -56,6 +56,14 @@ class CollectionSafetyTests(unittest.TestCase):
             [("invalid-annotation", 2)],
         )
 
+    def test_collection_diagnostic_cites_the_real_incidents_and_safe_merger(self) -> None:
+        guidance = CHECKER.COLLECTION_SAFETY_GUIDANCE
+
+        self.assertIn("Dictionary(lastWriteWins:)", guidance)
+        self.assertIn("#6506", guidance)
+        self.assertIn("#9288", guidance)
+        self.assertIn("static tripwire", guidance)
+
 
 class TestQualityRatchetTests(unittest.TestCase):
     def test_counts_behavioral_source_inspection_at_exact_site(self) -> None:
@@ -106,13 +114,14 @@ class TestQualityRatchetTests(unittest.TestCase):
 
 
 class GuardrailWiringTests(unittest.TestCase):
-    def test_component_suite_and_pre_push_run_the_guard(self) -> None:
+    def test_component_suite_and_manifest_run_the_guard(self) -> None:
         suite = (REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh").read_text()
-        pre_push = (REPO_ROOT / "scripts/pre-push").read_text()
+        manifest = (REPO_ROOT / ".github/checks-manifest.yaml").read_text()
 
         self.assertIn('python3 "$SCRIPT_DIR/tests/test_check_desktop_test_quality.py"', suite)
         self.assertIn('python3 "$SCRIPT_DIR/check_desktop_test_quality.py"', suite)
-        self.assertIn("run_step check_desktop_quality_if_needed", pre_push)
+        self.assertIn("desktop-test-quality", manifest)
+        self.assertIn("check_desktop_test_quality.py", manifest)
 
 
 if __name__ == "__main__":

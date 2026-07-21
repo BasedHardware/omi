@@ -1,6 +1,6 @@
 import Combine
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Search Debouncer
 
@@ -131,6 +131,32 @@ struct ConversationsPage: View {
       notification in
       handleAutomationOpenConversation(notification)
     }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationSetConversationsSearchRequested)
+    ) { notification in
+      searchQuery = (notification.userInfo?["query"] as? String) ?? ""
+    }
+    // Owner fencing: an in-place account switch posts only .runtimeOwnerDidChange;
+    // this page's local state (active search results, multi-select/merge state,
+    // folder sheets) otherwise keeps rendering the previous account's rows even
+    // after AppState and the repository reset.
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      searchQuery = ""
+      searchResults = []
+      isSearching = false
+      searchError = nil
+      showDatePicker = false
+      showCreateFolderSheet = false
+      editingFolder = nil
+      deletingFolder = nil
+      isFilteringStarred = false
+      isFilteringDate = false
+      isMultiSelectMode = false
+      selectedConversationIds = []
+      showMergeConfirmation = false
+      isMerging = false
+      mergeError = nil
+    }
     .dismissableSheet(isPresented: $showCreateFolderSheet) {
       FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
         .environmentObject(appState)
@@ -192,10 +218,14 @@ struct ConversationsPage: View {
       // Conversations header
       HStack {
         Text("Conversations")
-          .scaledFont(size: 18, weight: .semibold)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
+
+        if !appState.conversations.isEmpty {
+          selectModeButton
+        }
 
         quickNoteButton
 
@@ -203,28 +233,64 @@ struct ConversationsPage: View {
           startRecordingButton
         }
       }
-      .padding(.horizontal, 24)
-      .padding(.top, 18)
-      .padding(.bottom, 12)
+      .padding(.horizontal, OmiSpacing.xxl)
+      .padding(.top, OmiSpacing.lg)
+      .padding(.bottom, OmiSpacing.md)
 
       // Conversation list
       conversationListSection
     }
   }
 
+  /// IDs of the conversations currently shown to the user — search results while
+  /// a search is active, otherwise the full list. Used to scope "Select All".
+  private var displayedConversationIds: [String] {
+    searchQuery.isEmpty ? appState.conversations.map { $0.id } : searchResults.map { $0.id }
+  }
+
+  /// Entry point for the multi-select / merge feature. Without this the whole
+  /// merge UI (checkboxes, action bar, Merge button) was permanently unreachable
+  /// because `isMultiSelectMode` was never set true anywhere.
+  private var selectModeButton: some View {
+    Button {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+        isMultiSelectMode.toggle()
+        if !isMultiSelectMode {
+          selectedConversationIds.removeAll()
+          showMergeConfirmation = false
+        }
+      }
+    } label: {
+      HStack(spacing: OmiSpacing.xxs) {
+        Image(systemName: isMultiSelectMode ? "checkmark.circle" : "checkmark.circle.badge.questionmark")
+          .scaledFont(size: OmiType.caption)
+        Text(isMultiSelectMode ? "Done" : "Select")
+          .scaledFont(size: OmiType.body, weight: .medium)
+      }
+      .foregroundColor(isMultiSelectMode ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .omiControlSurface(
+        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+    }
+    .buttonStyle(.plain)
+    .help(isMultiSelectMode ? "Exit selection" : "Select conversations to merge")
+    .accessibilityIdentifier("conversations-select-toggle")
+  }
+
   private var quickNoteButton: some View {
     Button {
       NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
     } label: {
-      HStack(spacing: 5) {
+      HStack(spacing: OmiSpacing.xxs) {
         Image(systemName: "note.text")
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
         Text("Quick Note")
-          .scaledFont(size: 13, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
       }
       .foregroundColor(OmiColors.textSecondary)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 9)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .omiControlSurface(
         fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
     }
@@ -236,16 +302,16 @@ struct ConversationsPage: View {
   private var conversationListSection: some View {
     VStack(spacing: 0) {
       // Section header with search bar and filters
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         // Search bar
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
           Image(systemName: "magnifyingglass")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
 
           TextField("Search conversations...", text: $searchQuery)
             .textFieldStyle(.plain)
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textPrimary)
             .onChange(of: searchQuery) { _, newValue in
               // Feed input to debouncer
@@ -264,14 +330,14 @@ struct ConversationsPage: View {
               searchError = nil
             }) {
               Image(systemName: "xmark.circle.fill")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
           }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 11)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.md)
         .frame(minHeight: 46)
         .omiControlSurface(
           fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
@@ -279,8 +345,8 @@ struct ConversationsPage: View {
         // Filter buttons
         filterButtonsRow
       }
-      .padding(.horizontal, 24)
-      .padding(.vertical, 12)
+      .padding(.horizontal, OmiSpacing.xxl)
+      .padding(.vertical, OmiSpacing.md)
 
       // Folder tabs strip
       FolderTabsStrip(
@@ -289,8 +355,8 @@ struct ConversationsPage: View {
         onEditFolder: { folder in editingFolder = folder },
         onDeleteFolder: { folder in deletingFolder = folder }
       )
-      .padding(.horizontal, 24)
-      .padding(.bottom, 12)
+      .padding(.horizontal, OmiSpacing.xxl)
+      .padding(.bottom, OmiSpacing.md)
 
       // List - show search results or regular conversations
       if !searchQuery.isEmpty {
@@ -330,6 +396,17 @@ struct ConversationsPage: View {
             appState: appState
           )
 
+          if appState.canLoadMoreConversations && !(isMultiSelectMode && !selectedConversationIds.isEmpty) {
+            Button("Load older conversations") {
+              Task {
+                await appState.loadMoreConversations()
+              }
+            }
+            .buttonStyle(.bordered)
+            .padding(.bottom, OmiSpacing.md)
+            .accessibilityIdentifier("conversations-load-more")
+          }
+
           // Floating merge action bar
           if isMultiSelectMode && !selectedConversationIds.isEmpty {
             mergeActionBar
@@ -345,35 +422,35 @@ struct ConversationsPage: View {
   private var searchResultsView: some View {
     Group {
       if isSearching {
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
           ProgressView()
           Text("Searching...")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if searchError != nil {
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
           Image(systemName: "exclamationmark.triangle")
             .scaledFont(size: 32)
             .foregroundColor(OmiColors.textTertiary)
           Text("Couldn't search conversations. Check your connection and try again.")
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
             .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
       } else if searchResults.isEmpty {
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
           Image(systemName: "magnifyingglass")
             .scaledFont(size: 32)
             .foregroundColor(OmiColors.textTertiary.opacity(0.5))
           Text("No conversations found")
-            .scaledFont(size: 14)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
           Text("Try a different search term")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textQuaternary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -393,7 +470,7 @@ struct ConversationsPage: View {
 
   @ViewBuilder
   private var searchResultsContent: some View {
-    let content = LazyVStack(spacing: 8) {
+    let content = LazyVStack(spacing: OmiSpacing.sm) {
       ForEach(searchResults) { conversation in
         ConversationRowView(
           conversation: conversation,
@@ -419,8 +496,8 @@ struct ConversationsPage: View {
         )
       }
     }
-    .padding(.horizontal, 16)
-    .padding(.bottom, isMultiSelectMode && !selectedConversationIds.isEmpty ? 80 : 16)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.bottom, isMultiSelectMode && !selectedConversationIds.isEmpty ? 80 : OmiSpacing.lg)
 
     if embedded {
       content
@@ -467,7 +544,7 @@ struct ConversationsPage: View {
   // MARK: - Filter Buttons
 
   private var filterButtonsRow: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       // Starred filter button
       Button(action: {
         Task {
@@ -476,21 +553,21 @@ struct ConversationsPage: View {
           isFilteringStarred = false
         }
       }) {
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
           if isFilteringStarred {
             ProgressView()
               .scaleEffect(0.5)
               .frame(width: 12, height: 12)
           } else {
             Image(systemName: appState.showStarredOnly ? "star.fill" : "star")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
           }
           Text("Starred")
-            .scaledFont(size: 12, weight: .medium)
+            .scaledFont(size: OmiType.caption, weight: .medium)
         }
         .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
         .omiControlSurface(
           fill: appState.showStarredOnly
             ? OmiColors.amber.opacity(0.16) : OmiColors.backgroundSecondary,
@@ -506,18 +583,18 @@ struct ConversationsPage: View {
       Button(action: {
         showDatePicker.toggle()
       }) {
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
           if isFilteringDate {
             ProgressView()
               .scaleEffect(0.5)
               .frame(width: 12, height: 12)
           } else {
             Image(systemName: "calendar")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
           }
           if let date = appState.selectedDateFilter {
             Text(formatFilterDate(date))
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
             // Clear button
             Button(action: {
               Task {
@@ -527,17 +604,17 @@ struct ConversationsPage: View {
               }
             }) {
               Image(systemName: "xmark.circle.fill")
-                .scaledFont(size: 10)
+                .scaledFont(size: OmiType.micro)
             }
             .buttonStyle(.plain)
           } else {
             Text("Date")
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
           }
         }
         .foregroundColor(appState.selectedDateFilter != nil ? .black : OmiColors.textSecondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
         .omiControlSurface(
           fill: appState.selectedDateFilter != nil
             ? OmiColors.textPrimary : OmiColors.backgroundSecondary,
@@ -562,7 +639,7 @@ struct ConversationsPage: View {
           }
         }) {
           Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
@@ -571,7 +648,7 @@ struct ConversationsPage: View {
   }
 
   private var datePickerPopover: some View {
-    VStack(spacing: 12) {
+    VStack(spacing: OmiSpacing.md) {
       DatePicker(
         "Select Date",
         selection: Binding(
@@ -605,27 +682,31 @@ struct ConversationsPage: View {
   // MARK: - Merge Action Bar
 
   private var mergeActionBar: some View {
-    HStack(spacing: 16) {
+    HStack(spacing: OmiSpacing.lg) {
       // Selection count
       Text("\(selectedConversationIds.count) selected")
-        .scaledFont(size: 14, weight: .medium)
+        .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
 
       Spacer()
 
-      // Select All / Deselect All
+      // Select All / Deselect All — scoped to the CURRENTLY DISPLAYED list
+      // (search results when searching, otherwise all conversations), so
+      // "Select All" in search mode selects the results the user can see rather
+      // than the entire conversation list.
       Button(action: {
-        if selectedConversationIds.count == appState.conversations.count {
-          selectedConversationIds.removeAll()
-        } else {
-          selectedConversationIds = Set(appState.conversations.map { $0.id })
-        }
+        selectedConversationIds = ConversationMergeSelection.toggledSelectAll(
+          displayedIds: displayedConversationIds,
+          current: selectedConversationIds
+        )
       }) {
         Text(
-          selectedConversationIds.count == appState.conversations.count
-            ? "Deselect All" : "Select All"
+          ConversationMergeSelection.allDisplayedSelected(
+            displayedIds: displayedConversationIds,
+            current: selectedConversationIds
+          ) ? "Deselect All" : "Select All"
         )
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
       }
       .buttonStyle(.plain)
@@ -634,23 +715,23 @@ struct ConversationsPage: View {
       Button(action: {
         showMergeConfirmation = true
       }) {
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
           if isMerging {
             ProgressView()
               .scaleEffect(0.5)
               .frame(width: 14, height: 14)
           } else {
             Image(systemName: "arrow.triangle.merge")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
           }
           Text("Merge")
-            .scaledFont(size: 13, weight: .semibold)
+            .scaledFont(size: OmiType.body, weight: .semibold)
         }
         .foregroundColor(
           selectedConversationIds.count >= 2 ? OmiColors.textPrimary : OmiColors.textTertiary
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
         .background(
           Capsule()
             .fill(selectedConversationIds.count >= 2 ? Color.white : OmiColors.backgroundTertiary)
@@ -664,15 +745,15 @@ struct ConversationsPage: View {
       .buttonStyle(.plain)
       .disabled(selectedConversationIds.count < 2 || isMerging)
     }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 12)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md)
     .background(
-      RoundedRectangle(cornerRadius: 12)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
         .fill(OmiColors.backgroundTertiary)
         .shadow(color: .black.opacity(0.3), radius: 10, y: -2)
     )
-    .padding(.horizontal, 16)
-    .padding(.bottom, 16)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.bottom, OmiSpacing.lg)
     .alert("Merge Conversations", isPresented: $showMergeConfirmation) {
       Button("Cancel", role: .cancel) {}
       Button("Merge") {
@@ -719,7 +800,7 @@ struct ConversationsPage: View {
       await appState.refreshConversations()
 
       // Exit multi-select mode
-      withAnimation(.easeInOut(duration: 0.2)) {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
         isMultiSelectMode = false
         selectedConversationIds.removeAll()
       }
@@ -737,21 +818,47 @@ struct ConversationsPage: View {
     Button(action: {
       appState.startTranscription()
     }) {
-      HStack(spacing: 6) {
+      HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "mic.fill")
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
         Text("Start Recording")
-          .scaledFont(size: 13, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
       }
       .foregroundColor(.black)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 9)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .omiControlSurface(
         fill: OmiColors.textPrimary, radius: 18, stroke: OmiColors.border.opacity(0.2))
     }
     .buttonStyle(.plain)
   }
 
+}
+
+// MARK: - Conversation Merge Selection
+
+/// Pure selection logic for the conversation multi-select / merge feature.
+/// Kept free of view state so it is unit-testable and so "Select All" is always
+/// scoped to the list the user is actually looking at.
+enum ConversationMergeSelection {
+  /// Toggle "select all" over the currently displayed list. If every displayed
+  /// id is already selected, deselect just those (leaving any selections from
+  /// another view intact); otherwise add all displayed ids to the selection.
+  static func toggledSelectAll(displayedIds: [String], current: Set<String>) -> Set<String> {
+    let displayed = Set(displayedIds)
+    guard !displayed.isEmpty else { return current }
+    if displayed.isSubset(of: current) {
+      return current.subtracting(displayed)
+    }
+    return current.union(displayed)
+  }
+
+  /// True when every currently displayed id is selected (drives the
+  /// "Select All" / "Deselect All" label). False for an empty displayed list.
+  static func allDisplayedSelected(displayedIds: [String], current: Set<String>) -> Bool {
+    let displayed = Set(displayedIds)
+    return !displayed.isEmpty && displayed.isSubset(of: current)
+  }
 }
 
 // MARK: - Transcript Notes Divider
@@ -792,9 +899,9 @@ private struct TranscriptNotesDivider: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
-    .frame(width: 600, height: 800)
-    .background(OmiColors.backgroundSecondary)
-}
+  #Preview {
+    ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
+      .frame(width: 600, height: 800)
+      .background(OmiColors.backgroundSecondary)
+  }
 #endif

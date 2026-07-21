@@ -1,8 +1,92 @@
+import AppKit
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
+
+enum SettingsControlMetrics {
+  static let steppedSliderThumbDiameter: CGFloat = 22
+
+  static func steppedSliderInset(in containerWidth: CGFloat) -> CGFloat {
+    min(steppedSliderThumbDiameter / 2, max(0, containerWidth / 2))
+  }
+
+  static func steppedSliderTrackWidth(in containerWidth: CGFloat) -> CGFloat {
+    max(0, containerWidth - (2 * steppedSliderInset(in: containerWidth)))
+  }
+
+  static func steppedSliderPosition(index: Int, stepCount: Int, containerWidth: CGFloat) -> CGFloat {
+    let inset = steppedSliderInset(in: containerWidth)
+    guard stepCount > 1 else { return inset }
+
+    let clampedIndex = max(0, min(stepCount - 1, index))
+    let fraction = CGFloat(clampedIndex) / CGFloat(stepCount - 1)
+    return inset + (steppedSliderTrackWidth(in: containerWidth) * fraction)
+  }
+
+  static func steppedSliderIndex(locationX: CGFloat, stepCount: Int, containerWidth: CGFloat) -> Int {
+    let trackWidth = steppedSliderTrackWidth(in: containerWidth)
+    guard stepCount > 1, trackWidth > 0 else { return 0 }
+
+    let fraction = max(0, min(1, (locationX - steppedSliderInset(in: containerWidth)) / trackWidth))
+    return Int(round(fraction * CGFloat(stepCount - 1)))
+  }
+
+  static func dailySummaryDate(forHour hour: Int, referenceDate: Date, calendar: Calendar = .current) -> Date {
+    let normalizedHour = max(0, min(23, hour))
+    return calendar.date(bySettingHour: normalizedHour, minute: 0, second: 0, of: referenceDate)
+      ?? referenceDate
+  }
+
+  static func dailySummaryHour(from date: Date, calendar: Calendar = .current) -> Int {
+    calendar.component(.hour, from: date)
+  }
+}
+
+struct SettingsMenuPicker<SelectionValue: Hashable, Content: View>: View {
+  @Binding private var selection: SelectionValue
+  private let content: Content
+
+  init(selection: Binding<SelectionValue>, @ViewBuilder content: () -> Content) {
+    _selection = selection
+    self.content = content()
+  }
+
+  var body: some View {
+    Picker("", selection: $selection) {
+      content
+    }
+    .pickerStyle(.menu)
+    .labelsHidden()
+    .fixedSize()
+  }
+}
+
+private struct SettingsTextInputStyle: ViewModifier {
+  func body(content: Content) -> some View {
+    content
+      .textFieldStyle(.plain)
+      .scaledFont(size: OmiType.body)
+      .foregroundColor(OmiColors.textPrimary)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+          .fill(OmiColors.backgroundTertiary)
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+              .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+          )
+      )
+  }
+}
+
+extension View {
+  func settingsTextInputStyle() -> some View {
+    modifier(SettingsTextInputStyle())
+  }
+}
 
 extension SettingsContentView {
   var floatingBarTypedVoiceAnswersBinding: Binding<Bool> {
@@ -22,54 +106,53 @@ extension SettingsContentView {
       )?.offset ?? 3
 
     return settingsCard(settingId: settingId) {
-      VStack(spacing: 16) {
+      VStack(spacing: OmiSpacing.lg) {
         HStack {
-          VStack(alignment: .leading, spacing: 2) {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(ShortcutSettings.voiceSpeedLabel(for: currentSpeed))
-              .scaledFont(size: 16, weight: .semibold)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Text("Voice playback speed")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textSecondary)
           }
           Spacer()
           Text("\(String(format: "%.1f", currentSpeed))×")
-            .font(.system(size: 22, weight: .bold, design: .rounded))
-            .foregroundColor(OmiColors.purplePrimary)
-            .frame(width: 52, height: 52)
-            .background(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(OmiColors.purplePrimary.opacity(0.15))
-            )
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(OmiColors.accent)
         }
 
-        VStack(spacing: 6) {
+        VStack(spacing: OmiSpacing.xs) {
           // Stepped slider
           GeometryReader { geo in
-            let trackWidth = geo.size.width
             let segmentCount = CGFloat(steps.count - 1)
+            let trackWidth = SettingsControlMetrics.steppedSliderTrackWidth(in: geo.size.width)
+            let trackInset = SettingsControlMetrics.steppedSliderInset(in: geo.size.width)
 
             ZStack(alignment: .leading) {
               // Track background
-              RoundedRectangle(cornerRadius: 4)
+              RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
                 .fill(OmiColors.backgroundQuaternary)
-                .frame(height: 6)
+                .frame(width: trackWidth, height: 6)
+                .offset(x: trackInset)
 
               // Filled track
-              RoundedRectangle(cornerRadius: 4)
-                .fill(OmiColors.purplePrimary)
+              RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
+                .fill(OmiColors.accent)
                 .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
+                .offset(x: trackInset)
 
               // Step dots
               ForEach(0..<steps.count, id: \.self) { i in
                 Circle()
                   .fill(
-                    i <= currentIndex ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary
+                    i <= currentIndex ? OmiColors.accent : OmiColors.backgroundQuaternary
                   )
-                  .frame(width: 8, height: 8)
+                  .frame(width: 12, height: 12)
                   .position(
-                    x: trackWidth * CGFloat(i) / segmentCount,
-                    y: 3
+                    x: SettingsControlMetrics.steppedSliderPosition(
+                      index: i, stepCount: steps.count, containerWidth: geo.size.width),
+                    y: geo.size.height / 2
                   )
               }
 
@@ -79,29 +162,34 @@ extension SettingsContentView {
                 .frame(width: 22, height: 22)
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
                 .position(
-                  x: trackWidth * CGFloat(currentIndex) / segmentCount,
-                  y: 3
+                  x: SettingsControlMetrics.steppedSliderPosition(
+                    index: currentIndex, stepCount: steps.count, containerWidth: geo.size.width),
+                  y: geo.size.height / 2
                 )
                 .gesture(
-                  DragGesture(minimumDistance: 0)
+                  DragGesture(minimumDistance: 0, coordinateSpace: .named("voiceSpeedSlider"))
                     .onChanged { value in
-                      let fraction = max(0, min(1, value.location.x / trackWidth))
-                      let nearestIndex = Int(round(fraction * segmentCount))
-                      let clamped = max(0, min(steps.count - 1, nearestIndex))
-                      shortcutSettings.voicePlaybackSpeed = steps[clamped]
+                      let clamped = SettingsControlMetrics.steppedSliderIndex(
+                        locationX: value.location.x, stepCount: steps.count,
+                        containerWidth: geo.size.width)
+                      if shortcutSettings.voicePlaybackSpeed != steps[clamped] {
+                        performStepHaptic()
+                        shortcutSettings.voicePlaybackSpeed = steps[clamped]
+                      }
                     }
                 )
             }
           }
+          .coordinateSpace(name: "voiceSpeedSlider")
           .frame(height: 22)
 
           HStack {
             Text("Slow")
-              .scaledFont(size: 11)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
             Spacer()
             Text("Max")
-              .scaledFont(size: 11)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
           }
         }
@@ -119,49 +207,53 @@ extension SettingsContentView {
     let currentIndex = max(0, min(stepCount - 1, notificationFrequency))
     let currentLabel = frequencyOptions[currentIndex].1
 
-    let body = VStack(alignment: .leading, spacing: 12) {
+    let body = VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack(alignment: .center) {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text("Frequency")
-            .scaledFont(size: 14)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textSecondary)
           Text("How often to receive notifications")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
         Spacer()
         Text(currentLabel)
-          .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(OmiColors.purplePrimary)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 4)
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundColor(OmiColors.accent)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xxs)
           .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-              .fill(OmiColors.purplePrimary.opacity(0.15))
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+              .fill(OmiColors.accent.opacity(0.15))
           )
       }
 
       GeometryReader { geo in
-        let trackWidth = geo.size.width
+        let trackWidth = SettingsControlMetrics.steppedSliderTrackWidth(in: geo.size.width)
+        let trackInset = SettingsControlMetrics.steppedSliderInset(in: geo.size.width)
 
         ZStack(alignment: .leading) {
-          RoundedRectangle(cornerRadius: 4)
+          RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
             .fill(OmiColors.backgroundQuaternary)
-            .frame(height: 6)
+            .frame(width: trackWidth, height: 6)
+            .offset(x: trackInset)
 
-          RoundedRectangle(cornerRadius: 4)
-            .fill(OmiColors.purplePrimary)
+          RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
+            .fill(OmiColors.accent)
             .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
+            .offset(x: trackInset)
 
           ForEach(0..<stepCount, id: \.self) { i in
             Circle()
               .fill(
-                i <= currentIndex ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary
+                i <= currentIndex ? OmiColors.accent : OmiColors.backgroundQuaternary
               )
-              .frame(width: 8, height: 8)
+              .frame(width: 12, height: 12)
               .position(
-                x: trackWidth * CGFloat(i) / segmentCount,
-                y: 3
+                x: SettingsControlMetrics.steppedSliderPosition(
+                  index: i, stepCount: stepCount, containerWidth: geo.size.width),
+                y: geo.size.height / 2
               )
           }
 
@@ -170,16 +262,17 @@ extension SettingsContentView {
             .frame(width: 22, height: 22)
             .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
             .position(
-              x: trackWidth * CGFloat(currentIndex) / segmentCount,
-              y: 3
+              x: SettingsControlMetrics.steppedSliderPosition(
+                index: currentIndex, stepCount: stepCount, containerWidth: geo.size.width),
+              y: geo.size.height / 2
             )
             .gesture(
-              DragGesture(minimumDistance: 0)
+              DragGesture(minimumDistance: 0, coordinateSpace: .named("notificationFrequencySlider"))
                 .onChanged { value in
-                  let fraction = max(0, min(1, value.location.x / trackWidth))
-                  let nearestIndex = Int(round(fraction * segmentCount))
-                  let clamped = max(0, min(stepCount - 1, nearestIndex))
+                  let clamped = SettingsControlMetrics.steppedSliderIndex(
+                    locationX: value.location.x, stepCount: stepCount, containerWidth: geo.size.width)
                   if clamped != notificationFrequency {
+                    performStepHaptic()
                     notificationFrequency = clamped
                     updateNotificationSettings(frequency: clamped)
                   }
@@ -187,15 +280,16 @@ extension SettingsContentView {
             )
         }
       }
+      .coordinateSpace(name: "notificationFrequencySlider")
       .frame(height: 22)
 
       HStack {
         Text(frequencyOptions.first?.1 ?? "Off")
-          .scaledFont(size: 11)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
         Spacer()
         Text(frequencyOptions.last?.1 ?? "Maximum")
-          .scaledFont(size: 11)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
       }
     }
@@ -210,28 +304,28 @@ extension SettingsContentView {
     return Button(action: {
       TierManager.shared.userDidSetTier(tier)
     }) {
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-          .scaledFont(size: 16)
-          .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.subheading)
+          .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textTertiary)
 
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(label)
-            .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
+            .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
             .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 
           Text(subtitle)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
 
         Spacer()
       }
-      .padding(.vertical, 6)
-      .padding(.horizontal, 8)
+      .padding(.vertical, OmiSpacing.xs)
+      .padding(.horizontal, OmiSpacing.sm)
       .background(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(isSelected ? OmiColors.purplePrimary.opacity(0.1) : Color.clear)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+          .fill(isSelected ? OmiColors.accent.opacity(0.1) : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -240,38 +334,38 @@ extension SettingsContentView {
   func tierFeatureRow(
     tier: Int, name: String, requirement: String, progress: String?, unlocked: Bool
   ) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
       HStack {
         Text("Tier \(tier)")
-          .scaledFont(size: 11, weight: .semibold)
-          .foregroundColor(unlocked ? OmiColors.purplePrimary : OmiColors.textTertiary)
-          .padding(.horizontal, 6)
-          .padding(.vertical, 2)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(unlocked ? OmiColors.accent : OmiColors.textTertiary)
+          .padding(.horizontal, OmiSpacing.xs)
+          .padding(.vertical, OmiSpacing.hairline)
           .background(
-            RoundedRectangle(cornerRadius: 4)
-              .fill(unlocked ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary)
+            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
+              .fill(unlocked ? OmiColors.accent.opacity(0.15) : OmiColors.backgroundTertiary)
           )
 
         Text(name)
-          .scaledFont(size: 14, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(unlocked ? OmiColors.textPrimary : OmiColors.textTertiary)
 
         Spacer()
 
         if unlocked {
           Image(systemName: "checkmark.circle.fill")
-            .scaledFont(size: 14)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(.green)
         } else {
           Image(systemName: "lock.fill")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
       }
 
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         Text(requirement)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
 
         if let progress = progress, !unlocked {
@@ -281,13 +375,13 @@ extension SettingsContentView {
         }
       }
     }
-    .padding(.vertical, 4)
+    .padding(.vertical, OmiSpacing.xxs)
   }
 
   func statRow(label: String, value: Int) -> some View {
     HStack {
       Text(label)
-        .scaledFont(size: 14)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textSecondary)
 
       Spacer()
@@ -301,7 +395,7 @@ extension SettingsContentView {
   func statRowLoading(label: String) -> some View {
     HStack {
       Text(label)
-        .scaledFont(size: 14)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textSecondary)
 
       Spacer()
@@ -373,11 +467,11 @@ extension SettingsContentView {
   // MARK: - About Section
 
   var aboutSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "about.version") {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
           // App info
-          HStack(spacing: 16) {
+          HStack(spacing: OmiSpacing.lg) {
             if let logoURL = Bundle.resourceBundle.url(
               forResource: "herologo", withExtension: "png"),
               let logoImage = NSImage(contentsOf: logoURL)
@@ -388,21 +482,21 @@ extension SettingsContentView {
                 .frame(width: 48, height: 48)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-              HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              HStack(spacing: OmiSpacing.xs) {
                 Text("omi")
-                  .scaledFont(size: 18, weight: .bold)
+                  .scaledFont(size: OmiType.heading, weight: .bold)
                   .foregroundColor(OmiColors.textPrimary)
 
                 if !updaterViewModel.activeChannelLabel.isEmpty {
                   Text("(\(updaterViewModel.activeChannelLabel))")
-                    .scaledFont(size: 13, weight: .medium)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .scaledFont(size: OmiType.body, weight: .medium)
+                    .foregroundColor(OmiColors.accent)
                 }
               }
 
               Text("Version \(updaterViewModel.currentVersion) (\(updaterViewModel.buildNumber))")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
                 .textSelection(.enabled)
             }
@@ -422,13 +516,13 @@ extension SettingsContentView {
           }) {
             HStack {
               Text("Privacy Policy")
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textSecondary)
 
               Spacer()
 
               Image(systemName: "arrow.right")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
             }
           }
@@ -439,14 +533,14 @@ extension SettingsContentView {
 
       // Software Updates
       settingsCard(settingId: "about.updates") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "arrow.triangle.2.circlepath")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(OmiColors.textSecondary)
 
             Text("Software Updates")
-              .scaledFont(size: 15, weight: .medium)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
@@ -454,7 +548,7 @@ extension SettingsContentView {
             Button("Check Now") {
               updaterViewModel.checkForUpdates()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             .disabled(!updaterViewModel.canCheckForUpdates)
             .help(
               updaterViewModel.canCheckForUpdates
@@ -463,51 +557,51 @@ extension SettingsContentView {
 
           if let lastCheck = updaterViewModel.lastUpdateCheckDate {
             Text("Last checked: \(lastCheck, style: .relative) ago")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
           }
 
           if let failure = updaterViewModel.lastUpdateFailure {
-            VStack(alignment: .leading, spacing: 10) {
-              HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+              HStack(alignment: .top, spacing: OmiSpacing.sm) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                  .scaledFont(size: 14)
+                  .scaledFont(size: OmiType.body)
                   .foregroundColor(OmiColors.warning)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                   Text("Update Needs Attention")
-                    .scaledFont(size: 13, weight: .semibold)
+                    .scaledFont(size: OmiType.body, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                   Text(failure.userMessage)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(OmiColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
               }
 
-              HStack(spacing: 8) {
+              HStack(spacing: OmiSpacing.sm) {
                 if failure.isRecoverableLaunchLocation {
                   Button("Open Applications") {
                     NSWorkspace.shared.open(
                       URL(fileURLWithPath: "/Applications", isDirectory: true))
                   }
-                  .buttonStyle(.bordered)
+                  .buttonStyle(OmiButtonStyle(.primary, size: .compact))
                 }
 
                 Button("Download Latest") {
                   openURLInDefaultBrowser(AppBuild.manualDownloadURL)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button("Dismiss") {
                   updaterViewModel.lastUpdateFailure = nil
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .background(OmiColors.backgroundTertiary)
-            .cornerRadius(8)
+            .cornerRadius(OmiChrome.elementRadius)
           }
 
           Divider()
@@ -519,7 +613,7 @@ extension SettingsContentView {
             settingId: "about.autoupdates"
           ) {
             Toggle("", isOn: $updaterViewModel.automaticallyChecksForUpdates)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .disabled(updaterViewModel.usesManagedUpdatePolicy || AnalyticsManager.isDevBuild)
           }
@@ -531,7 +625,7 @@ extension SettingsContentView {
               settingId: "about.autoinstall"
             ) {
               Toggle("", isOn: $updaterViewModel.automaticallyDownloadsUpdates)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .disabled(updaterViewModel.usesManagedUpdatePolicy || AnalyticsManager.isDevBuild)
             }
@@ -539,13 +633,17 @@ extension SettingsContentView {
 
           if updaterViewModel.usesManagedUpdatePolicy {
             Text("Release builds always auto-check and auto-install updates in the background.")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary)
+          } else if AppBuild.isNamedDevelopmentBundle {
+            Text("Named developer bundles do not use shared Sparkle updates. Run omi-dev update instead.")
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
           } else if AnalyticsManager.isDevBuild {
             Text(
               "Development builds keep automatic installation disabled to avoid replacing the local app."
             )
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
           }
 
@@ -556,29 +654,33 @@ extension SettingsContentView {
             title: "Update Channel", subtitle: updaterViewModel.updateChannel.description,
             settingId: "about.channel"
           ) {
-            Picker(
-              "",
-              selection: Binding(
-                get: { updaterViewModel.updateChannel },
-                set: { newChannel in
-                  // Switching beta → stable with a newer build: confirm first
-                  if updaterViewModel.updateChannel == .beta && newChannel == .stable
-                    && updaterViewModel.isDowngradeToStable
-                  {
-                    showDowngradeAlert = true
-                  } else {
-                    updaterViewModel.updateChannel = newChannel
+            if AppBuild.isBetaProductionBundle {
+              // Omi Beta is permanently a beta-channel client; switching it to stable
+              // would make Sparkle replace it with the stable-identity app in place.
+              Text(UpdateChannel.beta.displayName)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(OmiColors.textSecondary)
+            } else {
+              SettingsMenuPicker(
+                selection: Binding(
+                  get: { updaterViewModel.updateChannel },
+                  set: { newChannel in
+                    // Switching beta → stable with a newer build: confirm first
+                    if updaterViewModel.updateChannel == .beta && newChannel == .stable
+                      && updaterViewModel.isDowngradeToStable
+                    {
+                      showDowngradeAlert = true
+                    } else {
+                      updaterViewModel.updateChannel = newChannel
+                    }
                   }
+                )
+              ) {
+                ForEach(UpdateChannel.allCases, id: \.self) { channel in
+                  Text(channel.displayName).tag(channel)
                 }
-              )
-            ) {
-              ForEach(UpdateChannel.allCases, id: \.self) { channel in
-                Text(channel.displayName).tag(channel)
               }
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .frame(width: 100)
           }
         }
       }
@@ -598,18 +700,18 @@ extension SettingsContentView {
       }
 
       settingsCard(settingId: "about.reportissue") {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "exclamationmark.bubble.fill")
-            .scaledFont(size: 16)
-            .foregroundColor(OmiColors.purplePrimary)
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(OmiColors.textSecondary)
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Report an Issue")
-              .scaledFont(size: 15, weight: .medium)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
 
             Text("Help us improve omi")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
 
@@ -618,7 +720,7 @@ extension SettingsContentView {
           Button("Report") {
             FeedbackWindow.show(userEmail: AuthState.shared.userEmail)
           }
-          .buttonStyle(.bordered)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
     }
@@ -629,16 +731,16 @@ extension SettingsContentView {
   func fontShortcutRow(label: String, keys: String) -> some View {
     HStack {
       Text(label)
-        .scaledFont(size: 13)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textTertiary)
       Spacer()
       Text(keys)
         .scaledMonospacedFont(size: 13, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.hairline)
         .background(OmiColors.backgroundTertiary.opacity(0.8))
-        .cornerRadius(5)
+        .cornerRadius(OmiChrome.badgeRadius)
     }
   }
 
@@ -647,12 +749,12 @@ extension SettingsContentView {
   ) -> some View {
     let card = content()
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(20)
+      .padding(OmiSpacing.xl)
       .background(
-        RoundedRectangle(cornerRadius: 12)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
           .fill(OmiColors.backgroundTertiary.opacity(0.5))
           .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
               .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
           )
       )
@@ -671,12 +773,12 @@ extension SettingsContentView {
     title: String, subtitle: String, settingId: String? = nil, @ViewBuilder control: () -> Content
   ) -> some View {
     let row = HStack {
-      VStack(alignment: .leading, spacing: 2) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
-          .scaledFont(size: 14)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(OmiColors.textSecondary)
         Text(subtitle)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
       }
 
@@ -695,6 +797,22 @@ extension SettingsContentView {
     }
   }
 
+  func settingsCardHeader(icon: String, title: String) -> some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(OmiColors.textSecondary)
+
+      Text(title)
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundColor(OmiColors.textPrimary)
+    }
+  }
+
+  func performStepHaptic() {
+    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+  }
+
   func linkRow(title: String, url: String) -> some View {
     Button(action: {
       if let url = URL(string: url) {
@@ -703,13 +821,13 @@ extension SettingsContentView {
     }) {
       HStack {
         Text(title)
-          .scaledFont(size: 14)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(OmiColors.textSecondary)
 
         Spacer()
 
         Image(systemName: "arrow.up.right")
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
       }
     }
@@ -717,25 +835,25 @@ extension SettingsContentView {
   }
 
   func trackingItem(_ text: String) -> some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       Circle()
         .fill(OmiColors.textTertiary.opacity(0.5))
         .frame(width: 4, height: 4)
 
       Text(text)
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
     }
   }
 
   func privacyBullet(_ text: String) -> some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "checkmark")
-        .scaledFont(size: 9, weight: .bold)
+        .scaledFont(size: OmiType.micro, weight: .bold)
         .foregroundColor(.green)
 
       Text(text)
-        .scaledFont(size: 12)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textSecondary)
     }
   }
@@ -747,20 +865,20 @@ extension SettingsContentView {
     isOn: Binding<Bool>,
     onChange: @escaping (Bool) -> Void
   ) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(alignment: .top, spacing: 12) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
         Image(systemName: icon)
-          .scaledFont(size: 14)
-          .foregroundColor(OmiColors.purplePrimary)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textSecondary)
           .frame(width: 20, alignment: .leading)
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(title)
-            .scaledFont(size: 14, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
 
           Text(subtitle)
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -768,7 +886,7 @@ extension SettingsContentView {
         Spacer(minLength: 12)
 
         Toggle("", isOn: isOn)
-          .toggleStyle(.switch)
+          .toggleStyle(OmiToggleStyle())
           .labelsHidden()
           .controlSize(.small)
           .onChange(of: isOn.wrappedValue) { _, newValue in

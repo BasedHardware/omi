@@ -1,7 +1,7 @@
 """Equivalence tests for shared memory read rollout decision core."""
 
-import utils.memory.v3_compatibility as v3_compatibility
-import utils.memory.v3_control_reader_contract as v3_control_reader_contract
+import utils.memory.v3.compatibility as v3_compatibility
+import utils.memory.v3.control_reader_contract as v3_control_reader_contract
 from config.memory_rollout import MemoryRolloutMode, PASSED, MemoryRolloutStageGate
 from utils.memory.default_read_rollout import (
     DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
@@ -20,8 +20,8 @@ from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_product_memory_route,
 )
-from utils.memory.v3_compatibility import V3CompatibilityContext, V3CompatibilityReadPath, decide_v3_compatibility
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.compatibility import V3CompatibilityContext, V3CompatibilityReadPath, decide_v3_compatibility
+from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReadResult,
     V3ControlReaderRequest,

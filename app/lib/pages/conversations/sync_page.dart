@@ -58,11 +58,12 @@ class WalListItem extends StatelessWidget {
 
   (Color, String) _rowStatus(BuildContext context, bool hasError) {
     final l = context.l10n;
-    if (wal.isSyncing) {
+    final state = wal.syncDisplayState;
+    if (state == WalSyncDisplayState.syncing) {
       return (Colors.grey.shade300, l.syncStatusBackingUp);
     }
     if (hasError) return (Colors.redAccent, l.failedStatus);
-    switch (wal.syncDisplayState) {
+    switch (state) {
       case WalSyncDisplayState.synced:
         return (Colors.grey.shade500, l.syncStatusConversationCreated);
       case WalSyncDisplayState.uploaded:
@@ -80,15 +81,15 @@ class WalListItem extends StatelessWidget {
   }
 
   Widget _trailing(BuildContext context, SyncProvider syncProvider, bool hasError) {
-    if (wal.isSyncing) {
+    final state = wal.syncDisplayState;
+    if (state == WalSyncDisplayState.syncing) {
       return const SizedBox(
         width: 16,
         height: 16,
         child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent)),
       );
     }
-    final st = wal.syncDisplayState;
-    if (hasError || st == WalSyncDisplayState.failed || st == WalSyncDisplayState.retrying) {
+    if (hasError || state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
       return GestureDetector(
         onTap: () => syncProvider.syncWal(wal),
         child: Container(
@@ -112,11 +113,13 @@ class WalListItem extends StatelessWidget {
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
         final hasError = syncProvider.failedWal?.id == wal.id;
+        final displayState = wal.syncDisplayState;
         final (statusColor, statusLabel) = _rowStatus(context, hasError);
         final timeStr = dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000));
         final duration = secondsToHumanReadable(wal.seconds, context);
         final source = _sourceLabel(context);
-        final showBar = wal.isSyncing &&
+        final showBar =
+            displayState == WalSyncDisplayState.syncing &&
             wal.status != WalStatus.synced &&
             wal.syncStartedAt != null &&
             wal.storage != WalStorage.flashPage;
@@ -126,7 +129,9 @@ class WalListItem extends StatelessWidget {
           decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
           child: Dismissible(
             key: Key(wal.id),
-            direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
+            direction: displayState == WalSyncDisplayState.syncing
+                ? DismissDirection.none
+                : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return OmiConfirmDialog.show(
@@ -406,8 +411,7 @@ class _SyncPageState extends State<SyncPage> {
             confirmColor: Colors.red,
           );
           if (confirmed == true && context.mounted) {
-            await provider.deleteAllSyncedWals();
-            await provider.deleteAllPendingWals();
+            await provider.deleteAllClearableWals();
             if (context.mounted) {
               ScaffoldMessenger.of(
                 context,
@@ -688,6 +692,7 @@ class _SyncPageState extends State<SyncPage> {
         children: [
           chip(WalStatusFilter.pending, context.l10n.pending, syncProvider.pendingStatusCount),
           chip(WalStatusFilter.synced, context.l10n.synced, syncProvider.syncedStatusCount),
+          chip(WalStatusFilter.corrupted, context.l10n.failedStatus, syncProvider.corruptedStatusCount),
         ],
       ),
     );
@@ -695,6 +700,7 @@ class _SyncPageState extends State<SyncPage> {
 
   Widget _buildEmptyFilterState(BuildContext context, WalStatusFilter filter) {
     final isPending = filter == WalStatusFilter.pending;
+    final isCorrupted = filter == WalStatusFilter.corrupted;
     return Container(
       margin: const EdgeInsets.all(20),
       padding: const EdgeInsets.all(32),
@@ -702,13 +708,25 @@ class _SyncPageState extends State<SyncPage> {
       child: Column(
         children: [
           _buildFaIcon(
-            isPending ? FontAwesomeIcons.circleCheck : FontAwesomeIcons.clockRotateLeft,
+            isPending
+                ? FontAwesomeIcons.circleCheck
+                : isCorrupted
+                ? FontAwesomeIcons.triangleExclamation
+                : FontAwesomeIcons.clockRotateLeft,
             size: 24,
-            color: isPending ? Colors.green : Colors.grey,
+            color: isPending
+                ? Colors.green
+                : isCorrupted
+                ? Colors.redAccent
+                : Colors.grey,
           ),
           const SizedBox(height: 16),
           Text(
-            isPending ? context.l10n.noPendingRecordings : context.l10n.noProcessedRecordings,
+            isPending
+                ? context.l10n.noPendingRecordings
+                : isCorrupted
+                ? context.l10n.syncStatusFileUnavailable
+                : context.l10n.noProcessedRecordings,
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
           ),
           if (isPending) ...[
@@ -1040,16 +1058,9 @@ class _PendingListItem {
   final int? count;
   final Wal? wal;
 
-  _PendingListItem.header(this.label, this.icon, this.color, this.count)
-      : isHeader = true,
-        wal = null;
+  _PendingListItem.header(this.label, this.icon, this.color, this.count) : isHeader = true, wal = null;
 
-  _PendingListItem.wal(this.wal)
-      : isHeader = false,
-        label = null,
-        icon = null,
-        color = null,
-        count = null;
+  _PendingListItem.wal(this.wal) : isHeader = false, label = null, icon = null, color = null, count = null;
 }
 
 class _ManageStorageSheet extends StatelessWidget {
@@ -1069,7 +1080,7 @@ class _ManageStorageSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final syncedCount = provider.syncedWals.length;
     final pendingCount = provider.pendingDeletableWals.length;
-    final totalCount = syncedCount + pendingCount;
+    final totalCount = provider.clearableWalsCount;
 
     return Container(
       decoration: const BoxDecoration(

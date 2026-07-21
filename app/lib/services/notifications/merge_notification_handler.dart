@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-
 import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'package:omi/app_globals.dart';
@@ -84,7 +82,8 @@ class MergeNotificationHandler {
           id: notificationId,
           channelKey: channelKey,
           title: '✅ ${ctx?.l10n.mergeConversationsSuccessTitle ?? 'Conversations Merged Successfully'}',
-          body: ctx?.l10n.mergeConversationsSuccessBody(totalCount) ??
+          body:
+              ctx?.l10n.mergeConversationsSuccessBody(totalCount) ??
               '$totalCount conversations have been merged successfully',
           payload: {
             'merged_conversation_id': mergedConversationId,

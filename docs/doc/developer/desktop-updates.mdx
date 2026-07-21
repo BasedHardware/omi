@@ -1,73 +1,42 @@
 ---
 title: Desktop update architecture
-description: Explicit release channels, qualification, fallback, and recovery for macOS desktop updates.
+description: Qualified desktop artifacts, explicit pointers, and recovery semantics.
 ---
 
-Desktop updates use immutable release manifests and explicit `stable` and `beta` pointers. A release build is not a channel. Promotion changes a pointer; it does not rebuild or mutate the artifact.
+Desktop Beta is a distribution channel, not a backend environment. The Omi and Omi Beta apps both use the established production backend; Omi Beta remains separately installable with its own bundle identity, storage/keychain/TCC scope, update feed, and signed artifacts.
 
-## Resolution order
+## Release model
 
-For each channel, the Python appcast and manual download endpoints resolve in this order:
+One Codemagic build signs and notarizes Stable and side-by-side Beta ZIP/DMG artifacts from one source revision. It first creates an immutable, non-live GitHub candidate. The trusted macOS qualifier downloads and hashes all four artifacts after the candidate gate, then uploads that evidence as an immutable GitHub Actions run artifact. Beta promotion verifies the successful trusted `main` qualification run ID, binds the exact bytes, and registers one immutable manifest. The qualified manifest stores exact Stable/Beta URLs, hashes, Sparkle signatures, release ID, and source SHA.
 
-1. cached explicit Firestore pointer and manifest;
-2. live Firestore pointer and manifest;
-3. validated 30-day last-known-good pointer;
-4. the same channel from legacy GitHub release metadata;
-5. fail closed.
+The machine-readable evidence explicitly separates two modalities. `source_qualification` records hermetic T2 and fault coverage for source-built named bundles. `signed_artifact_verification` records the exact signed ZIP/DMG digest, Sparkle-signing, notarization, and signed-smoke evidence. The signed production bytes are never described as having run automation T2. Before a human promotes beyond Beta, the operational release evidence still requires the signed `.89` upgrade, `.70` side-by-side install, real core journeys, and soak against the same immutable manifest. Stable never rebuilds or re-reads mutable release state after manifest registration.
 
-Stable never falls through to beta. `DESKTOP_UPDATE_POINTERS_MODE=legacy` is the incident kill switch. `DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE` controls sampled comparisons between pointer and legacy results.
+`macos-beta` and `macos-stable` are the only mutable release pointers. A pointer always resolves to an immutable qualified manifest. Registration is exact-idempotent; changing metadata under an existing release ID is rejected.
 
-Prometheus exposes the selected source, fallback reason, pointer/LKG age, feed validity, and sampled pointer mismatches. Cache clearing removes only live caches; it preserves last-known-good recovery data.
-
-## Release lifecycle
-
-The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`. It then automatically verifies the published ZIP/DMG digests against the signed-smoke result, runs static release checks, hermetic T2, and the fault-injection suite, and promotes only the newest passing candidate to beta.
-
-| State | How to identify it | Customer visibility |
+| Stage | Mutation | Audience |
 | --- | --- | --- |
-| Build candidate | `channel: candidate`, `isLive: false` | None |
-| Qualified beta | `channel: beta`, `isLive: true`, canonical `qualifiedBeta*` evidence (or legacy qualification aliases) | Beta only |
-| Stable candidate | Qualified beta plus complete `stableCandidate*` nomination metadata | Still beta only |
-| Stable | `channel: stable`, written only by `desktop_promote_prod.yml` after `confirm=promote-stable` | Stable |
+| Candidate | Immutable GitHub release and signed evidence | None |
+| Qualified Beta | `macos-beta` points at the exact qualified manifest | Omi Beta |
+| Stable | `macos-stable` points at that same release ID/artifact | Omi |
 
-Manual recovery or evidence-only qualification remains available:
+The normal candidate-to-Beta path uses non-cancelling per-tag GitHub concurrency. Qualification evidence and pointer idempotency make bounded dispatch retries safe; there is no separate claim/running/complete release-body state machine and no unqualified emergency route.
 
-```bash
-desktop/macos/scripts/qualify-desktop-beta.sh vX.Y.Z+BUILD-macos
-```
+## Stable promotion and repoint
 
-The automatic path calls the same script with `--automatic`, adding signed-artifact digest validation, static checks, and the hermetic fault suite to T2. The combined evidence asset records every gate. Before writing qualification metadata it rechecks that no newer tag exists. Promotion repeats the newest-tag check for automatic requests, validates the tag SHA and evidence, registers an immutable manifest, advances the beta pointer, changes GitHub metadata to live beta, and maintains the old-client Firestore bridge. Existing releases with legacy `blessed*` keys remain valid through dual-read compatibility.
+`desktop_promote_prod.yml` is protected, manual-only, and independent of backend deployment. `promote` verifies its trusted qualification run and that the requested release ID is the current qualified Beta pointer. It then reads the exact immutable manifest registered by Beta from the control plane and verifies its canonical identity; it does not reconstruct a manifest from mutable release metadata. `repoint` needs only that retained passed-T2 manifest under exact Stable CAS—no Actions artifact or GitHub release body/assets. Both update the existing legacy appcast/static bridges and verify the final pointer, hashes, and exactly one default/non-Beta Stable feed item.
 
-Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environment or GitHub's `prod` environment to pause automatic beta. Failures leave the candidate non-live. Stable nomination and `desktop_promote_prod.yml` remain manual-only.
+`operation=promote` is roll-forward. `operation=repoint` can choose any retained qualified manifest, in either direction, but requires the exact current release ID and generation. Both use the same transactional pointer authority and qualification gate. A stale compare-and-swap is rejected; a lost response is acknowledged only when the requested release is already selected at exactly the expected next generation.
 
-After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
+Repointing stops future rollout but cannot downgrade clients that Sparkle has already upgraded to a higher build. Ship a higher-version hotfix for those users.
 
-## Developer head-of-main
+## Resolution and compatibility
 
-Developers can use a local named bundle without creating a release:
+For each channel, update resolution is: live pointer cache, Firestore pointer/manifest, validated last-known-good pointer, then the same channel's legacy GitHub metadata. Stable never falls through to Beta. The legacy resolver remains while older clients require it; pointer failures record the shared fallback telemetry boundary.
 
-```bash
-desktop/macos/scripts/omi-main install
-desktop/macos/scripts/omi-main update
-desktop/macos/scripts/omi-main status
-```
+The desktop release workflows retain the existing Firestore legacy bridge and stable static repair route. A desktop pointer promotion never invokes or controls a backend deployment.
 
-This uses a dedicated detached worktree and `/Applications/omi-main.app`. It never replaces or launches the production Omi or Omi Beta bundles.
+## Backend deployment boundary for the update API
 
-## Update transaction truth
+The surviving direct backend deployment boundary for the desktop update API is Cloud Run only. `gcp_backend.yml` accepts `environment=prod, deploy_targets=cloud-run-only`: it deploys tagged no-traffic Cloud Run candidate revisions, proves the exact tagged backend with a VPC-connected ephemeral Cloud Run Job and both Cloud Run IAM plus Firebase authentication, then snapshots, promotes, verifies, and restores Cloud Run traffic if final verification fails. The temporary Job, tag, invoker binding, and probe service account are cleaned up on both success and failure.
 
-`willInstallUpdate` records an attempt ID plus source/target build and emits `Update Install Started`. `Update Installed` is emitted only after the relaunched app verifies that its current build equals the recorded target. A mismatch emits `Update Install Verification Failed` with the same attempt ID.
-
-Static GCS/CDN appcast delivery remains a follow-up. The existing beta download redirect may still be maintained, but it is not the source of channel truth.
-
-## First rollout after merge
-
-Merging this control-plane change does not make a beta live. For the first rollout:
-
-1. Deploy `main` to the production shared Python backend with `gcp_backend.yml` so manifest registration and pointer promotion endpoints exist.
-2. Wait for the weekday candidate workflow, or manually dispatch `desktop_auto_release.yml` when a candidate is wanted.
-3. Wait for Codemagic to publish the signed, notarized, non-live candidate and smoke evidence.
-4. Let Codemagic run the automatic digest, static, T2, and fault-suite gates. Use `desktop/macos/scripts/qualify-desktop-beta.sh <tag>` only for manual recovery.
-5. Verify the beta appcast and the resolution/fallback/pointer-age metrics. Nominate a stable candidate only after reviewing soak, telemetry, and the stable release-note rollup; leave stable unchanged until the separately planned stable rollout.
-
-After the dual path has proven reliable, complete the removal and static CDN follow-ups tracked in issue `#9350`.
+`environment=prod, deploy_targets=all` is rejected before checkout, cloud authentication, image publication, or mutation. Transactional GKE/config rollback parity does not exist, so this workflow does not claim atomic full-stack deployment. The source-admitted direct GKE workflows (`gcp_backend_listen_helm.yml`, `gcp_backend_pusher.yml`, `gcp_llm_gateway.yml`, and `gcp_backend_agent_proxy.yml`) remain the operational production paths for their respective surfaces.

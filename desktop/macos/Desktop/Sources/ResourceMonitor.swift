@@ -370,7 +370,11 @@ class ResourceMonitor {
       // Flush VideoChunkEncoder and await completion; ResourceMonitor records
       // reset counters in component diagnostics so hang/memory Sentry events can
       // be correlated.
-      _ = try? await VideoChunkEncoder.shared.flushCurrentChunk()
+      do {
+        _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
+      } catch {
+        logError("ResourceMonitor: Failed to flush video chunk during memory remediation", error: error)
+      }
 
       // Clear focus assistant pending tasks specifically
       if let focusAssistant = ProactiveAssistantsPlugin.shared.currentFocusAssistant {
@@ -554,7 +558,7 @@ class ResourceMonitor {
 
     guard result == KERN_SUCCESS else { return 0 }
 
-    let pageSize = UInt64(vm_kernel_page_size)
+    let pageSize = UInt64(getpagesize())
     let totalRAM = ProcessInfo.processInfo.physicalMemory
 
     // Active + Wired + Compressed = memory in use

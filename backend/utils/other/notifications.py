@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, time, timedelta
 from typing import Any, Dict, List, Tuple
 
-from utils.executors import postprocess_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 
 import pytz
 
@@ -52,7 +52,7 @@ async def send_daily_summary_notification() -> None:
 
         for target_hour, timezones in timezones_by_hour.items():
             # Get users in those timezones who want notifications at this hour
-            users = await notification_db.get_users_for_daily_summary(timezones, target_hour)
+            users = await _get_users_for_daily_summary(timezones, target_hour)
 
             if users:
                 logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
@@ -61,6 +61,17 @@ async def send_daily_summary_notification() -> None:
     except Exception as e:
         logger.error(f"Error sending daily summary: {e}")
         return None
+
+
+async def _get_users_for_daily_summary(timezones: List[str], target_hour: int) -> List[Tuple[str, List[str], Any]]:
+    timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
+    chunk_results = await asyncio.gather(
+        *[
+            run_blocking(db_executor, notification_db.get_users_for_daily_summary, chunk, target_hour)
+            for chunk in timezone_chunks
+        ]
+    )
+    return [user for chunk in chunk_results for user in chunk]
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
@@ -171,7 +182,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
 
     # Create notification with deep link to summary page
     daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
-    summary_body = str(summary_data.get('overview', 'Tap to see your daily summary'))
+    summary_body = str(summary_data.get('overview') or 'Tap to see your daily summary')
 
     # Truncate body for notification if too long
     if len(summary_body) > 150:
@@ -232,7 +243,11 @@ async def _send_notification_for_time(target_time: str, title: str, body: str) -
 
 async def _get_users_in_timezone(target_time: str) -> Any:
     timezones_in_time = _get_timezones_at_time(target_time)
-    return await notification_db.get_users_token_in_timezones(timezones_in_time)
+    timezone_chunks = [timezones_in_time[i : i + 30] for i in range(0, len(timezones_in_time), 30)]
+    chunk_results = await asyncio.gather(
+        *[run_blocking(db_executor, notification_db.get_users_token_in_timezones, chunk) for chunk in timezone_chunks]
+    )
+    return [token for chunk in chunk_results for token in chunk]
 
 
 def _get_timezones_at_time(target_time: str) -> List[str]:

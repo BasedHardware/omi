@@ -47,39 +47,6 @@ def get_notion_database_id(uid: str) -> str:
     return val.decode('utf-8') if val else None
 
 
-# *******************************************************
-# ************ ADVANCED REALTIME PLUGIN UTILS ***********
-# *******************************************************
-
-
-def append_segment_to_transcript(uid: str, session_id: str, new_segments: list[TranscriptSegment]) -> List[dict]:
-    key = f'transcript:{uid}:{session_id}'
-    segments = r.get(key)
-    if not segments:
-        segments = []
-    else:
-        segments = eval(segments)
-
-    segments.extend([segment.dict() for segment in new_segments])
-
-    segments = sorted(segments, key=lambda x: x['start'])
-    if len(segments) > 20:
-        segments = segments[-20:]
-
-    r.set(key, str(segments))
-    return [TranscriptSegment(**segment) for segment in segments]
-
-
-def remove_transcript(uid: str, session_id: str):
-    r.delete(f'transcript:{uid}:{session_id}')
-
-
-def clean_all_transcripts_except(uid: str, session_id: str):
-    for key in r.scan_iter(f'transcript:{uid}:*'):
-        if key.decode().split(':')[2] != session_id:
-            r.delete(key)
-
-
 # **********************************************************
 # ************ ZAPIER UTILS ************
 # **********************************************************
@@ -116,44 +83,6 @@ def store_multion_user_id(uid: str, user_id: str):
 def get_multion_user_id(uid: str) -> str:
     result = r.get(f'multion_user_id:{uid}')
     return result.decode('utf-8') if result else None
-
-
-def set_task_status(task_id: str, status: str):
-    r.set(f'task_status:{task_id}', status)
-
-
-def get_task_status(task_id: str) -> str:
-    result = r.get(f'task_status:{task_id}')
-    return result.decode('utf-8') if result else None
-
-
-def set_task_result(task_id: str, result: str):
-    r.set(f'task_result:{task_id}', result)
-
-
-def get_task_result(task_id: str) -> str:
-    result = r.get(f'task_result:{task_id}')
-    return result.decode('utf-8') if result else None
-
-
-# **********************************************************
-# ************ AHDA UTILS (PC Control) ************
-# **********************************************************
-
-
-def store_ahda(uid: str, url: str, os: str):
-    r.set(f'ahda_url:{uid}', url)
-    r.set(f'ahda_os:{uid}', os)
-
-
-def get_ahda_url(uid: str) -> str:
-    val = r.get(f'ahda_url:{uid}')
-    return val.decode('utf-8') if val else None
-
-
-def get_ahda_os(uid: str) -> str:
-    val = r.get(f'ahda_os:{uid}')
-    return val.decode('utf-8') if val else None
 
 
 # *******************************************************

@@ -47,7 +47,7 @@ enum OnboardingMemoryLogSource: String, CaseIterable, Sendable {
 
   var prompt: String {
     """
-    Return everything you know about me inside one fenced code block. Include long-term memory, bio details, and any model-set context you have with dates when available. I want a thorough memory export of what you've learned about me. Skip tool details and include only information that is actually about me. Be exhaustive and careful.
+    Return everything you know about me inside one fenced code block. Include long-term memory, bio details, and any model-set context you have. Prefix every item with when you learned it, using a bracket tag: an exact [YYYY-MM-DD] only if you genuinely have a real date, otherwise the coarse recency tier you actually have — [recent], [earlier], or [long-term]. Never invent or guess a date; if you truly have no recency signal at all, use [unknown]. I want a thorough memory export of what you've learned about me. Skip tool details and include only information that is actually about me. Be exhaustive and careful.
     """
   }
 }
@@ -97,6 +97,7 @@ actor OnboardingMemoryLogImportService {
       - Deduplicate overlapping memories
       - Exclude tool details, implementation notes, and meta-instructions
       - Each memory should be one concise factual statement
+      - Preserve any leading recency tag the log provides — an exact date ("[2024-05-01]") or a coarse tier ("[recent]", "[earlier]", "[long-term]"). Drop bare "[date unknown]"/"[unknown]" tags; they carry no signal
       """
 
     let extracted: ExtractedMemoryLog

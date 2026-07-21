@@ -20,7 +20,8 @@ file(GLOB app_sources
 )
 
 if(CONFIG_OMI_ENABLE_T5838_AAD)
-    list(APPEND app_sources src/aad.c)
+    # Hardware AAD is integrated into mic.c; t5838_aad.c is the low-level driver.
+    list(APPEND app_sources src/t5838_aad.c)
 endif()
 file(GLOB core_sources
     src/lib/core/config.h

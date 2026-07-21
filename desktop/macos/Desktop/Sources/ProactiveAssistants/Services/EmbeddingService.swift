@@ -36,7 +36,7 @@ actor EmbeddingService {
 
   /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingCString: cString), !url.isEmpty {
       return url.hasSuffix("/") ? url : url + "/"
     }
     return ""
@@ -253,22 +253,35 @@ actor EmbeddingService {
 
   /// Batch-embed all tasks missing embeddings (action_items + staged_tasks)
   func backfillIfNeeded() async {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      return
+    }
     let batchSize = 100
     var totalProcessed = 0
 
     do {
       // Backfill action_items
       while true {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let items = try await ActionItemStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         if items.isEmpty { break }
 
         let texts = items.map { $0.description }
         let embeddings = try await embedBatch(texts: texts)
 
         for (i, embedding) in embeddings.enumerated() where i < items.count {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
           let item = items[i]
           let data = floatsToData(embedding)
-          try await ActionItemStorage.shared.updateEmbedding(id: item.id, embedding: data)
+          try await ActionItemStorage.shared.updateEmbedding(
+            id: item.id,
+            embedding: data,
+            authorization: LocalMutationAuthorization {
+              RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+            }
+          )
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
           addToIndex(source: .actionItem, id: item.id, embedding: embedding)
         }
 
@@ -281,6 +294,7 @@ actor EmbeddingService {
 
       // Backfill staged_tasks
       while true {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let items = try await StagedTaskStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
         if items.isEmpty { break }
 
@@ -304,7 +318,9 @@ actor EmbeddingService {
         log("EmbeddingService: Backfill complete — \(totalProcessed) items embedded")
       }
     } catch let error as EmbeddingError where error.isExpectedBackendState {
-      log("EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)")
+      log(
+        "EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)"
+      )
     } catch {
       logError("EmbeddingService: Backfill failed after \(totalProcessed) items", error: error)
     }

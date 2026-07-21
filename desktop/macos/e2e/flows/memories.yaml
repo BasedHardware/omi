@@ -9,6 +9,12 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
+  - desktop/macos/Desktop/Sources/NotionConnect/NotionMCPConnector.swift
+  - desktop/macos/Desktop/Sources/NotionConnect/MemoryExportServiceNotion.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Persona.swift
 preconditions:
   - automation_bridge_ready
 

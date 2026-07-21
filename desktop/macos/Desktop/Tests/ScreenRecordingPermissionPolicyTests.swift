@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -65,7 +66,8 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       let src = try sourceFile(path)
       XCTAssertNil(
         src.range(
-          of: "openScreenRecordingPreferences\\([\\s\\S]{0,240}(requestAllScreenCapturePermissions|triggerScreenRecordingPermission)",
+          of:
+            "openScreenRecordingPreferences\\([\\s\\S]{0,240}(requestAllScreenCapturePermissions|triggerScreenRecordingPermission)",
           options: .regularExpression),
         "\(path) still opens Settings before requesting screen-recording access")
     }
@@ -74,6 +76,95 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
   func testUiPermissionFollowsTccGrant() {
     XCTAssertTrue(ScreenRecordingPermissionPolicy.uiPermissionGranted(tccGranted: true))
     XCTAssertFalse(ScreenRecordingPermissionPolicy.uiPermissionGranted(tccGranted: false))
+  }
+
+  func testDeniedScreenRecordingAlwaysRoutesToSettings() {
+    XCTAssertEqual(
+      ScreenCaptureService.screenRecordingRequestDestination(hasPermissionNow: true),
+      .alreadyGranted)
+    XCTAssertEqual(
+      ScreenCaptureService.screenRecordingRequestDestination(hasPermissionNow: false),
+      .systemSettings)
+  }
+
+  @MainActor
+  func testDragPayloadIsAFileURL() {
+    let appURL = URL(fileURLWithPath: "/Applications/omi-screen-drag-test.app")
+    let pasteboard = NSPasteboard(name: .init("omi-screen-recording-drag-test"))
+    pasteboard.clearContents()
+
+    XCTAssertTrue(
+      pasteboard.writeObjects([AppBundleDragSourceNSView.pasteboardWriter(for: appURL)]))
+    XCTAssertEqual(pasteboard.string(forType: .fileURL), appURL.absoluteString)
+  }
+
+  @MainActor
+  func testDragSourceRendersIconBeforeInteraction() {
+    let icon = NSImage(size: NSSize(width: 8, height: 8), flipped: false) { rect in
+      NSColor.red.setFill()
+      rect.fill()
+      return true
+    }
+    let view = AppBundleDragSourceNSView(frame: NSRect(x: 0, y: 0, width: 32, height: 32))
+    view.image = icon
+    let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+    view.cacheDisplay(in: view.bounds, to: bitmap)
+
+    XCTAssertGreaterThan(bitmap.colorAt(x: 16, y: 16)?.alphaComponent ?? 0, 0.5)
+  }
+
+  @MainActor
+  func testDragIconShrinksAsItEntersSystemSettings() {
+    let settingsFrame = CGRect(x: 100, y: 100, width: 600, height: 500)
+
+    XCTAssertEqual(
+      AppBundleDragSourceNSView.dragIconSize(
+        pointer: CGPoint(x: 80, y: 300), targetFrame: settingsFrame),
+      AppBundleDragSourceNSView.fullDragIconSize)
+    XCTAssertEqual(
+      AppBundleDragSourceNSView.dragIconSize(
+        pointer: CGPoint(x: 100, y: 300), targetFrame: settingsFrame),
+      AppBundleDragSourceNSView.fullDragIconSize)
+    XCTAssertEqual(
+      AppBundleDragSourceNSView.dragIconSize(
+        pointer: CGPoint(x: 140, y: 300), targetFrame: settingsFrame),
+      AppBundleDragSourceNSView.compactDragIconSize)
+  }
+
+  @MainActor
+  func testDragHelperSkipsFadeForReducedMotion() {
+    XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: false), 0)
+    XCTAssertEqual(CloudConnectorGuidanceOverlay.dragCardInitialAlpha(reduceMotion: true), 1)
+  }
+
+  /// The drag card sits centered in the bottom quarter of the screen (below the
+  /// Settings list, never covering the drop target), x-centered on the anchor.
+  @MainActor
+  func testDragCardSitsInBottomQuarterOfScreen() {
+    let visible = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+    let card = CGSize(width: 180, height: 164)
+    let anchor = CGRect(x: 900, y: 300, width: 600, height: 500)
+
+    let frame = CloudConnectorGuidanceOverlay.dragCardFrame(
+      anchor: anchor, cardSize: card, visibleFrame: visible)
+    XCTAssertEqual(frame.midX, anchor.midX)
+    XCTAssertLessThanOrEqual(frame.maxY, visible.minY + visible.height / 4)
+
+    // No anchor → centered on the screen, still in the bottom quarter.
+    let centered = CloudConnectorGuidanceOverlay.dragCardFrame(
+      anchor: nil, cardSize: card, visibleFrame: visible)
+    XCTAssertEqual(centered.midX, visible.midX)
+    XCTAssertLessThanOrEqual(centered.maxY, visible.minY + visible.height / 4)
+  }
+
+  @MainActor
+  func testDragCardExpandsForLongBundleDisplayNames() {
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragCardSize(appName: "Omi Dev"),
+      CGSize(width: 180, height: 164))
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.dragCardSize(appName: "omi-tool-stall-reliability"),
+      CGSize(width: 240, height: 180))
   }
 
   func testCaptureKitFailureDoesNotOverrideGrantedTccPermission() {
@@ -85,5 +176,68 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
 
   func testCaptureKitFailureDoesNotCreatePermissionFailureWhenTccIsDenied() {
     XCTAssertFalse(ScreenRecordingPermissionPolicy.shouldMarkCaptureKitBroken(tccGranted: false))
+  }
+
+  /// Regression: the onboarding request tool reopened System Settings (and the
+  /// FDA drag card) even when the permission was already granted. Opening must
+  /// stay behind a granted check, like the notifications/automation cases.
+  func testRequestToolOpensSettingsOnlyWhenDenied() throws {
+    // omi-test-quality: source-inspection -- static contract: the tool's
+    // NSWorkspace/System Settings side effects cannot be exercised hermetically.
+    let src = try sourceFile("Sources/Providers/ChatToolExecutor.swift")
+    for (caseStart, caseEnd, grantedGuard, pane) in [
+      ("case \"screen_recording\":", "case \"microphone\":", "if !screenRecordingGranted {", "Privacy_ScreenCapture"),
+      ("case \"full_disk_access\":", "default:", "if !checkFullDiskAccessDirectly() {", "Privacy_AllFiles"),
+    ] {
+      guard let start = src.range(of: caseStart)?.upperBound,
+        let end = src.range(of: caseEnd, range: start..<src.endIndex)?.lowerBound
+      else { return XCTFail("request tool must handle \(caseStart)") }
+      let body = String(src[start..<end])
+      guard let guardPos = body.range(of: grantedGuard)?.lowerBound,
+        let openPos = body.range(of: pane)?.lowerBound
+      else { return XCTFail("\(caseStart) must guard its \(pane) open behind \(grantedGuard)") }
+      XCTAssertLessThan(
+        guardPos, openPos,
+        "\(caseStart): opening \(pane) must sit inside the not-granted branch")
+    }
+  }
+
+  /// Regression: the onboarding "Reopen Omi" prompt looped forever because the
+  /// offer was static step config with no memory of restarts. The offer must
+  /// fire only for a grant that arrived during this process's lifetime.
+  func testRelaunchOfferedOnlyForGrantsArrivingWhileRunning() {
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: true, grantedAtLaunch: false),
+      "granted while running → capture is dead until relaunch, offer the reopen")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: true, grantedAtLaunch: true),
+      "already granted at launch (incl. right after a reopen) → never re-offer")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: false, grantedAtLaunch: false),
+      "not granted → nothing to apply")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: false, grantedAtLaunch: true),
+      "revoked while running → a relaunch can't help; the grant flow handles it")
+  }
+
+  func testScreenCaptureRestartsUseSharedRelaunchCommand() throws {
+    let src = try sourceFile("Sources/ScreenCaptureService.swift")
+    XCTAssertTrue(src.contains("static func screenCaptureRelaunchCommand(appPath: String) -> String"))
+    XCTAssertTrue(src.contains("AppState.relaunchCommand("))
+
+    guard let softRange = src.range(of: "static func softRecoveryAndRestart()"),
+      let resetRange = src.range(of: "static func resetScreenCapturePermissionAndRestart()")
+    else { return XCTFail("screen-capture restart helpers must exist") }
+    let softSnippet = String(src[softRange.lowerBound...]).prefix(4200)
+    let resetSnippet = String(src[resetRange.lowerBound...]).prefix(3000)
+
+    XCTAssertTrue(softSnippet.contains("screenCaptureRelaunchCommand(appPath: bundleURL.path)"))
+    XCTAssertTrue(resetSnippet.contains("screenCaptureRelaunchCommand(appPath: bundleURL.path)"))
+    XCTAssertFalse(softSnippet.contains("sleep 0.5 && open"))
+    XCTAssertFalse(resetSnippet.contains("sleep 0.5 && open"))
   }
 }

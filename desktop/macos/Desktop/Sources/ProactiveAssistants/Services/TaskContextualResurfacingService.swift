@@ -29,7 +29,7 @@ enum TaskContextUrgency: String, Codable {
   case timeSensitive = "time_sensitive"
 }
 
-struct TaskContextSubject: Hashable {
+struct TaskContextSubject: Hashable, Sendable {
   let kind: OmiAPI.RecommendationSubjectKind
   let id: String
   let workstreamID: String?
@@ -46,7 +46,7 @@ struct TaskContextSubject: Hashable {
 
 /// A privacy-bounded local event. Raw window titles, person names, document names,
 /// and meeting text are normalized and hashed before this value exists.
-struct TaskLocalContextEvent: Equatable {
+struct TaskLocalContextEvent: Equatable, Sendable {
   static let schemaVersion = 1
 
   let kind: TaskContextEventKind
@@ -68,7 +68,8 @@ struct TaskLocalContextEvent: Equatable {
     occurredAt: Date = Date(),
     lifetime: TimeInterval = 5 * 60
   ) -> TaskLocalContextEvent? {
-    let normalized = rawReference
+    let normalized =
+      rawReference
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
     guard !normalized.isEmpty, lifetime > 0 else { return nil }
@@ -134,6 +135,7 @@ final class TaskContextSubjectMatcher {
 
   private let defaults: UserDefaults
   private let fixedOwnerID: String?
+  private var activeAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   private var activeOwnerHash: String
   private var entries: [String: Entry]
   private var currentContext: RecentContext?
@@ -141,7 +143,13 @@ final class TaskContextSubjectMatcher {
   init(defaults: UserDefaults = .standard, ownerID: String? = nil) {
     self.defaults = defaults
     fixedOwnerID = ownerID
-    activeOwnerHash = Self.ownerHash(ownerID ?? defaults.string(forKey: .authUserId) ?? "signed-out")
+    activeAuthorizationSnapshot =
+      ownerID == nil
+      ? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      : nil
+    activeOwnerHash = Self.ownerHash(
+      ownerID ?? activeAuthorizationSnapshot?.ownerID ?? "signed-out"
+    )
     if let data = defaults.data(forKey: .taskContextSubjectMatches(ownerHash: activeOwnerHash)),
       let decoded = try? JSONDecoder().decode([Entry].self, from: data)
     {
@@ -169,11 +177,12 @@ final class TaskContextSubjectMatcher {
       let kind = OmiAPI.RecommendationSubjectKind(rawValue: entry.subjectKind),
       kind != ._unknown
     else { return event }
-    return event.attaching(subject: TaskContextSubject(
-      kind: kind,
-      id: entry.subjectID,
-      workstreamID: entry.workstreamID
-    ))
+    return event.attaching(
+      subject: TaskContextSubject(
+        kind: kind,
+        id: entry.subjectID,
+        workstreamID: entry.workstreamID
+      ))
   }
 
   func bindRecentContext(to subject: TaskContextSubject, now: Date = Date()) {
@@ -216,8 +225,15 @@ final class TaskContextSubjectMatcher {
 
   private func ensureCurrentOwner() {
     guard fixedOwnerID == nil else { return }
-    let next = Self.ownerHash(defaults.string(forKey: .authUserId) ?? "signed-out")
-    guard next != activeOwnerHash else { return }
+    let nextSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    if let activeAuthorizationSnapshot,
+      let nextSnapshot,
+      activeAuthorizationSnapshot == nextSnapshot
+    {
+      return
+    }
+    activeAuthorizationSnapshot = nextSnapshot
+    let next = Self.ownerHash(nextSnapshot?.ownerID ?? "signed-out")
     activeOwnerHash = next
     currentContext = nil
     if let data = defaults.data(forKey: .taskContextSubjectMatches(ownerHash: activeOwnerHash)),
@@ -424,6 +440,7 @@ enum TaskInterruptionGateReason: String, Codable, Equatable {
   case duplicate
   case dailyBudget = "daily_budget"
   case minimumSpacing = "minimum_spacing"
+  case staleOwner = "stale_owner"
 }
 
 struct TaskInterruptionGateTrace: Codable, Equatable {
@@ -437,7 +454,9 @@ struct TaskInterruptionGateTrace: Codable, Equatable {
   let reason: TaskInterruptionGateReason
   let evaluatedAt: Date
 
-  init(candidate: TaskInterruptionCandidate, environment: TaskInterruptionEnvironment, reason: TaskInterruptionGateReason) {
+  init(
+    candidate: TaskInterruptionCandidate, environment: TaskInterruptionEnvironment, reason: TaskInterruptionGateReason
+  ) {
     schemaVersion = Self.schemaVersion
     decisionID = "gate-\(UUID().uuidString.lowercased())"
     recommendationID = candidate.recommendationID
@@ -472,7 +491,11 @@ final class TaskInterruptionLedgerDefaults: TaskInterruptionLedgerPersisting {
   }
 
   private var key: String {
-    let owner = fixedOwnerID ?? defaults.string(forKey: .authUserId) ?? "signed-out"
+    let dynamicOwner =
+      defaults === UserDefaults.standard
+      ? RuntimeOwnerIdentity.currentOwnerId()
+      : defaults.string(forKey: .authUserId)
+    let owner = fixedOwnerID ?? dynamicOwner ?? "signed-out"
     return "proactiveTaskInterruptionLedger.v1.\(owner)"
   }
 
@@ -508,22 +531,37 @@ final class ProactiveTaskInterruptionGate {
     }.count
 
     let reason: TaskInterruptionGateReason
-    if !configuration.isEnrolled(cohort: environment.cohort) { reason = .notEnrolled }
-    else if !environment.masterNotificationsEnabled { reason = .masterDisabled }
-    else if !environment.frequencyEnabled { reason = .frequencyDisabled }
-    else if !environment.taskNotificationsEnabled { reason = .taskDisabled }
-    else if environment.focusSuppressed { reason = .focusSuppressed }
-    else if environment.snoozed { reason = .snoozed }
-    else if Self.isQuietHours(configuration: configuration, environment: environment) { reason = .quietHours }
-    else if candidate.expiresAt <= environment.now { reason = .expired }
-    else if candidate.canWait { reason = .canWait }
-    else if ledger.dedupeExpirations[candidate.dedupeKey] != nil { reason = .duplicate }
-    else if !environment.ambientFrequencyEligible { reason = .frequencyBudget }
-    else if sentToday >= configuration.dailyLimit { reason = .dailyBudget }
-    else if let last = ledger.sentAt.max(),
+    if !configuration.isEnrolled(cohort: environment.cohort) {
+      reason = .notEnrolled
+    } else if !environment.masterNotificationsEnabled {
+      reason = .masterDisabled
+    } else if !environment.frequencyEnabled {
+      reason = .frequencyDisabled
+    } else if !environment.taskNotificationsEnabled {
+      reason = .taskDisabled
+    } else if environment.focusSuppressed {
+      reason = .focusSuppressed
+    } else if environment.snoozed {
+      reason = .snoozed
+    } else if Self.isQuietHours(configuration: configuration, environment: environment) {
+      reason = .quietHours
+    } else if candidate.expiresAt <= environment.now {
+      reason = .expired
+    } else if candidate.canWait {
+      reason = .canWait
+    } else if ledger.dedupeExpirations[candidate.dedupeKey] != nil {
+      reason = .duplicate
+    } else if !environment.ambientFrequencyEligible {
+      reason = .frequencyBudget
+    } else if sentToday >= configuration.dailyLimit {
+      reason = .dailyBudget
+    } else if let last = ledger.sentAt.max(),
       environment.now.timeIntervalSince(last) < configuration.minimumSpacing
-    { reason = .minimumSpacing }
-    else { reason = .allowed }
+    {
+      reason = .minimumSpacing
+    } else {
+      reason = .allowed
+    }
 
     let trace = TaskInterruptionGateTrace(candidate: candidate, environment: environment, reason: reason)
     ledger.lastTrace = trace
@@ -611,24 +649,27 @@ struct KernelPreparedArtifactReceipt {
 /// versioning, supersession, and delivery receipts to the Ticket-06 kernel.
 @MainActor
 final class KernelPreparedArtifactBridge {
-  typealias Persist = @MainActor (
-    _ workstreamID: String,
-    _ logicalKey: String,
-    _ kind: String,
-    _ fileURL: URL,
-    _ contentHash: String,
-    _ evidenceRefs: [OmiAPI.EvidenceRef],
-    _ grantID: String
-  ) async throws -> TaskKernelPreparedArtifactReceipt
+  typealias Persist =
+    @MainActor (
+      _ workstreamID: String,
+      _ logicalKey: String,
+      _ kind: String,
+      _ fileURL: URL,
+      _ contentHash: String,
+      _ evidenceRefs: [OmiAPI.EvidenceRef],
+      _ grantID: String,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async throws -> TaskKernelPreparedArtifactReceipt
 
-  private let root: URL
+  private let fixedRoot: URL?
   private let fileManager: FileManager
   private let persist: Persist
 
   init(
     root: URL? = nil,
     fileManager: FileManager = .default,
-    persist: @escaping Persist = { workstreamID, logicalKey, kind, fileURL, contentHash, evidenceRefs, grantID in
+    persist: @escaping Persist = {
+      workstreamID, logicalKey, kind, fileURL, contentHash, evidenceRefs, grantID, authorizationSnapshot in
       try await TaskWorkstreamContinuity.persistPreparedArtifact(
         workstreamId: workstreamID,
         logicalKey: logicalKey,
@@ -636,40 +677,42 @@ final class KernelPreparedArtifactBridge {
         fileURL: fileURL,
         contentHash: contentHash,
         evidenceRefs: evidenceRefs,
-        grantId: grantID
+        grantId: grantID,
+        authorizationSnapshot: authorizationSnapshot
       )
     }
   ) {
     self.fileManager = fileManager
     self.persist = persist
-    if let root {
-      self.root = root
-    } else {
-      let owner = UserDefaults.standard.string(forKey: .authUserId) ?? "signed-out"
-      let ownerHash = SHA256.hash(data: Data(owner.utf8))
-        .map { String(format: "%02x", $0) }.joined()
-      self.root = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Omi/PreparedTaskArtifacts", isDirectory: true)
-        .appendingPathComponent(Self.safeComponent(AppBuild.bundleIdentifier), isDirectory: true)
-        .appendingPathComponent(String(ownerHash.prefix(24)), isDirectory: true)
-    }
+    fixedRoot = root
   }
 
   func prepare(
     _ proposal: ProactiveTaskArtifactProposal,
     configuration: ProactiveTaskInterruptionConfiguration
   ) async throws -> KernelPreparedArtifactReceipt? {
+    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    guard authorizationSnapshot != nil || fixedRoot != nil else {
+      return nil
+    }
     guard ProactiveTaskPreparationPolicy.denial(proposal: proposal, configuration: configuration) == nil else {
       return nil
     }
     let digest = SHA256.hash(data: proposal.content).map { String(format: "%02x", $0) }.joined()
     let contentHash = "sha256:\(digest)"
+    let root = fixedRoot ?? ownerRoot(ownerID: authorizationSnapshot!.ownerID)
+    if let authorizationSnapshot,
+      !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    {
+      return nil
+    }
     let payloadDirectory = root.appendingPathComponent("payloads", isDirectory: true)
     try fileManager.createDirectory(at: payloadDirectory, withIntermediateDirectories: true)
     let fileURL = payloadDirectory.appendingPathComponent("\(digest).artifact")
     if !fileManager.fileExists(atPath: fileURL.path) {
       try proposal.content.write(to: fileURL, options: .withoutOverwriting)
     }
+    guard let authorizationSnapshot else { return nil }
     let continuity = try await persist(
       proposal.workstreamID,
       Self.safeComponent(proposal.logicalKey),
@@ -677,8 +720,12 @@ final class KernelPreparedArtifactBridge {
       fileURL,
       contentHash,
       proposal.evidenceRefs,
-      proposal.coordinatorGrantID!
+      proposal.coordinatorGrantID!,
+      authorizationSnapshot
     )
+    if !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+      return nil
+    }
     let version = continuity.artifactVersion
     guard version.logicalKey == Self.safeComponent(proposal.logicalKey),
       version.artifact.contentHash == contentHash
@@ -692,6 +739,15 @@ final class KernelPreparedArtifactBridge {
     )
   }
 
+  private func ownerRoot(ownerID: String) -> URL {
+    let ownerHash = SHA256.hash(data: Data(ownerID.utf8))
+      .map { String(format: "%02x", $0) }.joined()
+    return fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("Omi/PreparedTaskArtifacts", isDirectory: true)
+      .appendingPathComponent(Self.safeComponent(AppBuild.bundleIdentifier), isDirectory: true)
+      .appendingPathComponent(String(ownerHash.prefix(24)), isDirectory: true)
+  }
+
   private static func safeComponent(_ value: String) -> String {
     let mapped = value.lowercased().map { $0.isLetter || $0.isNumber ? $0 : "-" }
     let collapsed = String(mapped).replacingOccurrences(of: "-+", with: "-", options: .regularExpression)
@@ -700,13 +756,22 @@ final class KernelPreparedArtifactBridge {
   }
 }
 
-protocol TaskContextualResurfacingClient: AnyObject {
-  func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl
+protocol TaskContextualResurfacingClient: AnyObject, Sendable {
+  func getCandidateWorkflowControl(
+    expectedOwnerId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> OmiAPI.TaskWorkflowControl
   func replaceTaskContextSnapshot(
     _ snapshot: OmiAPI.NormalizedContextSnapshot,
-    accountGeneration: Int
+    accountGeneration: Int,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async throws -> OmiAPI.SnapshotReceipt
-  func evaluateWhatMattersNow(_ request: OmiAPI.EvaluationRequest) async throws -> OmiAPI.WhatMattersNowProjection
+  func evaluateWhatMattersNow(
+    _ request: OmiAPI.EvaluationRequest,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> OmiAPI.WhatMattersNowProjection
 }
 
 extension APIClient: TaskContextualResurfacingClient {}
@@ -722,12 +787,17 @@ extension Notification.Name {
 final class ContextualTaskNavigationRouter {
   static let shared = ContextualTaskNavigationRouter()
   private(set) var pendingRecommendationID: String?
+  private var pendingAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
 
   func request(recommendationID: String) {
-    guard !recommendationID.isEmpty else { return }
+    guard !recommendationID.isEmpty,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else { return }
     pendingRecommendationID = recommendationID
+    pendingAuthorizationSnapshot = authorizationSnapshot
     NotificationCenter.default.post(name: .navigateToChat, object: nil)
     DispatchQueue.main.async {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
       NotificationCenter.default.post(
         name: .openWhatMattersNowRecommendation,
         object: nil,
@@ -737,9 +807,17 @@ final class ContextualTaskNavigationRouter {
   }
 
   func consume(requestedID: String? = nil) -> String? {
-    guard let pendingRecommendationID else { return nil }
+    guard let pendingRecommendationID,
+      let pendingAuthorizationSnapshot,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(pendingAuthorizationSnapshot)
+    else {
+      self.pendingRecommendationID = nil
+      self.pendingAuthorizationSnapshot = nil
+      return nil
+    }
     if let requestedID, requestedID != pendingRecommendationID { return nil }
     self.pendingRecommendationID = nil
+    self.pendingAuthorizationSnapshot = nil
     return pendingRecommendationID
   }
 }
@@ -750,20 +828,75 @@ actor TaskContextualResurfacingService {
 
   private let client: any TaskContextualResurfacingClient
   private let debounceInterval: TimeInterval
+  private let deviceID: () -> String
+  private let ownerID: @Sendable () -> String?
+  private let interruptionSender:
+    @MainActor @Sendable (
+      _ candidate: TaskInterruptionCandidate,
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) -> Void
   private var accumulator = TaskContextEventAccumulator()
   private var debounceTask: Task<Void, Never>?
+  private var ownerChangeTask: Task<Void, Never>?
+  private var activeLease: OwnerLease?
   private var lastMaterialHint: String?
   private var lastEvaluationAt: Date?
 
+  private struct OwnerLease: Equatable, Sendable {
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    let observedOwnerID: String
+    var ownerID: String { authorizationSnapshot.ownerID }
+  }
+
   init(
     client: any TaskContextualResurfacingClient = APIClient.shared,
-    debounceInterval: TimeInterval = 2
+    debounceInterval: TimeInterval = 2,
+    deviceIDProvider: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
+    ownerIDProvider: @escaping @Sendable () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    interruptionSender:
+      @escaping @MainActor @Sendable (
+        TaskInterruptionCandidate,
+        RuntimeOwnerAuthorizationSnapshot
+      ) -> Void = { candidate, authorizationSnapshot in
+        NotificationService.shared.sendContextualTaskInterruption(
+          candidate,
+          authorizationSnapshot: authorizationSnapshot
+        )
+      }
   ) {
     self.client = client
     self.debounceInterval = debounceInterval
+    self.deviceID = deviceIDProvider
+    self.ownerID = ownerIDProvider
+    self.interruptionSender = interruptionSender
+  }
+
+  init(
+    client: any TaskContextualResurfacingClient = APIClient.shared,
+    debounceInterval: TimeInterval = 2,
+    deviceIDProvider: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
+    ownerIDProvider: @escaping @Sendable () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    sendInterruption: @escaping @MainActor @Sendable (TaskInterruptionCandidate) -> Void
+  ) {
+    self.init(
+      client: client,
+      debounceInterval: debounceInterval,
+      deviceIDProvider: deviceIDProvider,
+      ownerIDProvider: ownerIDProvider,
+      interruptionSender: { candidate, _ in sendInterruption(candidate) }
+    )
   }
 
   func observe(_ event: TaskLocalContextEvent) {
+    ensureOwnerChangeObserver()
+    guard let lease = captureOwnerLease() else {
+      resetOwnerState()
+      return
+    }
+    if activeLease != lease {
+      resetOwnerState()
+      activeLease = lease
+    }
     accumulator.insert(event)
     debounceTask?.cancel()
     debounceTask = Task { [weak self] in
@@ -771,27 +904,43 @@ actor TaskContextualResurfacingService {
       let nanos = UInt64(max(0, self.debounceInterval) * 1_000_000_000)
       try? await Task.sleep(nanoseconds: nanos)
       guard !Task.isCancelled else { return }
-      await self.flush()
+      await self.flush(lease: lease)
     }
   }
 
   func pendingWorkstreamCount() -> Int { accumulator.pendingWorkstreamCount }
 
   func flush() async {
+    guard let lease = activeLease else { return }
+    await flush(lease: lease)
+  }
+
+  private func flush(lease: OwnerLease) async {
     debounceTask?.cancel()
     debounceTask = nil
+    guard isCurrent(lease), activeLease == lease else {
+      resetOwnerState()
+      return
+    }
     let now = Date()
     let events = accumulator.drain(now: now)
     guard !events.isEmpty else { return }
-    let materialFingerprint = events.map { event in
+    let matches = Self.contextMatches(events)
+    let semanticFingerprint = matches.map { match in
       [
-        event.kind.rawValue,
-        event.referenceHash,
-        event.subject?.kind.rawValue ?? "none",
-        event.subject?.id ?? "none",
-        event.urgency.rawValue,
+        match.subjectKind.rawValue,
+        match.subjectId,
+        match.signals.map(\.rawValue).sorted().joined(separator: ","),
       ].joined(separator: "|")
-    }.sorted().joined(separator: "||")
+    }.joined(separator: "||")
+    // Urgency is a privacy-safe control input, not model material. Including only
+    // its bounded state forces an authenticated gate recheck when a context moves
+    // from passive to interruptible while keeping the semantic snapshot stable.
+    let urgencyControl =
+      events.contains { $0.urgency == .timeSensitive }
+      ? TaskContextUrgency.timeSensitive.rawValue
+      : TaskContextUrgency.canWait.rawValue
+    let materialFingerprint = "\(semanticFingerprint)||urgency:\(urgencyControl)"
     let materialHash = SHA256.hash(data: Data(materialFingerprint.utf8))
       .map { String(format: "%02x", $0) }.joined()
     let materialHint = "ctx:\(materialHash.prefix(32))"
@@ -802,12 +951,15 @@ actor TaskContextualResurfacingService {
       return
     }
     do {
-      let control = try await client.getCandidateWorkflowControl()
+      let control = try await client.getCandidateWorkflowControl(
+        expectedOwnerId: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
+      )
+      guard isCurrent(lease), activeLease == lease else { return }
       guard control.workflowMode == .read, let accountGeneration = control.accountGeneration else { return }
-      let deviceID = ClientDeviceService.shared.deviceIdHash
-      let matches = Self.contextMatches(events)
+      let scopedDeviceID = deviceID()
       let snapshot = OmiAPI.NormalizedContextSnapshot(
-        deviceId: deviceID,
+        deviceId: scopedDeviceID,
         expiresAt: Self.iso8601(now.addingTimeInterval(5 * 60)),
         generatedAt: Self.iso8601(now),
         matches: matches,
@@ -816,36 +968,108 @@ actor TaskContextualResurfacingService {
       )
       _ = try await client.replaceTaskContextSnapshot(
         snapshot,
-        accountGeneration: accountGeneration
+        accountGeneration: accountGeneration,
+        expectedOwnerId: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
       )
+      guard isCurrent(lease), activeLease == lease else { return }
       let projection = try await client.evaluateWhatMattersNow(
-        OmiAPI.EvaluationRequest(deviceId: deviceID, materialHint: materialHint)
+        OmiAPI.EvaluationRequest(deviceId: scopedDeviceID, materialHint: materialHint),
+        expectedOwnerId: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
       )
+      guard isCurrent(lease), activeLease == lease else { return }
       lastMaterialHint = materialHint
       lastEvaluationAt = now
+      let currentOwnerID = ownerID
       await MainActor.run {
+        guard currentOwnerID() == lease.observedOwnerID,
+          RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+        else { return }
         NotificationCenter.default.post(name: .whatMattersNowContextDidRefresh, object: projection)
       }
-      await interruptIfEligible(projection: projection, events: events, now: now)
+      guard isCurrent(lease), activeLease == lease else { return }
+      await interruptIfEligible(
+        projection: projection,
+        events: events,
+        now: now,
+        lease: lease
+      )
     } catch {
-      logError("TaskContextualResurfacing: context re-evaluation failed", error: error)
+      if isCurrent(lease), activeLease == lease {
+        logError("TaskContextualResurfacing: context re-evaluation failed", error: error)
+      }
     }
+  }
+
+  private func ensureOwnerChangeObserver() {
+    guard ownerChangeTask == nil else { return }
+    ownerChangeTask = Task { [weak self] in
+      for await _ in NotificationCenter.default.notifications(named: .runtimeOwnerDidChange) {
+        guard !Task.isCancelled, let self else { return }
+        await self.handleOwnerChangeNotification()
+      }
+    }
+  }
+
+  private func handleOwnerChangeNotification() {
+    if let activeLease,
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot() == activeLease.authorizationSnapshot,
+      isCurrent(activeLease)
+    {
+      return
+    }
+    resetOwnerState()
+  }
+
+  func processOwnerChangeNotificationForTesting() {
+    handleOwnerChangeNotification()
+  }
+
+  private func captureOwnerLease() -> OwnerLease? {
+    guard let observedOwnerID = ownerID(),
+      let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else { return nil }
+    return OwnerLease(
+      authorizationSnapshot: snapshot,
+      observedOwnerID: observedOwnerID
+    )
+  }
+
+  private func isCurrent(_ lease: OwnerLease) -> Bool {
+    RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+      && ownerID() == lease.observedOwnerID
+      && !Task.isCancelled
+  }
+
+  private func resetOwnerState() {
+    debounceTask?.cancel()
+    debounceTask = nil
+    accumulator = TaskContextEventAccumulator()
+    activeLease = nil
+    lastMaterialHint = nil
+    lastEvaluationAt = nil
   }
 
   private func interruptIfEligible(
     projection: OmiAPI.WhatMattersNowProjection,
     events: [TaskLocalContextEvent],
-    now: Date
+    now: Date,
+    lease: OwnerLease
   ) async {
+    guard isCurrent(lease), activeLease == lease else { return }
     let urgentSubjects = Set(events.filter { $0.urgency == .timeSensitive }.compactMap(\.subject))
     guard !urgentSubjects.isEmpty else { return }
-    guard let recommendation = projection.recommendations.first(where: { item in
-      urgentSubjects.contains(TaskContextSubject(
-        kind: item.subjectKind,
-        id: item.subjectId,
-        workstreamID: item.destinationWorkstreamId
-      ))
-    }) else { return }
+    guard
+      let recommendation = projection.recommendations.first(where: { item in
+        urgentSubjects.contains(
+          TaskContextSubject(
+            kind: item.subjectKind,
+            id: item.subjectId,
+            workstreamID: item.destinationWorkstreamId
+          ))
+      })
+    else { return }
     guard let expiresAt = Self.parseDate(recommendation.expiresAt) else { return }
     let candidate = TaskInterruptionCandidate(
       recommendationID: "\(recommendation.outputVersion):\(recommendation.dedupeKey)",
@@ -857,16 +1081,21 @@ actor TaskContextualResurfacingService {
       expiresAt: expiresAt,
       canWait: false
     )
-    _ = await MainActor.run {
-      NotificationService.shared.sendContextualTaskInterruption(candidate)
+    let currentOwnerID = ownerID
+    await MainActor.run {
+      guard currentOwnerID() == lease.observedOwnerID,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
+      else { return }
+      interruptionSender(candidate, lease.authorizationSnapshot)
     }
   }
 
   private static func contextMatches(_ events: [TaskLocalContextEvent]) -> [OmiAPI.NormalizedContextMatch] {
-    let grouped = Dictionary(grouping: events.compactMap { event -> (TaskContextSubject, OmiAPI.ContextMatchSignal)? in
-      guard let subject = event.subject, let signal = event.kind.recommendationSignal else { return nil }
-      return (subject, signal)
-    }, by: \.0)
+    let grouped = Dictionary(
+      grouping: events.compactMap { event -> (TaskContextSubject, OmiAPI.ContextMatchSignal)? in
+        guard let subject = event.subject, let signal = event.kind.recommendationSignal else { return nil }
+        return (subject, signal)
+      }, by: \.0)
     return grouped.map { subject, entries in
       let signals = Dictionary(entries.map { ($0.1.rawValue, $0.1) }, uniquingKeysWith: { first, _ in first })
         .values.sorted { $0.rawValue < $1.rawValue }

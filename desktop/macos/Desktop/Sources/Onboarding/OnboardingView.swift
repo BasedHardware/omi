@@ -1,8 +1,8 @@
 import AVKit
 import AppKit
+import OmiTheme
 import SceneKit
 import SwiftUI
-import OmiTheme
 
 struct OnboardingView: View {
   @ObservedObject var appState: AppState
@@ -11,6 +11,11 @@ struct OnboardingView: View {
   var exportStepOverride: Int? = nil
   var isExportPreview = false
   @AppStorage("onboardingStep") private var currentStep = 0
+  /// Highest step the user has ever reached — a step is "cleared" (answered,
+  /// granted, or skipped) once they advance past it. Monotonic and persisted so
+  /// it survives the app restart the permission steps trigger. Gates the
+  /// clickable progress dots and forward navigation.
+  @AppStorage("onboardingFurthestStep") private var furthestStep = 0
   @AppStorage("onboardingPagedIntroMigrationDone") private var hasMigratedPagedIntro = false
   @AppStorage("onboardingVideoStepMigrationDone") private var hasMigratedOnboardingSteps = false
   @AppStorage("onboardingVoiceShortcutStepMigrationDone") private var hasInsertedVoiceShortcutStep =
@@ -32,6 +37,12 @@ struct OnboardingView: View {
   @AppStorage("onboardingBYOKStepRemoved") private var hasRemovedBYOKStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
+  @FocusState private var contentFocused: Bool
+  /// Static, not @State: SwiftUI can recreate this view mid-flow (parent tree
+  /// identity changes), and a per-identity handle would leak the old monitor —
+  /// which keeps consuming arrow keys — while installing a second one. One
+  /// shared handle means re-install replaces instead of stacking.
+  private static var keyNavMonitor: Any?
 
   let steps = OnboardingFlow.steps
 
@@ -103,6 +114,16 @@ struct OnboardingView: View {
       hasInsertedBYOKStep = true
       hasRemovedBYOKStep = true
       introCoordinator.prepare(appState: appState)
+      installKeyNavigationMonitor()
+    }
+    .onDisappear {
+      // Identity churn re-creates this view mid-flow, and the new identity's
+      // onAppear may run before this onDisappear — removing here would tear
+      // down the monitor it just installed. Only remove once onboarding is
+      // actually over; the handler also no-ops after completion.
+      if !isExportPreview, appState.hasCompletedOnboarding {
+        removeKeyNavigationMonitor()
+      }
     }
     .task {
       guard !isExportPreview else { return }
@@ -116,6 +137,17 @@ struct OnboardingView: View {
     .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
       log("OnboardingView: resetOnboardingRequested — returning to the first onboarding step")
       currentStep = 0
+      furthestStep = 0
+    }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .onboardingStepNavigationRequested)
+    ) { note in
+      guard !isExportPreview, let requested = note.userInfo?["targetStep"] as? Int else { return }
+      guard
+        let target = OnboardingFlow.validatedNavigationTarget(
+          requested, currentStep: currentStep, furthestStep: furthestStep)
+      else { return }
+      currentStep = target
     }
   }
 
@@ -126,7 +158,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 0,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Name")
             currentStep = 1
@@ -138,7 +170,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 1,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Language")
             currentStep = 2
@@ -149,7 +181,7 @@ struct OnboardingView: View {
         OnboardingHowDidYouHearStepView(
           graphViewModel: graphViewModel,
           stepIndex: 2,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "HowDidYouHear")
             currentStep = 3
@@ -161,7 +193,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 3,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Trust")
             currentStep = 4
@@ -174,16 +206,14 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 4,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi read your screen.",
           description: "Screen Recording lets Omi see what you're working on.",
           permissionType: "screen_recording",
           icon: "display.and.arrow.down",
           reasonTitle: "Screen Recording",
-          reasonDetail: "Screen Recording lets Omi see what you're working on.",
           primaryActionLabel: "Open Screen Recording settings",
-          requiresRestart: true,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "ScreenRecording")
             if !AppBuild.usesLazyDevPermissions {
@@ -204,16 +234,14 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 5,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Access",
           title: "Let Omi scan your work.",
           description: "File access lets Omi map your projects and files.",
           permissionType: "full_disk_access",
           icon: "externaldrive.fill.badge.person.crop",
           reasonTitle: "Disk Access",
-          reasonDetail: "This lets Omi scan your projects and recent files.",
           primaryActionLabel: "Open Disk Access",
-          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FullDiskAccess")
             currentStep = 6
@@ -231,7 +259,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 6,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "FileScan")
             currentStep = 7
@@ -248,16 +276,14 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 7,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi use your mic.",
-          description: "Microphone lets Omi transcribe meetings.",
+          description: "Microphone lets Omi transcribe meetings and voice notes.",
           permissionType: "microphone",
           icon: "mic.fill",
           reasonTitle: "Microphone",
-          reasonDetail: "This lets Omi transcribe meetings and voice notes.",
           primaryActionLabel: "Grant microphone access",
-          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone")
             currentStep = 8
@@ -274,16 +300,14 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 8,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi see the active app.",
           description: "Accessibility lets Omi know which app is active.",
           permissionType: "accessibility",
           icon: "figure.wave",
           reasonTitle: "Accessibility",
-          reasonDetail: "This lets Omi know which app you are using.",
           primaryActionLabel: "Open Accessibility settings",
-          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Accessibility")
             currentStep = 9
@@ -301,16 +325,14 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 9,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi act when asked.",
           description: "Automation lets Omi take actions for you.",
           permissionType: "automation",
           icon: "bolt.horizontal.circle.fill",
           reasonTitle: "Automation",
-          reasonDetail: "This lets Omi take actions when you ask.",
           primaryActionLabel: "Grant automation access",
-          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation")
             currentStep = 10
@@ -326,6 +348,8 @@ struct OnboardingView: View {
         OnboardingFloatingBarShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
+          stepIndex: 10,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(
               step: 10, stepName: "FloatingBarShortcut")
@@ -342,6 +366,8 @@ struct OnboardingView: View {
         OnboardingFloatingBarDemoView(
           appState: appState,
           chatProvider: chatProvider,
+          stepIndex: 11,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 11, stepName: "FloatingBar")
             currentStep = 12
@@ -357,6 +383,8 @@ struct OnboardingView: View {
         OnboardingVoiceShortcutStepView(
           appState: appState,
           chatProvider: chatProvider,
+          stepIndex: 12,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 12, stepName: "VoiceShortcut")
             currentStep = 13
@@ -372,6 +400,8 @@ struct OnboardingView: View {
         OnboardingVoiceDemoView(
           appState: appState,
           chatProvider: chatProvider,
+          stepIndex: 13,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 13, stepName: "VoiceDemo")
             currentStep = 14
@@ -388,7 +418,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 14,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 14, stepName: "DataSources")
             currentStep = 15
@@ -404,7 +434,7 @@ struct OnboardingView: View {
         OnboardingExportsStepView(
           graphViewModel: graphViewModel,
           stepIndex: 15,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           summaryText: introCoordinator.connectedContextSummary,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Exports")
@@ -423,7 +453,7 @@ struct OnboardingView: View {
           coordinator: introCoordinator,
           graphViewModel: graphViewModel,
           stepIndex: 16,
-          totalSteps: OnboardingFlow.introStepCount,
+          totalSteps: OnboardingFlow.steps.count,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Goal")
             if !AppBuild.usesLazyDevPermissions, !ProactiveAssistantsPlugin.shared.isMonitoring {
@@ -443,6 +473,8 @@ struct OnboardingView: View {
         )
       } else {
         OnboardingTasksStepView(
+          stepIndex: 17,
+          totalSteps: OnboardingFlow.steps.count,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks")
             handleOnboardingComplete()
@@ -455,6 +487,133 @@ struct OnboardingView: View {
         )
       }
     }
+    .environment(\.onboardingBack, canGoBack ? goBack : nil)
+    .environment(\.onboardingJumpTo, isExportPreview ? nil : jumpTo)
+    .environment(\.onboardingFurthestStep, isExportPreview ? Int.max : furthestStep)
+    .focusable(true)
+    .focusEffectDisabled()
+    .focused($contentFocused)
+    .onAppear {
+      contentFocused = true
+      recordFrontier(currentStep)
+    }
+    .onChange(of: currentStep) { _, newStep in
+      contentFocused = true
+      recordFrontier(newStep)
+    }
+  }
+
+  /// Back is available on every step past the first, except in the export preview
+  /// where the step is pinned by `exportStepOverride`.
+  private var canGoBack: Bool {
+    currentStep > 0 && !isExportPreview
+  }
+
+  private func goBack() {
+    guard canGoBack else { return }
+    currentStep -= 1
+  }
+
+  /// Advance the cleared-step frontier. Monotonic, clamped to the real step
+  /// range (a pre-migration index could exceed it), and never written by the
+  /// export preview — that pins an arbitrary step and must not mark the real
+  /// user's steps as cleared.
+  private func recordFrontier(_ step: Int) {
+    guard !isExportPreview else { return }
+    furthestStep = min(max(furthestStep, step), OnboardingFlow.lastStepIndex)
+  }
+
+  /// Jump directly to a step — powers the clickable progress dots. Backward and
+  /// already-cleared steps are always reachable; forward jumps may pass over
+  /// skippable steps (equivalent to pressing their Skip buttons) but stop at an
+  /// unanswered required step. Policy lives in `OnboardingFlow.canJump`.
+  private func jumpTo(_ index: Int) {
+    guard !isExportPreview else { return }
+    guard OnboardingFlow.canJump(to: index, furthestStep: furthestStep) else { return }
+    currentStep = index
+  }
+
+  /// Arrow-key navigation runs off a local `NSEvent` monitor rather than SwiftUI
+  /// `.onKeyPress`, because the "Ask a question" steps take key focus away from the
+  /// onboarding window (shortcut steps null the app menu + install their own key
+  /// monitor; demo steps hand focus to the floating Ask Omi panel). A monitor sees
+  /// the keystroke regardless of which of the app's windows is key.
+  private func installKeyNavigationMonitor() {
+    // The outer onAppear also runs on the already-completed branch — don't
+    // install an arrow monitor for a flow that isn't showing.
+    guard !isExportPreview, !appState.hasCompletedOnboarding else { return }
+    removeKeyNavigationMonitor()
+    Self.keyNavMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+      handleArrowNavigation(event) ? nil : event
+    }
+  }
+
+  private func removeKeyNavigationMonitor() {
+    if let monitor = Self.keyNavMonitor {
+      NSEvent.removeMonitor(monitor)
+      Self.keyNavMonitor = nil
+    }
+  }
+
+  /// Returns true when the event was consumed as a back/forward navigation.
+  /// Skips plain arrows while the user is typing (any text field, including the
+  /// floating Ask Omi bar) so the caret keeps moving instead of navigating.
+  ///
+  /// Runs inside the NSEvent monitor closure, which holds a detached copy of
+  /// this view. Mutating @AppStorage through that copy silently drops the write
+  /// on some macOS versions (it never reaches UserDefaults or the mounted
+  /// view), so this reads the persisted step state directly and posts the
+  /// target step for the mounted view's `.onReceive` to apply.
+  private func handleArrowNavigation(_ event: NSEvent) -> Bool {
+    guard !isExportPreview else { return false }
+    // The monitor may briefly outlive the flow (removal is deferred across
+    // identity churn); never swallow arrows once onboarding is done.
+    guard !UserDefaults.standard.bool(forKey: .hasCompletedOnboarding) else { return false }
+    // Only bare arrows navigate — leave shortcut chords (⌘/⌥/⌃/⇧) to their owners.
+    let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    guard mods.subtracting([.function, .numericPad]).isEmpty else { return false }
+    // Typing in the floating bar or any text field owns the arrows.
+    if NSApp.keyWindow is FloatingControlBarWindow { return false }
+    if NSApp.keyWindow?.firstResponder is NSText { return false }
+
+    let defaults = UserDefaults.standard
+    let step = defaults.integer(forKey: .onboardingStep)
+    let frontier = defaults.integer(forKey: .onboardingFurthestStep)
+
+    switch OnboardingFlow.arrowNavigation(keyCode: event.keyCode, step: step, furthestStep: frontier)
+    {
+    case .jump(let target):
+      postStepNavigation(target)
+      return true
+    case .forwardDefaultAction:
+      return handleForwardKey() == .handled
+    case nil:
+      return false
+    }
+  }
+
+  private func postStepNavigation(_ target: Int) {
+    NotificationCenter.default.post(
+      name: .onboardingStepNavigationRequested, object: nil, userInfo: ["targetStep": target])
+  }
+
+  /// Forward arrow == pressing the step's visible Continue button. Re-issuing the
+  /// default-action key (Return) reuses each step's own gating (name/goal required,
+  /// demo completion) instead of blindly advancing `currentStep`.
+  private func handleForwardKey() -> KeyPress.Result {
+    guard let window = NSApp.keyWindow else { return .ignored }
+    for phase in [NSEvent.EventType.keyDown, .keyUp] {
+      guard
+        let event = NSEvent.keyEvent(
+          with: phase, location: .zero, modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: window.windowNumber, context: nil,
+          characters: "\r", charactersIgnoringModifiers: "\r",
+          isARepeat: false, keyCode: 36)
+      else { continue }
+      window.postEvent(event, atStart: false)
+    }
+    return .handled
   }
 
   /// Complete onboarding — start all services and transition to the app
@@ -533,13 +692,13 @@ struct OnboardingView: View {
 
 struct OnboardingTrustPreviewCard: View {
   var body: some View {
-    VStack(spacing: 24) {
-      OnboardingVideoView(cornerRadius: 14)
+    VStack(spacing: OmiSpacing.xxl) {
+      OnboardingVideoView(cornerRadius: OmiChrome.chipRadius)
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
         .overlay(
-          RoundedRectangle(cornerRadius: 16)
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
             .stroke(OmiColors.backgroundQuaternary.opacity(0.35), lineWidth: 1)
         )
 
@@ -556,9 +715,9 @@ struct OnboardingTrustPreviewCard: View {
           )
         )
         .frame(height: 1)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, OmiSpacing.xl)
 
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "shield.lefthalf.filled")
           .font(.system(size: 16, weight: .semibold))
           .foregroundColor(OmiColors.textSecondary)
@@ -572,11 +731,11 @@ struct OnboardingTrustPreviewCard: View {
           .lineLimit(1)
           .minimumScaleFactor(0.85)
       }
-      .padding(.top, 2)
-      .padding(.bottom, 6)
+      .padding(.top, OmiSpacing.hairline)
+      .padding(.bottom, OmiSpacing.xs)
       .frame(maxWidth: .infinity, alignment: .center)
 
-      VStack(spacing: 10) {
+      VStack(spacing: OmiSpacing.sm) {
         trustRow(
           icon: "chevron.left.forwardslash.chevron.right", title: "Open Source", detail: "Code is ")
         trustRow(
@@ -586,29 +745,29 @@ struct OnboardingTrustPreviewCard: View {
           icon: "externaldrive.badge.person.crop", title: "User-Owned",
           detail: "Primary data stays local and belongs to you.")
       }
-      .padding(16)
+      .padding(OmiSpacing.lg)
       .background(
-        RoundedRectangle(cornerRadius: 16)
+        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
           .fill(OmiColors.backgroundTertiary.opacity(0.75))
           .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
               .stroke(Color.white.opacity(0.08), lineWidth: 1)
           )
       )
     }
     .frame(maxWidth: .infinity)
-    .padding(.vertical, 24)
+    .padding(.vertical, OmiSpacing.xxl)
   }
 
   @ViewBuilder
   private func trustRow(icon: String, title: String, detail: String) -> some View {
-    HStack(alignment: .top, spacing: 10) {
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .semibold))
         .foregroundColor(OmiColors.textSecondary)
         .frame(width: 20, height: 20)
 
-      VStack(alignment: .leading, spacing: 2) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
           .font(.system(size: 13, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
@@ -721,66 +880,66 @@ struct OnboardingPrivacySheet: View {
       // Header
       HStack {
         Image(systemName: "shield.lefthalf.filled")
-          .scaledFont(size: 16)
+          .scaledFont(size: OmiType.subheading)
           .foregroundColor(OmiColors.textSecondary)
 
         Text("Data & Privacy")
-          .scaledFont(size: 16, weight: .semibold)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
 
         Button(action: { isPresented = false }) {
           Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: 18)
+            .scaledFont(size: OmiType.heading)
             .foregroundColor(OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
       }
-      .padding(20)
+      .padding(OmiSpacing.xl)
 
       Divider()
 
       ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           // Encryption
           privacyCard {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Label("Encryption", systemImage: "lock.shield")
-                .scaledFont(size: 13, weight: .semibold)
+                .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-              HStack(spacing: 8) {
+              HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "checkmark.circle.fill")
-                  .scaledFont(size: 11)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(.green)
                 Text("Server-side encryption")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                   .foregroundColor(OmiColors.textSecondary)
                 Text("Active")
-                  .scaledFont(size: 10, weight: .semibold)
+                  .scaledFont(size: OmiType.micro, weight: .semibold)
                   .foregroundColor(.green)
-                  .padding(.horizontal, 5)
-                  .padding(.vertical, 1)
+                  .padding(.horizontal, OmiSpacing.xxs)
+                  .padding(.vertical, OmiSpacing.hairline)
                   .background(Color.green.opacity(0.15))
-                  .cornerRadius(3)
+                  .cornerRadius(OmiChrome.stripRadius)
               }
 
               Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
-                .padding(.top, 2)
+                .padding(.top, OmiSpacing.hairline)
             }
           }
 
           // What We Track
           privacyCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Label("What We Track", systemImage: "list.bullet")
-                .scaledFont(size: 13, weight: .semibold)
+                .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-              VStack(alignment: .leading, spacing: 4) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 sheetTrackingItem("Onboarding steps completed")
                 sheetTrackingItem("Settings changes")
                 sheetTrackingItem("App installations and usage")
@@ -798,12 +957,12 @@ struct OnboardingPrivacySheet: View {
 
           // Privacy Guarantees
           privacyCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Label("Privacy Guarantees", systemImage: "hand.raised.fill")
-                .scaledFont(size: 13, weight: .semibold)
+                .scaledFont(size: OmiType.body, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-              VStack(alignment: .leading, spacing: 5) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 sheetBullet("Anonymous tracking with randomly generated IDs")
                 sheetBullet("No personal info stored in analytics")
                 sheetBullet("Data is never sold or shared with third parties")
@@ -812,7 +971,7 @@ struct OnboardingPrivacySheet: View {
             }
           }
         }
-        .padding(20)
+        .padding(OmiSpacing.xl)
       }
     }
     .frame(width: 400, height: 480)
@@ -821,36 +980,36 @@ struct OnboardingPrivacySheet: View {
 
   private func privacyCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
     content()
-      .padding(14)
+      .padding(OmiSpacing.md)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
-        RoundedRectangle(cornerRadius: 10)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
           .fill(OmiColors.backgroundTertiary.opacity(0.5))
           .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
               .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
           )
       )
   }
 
   private func sheetTrackingItem(_ text: String) -> some View {
-    HStack(spacing: 6) {
+    HStack(spacing: OmiSpacing.xs) {
       Circle()
         .fill(OmiColors.textTertiary.opacity(0.5))
         .frame(width: 3, height: 3)
       Text(text)
-        .scaledFont(size: 11)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
     }
   }
 
   private func sheetBullet(_ text: String) -> some View {
-    HStack(spacing: 6) {
+    HStack(spacing: OmiSpacing.xs) {
       Image(systemName: "checkmark")
         .scaledFont(size: 8, weight: .bold)
         .foregroundColor(.green)
       Text(text)
-        .scaledFont(size: 11)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textSecondary)
     }
   }

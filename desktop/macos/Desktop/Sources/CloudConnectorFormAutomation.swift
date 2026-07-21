@@ -65,7 +65,13 @@ enum CloudConnectorFormAutomation {
     case refuse
   }
 
-  static func fill(_ args: [String: Any]) async -> String {
+  static func fill(
+    _ args: [String: Any],
+    expectedOwnerID: String? = nil
+  ) async -> String {
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     let provider = ((args["provider"] as? String) ?? "").lowercased()
     guard provider == "claude" || provider == "chatgpt" else {
       return "Error: provider must be 'claude' or 'chatgpt'."
@@ -149,7 +155,8 @@ enum CloudConnectorFormAutomation {
       if let result = await advanceClaudeConnectorStateMachine(
         provider: provider,
         values: values,
-        submit: submit)
+        submit: submit,
+        expectedOwnerID: expectedOwnerID)
       {
         return result
       }
@@ -161,7 +168,8 @@ enum CloudConnectorFormAutomation {
       if let result = await advanceClaudeConnectorStateMachine(
         provider: provider,
         values: values,
-        submit: submit)
+        submit: submit,
+        expectedOwnerID: expectedOwnerID)
       {
         return result
       }
@@ -174,8 +182,14 @@ enum CloudConnectorFormAutomation {
         in: form.nodes,
         matching: ["advanced settings", "advanced"])
     {
+      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+        return ChatToolExecutor.authorizedOwnerChangedResult()
+      }
       _ = AXUIElementPerformAction(disclosure.element, kAXPressAction as CFString)
       try? await Task.sleep(nanoseconds: 400_000_000)
+      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+        return ChatToolExecutor.authorizedOwnerChangedResult()
+      }
     }
 
     let refreshedNodes = collectNodes(from: form.root, maxDepth: 12, maxNodes: 700)
@@ -188,6 +202,9 @@ enum CloudConnectorFormAutomation {
     var missing: [String] = []
 
     for value in values {
+      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+        return ChatToolExecutor.authorizedOwnerChangedResult()
+      }
       if let match = findField(for: value, in: fields, usedElementIDs: usedElementIDs)
         ?? fallbackField(for: value, in: fields, usedElementIDs: usedElementIDs, provider: provider)
       {
@@ -208,13 +225,17 @@ enum CloudConnectorFormAutomation {
       let result = await advanceClaudeConnectorStateMachine(
         provider: provider,
         values: values,
-        submit: submit)
+        submit: submit,
+        expectedOwnerID: expectedOwnerID)
     {
       return result
     }
 
     var pressedButton: String?
     if submit && missing.isEmpty {
+      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+        return ChatToolExecutor.authorizedOwnerChangedResult()
+      }
       let submitNodes = collectNodes(from: form.root, maxDepth: 12, maxNodes: 700)
       if let button = findActionNode(
         in: submitNodes,
@@ -247,8 +268,12 @@ enum CloudConnectorFormAutomation {
   private static func advanceClaudeConnectorStateMachine(
     provider: String,
     values: [FieldValue],
-    submit: Bool
+    submit: Bool,
+    expectedOwnerID: String?
   ) async -> String? {
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     guard provider == "claude" else { return nil }
     guard let target = findClaudeConnectorTargetWithNodes().map({ (app: $0.app, state: $0.state) })
     else {
@@ -258,9 +283,14 @@ enum CloudConnectorFormAutomation {
     switch claudeConnectorAction(for: target.state, submit: submit) {
     case .fillAddModal:
       return await fillClaudeConnectorAddModalByKeyboard(
-        target: target, values: values, submit: submit)
+        target: target,
+        values: values,
+        submit: submit,
+        expectedOwnerID: expectedOwnerID)
     case .pressConnect:
-      return await pressClaudeConnectorConnectButton(target: target)
+      return await pressClaudeConnectorConnectButton(
+        target: target,
+        expectedOwnerID: expectedOwnerID)
     case .alreadyConnected:
       return [
         "Native connector form filler result:",
@@ -374,7 +404,7 @@ enum CloudConnectorFormAutomation {
     )
   }
 
-  private static func systemSettingsWindowAppKitFrame() -> CGRect? {
+  static func systemSettingsWindowAppKitFrame() -> CGRect? {
     guard
       let app = NSWorkspace.shared.runningApplications.first(where: {
         $0.bundleIdentifier == "com.apple.systempreferences"
@@ -740,8 +770,12 @@ enum CloudConnectorFormAutomation {
   private static func fillClaudeConnectorAddModalByKeyboard(
     target: (app: NSRunningApplication, state: ClaudeConnectorPageState),
     values: [FieldValue],
-    submit: Bool
+    submit: Bool,
+    expectedOwnerID: String?
   ) async -> String? {
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     guard target.state == .addCustomConnectorModal else { return nil }
     guard let name = values.first(where: { $0.label == "Name" })?.value,
       let serverURL = values.first(where: { $0.label == "Remote MCP server URL" })?.value,
@@ -754,6 +788,9 @@ enum CloudConnectorFormAutomation {
 
     target.app.activate()
     try? await Task.sleep(nanoseconds: 450_000_000)
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     guard let active = NSWorkspace.shared.frontmostApplication,
       active.processIdentifier == target.app.processIdentifier,
       let activeTarget = frontmostClaudeConnectorKeyboardTarget(),
@@ -765,6 +802,9 @@ enum CloudConnectorFormAutomation {
 
     // Claude's modal currently focuses the close button when opened. Atlas does
     // not expose the page fields through AX, so use the modal's stable tab order.
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     pressTab(count: 3)
     pasteIntoFocusedField(name)
     pressTab(count: 1)
@@ -787,7 +827,10 @@ enum CloudConnectorFormAutomation {
     ]
 
     if submit {
-      lines.append(await pressClaudeConnectorAddButtonByOCR(target: target))
+      lines.append(
+        await pressClaudeConnectorAddButtonByOCR(
+          target: target,
+          expectedOwnerID: expectedOwnerID))
     } else {
       lines.append("Submit skipped by request.")
     }
@@ -796,8 +839,12 @@ enum CloudConnectorFormAutomation {
   }
 
   private static func pressClaudeConnectorAddButtonByOCR(
-    target: (app: NSRunningApplication, state: ClaudeConnectorPageState)
+    target: (app: NSRunningApplication, state: ClaudeConnectorPageState),
+    expectedOwnerID: String?
   ) async -> String {
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     guard CGPreflightScreenCaptureAccess() else {
       return
         "Error: Screen Recording permission is not available to Omi, so the native connector form filler cannot OCR Claude's hidden Add button."
@@ -815,6 +862,9 @@ enum CloudConnectorFormAutomation {
       return
         "Error: The Claude add connector button is not exposed to Accessibility. Refusing blind coordinate or keyboard clicks."
     }
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
 
     guard let activeTarget = frontmostClaudeConnectorKeyboardTarget(),
       activeTarget.state == .addCustomConnectorModal,
@@ -824,18 +874,28 @@ enum CloudConnectorFormAutomation {
       return "Error: Refusing Claude Add because the OCR target was not stable."
     }
 
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     postLeftClick(at: refreshedPoint)
     try? await Task.sleep(nanoseconds: 700_000_000)
     return "Submitted with button: Add (OCR)"
   }
 
   private static func pressClaudeConnectorConnectButton(
-    target: (app: NSRunningApplication, state: ClaudeConnectorPageState)
+    target: (app: NSRunningApplication, state: ClaudeConnectorPageState),
+    expectedOwnerID: String?
   ) async -> String? {
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     guard target.state == .connectorDetailNotConnected else { return nil }
 
     target.app.activate()
     try? await Task.sleep(nanoseconds: 450_000_000)
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     guard let active = NSWorkspace.shared.frontmostApplication,
       active.processIdentifier == target.app.processIdentifier,
       let activeTarget = frontmostClaudeConnectorKeyboardTarget(),
@@ -852,6 +912,9 @@ enum CloudConnectorFormAutomation {
       return "Error: Refusing Claude Connect because the verified page state changed."
     }
     if let button = findClaudeConnectorDetailConnectButton(in: nodes) {
+      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+        return ChatToolExecutor.authorizedOwnerChangedResult()
+      }
       _ = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
       try? await Task.sleep(nanoseconds: 700_000_000)
       return await claudeConnectResultLines(
@@ -882,6 +945,9 @@ enum CloudConnectorFormAutomation {
       return "Error: Refusing Claude Connect because the OCR target was not stable."
     }
 
+    guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
+      return ChatToolExecutor.authorizedOwnerChangedResult()
+    }
     postLeftClick(at: refreshedPoint)
     try? await Task.sleep(nanoseconds: 700_000_000)
 
@@ -1133,8 +1199,7 @@ enum CloudConnectorFormAutomation {
     return nil
   }
 
-  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState
-  {
+  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState {
     let text = nodes.map(\.searchableText).joined(separator: " ")
     return classifyClaudeConnectorPageText(text)
   }
@@ -1193,8 +1258,7 @@ enum CloudConnectorFormAutomation {
   }
 
   private static func setField(_ element: AXUIElement, to value: String) -> Bool {
-    if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success
-    {
+    if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success {
       return true
     }
     _ = AXUIElementSetAttributeValue(element, "AXFocused" as CFString, kCFBooleanTrue)
@@ -1559,8 +1623,7 @@ enum CloudConnectorFormAutomation {
     return ""
   }
 
-  private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement?
-  {
+  private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
     var raw: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {
       return nil

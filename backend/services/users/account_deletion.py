@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 import time
-from typing import Literal, TypedDict, cast
+from typing import Any, Callable, Literal, TypedDict, cast
 
 from database import vector_db
 from database import users as users_db
@@ -178,11 +178,13 @@ def background_wipe_user_data(uid: str) -> bool:
         return True
 
 
-def enqueue_deletion_wipe(uid: str):
+def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
     """Dispatch the account-deletion wipe using the configured durable mechanism."""
     if is_account_deletion_dispatch_enabled() is True:
-        enqueue_account_deletion_wipe(uid)
+        enqueue_account_deletion_wipe(wipe_job_id)
         return
+    # Inline dispatch is retained solely for deterministic local/dev/test
+    # execution. Production startup rejects this mode before serving traffic.
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 
 
@@ -196,79 +198,29 @@ def _mark_wipe_failed_after_enqueue_error(uid: str, error: Exception):
         )
 
 
-def _persist_wipe_intent_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5) -> None:
-    """Persist the non-actionable deletion intent, retrying transient Firestore failures.
-
-    Writes ``wipe_status='deleting_auth'`` which the reconciler only recovers
-    *after* verifying the Firebase auth user is actually gone. A crash or deploy
-    between this write and ``auth.delete_account()`` therefore leaves a benign
-    record that cannot trigger a premature data wipe for a user whose Firebase
-    account still exists.
-
-    Raises on persistent failure so the caller can surface the error to the user
-    rather than proceeding to the irreversible Firebase user deletion without a
-    durable recovery marker.
-    """
-    last_err = None
+def _retry_firestore_write(
+    fn: Callable[[], Any],
+    *,
+    uid: str,
+    fail_msg: str,
+    on_failure: Literal['raise', 'log'],
+    max_attempts: int = 3,
+    retry_delay: float = 0.5,
+) -> Any:
+    """Retry a transient Firestore write, then raise or log on persistent failure."""
+    last_err: Exception | None = None
     for attempt in range(max_attempts):
         try:
-            users_db.mark_user_deletion_wipe_intent(uid)
-            return
+            return fn()
         except Exception as e:
             last_err = e
             if attempt < max_attempts - 1:
                 time.sleep(retry_delay * (attempt + 1))
-    raise Exception(
-        f'Failed to persist deletion-wipe intent after {max_attempts} attempts for {uid}: {sanitize(str(last_err))}'
-    )
-
-
-def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5) -> None:
-    """Transition the marker to the actionable ``'pending'`` state after auth deletion is confirmed.
-
-    Called only after ``auth.delete_account()`` has succeeded (or the user was
-    already gone). Raises on persistent failure so callers do not enqueue or
-    report success without an actionable wipe marker. A stale
-    ``'deleting_auth'`` marker remains recoverable: the reconciler verifies the
-    auth user is gone before re-enqueueing the wipe.
-    """
-    last_err = None
-    for attempt in range(max_attempts):
-        try:
-            users_db.mark_user_deletion_wipe_started(uid)
-            return
-        except Exception as e:
-            last_err = e
-            if attempt < max_attempts - 1:
-                time.sleep(retry_delay * (attempt + 1))
-    raise Exception(
-        f'delete_account marker transition to pending failed after {max_attempts} attempts for {uid}: '
-        f'{sanitize(str(last_err))}'
-    )
-
-
-def _mark_billing_failed_with_retry(
-    uid: str, subscription_id: str | None, error: Exception, max_attempts: int = 3, retry_delay: float = 0.5
-) -> None:
-    last_err = None
-    raw_error = str(error)
-    sanitized_error = sanitize(raw_error)
-    if not isinstance(
-        sanitized_error, str
-    ):  # pyright: ignore[reportUnnecessaryIsInstance]  # tests stub sanitize with MagicMock
-        sanitized_error = raw_error
-    for attempt in range(max_attempts):
-        try:
-            users_db.mark_user_deletion_billing_failed(uid, subscription_id, sanitized_error)
-            return
-        except Exception as e:
-            last_err = e
-            if attempt < max_attempts - 1:
-                time.sleep(retry_delay * (attempt + 1))
-    logger.critical(
-        f'delete_account billing failure status persist failed after {max_attempts} attempts for {uid}: '
-        f'{sanitize(str(last_err))}; original billing error: {sanitized_error}'
-    )
+    assert last_err is not None
+    msg = f'{fail_msg} after {max_attempts} attempts for {uid}: {sanitize(str(last_err))}'
+    if on_failure == 'raise':
+        raise Exception(msg)
+    logger.critical(msg)
 
 
 def _cancel_subscription_for_account_deletion(uid: str) -> None:
@@ -282,34 +234,20 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
         if not canceled:
             raise RuntimeError('stripe cancel returned no subscription')
     except Exception as e:
-        _mark_billing_failed_with_retry(uid, subscription_id, e)
+        raw_error = str(e)
+        sanitized_error = sanitize(raw_error)
+        if not isinstance(
+            sanitized_error, str
+        ):  # pyright: ignore[reportUnnecessaryIsInstance]  # tests stub sanitize with MagicMock
+            sanitized_error = raw_error
+        _retry_firestore_write(
+            lambda: users_db.mark_user_deletion_billing_failed(uid, subscription_id, sanitized_error),
+            uid=uid,
+            fail_msg='delete_account billing failure status persist failed',
+            on_failure='log',
+        )
         logger.error(f'delete_account billing cancellation failed for {uid}: {sanitize(str(e))}')
         raise
-
-
-def _cancel_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5) -> None:
-    """Cancel the pending-deletion marker, retrying transient Firestore failures.
-
-    Used when auth.delete_account() fails after the marker was already persisted.
-    Escalates to a critical log (not an exception) if cancellation ultimately
-    fails — the auth error still propagates to the caller, and the stale marker
-    will age out naturally (pending → stale → retried by reconciler, by which
-    point the auth user may be re-deleted).
-    """
-    last_err = None
-    for attempt in range(max_attempts):
-        try:
-            users_db.cancel_user_deletion_wipe(uid)
-            return
-        except Exception as e:
-            last_err = e
-            if attempt < max_attempts - 1:
-                time.sleep(retry_delay * (attempt + 1))
-    logger.critical(
-        f'delete_account marker CANCEL failed after {max_attempts} attempts for {uid}: '
-        f'{sanitize(str(last_err))} — manual intervention may be needed to prevent '
-        f'unwanted data wipe by the reconciliation worker.'
-    )
 
 
 def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
@@ -326,7 +264,14 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     # premature data wipe for a user whose Firebase account still exists. Retry
     # transient Firestore failures; if the intent cannot be written, do NOT
     # proceed.
-    _persist_wipe_intent_with_retry(uid)
+    wipe_job_id = _retry_firestore_write(
+        lambda: users_db.mark_user_deletion_wipe_intent(uid),
+        uid=uid,
+        fail_msg='Failed to persist deletion-wipe intent',
+        on_failure='raise',
+    )
+    if not isinstance(wipe_job_id, str) or not wipe_job_id:
+        raise RuntimeError('deletion-wipe intent did not persist a wipe_job_id')
 
     _cancel_subscription_for_account_deletion(uid)
 
@@ -341,15 +286,25 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
             # linger in 'deleting_auth'. This is cosmetic cleanup, not a safety
             # requirement: the reconciler verifies the auth user is gone before
             # recovering any 'deleting_auth' record.
-            _cancel_wipe_marker_with_retry(uid)
+            _retry_firestore_write(
+                lambda: users_db.cancel_user_deletion_wipe(uid),
+                uid=uid,
+                fail_msg='delete_account marker CANCEL failed — manual intervention may be needed to prevent unwanted data wipe by the reconciliation worker.',
+                on_failure='log',
+            )
             raise
 
     # Phase 2 — auth deletion confirmed. Transition the marker to the
     # actionable 'pending' state before dispatching the durable wipe task.
-    _persist_wipe_marker_with_retry(uid)
+    _retry_firestore_write(
+        lambda: users_db.mark_user_deletion_wipe_started(uid),
+        uid=uid,
+        fail_msg='delete_account marker transition to pending failed',
+        on_failure='raise',
+    )
 
     try:
-        enqueue_deletion_wipe(uid)
+        enqueue_deletion_wipe(uid, wipe_job_id)
     except Exception as e:
         _mark_wipe_failed_after_enqueue_error(uid, e)
         raise
@@ -435,8 +390,23 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         if claimed_uid is None:
             skipped += 1
             continue
+        wipe_job_id = record.get('wipe_job_id')
+        if not isinstance(wipe_job_id, str) or not wipe_job_id:
+            try:
+                wipe_job_id = users_db.ensure_deletion_wipe_job_id(uid)
+            except Exception as e:
+                logger.error(f'delete_account reconciliation job-id recovery failed for {uid}: {sanitize(str(e))}')
+                _mark_wipe_failed_after_enqueue_error(uid, e)
+                skipped += 1
+                continue
+        if not isinstance(wipe_job_id, str) or not wipe_job_id:
+            error = RuntimeError('deletion-wipe job id missing after recovery')
+            logger.error(f'delete_account reconciliation cannot dispatch {uid}: {error}')
+            _mark_wipe_failed_after_enqueue_error(uid, error)
+            skipped += 1
+            continue
         try:
-            enqueue_deletion_wipe(uid)
+            enqueue_deletion_wipe(uid, wipe_job_id)
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
             _mark_wipe_failed_after_enqueue_error(uid, e)

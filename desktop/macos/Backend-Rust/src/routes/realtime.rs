@@ -480,6 +480,16 @@ struct UsageReport {
     output_text_tokens: i64,
     #[serde(default)]
     output_audio_tokens: i64,
+    /// Opaque SHA-derived identifiers emitted by the desktop cache contract;
+    /// they intentionally contain no rendered context or user content.
+    #[serde(default)]
+    context_plan_id: String,
+    #[serde(default)]
+    stable_cache_identity: String,
+    #[serde(default)]
+    dynamic_context_identity: String,
+    #[serde(default)]
+    context_cache_replaced: bool,
 }
 
 fn usage_cost(r: &UsageReport) -> f64 {
@@ -492,6 +502,18 @@ fn usage_cost(r: &UsageReport) -> f64 {
         + r.output_text_tokens.max(0) as f64 * rates.out_text
         + r.output_audio_tokens.max(0) as f64 * rates.out_audio)
         / 1_000_000.0
+}
+
+/// Realtime usage is client-reported. Keep cache telemetry privacy-safe even
+/// when a modified client sends arbitrary strings: only the canonical opaque
+/// SHA-256 identifiers are eligible for logs.
+fn safe_cache_identity(value: &str) -> &str {
+    let hex = value.strip_prefix("sha256:").unwrap_or("");
+    if hex.len() == 64 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        value
+    } else {
+        "invalid_or_missing"
+    }
 }
 
 /// Record one client-reported realtime turn's usage into the llm_usage ledger.
@@ -511,8 +533,8 @@ async fn report_usage(
         return StatusCode::NO_CONTENT;
     }
     let cost = usage_cost(&report);
-    // Funnels into desktop_chat.cost_usd (counted by get_total_llm_cost/quota) plus a
-    // "desktop_chat_realtime.*" breakdown.
+    // Record both the shared desktop_chat aggregate and the
+    // "desktop_chat_realtime.*" reconciliation breakdown.
     if let Err(e) = state
         .firestore
         .record_llm_usage(&user.uid, input, output, cached, 0, total, cost, "realtime")
@@ -534,13 +556,17 @@ async fn report_usage(
         return StatusCode::BAD_GATEWAY;
     }
     tracing::info!(
-        "realtime usage uid={} provider={} in={} out={} cached={} cost=${:.5}",
+        "realtime usage uid={} provider={} in={} out={} cached={} cost=${:.5} plan={} stable_cache={} dynamic_context={} cache_replaced={}",
         user.uid,
         report.provider,
         input,
         output,
         cached,
-        cost
+        cost,
+        safe_cache_identity(&report.context_plan_id),
+        safe_cache_identity(&report.stable_cache_identity),
+        safe_cache_identity(&report.dynamic_context_identity),
+        report.context_cache_replaced,
     );
     StatusCode::NO_CONTENT
 }
@@ -567,8 +593,26 @@ mod tests {
             input_cached_tokens: -1_000_000,
             output_text_tokens: -1_000_000,
             output_audio_tokens: -1_000_000,
+            context_plan_id: String::new(),
+            stable_cache_identity: String::new(),
+            dynamic_context_identity: String::new(),
+            context_cache_replaced: false,
         };
         assert_eq!(usage_cost(&report), 0.0);
+    }
+
+    #[test]
+    fn cache_usage_telemetry_logs_only_opaque_sha256_identifiers() {
+        assert_eq!(
+            safe_cache_identity(
+                "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            ),
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        assert_eq!(
+            safe_cache_identity("user said secret words"),
+            "invalid_or_missing"
+        );
     }
 
     #[test]
@@ -583,6 +627,10 @@ mod tests {
             input_cached_tokens: -5000,
             output_text_tokens: 0,
             output_audio_tokens: 0,
+            context_plan_id: String::new(),
+            stable_cache_identity: String::new(),
+            dynamic_context_identity: String::new(),
+            context_cache_replaced: false,
         };
         let positive_only = UsageReport {
             provider: "openai".to_string(),
@@ -592,6 +640,10 @@ mod tests {
             input_cached_tokens: 0,
             output_text_tokens: 0,
             output_audio_tokens: 0,
+            context_plan_id: String::new(),
+            stable_cache_identity: String::new(),
+            dynamic_context_identity: String::new(),
+            context_cache_replaced: false,
         };
         assert_eq!(usage_cost(&mixed), usage_cost(&positive_only));
         assert!(usage_cost(&mixed) > 0.0);

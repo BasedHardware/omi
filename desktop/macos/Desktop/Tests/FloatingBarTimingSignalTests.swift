@@ -4,12 +4,12 @@ import XCTest
 
 /// BL-005 / S-14b: guards the signal-driven conversions in the floating bar so
 /// they aren't silently reverted to fixed-delay `asyncAfter` timing, and pins the
-/// `.asyncAfter(` call-site count under `FloatingControlBar/` to the ratchet
-/// baseline (mirrors `scripts/check-async-after-ratchet.py` inside the test suite
-/// that `test.sh` runs).
+/// `.asyncAfter(` call-site count under `FloatingControlBar/` to the SwiftLint
+/// `omi_floating_control_bar_async_after` custom rule baseline (in
+/// `Desktop/.swiftlint.yml`, enforced by the down-only baseline guard).
 final class FloatingBarTimingSignalTests: XCTestCase {
-  /// Keep in sync with `BASELINE` in `scripts/check-async-after-ratchet.py`.
-  private static let asyncAfterBaseline = 27
+  /// Keep in sync with the SwiftLint baseline count for omi_floating_control_bar_async_after.
+  private static let asyncAfterBaseline = 22
 
   private func floatingControlBarDir() -> URL {
     URL(fileURLWithPath: #filePath)
@@ -62,8 +62,8 @@ final class FloatingBarTimingSignalTests: XCTestCase {
       new fixed-delay .asyncAfter( added under FloatingControlBar/ \
       (count \(count) > baseline \(Self.asyncAfterBaseline)). Key the transition off a \
       signal (window didBecomeKey, view lifecycle, state change) or, if the delay is \
-      genuinely required, lower/raise the baseline deliberately in both this test and \
-      scripts/check-async-after-ratchet.py.
+      genuinely required, lower/raise the baseline in both this test and \
+      the SwiftLint baseline (.swiftlint-baseline.json).
       """)
   }
 }

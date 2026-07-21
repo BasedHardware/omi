@@ -24,6 +24,12 @@ on:
         required: false
         default: 'pusher'
 
+# The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
+# mutates its own GKE release and therefore keeps a separate environment lock.
+concurrency:
+  group: ${{ (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}
+  cancel-in-progress: false
+
 env:
   SERVICE: ${{ github.event.inputs.service || 'pusher' }}
   REGION: us-central1
@@ -57,18 +63,35 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Admit checked-out production source and image identity
+        run: |
+          set -euo pipefail
+          CHECKED_OUT_SHA=$(git rev-parse HEAD)
+          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            if ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
+              echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
+              exit 1
+            fi
+          fi
+          IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
+          echo "Admitted deployment source: $CHECKED_OUT_SHA"
+          echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Bootstrap LLM Gateway dev service token
         if: env.SERVICE == 'llm-gateway' && github.event.inputs.environment == 'development'
@@ -106,38 +129,109 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and Push Docker image
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
-            docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
+            docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG} -f backend/Dockerfile .
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/Dockerfile \
+              --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
           else
-            docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
+            docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG} -f backend/pusher/Dockerfile .
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/pusher/Dockerfile \
+              --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
           fi
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
 
       - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
+        uses: google-github-actions/get-gke-credentials@v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Resolve production pusher runtime targets
+        if: env.SERVICE == 'pusher' && vars.ENV == 'prod'
+        id: pusher-runtime-targets
+        run: |
+          set -euo pipefail
+          SYNC_SERVICE_URL="$(
+            gcloud run services describe backend-sync \
+              --region="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format='value(status.url)'
+          )"
+          SYNC_TASKS_INVOKER_SA="$(
+            gcloud run services describe backend-sync \
+              --region="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format=json \
+              | jq -r '.spec.template.spec.containers[0].env[]? | select(.name == "SYNC_TASKS_INVOKER_SA") | .value'
+          )"
+          test -n "$SYNC_SERVICE_URL"
+          test -n "$SYNC_TASKS_INVOKER_SA"
+          {
+            echo "account_deletion_handler_url=${SYNC_SERVICE_URL}/v1/users/account-deletion-wipes/run"
+            echo "sync_tasks_handler_url=${SYNC_SERVICE_URL}/v2/sync-jobs/run"
+            echo "sync_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Apply non-secret pusher runtime config
+        if: env.SERVICE == 'pusher'
+        env:
+          ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
+          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+          MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+          MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
+          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_SERVICE_MODELS: modulate-velma-2,parakeet
+          SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
+          SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
+          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
+        run: backend/scripts/deploy-backend-config.sh
+
+      - name: Preflight pusher ConfigMap and Secret references
+        if: env.SERVICE == 'pusher'
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify_pusher_config_references.py \
+            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
+
       - name: Deploy Pusher to GKE cluster using Helm
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
+            test -n "$LLM_GATEWAY_GSA"
             python3 -m pip install -q pyyaml
             python3 backend/scripts/validate-llm-gateway-env.py \
               backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
               backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml
-            if ! IMAGE_TAG="${GITHUB_SHA::7}" backend/scripts/deploy-llm-gateway.sh; then
+            if ! IMAGE_TAG="${IMAGE_TAG}" backend/scripts/deploy-llm-gateway.sh; then
               python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway || true
               echo "=== llm-gateway deployment ==="
               kubectl -n ${{ vars.ENV }}-omi-backend describe deploy/${{ vars.ENV }}-omi-llm-gateway || true
@@ -157,13 +251,38 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
           else
-            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
-            if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=300s; then
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${IMAGE_TAG}"
+            # Must cover the chart-derived Pusher rollout budget (fourteen
+            # availability waves at the current production HPA ceiling).
+            if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=9600s; then
               python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher || true
               exit 1
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
           fi
+
+      - name: Verify LLM Gateway serving data plane
+        if: env.SERVICE == 'llm-gateway'
+        id: gateway-serving
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Probe LLM Gateway from the Cloud Run VPC
+        if: env.SERVICE == 'llm-gateway'
+        run: |
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}" \
+            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress private-ranges-only \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Smoke LLM Gateway
         if: env.SERVICE == 'llm-gateway'
@@ -183,7 +302,7 @@ jobs:
             restartPolicy: Never
             containers:
               - name: smoke
-                image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+                image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}
                 command: ["sh", "-c", "python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\" --check-metrics --metrics-token \"\$METRICS_SECRET\""]
                 env:
                   - name: SMOKE_URL

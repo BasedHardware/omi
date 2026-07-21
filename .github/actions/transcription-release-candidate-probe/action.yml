@@ -1,0 +1,46 @@
+name: Transcription release candidate probe
+description: Mint a short-lived Firebase probe token and prove the tagged full transcription route.
+
+inputs:
+  candidate_api_url:
+    description: Tagged no-traffic Cloud Run candidate URL.
+    required: true
+  project_id:
+    description: GCP project used for Secret Manager and the existing deploy identity.
+    required: true
+  firebase_auth_project_id:
+    description: Firebase project whose ID-token audience the candidate verifies.
+    required: true
+  evidence_path:
+    description: Optional absolute path for the redacted probe report.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Probe tagged transcription candidate
+      shell: bash
+      env:
+        CANDIDATE_API_URL: ${{ inputs.candidate_api_url }}
+        EVIDENCE_PATH: ${{ inputs.evidence_path }}
+        PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
+        FIREBASE_AUTH_PROJECT_ID: ${{ inputs.firebase_auth_project_id }}
+      run: |
+        set -euo pipefail
+        token_file="$(mktemp "$RUNNER_TEMP/omi-transcription-probe.XXXXXX")"
+        trap 'rm -f "$token_file"' EXIT
+        python3 backend/scripts/firebase_release_probe_token.py \
+          --secret-project "$PROBE_SECRET_PROJECT" \
+          --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+          --token-output "$token_file"
+        probe_args=(
+          --candidate-api-url "$CANDIDATE_API_URL"
+          --bearer-token-file "$token_file"
+          --json-only
+        )
+        if [[ -n "$EVIDENCE_PATH" ]]; then
+          python3 backend/scripts/transcription_capability_probe.py "${probe_args[@]}" > "$EVIDENCE_PATH"
+        else
+          python3 backend/scripts/transcription_capability_probe.py "${probe_args[@]}"
+        fi

@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -60,9 +59,6 @@ class WaveformPainter extends CustomPainter {
       final height = amplitude * size.height;
       final centerY = size.height / 2;
 
-      // Draw waveform bar from center, extending both up and down
-      final halfHeight = height / 2;
-
       final progressBarIndex = (barCount * playbackProgress).floor();
       final useActivePaint = isPlaying && i <= progressBarIndex;
 
@@ -83,7 +79,8 @@ class WaveformPainter extends CustomPainter {
     if (isPlaying && playbackProgress > 0) {
       final progressX = (barCount * playbackProgress) * (barWidth + spacing);
       final dotPaint = Paint()
-        ..color = const Color(0xFF4A90E2) // Blue color like in the image
+        ..color =
+            const Color(0xFF4A90E2) // Blue color like in the image
         ..style = PaintingStyle.fill;
 
       // Draw the progress dot above the waveform

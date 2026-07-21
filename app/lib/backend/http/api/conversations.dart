@@ -478,9 +478,7 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
     method: 'POST',
   );
   if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(
-    jsonDecode(response!.body) as Map<String, dynamic>,
-  );
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
   return body.manifest;
 }
 
@@ -493,6 +491,26 @@ class SyncRateLimitedException implements Exception {
 
   @override
   String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
+}
+
+/// A synchronous upload response that durably reached the server but did not
+/// transcribe every segment. Callers keep the local WAL and retry it; the
+/// backend deduplicates any segments that already succeeded.
+class SyncUploadIncompleteException implements Exception {
+  final int failedSegments;
+
+  const SyncUploadIncompleteException(this.failedSegments);
+
+  @override
+  String toString() => 'SyncUploadIncompleteException(failedSegments=$failedSegments)';
+}
+
+@visibleForTesting
+SyncLocalFilesResponse requireCompleteSyncUpload(SyncLocalFilesResponse response) {
+  if (response.hasPartialFailure) {
+    throw SyncUploadIncompleteException(response.failedSegments);
+  }
+  return response;
 }
 
 /// Parse a Retry-After header expressed in delta-seconds. Returns null for an
@@ -534,10 +552,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   if (shouldRequestSyncCaptureManifest(conversationId, syncLane)) {
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
     if (captureManifest == null) {
-      throw SyncRateLimitedException(
-        kind: SyncRateLimitKind.backfillPaced,
-        retryAfterSeconds: 30,
-      );
+      throw SyncRateLimitedException(kind: SyncRateLimitKind.backfillPaced, retryAfterSeconds: 30);
     }
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
@@ -555,12 +570,13 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   );
 
   if (response.statusCode == 200) {
-    // Fast-path: server processed synchronously and returned the result.
-    return UploadFilesResult.done(
-      SyncLocalFilesResponse.fromGenerated(
-        wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
-      ),
+    // Fast-path: server processed synchronously and returned the result. A
+    // legacy server can still encode partial work in a 200, which must follow
+    // the retry path rather than acknowledging/deleting the local WAL.
+    final completed = SyncLocalFilesResponse.fromGenerated(
+      wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
     );
+    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
   }
   if (response.statusCode == 202) {
     final start = SyncJobStartResponse.fromGenerated(

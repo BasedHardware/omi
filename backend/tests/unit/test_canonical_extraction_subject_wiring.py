@@ -21,6 +21,7 @@ from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier
 from utils.memory.canonical_memory_adapter import read_canonical_memories, write_canonical_extraction_memory
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
+from utils.memory.canonical_activation import CanonicalWriteDecision
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.required_promotion import required_promotion_payload
@@ -106,9 +107,9 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
 
     db = _FakeDb(_control_seed(uid))
     service = MemoryService(db_client=db)
-    with (
-        patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.memory_service.canonical_write_enabled", return_value=True),
+    with patch(
+        "utils.memory.memory_service.canonical_write_decision",
+        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
     ):
         service.write(uid, payload)
 
@@ -134,9 +135,9 @@ def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_
     db = _FakeDb(_control_seed(uid))
     service = MemoryService(db_client=db)
 
-    with (
-        patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.memory_service.canonical_write_enabled", return_value=True),
+    with patch(
+        "utils.memory.memory_service.canonical_write_decision",
+        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
     ):
         service.write(
             uid,
@@ -174,9 +175,9 @@ def test_write_mode_rollout_doc_does_not_collide_with_apply_control_state(monkey
     db = _FakeDb({f"users/{uid}/memory_control/state": _rollout_control_doc(uid)})
     service = MemoryService(db_client=db)
 
-    with (
-        patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.memory_service.canonical_write_enabled", return_value=True),
+    with patch(
+        "utils.memory.memory_service.canonical_write_decision",
+        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
     ):
         service.write(uid, payload)
 

@@ -21,4 +21,17 @@ spec:
           type: Utilization
           averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
     {{- end }}
+    {{- if .Values.autoscaling.requestsPerPod }}
+    # Scale on concurrent translation requests — the primary signal for a GPU-bound
+    # inference service (CPU stays low during inference, so a CPU-only HPA never
+    # scales). Mirrors the parakeet active-requests pattern. Requires the
+    # nllb_active_requests_total adapter rule in the cluster-wide prometheus-adapter.
+    - type: External
+      external:
+        metric:
+          name: nllb_active_requests_total
+        target:
+          type: AverageValue
+          averageValue: "{{ .Values.autoscaling.requestsPerPod }}"
+    {{- end }}
 {{- end }}

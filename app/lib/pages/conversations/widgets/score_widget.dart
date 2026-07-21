@@ -146,12 +146,10 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
       for (var conv in allConversations) {
         final convDate = conv.createdAt;
         if (convDate.isAfter(today) && convDate.isBefore(todayEnd)) {
-          if (conv.structured?.actionItems != null) {
-            for (var item in conv.structured!.actionItems) {
-              todayTasksTotal++;
-              if (item.completed) {
-                todayTasksDone++;
-              }
+          for (var item in conv.structured.actionItems) {
+            todayTasksTotal++;
+            if (item.completed) {
+              todayTasksDone++;
             }
           }
         }
@@ -197,12 +195,10 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         for (var conv in allConversations) {
           final convDate = conv.createdAt;
           if (convDate.isAfter(dayStart) && convDate.isBefore(dayEnd)) {
-            if (conv.structured?.actionItems != null) {
-              for (var item in conv.structured!.actionItems) {
-                tasksTotal++;
-                if (item.completed) {
-                  tasksDone++;
-                }
+            for (var item in conv.structured.actionItems) {
+              tasksTotal++;
+              if (item.completed) {
+                tasksDone++;
               }
             }
           }
@@ -644,9 +640,9 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
     for (int i = 0; i < days.length; i++) {
       final day = days[i];
       final grade = _history.cast<DailyGrade?>().firstWhere(
-            (g) => g != null && g.date.year == day.year && g.date.month == day.month && g.date.day == day.day,
-            orElse: () => null,
-          );
+        (g) => g != null && g.date.year == day.year && g.date.month == day.month && g.date.day == day.day,
+        orElse: () => null,
+      );
       final isToday = day.day == now.day && day.month == now.month && day.year == now.year;
       dataPoints.add(
         _ChartPoint(

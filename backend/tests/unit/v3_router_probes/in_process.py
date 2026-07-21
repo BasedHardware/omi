@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 from tests.unit.v3_router_probes.stubs import import_memories_router, install_router_import_stubs
 
 MEMORY_ADAPTER_MODULES = [
-    "utils.memory.v3_request_adapter",
+    "utils.memory.v3.request_adapter",
     "testing.memory.v3_route_planner",
-    "utils.memory.v3_response_adapter",
+    "utils.memory.v3.response_adapter",
 ]
 
 _STUB_MODULE_PREFIXES = (

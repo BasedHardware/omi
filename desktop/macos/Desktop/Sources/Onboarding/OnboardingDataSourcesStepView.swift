@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingDataSourcesStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator
@@ -27,7 +27,7 @@ struct OnboardingDataSourcesStepView: View {
       onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         connectionsList
 
         if let error = coordinator.lastActionError {
@@ -36,23 +36,28 @@ struct OnboardingDataSourcesStepView: View {
             .foregroundColor(OmiColors.warning)
         }
 
-        if coordinator.isResearchComplete {
-          Button("Continue") {
-            onContinue()
-          }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-          .keyboardShortcut(.defaultAction)
-          .transition(.opacity.combined(with: .scale(scale: 0.95)))
-        } else {
-          HStack(spacing: 8) {
-            ProgressView()
-              .controlSize(.small)
-              .tint(OmiColors.textTertiary)
-            Text("Scanning your data sources...")
-              .font(.system(size: 13, weight: .medium))
-              .foregroundColor(OmiColors.textTertiary)
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if coordinator.isResearchComplete {
+            Button("Continue") {
+              onContinue()
+            }
+            .buttonStyle(OmiButtonStyle(.primary))
+            .keyboardShortcut(.defaultAction)
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+          } else {
+            HStack(spacing: OmiSpacing.sm) {
+              ProgressView()
+                .controlSize(.small)
+                .tint(OmiColors.textTertiary)
+              Text("Scanning your data sources...")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(OmiColors.textTertiary)
+            }
           }
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {
@@ -140,8 +145,8 @@ struct OnboardingDataSourcesStepView: View {
       if activeImportSource == .chatgpt {
         listDivider
         memoryLogPanel(source: .chatgpt, text: $chatGPTMemoryLog)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 16)
+          .padding(.horizontal, OmiSpacing.lg)
+          .padding(.vertical, OmiSpacing.lg)
       }
       listDivider
 
@@ -149,8 +154,8 @@ struct OnboardingDataSourcesStepView: View {
       if activeImportSource == .claude {
         listDivider
         memoryLogPanel(source: .claude, text: $claudeMemoryLog)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 16)
+          .padding(.horizontal, OmiSpacing.lg)
+          .padding(.vertical, OmiSpacing.lg)
       }
     }
     .background(
@@ -192,7 +197,7 @@ struct OnboardingDataSourcesStepView: View {
     source: OnboardingMemoryLogSource,
     text: Binding<String>
   ) -> some View {
-    VStack(alignment: .leading, spacing: 14) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Open \(source.displayName), paste the copied prompt, then drop the full response here.")
         .font(.system(size: 13))
         .foregroundColor(OmiColors.textSecondary)
@@ -200,13 +205,13 @@ struct OnboardingDataSourcesStepView: View {
       Button("Open \(source.displayName) and Copy Prompt") {
         coordinator.copyPromptAndOpenMemoryLogSource(source)
       }
-      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+      .buttonStyle(OmiButtonStyle(.primary))
 
       ZStack(alignment: .topLeading) {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
           .fill(OmiColors.backgroundSecondary)
           .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
               .stroke(Color.white.opacity(0.08), lineWidth: 1)
           )
 
@@ -214,8 +219,8 @@ struct OnboardingDataSourcesStepView: View {
           Text("Paste the full \(source.displayName) response here…")
             .font(.system(size: 13))
             .foregroundColor(OmiColors.textTertiary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 14)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.md)
         }
 
         TextEditor(text: text)
@@ -223,11 +228,11 @@ struct OnboardingDataSourcesStepView: View {
           .font(.system(size: 13))
           .foregroundColor(OmiColors.textPrimary)
           .frame(minHeight: 160)
-          .padding(8)
+          .padding(OmiSpacing.sm)
       }
       .frame(maxWidth: 560)
 
-      HStack(spacing: 12) {
+      HStack(spacing: OmiSpacing.md) {
         Button(
           coordinator.isImportingMemoryLog(for: source)
             ? "Importing…" : "Import \(source.displayName)"
@@ -240,7 +245,7 @@ struct OnboardingDataSourcesStepView: View {
             }
           }
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .buttonStyle(OmiButtonStyle(.primary))
         .disabled(
           coordinator.isImportingMemoryLog(for: source)
             || text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -253,12 +258,12 @@ struct OnboardingDataSourcesStepView: View {
         .font(.system(size: 13, weight: .medium))
       }
     }
-    .padding(18)
+    .padding(OmiSpacing.lg)
     .background(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
         .fill(OmiColors.backgroundSecondary)
         .overlay(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
             .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     )
@@ -282,10 +287,10 @@ struct OnboardingDataSourcesStepView: View {
       scanFailed: scanFailed
     )
 
-    return HStack(alignment: .center, spacing: 12) {
-      ConnectorBrandIcon(brand: brand, size: 38, cornerRadius: 11)
+    return HStack(alignment: .center, spacing: OmiSpacing.md) {
+      ConnectorBrandIcon(brand: brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
 
-      VStack(alignment: .leading, spacing: 3) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
           .font(.system(size: 15, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
@@ -316,11 +321,11 @@ struct OnboardingDataSourcesStepView: View {
         )
       )
       .labelsHidden()
-      .toggleStyle(.switch)
+      .toggleStyle(OmiToggleStyle())
       .disabled(isDisabled || onToggle == nil)
     }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 13)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md)
   }
 
   private func metricsText(

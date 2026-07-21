@@ -2,6 +2,13 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# At the 40-pod HPA ceiling, Pusher needs fourteen waves. The committed probe
+# and availability settings make that a 8960s healthy-rollout budget; retain
+# one 640s per-pod allowance of scheduler headroom above it. CI recalculates
+# this bound from the chart whenever any rollout input changes.
+minReadySeconds: 0
+progressDeadlineSeconds: 9600
+
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
@@ -82,6 +89,10 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
+envFrom:
+  - configMapRef:
+      name: prod-omi-backend-config
+
 env:
   - name: BUCKET_SPEECH_PROFILES
     value: "profiles"
@@ -116,13 +127,13 @@ env:
         key: PINECONE_API_KEY
   - name: PINECONE_INDEX_NAME
     value: "memories-backend"
-  - name: REDIS_DB_HOST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: REDIS_DB_HOST
   - name: REDIS_DB_PORT
     value: "13151"
+  - name: REDIS_DB_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: REDIS_DB_HOST
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
@@ -133,21 +144,24 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
+  # This is the self-hosted Deepgram credential used only with dg.omi.me.
+  # Hosted Deepgram is disabled by the serving policy and is not injected into
+  # backend-listen or Cloud Run workloads.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: DEEPGRAM_API_KEY
+  - name: MODULATE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MODULATE_API_KEY
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
-  - name: GOOGLE_CLIENT_ID
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_CLIENT_ID
   - name: GOOGLE_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
@@ -220,9 +234,12 @@ env:
         key: MARKETPLACE_APP_REVIEWERS
   - name: TYPESENSE_HOST
     valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
+      configMapKeyRef:
+        name: prod-omi-backend-config
         key: TYPESENSE_HOST
+      # TYPESENSE_HOST is public runtime configuration. Clear a historical
+      # Secret-backed binding when Helm strategically merges this named env.
+      secretKeyRef: null
   - name: TYPESENSE_HOST_PORT
     value: "443"
   - name: TYPESENSE_API_KEY
@@ -234,11 +251,12 @@ env:
     value: "true"
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omi.me"
-  - name: RAPID_API_HOST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: RAPID_API_HOST
+  - name: HOSTED_PARAKEET_API_URL
+    value: "http://parakeet.omi.me"
+  - name: STT_PRERECORDED_MODEL
+    value: "modulate-velma-2,parakeet"
+  - name: STT_SERVICE_MODELS
+    value: "modulate-velma-2,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -251,18 +269,8 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
-  - name: CONVERSATION_SUMMARIZED_APP_IDS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: CONVERSATION_SUMMARIZED_APP_IDS
-  - name: STT_SERVICE_MODELS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: STT_SERVICE_MODELS
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "600"
+    value: "300"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -318,7 +326,9 @@ readinessProbe:
     path: /health
     port: 8080
   failureThreshold: 3
+  initialDelaySeconds: 0
   periodSeconds: 10
+  successThreshold: 1
   timeoutSeconds: 5
 
 startupProbe:
@@ -326,6 +336,7 @@ startupProbe:
     path: /health
     port: 8080
   failureThreshold: 60
+  initialDelaySeconds: 0
   periodSeconds: 10
   timeoutSeconds: 5
 

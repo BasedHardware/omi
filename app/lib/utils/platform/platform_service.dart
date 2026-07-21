@@ -10,7 +10,6 @@ class PlatformService {
   static bool get isMobile => isAndroid || isIOS;
   static bool get isApple => isIOS;
   static bool get isAnalyticsSupported => !(kIsWeb);
-  static bool get isNotificationSupported => true;
   static bool get isIntercomSupported => true;
   static bool get isCrashlyticsSupported => true;
 

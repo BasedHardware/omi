@@ -8,12 +8,12 @@ struct OmiHTTPTransport {
   let encoder: JSONEncoder
 
   // Cached formatters — avoid allocating per-field on large payloads.
-  private static let isoFractional: ISO8601DateFormatter = {
+  private nonisolated(unsafe) static let isoFractional: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
-  private static let isoStandard = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let isoStandard = ISO8601DateFormatter()
 
   /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
   var testAuthHeader: String?
@@ -72,7 +72,8 @@ struct OmiHTTPTransport {
   func buildHeaders(
     requireAuth: Bool = true,
     forceRefreshAuth: Bool = false,
-    includeBYOK: Bool = false
+    includeBYOK: Bool = false,
+    expectedAuthOwnerId: String? = nil
   ) async throws -> [String: String] {
     var headers: [String: String] = [
       "Content-Type": "application/json",
@@ -89,7 +90,15 @@ struct OmiHTTPTransport {
         headers["Authorization"] = testHeader
       } else {
         let authService = await MainActor.run { AuthService.shared }
-        let authHeader = try await authService.getAuthHeader(forceRefresh: forceRefreshAuth)
+        let authHeader: String
+        if let expectedAuthOwnerId {
+          authHeader = try await authService.getAuthHeader(
+            forceRefresh: forceRefreshAuth,
+            expectedUserId: expectedAuthOwnerId
+          )
+        } else {
+          authHeader = try await authService.getAuthHeader(forceRefresh: forceRefreshAuth)
+        }
         headers["Authorization"] = authHeader
       }
     }

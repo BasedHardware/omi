@@ -36,6 +36,10 @@ inputs:
     description: Manifest-rendered backend-sync-backfill secrets overlay (mode=worker)
     required: false
     default: ''
+  candidate_tag:
+    description: Stable no-traffic candidate tag (mode=worker)
+    required: false
+    default: ''
   provision_sync_ledger_ttl:
     description: Provision and verify Firestore sync_content_ledger TTL (mode=platform)
     required: false
@@ -90,6 +94,7 @@ runs:
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
+        REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL
       run: |
         gcloud run services describe backend-sync \
           --region=${{ inputs.region }} \
@@ -98,10 +103,19 @@ runs:
         python3 backend/scripts/render_cloud_run_clone_env.py \
           --source-json /tmp/backend-sync-live.json >> "$GITHUB_OUTPUT"
 
+    - name: Render optional candidate tag
+      if: ${{ inputs.mode == 'worker' }}
+      id: candidate-tag
+      shell: bash
+      run: |
+        if [[ -n "${{ inputs.candidate_tag }}" ]]; then
+          echo "flag=--tag=${{ inputs.candidate_tag }}" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Deploy ${{ inputs.service }}-sync-backfill to Cloud Run
       if: ${{ inputs.mode == 'worker' }}
       id: deploy-backend-sync-backfill
-      uses: google-github-actions/deploy-cloudrun@v2
+      uses: google-github-actions/deploy-cloudrun@v3
       with:
         service: ${{ inputs.service }}-sync-backfill
         region: ${{ inputs.region }}
@@ -110,9 +124,11 @@ runs:
         no_traffic: true
         flags: >-
           --revision-suffix=${{ inputs.revision_suffix }}
+          ${{ steps.candidate-tag.outputs.flag }}
           --min-instances=0
           --max-instances=4
           --concurrency=1
+          --remove-env-vars=HOSTED_PUSHER_API_URL
           ${{ inputs.cloud_run_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
         secrets: ${{ steps.backfill-runtime.outputs.secrets }}

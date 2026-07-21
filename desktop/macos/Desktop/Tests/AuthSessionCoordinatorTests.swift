@@ -74,18 +74,23 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(authSource.contains("func invalidateSession(reason:"))
     XCTAssertTrue(authSource.contains("func performLightSessionInvalidation()"))
     XCTAssertTrue(authSource.contains("clearTokens()"))
-    XCTAssertTrue(authSource.contains("saveAuthState(isSignedIn: false"))
+    XCTAssertTrue(authSource.contains("commitSignedOutSession(attempt: attempt"))
 
     // Nuclear signOut still wipes onboarding — invalidate must not.
-    let signOutRange = authSource.range(of: "func signOut() throws")
+    let signOutRange = authSource.range(of: "func signOut() async throws")
     XCTAssertNotNil(signOutRange)
-    let signOutSnippet = String(authSource[signOutRange!.lowerBound...]).prefix(4000)
-    XCTAssertTrue(signOutSnippet.contains("onboardingStep"))
+    let signOutTail = authSource[signOutRange!.lowerBound...]
+    let signOutEnd = signOutTail.range(of: "// MARK: - Helper Methods")?.lowerBound ?? signOutTail.endIndex
+    let signOutSnippet = String(signOutTail[..<signOutEnd])
+    // Onboarding wipe now routes through the shared clearing helpers
+    // (OnboardingFlow.persistedStateKeys), not a hand-rolled key list.
+    XCTAssertTrue(signOutSnippet.contains("OnboardingFlow.clearPersistedState()"))
     XCTAssertTrue(signOutSnippet.contains("userDidSignOut"))
 
     let invalidateRange = authSource.range(of: "func performLightSessionInvalidation()")
     XCTAssertNotNil(invalidateRange)
     let invalidateSnippet = String(authSource[invalidateRange!.lowerBound...]).prefix(500)
+    XCTAssertFalse(invalidateSnippet.contains("clearPersistedState"))
     XCTAssertFalse(invalidateSnippet.contains("onboardingStep"))
     XCTAssertFalse(invalidateSnippet.contains("userDidSignOut"))
     XCTAssertFalse(invalidateSnippet.contains("stopTranscription"))
@@ -104,7 +109,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
   func testRefreshIdTokenUsesClassifierNotBlanket400() throws {
     let source = try sourceFile("AuthService.swift")
     XCTAssertTrue(source.contains("AuthDefinitiveDeathClassifier.isDefinitiveRefreshFailure"))
-    let refreshRange = source.range(of: "private func refreshIdToken()")
+    let refreshRange = source.range(of: "private func refreshIdToken(attempt:")
     XCTAssertNotNil(refreshRange)
     let snippet = String(source[refreshRange!.lowerBound...]).prefix(3200)
     XCTAssertFalse(snippet.contains("httpResponse.statusCode == 400"))
@@ -113,12 +118,34 @@ final class AuthSessionCoordinatorTests: XCTestCase {
 
   func testRestoreValidationUsesRefreshSingleFlight() throws {
     let source = try sourceFile("AuthService.swift")
-    let validationRange = source.range(of: "private func validateRestoredSessionNow() async")
+    let validationRange = source.range(of: "private func validateRestoredSessionNow(attempt:")
     XCTAssertNotNil(validationRange)
-    let snippet = String(source[validationRange!.lowerBound...]).prefix(1800)
+    let snippet = String(source[validationRange!.lowerBound...]).prefix(3200)
     XCTAssertTrue(snippet.contains("refreshSingleFlight(auth: self)"))
     XCTAssertTrue(snippet.contains("transition(to: .recoveryRequired)"))
-    XCTAssertTrue(snippet.contains("resetAfterSuccessfulSignIn()"))
+    XCTAssertTrue(snippet.contains("commitRestoredSession"))
+
+    let commitRange = source.range(of: "func commitRestoredSession(")
+    XCTAssertNotNil(commitRange)
+    let commitSnippet = String(source[commitRange!.lowerBound...]).prefix(900)
+    XCTAssertTrue(commitSnippet.contains("resetAfterSuccessfulSignIn()"))
+  }
+
+  func testOwnerTransitionSynchronouslyInvalidatesPerOwnerStorage() throws {
+    let authSource = try sourceFile("AuthService.swift")
+    let ownerSource = try sourceFile("Chat/RuntimeOwnerIdentity.swift")
+
+    let signOutRange = authSource.range(of: "func signOut() async throws")
+    XCTAssertNotNil(signOutRange)
+    let signOutSnippet = String(authSource[signOutRange!.lowerBound...]).prefix(4200)
+
+    XCTAssertTrue(signOutSnippet.contains("commitSignedOutSession"))
+    XCTAssertFalse(signOutSnippet.contains("RewindDatabase.shared.closeIfStale"))
+    XCTAssertTrue(ownerSource.contains("RewindDatabase.shared.retargetEffectiveOwner"))
+    XCTAssertTrue(ownerSource.contains("RewindIndexer.shared.reset()"))
+    XCTAssertTrue(ownerSource.contains("RewindStorage.shared.reset()"))
+    XCTAssertTrue(ownerSource.contains("AgentSyncService.shared.stop(flushPendingChanges: false)"))
+    XCTAssertTrue(ownerSource.contains("FileIndexerService.shared.invalidateCache()"))
   }
 
   func testOnlyAuthenticatedPhaseReportsSignedIn() {

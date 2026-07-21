@@ -1,17 +1,130 @@
 name: Auto Deploy Backend to Development
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'backend/**'
+  workflow_run:
+    workflows: ["Release Eligibility"]
+    branches: [main]
+    types: [completed]
+
+# Share the development backend mutation domain with manual deploys, traffic
+# repair, backend-listen, and LLM Gateway's shared backend-secrets updates.
+concurrency:
+  group: deploy-backend-stack-development
+  cancel-in-progress: false
 
 env:
   SERVICE: backend
   REGION: us-central1
+  # Cloud Run tags are service-scoped. Reusing this tag atomically moves each
+  # service's candidate URL without accumulating stale no-traffic routes.
+  CANDIDATE_TAG: candidate
 
 jobs:
+  firestore_readiness:
+    # A workflow_run can access deployment credentials, so never run source
+    # code until the first completed proof identifies the exact current commit
+    # on this repository's main branch. Every later checkout and release vector
+    # uses that admitted SHA rather than a mutable default branch ref.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    environment: development
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest-m
+    outputs:
+      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+    steps:
+      # This checks out current main solely to run the guard script. Source
+      # selected by the workflow_run is not checked out or executed until the
+      # guard establishes it is still this exact main commit.
+      - name: Checkout current main for automatic source admission
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify Release Eligibility proof is current main
+        id: admitted_source
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          checkout_sha="$(git rev-parse --verify HEAD)"
+          python3 .github/scripts/verify_auto_backend_release_admission.py \
+            --sha "$RELEASE_SHA" \
+            --main-sha "$main_sha" \
+            --checkout-sha "$checkout_sha" \
+            --run-attempt "$RELEASE_RUN_ATTEMPT"
+          printf 'admitted_sha=%s\n' "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Require read-only Firestore credentials
+        env:
+          GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+        run: |
+          if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then
+            echo "::error title=Missing Firestore read-only credentials::Set GCP_FIRESTORE_READONLY_CREDENTIALS in the development environment before deploying."
+            exit 1
+          fi
+
+      - name: Checkout admitted Firestore source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
+
+      - name: Google Auth for read-only Firestore inventory
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify serving Firestore indexes
+        id: firestore_readiness
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --check-only \
+            --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Validate blocked Firestore schema proposal
+        id: validate_firestore_proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Preserve blocked Firestore schema proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+        with:
+          name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
+    needs: firestore_readiness
     environment: development
     permissions:
       contents: 'read'
@@ -24,40 +137,60 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify serving sync ledger fence mode before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+        run: |
+          python3 backend/scripts/verify_sync_ledger_fence_transition.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --desired-mode="$SYNC_LEDGER_FENCE_MODE" \
+            --allow-tagged-no-percent-targets
 
       - name: Login to GCR
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Compute short SHA
         id: image-tag
         run: |
-          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "revision_suffix=${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
 
-      - name: Render backend runtime env
-        id: runtime-env
-        env:
-          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
-          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
-          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+      - name: Get GKE credentials for gateway serving gate
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify LLM gateway control plane before promotion
+        id: gateway-serving
         run: |
-          python3 backend/scripts/render_backend_runtime_env.py --env dev >> "$GITHUB_OUTPUT"
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment=dev \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
 
       - name: Preflight Cloud Run deploy
         run: |
@@ -70,24 +203,82 @@ jobs:
             --repair-traffic
 
       - name: Validate backend runtime env before deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
 
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
+      - name: Build runtime image
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./backend/Dockerfile
-          push: true
+          push: false
+          load: true
           tags: |
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Verify built runtime image before publish
+        run: |
+          image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image "$image"
+
+      - name: Push verified runtime image
+        run: |
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+
+      - name: Probe LLM gateway from the Cloud Run VPC before promotion
+        run: |
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
+            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress private-ranges-only \
+            --lane omi:auto:public-shared-conversation-chat \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: Render backend runtime env from the gated gateway endpoint
+        id: runtime-env
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}
+          PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
+          PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+        run: |
+          python3 backend/scripts/render_backend_runtime_env.py --env dev >> "$GITHUB_OUTPUT"
+
+      - name: Migrate legacy public Cloud Run bindings
+        run: >-
+          python3 backend/scripts/preflight-cloud-run-deploy.py
+          --env dev
+          --project="${{ vars.GCP_PROJECT_ID }}"
+          --region="${{ env.REGION }}"
+          --migrate-legacy-public-binding backend
+          --migrate-legacy-public-binding backend-sync
+          --migrate-legacy-public-binding backend-sync-backfill
+          --migrate-legacy-public-binding backend-integration
+
+      - name: Check development Cloud Run runtime bindings
+        run: >-
+          python3 backend/scripts/preflight-cloud-run-deploy.py
+          --env dev
+          --project="${{ vars.GCP_PROJECT_ID }}"
+          --region="${{ env.REGION }}"
+          --check-runtime-bindings
+
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
@@ -96,6 +287,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            --tag=${{ env.CANDIDATE_TAG }}
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -118,10 +310,11 @@ jobs:
           cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
           backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
           backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
+          candidate_tag: ${{ env.CANDIDATE_TAG }}
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE }}-sync
           region: ${{ env.REGION }}
@@ -130,6 +323,8 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            --tag=${{ env.CANDIDATE_TAG }}
+            --remove-env-vars=HOSTED_PUSHER_API_URL
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: |-
             ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -151,44 +346,9 @@ jobs:
           provision_sync_ledger_ttl: 'true'
           provision_budget_alerts: 'false'
 
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ vars.GKE_CLUSTER }}
-          location: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-
-      - name: Deploy backend-secrets to GKE
-        env:
-          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
-          ENVIRONMENT: ${{ vars.ENV }}
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
-          REGION: ${{ env.REGION }}
-        run: backend/scripts/deploy-backend-secrets.sh
-
-      - name: Deploy ${{ env.SERVICE }}-listen to GKE
-        run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
-            ${{ vars.ENV }}-omi-backend-listen \
-            ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
-            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
-            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
-            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set image.tag=${{ steps.image-tag.outputs.short_sha }}
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
-            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
-            exit 1
-          fi
-          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
-
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE }}-integration
           region: ${{ env.REGION }}
@@ -197,6 +357,8 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            --tag=${{ env.CANDIDATE_TAG }}
+            --remove-env-vars=HOSTED_PUSHER_API_URL
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
@@ -217,23 +379,213 @@ jobs:
             --wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
             --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
 
+      - name: Capture exact no-traffic candidate URLs
+        id: candidate-urls
+        run: |
+          set -euo pipefail
+          backend_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --service=backend \
+            --revision=${{ steps.capture-backend-revision.outputs.revision }} \
+            --tag=${{ env.CANDIDATE_TAG }})"
+          backend_sync_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --service=backend-sync \
+            --revision=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --tag=${{ env.CANDIDATE_TAG }})"
+          backend_sync_backfill_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --service=backend-sync-backfill \
+            --revision=${{ steps.sync-backfill.outputs.revision }} \
+            --tag=${{ env.CANDIDATE_TAG }})"
+          backend_integration_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project=${{ vars.GCP_PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --service=backend-integration \
+            --revision=${{ steps.capture-backend-integration-revision.outputs.revision }} \
+            --tag=${{ env.CANDIDATE_TAG }})"
+          # Cloud Run verifies the service URL as the OIDC audience even when
+          # the HTTP request itself uses a tagged candidate URL.
+          backend_audience="$(gcloud run services describe backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.url)')"
+          backend_sync_audience="$(gcloud run services describe backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.url)')"
+          backend_sync_backfill_audience="$(gcloud run services describe backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.url)')"
+          backend_integration_audience="$(gcloud run services describe backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.url)')"
+          test -n "$backend_audience"
+          test -n "$backend_sync_audience"
+          test -n "$backend_sync_backfill_audience"
+          test -n "$backend_integration_audience"
+          {
+            echo "backend_url=${backend_url}"
+            echo "backend_sync_url=${backend_sync_url}"
+            echo "backend_sync_backfill_url=${backend_sync_backfill_url}"
+            echo "backend_integration_url=${backend_integration_url}"
+            echo "backend_audience=${backend_audience}"
+            echo "backend_sync_audience=${backend_sync_audience}"
+            echo "backend_sync_backfill_audience=${backend_sync_backfill_audience}"
+            echo "backend_integration_audience=${backend_integration_audience}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Validate backend runtime env after deploy
+        env:
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-live-cloud-run
 
+      - name: Gate candidate revisions with the acceptance manifest
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
+          export ADMIN_KEY
+          trap 'unset ADMIN_KEY' EXIT
+          python3 backend/scripts/run_dev_candidate_acceptance.py \
+            --candidate backend=${{ steps.candidate-urls.outputs.backend_url }} \
+            --candidate backend-sync=${{ steps.candidate-urls.outputs.backend_sync_url }} \
+            --candidate backend-sync-backfill=${{ steps.candidate-urls.outputs.backend_sync_backfill_url }} \
+            --candidate backend-integration=${{ steps.candidate-urls.outputs.backend_integration_url }} \
+            --audience backend=${{ steps.candidate-urls.outputs.backend_audience }} \
+            --audience backend-sync=${{ steps.candidate-urls.outputs.backend_sync_audience }} \
+            --audience backend-sync-backfill=${{ steps.candidate-urls.outputs.backend_sync_backfill_audience }} \
+            --audience backend-integration=${{ steps.candidate-urls.outputs.backend_integration_audience }} \
+            --evidence-path artifacts/dev-backend-candidate-acceptance.json
+
+      # This is the Cloud Run-only acceptance boundary. The development
+      # candidate manifest must pass before shared GKE runtime state can change.
+      - name: Accept no-traffic Cloud Run candidate
+        run: |
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --candidate \
+            --cloud-run-only \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment dev \
+            --evidence-path artifacts/dev-backend-cloud-run-candidate-release-vector.json
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Apply non-secret backend runtime config
+        env:
+          ENVIRONMENT: ${{ vars.ENV }}
+          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
+          STT_SERVICE_MODELS: modulate-velma-2,parakeet
+          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
+        run: backend/scripts/deploy-backend-config.sh
+
+      - name: Deploy backend-secrets to GKE
+        env:
+          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
+        run: backend/scripts/deploy-backend-secrets.sh
+
+      - name: Deploy ${{ env.SERVICE }}-listen to GKE
+        run: |
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
+            ${{ vars.ENV }}-omi-backend-listen \
+            ./backend/charts/backend-listen \
+            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
+            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
+            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
+            --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
+          # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
+          # stalled rollout still fails on progressDeadlineSeconds.
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=1800s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
+
+      # The lock remains held until the accepted Cloud Run candidate and the
+      # newly rolled GKE listener form one exact candidate release vector.
+      - name: Verify exact candidate composition
+        run: |
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --candidate \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment dev \
+            --evidence-path artifacts/dev-backend-deployment-composition.json
+
+      - name: Capture Cloud Run pre-promotion traffic snapshot
+        id: cloud-run-traffic-snapshot
+        run: |
+          python3 backend/scripts/cloud_run_traffic_snapshot.py capture \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --service backend \
+            --service backend-sync \
+            --service backend-sync-backfill \
+            --service backend-integration \
+            --output artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json
+
       - name: Verify validated revisions are still current
         run: |
-          test "$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
-          test "$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
-          test "$(gcloud run services describe backend-sync-backfill --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
-          test "$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
+          test "$(gcloud run services describe backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
       - name: Shift Cloud Run traffic to validated revisions
+        id: shift-cloud-run-traffic
         run: |
           gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync-backfill --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+
+      # The no-traffic candidate gate proves readiness; this post-promotion
+      # read verifies that every serving tier actually converged on the same
+      # attempt-scoped release vector.
+      - name: Verify serving backend release vector
+        id: verify-serving-release-vector
+        run: |
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment dev \
+            --evidence-path artifacts/dev-backend-serving-release-vector.json
+
+      - name: Restore Cloud Run traffic snapshot after failed promotion
+        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') }}
+        run: |
+          python3 backend/scripts/cloud_run_traffic_snapshot.py restore \
+            --snapshot artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json \
+            --evidence-path artifacts/dev-backend-cloud-run-traffic-restore.json
 
       - name: Cloud Run deploy status report
         if: always()
@@ -250,7 +602,25 @@ jobs:
             --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }} \
             --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
             --expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
-            --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
+            --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }} \
+            --candidate-acceptance-manifest backend/deploy/dev_candidate_acceptance.json \
+            --candidate-acceptance-evidence artifacts/dev-backend-candidate-acceptance.json \
+            --candidate-status-output artifacts/dev-backend-candidate-status.json
+
+      - name: Upload deployment acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dev-backend-deployment-acceptance-${{ github.run_id }}
+          path: |
+            artifacts/dev-backend-cloud-run-candidate-release-vector.json
+            artifacts/dev-backend-deployment-composition.json
+            artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json
+            artifacts/dev-backend-serving-release-vector.json
+            artifacts/dev-backend-candidate-acceptance.json
+            artifacts/dev-backend-candidate-status.json
+            artifacts/dev-backend-cloud-run-traffic-restore.json
+          if-no-files-found: warn
 
       - name: Show Output
         run: echo "Backend deployed to development environment"

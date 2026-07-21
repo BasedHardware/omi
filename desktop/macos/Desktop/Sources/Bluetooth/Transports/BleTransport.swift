@@ -1,446 +1,677 @@
-import Combine
-import CoreBluetooth
+@preconcurrency import Combine
+@preconcurrency import CoreBluetooth
 import Foundation
 import os.log
 
-/// BLE transport implementation using CoreBluetooth
-/// Ported from: omi/app/lib/services/devices/transports/ble_transport.dart
-final class BleTransport: NSObject, DeviceTransport {
-
-    // MARK: - DeviceTransport Protocol
-
-    let deviceId: String
-
-    var state: DeviceTransportState {
-        _state
-    }
-
-    var connectionStatePublisher: AnyPublisher<DeviceTransportState, Never> {
-        connectionStateSubject.eraseToAnyPublisher()
-    }
-
-    // MARK: - Private Properties
-
-    private let peripheral: CBPeripheral
-    private let centralManager: CBCentralManager
-    private let logger = Logger(subsystem: "me.omi.desktop", category: "BleTransport")
-
-    private var _state: DeviceTransportState = .disconnected
-    private let connectionStateSubject = PassthroughSubject<DeviceTransportState, Never>()
-
-    private var discoveredServices: [CBService] = []
-    private var characteristicContinuations: [CBUUID: CheckedContinuation<Data, Error>] = [:]
-    private var writeContinuations: [CBUUID: CheckedContinuation<Void, Error>] = [:]
-    private var characteristicStreams: [String: CharacteristicStreamHandler] = [:]
-
-    private var connectionContinuation: CheckedContinuation<Void, Error>?
-    private var serviceDiscoveryContinuation: CheckedContinuation<[CBService], Error>?
-
-    private var isDisposed = false
-    // All block-based NotificationCenter observer tokens. Every token must be
-    // stored and removed individually in deinit: `removeObserver(self)` does NOT
-    // remove block-based observers (they are keyed by the returned token, not by
-    // `self`), so a discarded token leaks the observer and its closure for the
-    // process lifetime — and DeviceProvider recreates transports on every
-    // reconnect attempt, so leaks accumulate unboundedly.
-    private var connectionObservers: [NSObjectProtocol] = []
-
-    // MARK: - Initialization
-
-    init(peripheral: CBPeripheral, centralManager: CBCentralManager) {
-        self.peripheral = peripheral
-        self.centralManager = centralManager
-        self.deviceId = peripheral.identifier.uuidString
-        super.init()
-        peripheral.delegate = self
-        setupConnectionObserver()
-    }
-
-    private func setupConnectionObserver() {
-        // Observe connection state changes via NotificationCenter
-        // BluetoothManager posts these when CBCentralManagerDelegate methods fire
-        connectionObservers.append(
-            NotificationCenter.default.addObserver(
-                forName: .bleDeviceConnected,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                guard let self = self,
-                      let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
-                      peripheralId == self.peripheral.identifier else { return }
-
-                self.handleConnectionSuccess()
-            })
-
-        connectionObservers.append(
-            NotificationCenter.default.addObserver(
-                forName: .bleDeviceDisconnected,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                guard let self = self,
-                      let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
-                      peripheralId == self.peripheral.identifier else { return }
-
-                let error = notification.userInfo?["error"] as? Error
-                self.handleDisconnection(error: error)
-            })
-
-        connectionObservers.append(
-            NotificationCenter.default.addObserver(
-                forName: .bleDeviceFailedToConnect,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                guard let self = self,
-                      let peripheralId = notification.userInfo?["peripheralId"] as? UUID,
-                      peripheralId == self.peripheral.identifier else { return }
-
-                let error = notification.userInfo?["error"] as? Error
-                self.handleConnectionFailure(error: error)
-            })
-    }
-
-    private func handleConnectionSuccess() {
-        connectionContinuation?.resume()
-        connectionContinuation = nil
-    }
-
-    private func handleConnectionFailure(error: Error?) {
-        let transportError = DeviceTransportError.connectionFailed(error?.localizedDescription ?? "Unknown error")
-        connectionContinuation?.resume(throwing: transportError)
-        connectionContinuation = nil
-        updateState(.disconnected)
-    }
-
-    private func handleDisconnection(error: Error?) {
-        if let continuation = connectionContinuation {
-            continuation.resume(throwing: DeviceTransportError.connectionFailed("Disconnected during connection"))
-            connectionContinuation = nil
-        }
-        updateState(.disconnected)
-    }
-
-    deinit {
-        // Remove every block-based observer by its token (removeObserver(self)
-        // does not cover them). Missing any one leaks that observer + closure.
-        for observer in connectionObservers {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        connectionObservers.removeAll()
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    // MARK: - Connection
-
-    func connect() async throws {
-        guard !isDisposed else { throw DeviceTransportError.disposed }
-        guard _state != .connected else { return }
-
-        updateState(.connecting)
-
-        do {
-            // Connect to the peripheral
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                self.connectionContinuation = continuation
-                self.centralManager.connect(self.peripheral, options: nil)
-            }
-
-            // Discover services
-            discoveredServices = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[CBService], Error>) in
-                self.serviceDiscoveryContinuation = continuation
-                self.peripheral.discoverServices(nil)
-            }
-
-            // Discover characteristics for each service
-            for service in discoveredServices {
-                peripheral.discoverCharacteristics(nil, for: service)
-            }
-
-            // Wait briefly for characteristic discovery
-            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-
-            updateState(.connected)
-            logger.info("Connected to device \(self.deviceId)")
-
-        } catch {
-            updateState(.disconnected)
-            throw DeviceTransportError.connectionFailed(error.localizedDescription)
-        }
-    }
-
-    func disconnect() async {
-        guard !isDisposed else { return }
-        guard _state != .disconnected else { return }
-
-        updateState(.disconnecting)
-
-        // Cancel all characteristic streams
-        for handler in characteristicStreams.values {
-            handler.finish()
-        }
-        characteristicStreams.removeAll()
-
-        // Cancel pending continuations
-        connectionContinuation?.resume(throwing: CancellationError())
-        connectionContinuation = nil
-        serviceDiscoveryContinuation?.resume(throwing: CancellationError())
-        serviceDiscoveryContinuation = nil
-
-        for (_, continuation) in characteristicContinuations {
-            continuation.resume(throwing: CancellationError())
-        }
-        characteristicContinuations.removeAll()
-
-        for (_, continuation) in writeContinuations {
-            continuation.resume(throwing: CancellationError())
-        }
-        writeContinuations.removeAll()
-
-        // Disconnect
-        centralManager.cancelPeripheralConnection(peripheral)
-        updateState(.disconnected)
-
-        logger.info("Disconnected from device \(self.deviceId)")
-    }
-
-    func isConnected() async -> Bool {
-        peripheral.state == .connected
-    }
-
-    func ping() async -> Bool {
-        guard peripheral.state == .connected else { return false }
-        do {
-            _ = try await peripheral.readRSSIAsync()
-            return true
-        } catch {
-            logger.debug("Ping failed: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    // MARK: - Characteristic Operations
-
-    func getCharacteristicStream(
-        serviceUUID: CBUUID,
-        characteristicUUID: CBUUID
-    ) -> AsyncThrowingStream<Data, Error> {
-        let key = "\(serviceUUID.uuidString):\(characteristicUUID.uuidString)"
-
-        // Return existing stream if available
-        if let existing = characteristicStreams[key] {
-            return existing.stream
-        }
-
-        // Create new stream handler
-        let handler = CharacteristicStreamHandler()
-        characteristicStreams[key] = handler
-
-        // Set up characteristic notification
-        Task {
-            do {
-                guard let characteristic = findCharacteristic(
-                    serviceUUID: serviceUUID,
-                    characteristicUUID: characteristicUUID
-                ) else {
-                    handler.finish(throwing: DeviceTransportError.characteristicNotFound(characteristicUUID))
-                    return
-                }
-
-                peripheral.setNotifyValue(true, for: characteristic)
-                logger.debug("Enabled notifications for \(characteristicUUID.uuidString)")
-            }
-        }
-
-        return handler.stream
-    }
-
-    func readCharacteristic(
-        serviceUUID: CBUUID,
-        characteristicUUID: CBUUID
-    ) async throws -> Data {
-        guard !isDisposed else { throw DeviceTransportError.disposed }
-        guard _state == .connected else { throw DeviceTransportError.notConnected }
-
-        guard let characteristic = findCharacteristic(
-            serviceUUID: serviceUUID,
-            characteristicUUID: characteristicUUID
-        ) else {
-            throw DeviceTransportError.characteristicNotFound(characteristicUUID)
-        }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            characteristicContinuations[characteristicUUID] = continuation
-            peripheral.readValue(for: characteristic)
-        }
-    }
-
-    func writeCharacteristic(
-        data: Data,
-        serviceUUID: CBUUID,
-        characteristicUUID: CBUUID,
-        withResponse: Bool
-    ) async throws {
-        guard !isDisposed else { throw DeviceTransportError.disposed }
-        guard _state == .connected else { throw DeviceTransportError.notConnected }
-
-        guard let characteristic = findCharacteristic(
-            serviceUUID: serviceUUID,
-            characteristicUUID: characteristicUUID
-        ) else {
-            throw DeviceTransportError.characteristicNotFound(characteristicUUID)
-        }
-
-        let writeType: CBCharacteristicWriteType = withResponse ? .withResponse : .withoutResponse
-
-        if withResponse {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                writeContinuations[characteristicUUID] = continuation
-                peripheral.writeValue(data, for: characteristic, type: writeType)
-            }
-        } else {
-            peripheral.writeValue(data, for: characteristic, type: writeType)
-        }
-    }
-
-    func dispose() async {
-        guard !isDisposed else { return }
-        isDisposed = true
-
-        await disconnect()
-        logger.debug("Transport disposed for device \(self.deviceId)")
-    }
-
-    // MARK: - Private Helpers
-
-    private func updateState(_ newState: DeviceTransportState) {
-        guard _state != newState else { return }
-        _state = newState
-        connectionStateSubject.send(newState)
-    }
-
-    private func findCharacteristic(serviceUUID: CBUUID, characteristicUUID: CBUUID) -> CBCharacteristic? {
-        guard let service = discoveredServices.first(where: {
-            $0.uuid.uuidString.lowercased() == serviceUUID.uuidString.lowercased()
-        }) else {
-            return nil
-        }
-
-        return service.characteristics?.first(where: {
-            $0.uuid.uuidString.lowercased() == characteristicUUID.uuidString.lowercased()
-        })
-    }
-
-    /// Get all discovered services
-    var services: [CBService] {
-        discoveredServices
-    }
+private enum BLESingletonOperation: String, Hashable, Sendable {
+  case value
 }
 
-// MARK: - CBPeripheralDelegate
+private struct BLEDiscoveredServices: @unchecked Sendable {
+  let values: [CBService]
+}
+
+/// BLE transport implementation using CoreBluetooth.
+///
+/// CoreBluetooth remains the physical driver. Logical session identity belongs
+/// to `DeviceSessionCoordinator`; this transport accepts only events for its
+/// peripheral and carries that coordinator-assigned generation for fencing.
+@MainActor
+final class BleTransport: NSObject, DeviceTransport {
+  let deviceId: String
+  let sessionGeneration: UInt64
+
+  var state: DeviceTransportState { transportState }
+  var connectionStatePublisher: AnyPublisher<DeviceTransportState, Never> {
+    connectionStateSubject.eraseToAnyPublisher()
+  }
+
+  private let physicalDriver: any BLEPhysicalDriving
+  private let logger = Logger(subsystem: "me.omi.desktop", category: "BleTransport")
+
+  private var transportState: DeviceTransportState = .disconnected
+  private let connectionStateSubject = PassthroughSubject<DeviceTransportState, Never>()
+  private var discoveredServices: [CBService] = []
+  private var pendingCharacteristicServices: Set<ObjectIdentifier> = []
+  private var characteristicStreams: [String: CharacteristicStreamBroadcaster] = [:]
+  private var isDisposed = false
+  private var isConnectionInvalidated = false
+  private var didRequestPhysicalDisconnect = false
+  private var connectionLease: BluetoothConnectionLease?
+
+  nonisolated(unsafe) private var centralEventSubscription: AnyCancellable?
+  private var centralEventContinuation: AsyncStream<BluetoothCentralEvent>.Continuation?
+  private var centralEventTask: Task<Void, Never>?
+
+  private let connectOperations: DeviceOperationBroker<BLESingletonOperation, Void>
+  private let serviceOperations: DeviceOperationBroker<BLESingletonOperation, BLEDiscoveredServices>
+  private let characteristicDiscoveryOperations: DeviceOperationBroker<BLESingletonOperation, Void>
+  private let readOperations: DeviceOperationBroker<String, Data>
+  private let writeOperations: DeviceOperationBroker<String, Void>
+
+  private var connectHandle: DeviceOperationHandle<BLESingletonOperation>?
+  private var serviceHandle: DeviceOperationHandle<BLESingletonOperation>?
+  private var characteristicDiscoveryHandle: DeviceOperationHandle<BLESingletonOperation>?
+  private let readGate = UncorrelatedOperationGate<String>()
+  private let writeGate = UncorrelatedOperationGate<String>()
+
+  convenience init(
+    peripheral: CBPeripheral,
+    connectionController: any BluetoothCentralConnectionControlling,
+    centralEvents: AnyPublisher<BluetoothCentralEvent, Never>,
+    sessionGeneration: UInt64,
+    operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+  ) {
+    self.init(
+      physicalDriver: CoreBluetoothPhysicalDriver(
+        peripheral: peripheral,
+        connectionController: connectionController
+      ),
+      centralEvents: centralEvents,
+      sessionGeneration: sessionGeneration,
+      operationClock: operationClock
+    )
+  }
+
+  init(
+    physicalDriver: any BLEPhysicalDriving,
+    centralEvents: AnyPublisher<BluetoothCentralEvent, Never>,
+    sessionGeneration: UInt64,
+    operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+  ) {
+    self.physicalDriver = physicalDriver
+    self.deviceId = physicalDriver.identifier.uuidString
+    self.sessionGeneration = sessionGeneration
+    self.connectOperations = DeviceOperationBroker(clock: operationClock)
+    self.serviceOperations = DeviceOperationBroker(clock: operationClock)
+    self.characteristicDiscoveryOperations = DeviceOperationBroker(clock: operationClock)
+    self.readOperations = DeviceOperationBroker(clock: operationClock)
+    self.writeOperations = DeviceOperationBroker(clock: operationClock)
+    super.init()
+
+    physicalDriver.delegate = self
+    let (eventStream, eventContinuation) = AsyncStream.makeStream(
+      of: BluetoothCentralEvent.self
+    )
+    centralEventContinuation = eventContinuation
+    centralEventSubscription = centralEvents.sink { event in
+      eventContinuation.yield(event)
+    }
+    centralEventTask = Task { @MainActor [weak self] in
+      for await event in eventStream {
+        guard let self else { return }
+        await self.handleCentralEvent(event)
+      }
+    }
+  }
+
+  deinit {
+    centralEventSubscription?.cancel()
+    centralEventContinuation?.finish()
+    centralEventTask?.cancel()
+  }
+
+  func connect() async throws {
+    guard !isDisposed else { throw DeviceTransportError.disposed }
+    guard !isConnectionInvalidated else {
+      throw DeviceTransportError.connectionFailed("Transport session must be recreated")
+    }
+    guard transportState != .connected else { return }
+
+    updateState(.connecting)
+    do {
+      _ = try await connectOperations.perform(
+        key: .value,
+        timeout: .seconds(10),
+        onTerminal: { [weak self] handle, _ in
+          guard self?.connectHandle == handle else { return }
+          self?.connectHandle = nil
+        }
+      ) { [weak self] handle in
+        guard let self else { throw DeviceTransportError.disposed }
+        self.connectHandle = handle
+        self.connectionLease = try self.physicalDriver.connect(
+          sessionGeneration: self.sessionGeneration
+        )
+      }
+      try ensureConnectionIsValid()
+
+      let services = try await serviceOperations.perform(
+        key: .value,
+        timeout: .seconds(10),
+        onTerminal: { [weak self] handle, _ in
+          guard self?.serviceHandle == handle else { return }
+          self?.serviceHandle = nil
+        }
+      ) { [weak self] handle in
+        guard let self else { throw DeviceTransportError.disposed }
+        self.serviceHandle = handle
+        self.physicalDriver.discoverServices(nil)
+      }
+      try ensureConnectionIsValid()
+      discoveredServices = services.values
+
+      if !discoveredServices.isEmpty {
+        _ = try await characteristicDiscoveryOperations.perform(
+          key: .value,
+          timeout: .seconds(10),
+          onTerminal: { [weak self] handle, _ in
+            guard self?.characteristicDiscoveryHandle == handle else { return }
+            self?.characteristicDiscoveryHandle = nil
+          }
+        ) { [weak self] handle in
+          guard let self else { throw DeviceTransportError.disposed }
+          self.characteristicDiscoveryHandle = handle
+          self.pendingCharacteristicServices = Set(
+            self.discoveredServices.map(ObjectIdentifier.init)
+          )
+          for service in self.discoveredServices {
+            self.physicalDriver.discoverCharacteristics(nil, for: service)
+          }
+        }
+      }
+      try ensureConnectionIsValid()
+
+      updateState(.connected)
+      logger.info("Connected to device \(self.deviceId), generation \(self.sessionGeneration)")
+    } catch {
+      isConnectionInvalidated = true
+      await cancelPendingOperations(reason: .cancelled)
+      requestPhysicalDisconnectIfNeeded()
+      updateState(.disconnected)
+      throw DeviceTransportError.connectionFailed(error.localizedDescription)
+    }
+  }
+
+  func disconnect() async {
+    guard !isDisposed else { return }
+    await drainSession()
+  }
+
+  func dispose() async {
+    guard !isDisposed else { return }
+    // Claim disposal before the first suspension so concurrent callers
+    // cannot start a second drain. `drainSession` deliberately has no
+    // disposed guard; disposal must still cancel every pending operation.
+    isDisposed = true
+    await drainSession()
+    centralEventSubscription?.cancel()
+    centralEventSubscription = nil
+    centralEventContinuation?.finish()
+    centralEventContinuation = nil
+    centralEventTask?.cancel()
+    centralEventTask = nil
+    physicalDriver.delegate = nil
+    readGate.reset()
+    writeGate.reset()
+    logger.debug("Transport disposed for device \(self.deviceId), generation \(self.sessionGeneration)")
+  }
+
+  private func drainSession() async {
+    isConnectionInvalidated = true
+
+    if transportState != .disconnected {
+      updateState(.disconnecting)
+    }
+
+    await cancelPendingOperations(reason: .cancelled)
+    finishCharacteristicStreams()
+    requestPhysicalDisconnectIfNeeded()
+    updateState(.disconnected)
+    logger.info("Disconnected from device \(self.deviceId), generation \(self.sessionGeneration)")
+  }
+
+  func isConnected() async -> Bool {
+    physicalDriver.state == .connected && transportState == .connected
+  }
+
+  func ping() async -> Bool {
+    guard physicalDriver.state == .connected else { return false }
+    physicalDriver.readRSSI()
+    return true
+  }
+
+  func getCharacteristicStream(
+    serviceUUID: CBUUID,
+    characteristicUUID: CBUUID
+  ) -> AsyncThrowingStream<Data, Error> {
+    guard !isDisposed else {
+      return failedCharacteristicStream(error: DeviceTransportError.disposed)
+    }
+    guard transportState == .connected else {
+      return failedCharacteristicStream(error: DeviceTransportError.notConnected)
+    }
+
+    let key = streamKey(serviceUUID: serviceUUID, characteristicUUID: characteristicUUID)
+    if let existing = characteristicStreams[key] {
+      return existing.makeStream()
+    }
+
+    guard
+      let characteristic = findCharacteristic(
+        serviceUUID: serviceUUID,
+        characteristicUUID: characteristicUUID
+      )
+    else {
+      return failedCharacteristicStream(
+        error: DeviceTransportError.characteristicNotFound(characteristicUUID)
+      )
+    }
+
+    let broadcaster = CharacteristicStreamBroadcaster()
+    characteristicStreams[key] = broadcaster
+    physicalDriver.setNotifyValue(true, for: characteristic)
+    logger.debug("Enabled notifications for \(characteristicUUID.uuidString)")
+    return broadcaster.makeStream()
+  }
+
+  func readCharacteristic(
+    serviceUUID: CBUUID,
+    characteristicUUID: CBUUID
+  ) async throws -> Data {
+    guard !isDisposed else { throw DeviceTransportError.disposed }
+    guard transportState == .connected else { throw DeviceTransportError.notConnected }
+    guard
+      let characteristic = findCharacteristic(
+        serviceUUID: serviceUUID,
+        characteristicUUID: characteristicUUID
+      )
+    else {
+      throw DeviceTransportError.characteristicNotFound(characteristicUUID)
+    }
+
+    let key = operationKey(
+      serviceUUIDString: serviceUUID.uuidString,
+      characteristicUUIDString: characteristicUUID.uuidString
+    )
+    guard readGate.canStart(key) else {
+      throw DeviceTransportError.readFailed(
+        "A previous read has an uncorrelated callback; reconnect the device"
+      )
+    }
+    do {
+      return try await readOperations.perform(
+        key: key,
+        timeout: .seconds(5),
+        onTerminal: { [weak self] handle, termination in
+          self?.readGate.terminal(handle: handle, termination: termination)
+        }
+      ) { [weak self] handle in
+        guard let self else { throw DeviceTransportError.disposed }
+        guard self.readGate.register(handle) else {
+          throw DeviceTransportError.readFailed(
+            "Read callback identity is no longer trustworthy"
+          )
+        }
+        self.physicalDriver.readValue(for: characteristic)
+      }
+    } catch let error as DeviceOperationBrokerError {
+      throw DeviceTransportError.readFailed(error.localizedDescription)
+    }
+  }
+
+  func writeCharacteristic(
+    data: Data,
+    serviceUUID: CBUUID,
+    characteristicUUID: CBUUID,
+    withResponse: Bool
+  ) async throws {
+    guard !isDisposed else { throw DeviceTransportError.disposed }
+    guard transportState == .connected else { throw DeviceTransportError.notConnected }
+    guard
+      let characteristic = findCharacteristic(
+        serviceUUID: serviceUUID,
+        characteristicUUID: characteristicUUID
+      )
+    else {
+      throw DeviceTransportError.characteristicNotFound(characteristicUUID)
+    }
+
+    let writeType: CBCharacteristicWriteType = withResponse ? .withResponse : .withoutResponse
+    guard withResponse else {
+      physicalDriver.writeValue(data, for: characteristic, type: writeType)
+      return
+    }
+
+    let key = operationKey(
+      serviceUUIDString: serviceUUID.uuidString,
+      characteristicUUIDString: characteristicUUID.uuidString
+    )
+    guard writeGate.canStart(key) else {
+      throw DeviceTransportError.writeFailed(
+        "A previous write has an uncorrelated callback; reconnect the device"
+      )
+    }
+    do {
+      _ = try await writeOperations.perform(
+        key: key,
+        timeout: .seconds(5),
+        onTerminal: { [weak self] handle, termination in
+          self?.writeGate.terminal(handle: handle, termination: termination)
+        }
+      ) { [weak self] handle in
+        guard let self else { throw DeviceTransportError.disposed }
+        guard self.writeGate.register(handle) else {
+          throw DeviceTransportError.writeFailed(
+            "Write callback identity is no longer trustworthy"
+          )
+        }
+        self.physicalDriver.writeValue(data, for: characteristic, type: writeType)
+      }
+    } catch let error as DeviceOperationBrokerError {
+      throw DeviceTransportError.writeFailed(error.localizedDescription)
+    }
+  }
+
+  var services: [CBService] { discoveredServices }
+
+  private func handleCentralEvent(_ event: BluetoothCentralEvent) async {
+    switch event {
+    case .connected(let lease):
+      guard lease == connectionLease else { return }
+      guard !isConnectionInvalidated else {
+        requestPhysicalDisconnectIfNeeded()
+        return
+      }
+      guard let handle = connectHandle else { return }
+      connectHandle = nil
+      await connectOperations.succeed(handle: handle, value: ())
+
+    case .failedToConnect(let lease, let reason):
+      guard lease == connectionLease else { return }
+      connectionLease = nil
+      isConnectionInvalidated = true
+      if let handle = connectHandle {
+        connectHandle = nil
+        await connectOperations.fail(handle: handle, reason: reason)
+      }
+      await cancelPendingOperations(reason: .disconnected)
+      updateState(.disconnected)
+
+    case .disconnected(let lease, let reason):
+      guard lease == connectionLease else { return }
+      connectionLease = nil
+      isConnectionInvalidated = true
+      if let handle = connectHandle {
+        connectHandle = nil
+        await connectOperations.fail(
+          handle: handle,
+          reason: reason ?? "Disconnected during connection"
+        )
+      }
+      await cancelPendingOperations(reason: .disconnected)
+      finishCharacteristicStreams(
+        throwing: reason.map(DeviceOperationBrokerError.failed)
+          ?? DeviceOperationBrokerError.disconnected
+      )
+      updateState(.disconnected)
+    }
+  }
+
+  func didDiscoverServices(_ services: [CBService], error: Error?) async {
+    guard let handle = serviceHandle else { return }
+    serviceHandle = nil
+    if let error {
+      await serviceOperations.fail(handle: handle, reason: error.localizedDescription)
+    } else {
+      await serviceOperations.succeed(
+        handle: handle,
+        value: BLEDiscoveredServices(values: services)
+      )
+    }
+  }
+
+  func didDiscoverCharacteristics(for service: CBService, error: Error?) async {
+    if let error {
+      guard let handle = characteristicDiscoveryHandle else { return }
+      characteristicDiscoveryHandle = nil
+      pendingCharacteristicServices.removeAll()
+      await characteristicDiscoveryOperations.fail(
+        handle: handle,
+        reason: error.localizedDescription
+      )
+      return
+    }
+
+    pendingCharacteristicServices.remove(ObjectIdentifier(service))
+    logger.debug("Discovered \(service.characteristics?.count ?? 0) characteristics for \(service.uuid)")
+    guard pendingCharacteristicServices.isEmpty,
+      let handle = characteristicDiscoveryHandle
+    else { return }
+    characteristicDiscoveryHandle = nil
+    await characteristicDiscoveryOperations.succeed(handle: handle, value: ())
+  }
+
+  func didUpdateValue(for characteristic: CBCharacteristic, error: Error?) async {
+    let characteristicKey = operationKey(
+      serviceUUIDString: characteristic.service?.uuid.uuidString ?? "",
+      characteristicUUIDString: characteristic.uuid.uuidString
+    )
+
+    if let handle = readGate.takeHandleForCallback(key: characteristicKey) {
+      if let error {
+        await readOperations.fail(
+          handle: handle,
+          reason: error.localizedDescription
+        )
+      } else {
+        await readOperations.succeed(
+          handle: handle,
+          value: characteristic.value ?? Data()
+        )
+      }
+      return
+    }
+
+    // CoreBluetooth uses the same delegate callback for explicit reads and
+    // subscribed notifications. A timed-out read poisons only the read
+    // operation identity; it must never suppress later notifications. A
+    // live read was resolved above, so only unclaimed values broadcast.
+    let notificationKey = streamKey(
+      serviceUUIDString: characteristic.service?.uuid.uuidString ?? "",
+      characteristicUUIDString: characteristic.uuid.uuidString
+    )
+    if error == nil, let value = characteristic.value {
+      characteristicStreams[notificationKey]?.yield(value)
+    }
+  }
+
+  func didWriteValue(for characteristic: CBCharacteristic, error: Error?) async {
+    let key = operationKey(
+      serviceUUIDString: characteristic.service?.uuid.uuidString ?? "",
+      characteristicUUIDString: characteristic.uuid.uuidString
+    )
+    guard let handle = writeGate.takeHandleForCallback(key: key) else { return }
+
+    if let error {
+      await writeOperations.fail(handle: handle, reason: error.localizedDescription)
+    } else {
+      await writeOperations.succeed(handle: handle, value: ())
+    }
+  }
+
+  private func cancelPendingOperations(reason: DeviceOperationBrokerError) async {
+    await connectOperations.cancelAll(reason: reason)
+    await serviceOperations.cancelAll(reason: reason)
+    await characteristicDiscoveryOperations.cancelAll(reason: reason)
+    await readOperations.cancelAll(reason: reason)
+    await writeOperations.cancelAll(reason: reason)
+    connectHandle = nil
+    serviceHandle = nil
+    characteristicDiscoveryHandle = nil
+    pendingCharacteristicServices.removeAll()
+  }
+
+  private func requestPhysicalDisconnectIfNeeded() {
+    guard !didRequestPhysicalDisconnect else { return }
+    didRequestPhysicalDisconnect = true
+    physicalDriver.disconnect()
+  }
+
+  private func ensureConnectionIsValid() throws {
+    guard !isDisposed, !isConnectionInvalidated else {
+      throw DeviceTransportError.connectionFailed("Connection was superseded")
+    }
+  }
+
+  private func finishCharacteristicStreams(throwing error: Error? = nil) {
+    for handler in characteristicStreams.values {
+      handler.finish(throwing: error)
+    }
+    characteristicStreams.removeAll()
+  }
+
+  private func updateState(_ newState: DeviceTransportState) {
+    guard transportState != newState else { return }
+    transportState = newState
+    connectionStateSubject.send(newState)
+  }
+
+  private func findCharacteristic(
+    serviceUUID: CBUUID,
+    characteristicUUID: CBUUID
+  ) -> CBCharacteristic? {
+    guard
+      let service = discoveredServices.first(where: {
+        $0.uuid.uuidString.caseInsensitiveCompare(serviceUUID.uuidString) == .orderedSame
+      })
+    else {
+      return nil
+    }
+
+    return service.characteristics?.first(where: {
+      $0.uuid.uuidString.caseInsensitiveCompare(characteristicUUID.uuidString) == .orderedSame
+    })
+  }
+
+  private func streamKey(serviceUUID: CBUUID, characteristicUUID: CBUUID) -> String {
+    streamKey(
+      serviceUUIDString: serviceUUID.uuidString,
+      characteristicUUIDString: characteristicUUID.uuidString
+    )
+  }
+
+  private func streamKey(serviceUUIDString: String, characteristicUUIDString: String) -> String {
+    "\(serviceUUIDString.lowercased()):\(characteristicUUIDString.lowercased())"
+  }
+
+  private func operationKey(
+    serviceUUIDString: String,
+    characteristicUUIDString: String
+  ) -> String {
+    streamKey(
+      serviceUUIDString: serviceUUIDString,
+      characteristicUUIDString: characteristicUUIDString
+    )
+  }
+
+  private func failedCharacteristicStream(
+    error: Error
+  ) -> AsyncThrowingStream<Data, Error> {
+    AsyncThrowingStream { continuation in
+      continuation.finish(throwing: error)
+    }
+  }
+}
 
 extension BleTransport: CBPeripheralDelegate {
-
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        if let error = error {
-            serviceDiscoveryContinuation?.resume(throwing: error)
-        } else {
-            serviceDiscoveryContinuation?.resume(returning: peripheral.services ?? [])
-        }
-        serviceDiscoveryContinuation = nil
+  nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+    let services = peripheral.services ?? []
+    Task { @MainActor [weak self] in
+      await self?.didDiscoverServices(services, error: error)
     }
+  }
 
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        if let error = error {
-            logger.warning("Failed to discover characteristics for \(service.uuid): \(error.localizedDescription)")
-        } else {
-            logger.debug("Discovered \(service.characteristics?.count ?? 0) characteristics for \(service.uuid)")
-        }
+  nonisolated func peripheral(
+    _ peripheral: CBPeripheral,
+    didDiscoverCharacteristicsFor service: CBService,
+    error: Error?
+  ) {
+    Task { @MainActor [weak self] in
+      await self?.didDiscoverCharacteristics(for: service, error: error)
     }
+  }
 
-    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        let uuid = characteristic.uuid
-
-        // Handle pending read continuation
-        if let continuation = characteristicContinuations.removeValue(forKey: uuid) {
-            if let error = error {
-                continuation.resume(throwing: DeviceTransportError.readFailed(error.localizedDescription))
-            } else {
-                continuation.resume(returning: characteristic.value ?? Data())
-            }
-            return
-        }
-
-        // Handle stream notification
-        let key = "\(characteristic.service?.uuid.uuidString ?? ""):\(uuid.uuidString)"
-        if let handler = characteristicStreams[key], let value = characteristic.value {
-            handler.yield(value)
-        }
+  nonisolated func peripheral(
+    _ peripheral: CBPeripheral,
+    didUpdateValueFor characteristic: CBCharacteristic,
+    error: Error?
+  ) {
+    Task { @MainActor [weak self] in
+      await self?.didUpdateValue(for: characteristic, error: error)
     }
+  }
 
-    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        let uuid = characteristic.uuid
-
-        if let continuation = writeContinuations.removeValue(forKey: uuid) {
-            if let error = error {
-                continuation.resume(throwing: DeviceTransportError.writeFailed(error.localizedDescription))
-            } else {
-                continuation.resume()
-            }
-        }
+  nonisolated func peripheral(
+    _ peripheral: CBPeripheral,
+    didWriteValueFor characteristic: CBCharacteristic,
+    error: Error?
+  ) {
+    Task { @MainActor [weak self] in
+      await self?.didWriteValue(for: characteristic, error: error)
     }
+  }
 
-    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
-        if let error = error {
-            logger.warning("Failed to update notification state for \(characteristic.uuid): \(error.localizedDescription)")
-        } else {
-            logger.debug("Notification state updated for \(characteristic.uuid): \(characteristic.isNotifying)")
-        }
+  nonisolated func peripheral(
+    _ peripheral: CBPeripheral,
+    didUpdateNotificationStateFor characteristic: CBCharacteristic,
+    error: Error?
+  ) {
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      if let error {
+        self.logger.warning(
+          "Failed to update notification state for \(characteristic.uuid): \(error.localizedDescription)")
+      } else {
+        self.logger.debug("Notification state updated for \(characteristic.uuid): \(characteristic.isNotifying)")
+      }
     }
-
-    func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
-        // RSSI read completion - used for ping
-    }
+  }
 }
 
-// MARK: - Characteristic Stream Handler
+@MainActor
+private final class CharacteristicStreamBroadcaster {
+  typealias Continuation = AsyncThrowingStream<Data, Error>.Continuation
 
-/// Helper class to manage AsyncThrowingStream for characteristic notifications
-private final class CharacteristicStreamHandler: @unchecked Sendable {
-    private var continuation: AsyncThrowingStream<Data, Error>.Continuation?
+  private var continuations: [UUID: Continuation] = [:]
 
-    let stream: AsyncThrowingStream<Data, Error>
-
-    init() {
-        var capturedContinuation: AsyncThrowingStream<Data, Error>.Continuation?
-        stream = AsyncThrowingStream { continuation in
-            capturedContinuation = continuation
+  func makeStream() -> AsyncThrowingStream<Data, Error> {
+    let subscriberID = UUID()
+    return AsyncThrowingStream { continuation in
+      continuations[subscriberID] = continuation
+      continuation.onTermination = { @Sendable [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.removeSubscriber(subscriberID)
         }
-        self.continuation = capturedContinuation
+      }
     }
+  }
 
-    func yield(_ data: Data) {
-        continuation?.yield(data)
+  func yield(_ data: Data) {
+    var terminatedSubscribers: [UUID] = []
+    for (subscriberID, continuation) in continuations {
+      if case .terminated = continuation.yield(data) {
+        terminatedSubscribers.append(subscriberID)
+      }
     }
-
-    func finish(throwing error: Error? = nil) {
-        if let error = error {
-            continuation?.finish(throwing: error)
-        } else {
-            continuation?.finish()
-        }
-        continuation = nil
+    for subscriberID in terminatedSubscribers {
+      continuations.removeValue(forKey: subscriberID)
     }
-}
+  }
 
-// MARK: - CBPeripheral Extension for Async RSSI
-
-extension CBPeripheral {
-    func readRSSIAsync() async throws -> Int {
-        // Simple RSSI read - the delegate method handles the result
-        // For now, just trigger the read and return immediately
-        // A more robust implementation would use a continuation
-        self.readRSSI()
-        return 0 // Placeholder - ping uses this for connectivity check
+  func finish(throwing error: Error? = nil) {
+    let currentContinuations = Array(continuations.values)
+    continuations.removeAll()
+    for continuation in currentContinuations {
+      if let error {
+        continuation.finish(throwing: error)
+      } else {
+        continuation.finish()
+      }
     }
+  }
+
+  private func removeSubscriber(_ subscriberID: UUID) {
+    continuations.removeValue(forKey: subscriberID)
+  }
 }

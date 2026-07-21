@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class FloatingBarLaunchPolicyTests: XCTestCase {
@@ -80,7 +81,8 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
       floatingBarLaunchSection.contains("FloatingControlBarManager.shared.setup("),
       "DesktopHomeView must create the floating bar window before applying launch presentation.")
     XCTAssertTrue(
-      floatingBarLaunchSection.contains("FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)"),
+      floatingBarLaunchSection.contains(
+        "FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)"),
       "Normal DesktopHomeView launch must route through the normal signed-in floating-bar policy.")
     XCTAssertFalse(
       floatingBarLaunchSection.contains("showDeferredUntilFirstPushToTalk()"),
@@ -102,7 +104,9 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
-  private func extractSection(from source: String, startingAt startMarker: String, endingBefore endMarker: String) throws -> String {
+  private func extractSection(from source: String, startingAt startMarker: String, endingBefore endMarker: String)
+    throws -> String
+  {
     guard let start = source.range(of: startMarker) else {
       XCTFail("Missing expected section start marker: \(startMarker)")
       return ""

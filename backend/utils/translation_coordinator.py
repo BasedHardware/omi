@@ -3,7 +3,7 @@
 Replaces the scattered state in transcribe.py with a single coordinator that:
 - Tracks per-segment committed text (prefix-safe)
 - Gates translation on text stability signals
-- Batches eligible segments into minimal GCP API calls
+- Batches eligible segments into minimal provider API calls
 - Integrates with ConversationLanguageState for monolingual gating
 - Supports negative caching to avoid re-checking known target-language text
 
@@ -20,9 +20,8 @@ from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
 from models.transcript_segment import TranscriptSegment, SENTENCE_ENDERS
 from utils.translation import (
     TranslationNeed,
+    TranslationStatus,
     classify_translation_need,
-    get_cached_translation,
-    set_negative_cache,
     TranslationService,
 )
 from utils.executors import db_executor, sync_executor, run_blocking
@@ -101,15 +100,15 @@ class TranslationCoordinator:
     ## Architecture
 
     This coordinator implements SINGLE-PHASE translation: every stable text
-    update is sent in full to the batch translator, which calls Google
-    Translate V3 with the complete segment text. See DD-008 design doc
+    update is sent in full to the configured translation provider with the
+    complete segment text. See DD-008 design doc
     (`deep-dives/DD-008-design-review.md`) for the planned TWO-PHASE
     architecture (streaming deltas + final full-sentence translation).
 
     ## Data Flow
 
     observe() → [stability gates] → batch_buffer → _flush_batch()
-        → translate_units_batch() → [LRU → Redis → API]
+        → translate_outcomes() → [LRU → Redis → provider chain]
         → on_translation_ready() → Firestore persist + WebSocket push
 
     ## Cost Note
@@ -172,7 +171,7 @@ class TranslationCoordinator:
         updated_segments: List[TranscriptSegment],
         removed_ids: List[str],
         conversation_id: str,
-    ):
+    ) -> None:
         """Process updated segments and queue eligible ones for translation.
 
         Args:
@@ -183,164 +182,172 @@ class TranslationCoordinator:
         if not self._active and not self._flushing:
             return
 
-        # Clean up removed segments
         for seg_id in removed_ids:
             self._segment_states.pop(seg_id, None)
 
         now = time.monotonic()
-
         for segment in updated_segments:
-            if not segment or not segment.id:
-                continue
+            await self._observe_segment(segment, conversation_id, now)
 
-            text = segment.text.strip() if segment.text else ''
-            if not text:
-                continue
+        self._restart_batch_timer()
 
-            state = self._get_or_create_state(segment.id)
+    async def _observe_segment(self, segment: TranscriptSegment, conversation_id: str, now: float) -> None:
+        if not segment or not segment.id:
+            return
 
-            # Prefix-safe check: if prefix changed, reset
-            if state.committed_text and not text.startswith(state.committed_text):
-                # Bump version and invalidate batch buffer BEFORE Redis lookup so
-                # any in-flight batch job is rejected immediately as stale.
-                state.version = self._next_version()
-                self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
-                if self._batch_task and not self._batch_task.done():
-                    self._batch_task.cancel()
-                    self._batch_task = None
+        text = segment.text.strip() if segment.text else ''
+        if not text:
+            return
 
-                # Check if the new merged text was already translated (Redis cache)
-                text_hash = hashlib.md5(text.encode()).hexdigest()
-                redis_cached = await run_blocking(db_executor, get_cached_translation, text_hash, self.target_language)
-                if redis_cached:
-                    # Found in Redis — adopt as committed, skip re-translation
-                    translated_text = redis_cached['text']
-                    detected_lang = redis_cached.get('detected_lang', '')
-                    # Apply cached detected language to conversation state so the
-                    # monolingual gate doesn't incorrectly stay enabled for foreign text.
-                    # Use the same logic as observe() but with known detected_lang.
-                    if detected_lang:
-                        _det_base = _normalize_base_language(detected_lang) or ''
-                        if _det_base and _det_base != self.language_state.target_base:
-                            # Foreign-language cache hit — exit monolingual gate
-                            self.language_state.monolingual = False
-                            self.language_state.consecutive_target = 0
+        state = self._get_or_create_state(segment.id)
+        if await self._reconcile_changed_prefix(segment.id, text, state, conversation_id, now):
+            return
 
-                    # Guard: skip no-op "translations" that would spam UI badges.
-                    if not should_persist_translation(text, translated_text, detected_lang, self.target_language):
-                        state.committed_text = text
-                        state.assembled_translation = translated_text
-                        state.detected_lang = detected_lang
-                        state.version = self._next_version()
-                        state.latest_text = text
-                        state.last_update_at = now
-                        self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
-                        # Cancel any in-flight batch task to prevent stale overwrite
-                        if self._batch_task and not self._batch_task.done():
-                            self._batch_task.cancel()
-                            self._batch_task = None
-                        self.metrics['prefix_resets'] += 1
-                        continue  # Don't add to batch buffer
-                    state.committed_text = text
-                    state.assembled_translation = translated_text
-                    state.detected_lang = detected_lang
-                    state.latest_text = text
-                    state.last_update_at = now
-                    await self.on_translation_ready(segment.id, translated_text, detected_lang, conversation_id)
-                    continue  # Don't add to batch buffer
-                else:
-                    state.committed_text = ''
-                    state.assembled_translation = None
-                    state.detected_lang = None
-                    self.metrics['prefix_resets'] += 1
-
-            # Only translate the new (uncommitted) portion
-            new_text = text[len(state.committed_text) :].strip() if state.committed_text else text
-            if not new_text:
-                state.latest_text = text
-                state.last_update_at = now
-                continue
-
-            # Save old last_update_at BEFORE overwriting (needed for time-based stability)
-            old_last_update_at = state.last_update_at
-
+        new_text = text[len(state.committed_text) :].strip() if state.committed_text else text
+        if not new_text:
             state.latest_text = text
             state.last_update_at = now
+            return
 
-            # Monolingual gate check
-            skip_mono = self.language_state.observe(new_text, speaker_id=segment.speaker_id)
-            if skip_mono and not self.language_state.should_probe():
-                self.metrics['mono_gate_skips'] += 1
-                # Record as committed (target language, no translation needed)
-                state.committed_text = text
-                # Set negative cache for this text
-                text_hash = hashlib.md5(text.encode()).hexdigest()
-                set_negative_cache(text_hash, self.target_language)
-                self.metrics['negative_cache_sets'] += 1
-                continue
+        old_last_update_at = state.last_update_at
+        state.latest_text = text
+        state.last_update_at = now
 
-            # Compute stability signals using old timing and per-segment speaker tracking
-            # prev_speaker comes from the last speaker we processed in this session
-            signals = _compute_stability_signals(
-                new_text, old_last_update_at, now, self._last_speaker_id, segment.speaker_id
-            )
-            self._last_speaker_id = segment.speaker_id
+        skip_mono = self.language_state.observe(new_text, speaker_id=segment.speaker_id)
+        if skip_mono and not self.language_state.should_probe():
+            await self._commit_target_language_text(state, text, 'mono_gate_skips')
+            return
 
-            is_stable = _is_text_stable(new_text, signals)
+        signals = _compute_stability_signals(
+            new_text,
+            old_last_update_at,
+            now,
+            self._last_speaker_id,
+            segment.speaker_id,
+        )
+        self._last_speaker_id = segment.speaker_id
+        need = classify_translation_need(
+            new_text,
+            self.target_language,
+            is_stable=_is_text_stable(new_text, signals),
+        )
 
-            # Classify translation need
-            need = classify_translation_need(new_text, self.target_language, is_stable=is_stable)
+        if need == TranslationNeed.SKIP:
+            await self._commit_target_language_text(state, text, 'classify_skips')
+        elif need == TranslationNeed.DEFER:
+            self.metrics['classify_defers'] += 1
+        else:
+            self._queue_translation(segment.id, text, conversation_id, state)
 
-            if need == TranslationNeed.SKIP:
-                self.metrics['classify_skips'] += 1
-                state.committed_text = text
-                text_hash = hashlib.md5(text.encode()).hexdigest()
-                set_negative_cache(text_hash, self.target_language)
-                self.metrics['negative_cache_sets'] += 1
-                continue
+    async def _reconcile_changed_prefix(
+        self,
+        segment_id: str,
+        text: str,
+        state: SegmentState,
+        conversation_id: str,
+        now: float,
+    ) -> bool:
+        """Reconcile a non-prefix update, returning whether cached work handled it."""
+        if not state.committed_text or text.startswith(state.committed_text):
+            return False
 
-            if need == TranslationNeed.DEFER:
-                self.metrics['classify_defers'] += 1
-                continue
+        # Invalidate before cache I/O so an in-flight result cannot win a stale write.
+        self._invalidate_segment_work(segment_id, state)
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        cached = await run_blocking(
+            db_executor,
+            self.translation_service.get_cached_translation,
+            text_hash,
+            self.target_language,
+        )
+        if cached is None:
+            state.committed_text = ''
+            state.assembled_translation = None
+            state.detected_lang = None
+            self.metrics['prefix_resets'] += 1
+            return False
 
-            # TRANSLATE — queue for batch
-            self.metrics['classify_translates'] += 1
-            version = self._next_version()
-            state.version = version
+        translated_text = cached['text']
+        detected_lang = cached.get('detected_lang', '')
+        if detected_lang:
+            self.language_state.observe_detection(detected_lang, 1.0)
 
-            # DESIGN DECISION: We send `text` (full segment text) instead of
-            # `new_text` (the uncommitted delta) to the batch translator.
-            #
-            # Rationale:
-            # - Google Translate V3 translates each content string independently;
-            #   full sentence context improves disambiguation (gender agreement,
-            #   idioms like "estoy de acuerdo" → "I agree", not "acuerdo" → "agreement")
-            # - The assembled_translation IS the final persisted result — it must be
-            #   high quality since it's stored in Firestore and displayed to users
-            #
-            # Trade-off: This means evolving text ("Hola" → "Hola como" → "Hola como estas")
-            # generates unique MD5 cache keys at every step, causing 3–4x redundant
-            # translations per stabilized segment. See DD-008 for cost analysis and
-            # proposed two-phase architecture that preserves quality while reducing cost.
-            #
-            # If you change this to send new_text (delta), you MUST also:
-            # 1. Update assembly stitching logic in _flush_batch()
-            # 2. Ensure stability gates filter out sub-sentence fragments
-            # 3. Update the cache key strategy
-            # 4. Measure translation quality regression in production
-            self._batch_buffer.append((segment.id, text, conversation_id, version))
+        if not should_persist_translation(text, translated_text, detected_lang, self.target_language):
+            # Cache I/O yielded; invalidate again in case newer work arrived meanwhile.
+            self._invalidate_segment_work(segment_id, state)
+            self._adopt_cached_prefix(state, text, translated_text, detected_lang, now)
+            self.metrics['prefix_resets'] += 1
+            return True
 
-        # (Re)start batch aggregation timer
-        if self._batch_buffer:
-            if self._batch_task and not self._batch_task.done():
-                self._batch_task.cancel()
+        self._adopt_cached_prefix(state, text, translated_text, detected_lang, now)
+        await self.on_translation_ready(segment_id, translated_text, detected_lang, conversation_id)
+        return True
 
-            async def _batch_timer():
-                await asyncio.sleep(BATCH_WINDOW_SECONDS)
-                # Shield flush from cancellation to prevent losing in-flight results
-                await asyncio.shield(self._flush_batch())
+    @staticmethod
+    def _adopt_cached_prefix(
+        state: SegmentState,
+        text: str,
+        translated_text: str,
+        detected_lang: str,
+        now: float,
+    ) -> None:
+        state.committed_text = text
+        state.assembled_translation = translated_text
+        state.detected_lang = detected_lang
+        state.latest_text = text
+        state.last_update_at = now
 
-            self._batch_task = asyncio.ensure_future(_batch_timer())
+    async def _commit_target_language_text(
+        self,
+        state: SegmentState,
+        text: str,
+        skip_metric: str,
+    ) -> None:
+        """Commit a local skip and persist its shared negative-cache decision."""
+        self.metrics[skip_metric] += 1
+        state.committed_text = text
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        await run_blocking(
+            db_executor,
+            self.translation_service.set_negative_cache,
+            text_hash,
+            self.target_language,
+        )
+        self.metrics['negative_cache_sets'] += 1
+
+    def _queue_translation(
+        self,
+        segment_id: str,
+        text: str,
+        conversation_id: str,
+        state: SegmentState,
+    ) -> None:
+        """Queue full text for provider context; delta translation remains deferred by DD-008."""
+        self.metrics['classify_translates'] += 1
+        version = self._next_version()
+        state.version = version
+        self._batch_buffer.append((segment_id, text, conversation_id, version))
+
+    def _invalidate_segment_work(self, segment_id: str, state: SegmentState) -> None:
+        state.version = self._next_version()
+        self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment_id]
+        self._cancel_batch_timer()
+
+    def _cancel_batch_timer(self) -> None:
+        if self._batch_task and not self._batch_task.done():
+            self._batch_task.cancel()
+        self._batch_task = None
+
+    def _restart_batch_timer(self) -> None:
+        if not self._batch_buffer:
+            return
+        self._cancel_batch_timer()
+        self._batch_task = asyncio.ensure_future(self._flush_after_batch_window())
+
+    async def _flush_after_batch_window(self) -> None:
+        await asyncio.sleep(BATCH_WINDOW_SECONDS)
+        # Shield provider work from timer cancellation once flushing has begun.
+        await asyncio.shield(self._flush_batch())
 
     async def _flush_batch(self):
         """Translate all queued segments in a single batched API call.
@@ -373,65 +380,74 @@ class TranslationCoordinator:
         logger.info(f"translate_coordinator [batch] units={len(api_units)}")
 
         try:
-            # Run the sync GCP API call in a thread pool to avoid blocking the event loop
-            results = await run_blocking(
+            # Run the sync provider call in a thread pool to avoid blocking the event loop
+            outcomes = await run_blocking(
                 sync_executor,
-                self.translation_service.translate_units_batch,
+                self.translation_service.translate_outcomes,
                 self.target_language,
                 api_units,
                 source_language=self.source_language,
             )
+            if len(outcomes) != len(valid_units):
+                raise RuntimeError('Translation service returned the wrong number of outcomes')
 
-            for seg_id, translated_text, detected_lang in results:
-                # Find the corresponding entry
-                matching: List[Tuple[str, str, str, int]] = [(s, t, c, v) for s, t, c, v in valid_units if s == seg_id]
-                if not matching:
-                    continue
-                _, original_text, conv_id, version = matching[0]
-
+            for outcome, (seg_id, original_text, conv_id, version) in zip(outcomes, valid_units):
                 state = self._segment_states.get(seg_id)
                 if not state or state.version != version:
+                    continue
+                if outcome.status == TranslationStatus.failed:
                     continue
 
                 # Check if translation is meaningful
                 target_base = self.target_base
-                if not should_persist_translation(original_text, translated_text, detected_lang, target_base):
-                    # Distinguish real no-op (target-language text) from translation failure.
-                    # A failure returns original_text with empty detected_lang — do NOT
-                    # set negative cache or advance committed_text, so the segment can
-                    # be retried on the next cycle.
-                    if detected_lang:
-                        # Genuine no-op: source is already in target language
-                        text_hash = hashlib.md5(original_text.encode()).hexdigest()
-                        set_negative_cache(text_hash, self.target_language)
-                        self.metrics['negative_cache_sets'] += 1
+                if not should_persist_translation(
+                    original_text,
+                    outcome.text,
+                    outcome.detected_language,
+                    target_base,
+                ):
+                    detected_base = _normalize_base_language(outcome.detected_language) or ''
+                    if outcome.status == TranslationStatus.unchanged:
+                        if outcome.detected_language:
+                            self.language_state.observe_detection(outcome.detected_language, 1.0)
+                        if detected_base == target_base:
+                            # Only target-language no-ops belong in the negative cache.
+                            text_hash = hashlib.md5(original_text.encode()).hexdigest()
+                            await run_blocking(
+                                db_executor,
+                                self.translation_service.set_negative_cache,
+                                text_hash,
+                                self.target_language,
+                            )
+                            self.metrics['negative_cache_sets'] += 1
                         state.committed_text = original_text
-                    # else: translation failure — skip silently, allow retry
                     continue
 
                 # Update state
                 state.committed_text = original_text
-                state.assembled_translation = translated_text
-                state.detected_lang = detected_lang
+                state.assembled_translation = outcome.text
+                state.detected_lang = outcome.detected_language
 
                 # Update language state from API response
-                if detected_lang:
-                    self.language_state.observe(original_text, speaker_id=None)
+                if outcome.detected_language:
+                    self.language_state.observe_detection(outcome.detected_language, 1.0)
 
                 # Notify via callback
-                await self.on_translation_ready(seg_id, translated_text, detected_lang, conv_id)
+                await self.on_translation_ready(
+                    seg_id,
+                    outcome.text,
+                    outcome.detected_language,
+                    conv_id,
+                )
 
-        except Exception as e:
-            logger.error(f"TranslationCoordinator batch error: {e}")
+        except (RuntimeError, ValueError) as error:
+            logger.error('TranslationCoordinator batch error: %s', error)
 
     async def flush(self):
         """Flush all pending translations before session cleanup."""
         self._flushing = True
 
-        # Cancel batch timer and flush immediately
-        if self._batch_task and not self._batch_task.done():
-            self._batch_task.cancel()
-            self._batch_task = None
+        self._cancel_batch_timer()
         await self._flush_batch()
 
         self._segment_states.clear()

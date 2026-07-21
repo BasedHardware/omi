@@ -2935,7 +2935,7 @@
     "upgradePlan": "Actualizare plan",
     "billingMonthly": "Lunar",
     "billingYearly": "Anual",
-    "savePercent": "Economisiți ~17%",
+    "savePercent": "Economisiți ~{percent}%",
     "popular": "Popular",
     "currentPlan": "Curent",
     "neoSubtitle": "{count} întrebări pe lună",
@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.",
     "transcribeLaterTitle": "Transcrie mai târziu",
     "transcribeLaterDescription": "Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.",
-    "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
+    "transcribeLaterNote": "Funcționează cu microfonul telefonului și cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
     "transcribeLaterStorageFull": "Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.",
     "unmute": "Reactivează sunetul",
     "newRecording": "Înregistrare nouă",
@@ -3143,5 +3143,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Stocarea dispozitivului",
+    "deviceStoragePercentFull": "{percent}% plin",
+    "deviceStorageUsedOfTotal": "{used} din {total} utilizat",
+    "deviceStorageFree": "{free} liber",
+    "deviceStorageNearlyFull": "Dispozitivul este aproape plin — sincronizează pentru a elibera spațiu.",
+    "phoneMicOfflineFallbackMessage": "Fără conexiune — se înregistrează local. Va fi transcris când revii online.",
+    "dataEncryptedBanner": "Datele tale sunt securizate în mod implicit cu criptare puternică, iar tu controlezi modul în care sunt stocate și utilizate.",
+    "rayBanMetaMicPickerTitle": "Alege microfonul Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Selectează microfonul Bluetooth al ochelarilor. Muzica este întreruptă cât timp Omi îl folosește.",
+    "rayBanMetaMicPickerEmpty": "Nu s-au găsit microfoane Bluetooth. Conectează ochelarii în Configurările iPhone și încearcă din nou.",
+    "rayBanMetaMicPickerLoadError": "Microfoanele Bluetooth nu au putut fi încărcate. Verifică dacă Bluetooth este activat și încearcă din nou.",
+    "rayBanMetaMicPickerConnectError": "Nu s-a putut conecta la acel microfon. Asigură-te că este conectat în Configurările iPhone."
 }

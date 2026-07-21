@@ -27,7 +27,7 @@ from models.product_memory import (
     is_default_access_eligible,
 )
 from utils.memory.memory_read_api import query_default_product_memory_items
-from utils.memory.v3_control_reader_contract import (
+from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReadResult,
     V3ControlReaderRequest,
@@ -355,6 +355,17 @@ class TestInvMem1DefaultAccessAndCanonicalCollection:
 
         assert result_ids == {"mem_st", "mem_lt"}
         assert "mem_ar" not in result_ids
+
+    def test_archive_transition_is_removed_from_default_access(self):
+        now = datetime.now(timezone.utc)
+        policy = MemoryAccessPolicy.for_omi_chat()
+        long_term = _item("mem_transition", tier=MemoryTier.long_term, expires_at=None)
+        archived = long_term.model_copy(update={"tier": MemoryTier.archive, "item_revision": 2})
+
+        decision = is_default_access_eligible(archived, policy, now=now)
+
+        assert decision.allowed is False
+        assert decision.reason == "archive_requires_explicit_query"
 
     def test_memory_collections_canonical_product_memory_path_is_memory_items(self):
         paths = MemoryCollections(uid="u_guard")

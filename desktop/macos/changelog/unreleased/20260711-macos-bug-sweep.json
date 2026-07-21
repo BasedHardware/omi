@@ -1,3 +1,0 @@
-{
-  "change": "Fixed several crashes and data-loss issues: a Rewind cleanup bug that could delete your entire screenshot history, cross-account data leaking between sign-ins, Bluetooth device crashes and silent audio, and duplicate-task deletion destroying the kept task"
-}

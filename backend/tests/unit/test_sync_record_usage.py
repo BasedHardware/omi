@@ -149,14 +149,14 @@ class TestV2RecordUsage:
         preceding = body[max(0, record_idx - 300) : record_idx]
         assert 'usage_seconds > 0' in preceding, "record_usage must be guarded by positive usage seconds"
 
-    def test_record_usage_before_final_mark_job_completed(self):
-        """record_usage must run before the final mark_job_completed (after segment processing)."""
+    def test_static_record_usage_before_finalize_sync_job(self):
+        """Static ordering contract: usage precedes the fenced terminal publication."""
         body = self._get_v2_body()
         record_pos = body.find('record_usage,')
         assert record_pos > 0, "record_usage must exist"
-        complete_pos = body.rfind('mark_job_completed,')
-        assert complete_pos > 0, "mark_job_completed must exist"
-        assert record_pos < complete_pos, "record_usage must run before the final mark_job_completed"
+        complete_pos = body.rfind('_finalize_sync_job_for_run,')
+        assert complete_pos > 0, "fenced finalization must exist"
+        assert record_pos < complete_pos, "record_usage must run before final job publication"
 
     def test_record_usage_wrapped_in_try_except(self):
         body = self._get_v2_body()

@@ -12,7 +12,7 @@ The Omi backend powers all AI capabilities including transcription, conversation
 flowchart LR
     subgraph External["External Services"]
         OAI[OpenAI]
-        DG[Deepgram]
+        STT[Parakeet / Modulate]
         Pine[Pinecone]
         Redis[Redis]
     end
@@ -69,7 +69,8 @@ Before starting, gather these API keys and credentials:
   | Service | Purpose | Get Key |
   |---------|---------|---------|
   | OpenAI | AI language models | [Get Key](https://platform.openai.com/settings/organization/api-keys) |
-  | Deepgram | Speech-to-text | [Get Key](https://console.deepgram.com/api-keys) |
+  | Modulate | Speech-to-text fallback | Provision `MODULATE_API_KEY` |
+  | Parakeet | Self-hosted speech-to-text | Configure `HOSTED_PARAKEET_API_URL` |
   | Redis (Upstash) | Caching & sessions | [Get Key](https://console.upstash.com/) |
   | Pinecone | Vector database | [Get Key](https://app.pinecone.io/organizations/-/projects/-/api-keys) |
   | Hugging Face | Voice detection | [Get Key](https://huggingface.co/settings/tokens) |
@@ -461,7 +462,8 @@ Complete reference for all `.env` variables:
     | Variable | Description |
     |----------|-------------|
     | `OPENAI_API_KEY` | OpenAI API key for AI models |
-    | `DEEPGRAM_API_KEY` | Deepgram API key for transcription |
+    | `MODULATE_API_KEY` | Modulate API key for transcription fallback |
+    | `HOSTED_PARAKEET_API_URL` | Parakeet endpoint for transcription |
     | `HUGGINGFACE_TOKEN` | Hugging Face token for voice detection models |
     | `REDIS_DB_HOST` | Redis host address |
     | `REDIS_DB_PORT` | Redis port number |

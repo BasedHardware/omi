@@ -3,6 +3,7 @@ import CryptoKit
 import Foundation
 import Network
 import OmiSupport
+import VoiceTurnDomain
 
 enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
@@ -12,21 +13,35 @@ enum DesktopAutomationLaunchOptions {
   static let tokenEnvironmentKey = "OMI_AUTOMATION_TOKEN"
   static let tokenFileEnvironmentKey = "OMI_AUTOMATION_TOKEN_FILE"
 
-  private static let generatedToken = "omi_auto_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
+  private static let generatedToken =
+    "omi_auto_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
 
   static var isEnabled: Bool {
-    guard AppBuild.isNonProduction else {
+    isEnabled(
+      allowsLocalAutomation: AppBuild.allowsLocalAutomation,
+      arguments: CommandLine.arguments,
+      environment: ProcessInfo.processInfo.environment
+    )
+  }
+
+  static func isEnabled(
+    allowsLocalAutomation: Bool,
+    arguments: [String],
+    environment: [String: String]
+  ) -> Bool {
+    guard allowsLocalAutomation else {
       return false
     }
     // Explicit opt-out always wins, so a dev build can be run "clean" if needed.
-    if ProcessInfo.processInfo.environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
+    if environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
       return false
     }
-    // Auto-enable on any non-production bundle (Omi Dev + every `omi-*` named test
-    // bundle) so agents can drive the app without remembering a launch flag.
-    return CommandLine.arguments.contains(enableFlag)
-      || ProcessInfo.processInfo.environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
-      || AppBuild.isNonProduction
+    // Auto-enable on local bundles (Omi Dev + every `omi-*` named test bundle) so agents
+    // can drive the app without remembering a launch flag. Published previews are excluded
+    // by `allowsLocalAutomation` above even if their process environment is contaminated.
+    return arguments.contains(enableFlag)
+      || environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
+      || allowsLocalAutomation
   }
 
   static var port: UInt16 {
@@ -331,8 +346,18 @@ private struct DesktopAutomationHealth: Codable {
   let ok: Bool
   let name: String
   let bundleIdentifier: String
+  let processID: Int32
+  let logFilePath: String
+  let logLaunchID: String
   let bridgePort: UInt16
   let requiresAuth: Bool
+  let backendEnvironment: String
+  let pythonBackendURL: String
+  let rustBackendURL: String
+  let agentRuntimeRunning: Bool
+  let agentRuntimeExpectedProtocolVersion: Int
+  let agentRuntimeProtocolVersion: Int?
+  let agentRuntimeVersion: String?
 }
 
 struct DesktopAutomationRouteTrace: Codable {
@@ -378,7 +403,7 @@ private func automationSafeErrorDetail(_ raw: String) -> String {
 }
 
 private func automationActionErrorDescription(_ error: Error) -> String {
-  if case let APIError.httpError(statusCode, detail) = error {
+  if case APIError.httpError(let statusCode, let detail) = error {
     let suffix = detail.map { " detail=\(automationSafeErrorDetail($0))" } ?? ""
     return "api_http_error status=\(statusCode)\(suffix)"
   }
@@ -392,7 +417,7 @@ private struct DesktopAutomationResponse<T: Codable>: Codable {
 }
 
 final class DesktopAutomationStateStore {
-  static let shared = DesktopAutomationStateStore()
+  nonisolated(unsafe) static let shared = DesktopAutomationStateStore()
   private let lock = NSLock()
 
   private var snapshot = DesktopAutomationSnapshot(
@@ -458,7 +483,7 @@ private final class TimeoutRaceBox<T>: @unchecked Sendable {
     self.continuation = continuation
   }
 
-  func resume(_ value: T?) {
+  func resume(_ value: sending T?) {
     lock.lock()
     defer { lock.unlock() }
     guard !resumed else { return }
@@ -496,7 +521,8 @@ private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
   // Bound the MainActor hop: if the main thread is wedged (blocking Keychain read
   // during sign-in), fall back to the last cached snapshot so `/state` still
   // answers instead of hanging the whole bridge. See awaitWithTimeout.
-  guard let live = await awaitWithTimeout(liveSnapshotMainActorTimeout, operation: liveAutomationSnapshotFromMainActor) else {
+  guard let live = await awaitWithTimeout(liveSnapshotMainActorTimeout, operation: liveAutomationSnapshotFromMainActor)
+  else {
     log("DesktopAutomationBridge: live /state refresh timed out (main thread busy); serving cached snapshot")
     var stale = await cachedAutomationSnapshot()
     stale.snapshotStale = true
@@ -688,6 +714,101 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+    // Posts a real keyDown+keyUp pair through the app's own event queue, so local
+    // NSEvent monitors and SwiftUI key equivalents see it exactly like a physical
+    // keypress — lets a headless harness drive keyboard navigation without
+    // Accessibility permission or a frontmost window. Non-prod only.
+    register(
+      name: "post_key",
+      summary:
+        "Post a keyDown+keyUp NSEvent through the app event queue (e.g. key_code=124 for right arrow). Non-prod only.",
+      params: ["key_code", "modifiers"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "post_key is disabled on production bundles"]
+      }
+      guard let codeText = params["key_code"], let keyCode = UInt16(codeText) else {
+        throw DesktopAutomationActionError.invalidParams("key_code must be a numeric macOS key code")
+      }
+      var modifiers: NSEvent.ModifierFlags = []
+      for token in (params["modifiers"] ?? "").split(separator: ",") {
+        switch token.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "command", "cmd": modifiers.insert(.command)
+        case "shift": modifiers.insert(.shift)
+        case "option", "alt": modifiers.insert(.option)
+        case "control", "ctrl": modifiers.insert(.control)
+        case "function", "fn": modifiers.insert(.function)
+        case "": break
+        default:
+          throw DesktopAutomationActionError.invalidParams("unknown modifier '\(token)'")
+        }
+      }
+      // Arrow keys carry their function-key character and the flags a physical
+      // press would have, so consumers that look at characters/flags match too.
+      let arrowCharacters: [UInt16: String] = [
+        123: "\u{F702}", 124: "\u{F703}", 125: "\u{F701}", 126: "\u{F700}",
+      ]
+      let characters = arrowCharacters[keyCode] ?? ""
+      if arrowCharacters[keyCode] != nil {
+        modifiers.formUnion([.function, .numericPad])
+      }
+      let window = NSApp.keyWindow ?? NSApp.mainWindow
+      var posted = 0
+      for phase in [NSEvent.EventType.keyDown, .keyUp] {
+        if let event = NSEvent.keyEvent(
+          with: phase, location: .zero, modifierFlags: modifiers,
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: window?.windowNumber ?? 0, context: nil,
+          characters: characters, charactersIgnoringModifiers: characters,
+          isARepeat: false, keyCode: keyCode)
+        {
+          NSApp.postEvent(event, atStart: false)
+          posted += 1
+        }
+      }
+      return [
+        "posted_events": "\(posted)",
+        "key_code": "\(keyCode)",
+        "window": window.map { $0.title.isEmpty ? "untitled" : $0.title } ?? "none",
+      ]
+    }
+
+    // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
+    // prove the counter is deterministic without spending LLM calls. Read-only.
+    register(
+      name: "usage_limiter_snapshot",
+      summary: "Read the free-tier monthly chat usage-limiter state (deterministic counter) — CHAT-05 harness read."
+    ) { _ in
+      await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        return [
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+          "remaining_queries": "\(limiter.remainingQueries)",
+          "limit_description": limiter.limitDescription,
+        ]
+      }
+    }
+
+    // CHAT-05: reset the usage-limiter counter so a harness can prove it is
+    // dev-resettable (the criterion's second half) without driving real LLM usage.
+    register(
+      name: "reset_usage_limiter",
+      summary: "Reset the free-tier monthly chat usage-limiter counter (dev-resettable proof) — CHAT-05. Non-prod only."
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "reset_usage_limiter is disabled on production bundles"]
+      }
+      return await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        limiter.reset()
+        return [
+          "reset": "true",
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+          "remaining_queries": "\(limiter.remainingQueries)",
+        ]
+      }
+    }
+
     register(
       name: "task_capture_fixture",
       summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
@@ -734,12 +855,15 @@ final class DesktopAutomationActionRegistry {
       configuration.shippedCohortsEnabled = boolParam(
         params["shipped_cohorts_enabled"], default: false)
       configuration.dailyLimit = max(0, intParam(params["daily_limit"], default: configuration.dailyLimit))
-      configuration.minimumSpacing = TimeInterval(max(
-        0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
-      configuration.quietHoursStartMinute = min(max(
-        0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
-      configuration.quietHoursEndMinute = min(max(
-        0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
+      configuration.minimumSpacing = TimeInterval(
+        max(
+          0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
+      configuration.quietHoursStartMinute = min(
+        max(
+          0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
+      configuration.quietHoursEndMinute = min(
+        max(
+          0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
       ProactiveTaskInterruptionSettings.save(configuration)
       if params["notifications_enabled"] != nil {
         UserDefaults.standard.set(
@@ -769,6 +893,9 @@ final class DesktopAutomationActionRegistry {
       summary: "Evaluate a synthetic bounded recommendation through the real interruption gate",
       params: ["can_wait", "expires_in_seconds"]
     ) { params in
+      guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        return ["error": "runtime_owner_unavailable"]
+      }
       let nonce = UUID().uuidString.lowercased()
       let trace = NotificationService.shared.sendContextualTaskInterruption(
         TaskInterruptionCandidate(
@@ -778,10 +905,12 @@ final class DesktopAutomationActionRegistry {
           headline: "Review a relevant update",
           whyNow: "The linked context changed materially.",
           recommendedAction: "Review update",
-          expiresAt: Date().addingTimeInterval(TimeInterval(
-            intParam(params["expires_in_seconds"], default: 300))),
+          expiresAt: Date().addingTimeInterval(
+            TimeInterval(
+              intParam(params["expires_in_seconds"], default: 300))),
           canWait: boolParam(params["can_wait"], default: false)
-        )
+        ),
+        authorizationSnapshot: authorizationSnapshot
       )
       return [
         "reason": trace.reason.rawValue,
@@ -827,20 +956,23 @@ final class DesktopAutomationActionRegistry {
       } else {
         subject = nil
       }
-      guard let event = TaskLocalContextEvent.normalized(
-        kind: kind,
-        rawReference: reference,
-        subject: subject,
-        urgency: TaskContextUrgency(rawValue: params["urgency"] ?? "can_wait") ?? .canWait
-      ) else {
+      guard
+        let event = TaskLocalContextEvent.normalized(
+          kind: kind,
+          rawReference: reference,
+          subject: subject,
+          urgency: TaskContextUrgency(rawValue: params["urgency"] ?? "can_wait") ?? .canWait
+        )
+      else {
         throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
       }
       let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      let referenceHash = matched.referenceHash
       await TaskContextualResurfacingService.shared.observe(matched)
       let shouldFlush = boolParam(params["flush"], default: true)
       if shouldFlush { await TaskContextualResurfacingService.shared.flush() }
       return [
-        "reference_hash": matched.referenceHash,
+        "reference_hash": referenceHash,
         "pending_workstreams": "\(await TaskContextualResurfacingService.shared.pendingWorkstreamCount())",
         "flushed": shouldFlush ? "true" : "false",
       ]
@@ -882,10 +1014,11 @@ final class DesktopAutomationActionRegistry {
           else { throw DesktopAutomationActionError.invalidParams("kernel returned invalid JSON") }
           return value
         }
-        let prepared = try object(try await TaskChatRuntime.controlTool(
-          name: "prepare_workstream_continuity",
-          input: ["workstreamId": workstreamID, "taskIds": []]
-        ))
+        let prepared = try object(
+          try await TaskChatRuntime.controlTool(
+            name: "prepare_workstream_continuity",
+            input: ["workstreamId": workstreamID, "taskIds": []]
+          ))
         guard let session = prepared["session"] as? [String: Any],
           let sessionID = session["agentSessionId"] as? String
         else { throw DesktopAutomationActionError.invalidParams("kernel session unavailable") }
@@ -893,42 +1026,44 @@ final class DesktopAutomationActionRegistry {
         let operation = "prepare_artifact"
         let resource = "workstream:\(workstreamID)"
         let expiry = Int(Date().addingTimeInterval(5 * 60).timeIntervalSince1970 * 1_000)
-        let dispatch = try object(try await TaskChatRuntime.controlTool(
-          name: "create_desktop_dispatch",
-          input: [
-            "kind": "approval",
-            "priority": 1,
-            "title": "Automation prepared artifact fixture",
-            "decisionPrompt": "Authorize this non-production artifact fixture?",
-            "sourceSessionId": sessionID,
-            "capability": capability,
-            "operation": operation,
-            "resourceRef": resource,
-            "payload": ["automation_fixture": true],
-            "expiresAtMs": expiry,
-          ]
-        ))
+        let dispatch = try object(
+          try await TaskChatRuntime.controlTool(
+            name: "create_desktop_dispatch",
+            input: [
+              "kind": "approval",
+              "priority": 1,
+              "title": "Automation prepared artifact fixture",
+              "decisionPrompt": "Authorize this non-production artifact fixture?",
+              "sourceSessionId": sessionID,
+              "capability": capability,
+              "operation": operation,
+              "resourceRef": resource,
+              "payload": ["automation_fixture": true],
+              "expiresAtMs": expiry,
+            ]
+          ))
         guard let dispatchObject = dispatch["dispatch"] as? [String: Any],
           let dispatchID = dispatchObject["dispatchId"] as? String
         else { throw DesktopAutomationActionError.invalidParams("kernel dispatch unavailable") }
-        let resolved = try object(try await TaskChatRuntime.controlTool(
-          name: "resolve_desktop_dispatch",
-          input: [
-            "dispatchId": dispatchID,
-            "status": "resolved",
-            "resolvedBy": "desktop_automation",
-            "resolution": ["decision": "allow"],
-            "grant": [
-              "sessionId": sessionID,
-              "capability": capability,
-              "operation": operation,
-              "resourcePattern": resource,
-              "effect": "allow",
-              "source": "user",
-              "expiresAtMs": expiry,
-            ],
-          ]
-        ))
+        let resolved = try object(
+          try await TaskChatRuntime.controlTool(
+            name: "resolve_desktop_dispatch",
+            input: [
+              "dispatchId": dispatchID,
+              "status": "resolved",
+              "resolvedBy": "desktop_automation",
+              "resolution": ["decision": "allow"],
+              "grant": [
+                "sessionId": sessionID,
+                "capability": capability,
+                "operation": operation,
+                "resourcePattern": resource,
+                "effect": "allow",
+                "source": "user",
+                "expiresAtMs": expiry,
+              ],
+            ]
+          ))
         guard let grant = resolved["grant"] as? [String: Any],
           let createdGrantID = grant["grantId"] as? String
         else { throw DesktopAutomationActionError.invalidParams("kernel grant unavailable") }
@@ -961,7 +1096,8 @@ final class DesktopAutomationActionRegistry {
     // TextEditor. Writes real memories on success, like the sheet would.
     register(
       name: "memory_log_import_probe",
-      summary: "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
+      summary:
+        "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
       params: ["source", "text", "fixture"]
     ) { params in
       guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
@@ -1215,22 +1351,47 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.endPushToTalkForAutomation()
     }
 
+    // Manager-level PTT harness: this crosses the real shortcut lifecycle,
+    // routing decision, realtime admission, warm buffering, and replay seam.
+    // Unlike `ptt_test_turn`, it does not bypass PushToTalkManager; unlike a
+    // physical test, it needs neither microphone permission nor a device.
+    register(
+      name: "ptt_manager_turn",
+      summary:
+        "Inject a PCM16/16k mono hold through PushToTalkManager and realtime admission; returns lifecycle diagnostics",
+      params: ["pcm"]
+    ) { params in
+      guard let path = params["pcm"],
+        let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !pcm16k.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+
+      var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
+      guard result["listening"] == "true" else { return result }
+      let chunkSize = 3_200
+      var offset = 0
+      var injected = 0
+      while offset < pcm16k.count {
+        let end = min(offset + chunkSize, pcm16k.count)
+        if PushToTalkManager.shared.injectRealtimePTTAutomationAudio(pcm16k.subdata(in: offset..<end)) {
+          injected += end - offset
+        }
+        offset = end
+      }
+      let stopped = PushToTalkManager.shared.endPushToTalkForAutomation()
+      result["injected_bytes"] = "\(injected)"
+      result["finalized"] = stopped["finalized"] ?? "false"
+      for (key, value) in RealtimeHubController.shared.automationPTTDiagnostics() {
+        result[key] = value
+      }
+      return result
+    }
+
     register(
       name: "ptt_turn_snapshot",
-      summary: "Return the typed PTT lifecycle state and bounded diagnostic counters"
+      summary: "Return typed PTT lifecycle state, pending-tool fences, and safe screen-evidence diagnostics"
     ) { _ in
-      let coordinator = VoiceTurnCoordinator.shared
-      let turn = coordinator.model.turn
-      let terminalReason = turn?.terminalReason?.rawValue ?? ""
-      let phase = turn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
-      let route = turn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
-      return [
-        "phase": phase,
-        "route": route,
-        "terminal_reason": terminalReason,
-        "stale_event_count": "\(coordinator.model.staleEventCount)",
-        "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
-      ]
+      RealtimeHubController.shared.automationPTTDiagnostics()
     }
 
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
@@ -1241,10 +1402,12 @@ final class DesktopAutomationActionRegistry {
       params: ["pcm", "timeout", "provider"]
     ) { params in
       guard let path = params["pcm"],
-            let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty else {
+        let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty
+      else {
         return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"]
       }
-      let provider = params["provider"].flatMap(RealtimeOmniProvider.init(rawValue:))
+      let provider =
+        params["provider"].flatMap(RealtimeOmniProvider.init(rawValue:))
         ?? RealtimeOmniSettings.shared.effectiveProvider
       let base = DesktopBackendEnvironment.pythonBaseURL()
       let authHeader: String
@@ -1324,9 +1487,7 @@ final class DesktopAutomationActionRegistry {
       guard AuthState.shared.isSignedIn else {
         return ["signed_out": "true", "was_signed_in": "false"]
       }
-      try await MainActor.run {
-        try AuthService.shared.signOut()
-      }
+      try await AuthService.shared.signOut()
       return [
         "signed_out": "true",
         "was_signed_in": "true",
@@ -1443,13 +1604,30 @@ final class DesktopAutomationActionRegistry {
       params: ["state"]
     ) { params in
       let s = (params["state"] ?? "thinking").lowercased()
+      guard let debugState = VoiceTurnDebugPresentationState(rawValue: s) else {
+        return ["error": "state must be idle, listening, thinking, or answering"]
+      }
       let mgr = FloatingControlBarManager.shared
       guard let bar = mgr.barState else { return ["error": "no bar state"] }
       if s != "idle", !mgr.isVisible { mgr.show() }
-      bar.isVoiceResponseActive = (s == "answering")
-      bar.isVoiceListening = (s == "listening")
-      bar.isThinking = (s == "thinking")
+      guard VoiceTurnCoordinator.shared.applyDebugPresentationState(debugState) else {
+        return ["error": "a non-debug voice turn is active"]
+      }
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
+    }
+
+    register(
+      name: "debug_reach_error",
+      summary: "Show the actionable 'Couldn't reach Omi' card on the bar (Retry/Skip) for visual verification",
+      params: []
+    ) { _ in
+      let mgr = FloatingControlBarManager.shared
+      guard mgr.barState != nil else { return ["error": "no bar state"] }
+      if !mgr.isVisible { mgr.show() }
+      mgr.showReachError(message: "Error 502") {
+        log("debug_reach_error: Retry tapped")
+      }
+      return ["shown": "true"]
     }
 
     register(
@@ -1463,8 +1641,7 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
-      _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
-      if let error = await provider.automationResetChatForHarness() {
+      if let error = await provider.automationResetMainChatForHarness() {
         return ["error": error]
       }
       return ["reset": "true"]
@@ -1691,7 +1868,8 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "suspend_agent_stream",
-      summary: "Freeze the agent stdio stream (SIGSTOP) to induce a chat stall; auto-resumes after durationMs. Non-prod only.",
+      summary:
+        "Freeze the agent stdio stream (SIGSTOP) to induce a chat stall; auto-resumes after durationMs. Non-prod only.",
       params: ["durationMs"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -1740,14 +1918,15 @@ final class DesktopAutomationActionRegistry {
       while Date() < deadline {
         var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
         let messageCount = Int(detail["message_count"] ?? "") ?? 0
-        observedSubmission = observedSubmission
+        observedSubmission =
+          observedSubmission
           || messageCount > submission.baselineMessageCount
           || detail["is_sending"] == "true"
           || detail["is_streaming"] == "true"
         if observedSubmission,
-           detail["error"] == nil,
-           detail["is_sending"] == "false",
-           detail["is_streaming"] == "false"
+          detail["error"] == nil,
+          detail["is_sending"] == "false",
+          detail["is_streaming"] == "false"
         {
           detail["idle"] = "true"
           detail["submission_observed"] = "true"
@@ -2069,10 +2248,75 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_awareness_snapshot",
-      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging"
-    ) { _ in
-      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON()
+      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging",
+      params: ["limit"]
+    ) { params in
+      let limit = max(1, min(200, intParam(params["limit"], default: 50)))
+      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON(limit: limit)
       return ["snapshot": snapshot]
+    }
+
+    register(
+      name: "agent_lifecycle_convergence_snapshot",
+      summary: "Read canonical child-run status alongside the rendered pill and journal-completion projection",
+      params: ["runIds"],
+      category: "read",
+      surfaces: ["floating_bar", "main_chat", "realtime"],
+      safety: "read_only"
+    ) { params in
+      let runIDs = Set(
+        (params["runIds"] ?? "")
+          .split(separator: ",")
+          .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+          .filter { !$0.isEmpty }
+          .prefix(20)
+      )
+      return ["snapshot": await AgentPillsManager.shared.lifecycleConvergenceSnapshot(runIDs: runIDs)]
+    }
+
+    register(
+      name: "coordinator_inspect_run",
+      summary: "Inspect one owner-scoped kernel run and its bounded tool-invocation ledger",
+      params: ["runId"]
+    ) { params in
+      guard let runId = params["runId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !runId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing runId")
+      }
+      let run = try await DesktopCoordinatorService.shared.inspectRun(runId: runId)
+      return ["run": run]
+    }
+
+    register(
+      name: "coordinator_continue_agent",
+      summary: "Continue one owner-scoped canonical agent session and return its new run handles",
+      params: ["sessionId", "prompt", "surfaceKind"]
+    ) { params in
+      guard let sessionId = params["sessionId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !sessionId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing sessionId")
+      }
+      guard let prompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !prompt.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing prompt")
+      }
+      let inspection = try await DesktopCoordinatorService.shared.continueAgent(
+        sessionId: sessionId,
+        prompt: prompt,
+        originSurface: DesktopCoordinatorOriginSurface(surfaceKind: params["surfaceKind"]),
+        model: nil,
+        cwd: nil
+      )
+      return [
+        "session_id": inspection.sessionId ?? "",
+        "run_id": inspection.runId ?? "",
+        "attempt_id": inspection.attemptId ?? "",
+        "status": inspection.status,
+        "error": inspection.errorMessage ?? "",
+      ]
     }
 
     register(
@@ -2095,13 +2339,33 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_route_intent",
-      summary: "Route an intent through deterministic coordinator projection rules",
-      params: ["intent", "surfaceKind", "taskId"]
+      summary: "Route a structured proposal through the canonical agent kernel",
+      params: [
+        "intent", "surfaceKind", "taskId", "proposal", "snapshotVersion",
+        "sessionId", "runId", "parentRunId", "provider", "agentCount",
+      ]
     ) { params in
+      let proposal: DesktopCoordinatorIntentProposal
+      switch params["proposal"] {
+      case "spawn_agent": proposal = .spawnAgent
+      case "continue_run": proposal = .continueRun
+      case "clarify": proposal = .clarify(missing: ["automation_input"])
+      default: proposal = .answerInline
+      }
+      let syntaxFacts = DesktopCoordinatorIntentSyntaxFacts(
+        delegationNegated: nil,
+        explicitSessionId: params["sessionId"],
+        explicitRunId: params["runId"],
+        parentRunId: params["parentRunId"],
+        explicitProvider: params["provider"],
+        requestedAgentCount: params["agentCount"].flatMap(Int.init))
       let decision = try await DesktopCoordinatorService.shared.routeIntentJSON(
         intent: params["intent"] ?? "",
         surfaceKind: params["surfaceKind"],
-        taskId: params["taskId"]
+        taskId: params["taskId"],
+        snapshotVersion: params["snapshotVersion"],
+        proposal: proposal,
+        syntaxFacts: syntaxFacts
       )
       return ["decision": decision]
     }
@@ -2265,6 +2529,14 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "preview_screen_recording_drag_helper",
+      summary: "Open Screen Recording settings and show the drag-to-enable helper"
+    ) { _ in
+      await MainActor.run { ScreenCaptureService.openScreenRecordingPreferences() }
+      return CloudConnectorGuidanceOverlay.shared.automationState()
+    }
+
+    register(
       name: "open_conversation",
       summary: "Open a conversation detail view (same path as POST /conversation/open)",
       params: ["conversationId", "showTranscript", "timeoutMs"]
@@ -2293,6 +2565,20 @@ final class DesktopAutomationActionRegistry {
         "show_transcript": showTranscript ? "true" : "false",
         "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
       ]
+    }
+
+    register(
+      name: "set_conversations_search",
+      summary: "Set the Conversations page search query (drives the real debounced search path)",
+      params: ["query"]
+    ) { params in
+      try await ensureConversationsTabVisibleForAutomation()
+      NotificationCenter.default.post(
+        name: .desktopAutomationSetConversationsSearchRequested,
+        object: nil,
+        userInfo: ["query": params["query"] ?? ""]
+      )
+      return ["query": params["query"] ?? ""]
     }
 
     register(
@@ -2845,7 +3131,7 @@ final class DesktopAutomationActionRegistry {
         "storage_bytes": "\(stats?.storageSize ?? 0)",
       ]
     }
-
+    registerRewindArtifactRecoveryGauntlet()
     register(
       name: "navigate_via_shortcut",
       summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
@@ -2929,7 +3215,8 @@ final class DesktopAutomationActionRegistry {
       guard let appState = AppState.current else {
         return ["error": "app state unavailable"]
       }
-      let personName = params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let personName =
+        params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         ?? "[[MARKER:speaker-naming]] Harness Speaker"
       let segmentIndex = max(0, Int(params["segmentIndex"] ?? "") ?? 0)
 
@@ -3012,17 +3299,14 @@ final class DesktopAutomationActionRegistry {
     }
 
     // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
-    // attach — the report title + the desktop_diagnostics.json attachment + the
-    // log-attachment metadata — WITHOUT calling SentrySDK, so a harness can grep
-    // the diagnostics JSON for secrets without firing a real Sentry event. The
-    // title and diagnostics JSON come from the same builders the real submit
-    // uses (feedbackReportTitle / writeDiagnosticsAttachment), so the dry-run
-    // can't diverge from what ships. The raw log is attached unredacted to Sentry
-    // by design (trusted sink, explicit user report); we surface only its
-    // metadata here — never its contents — so the bridge response can't leak it.
+    // attach — the report title plus a redacted incident diagnostics attachment —
+    // WITHOUT calling SentrySDK. The dry-run uses the same builders as the real
+    // submit path, so a harness can secret-scan the attachment without a cloud
+    // side effect and cannot drift toward a raw-log upload.
     register(
       name: "dump_feedback_payload_dryrun",
-      summary: "Assemble the feedback report payload (title + desktop_diagnostics.json + log-attachment metadata) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+      summary:
+        "Assemble the feedback report payload (title + redacted desktop_diagnostics.json) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
       params: ["message"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -3036,7 +3320,11 @@ final class DesktopAutomationActionRegistry {
         "would_submit_to_sentry": "false",
       ]
 
-      if let url = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+      if let url = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+        area: "other",
+        failureClass: "user_report",
+        phase: "other"
+      ) {
         defer { try? FileManager.default.removeItem(at: url) }
         if let data = try? Data(contentsOf: url), let json = String(data: data, encoding: .utf8) {
           detail["diagnostics_json"] = json
@@ -3046,18 +3334,6 @@ final class DesktopAutomationActionRegistry {
         }
       } else {
         detail["diagnostics_error"] = "attachment_write_failed"
-      }
-
-      let logPath = omiLogFilePath()
-      let logExists = FileManager.default.fileExists(atPath: logPath)
-      detail["log_attachment_filename"] = (logPath as NSString).lastPathComponent
-      detail["log_attachment_exists"] = logExists ? "true" : "false"
-      if logExists,
-        let attributes = try? FileManager.default.attributesOfItem(atPath: logPath),
-        let size = attributes[.size] as? NSNumber
-      {
-        // int64Value, not intValue (Int32): the log can exceed 2 GB in a long dev session.
-        detail["log_attachment_bytes"] = "\(size.int64Value)"
       }
       return detail
     }
@@ -3088,6 +3364,67 @@ final class DesktopAutomationActionRegistry {
       return ["blocking_main_thread_ms": "\(durationMs)"]
     }
 
+    // AUTH-03: force the stored idToken's expiry into the past through AuthService's own
+    // storage abstraction, so a harness can relaunch and prove the app REFRESHES an
+    // expired token without signing the user out. The old harness trick
+    // (`defaults write <bundle> auth_tokenExpiry -float 1000`) tampers a key the app no
+    // longer reads now that tokens are keychain-backed — it measured nothing and reported
+    // a false regression. This seam is storage-agnostic and never exposes token material.
+    // Non-prod only (double-gated: here and inside AuthService).
+    register(
+      name: "expire_auth_token",
+      summary:
+        "Expire the stored idToken via AuthService's real storage path (keychain or UserDefaults) so a relaunch must refresh it without signing out — AUTH-03. Status only, no token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "expire_auth_token is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.expireStoredTokenForAutomation() }
+    }
+
+    // AUTH-03 read-back: which backend actually holds the tokens, and is the stored
+    // idToken currently expired? Lets a harness assert "expired -> relaunch -> refreshed,
+    // still signed in" against the REAL storage rather than a UserDefaults key the app may
+    // no longer use. Presence/expiry booleans only — never token material. Non-prod only.
+    register(
+      name: "auth_token_status",
+      summary:
+        "Read-only auth token status (signed_in, storage backend, has_id_token, has_refresh_token, is_token_expired) — AUTH-03. No token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "auth_token_status is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.tokenStatusForAutomation() }
+    }
+
+    // CHAT-07: post `NSWorkspace.didWakeNotification` on the WORKSPACE notification
+    // center — the top of the real wake chain. Every production consumer then fires
+    // exactly as on a physical wake: RealtimeHubController re-warms/defers its
+    // session ("system_wake"), and AppState's observer re-broadcasts the
+    // default-center `.systemDidWake` for downstream consumers. (Posting only the
+    // default-center `.systemDidWake` would MISS RealtimeHub, which observes the
+    // workspace center directly.) Transcription restart stays guarded by
+    // wasTranscribingBeforeSleep, so a synthetic wake is a safe no-op there.
+    // Read-only with respect to user data; non-prod only.
+    register(
+      name: "simulate_system_wake",
+      summary:
+        "Post NSWorkspace.didWakeNotification on the workspace center (the top of the real wake chain: RealtimeHub re-warm + AppState .systemDidWake re-broadcast) so post-wake restart paths run without a real sleep — CHAT-07 harness. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "simulate_system_wake is disabled on production bundles"]
+      }
+      await MainActor.run {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.didWakeNotification, object: nil)
+      }
+      log("DesktopAutomationBridge: simulate_system_wake posted NSWorkspace.didWakeNotification")
+      return ["posted": "NSWorkspace.didWakeNotification"]
+    }
+
     // PERM-06: trigger the permission-flow "Quit & Reopen" restart — the exact
     // AppState.restartApp() path used after granting Accessibility / Screen
     // Recording — so a harness can prove the SAME bundle relaunches with the
@@ -3096,7 +3433,8 @@ final class DesktopAutomationActionRegistry {
     // response flushes before restartApp() terminates the process. Non-prod only.
     register(
       name: "quit_and_reopen",
-      summary: "Trigger the permission-flow Quit & Reopen restart (AppState.restartApp) — relaunches the same bundle; auth/onboarding session persists. Non-prod only.",
+      summary:
+        "Trigger the permission-flow Quit & Reopen restart (AppState.restartApp) — relaunches the same bundle; auth/onboarding session persists. Non-prod only.",
       params: ["delayMs"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -3139,7 +3477,7 @@ private func intParam(_ raw: String?, default fallback: Int) -> Int {
   return Int(raw) ?? fallback
 }
 
-final class DesktopAutomationBridge {
+final class DesktopAutomationBridge: @unchecked Sendable {
   static let shared = DesktopAutomationBridge()
 
   private let queue = DispatchQueue(label: "com.omi.desktop.automation-bridge")
@@ -3259,7 +3597,7 @@ final class DesktopAutomationBridge {
     }
   }
 
-  private func parseRequest(from data: Data) -> HTTPRequest? {
+  private func parseRequest(from data: Data) -> DesktopAutomationHTTPRequest? {
     guard let headerRange = data.range(of: Data("\r\n\r\n".utf8)) else {
       return nil
     }
@@ -3305,7 +3643,7 @@ final class DesktopAutomationBridge {
     }
 
     let body = Data(data[bodyStart..<data.index(bodyStart, offsetBy: contentLength)])
-    return HTTPRequest(method: method, path: path, headers: headers, body: body)
+    return DesktopAutomationHTTPRequest(method: method, path: path, headers: headers, body: body)
   }
 
   /// Parse a `POST /action` body: `{ "name": "...", "params": { "k": "v", ... } }`.
@@ -3337,9 +3675,9 @@ final class DesktopAutomationBridge {
     return (name, params)
   }
 
-  private func route(request: HTTPRequest) async -> HTTPResponse {
+  private func route(request: DesktopAutomationHTTPRequest) async -> DesktopAutomationHTTPResponse {
     let started = DispatchTime.now().uptimeNanoseconds
-    let response = await routeUntimed(request: request)
+    let response = await self.response(for: request)
     let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
     await DesktopAutomationTraceStore.shared.record(
       method: request.method,
@@ -3350,7 +3688,10 @@ final class DesktopAutomationBridge {
     return response
   }
 
-  private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
+  /// Internal executable route seam used by both the loopback listener and
+  /// behavioral tests. Keeping auth, dispatch, and JSON encoding on this path
+  /// prevents tests from validating a parallel fake router.
+  func response(for request: DesktopAutomationHTTPRequest) async -> DesktopAutomationHTTPResponse {
     guard acceptsLoopbackHostAndOrigin(request.headers) else {
       return jsonResponse(
         DesktopAutomationResponse<DesktopAutomationSnapshot>(
@@ -3358,13 +3699,24 @@ final class DesktopAutomationBridge {
         statusCode: 403)
     }
     if request.method == "GET", request.path == "/health", request.headers["authorization"] == nil {
+      let runtime = await AgentRuntimeProcess.shared.diagnosticsSnapshot()
       return jsonResponse(
         DesktopAutomationHealth(
           ok: true,
           name: "omi-desktop-automation",
           bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+          processID: getpid(),
+          logFilePath: omiLogFilePath(),
+          logLaunchID: omiLogLaunchID(),
           bridgePort: DesktopAutomationLaunchOptions.port,
-          requiresAuth: true
+          requiresAuth: true,
+          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends ? "development" : "production",
+          pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
+          rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
+          agentRuntimeRunning: runtime.running,
+          agentRuntimeExpectedProtocolVersion: AgentRuntimeProcess.expectedProtocolVersion,
+          agentRuntimeProtocolVersion: runtime.protocolVersion,
+          agentRuntimeVersion: runtime.runtimeVersion
         )
       )
     }
@@ -3463,8 +3815,7 @@ final class DesktopAutomationBridge {
           "POST /conversation/open",
           "POST /action",
           "POST /visual/export",
-          "POST /open-import",
-        ],
+        ] + DesktopAutomationPresentationRoute.allCases.map(\.capability),
         lanes: ["bridge", "visual", "ui"],
         waits: ["state", "log", "trace"],
         assertions: ["state", "log", "trace", "ax"],
@@ -3508,75 +3859,77 @@ final class DesktopAutomationBridge {
           statusCode: 500
         )
       }
-    case ("POST", "/open-export"):
-      struct OpenResult: Codable { let destination: String }
-      do {
-        let payload = try JSONDecoder().decode(
-          DesktopAutomationExecuteExportRequest.self, from: request.body)
-        guard MemoryExportDestination(rawValue: payload.destination) != nil else {
-          return jsonResponse(
-            DesktopAutomationResponse<OpenResult>(
-              ok: false, result: nil, error: "unknown destination: \(payload.destination)"),
-            statusCode: 400)
-        }
-        await MainActor.run {
-          NSApp.activate()
-          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
-            window.makeKeyAndOrderFront(nil)
-          }
-          NotificationCenter.default.post(
-            name: .desktopAutomationOpenExportRequested, object: nil,
-            userInfo: ["destination": payload.destination])
-        }
-        try await Task.sleep(for: .milliseconds(300))
-        return jsonResponse(
-          DesktopAutomationResponse(
-            ok: true, result: OpenResult(destination: payload.destination), error: nil))
-      } catch {
-        return jsonResponse(
-          DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
-          statusCode: 500)
+    case ("POST", let path) where path == DesktopAutomationPresentationRoute.openExport.rawValue:
+      struct OpenResult: Codable {
+        let destination: String
+        let generation: UInt64
       }
-    case ("POST", "/open-import"):
-      struct OpenResult: Codable { let connector: String }
-      let payload: DesktopAutomationOpenImportRequest
-      do {
-        payload = try JSONDecoder().decode(
-          DesktopAutomationOpenImportRequest.self, from: request.body)
-      } catch {
+      guard
+        let payload = try? JSONDecoder().decode(
+          DesktopAutomationExecuteExportRequest.self, from: request.body)
+      else {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
+            ok: false, result: nil, error: "invalid_request"),
+          statusCode: 400)
+      }
+      let gate = await currentAutomationPresentationGate()
+      let outcome = await DesktopAutomationPresentationRequestHandler.shared.openExport(
+        identifier: payload.destination,
+        knownIdentifiers: Set(MemoryExportDestination.allCases.map(\.rawValue)),
+        gate: gate
+      )
+      guard let command = outcome.command else {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: outcome.errorCode),
+          statusCode: outcome.statusCode)
+      }
+      return jsonResponse(
+        DesktopAutomationResponse(
+          ok: true,
+          result: OpenResult(
+            destination: payload.destination,
+            generation: command.generation
+          ),
+          error: nil
+        ))
+    case ("POST", let path) where path == DesktopAutomationPresentationRoute.openImport.rawValue:
+      struct OpenResult: Codable {
+        let connector: String
+        let generation: UInt64
+      }
+      guard
+        let payload = try? JSONDecoder().decode(
+          DesktopAutomationOpenImportRequest.self, from: request.body)
+      else {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: "invalid_request"),
           statusCode: 400)
       }
       let knownIDs = await MainActor.run { ImportConnector.all.map(\.id) }
-      guard knownIDs.contains(payload.connector) else {
+      let gate = await currentAutomationPresentationGate()
+      let outcome = await DesktopAutomationPresentationRequestHandler.shared.openImport(
+        identifier: payload.connector,
+        knownIdentifiers: Set(knownIDs),
+        gate: gate
+      )
+      guard let command = outcome.command else {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: "unknown connector: \(payload.connector)"),
-          statusCode: 400)
+            ok: false, result: nil, error: outcome.errorCode),
+          statusCode: outcome.statusCode)
       }
-      do {
-        await MainActor.run {
-          NSApp.activate()
-          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
-            window.makeKeyAndOrderFront(nil)
-          }
-          NotificationCenter.default.post(
-            name: .desktopAutomationOpenImportRequested, object: nil,
-            userInfo: ["connector": payload.connector])
-        }
-        try await Task.sleep(for: .milliseconds(300))
-        return jsonResponse(
-          DesktopAutomationResponse(
-            ok: true, result: OpenResult(connector: payload.connector), error: nil))
-      } catch {
-        return jsonResponse(
-          DesktopAutomationResponse<OpenResult>(
-            ok: false, result: nil, error: error.localizedDescription),
-          statusCode: 500)
-      }
+      return jsonResponse(
+        DesktopAutomationResponse(
+          ok: true,
+          result: OpenResult(
+            connector: payload.connector,
+            generation: command.generation
+          ),
+          error: nil
+        ))
     case ("POST", "/gmail-read"):
       struct RemovedRoute: Codable {
         let message: String
@@ -3586,7 +3939,8 @@ final class DesktopAutomationBridge {
         DesktopAutomationResponse(
           ok: false,
           result: RemovedRoute(
-            message: "The legacy Gmail import route was removed because automation responses must not expose email contents or trigger memory writes.",
+            message:
+              "The legacy Gmail import route was removed because automation responses must not expose email contents or trigger memory writes.",
             replacement: "Use POST /action with gmail_read_probe for privacy-safe Gmail status checks."
           ),
           error: "gmail_read_removed"
@@ -3618,6 +3972,21 @@ final class DesktopAutomationBridge {
         ]
       )
     }
+  }
+
+  @MainActor
+  private func currentAutomationPresentationGate() -> DesktopAutomationPresentationGate {
+    let authState = AuthState.shared
+    if authState.isRestoringAuth {
+      return .presentationUnavailable
+    }
+    guard authState.isSignedIn else {
+      return .signedOut
+    }
+    guard let appState = AppState.current else {
+      return .presentationUnavailable
+    }
+    return appState.hasCompletedOnboarding ? .ready : .onboardingIncomplete
   }
 
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
@@ -3732,7 +4101,7 @@ final class DesktopAutomationBridge {
       guard let url = URL(string: origin), let host = url.host, let port = url.port else {
         return false
       }
-      guard (url.scheme == "http" || url.scheme == "https"), port == Int(DesktopAutomationLaunchOptions.port) else {
+      guard url.scheme == "http" || url.scheme == "https", port == Int(DesktopAutomationLaunchOptions.port) else {
         return false
       }
       guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {
@@ -3777,17 +4146,20 @@ final class DesktopAutomationBridge {
     return diff == 0
   }
 
-  private func jsonResponse<T: Codable>(_ payload: T, statusCode: Int = 200) -> HTTPResponse {
+  private func jsonResponse<T: Codable>(
+    _ payload: T,
+    statusCode: Int = 200
+  ) -> DesktopAutomationHTTPResponse {
     do {
       let body = try JSONEncoder.pretty.encode(payload)
-      return HTTPResponse(
+      return DesktopAutomationHTTPResponse(
         statusCode: statusCode,
         headers: ["Content-Type": "application/json"],
         body: body
       )
     } catch {
       let fallback = Data("{\"ok\":false,\"error\":\"encode_failed\"}".utf8)
-      return HTTPResponse(
+      return DesktopAutomationHTTPResponse(
         statusCode: 500,
         headers: ["Content-Type": "application/json"],
         body: fallback
@@ -3803,50 +4175,59 @@ final class DesktopAutomationBridge {
     send(response, on: connection)
   }
 
-  private func send(_ response: HTTPResponse, on connection: NWConnection) {
-    let statusText: String
-    switch response.statusCode {
-    case 200: statusText = "OK"
-    case 400: statusText = "Bad Request"
-    case 401: statusText = "Unauthorized"
-    case 403: statusText = "Forbidden"
-    case 404: statusText = "Not Found"
-    default: statusText = "Internal Server Error"
-    }
-
-    var headerLines = [
-      "HTTP/1.1 \(response.statusCode) \(statusText)",
-      "Content-Length: \(response.body.count)",
-      "Connection: close",
-    ]
-    for (key, value) in response.headers {
-      headerLines.append("\(key): \(value)")
-    }
-    headerLines.append("")
-    headerLines.append("")
-
-    var data = Data(headerLines.joined(separator: "\r\n").utf8)
-    data.append(response.body)
-
+  private func send(_ response: DesktopAutomationHTTPResponse, on connection: NWConnection) {
     connection.send(
-      content: data,
+      content: response.serializedHTTP1Data(),
       completion: .contentProcessed { _ in
         connection.cancel()
       })
   }
 }
 
-private struct HTTPRequest {
+struct DesktopAutomationHTTPRequest {
   let method: String
   let path: String
   let headers: [String: String]
   let body: Data
 }
 
-private struct HTTPResponse {
+struct DesktopAutomationHTTPResponse {
   let statusCode: Int
   let headers: [String: String]
   let body: Data
+
+  func serializedHTTP1Data() -> Data {
+    var headerLines = [
+      "HTTP/1.1 \(statusCode) \(Self.reasonPhrase(for: statusCode))",
+      "Content-Length: \(body.count)",
+      "Connection: close",
+    ]
+    for (key, value) in headers {
+      headerLines.append("\(key): \(value)")
+    }
+    headerLines.append("")
+    headerLines.append("")
+
+    var data = Data(headerLines.joined(separator: "\r\n").utf8)
+    data.append(body)
+    return data
+  }
+
+  private static func reasonPhrase(for statusCode: Int) -> String {
+    switch statusCode {
+    case 200: return "OK"
+    case 400: return "Bad Request"
+    case 401: return "Unauthorized"
+    case 403: return "Forbidden"
+    case 404: return "Not Found"
+    case 409: return "Conflict"
+    case 410: return "Gone"
+    case 500: return "Internal Server Error"
+    case 503: return "Service Unavailable"
+    case 504: return "Gateway Timeout"
+    default: return "Unknown Status"
+    }
+  }
 }
 
 extension JSONEncoder {
