@@ -283,7 +283,7 @@ final class APIClientRoutingTests: XCTestCase {
         environmentValue: nil,
         launchEnvironmentValue: nil
       ),
-      ""
+      DesktopBackendEnvironment.productionRustBackendURL
     )
   }
 
