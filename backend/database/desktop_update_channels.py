@@ -229,7 +229,7 @@ def _admit_qualified_beta_transaction(
         expected_generation=None,
     )
     if not manifest_exists:
-        transaction.create(manifest_ref, {**manifest, "created_at": datetime.now(timezone.utc)})
+        transaction.create(manifest_ref, manifest)
     if pointer is not current:
         transaction.set(pointer_ref, pointer)
     return {"manifest": manifest, "pointer": pointer, "idempotent": manifest_exists and pointer is current}

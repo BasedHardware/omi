@@ -2,16 +2,24 @@ import hashlib
 import io
 import json
 import zipfile
+import zlib
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
+from routers.updates import router as updates_router
 from utils.qualified_beta_promotion import (
     MAX_QUALIFICATION_ARTIFACT_BYTES,
     GitHubQualifiedBetaReader,
     QualifiedBetaAdmissionError,
     build_qualified_beta_manifest,
 )
+
+_test_app = FastAPI()
+_test_app.include_router(updates_router)
 
 TAG = "v0.12.93+12093-macos"
 SHA = "a" * 40
@@ -39,6 +47,7 @@ class FakeQualifiedBetaReader:
         ]
         self.artifact_downloads = {456: artifact}
         self.artifact_run_ids = []
+        self.download_calls = []
 
     async def release(self, tag):
         return self.release_payload
@@ -60,6 +69,7 @@ class FakeQualifiedBetaReader:
         return self.artifact_downloads[artifact_id]
 
     async def download(self, url):
+        self.download_calls.append(url)
         return self.downloaded[url]
 
 
@@ -118,6 +128,18 @@ def _artifact_archive(evidence):
     with zipfile.ZipFile(output, "w") as archive:
         archive.writestr("qualification-evidence.json", evidence)
     return output.getvalue()
+
+
+def _corrupt_deflated_artifact(evidence):
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("qualification-evidence.json", evidence)
+    payload = bytearray(output.getvalue())
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        info = archive.getinfo("qualification-evidence.json")
+    data_offset = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
+    payload[data_offset : data_offset + info.compress_size] = b"\xff" * info.compress_size
+    return bytes(payload)
 
 
 @pytest.mark.asyncio
@@ -255,6 +277,35 @@ async def test_zip_slip_or_oversized_qualification_artifact_fails_closed():
             reader=reader,
             now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
         )
+
+
+@pytest.mark.asyncio
+async def test_corrupted_deflated_artifact_returns_typed_rejection_without_post_rejection_side_effects():
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.artifact_downloads[456] = _corrupt_deflated_artifact(evidence)
+    with zipfile.ZipFile(io.BytesIO(reader.artifact_downloads[456])) as archive:
+        with pytest.raises(zlib.error):
+            archive.read("qualification-evidence.json")
+
+    with (
+        patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+        patch("utils.qualified_beta_promotion.GitHubQualifiedBetaReader", return_value=reader),
+        patch("routers.updates.admit_qualified_beta_manifest") as admit,
+        patch("routers.updates.delete_generic_cache") as invalidate,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+            response = await client.post(
+                "/v2/desktop/beta/promote-qualified",
+                headers={"Authorization": "Bearer promotion-token"},
+                json={"tag": TAG},
+            )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Qualified Beta candidate rejected"}
+    assert reader.download_calls == []
+    assert admit.call_count == 0
+    assert invalidate.call_count == 0
 
 
 @pytest.mark.asyncio

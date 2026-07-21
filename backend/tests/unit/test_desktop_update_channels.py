@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 from database.desktop_update_channels import (
     _admit_qualified_beta_transaction,
     _build_pointer,
+    admit_qualified_beta_manifest,
     get_channel_release,
     get_release_manifest,
     normalize_release_manifest,
@@ -111,6 +113,40 @@ class TestReleaseManifestPersistence:
             )
             == pointer
         )
+
+    def test_qualified_beta_admission_preserves_created_canonical_manifest_for_exact_retry_and_resolution(self):
+        """The transaction-created snapshot is the canonical object Beta subsequently resolves."""
+        client = StrictFirestore()
+        manifest = normalize_release_manifest(_manifest())
+        canonical_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
+
+        first = admit_qualified_beta_manifest(manifest, firestore_client=client)
+        created = client.transactions[-1].creates
+        assert created == [(('desktop_release_manifests', manifest['release_id']), manifest)]
+        assert json.dumps(created[0][1], sort_keys=True, separators=(',', ':')).encode() == canonical_bytes
+        assert client.rows[('desktop_release_manifests', manifest['release_id'])] == manifest
+        assert (
+            json.dumps(
+                client.rows[('desktop_release_manifests', manifest['release_id'])],
+                sort_keys=True,
+                separators=(',', ':'),
+            ).encode()
+            == canonical_bytes
+        )
+        assert (
+            client.rows[('desktop_release_manifests', manifest['release_id'])]['created_at'] == manifest['created_at']
+        )
+        assert isinstance(client.rows[('desktop_release_manifests', manifest['release_id'])]['created_at'], str)
+
+        retry = admit_qualified_beta_manifest(manifest, firestore_client=client)
+        assert client.transactions[-1].creates == []
+        assert retry['idempotent'] is True
+        assert retry['pointer']['generation'] == first['pointer']['generation'] == 1
+
+        resolved = get_channel_release('macos', 'beta', firestore_client=client)
+        assert resolved is not None
+        assert resolved['manifest'] == manifest
+        assert json.dumps(resolved['manifest'], sort_keys=True, separators=(',', ':')).encode() == canonical_bytes
 
     def test_register_is_idempotent_for_identical_manifest(self):
         snapshot = MagicMock(exists=True)

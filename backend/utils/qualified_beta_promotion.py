@@ -10,6 +10,7 @@ import os
 import re
 from typing import Any
 import zipfile
+import zlib
 
 from desktop_qualification_admission import validate_qualification_run
 from desktop_qualification_evidence import verify_evidence
@@ -152,7 +153,7 @@ def _evidence_from_artifact(payload: object) -> bytes:
             ):
                 _fail("candidate qualification artifact has unsafe contents")
             evidence = archive.read(info)
-    except (OSError, RuntimeError, zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
+    except (EOFError, OSError, RuntimeError, zipfile.BadZipFile, zipfile.LargeZipFile, zlib.error) as exc:
         raise QualifiedBetaAdmissionError("candidate qualification artifact is not a safe ZIP") from exc
     if len(evidence) != info.file_size or len(evidence) > MAX_QUALIFICATION_EVIDENCE_BYTES:
         _fail("candidate qualification artifact evidence is invalid")
