@@ -108,19 +108,15 @@ struct ChatBubble: View {
         .clipShape(Circle())
       }
 
+      // Bubbles hug their content up to a readable cap — omi replies sit
+      // left, user messages sit right, neither spans the full column.
       VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
         messageContentView(groupedBlocks)
       }
-
-      if message.sender == .user {
-        // User avatar
-        Image(systemName: "person.fill")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
-          .frame(width: 32, height: 32)
-          .background(OmiColors.backgroundTertiary)
-          .clipShape(Circle())
-      }
+      .frame(
+        maxWidth: 640,
+        alignment: message.sender == .user ? .trailing : .leading
+      )
     }
     .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
     .contentShape(Rectangle())
