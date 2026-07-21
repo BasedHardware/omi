@@ -20,6 +20,7 @@ AUTO_DEPLOY_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }
 MANUAL_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }}"
 AUTO_SOURCE_ADMISSION_CONDITION = "\n".join(
     (
+        "needs.scope.outputs.applies == 'true' &&",
         "github.event.workflow_run.conclusion == 'success' &&",
         "github.event.workflow_run.event == 'push' &&",
         "github.event.workflow_run.run_attempt == 1 &&",
@@ -151,9 +152,61 @@ def validate_auto_workflow(text: str) -> list[str]:
 
     firestore_job = mapping_block(text, "firestore_readiness", 2)
     readiness_steps = None if firestore_job is None else mapping_block(firestore_job, "steps", 4)
+    scope_job = mapping_block(text, "scope", 2)
+    scope_steps = None if scope_job is None else mapping_block(scope_job, "steps", 4)
+    if scope_job is None:
+        errors.append("auto backend deploy is missing its unprivileged scope decision job")
+    else:
+        require_fragment(
+            errors,
+            scope_job,
+            "permissions:\n      contents: 'read'",
+            "auto backend scope decision must remain contents-read-only",
+        )
+        if "environment:" in scope_job:
+            errors.append("auto backend scope decision must not receive a deployment environment")
+        if "google-github-actions/auth" in scope_job or "gcloud" in scope_job:
+            errors.append("auto backend scope decision must not authenticate to cloud services")
+    if scope_steps is None:
+        errors.append("auto backend deploy scope decision must contain its steps")
+    else:
+        scope_checkout = require_step(
+            errors,
+            scope_steps,
+            "Checkout triggering main commit for scope decision",
+            "triggering-commit scope checkout",
+        )
+        for fragment, message in (
+            (f"ref: {AUTO_PROOF_SHA}", "auto backend scope decision must inspect the triggering SHA"),
+            ("fetch-depth: 2", "auto backend scope decision must fetch the triggering commit parent"),
+        ):
+            require_fragment(errors, scope_checkout, fragment, message)
+        scope_decision = require_step(
+            errors,
+            scope_steps,
+            "Decide whether the triggering commit can affect the backend deployment",
+            "backend deployment scope decision",
+        )
+        for fragment, message in (
+            (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "auto backend scope decision must bind the triggering SHA"),
+            ("git rev-parse \"${RELEASE_SHA}^\"", "auto backend scope decision must inspect the triggering parent"),
+            (
+                "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
+                "auto backend scope decision must diff the triggering SHA against its parent",
+            ),
+            ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
+            ("Green no-op", "auto backend scope decision must summarize green no-ops"),
+        ):
+            require_fragment(errors, scope_decision, fragment, message)
     if firestore_job is None:
         errors.append("auto backend deploy is missing its source-admission job")
     else:
+        require_fragment(
+            errors,
+            firestore_job,
+            "needs: scope",
+            "auto source-admission job must depend on the scope decision",
+        )
         condition = folded_job_condition(firestore_job)
         if condition != AUTO_SOURCE_ADMISSION_CONDITION:
             errors.append(
@@ -267,8 +320,8 @@ def validate_auto_workflow(text: str) -> list[str]:
 
     if "github.sha" in text:
         errors.append("auto backend deploy must not use github.sha after workflow_run admission")
-    if text.count(AUTO_PROOF_SHA) != 1:
-        errors.append("auto backend deploy must use workflow_run.head_sha only in the current-main admission guard")
+    if text.count(AUTO_PROOF_SHA) != 3:
+        errors.append("auto backend deploy must use workflow_run.head_sha only in scope decision and current-main admission guard")
     if text.count(AUTO_PROOF_RUN_ATTEMPT) != 1:
         errors.append("auto backend deploy must use workflow_run.run_attempt only in the source-admission guard")
     if text.count(f"ref: {AUTO_FIRESTORE_ADMITTED_SHA}") != 1:
