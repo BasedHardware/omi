@@ -27,6 +27,12 @@ def main() -> int:
         "Publish latest stable repair route",
         "Verify exact pointer, hashes, and stable feed",
         "https://api.omi.me/v2/desktop/channels/promote",
+        'Authorization: Bearer $ACCESS_TOKEN',
+        "appcast.xml?identity=stable",
+        "shortVersionString",
+        "edSignature",
+        ".event",
+        ".path",
         "--if-generation-match=0",
         "operation\": os.environ[\"OPERATION\"]",
     )
