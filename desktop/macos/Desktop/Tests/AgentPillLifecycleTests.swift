@@ -71,9 +71,9 @@ import XCTest
   }
 
   func testMainChatSpawnReceiptProjectsTheExistingFloatingPill() throws {
+    let pillSource = try agentPillSource()
     let providerSource = try chatProviderSource()
     let viewSource = try floatingControlBarViewSource()
-    let pillSource = try agentPillSource()
 
     XCTAssertTrue(providerSource.contains("AgentPillsManager.shared.upsertSpawnedPill("))
     XCTAssertTrue(providerSource.contains("producingJournalSurface: mainChatSurfaceReference()"))
@@ -373,9 +373,9 @@ import XCTest
     XCTAssertFalse(windowSource.contains("resolveDelegationAndDispatch"))
     XCTAssertTrue(windowSource.contains("await dispatchChatQuery("))
     XCTAssertFalse(source.contains("AgentPillFollowUpRoutingPolicy"))
-    // The bar has no typed pill composer since typing moved to the app's chat:
-    // pill steering routes to the main app instead of parsing wording locally.
-    XCTAssertTrue(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppWindow()"))
+    // The bar's typed follow-up composer was retired (#10181): its "Continue
+    // in Omi" affordance routes to the main chat instead of spawning.
+    XCTAssertTrue(source.contains("openMainAppChat()"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -835,13 +835,14 @@ import XCTest
   }
 
   func testSubagentFollowUpsOnlyContinueTheCanonicalSession() throws {
-    // omi-test-quality: source-inspection -- static contract: the bar's typed composer is gone; follow-ups continue only through the manager bound to the pill's canonical session.
+    // omi-test-quality: source-inspection -- static contract: the bar's typed composer is gone; the pill's only affordance opens the main chat.
     let viewSource = try floatingControlBarViewSource()
-    let pillSource = try agentPillSource()
 
     XCTAssertFalse(viewSource.contains("AgentPillFollowUpRoutingPolicy"))
-    XCTAssertTrue(pillSource.contains("guard pill.canonicalSessionId == sessionId else { return }"))
-    XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.continueAgent("))
+    // Typed steering from the pill was retired (#10181): the composer's only
+    // affordance opens the main chat, so no second send path can exist.
+    XCTAssertFalse(viewSource.contains("manager.continueAgent(from:"))
+    XCTAssertTrue(viewSource.contains("openMainAppChat()"))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {
@@ -926,10 +927,10 @@ import XCTest
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    // Archiving the previous exchange moved into the window alongside sizing;
-    // the view must not archive on its own.
+    // Archiving moved with the retired typed follow-up (#10181): the window's
+    // query paths own it now; the view must not archive on its own.
+    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using:"))
     XCTAssertFalse(viewSource.contains("archiveCurrentExchange"))
-    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using: self.historyChatProvider)"))
     XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
