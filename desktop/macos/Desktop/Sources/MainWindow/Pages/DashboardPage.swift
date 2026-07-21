@@ -776,7 +776,7 @@ struct DashboardPage: View {
       ZStack {
         switch homeMode {
         case .chat:
-          homeChatPanel(stageWidth: stageWidth)
+          homeChatPanel(width: askBarWidth)
             .transition(.homeDropFromTop)
         case .connect:
           homeConnectPanel(stageWidth: stageWidth)
@@ -938,7 +938,7 @@ struct DashboardPage: View {
 
   // MARK: Inline chat panel
 
-  private func homeChatPanel(stageWidth: CGFloat) -> some View {
+  private func homeChatPanel(width: CGFloat) -> some View {
     VStack(spacing: 0) {
       ChatMessagesView(
         messages: chatProvider.messages,
@@ -967,6 +967,7 @@ struct DashboardPage: View {
         onOpenAgentRef: { ref, completion in
           FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
         },
+        horizontalContentPadding: 0,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -982,13 +983,13 @@ struct DashboardPage: View {
           endPoint: .bottom
         )
       )
-      .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xs)
 
     }
     // Chat is the Home surface itself — no card chrome, it sits directly on
-    // the ambient canvas. Width is capped for a readable measure.
-    .frame(width: min(900, homeStagePanelWidth(for: stageWidth)))
+    // the ambient canvas. The column matches the ask bar's width exactly so
+    // message edges align with the bar's edges.
+    .frame(width: width)
   }
 
   // MARK: Connect tray

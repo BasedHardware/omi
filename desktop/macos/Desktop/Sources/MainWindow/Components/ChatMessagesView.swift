@@ -88,6 +88,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   /// Opens via structured agent identity (session/run/pill) when available.
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Horizontal inset of the message column. Home passes 0 so bubbles align
+  /// exactly with the ask bar's edges; other surfaces keep the default gutter.
+  var horizontalContentPadding: CGFloat = OmiSpacing.xxl
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -167,7 +170,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         loadMoreButton
         messageContent
       }
-      .padding(.horizontal, OmiSpacing.xxl)
+      .padding(.horizontal, horizontalContentPadding)
       .padding(.vertical, OmiSpacing.xl)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
