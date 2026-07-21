@@ -39,8 +39,8 @@ def install_module(name: str, module=None, *, default_factory=None):
     if module is None:
         module = default_factory(name) if default_factory is not None else MagicMock()
     sys.modules[name] = module
-    if '.' in name:
-        parent_name, attr_name = name.rsplit('.', 1)
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
         parent = sys.modules.get(parent_name)
         if parent is not None:
             setattr(parent, attr_name, module)
@@ -51,8 +51,8 @@ def load_real_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    if '.' in name:
-        parent_name, attr_name = name.rsplit('.', 1)
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
         parent = sys.modules.get(parent_name)
         if parent is not None:
             setattr(parent, attr_name, module)
@@ -76,27 +76,27 @@ def wire_common_stubs(install) -> SimpleNamespace:
     to ``ModuleType`` because both suites installed them that way. Returns the
     handles a suite layers extra attributes onto.
     """
-    load_real_module('models.chat', BACKEND_DIR / 'models' / 'chat.py')
+    load_real_module("models.chat", BACKEND_DIR / "models" / "chat.py")
 
-    chat_db = install('database.chat')
+    chat_db = install("database.chat")
     chat_db.get_chat_session = MagicMock(return_value=None)
     chat_db.get_messages = MagicMock(return_value=[])
     chat_db.add_message = MagicMock(side_effect=lambda uid, message_data: message_data)
     chat_db.add_message_to_chat_session = MagicMock()
-    install('database.conversations')
-    apps_db = install('database.apps')
+    install("database.conversations")
+    apps_db = install("database.apps")
     apps_db.record_app_usage = MagicMock()
-    llm_usage_db = install('database.llm_usage')
+    llm_usage_db = install("database.llm_usage")
     llm_usage_db.record_chat_quota_question = MagicMock(return_value=True)
-    users_db = install('database.users')
+    users_db = install("database.users")
     users_db.set_chat_message_rating_score = MagicMock()
-    redis_db = install('database.redis_db')
+    redis_db = install("database.redis_db")
     redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=False)
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
     redis_db.store_chat_share = MagicMock()
     redis_db.get_chat_share = MagicMock(return_value=None)
 
-    executors = install('utils.executors', ModuleType('utils.executors'))
+    executors = install("utils.executors", ModuleType("utils.executors"))
     executors.critical_executor = MagicMock()
     executors.db_executor = MagicMock()
     executors.llm_executor = MagicMock()
@@ -108,30 +108,37 @@ def wire_common_stubs(install) -> SimpleNamespace:
 
     executors.run_blocking = AsyncMock(side_effect=run_blocking_side_effect)
 
-    utils_apps = install('utils.apps', ModuleType('utils.apps'))
+    utils_apps = install("utils.apps", ModuleType("utils.apps"))
     utils_apps.get_available_app_by_id = MagicMock(return_value=None)
-    helpers = install('utils.conversation_helpers', ModuleType('utils.conversation_helpers'))
+    helpers = install("utils.conversation_helpers", ModuleType("utils.conversation_helpers"))
     helpers.extract_memory_ids = MagicMock(return_value=[])
-    goals = install('utils.llm.goals', ModuleType('utils.llm.goals'))
+    goals = install("utils.llm.goals", ModuleType("utils.llm.goals"))
     goals.extract_and_update_goal_progress = MagicMock()
-    users = install('utils.users', ModuleType('utils.users'))
-    users.get_user_display_name = MagicMock(return_value='Test User')
-    sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
+    users = install("utils.users", ModuleType("utils.users"))
+    users.get_user_display_name = MagicMock(return_value="Test User")
+    sanitizer = install("utils.log_sanitizer", ModuleType("utils.log_sanitizer"))
     sanitizer.sanitize_pii = lambda value: value
-    observability = install('utils.observability', ModuleType('utils.observability'))
+    observability = install("utils.observability", ModuleType("utils.observability"))
     observability.submit_langsmith_feedback = MagicMock()
+    obs_transcription = install(
+        "utils.observability.transcription",
+        ModuleType("utils.observability.transcription"),
+    )
+    obs_transcription.TranscriptionAttempt = MagicMock()
+    obs_journeys = install("utils.observability.journeys", ModuleType("utils.observability.journeys"))
+    obs_journeys.JourneyAttempt = MagicMock()
 
-    rate_limit = install('utils.rate_limit_config', ModuleType('utils.rate_limit_config'))
+    rate_limit = install("utils.rate_limit_config", ModuleType("utils.rate_limit_config"))
     rate_limit.get_effective_limit = MagicMock(return_value=(100, 60))
     rate_limit.RATE_LIMIT_SHADOW = False
-    subscription = install('utils.subscription', ModuleType('utils.subscription'))
+    subscription = install("utils.subscription", ModuleType("utils.subscription"))
     subscription.enforce_chat_quota = MagicMock()
     subscription.is_trial_paywalled = MagicMock(return_value=False)
 
-    auth = install('utils.other.endpoints', ModuleType('utils.other.endpoints'))
+    auth = install("utils.other.endpoints", ModuleType("utils.other.endpoints"))
 
     def get_current_user_uid():
-        return 'test-uid'
+        return "test-uid"
 
     def with_rate_limit(func, _policy):
         return func
@@ -139,38 +146,43 @@ def wire_common_stubs(install) -> SimpleNamespace:
     auth.get_current_user_uid = get_current_user_uid
     auth.get_current_user_uid_ws_listen = get_current_user_uid
     auth.with_rate_limit = with_rate_limit
-    storage = install('utils.other.storage', ModuleType('utils.other.storage'))
-    storage.get_syncing_file_temporal_signed_url = MagicMock(return_value='https://example.test/audio.wav')
+    storage = install("utils.other.storage", ModuleType("utils.other.storage"))
+    storage.get_syncing_file_temporal_signed_url = MagicMock(return_value="https://example.test/audio.wav")
     storage.schedule_syncing_temporal_file_deletion = MagicMock()
-    chat_file = install('utils.other.chat_file', ModuleType('utils.other.chat_file'))
+    chat_file = install("utils.other.chat_file", ModuleType("utils.other.chat_file"))
     chat_file.FileChatTool = MagicMock()
 
-    sync_files = install('utils.sync.files', ModuleType('utils.sync.files'))
+    sync_files = install("utils.sync.files", ModuleType("utils.sync.files"))
     sync_files.retrieve_file_paths = MagicMock(return_value=[])
     sync_files.decode_files_to_wav = MagicMock(return_value=[])
-    stt_streaming = install('utils.stt.streaming', ModuleType('utils.stt.streaming'))
+    stt_streaming = install("utils.stt.streaming", ModuleType("utils.stt.streaming"))
     stt_streaming.process_audio_dg = MagicMock()
     stt_streaming.get_stt_service_for_language = MagicMock()
+    stt_streaming.STTService = MagicMock()
+    stt_streaming.connect_stt_socket_with_fallback = MagicMock()
+    stt_streaming.drain_stt_socket = MagicMock()
+    stt_streaming.process_audio_modulate = MagicMock()
+    stt_streaming.process_audio_parakeet = MagicMock()
 
-    usage_tracker = install('utils.llm.usage_tracker', ModuleType('utils.llm.usage_tracker'))
-    usage_tracker.set_usage_context = MagicMock(return_value='usage-token')
+    usage_tracker = install("utils.llm.usage_tracker", ModuleType("utils.llm.usage_tracker"))
+    usage_tracker.set_usage_context = MagicMock(return_value="usage-token")
     usage_tracker.reset_usage_context = MagicMock()
 
     class Features:
-        CHAT = 'chat'
+        CHAT = "chat"
 
     usage_tracker.Features = Features
 
-    limiter = install('utils.voice_duration_limiter', ModuleType('utils.voice_duration_limiter'))
+    limiter = install("utils.voice_duration_limiter", ModuleType("utils.voice_duration_limiter"))
     limiter.compute_pcm_duration_ms = MagicMock(return_value=1000)
     limiter.read_wav_duration_ms = MagicMock(return_value=1000)
     limiter.try_consume_budget = MagicMock(return_value=(True, 1000, 7199000))
     limiter.check_budget = MagicMock(return_value=(True, 0, 7200000))
     limiter.record_actual_duration = MagicMock()
 
-    multipart = install('multipart', ModuleType('multipart'))
-    multipart.__version__ = '0.0.20'
-    multipart_sub = install('multipart.multipart', ModuleType('multipart.multipart'))
+    multipart = install("multipart", ModuleType("multipart"))
+    multipart.__version__ = "0.0.20"
+    multipart_sub = install("multipart.multipart", ModuleType("multipart.multipart"))
     multipart_sub.shutil = shutil
 
     return SimpleNamespace(
