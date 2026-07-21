@@ -1,0 +1,28 @@
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_2204722b151ea4::t_e7e104214b36cf 273-296
+  s_2204722b151ea4::t_6058a946c037df 38-39,42-45
+  s_2204722b151ea4::t_d3bde7d76b2ee2 314-352
+  s_2204722b151ea4::t_e659142d3ce5f6 12
+  s_2204722b151ea4::t_af24162a6202e3 241,251
+  s_2204722b151ea4::t_bbb987842d2b63 87-92
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_2204722b151ea4::t_0e59fb7bd9602c 354-355,360-362,365,368-369,371-372
+  s_2204722b151ea4::t_c26e678f554512 260-308
+  s_2204722b151ea4::t_9d5492fbe77d61 133-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "30217e4c6f8204630710893055bcd8c5cc3a777a",
+  "prompts": {},
+  "sessions": {
+    "s_2204722b151ea4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bbfea6-8dc5-4cef-9719-1bec40925231",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
