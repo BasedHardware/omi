@@ -101,6 +101,17 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("desktop signed artifact smoke must run before Create GitHub release")
     if dispatch_index == -1 or release_index == -1 or dispatch_index < release_index:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
+    reserve_index = desktop_workflow_body.find("/v2/desktop/beta/candidates/reserve")
+    canonical_publish_index = desktop_workflow_body.find('gh release create "$CM_TAG"')
+    if reserve_index == -1 or canonical_publish_index == -1 or not (smoke_index < reserve_index < canonical_publish_index):
+        errors.append("desktop release must reserve its exact candidate after signed smoke and before canonical publication")
+    for required_fragment in (
+        'Authorization: Bearer ${BETA_PROMOTION_TOKEN}',
+        '--data "{\\"tag\\":\\"${CM_TAG}\\"}"',
+        'test -n "${BETA_PROMOTION_TOKEN:-}"',
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop candidate reservation is missing fail-closed fragment: {required_fragment}")
     if "desktop_qualify_beta.yml" not in desktop_workflow_body:
         errors.append("desktop release must dispatch the trusted macOS qualification workflow")
     for required_fragment in (
@@ -160,7 +171,7 @@ def check_desktop_codemagic_release() -> list[str]:
         "build/desktop-smoke-result.json",
         "desktop-smoke-result.json",
         "desktop_qualify_beta.yml",
-        "DESKTOP_AUTO_BETA_ENABLED",
+        "BETA_PROMOTION_TOKEN",
     ):
         if required_fragment not in desktop_workflow_body:
             errors.append(f"desktop release is missing signed smoke result artifact fragment: {required_fragment}")
