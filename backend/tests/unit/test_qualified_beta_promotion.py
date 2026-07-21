@@ -13,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from routers.updates import router as updates_router
 from utils.qualified_beta_promotion import (
     MAX_QUALIFICATION_ARTIFACT_BYTES,
+    REPOSITORY,
     GitHubQualifiedBetaReader,
     QualifiedBetaAdmissionError,
     build_qualified_beta_manifest,
@@ -43,6 +44,7 @@ class FakeQualifiedBetaReader:
                 "name": f"desktop-qualification-evidence-{release['tag_name']}",
                 "expired": False,
                 "size_in_bytes": len(artifact),
+                "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/456/zip",
             }
         ]
         self.artifact_downloads = {456: artifact}
@@ -153,6 +155,45 @@ def _malformed_reader(collection, value):
     return reader
 
 
+def _reader_with_malformed_member(collection, value):
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    if collection == "assets":
+        reader.release_payload["assets"].append(value)
+    elif collection == "runs":
+        reader.runs_payload.append(value)
+    else:
+        reader.artifacts_payload.append(value)
+    return reader
+
+
+async def _assert_direct_and_endpoint_rejection(reader):
+    with pytest.raises(QualifiedBetaAdmissionError):
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+
+    with (
+        patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+        patch("utils.qualified_beta_promotion.GitHubQualifiedBetaReader", return_value=reader),
+        patch("routers.updates.admit_qualified_beta_manifest") as admit,
+        patch("routers.updates.delete_generic_cache") as invalidate,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+            response = await client.post(
+                "/v2/desktop/beta/promote-qualified",
+                headers={"Authorization": "Bearer promotion-token"},
+                json={"tag": TAG},
+            )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Qualified Beta candidate rejected"}
+    admit.assert_not_called()
+    invalidate.assert_not_called()
+
+
 def _corrupt_deflated_artifact(evidence):
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -186,7 +227,7 @@ async def test_server_builds_the_canonical_manifest_from_qualified_immutable_ass
     ("field", "expected_error"),
     [
         ("qualification_run_id", "does not bind its run"),
-        ("run_id", "no fresh trusted qualification run"),
+        ("run_id", "qualification run has no trusted identity"),
         ("artifact_id", "qualification artifact is invalid"),
         ("artifact_size", "qualification artifact is invalid"),
         ("evidence_schema_version", "trusted qualification evidence is invalid"),
@@ -236,6 +277,143 @@ async def test_malformed_nested_github_entries_are_typed_admission_rejections(co
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("name", [{}, [], None, True, 1])
+async def test_malformed_release_asset_names_fail_closed_before_set_construction(name):
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.release_payload["assets"].append(
+        {
+            "name": name,
+            "browser_download_url": f"https://github.com/{REPOSITORY}/releases/download/{TAG}/unrelated.bin",
+            "digest": _digest(b"unrelated"),
+        }
+    )
+
+    await _assert_direct_and_endpoint_rejection(reader)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["draft", "prerelease"])
+@pytest.mark.parametrize(
+    "value",
+    [None, 0, 0.0, "", [], {}, 1, 1.0, "false", [False], {"truthy": True}],
+)
+async def test_non_boolean_release_state_shapes_fail_closed_before_admission(field, value):
+    release, evidence, run = _candidate()
+    release[field] = value
+
+    await _assert_direct_and_endpoint_rejection(FakeQualifiedBetaReader(release, evidence, run))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [None, 0, {}, [], 1, {"merged": True}, [True]])
+async def test_non_boolean_merge_state_fails_closed_before_run_selection(value):
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.merged = value
+
+    await _assert_direct_and_endpoint_rejection(reader)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("collection", "value"),
+    [
+        ("assets", {}),
+        ("assets", "not-an-object"),
+        ("assets", {"name": 1, "browser_download_url": "invalid", "digest": "invalid"}),
+        ("assets", {"name": "unrelated.bin"}),
+        ("runs", {}),
+        ("runs", "not-an-object"),
+        ("runs", {"id": True}),
+        ("runs", {key: value for key, value in _candidate()[2].items() if key != "updated_at"}),
+        ("artifacts", {}),
+        ("artifacts", "not-an-object"),
+        ("artifacts", {"id": True}),
+        (
+            "artifacts",
+            {
+                key: value
+                for key, value in FakeQualifiedBetaReader(*_candidate()).artifacts_payload[0].items()
+                if key != "archive_download_url"
+            },
+        ),
+    ],
+)
+async def test_malformed_members_mixed_with_valid_github_collections_fail_closed(collection, value):
+    await _assert_direct_and_endpoint_rejection(_reader_with_malformed_member(collection, value))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", 1),
+        ("browser_download_url", []),
+        ("digest", None),
+    ],
+)
+async def test_every_consumed_release_asset_field_is_checked_for_mixed_members(field, value):
+    release, evidence, run = _candidate()
+    malformed = {
+        "name": "unrelated.bin",
+        "browser_download_url": f"https://github.com/{REPOSITORY}/releases/download/{TAG}/unrelated.bin",
+        "digest": _digest(b"unrelated"),
+    }
+    malformed[field] = value
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.release_payload["assets"].append(malformed)
+
+    await _assert_direct_and_endpoint_rejection(reader)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("id", True),
+        ("status", 1),
+        ("conclusion", []),
+        ("event", {}),
+        ("path", None),
+        ("head_branch", 1),
+        ("head_sha", []),
+        ("name", {}),
+        ("updated_at", None),
+        ("repository", {"full_name": 1}),
+        ("head_repository", {"full_name": []}),
+    ],
+)
+async def test_every_consumed_qualification_run_field_is_checked_for_mixed_members(field, value):
+    release, evidence, run = _candidate()
+    malformed = {**run, field: value}
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.runs_payload.append(malformed)
+
+    await _assert_direct_and_endpoint_rejection(reader)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("id", True),
+        ("name", 1),
+        ("expired", 0),
+        ("size_in_bytes", True),
+        ("archive_download_url", []),
+    ],
+)
+async def test_every_consumed_qualification_artifact_field_is_checked_for_mixed_members(field, value):
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    malformed = {**reader.artifacts_payload[0], field: value}
+    reader.artifacts_payload.append(malformed)
+
+    await _assert_direct_and_endpoint_rejection(reader)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("collection", "value"),
     [
@@ -280,7 +458,7 @@ async def test_uncompleted_qualification_run_fails_before_any_mutation_can_begin
     release, evidence, run = _candidate()
     run.pop("status")
 
-    with pytest.raises(QualifiedBetaAdmissionError, match="no fresh trusted qualification run"):
+    with pytest.raises(QualifiedBetaAdmissionError, match="qualification runs are invalid"):
         await build_qualified_beta_manifest(
             TAG,
             reader=FakeQualifiedBetaReader(release, evidence, run),
@@ -311,6 +489,7 @@ async def test_release_asset_replacement_with_self_consistent_release_evidence_i
             "name": f"desktop-qualification-evidence-{TAG}",
             "expired": False,
             "size_in_bytes": len(_artifact_archive(trusted_evidence)),
+            "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/456/zip",
         }
     ]
     reader.artifact_downloads[456] = _artifact_archive(trusted_evidence)
@@ -431,10 +610,30 @@ async def test_corrupted_deflated_artifact_returns_typed_rejection_without_post_
     [
         [],
         [
-            {"id": 456, "name": f"desktop-qualification-evidence-{TAG}", "expired": False, "size_in_bytes": 1},
-            {"id": 457, "name": f"desktop-qualification-evidence-{TAG}", "expired": False, "size_in_bytes": 1},
+            {
+                "id": 456,
+                "name": f"desktop-qualification-evidence-{TAG}",
+                "expired": False,
+                "size_in_bytes": 1,
+                "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/456/zip",
+            },
+            {
+                "id": 457,
+                "name": f"desktop-qualification-evidence-{TAG}",
+                "expired": False,
+                "size_in_bytes": 1,
+                "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/457/zip",
+            },
         ],
-        [{"id": 456, "name": f"desktop-qualification-evidence-{TAG}", "expired": True, "size_in_bytes": 1}],
+        [
+            {
+                "id": 456,
+                "name": f"desktop-qualification-evidence-{TAG}",
+                "expired": True,
+                "size_in_bytes": 1,
+                "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/456/zip",
+            }
+        ],
     ],
 )
 async def test_missing_ambiguous_or_expired_qualification_artifact_fails_closed(artifacts):
