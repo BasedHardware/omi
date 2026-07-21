@@ -714,7 +714,10 @@ def get_dg_budget_status(uid: str) -> Dict[str, Any]:
         result['used_ms'] = used_ms
         result['remaining_ms'] = remaining
         result['exhausted'] = remaining <= 0
-        result['resets_at'] = tomorrow.isoformat() + 'Z'
+        # tomorrow is tz-aware, so isoformat() already yields a "+00:00" offset; append the
+        # Zulu suffix by replacing that offset rather than concatenating (which would emit an
+        # invalid "…+00:00Z" that datetime.fromisoformat rejects). Matches models/integrations._serialize_datetime.
+        result['resets_at'] = tomorrow.isoformat().replace('+00:00', 'Z')
     except Exception as e:
         logger.error(f'fair_use: Redis error reading DG budget for {uid}: {e}')
 
