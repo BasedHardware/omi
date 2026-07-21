@@ -2015,10 +2015,18 @@ def _format_dart_tree(root: Path) -> None:
     dart_dir = root / 'dart'
     if not dart_dir.exists():
         return
+    import os
     import shutil
     import subprocess
 
-    dart = shutil.which('dart')
+    dart = None
+    flutter_root = os.environ.get('FLUTTER_ROOT')
+    if flutter_root:
+        candidate = Path(flutter_root) / 'bin' / 'dart'
+        if candidate.exists():
+            dart = str(candidate)
+    if dart is None:
+        dart = shutil.which('dart')
     if not dart:
         return
     targets = [str(path) for path in dart_dir.rglob('*.dart') if path.is_file()]
@@ -2152,12 +2160,20 @@ def main(argv: list[str] | None = None) -> int:
         # exactly, and require committed Dart to already be format-clean.
         dirty = [item for item in dirty if not item.split(' ', 1)[-1].startswith('dart/')]
         dart_dir = out_root / 'dart'
-        if dart_dir.exists() and shutil.which('dart'):
+        dart_bin = None
+        flutter_root = __import__('os').environ.get('FLUTTER_ROOT')
+        if flutter_root:
+            candidate = Path(flutter_root) / 'bin' / 'dart'
+            if candidate.exists():
+                dart_bin = str(candidate)
+        if dart_bin is None:
+            dart_bin = shutil.which('dart')
+        if dart_dir.exists() and dart_bin:
             dart_files = [str(path) for path in dart_dir.rglob('*.dart') if path.is_file()]
             if dart_files:
                 proc = subprocess.run(
                     [
-                        'dart',
+                        dart_bin,
                         'format',
                         '--line-length',
                         '120',
