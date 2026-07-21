@@ -43,8 +43,9 @@ icon_locations = {
     "Applications": (455, 175),
 }
 
-# Hide extension for the app
-hide_extensions = [app_name + ".app"]
+# Hiding the extension attaches com.apple.FinderInfo to the signed app bundle,
+# which makes codesign --deep --strict reject the app copied into the DMG.
+hide_extensions = []
 
 # Volume icon
 if icon_path:

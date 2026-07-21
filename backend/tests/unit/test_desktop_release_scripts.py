@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import runpy
 import tempfile
 
 import pytest
@@ -12,6 +13,7 @@ PROMOTE_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_b
 PROMOTE_PROD_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_promote_prod.yml"
 QUALIFY_BETA_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "desktop_qualify_beta.yml"
 CODEMAGIC_CONFIG = REPO_ROOT / "codemagic.yaml"
+DMGBUILD_SETTINGS = REPO_ROOT / "desktop" / "macos" / "dmg-assets" / "dmgbuild_settings.py"
 QUALIFICATION_ADMISSION = SCRIPTS / "desktop_qualification_admission.py"
 
 
@@ -250,6 +252,15 @@ def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
     assert 'codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"' in workflow
     assert 'dmg_app="$DMG_MOUNTPOINT/Omi.app"' in smoke
     assert "DMG-contained Omi.app failed deep strict codesign verification" in smoke
+
+
+def test_dmgbuild_does_not_attach_finder_info_to_the_signed_app():
+    settings = runpy.run_path(
+        str(DMGBUILD_SETTINGS),
+        init_globals={"defines": {"app_name": "Omi", "app_path": "/tmp/Omi.app"}},
+    )
+
+    assert settings.get("hide_extensions", []) == []
 
 
 def test_universal_release_stages_and_smokes_both_sharp_architectures():
