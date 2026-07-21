@@ -705,7 +705,7 @@ final class DesktopAutomationActionRegistry {
   func registerBuiltins() {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
-
+    registerOpenOmiShortcutActionsForQA()
     register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"

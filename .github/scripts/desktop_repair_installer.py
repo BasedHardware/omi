@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 RELEASE_ID_RE = re.compile(r"^v\d+\.\d+(?:\.\d+)?\+\d+-macos$")
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
-SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
+SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$", re.IGNORECASE)
 
 
 def _required_string(data: dict[str, Any], key: str) -> str:
@@ -45,9 +45,9 @@ def build_repair_bundle(manifest: dict[str, Any], bucket: str) -> dict[str, Any]
     if not isinstance(build_number, int) or isinstance(build_number, bool) or build_number <= 0:
         raise ValueError("build_number must be a positive integer")
 
-    source_sha = _required_string(manifest, "source_sha")
+    source_sha = _required_string(manifest, "app_source_sha")
     if not SHA40_RE.fullmatch(source_sha):
-        raise ValueError("source_sha has an invalid digest")
+        raise ValueError("app_source_sha has an invalid digest")
     dmg_sha256 = _required_string(manifest, "dmg_sha256")
     if not SHA256_RE.fullmatch(dmg_sha256):
         raise ValueError("dmg_sha256 has an invalid digest")

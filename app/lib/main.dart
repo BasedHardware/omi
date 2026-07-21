@@ -38,7 +38,6 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -158,27 +157,10 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
-  // TestFlight environment detection — must be after SharedPreferencesUtil.init()
-  // so the user's opt-in preference can be read. Staging is iOS-TestFlight-only
-  // and opt-in (default production); Android and production-store builds always
-  // stay on prod — isTestFlight() is false off iOS, and startup routing pins the
-  // base URL for every production-family build before this override can run.
+  // TestFlight remains a distribution/telemetry signal; production-family
+  // builds always use the established production backend.
   if (F.env == Environment.prod) {
-    final isTestFlight = await EnvironmentDetector.isTestFlight();
-    if (isTestFlight) {
-      Env.isTestFlight = true;
-      if (SharedPreferencesUtil().testFlightUseStagingApi) {
-        final staging = Env.stagingApiUrl;
-        if (staging != null) {
-          Env.overrideApiBaseUrl(staging);
-          debugPrint('TestFlight detected: using staging backend ($staging)');
-        } else {
-          debugPrint('TestFlight detected: staging preferred but STAGING_API_URL not configured, using production');
-        }
-      } else {
-        debugPrint('TestFlight detected: user chose production backend');
-      }
-    }
+    Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
@@ -416,41 +398,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
-              Widget content;
-              if (Env.isUsingStagingApi) {
-                final topPadding = MediaQuery.of(context).padding.top;
-                content = Column(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        MyApp.navigatorKey.currentState?.push(
-                          MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
-                        );
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.only(top: topPadding + 4, bottom: 4),
-                        color: Colors.orange.shade800,
-                        child: Text(
-                          context.l10n.staging.toUpperCase(),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
-                    ),
-                  ],
-                );
-              } else {
-                content = child!;
-              }
+              final content = child!;
               return PlatformService.isIOS && Env.posthogApiKey != null
                   ? RageClickContextTracker(child: content)
                   : content;

@@ -55,7 +55,7 @@ jobs:
       - name: Checkout promotion controls
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ inputs.release_tag }}
           fetch-depth: 0
 
       - name: Generate Omi Bot token
@@ -84,14 +84,10 @@ jobs:
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
           [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
           run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
-          test "$(jq -r .conclusion <<<"$run")" = success
-          test "$(jq -r .repository.full_name <<<"$run")" = "$REPO"
-          test "$(jq -r .head_repository.full_name <<<"$run")" = "$REPO"
-          test "$(jq -r .event <<<"$run")" = workflow_dispatch
-          test "$(jq -r .path <<<"$run")" = .github/workflows/desktop_qualify_beta.yml
-          test "$(jq -r .head_branch <<<"$run")" = main
-          test "$(jq -r .name <<<"$run")" = 'Qualify Desktop Beta Candidate'
-          test "$(jq -r .head_sha <<<"$run")" = "$TARGET_SHA"
+          printf '%s\n' "$run" > /tmp/desktop-qualification-run.json
+          python3 .github/scripts/desktop_qualification_admission.py \
+            --run-json /tmp/desktop-qualification-run.json \
+            --repository "$REPO" --release-tag "$RELEASE_TAG" --candidate-sha "$TARGET_SHA"
       - name: Google Auth
         uses: google-github-actions/auth@v3
         with:

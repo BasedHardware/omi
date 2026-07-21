@@ -17,8 +17,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-ARTIFACTS = ("Omi.zip", "Omi.dmg", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg")
-ZIP_SIGNATURES = {"Omi.zip": "edSignature", "Omi.Beta.zip": "betaEdSignature"}
+ARTIFACTS = ("Omi.zip", "omi.dmg")
+ZIP_SIGNATURES = {"Omi.zip": "edSignature"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -55,7 +55,7 @@ def file_sha256(path: Path) -> str:
 
 
 def build_evidence(
-    release: dict[str, Any], release_tag: str, source_sha: str, files: dict[str, Path]
+    release: dict[str, Any], release_tag: str, source_sha: str, files: dict[str, Path], qualification_run_id: int | None = None
 ) -> dict[str, Any]:
     if release.get("tagName") != release_tag:
         _fail("release ID does not match requested tag")
@@ -63,16 +63,17 @@ def build_evidence(
         _fail("source SHA is not an exact 40-character SHA")
     gate = files.pop("__candidate_gate__")
     candidate_gate = json.loads(gate.read_text(encoding="utf-8"))
-    if candidate_gate.get("passed") is not True or candidate_gate.get("release_tag") != release_tag:
+    if (
+        candidate_gate.get("passed") is not True
+        or candidate_gate.get("release_tag") != release_tag
+        or candidate_gate.get("source_sha") != source_sha
+    ):
         _fail("was not created after the passing candidate gate")
     metadata = _metadata(str(release.get("body") or ""))
     artifacts: dict[str, dict[str, str]] = {}
-    stable_dmg = [name for name in ("Omi.dmg", "omi.dmg") if name in files]
-    if len(stable_dmg) != 1:
-        _fail("requires exactly one stable DMG file")
-    required = {"Omi.zip", stable_dmg[0], "Omi.Beta.zip", "omi-beta.dmg"}
+    required = {"Omi.zip", "omi.dmg"}
     if set(files) != required:
-        _fail("does not contain all four qualified artifacts")
+        _fail("does not contain the exact qualified Omi.zip and omi.dmg")
     for name, path in files.items():
         if not path.is_file():
             _fail(f"is missing downloaded {name}")
@@ -89,7 +90,7 @@ def build_evidence(
                 _fail(f"is missing {signature_key}")
             item["signature"] = signature
         artifacts[name] = item
-    return {
+    evidence = {
         "schema_version": 1,
         "release_id": release_tag,
         "source_sha": source_sha,
@@ -106,6 +107,11 @@ def build_evidence(
         },
         "artifacts": artifacts,
     }
+    if qualification_run_id is not None:
+        if qualification_run_id <= 0:
+            _fail("has an invalid qualification run identity")
+        evidence["qualification_run_id"] = qualification_run_id
+    return evidence
 
 
 def verify_evidence(
@@ -119,7 +125,11 @@ def verify_evidence(
         _fail("release ID or source SHA does not match the trusted run")
     source_qualification = evidence.get("source_qualification")
     signed_artifacts = evidence.get("signed_artifact_verification")
-    if not isinstance(source_qualification, dict) or source_qualification.get("passed") is not True or source_qualification.get("tier") != "T2":
+    if (
+        not isinstance(source_qualification, dict)
+        or source_qualification.get("passed") is not True
+        or source_qualification.get("tier") != "T2"
+    ):
         _fail("does not prove source-built named-bundle T2 qualification")
     if not isinstance(signed_artifacts, dict) or signed_artifacts.get("passed") is not True:
         _fail("does not prove exact signed artifact verification")
@@ -151,6 +161,7 @@ def main() -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--evidence", required=True)
     parser.add_argument("--candidate-gate")
+    parser.add_argument("--qualification-run-id", type=int)
     parser.add_argument("--asset", action="append", default=[])
     args = parser.parse_args()
     release = json.loads(Path(args.release_json).read_text(encoding="utf-8"))
@@ -164,7 +175,7 @@ def main() -> int:
         if not args.candidate_gate:
             raise SystemExit("build requires --candidate-gate")
         files["__candidate_gate__"] = Path(args.candidate_gate)
-        result = build_evidence(release, args.release_tag, args.source_sha, files)
+        result = build_evidence(release, args.release_tag, args.source_sha, files, args.qualification_run_id)
         Path(args.evidence).write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     else:
         evidence = json.loads(Path(args.evidence).read_text(encoding="utf-8"))

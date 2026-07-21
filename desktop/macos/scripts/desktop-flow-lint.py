@@ -24,6 +24,7 @@ FLOWS_DIR = DESKTOP_DIR / "e2e" / "flows"
 BRIDGE_SOURCE = DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift"
 REWIND_GAUNTLET_SOURCE = DESKTOP_DIR / "Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
 HUB_SOURCE = DESKTOP_DIR / "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
+OPEN_OMI_SHORTCUT_QA_SOURCE = DESKTOP_DIR / "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift"
 VIEW_MODEL_ACTION_SOURCES = (
     DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
@@ -54,7 +55,13 @@ def fail(message: str) -> None:
 def registered_actions() -> set[str]:
     actions: set[str] = set()
     pattern = re.compile(r'name:\s*"([^"]+)"')
-    for path in (BRIDGE_SOURCE, REWIND_GAUNTLET_SOURCE, HUB_SOURCE, *VIEW_MODEL_ACTION_SOURCES):
+    for path in (
+        BRIDGE_SOURCE,
+        REWIND_GAUNTLET_SOURCE,
+        HUB_SOURCE,
+        OPEN_OMI_SHORTCUT_QA_SOURCE,
+        *VIEW_MODEL_ACTION_SOURCES,
+    ):
         if not path.is_file():
             fail(f"missing automation source: {path}")
         actions.update(pattern.findall(path.read_text(encoding="utf-8")))

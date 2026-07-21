@@ -131,9 +131,8 @@ final class ClientDeviceService {
   private var usesUserDefaultsInstallId: Bool {
     guard let bundleIdentifier else { return false }
     // Any non-production com.omi.* bundle (desktop-dev + omi-*) — avoid Keychain.
-    // Production-family bundles (stable + Omi Beta) keep the durable Keychain id.
     return bundleIdentifier.hasPrefix("com.omi.")
-      && !AppBuild.productionFamilyBundleIdentifiers.contains(bundleIdentifier)
+      && bundleIdentifier != AppBuild.productionBundleIdentifier
   }
 
   private func loadOrCreateDevInstallId() -> String {

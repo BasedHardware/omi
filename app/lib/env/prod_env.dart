@@ -21,10 +21,6 @@ final class ProdEnv implements EnvFields {
   final String? apiBaseUrl = _ProdEnv.apiBaseUrl;
 
   @override
-  @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
-  final String? stagingApiUrl = _ProdEnv.stagingApiUrl;
-
-  @override
   @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
   final String? googleMapsApiKey = _ProdEnv.googleMapsApiKey;
 
