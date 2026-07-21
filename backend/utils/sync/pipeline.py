@@ -95,6 +95,7 @@ from utils.other.storage import (
     upload_audio_chunk,
     upload_syncing_temporal_file,
 )
+from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
@@ -154,6 +155,27 @@ def _bounded_sync_lane(lane: str | None) -> str:
 def _bounded_exception_type(error: BaseException) -> str:
     name = error.__class__.__name__
     return name if name.replace('_', '').isalnum() and len(name) <= 64 else 'Exception'
+
+
+async def _resolve_fair_use_soft_cap_plan(uid: str):
+    """Return the stored plan, falling back to the default soft-cap tier on read failure."""
+    try:
+        fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+        return fair_use_sub.plan if fair_use_sub else None
+    except Exception as e:
+        logger.warning(
+            'event=sync_fair_use outcome=subscription_plan_fallback exception_type=%s',
+            _bounded_exception_type(e),
+        )
+        record_fallback(
+            component='other',
+            from_mode='subscription_plan',
+            to_mode='default_cap',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
 
 
 def _bounded_sync_failure_reason(reason: str | None) -> str:
@@ -1037,9 +1059,9 @@ def process_segment(
         # attach segments to it directly instead of searching by timestamp.
         if target_conversation_id:
             closest_memory = conversations_db.get_conversation(uid, target_conversation_id)
-            if not closest_memory:
+            if not conversations_db.eligible_merge_target(closest_memory):
                 logger.warning(
-                    f'Target conversation {target_conversation_id} not found, falling back to timestamp lookup'
+                    f'Target conversation {target_conversation_id} not found or deleted, falling back to timestamp lookup'
                 )
                 closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         else:
@@ -1789,8 +1811,11 @@ async def _run_full_pipeline_background_async(
                         raise_on_error=bool(content_id),
                     )
                 if sync_lane == SyncLane.FRESH.value:
+                    fair_use_plan = await _resolve_fair_use_soft_cap_plan(uid)
                     speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
-                    triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
+                    triggered_caps = await run_blocking(
+                        db_executor, check_soft_caps, uid, speech_totals=speech_totals, plan=fair_use_plan
+                    )
                     if triggered_caps:
                         logger.info(
                             'event=sync_fair_use outcome=soft_cap_triggered cap_count=%d',

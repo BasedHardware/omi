@@ -35,6 +35,13 @@ export interface QueryMessage extends ProtocolEnvelope {
   expectedContextSnapshotGeneration?: number;
   expectedContextRendererFingerprint?: string;
   expectedCapabilityVersion?: string;
+  /**
+   * Per-turn reasoning-effort lane: "adaptive" for typed chat (model decides
+   * its own thinking depth), "fast" for PTT/voice (speed-optimized, no
+   * thinking). Relayed opaquely to the desktop backend as the
+   * x-omi-reasoning-effort header; never interpreted by the runtime.
+   */
+  reasoningEffort?: string;
 }
 
 export interface QueryAttachment {
@@ -631,7 +638,7 @@ export interface RuntimeFailurePayload {
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
-  status: "started" | "completed" | "failed";
+  status: "started" | "progress" | "completed" | "failed";
   toolUseId?: string;
   input?: Record<string, unknown>;
 }

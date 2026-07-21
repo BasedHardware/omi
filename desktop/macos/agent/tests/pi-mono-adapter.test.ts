@@ -120,6 +120,37 @@ function makeErrorTurnEndEvent(errorMessage: string) {
 }
 
 describe("PiMonoAdapter prompt correlation", () => {
+  it("forwards tool execution updates as content-free progress activity", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "write the document" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => "",
+    );
+
+    (adapter as any).handleEvent(JSON.stringify({
+      type: "tool_execution_update",
+      toolName: "write",
+      toolCallId: "tool-write-1",
+      partialResult: { content: [{ type: "text", text: "private document content" }] },
+    }));
+
+    expect(events).toEqual([{
+      type: "tool_activity",
+      name: "write",
+      status: "progress",
+      toolUseId: "tool-write-1",
+    }]);
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await expect(prompt).resolves.toMatchObject({ text: "done" });
+  });
+
   it("routes current public web requests for both coordinator and leaf sessions", async () => {
     const { adapter } = createAdapter();
     seedSessions(adapter, "main", "leaf");
@@ -354,7 +385,7 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
     const relayContext = JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8"));
-    expect(relayContext).toEqual({ capabilityRef: "cap_runtime" });
+    expect(relayContext).toEqual({ capabilityRef: "cap_runtime", requestId: "request-runtime" });
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
     await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });

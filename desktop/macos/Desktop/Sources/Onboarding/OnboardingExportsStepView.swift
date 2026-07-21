@@ -12,6 +12,7 @@ struct OnboardingExportsStepView: View {
 
   @State private var statuses: [MemoryExportDestination: MemoryExportStatus] = [:]
   @State private var activeDestination: MemoryExportDestination?
+  @State private var showMore = false
 
   var body: some View {
     OnboardingStepScaffold(
@@ -19,9 +20,10 @@ struct OnboardingExportsStepView: View {
       stepIndex: stepIndex,
       totalSteps: totalSteps,
       eyebrow: "",
-      title: "Put your memories where you work.",
-      description: "Connect the tools where you want Omi context to live.",
+      title: "Use Omi memory where you work.",
+      description: "Export Omi context to the tools you already use.",
       rightPaneFooterText: summaryText,
+      graphLeading: true,
       showsSkip: true,
       onSkip: onSkip,
       onForceComplete: onForceComplete
@@ -29,15 +31,16 @@ struct OnboardingExportsStepView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         destinationsList
 
-        if let activeDestination {
-          exportPanel(for: activeDestination)
-        }
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
 
-        Button("Continue") {
-          onContinue()
+          Button("Continue") {
+            onContinue()
+          }
+          .buttonStyle(OmiButtonStyle(.primary))
+          .keyboardShortcut(.defaultAction)
         }
-        .buttonStyle(OmiButtonStyle(.primary))
-        .keyboardShortcut(.defaultAction)
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {
@@ -45,23 +48,58 @@ struct OnboardingExportsStepView: View {
         statuses = await MemoryExportService.shared.allStatuses()
       }
     }
+    .dismissableSheet(item: $activeDestination) { destination in
+      // Same end-to-end MCP connect flow as the main-app connect screen:
+      // grouped picker for Claude / Claude Code and ChatGPT / Codex, full
+      // destination sheet for everything else.
+      ConnectDestinationSheet(
+        destination: destination,
+        statuses: $statuses,
+        onDismiss: { activeDestination = nil }
+      )
+      .frame(width: 520, height: 620)
+    }
   }
 
-  private var onboardingDestinations: [MemoryExportDestination] {
-    MemoryExportDestination.allCases.filter { $0.supportsMemoryPack || $0.supportsAgentSetup }
+  /// Mirrors the main-app "Use omi memory anywhere" stack: combined rows for
+  /// Claude / Claude Code and ChatGPT / Codex, then the other MCP destinations.
+  private var primaryEntries: [OnboardingExportEntry] {
+    [
+      OnboardingExportEntry(destination: .notion),
+      OnboardingExportEntry(destination: .obsidian),
+      OnboardingExportEntry(
+        destination: .claudeCode, titleOverride: "Claude / Claude Code", brandOverride: .claude,
+        connectionGroup: [.claude, .claudeCode]),
+      OnboardingExportEntry(
+        destination: .chatgpt, titleOverride: "ChatGPT / Codex",
+        connectionGroup: [.chatgpt, .codex]),
+      OnboardingExportEntry(destination: .openclaw),
+      OnboardingExportEntry(destination: .hermes),
+    ]
+  }
+
+  private var moreEntries: [OnboardingExportEntry] {
+    [
+      OnboardingExportEntry(destination: .claude),
+      OnboardingExportEntry(destination: .codex),
+      OnboardingExportEntry(destination: .gemini),
+      OnboardingExportEntry(destination: .agents),
+    ]
+  }
+
+  private var visibleEntries: [OnboardingExportEntry] {
+    showMore ? primaryEntries + moreEntries : primaryEntries
   }
 
   private var destinationsList: some View {
     VStack(alignment: .leading, spacing: 0) {
-      ForEach(Array(onboardingDestinations.enumerated()), id: \.element.id) {
-        index, destination in
-        exportRow(destination: destination)
-        if index < onboardingDestinations.count - 1 {
-          Divider()
-            .padding(.leading, 66)
-            .background(Color.white.opacity(0.05))
-        }
+      ForEach(visibleEntries) { entry in
+        exportRow(entry: entry)
+        Divider()
+          .padding(.leading, 66)
+          .background(Color.white.opacity(0.05))
       }
+      moreRow
     }
     .background(
       RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -73,18 +111,47 @@ struct OnboardingExportsStepView: View {
     )
   }
 
-  private func exportRow(destination: MemoryExportDestination) -> some View {
+  private var moreRow: some View {
+    Button {
+      showMore.toggle()
+    } label: {
+      HStack(alignment: .center, spacing: OmiSpacing.md) {
+        Image(systemName: showMore ? "minus" : "plus")
+          .font(.system(size: 15, weight: .semibold))
+          .foregroundColor(OmiColors.textSecondary)
+          .frame(width: 38, height: 38)
+          .background(
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+              .fill(OmiColors.backgroundPrimary)
+          )
+
+        Text(showMore ? "Less" : "More")
+          .font(.system(size: 15, weight: .semibold))
+          .foregroundColor(OmiColors.textPrimary)
+
+        Spacer(minLength: 12)
+      }
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.md)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func exportRow(entry: OnboardingExportEntry) -> some View {
+    let destination = entry.destination
     let status =
       statuses[destination]
       ?? MemoryExportStatus(
         exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false, hasConnection: false)
-    let metrics = exportMetrics(for: destination, status: status)
+    let groupConnected = entry.connectionGroup.contains { statuses[$0]?.hasConnection == true }
+    let metrics = exportMetrics(for: destination, status: status, groupConnected: groupConnected)
 
     return HStack(alignment: .center, spacing: OmiSpacing.md) {
-      ConnectorBrandIcon(brand: destination.brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
+      ConnectorBrandIcon(brand: entry.brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-        Text(destination.title)
+        Text(entry.title)
           .font(.system(size: 15, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
         Text(metrics)
@@ -94,8 +161,8 @@ struct OnboardingExportsStepView: View {
 
       Spacer(minLength: 12)
 
-      Button(activeDestination == destination ? "Close" : "Connect") {
-        activeDestination = activeDestination == destination ? nil : destination
+      Button("Connect") {
+        activeDestination = destination
       }
       .buttonStyle(.plain)
       .font(.system(size: 13, weight: .semibold))
@@ -115,18 +182,14 @@ struct OnboardingExportsStepView: View {
     .padding(.vertical, OmiSpacing.md)
   }
 
-  private func exportPanel(for destination: MemoryExportDestination) -> some View {
-    OnboardingInlineExportPanel(
-      destination: destination,
-      statuses: $statuses,
-      onClose: { activeDestination = nil }
-    )
-  }
-
   private func exportMetrics(
     for destination: MemoryExportDestination,
-    status: MemoryExportStatus
+    status: MemoryExportStatus,
+    groupConnected: Bool = false
   ) -> String {
+    if destination.supportsMCP {
+      return status.hasConnection || groupConnected ? "Connected — live memory" : "Live connection"
+    }
     if status.exportedCount > 0 {
       return "\(status.exportedCount.formatted()) memories exported"
     }
@@ -143,164 +206,13 @@ struct OnboardingExportsStepView: View {
   }
 }
 
-private struct OnboardingInlineExportPanel: View {
+private struct OnboardingExportEntry: Identifiable {
   let destination: MemoryExportDestination
-  @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
-  let onClose: () -> Void
+  var titleOverride: String? = nil
+  var brandOverride: ConnectorBrand? = nil
+  var connectionGroup: [MemoryExportDestination] = []
 
-  @StateObject private var model = MemoryExportDestinationSheetModel()
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      Text(destination.description)
-        .font(.system(size: 13))
-        .foregroundColor(OmiColors.textSecondary)
-
-      switch destination {
-      case .notion:
-        inlineInfoCard(
-          "Omi copies a ready-to-paste memory page, saves a backup in Downloads, and opens Notion."
-        )
-
-      case .obsidian:
-        inlineInfoCard(
-          model.obsidianVaultPath.isEmpty
-            ? "Pick your Obsidian vault once. Omi will keep refreshing `Omi/Memories.md` there."
-            : model.obsidianVaultPath
-        )
-
-        Button(model.obsidianVaultPath.isEmpty ? "Choose vault" : "Change vault") {
-          model.pickObsidianVault()
-        }
-        .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
-        .font(.system(size: 12, weight: .medium))
-
-      case .chatgpt, .claude, .gemini:
-        inlineInfoCard(
-          "Omi copies the prompt and memory pack together, saves a Markdown backup, and opens \(destination.title)."
-        )
-
-      case .agents:
-        inlineInfoCard(
-          "Omi copies one setup prompt for your agent. It includes the connection keys and a short guide the agent can save for later."
-        )
-
-      case .claudeCode, .codex, .openclaw, .hermes:
-        inlineInfoCard(
-          "Connect \(destination.title) over MCP from Apps after onboarding.")
-      }
-
-      HStack(spacing: OmiSpacing.md) {
-        Button(model.isRunning ? runningLabel : idleLabel) {
-          Task {
-            if destination.supportsAgentSetup,
-              let updatedStatus = await model.copyAgentSetupPrompt()
-            {
-              statuses[destination] = updatedStatus
-            } else if let updatedStatus = await model.run(destination: destination) {
-              statuses[destination] = updatedStatus
-            }
-          }
-        }
-        .buttonStyle(OmiButtonStyle(.primary))
-        .disabled(model.isRunning || model.isLoadingMCPKey)
-
-        Button("Cancel") {
-          onClose()
-        }
-        .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
-        .font(.system(size: 13, weight: .medium))
-      }
-
-      if let statusMessage = model.statusMessage {
-        Text(statusMessage)
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(OmiColors.success)
-      }
-
-      if let errorMessage = model.errorMessage {
-        Text(UserFacingErrorPresentation.message(from: errorMessage, while: .memoryExport))
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(OmiColors.warning)
-      }
-    }
-    .padding(OmiSpacing.lg)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-    )
-    .task {
-      await model.loadConfiguration()
-    }
-  }
-
-  private var runningLabel: String {
-    switch destination {
-    case .notion: return "Preparing…"
-    case .obsidian: return "Exporting…"
-    case .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes: return "Preparing…"
-    }
-  }
-
-  private var idleLabel: String {
-    switch destination {
-    case .notion:
-      return "Copy & open"
-    case .obsidian:
-      return model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export"
-    case .agents:
-      return "Copy prompt"
-    case .chatgpt, .claude, .gemini, .claudeCode, .codex, .openclaw, .hermes:
-      return "Copy & open"
-    }
-  }
-
-  private func inlineTextField(
-    _ placeholder: String,
-    text: Binding<String>,
-    secure: Bool = false
-  ) -> some View {
-    Group {
-      if secure {
-        SecureField(placeholder, text: text)
-      } else {
-        TextField(placeholder, text: text)
-      }
-    }
-    .textFieldStyle(.plain)
-    .font(.system(size: 13))
-    .foregroundColor(OmiColors.textPrimary)
-    .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.md)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-    )
-  }
-
-  private func inlineInfoCard(_ text: String) -> some View {
-    Text(text)
-      .font(.system(size: 12))
-      .foregroundColor(OmiColors.textTertiary)
-      .padding(OmiSpacing.md)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-              .stroke(Color.white.opacity(0.08), lineWidth: 1)
-          )
-      )
-  }
+  var id: String { destination.rawValue }
+  var title: String { titleOverride ?? destination.title }
+  var brand: ConnectorBrand { brandOverride ?? destination.brand }
 }

@@ -39,7 +39,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(messages[3].contentBlocks.spawnedAgentIDs, [subagentID])
   }
 
-  func testMainChatHidesCompletedNonAgentToolLogsButKeepsAgentLinks() {
+  func testMainChatKeepsCompletedNonAgentToolLogsAndAgentLinks() {
     let subagentID = UUID()
     let groups = ContentBlockGroup.visibleChatGroups(
       [
@@ -71,7 +71,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
     guard case .toolCalls(_, let calls) = groups[1] else {
       return XCTFail("expected a spawned-agent link group")
     }
-    XCTAssertEqual(calls.count, 1)
+    XCTAssertEqual(calls.count, 2)
+    XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
     XCTAssertEqual(calls.spawnedAgentIDs, [subagentID])
   }
 
@@ -242,7 +243,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertFalse(projected[0].text.localizedCaseInsensitiveContains(lowercasedPillID))
   }
 
-  func testMainChatKeepsOnlyInFlightNonAgentToolsAfterAssistantTextSettles() {
+  func testMainChatKeepsCompletedAndInFlightNonAgentToolsAfterAssistantTextSettles() {
     let groups = ContentBlockGroup.visibleChatGroups(
       [
         .toolCall(id: "tool_1", name: "search_conversations", status: .completed, output: "done"),
@@ -257,11 +258,12 @@ final class ChatTimelineContinuityTests: XCTestCase {
     guard case .toolCalls(_, let calls) = groups[0],
       case .toolCall(_, let name, let status, _, _, _) = calls[0]
     else {
-      return XCTFail("expected only the active progress tool")
+      return XCTFail("expected the complete tool-progress trace")
     }
-    XCTAssertEqual(calls.count, 1)
-    XCTAssertEqual(name, "execute_sql")
-    XCTAssertEqual(status, .running)
+    XCTAssertEqual(calls.count, 2)
+    XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
+    XCTAssertEqual(name, "search_conversations")
+    XCTAssertEqual(status, .completed)
   }
 
   func testMainChatKeepsActiveToolProgressAlongsideUnmaterializedSpawnLink() {
@@ -286,7 +288,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(calls.map(\.id), ["spawn_1", "web_1"])
   }
 
-  func testMainChatHidesToolProgressWhenItsLifecycleBecomesTerminal() {
+  func testMainChatKeepsToolProgressWhenItsLifecycleBecomesTerminal() {
     let groups = ContentBlockGroup.visibleChatGroups(
       [
         .toolCall(id: "tool_1", name: "WebSearch", status: .completed, output: "done"),
@@ -295,7 +297,11 @@ final class ChatTimelineContinuityTests: XCTestCase {
       isStreaming: false
     )
 
-    XCTAssertTrue(groups.isEmpty)
+    XCTAssertEqual(groups.count, 1)
+    guard case .toolCalls(_, let calls) = groups[0] else {
+      return XCTFail("expected terminal tool progress to remain visible")
+    }
+    XCTAssertEqual(calls.map(\.id), ["tool_1", "tool_2"])
   }
 
   func testBackgroundAgentSummaryParsesLinkedAndLegacyCompletionText() {

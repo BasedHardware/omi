@@ -9767,4 +9767,23 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'اپنا Ray-Ban Meta مائیکروفون منتخب کریں';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'اپنے چشمے کا Bluetooth مائیکروفون منتخب کریں۔ Omi کے استعمال کے دوران موسیقی رک جاتی ہے۔';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'کوئی Bluetooth مائیکروفون نہیں ملا۔ iPhone کی ترتیبات میں چشمہ منسلک کریں، پھر دوبارہ کوشش کریں۔';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth مائیکروفون لوڈ نہیں ہو سکے۔ چیک کریں کہ Bluetooth آن ہے، پھر دوبارہ کوشش کریں۔';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'اس مائیکروفون سے منسلک نہیں ہو سکے۔ یقینی بنائیں کہ یہ iPhone کی ترتیبات میں منسلک ہے۔';
 }

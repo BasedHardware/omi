@@ -10728,5 +10728,10 @@
     "deviceStorageFree": "{free} prosto",
     "deviceStorageNearlyFull": "Naprava je skoraj polna — sinhronizirajte za sprostitev prostora.",
     "phoneMicOfflineFallbackMessage": "Ni povezave – snemanje poteka lokalno. Prepis bo opravljen, ko boste spet povezani.",
-    "dataEncryptedBanner": "Vaši podatki so privzeto zaščiteni z močnim šifriranjem, vi pa nadzorujete, kako so shranjeni in uporabljeni."
+    "dataEncryptedBanner": "Vaši podatki so privzeto zaščiteni z močnim šifriranjem, vi pa nadzorujete, kako so shranjeni in uporabljeni.",
+    "rayBanMetaMicPickerTitle": "Izberite mikrofon Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Izberite Bluetooth mikrofon očal. Glasba se začasno ustavi, ko ga uporablja Omi.",
+    "rayBanMetaMicPickerEmpty": "Ni bilo mogoče najti mikrofonov Bluetooth. Povežite očala v nastavitvah iPhona in poskusite znova.",
+    "rayBanMetaMicPickerLoadError": "Mikrofonov Bluetooth ni bilo mogoče naložiti. Preverite, ali je Bluetooth vklopljen, in poskusite znova.",
+    "rayBanMetaMicPickerConnectError": "S tem mikrofonom se ni bilo mogoče povezati. Prepričajte se, da je povezan v nastavitvah iPhona."
 }

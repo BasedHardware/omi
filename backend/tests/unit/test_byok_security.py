@@ -75,6 +75,12 @@ def _make_db_fakes() -> dict:
 @pytest.fixture(scope="module", autouse=True)
 def _byok_isolation():
     with stub_modules(_make_db_fakes()):
+        # Warm the OpenAI client construction path once (SDK import/init) so the
+        # per-test fast-unit CPU-time guard doesn't charge cold-start cost to the
+        # first cache-routing test. Uses a distinct key so no assertion is affected.
+        from utils.llm.clients import _cached_openai_chat
+
+        _cached_openai_chat('gpt-4.1-mini', 'sk-warmup-timing-guard-not-asserted', {})
         yield
 
 

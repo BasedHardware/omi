@@ -22,9 +22,72 @@ enum OnboardingFlow {
     "Goal",
     "Tasks",
   ]
-  static let introStepCount = 13
   static let legacyPostIntroOffset = 11
   static let lastStepIndex = steps.count - 1
+
+  /// Steps without a Skip button — the user must answer to get past them.
+  /// Everything from ScreenRecording (4) onward is skippable, so forward
+  /// navigation may jump over those freely; these four gate it.
+  static let unskippableSteps: Set<Int> = [0, 1, 2, 3]
+
+  /// The pages grouped into the four user-facing phases the segmented progress
+  /// bar shows. Ranges must tile `steps` contiguously and completely — a test
+  /// asserts this so a step added to `steps` can't silently fall outside every
+  /// phase.
+  struct Phase {
+    let title: String
+    let steps: Range<Int>
+  }
+
+  static let phases: [Phase] = [
+    Phase(title: "Profile", steps: 0..<3),
+    Phase(title: "Permissions", steps: 3..<10),
+    Phase(title: "Shortcuts", steps: 10..<14),
+    Phase(title: "Your memory", steps: 14..<18),
+  ]
+
+  /// Whether the user may navigate directly to `target` (progress dots, forward
+  /// arrow). Backward and already-reached steps are always allowed. A forward
+  /// jump is allowed when every step it would pass over — from the current
+  /// frontier up to the target — is skippable (jumping over a skippable step is
+  /// equivalent to pressing its Skip button). An unskippable step that hasn't
+  /// been cleared yet blocks all jumps beyond it.
+  static func canJump(to target: Int, furthestStep: Int) -> Bool {
+    guard target >= 0, target <= lastStepIndex else { return false }
+    if target <= furthestStep { return true }
+    let frontier = max(0, furthestStep)
+    return !(frontier..<target).contains { unskippableSteps.contains($0) }
+  }
+
+  /// What a bare arrow key does at `step`. Left/up go back one step; right/down
+  /// jump forward when the next step is cleared or skippable, and otherwise
+  /// defer to the step's own Continue gating (the caller re-issues the default
+  /// action). Non-arrow key codes navigate nothing.
+  enum ArrowNavigation: Equatable {
+    case jump(to: Int)
+    case forwardDefaultAction
+  }
+
+  static func arrowNavigation(keyCode: UInt16, step: Int, furthestStep: Int) -> ArrowNavigation? {
+    switch keyCode {
+    case 123, 126:  // left, up
+      return step > 0 ? .jump(to: step - 1) : nil
+    case 124, 125:  // right, down
+      let next = step + 1
+      return canJump(to: next, furthestStep: furthestStep) ? .jump(to: next) : .forwardDefaultAction
+    default:
+      return nil
+    }
+  }
+
+  /// Validates a requested arrow-navigation target against live state before
+  /// the mounted view applies it: backward is always allowed, forward only
+  /// through cleared/skippable steps (same policy as the progress dots).
+  static func validatedNavigationTarget(_ target: Int, currentStep: Int, furthestStep: Int) -> Int? {
+    guard target >= 0, target <= lastStepIndex else { return nil }
+    if target > currentStep, !canJump(to: target, furthestStep: furthestStep) { return nil }
+    return target
+  }
 
   static func migratedStep(
     currentStep: Int,
@@ -157,11 +220,14 @@ enum OnboardingFlow {
   /// - "screenAnalysisEnabled": SettingsSyncManager overwrites it from the
   ///   server within ~200ms of sign-in; onboarding force-starts monitoring
   ///   regardless of this setting.
-  /// - onboarding chat keys (mid-onboarding/exploration state, legacy
-  ///   "onboardingChatMessages"/"onboardingACPSessionId"): owned by
+  /// - onboarding chat keys ("onboardingChatMessages", "onboardingACPSessionId",
+  ///   mid-onboarding/exploration state): owned by
   ///   `OnboardingChatPersistence.clear()`, which both sites call.
   static let persistedStateKeys: [String] = [
     "onboardingStep",
+    "onboardingFurthestStep",
+    "onboardingHowDidYouHearSource",
+    "onboardingGoalDraft",
     "onboardingJustCompleted",
     "hasSeenRewindIntro",
     "hasTriggeredNotification",
@@ -174,12 +240,34 @@ enum OnboardingFlow {
   ]
 
   /// Remove every account-scoped onboarding key. Mounted-@AppStorage values
-  /// that need a live reset (e.g. `onboardingStep` while OnboardingView is
-  /// showing) are handled by the notification handlers; this clears the
-  /// persisted backing store.
+  /// that need a live reset (e.g. `onboardingStep`, `onboardingFurthestStep`
+  /// in DesktopHomeView) are handled by the notification handlers; this clears
+  /// the persisted backing store.
   static func clearPersistedState(in defaults: UserDefaults = .standard) {
     for key in persistedStateKeys {
       defaults.removeObject(forKey: key)
     }
+  }
+
+  /// What pressing Continue does on a granted permission step. Granting alone
+  /// never navigates: the user stays on the page until they explicitly
+  /// continue. The reopen offer is a runtime decision — it fires only when a
+  /// grant can't apply to the running process (screen recording granted after
+  /// launch), never from static step config: a process that already relaunched
+  /// after the grant advances like any other step.
+  enum PermissionContinueAction: Equatable {
+    case advance
+    case offerReopen
+  }
+
+  static func permissionContinueAction(needsRelaunchToApply: Bool) -> PermissionContinueAction {
+    needsRelaunchToApply ? .offerReopen : .advance
+  }
+
+  /// The editable Name field never shows the "there" greeting fallback — an
+  /// Apple login that shared no name gets a blank field (placeholder shows),
+  /// not literal text the user has to delete first.
+  static func nameFieldPrefill(_ preferredName: String) -> String {
+    preferredName == "there" ? "" : preferredName
   }
 }

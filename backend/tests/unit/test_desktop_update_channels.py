@@ -5,8 +5,8 @@ import pytest
 
 from database.desktop_update_channels import (
     _build_pointer,
-    _rollback_macos_beta_transaction,
     get_channel_release,
+    get_release_manifest,
     normalize_release_manifest,
     register_release_manifest,
 )
@@ -20,13 +20,18 @@ def _manifest(**overrides):
         "build_number": 12064,
         "zip_url": "https://github.com/BasedHardware/omi/releases/download/test/Omi.zip",
         "dmg_url": "https://github.com/BasedHardware/omi/releases/download/test/Omi.dmg",
+        "beta_zip_url": "https://github.com/BasedHardware/omi/releases/download/test/Omi.Beta.zip",
+        "beta_dmg_url": "https://github.com/BasedHardware/omi/releases/download/test/omi-beta.dmg",
         "ed_signature": "sparkle-signature",
+        "beta_ed_signature": "beta-sparkle-signature",
         "published_at": "2026-07-09T12:00:00Z",
         "changelog": ["Qualified beta"],
         "mandatory": False,
         "source_sha": "a" * 40,
         "zip_sha256": "b" * 64,
         "dmg_sha256": "c" * 64,
+        "beta_zip_sha256": "d" * 64,
+        "beta_dmg_sha256": "e" * 64,
         "qualification": {"tier": "T2", "passed": True},
     }
     data.update(overrides)
@@ -53,6 +58,11 @@ class TestNormalizeReleaseManifest:
     def test_requires_dmg_for_macos(self):
         with pytest.raises(ValueError, match="dmg_url"):
             normalize_release_manifest(_manifest(dmg_url=None))
+
+    def test_requires_all_beta_identity_artifact_fields_for_macos(self):
+        for field in ("beta_zip_url", "beta_dmg_url", "beta_ed_signature", "beta_zip_sha256", "beta_dmg_sha256"):
+            with pytest.raises(ValueError, match=field):
+                normalize_release_manifest(_manifest(**{field: None}))
 
 
 class TestReleaseManifestPersistence:
@@ -104,6 +114,18 @@ class TestReleaseManifestPersistence:
         assert result["pointer"]["generation"] == 4
         assert result["manifest"]["release_id"] == _manifest()["release_id"]
 
+    def test_reads_retained_manifest_without_a_channel_or_release_metadata(self):
+        snapshot = MagicMock(exists=True)
+        snapshot.to_dict.return_value = _manifest()
+        ref = MagicMock()
+        ref.get.return_value = snapshot
+        client = MagicMock()
+        client.collection.return_value.document.return_value = ref
+
+        assert get_release_manifest(_manifest()["release_id"], firestore_client=client) == normalize_release_manifest(
+            _manifest()
+        )
+
 
 class TestChannelPromotionRules:
     def test_first_qualified_promotion_sets_generation_and_build(self):
@@ -135,7 +157,8 @@ class TestChannelPromotionRules:
             platform="macos",
             channel="beta",
             release_id=_manifest()["release_id"],
-            expected_generation=4,
+            expected_generation=3,
+            expected_current_release_id="previous-release",
         )
         assert pointer is current
         assert pointer["generation"] == 4
@@ -167,23 +190,42 @@ class TestChannelPromotionRules:
             )
 
 
-class TestMacosBetaRollbackRules:
-    def test_rolls_back_qualified_release_and_creates_immutable_audit(self):
-        current = {
-            "platform": "macos",
-            "channel": "beta",
-            "release_id": "v0.12.84+12084-macos",
-            "version": "0.12.84+12084",
-            "build_number": 12084,
-            "generation": 7,
-        }
+class TestPointerRepointRules:
+    def test_qualified_manifest_moves_the_same_release_from_beta_to_stable(self):
+        """Local dry run of candidate evidence -> qualified manifest -> both pointers."""
+        manifest = normalize_release_manifest(_manifest())
+        beta = _build_pointer(
+            {},
+            manifest,
+            transition="promote",
+            platform="macos",
+            channel="beta",
+            release_id=manifest["release_id"],
+            expected_generation=0,
+        )
+        stable = _build_pointer(
+            {},
+            manifest,
+            transition="promote",
+            platform="macos",
+            channel="stable",
+            release_id=beta["release_id"],
+            expected_generation=0,
+        )
+
+        assert beta["release_id"] == manifest["release_id"] == stable["release_id"]
+        assert beta["generation"] == stable["generation"] == 1
+
+    def test_repoints_a_qualified_retained_manifest_with_compare_and_swap(self):
+        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
         target = normalize_release_manifest(
             _manifest(release_id="v0.12.73+12073-macos", version="0.12.73+12073", build_number=12073)
         )
+
         pointer = _build_pointer(
             current,
             target,
-            transition="rollback",
+            transition="repoint",
             platform="macos",
             channel="beta",
             release_id=target["release_id"],
@@ -191,200 +233,44 @@ class TestMacosBetaRollbackRules:
             expected_generation=7,
         )
 
-        pointer_snapshot = MagicMock(exists=True)
-        pointer_snapshot.to_dict.return_value = current
-        manifest_snapshot = MagicMock(exists=True)
-        manifest_snapshot.to_dict.return_value = target
-        pointer_ref = MagicMock()
-        pointer_ref.get.return_value = pointer_snapshot
-        manifest_ref = MagicMock()
-        manifest_ref.get.return_value = manifest_snapshot
-        audit_ref = MagicMock()
-        transaction = MagicMock()
-
-        result = _rollback_macos_beta_transaction.to_wrap(
-            transaction,
-            pointer_ref,
-            manifest_ref,
-            audit_ref,
-            release_id=target["release_id"],
-            expected_current_release_id=current["release_id"],
-            expected_generation=7,
-            audit_id="audit-123",
-            occurred_at=pointer["updated_at"],
-        )
-
-        assert result["pointer"]["release_id"] == target["release_id"]
-        assert result["pointer"]["generation"] == 8
-        assert result["audit"] == {
-            "audit_id": "audit-123",
-            "operation": "macos_beta_rollback",
-            "platform": "macos",
-            "channel": "beta",
-            "previous_release_id": current["release_id"],
-            "previous_generation": 7,
-            "target_release_id": target["release_id"],
-            "generation": 8,
-            "occurred_at": pointer["updated_at"],
-        }
-        transaction.create.assert_called_once_with(audit_ref, result["audit"])
-        transaction.set.assert_called_once_with(pointer_ref, result["pointer"])
-
-    def test_rejects_stale_current_release_or_generation(self):
-        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
-        target = normalize_release_manifest(
-            _manifest(release_id="v0.12.73+12073-macos", version="0.12.73+12073", build_number=12073)
-        )
-
-        with pytest.raises(ValueError, match="current release mismatch"):
-            _build_pointer(
-                current,
-                target,
-                transition="rollback",
-                platform="macos",
-                channel="beta",
-                release_id=target["release_id"],
-                expected_current_release_id="v0.12.83+12083-macos",
-                expected_generation=7,
-            )
-        with pytest.raises(ValueError, match="generation mismatch"):
-            _build_pointer(
-                current,
-                target,
-                transition="rollback",
-                platform="macos",
-                channel="beta",
-                release_id=target["release_id"],
-                expected_current_release_id=current["release_id"],
-                expected_generation=6,
-            )
-
-    def test_rejects_unqualified_or_non_macos_target(self):
-        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
-        unqualified = normalize_release_manifest(
-            _manifest(
-                release_id="v0.12.73+12073-macos",
-                version="0.12.73+12073",
-                build_number=12073,
-                qualification={"tier": "T2", "passed": False},
-            )
-        )
-        with pytest.raises(ValueError, match="qualification"):
-            _build_pointer(
-                current,
-                unqualified,
-                transition="rollback",
-                platform="macos",
-                channel="beta",
-                release_id=unqualified["release_id"],
-                expected_current_release_id=current["release_id"],
-                expected_generation=7,
-            )
-
-
-class TestEmergencyBetaPromotionRules:
-    """Emergency promotion is ordinary promotion with the T2 gate relaxed.
-
-    These cover the break-glass contract: it may ship unqualified builds to
-    beta, it must still compare-and-swap, and it must never reach stable.
-    """
-
-    def _unqualified(self):
-        return normalize_release_manifest(
-            _manifest(
-                release_id="v0.12.87+12087-macos",
-                version="0.12.87+12087",
-                build_number=12087,
-                qualification={"tier": "T2", "passed": False},
-            )
-        )
-
-    def _current(self):
-        return {"release_id": "v0.12.86+12086-macos", "build_number": 12086, "generation": 9}
-
-    def test_promotes_an_unqualified_build_and_marks_the_pointer_emergency(self):
-        current = self._current()
-        target = self._unqualified()
-        pointer = _build_pointer(
-            current,
-            target,
-            transition="emergency",
-            platform="macos",
-            channel="beta",
-            release_id=target["release_id"],
-            expected_current_release_id=current["release_id"],
-            expected_generation=9,
-        )
         assert pointer["release_id"] == target["release_id"]
-        assert pointer["generation"] == 10
-        assert pointer["emergency"] is True
-
-    def test_normal_promotion_still_rejects_the_same_unqualified_build(self):
-        with pytest.raises(ValueError, match="qualification"):
-            _build_pointer(
-                self._current(),
-                self._unqualified(),
-                transition="promote",
-                platform="macos",
-                channel="beta",
-                release_id="v0.12.87+12087-macos",
-                expected_generation=9,
-            )
+        assert pointer["generation"] == 8
 
     @pytest.mark.parametrize(
         "expected_release_id, expected_generation, message",
         [
-            ("v0.12.99+12099-macos", 9, "current release mismatch"),
-            ("v0.12.86+12086-macos", 3, "generation mismatch"),
+            ("v0.12.83+12083-macos", 7, "current release mismatch"),
+            ("v0.12.84+12084-macos", 6, "generation mismatch"),
         ],
     )
-    def test_rejects_a_stale_compare_and_swap(self, expected_release_id, expected_generation, message):
+    def test_rejects_stale_repoint_compare_and_swap(self, expected_release_id, expected_generation, message):
+        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
+        target = normalize_release_manifest(
+            _manifest(release_id="v0.12.73+12073-macos", version="0.12.73+12073", build_number=12073)
+        )
         with pytest.raises(ValueError, match=message):
             _build_pointer(
-                self._current(),
-                self._unqualified(),
-                transition="emergency",
+                current,
+                target,
+                transition="repoint",
                 platform="macos",
                 channel="beta",
-                release_id="v0.12.87+12087-macos",
+                release_id=target["release_id"],
                 expected_current_release_id=expected_release_id,
                 expected_generation=expected_generation,
             )
 
-    def test_is_roll_forward_only(self):
-        current = {"release_id": "v0.12.86+12086-macos", "build_number": 12086, "generation": 9}
-        older = normalize_release_manifest(
-            _manifest(
-                release_id="v0.12.80+12080-macos",
-                version="0.12.80+12080",
-                build_number=12080,
-                qualification={"tier": "T2", "passed": False},
-            )
-        )
-        with pytest.raises(ValueError, match="roll-forward only"):
-            _build_pointer(
-                current,
-                older,
-                transition="emergency",
-                platform="macos",
-                channel="beta",
-                release_id=older["release_id"],
-                expected_current_release_id=current["release_id"],
-                expected_generation=9,
-            )
-
-    @pytest.mark.parametrize("channel", ["stable"])
-    def test_never_reaches_stable(self, channel):
-        current = self._current()
-        target = self._unqualified()
-        with pytest.raises(ValueError, match="only permitted for the macos beta channel"):
+    def test_repoint_rejects_unqualified_manifest(self):
+        current = {"release_id": "v0.12.84+12084-macos", "build_number": 12084, "generation": 7}
+        target = normalize_release_manifest(_manifest(qualification={"tier": "T2", "passed": False}))
+        with pytest.raises(ValueError, match="qualification"):
             _build_pointer(
                 current,
                 target,
-                transition="emergency",
+                transition="repoint",
                 platform="macos",
-                channel=channel,
+                channel="stable",
                 release_id=target["release_id"],
                 expected_current_release_id=current["release_id"],
-                expected_generation=9,
+                expected_generation=7,
             )

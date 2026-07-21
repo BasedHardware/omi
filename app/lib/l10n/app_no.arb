@@ -3150,5 +3150,10 @@
     "deviceStorageFree": "{free} ledig",
     "deviceStorageNearlyFull": "Enheten er nesten full — synkroniser for å frigjøre plass.",
     "phoneMicOfflineFallbackMessage": "Ingen tilkobling – tar opp lokalt. Det blir transkribert når du er tilkoblet igjen.",
-    "dataEncryptedBanner": "Dataene dine er som standard sikret med sterk kryptering, og du bestemmer hvordan de lagres og brukes."
+    "dataEncryptedBanner": "Dataene dine er som standard sikret med sterk kryptering, og du bestemmer hvordan de lagres og brukes.",
+    "rayBanMetaMicPickerTitle": "Velg Ray-Ban Meta-mikrofonen",
+    "rayBanMetaMicPickerDescription": "Velg Bluetooth-mikrofonen til brillene. Musikken settes på pause mens Omi bruker den.",
+    "rayBanMetaMicPickerEmpty": "Fant ingen Bluetooth-mikrofoner. Koble til brillene i iPhone-innstillingene, og prøv igjen.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth-mikrofonene kunne ikke lastes inn. Kontroller at Bluetooth er på, og prøv igjen.",
+    "rayBanMetaMicPickerConnectError": "Kunne ikke koble til mikrofonen. Sørg for at den er tilkoblet i iPhone-innstillingene."
 }

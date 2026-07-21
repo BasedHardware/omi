@@ -3150,5 +3150,10 @@
     "deviceStorageFree": "ว่าง {free}",
     "deviceStorageNearlyFull": "อุปกรณ์เกือบเต็มแล้ว — ซิงค์เพื่อเพิ่มพื้นที่ว่าง",
     "phoneMicOfflineFallbackMessage": "ไม่มีการเชื่อมต่อ — กำลังบันทึกในเครื่อง จะถอดเสียงเมื่อคุณกลับมาออนไลน์",
-    "dataEncryptedBanner": "ข้อมูลของคุณได้รับการปกป้องด้วยการเข้ารหัสที่แข็งแกร่งตามค่าเริ่มต้น และคุณเป็นผู้ควบคุมว่าจะจัดเก็บและใช้งานอย่างไร"
+    "dataEncryptedBanner": "ข้อมูลของคุณได้รับการปกป้องด้วยการเข้ารหัสที่แข็งแกร่งตามค่าเริ่มต้น และคุณเป็นผู้ควบคุมว่าจะจัดเก็บและใช้งานอย่างไร",
+    "rayBanMetaMicPickerTitle": "เลือกไมโครโฟน Ray-Ban Meta ของคุณ",
+    "rayBanMetaMicPickerDescription": "เลือกไมโครโฟน Bluetooth ของแว่นตา เพลงจะหยุดชั่วคราวขณะที่ Omi ใช้งานไมโครโฟน",
+    "rayBanMetaMicPickerEmpty": "ไม่พบไมโครโฟน Bluetooth เชื่อมต่อแว่นตาในการตั้งค่า iPhone แล้วลองอีกครั้ง",
+    "rayBanMetaMicPickerLoadError": "โหลดไมโครโฟน Bluetooth ไม่ได้ ตรวจสอบว่าเปิด Bluetooth แล้วลองอีกครั้ง",
+    "rayBanMetaMicPickerConnectError": "เชื่อมต่อกับไมโครโฟนนั้นไม่ได้ ตรวจสอบว่าเชื่อมต่ออยู่ในการตั้งค่า iPhone"
 }

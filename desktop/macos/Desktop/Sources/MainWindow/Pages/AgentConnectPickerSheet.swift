@@ -180,7 +180,14 @@ private struct ConnectOptionCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                manualBlock(manualText(for: setup))
+                if let copyText = setup.copyText {
+                  manualBlock(copyText)
+                } else {
+                  manualBlock("Server URL: \(setup.serverURL)", copy: setup.serverURL)
+                  if destination.requiresHostedMCPKeyForSetup {
+                    manualBlock("Key: \(mcpKey ?? "YOUR_OMI_KEY")", copy: mcpKey ?? "YOUR_OMI_KEY")
+                  }
+                }
               }
             }
             .padding(.top, OmiSpacing.sm)
@@ -284,10 +291,14 @@ private struct ConnectOptionCard: View {
         Text(completion.title)
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
-        Text(completion.subtitle)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
+        if destination == .claudeCode {
+          ClaudeCodeRestartSubtitle()
+        } else {
+          Text(completion.subtitle)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
     }
     .padding(OmiSpacing.sm)
@@ -323,16 +334,6 @@ private struct ConnectOptionCard: View {
     return "Omi couldn't finish setup. Try again."
   }
 
-  private func manualText(for setup: MCPSetup) -> String {
-    if let copyText = setup.copyText {
-      return copyText
-    }
-    if destination.requiresHostedMCPKeyForSetup {
-      return "Server URL: \(setup.serverURL)\nKey: \(mcpKey ?? "YOUR_OMI_KEY")"
-    }
-    return "Server URL: \(setup.serverURL)"
-  }
-
   private var chatGPTDeveloperModeText: String {
     let clientID = destination.cloudOAuthClientID ?? ""
     let tokenAuthMethod = destination.cloudTokenAuthMethod ?? "none"
@@ -348,7 +349,9 @@ private struct ConnectOptionCard: View {
     ].joined(separator: "\n")
   }
 
-  private func manualBlock(_ text: String) -> some View {
+  /// `copy` overrides what the Copy button writes — used by label:value rows so
+  /// the clipboard gets the paste-able value, never the display label.
+  private func manualBlock(_ text: String, copy: String? = nil) -> some View {
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       Text(text)
         .font(.system(size: 11, design: .monospaced))
@@ -358,7 +361,7 @@ private struct ConnectOptionCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       Button {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        NSPasteboard.general.setString(copy ?? text, forType: .string)
         resultMessage = .success("Copied.")
       } label: {
         Text("Copy")
@@ -374,6 +377,36 @@ private struct ConnectOptionCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous).fill(OmiColors.backgroundTertiary))
+  }
+}
+
+/// Setup-complete subtitle for Claude Code. Detects running CLI sessions: none →
+/// "you're all set"; some → the restart note plus an explicit button that stops
+/// them (SIGTERM; `claude --continue` resumes). Shared by ConnectOptionCard and
+/// MemoryExportDestinationSheet.
+struct ClaudeCodeRestartSubtitle: View {
+  @State private var pids: [pid_t] = []
+  @State private var didStop = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      Text(ClaudeCodeSessions.completionSubtitle(sessionCount: pids.count, didStop: didStop))
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+      if !didStop && !pids.isEmpty {
+        Button("Restart \(pids.count) running session\(pids.count == 1 ? "" : "s")") {
+          ClaudeCodeSessions.stop(pids)
+          didStop = true
+        }
+        .buttonStyle(.plain)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundColor(OmiColors.textSecondary)
+      }
+    }
+    .task {
+      pids = await Task.detached { ClaudeCodeSessions.runningPIDs() }.value
+    }
   }
 }
 

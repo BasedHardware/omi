@@ -10728,5 +10728,10 @@
     "deviceStorageFree": "{free} פנוי",
     "deviceStorageNearlyFull": "המכשיר כמעט מלא — סנכרן כדי לפנות מקום.",
     "phoneMicOfflineFallbackMessage": "אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.",
-    "dataEncryptedBanner": "הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים."
+    "dataEncryptedBanner": "הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים.",
+    "rayBanMetaMicPickerTitle": "בחירת המיקרופון של Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "בחרו את מיקרופון ה-Bluetooth של המשקפיים. המוזיקה מושהית בזמן ש-Omi משתמש בו.",
+    "rayBanMetaMicPickerEmpty": "לא נמצאו מיקרופוני Bluetooth. חברו את המשקפיים בהגדרות ה-iPhone ונסו שוב.",
+    "rayBanMetaMicPickerLoadError": "לא ניתן היה לטעון את מיקרופוני ה-Bluetooth. ודאו ש-Bluetooth מופעל ונסו שוב.",
+    "rayBanMetaMicPickerConnectError": "לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone."
 }

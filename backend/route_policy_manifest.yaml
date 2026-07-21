@@ -140,8 +140,8 @@ routes:
       deprecation:
         state: active
   - route_type: http
-    method: POST
-    path: /v2/desktop/channels/rollback
+    method: GET
+    path: /v2/desktop/releases/{release_id}
     policy:
       review_status: reviewed
       auth:

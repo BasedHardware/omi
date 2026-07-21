@@ -95,7 +95,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var subtitle: String {
     switch self {
-    case .notion: return "Copy-ready page export"
+    case .notion: return "Live page in your workspace"
     case .obsidian: return "Choose once, refresh anytime"
     case .chatgpt: return "Add Omi from the ChatGPT directory"
     case .claude: return "Live MCP or memory pack"
@@ -110,7 +110,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var description: String {
     switch self {
-    case .notion: return "Copy a ready-to-paste memory page and jump into Notion."
+    case .notion: return "Connect once and Omi keeps an Omi Memories page fresh in your workspace."
     case .obsidian: return "Write Omi memories into your Obsidian vault."
     case .chatgpt:
       return "Add Omi in ChatGPT, authorize once, and use your memories in every ChatGPT chat."
@@ -845,7 +845,7 @@ actor MemoryExportService {
     case .chatgpt, .claude:
       isConfigured = hasConnection
     case .notion, .gemini:
-      isConfigured = exportedCount > 0
+      isConfigured = destination == .notion ? NotionMCPConnector.shared.isConnected : exportedCount > 0
     }
 
     return MemoryExportStatus(
@@ -1331,7 +1331,7 @@ actor MemoryExportService {
     )
   }
 
-  private func fetchMemories(limit: Int) async throws -> [ServerMemory] {
+  func fetchMemories(limit: Int) async throws -> [ServerMemory] {
     do {
       let remoteMemories = try await APIClient.shared.getMemories(limit: limit)
       if !remoteMemories.isEmpty {
@@ -1349,7 +1349,7 @@ actor MemoryExportService {
     throw MemoryExportError.noMemories
   }
 
-  private func buildMarkdownPack(
+  func buildMarkdownPack(
     memories: [ServerMemory],
     destination: MemoryExportDestination
   ) -> String {
@@ -1398,7 +1398,7 @@ actor MemoryExportService {
     return directory
   }
 
-  private func persistStatus(
+  func persistStatus(
     destination: MemoryExportDestination,
     exportedCount: Int,
     detailText: String?,

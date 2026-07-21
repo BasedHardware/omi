@@ -3150,5 +3150,10 @@
     "deviceStorageFree": "{free} bebas",
     "deviceStorageNearlyFull": "Peranti hampir penuh — segerakkan untuk mengosongkan ruang.",
     "phoneMicOfflineFallbackMessage": "Tiada sambungan — merakam secara setempat. Ia akan ditranskripsikan apabila anda dalam talian semula.",
-    "dataEncryptedBanner": "Data anda dilindungi secara lalai dengan penyulitan yang kuat, dan anda mengawal cara ia disimpan dan digunakan."
+    "dataEncryptedBanner": "Data anda dilindungi secara lalai dengan penyulitan yang kuat, dan anda mengawal cara ia disimpan dan digunakan.",
+    "rayBanMetaMicPickerTitle": "Pilih mikrofon Ray-Ban Meta anda",
+    "rayBanMetaMicPickerDescription": "Pilih mikrofon Bluetooth untuk cermin mata anda. Muzik dijeda semasa Omi menggunakannya.",
+    "rayBanMetaMicPickerEmpty": "Tiada mikrofon Bluetooth ditemui. Sambungkan cermin mata dalam Tetapan iPhone, kemudian cuba lagi.",
+    "rayBanMetaMicPickerLoadError": "Mikrofon Bluetooth tidak dapat dimuatkan. Pastikan Bluetooth dihidupkan, kemudian cuba lagi.",
+    "rayBanMetaMicPickerConnectError": "Tidak dapat menyambung ke mikrofon itu. Pastikan ia disambungkan dalam Tetapan iPhone."
 }

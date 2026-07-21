@@ -82,6 +82,7 @@ struct FloatingControlBarView: View {
   var onShareLink: (() async -> String?)?
 
   @State private var isHovering = false
+  @State private var onboardingGlowOn = false
   @State private var notchLogoHovering = false
   @State private var notchSettingsHovering = false
   @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
@@ -163,7 +164,7 @@ struct FloatingControlBarView: View {
           barChrome
 
           if let notification = state.currentNotification, !state.showingAIConversation {
-            notificationView(notification)
+            barNotification(notification)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.bottom, OmiSpacing.sm)
               .transition(.move(edge: .top).combined(with: .opacity))
@@ -282,7 +283,7 @@ struct FloatingControlBarView: View {
       }
 
       if let notification = state.currentNotification, !state.showingAIConversation {
-        notificationView(notification)
+        barNotification(notification)
           .padding(.horizontal, 10)
           .padding(.bottom, 10)
           .transition(.move(edge: .top).combined(with: .opacity))
@@ -345,6 +346,38 @@ struct FloatingControlBarView: View {
               edgeInset: state.usesNotchIsland ? 0 : 3
             )
             .frame(width: surfaceWidth, height: surfaceHeight)
+          }
+
+          // Onboarding: a plain white glow on the bar edge so first-run
+          // users notice it — no animated sweep. Reuses the voice glow's
+          // shape and ramps in 1s after the bar appears. Clears the
+          // moment they start typing.
+          if state.onboardingBarGlow && state.aiInputText.isEmpty {
+            NotchLowerEdgeShape(
+              bottomRadius: bottomRadius,
+              topRadius: state.usesNotchIsland ? 0 : 14,
+              edgeInset: state.usesNotchIsland ? 0 : 3
+            )
+            .stroke(
+              Color.white,
+              style: StrokeStyle(lineWidth: 3.2, lineCap: .round, lineJoin: .round)
+            )
+            .frame(width: surfaceWidth, height: surfaceHeight)
+            .shadow(color: Color.white.opacity(0.85), radius: 12)
+            .shadow(color: Color.white.opacity(0.5), radius: 22)
+            .opacity(onboardingGlowOn ? 1 : 0)
+            .allowsHitTesting(false)
+            .task {
+              // Signal-driven (cancels on disappear) instead of asyncAfter:
+              // hold the bar un-glowed for a beat, then ease the glow in.
+              onboardingGlowOn = false
+              try? await Task.sleep(for: .seconds(1))
+              guard !Task.isCancelled else { return }
+              OmiMotion.withGated(.easeIn(duration: 0.7)) {
+                onboardingGlowOn = true
+              }
+            }
+            .onDisappear { onboardingGlowOn = false }
           }
         }
         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
@@ -536,6 +569,69 @@ struct FloatingControlBarView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+  }
+
+  /// Picks the actionable "Couldn't reach Omi" card for reach errors, else the
+  /// normal notification card.
+  @ViewBuilder
+  private func barNotification(_ notification: FloatingBarNotification) -> some View {
+    if notification.assistantId == "reach_error" {
+      reachErrorCard(notification)
+    } else {
+      notificationView(notification)
+    }
+  }
+
+  /// Hard reach failure (retries exhausted). Persists until the user picks
+  /// Retry (re-runs the query, restarting backoff) or Skip (back to idle).
+  private func reachErrorCard(_ notification: FloatingBarNotification) -> some View {
+    HStack(alignment: .center, spacing: OmiSpacing.sm) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundColor(.white.opacity(0.9))
+
+      VStack(alignment: .leading, spacing: 1) {
+        Text(notification.title)
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundColor(.white)
+          .lineLimit(1)
+        if !notification.message.isEmpty {
+          Text(notification.message)
+            .scaledFont(size: 11)
+            .foregroundColor(.white.opacity(0.7))
+            .lineLimit(1)
+        }
+      }
+
+      Spacer(minLength: OmiSpacing.sm)
+
+      Button {
+        FloatingControlBarManager.shared.retryReachError()
+      } label: {
+        Text("Retry")
+          .scaledFont(size: 12, weight: .semibold)
+          .foregroundColor(.white)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xxs)
+          .background(Color.white.opacity(0.18))
+          .clipShape(Capsule())
+      }
+      .buttonStyle(.plain)
+
+      Button {
+        FloatingControlBarManager.shared.dismissReachError()
+      } label: {
+        Text("Skip")
+          .scaledFont(size: 12, weight: .semibold)
+          .foregroundColor(.white.opacity(0.6))
+          .padding(.horizontal, OmiSpacing.xs)
+          .padding(.vertical, OmiSpacing.xxs)
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private var notchAgentLogoHitTarget: some View {
@@ -1285,7 +1381,7 @@ struct FloatingControlBarView: View {
           .transition(.opacity)
       } else if allowsHoverExpansion {
         VStack(spacing: 1) {
-          compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
+          compactButton(title: "Open Omi", keys: shortcutSettings.askOmiShortcut.displayTokens) {
             onAskAI()
           }
 
@@ -1587,28 +1683,15 @@ struct FloatingControlBarView: View {
         set: { state.isAILoading = $0 }
       ),
       currentMessage: state.currentAIMessage(from: provider),
-      followUpText: Binding(
-        get: { state.aiInputText },
-        set: { state.aiInputText = $0 }
-      ),
       userInput: state.displayedQuery,
       chatHistory: state.derivedChatHistory(from: provider),
       canClearVisibleConversation: false,
       showsHeader: false,
       onClearVisibleConversation: onClearVisibleConversation,
       onEscape: onEscape,
-      onSendFollowUp: { message in
-        state.archiveCurrentExchange(using: floatingChatProvider)
-
-        (window as? FloatingControlBarWindow)?
-          .beginVisibleMainQuery(message, fromVoice: false, animated: true)
-        state.displayedQuery = message
-        state.bindQuestionMessageId(nil)
-        state.markConversationActivity()
-        OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
-          state.isAILoading = true
-        }
-        onSendQuery(message)
+      onOpenMainApp: {
+        (window as? FloatingControlBarWindow)?.closeAIConversation()
+        (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
       },
       onRate: onRate,
       onShareLink: onShareLink,
@@ -1833,11 +1916,6 @@ private struct AgentMainChatView: View {
   let onBackToAgentRows: () -> Void
   let onEscape: () -> Void
 
-  @State private var followUpText: String
-  @State private var attachments: [ChatAttachment] = []
-  @State private var isDropTargeted = false
-  @FocusState private var isFollowUpFocused: Bool
-
   init(
     pill: AgentPill,
     manager: AgentPillsManager,
@@ -1848,7 +1926,6 @@ private struct AgentMainChatView: View {
     self.manager = manager
     self.onBackToAgentRows = onBackToAgentRows
     self.onEscape = onEscape
-    _followUpText = State(initialValue: ChatDraftStore.shared.text(for: .floatingAgent(pill.id)))
   }
 
   private var isRunning: Bool {
@@ -1932,11 +2009,6 @@ private struct AgentMainChatView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
       manager.markViewed(pillID: pill.id)
-    }
-    .task {
-      // Focus the follow-up field once the view is on screen (view-lifecycle
-      // signal) instead of guessing a fixed delay for it to mount (BL-005).
-      isFollowUpFocused = true
     }
     .onExitCommand {
       onEscape()
@@ -2220,80 +2292,29 @@ private struct AgentMainChatView: View {
   }
 
   private var followUpInput: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      if !attachments.isEmpty {
-        AttachmentPreviewRow(
-          attachments: attachments,
-          onRemove: removeAttachment
-        )
-        .environment(\.colorScheme, .dark)
-      }
-
-      HStack(spacing: OmiSpacing.xs) {
-        TextField("Ask this agent...", text: $followUpText)
-          .textFieldStyle(.plain)
-          .scaledFont(size: OmiType.body)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 7)
-          .background(Color.white.opacity(isDropTargeted ? 0.18 : 0.10))
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
-          .focused($isFollowUpFocused)
-          .onSubmit {
-            sendFollowUp()
-          }
-
-        Button(action: sendFollowUp) {
-          Image(systemName: "arrow.up.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(canSend ? .white : .secondary)
+    HStack(spacing: OmiSpacing.xs) {
+      Button {
+        onEscape()
+        (NSApp.delegate as? AppDelegate)?.openMainAppWindow()
+      } label: {
+        HStack(spacing: OmiSpacing.xs) {
+          Text("Continue in Omi")
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(.white.opacity(0.85))
+          Spacer(minLength: 0)
+          Image(systemName: "arrow.up.forward.app")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(.secondary)
         }
-        .disabled(!canSend)
-        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.white.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous))
+        .contentShape(Rectangle())
       }
+      .buttonStyle(.plain)
+      .help("Open the Omi app to steer this agent")
     }
-    .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)
-    .onChange(of: followUpText) { _, text in
-      ChatDraftStore.shared.setText(text, for: .floatingAgent(pill.id))
-    }
-  }
-
-  private var canSend: Bool {
-    !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
-  }
-
-  private func sendFollowUp() {
-    let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let staged = attachments
-    guard !trimmed.isEmpty || !staged.isEmpty else { return }
-    followUpText = ""
-    attachments = []
-    manager.continueAgent(from: pill, text: trimmed, attachments: staged)
-  }
-
-  // MARK: - Attachments
-
-  private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
-    ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
-      addAttachmentURLs(urls)
-    }
-  }
-
-  private func addAttachmentURLs(_ urls: [URL]) {
-    let remaining = max(0, kMaxChatAttachments - attachments.count)
-    guard remaining > 0 else { return }
-    let staged = urls.prefix(remaining).compactMap { url -> ChatAttachment? in
-      guard var attachment = ChatAttachment.from(url: url) else { return nil }
-      // Files are read from disk by the local agent, so mark them ready
-      // immediately — there is no upload step in the floating-pill path.
-      attachment.state = .localOnly
-      return attachment
-    }
-    guard !staged.isEmpty else { return }
-    attachments.append(contentsOf: staged)
-  }
-
-  private func removeAttachment(_ id: String) {
-    attachments.removeAll { $0.id == id }
   }
 }
 
