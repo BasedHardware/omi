@@ -95,17 +95,20 @@ void main() {
     ];
 
     for (final c in cases) {
-      test('supportsBatch=${c.supportsBatch} batchModeEnabled=${c.batchModeEnabled} '
-          'hasNetwork=${c.hasNetwork} -> ${c.expected}', () {
-        expect(
-          selectPhoneMicSessionMode(
-            supportsBatch: c.supportsBatch,
-            batchModeEnabled: c.batchModeEnabled,
-            hasNetwork: c.hasNetwork,
-          ),
-          c.expected,
-        );
-      });
+      test(
+        'supportsBatch=${c.supportsBatch} batchModeEnabled=${c.batchModeEnabled} '
+        'hasNetwork=${c.hasNetwork} -> ${c.expected}',
+        () {
+          expect(
+            selectPhoneMicSessionMode(
+              supportsBatch: c.supportsBatch,
+              batchModeEnabled: c.batchModeEnabled,
+              hasNetwork: c.hasNetwork,
+            ),
+            c.expected,
+          );
+        },
+      );
     }
   });
 }

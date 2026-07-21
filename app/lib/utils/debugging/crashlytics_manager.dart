@@ -60,7 +60,11 @@ class CrashlyticsManager {
     FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(isEnabled);
   }
 
-  Future<void> reportCrash(Object exception, StackTrace stackTrace, {Map<String, String>? userAttributes}) async {
+  Future<void> reportCrash(
+    Object exception,
+    StackTrace stackTrace, {
+    Map<String, String>? userAttributes,
+  }) async {
     if (userAttributes != null) {
       for (final entry in userAttributes.entries) {
         await FirebaseCrashlytics.instance.setCustomKey(entry.key, entry.value);

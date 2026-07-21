@@ -808,7 +808,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     );
   }
 
-  Widget _buildCardBase({required Color backgroundColor, required Widget child, EdgeInsets? customPadding}) {
+  Widget _buildCardBase({
+    required Color backgroundColor,
+    required Widget child,
+    EdgeInsets? customPadding,
+  }) {
     return Container(
       color: backgroundColor,
       child: SafeArea(
@@ -1897,9 +1901,8 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
               final isFirst = index == 0;
 
               // Label appears when its slice starts animating
-              final labelOpacity = index < _sliceAnimations.length
-                  ? _sliceAnimations[index].value.clamp(0.0, 1.0)
-                  : 0.0;
+              final labelOpacity =
+                  index < _sliceAnimations.length ? _sliceAnimations[index].value.clamp(0.0, 1.0) : 0.0;
 
               return Opacity(
                 opacity: labelOpacity,
@@ -2156,9 +2159,8 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                               color: WrappedColors.indigo,
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              decoration: strikethroughProgress > 0.9
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
+                              decoration:
+                                  strikethroughProgress > 0.9 ? TextDecoration.lineThrough : TextDecoration.none,
                               decorationColor: WrappedColors.indigo,
                               decorationThickness: 2,
                             ),
@@ -2355,8 +2357,8 @@ class _MemorableDayData {
     required this.title,
     required this.description,
     required this.dateStr,
-  }) : month = _parseMonth(dateStr),
-       day = _parseDay(dateStr);
+  })  : month = _parseMonth(dateStr),
+        day = _parseDay(dateStr);
 
   static int _parseMonth(String dateStr) {
     final months = {
@@ -2633,9 +2635,8 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     return AnimatedBuilder(
       animation: _introAnimation,
       builder: (context, child) {
-        final currentDay = widget.days.isNotEmpty && _currentDayIndex < widget.days.length
-            ? widget.days[_currentDayIndex]
-            : null;
+        final currentDay =
+            widget.days.isNotEmpty && _currentDayIndex < widget.days.length ? widget.days[_currentDayIndex] : null;
 
         return Column(
           children: [

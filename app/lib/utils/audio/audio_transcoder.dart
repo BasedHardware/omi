@@ -84,7 +84,7 @@ class OpusToWavTranscoder implements IAudioTranscoder {
   final SimpleOpusDecoder _decoder;
 
   OpusToWavTranscoder({this.sampleRate = 16000, this.channels = 1})
-    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+      : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusData) {
@@ -157,7 +157,7 @@ class OpusToRawPcmTranscoder implements IAudioTranscoder {
   final SimpleOpusDecoder _decoder;
 
   OpusToRawPcmTranscoder({this.sampleRate = 16000, this.channels = 1})
-    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+      : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusData) {
@@ -208,7 +208,7 @@ class OpusFramesToWavTranscoder implements IAudioTranscoder {
   final SimpleOpusDecoder _decoder;
 
   OpusFramesToWavTranscoder({this.sampleRate = 16000, this.channels = 1, this.frameSizeBytes = 80})
-    : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
+      : _decoder = SimpleOpusDecoder(sampleRate: sampleRate, channels: channels);
 
   @override
   Uint8List transcode(Uint8List opusFramesData) {

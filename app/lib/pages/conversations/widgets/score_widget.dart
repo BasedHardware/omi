@@ -640,9 +640,9 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
     for (int i = 0; i < days.length; i++) {
       final day = days[i];
       final grade = _history.cast<DailyGrade?>().firstWhere(
-        (g) => g != null && g.date.year == day.year && g.date.month == day.month && g.date.day == day.day,
-        orElse: () => null,
-      );
+            (g) => g != null && g.date.year == day.year && g.date.month == day.month && g.date.day == day.day,
+            orElse: () => null,
+          );
       final isToday = day.day == now.day && day.month == now.month && day.year == now.year;
       dataPoints.add(
         _ChartPoint(

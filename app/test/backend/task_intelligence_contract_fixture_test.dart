@@ -52,7 +52,9 @@ void main() {
 
   test('canonical task fields survive the generated Dart DTO round trip', () {
     final fixture = _readJson('backend/tests/unit/fixtures/task_intelligence/canonical_round_trip_v1.json');
-    final decoded = wire.GeneratedActionItemResponse.fromJson(fixture['create_response'] as Map<String, dynamic>);
+    final decoded = wire.GeneratedActionItemResponse.fromJson(
+      fixture['create_response'] as Map<String, dynamic>,
+    );
     final roundTrip = decoded.toJson();
 
     expect(roundTrip['goal_id'], 'goal-1');
@@ -62,7 +64,9 @@ void main() {
     expect(roundTrip['provenance'], isNotEmpty);
     expect(roundTrip['due_confidence'], 0.9);
 
-    final listed = wire.GeneratedActionItemsResponse.fromJson(fixture['list_response'] as Map<String, dynamic>);
+    final listed = wire.GeneratedActionItemsResponse.fromJson(
+      fixture['list_response'] as Map<String, dynamic>,
+    );
     expect(listed.actionItems.single.toJson(), roundTrip);
 
     final createRequest = wire.GeneratedActionItemCreateRequest.fromJson(
@@ -71,12 +75,16 @@ void main() {
     final updateRequest = wire.GeneratedActionItemUpdateRequest.fromJson(
       fixture['update_request'] as Map<String, dynamic>,
     );
-    final updated = wire.GeneratedActionItemResponse.fromJson(fixture['update_response'] as Map<String, dynamic>);
+    final updated = wire.GeneratedActionItemResponse.fromJson(
+      fixture['update_response'] as Map<String, dynamic>,
+    );
     expect(createRequest.toJson()['workstream_id'], 'workstream-1');
     expect(updateRequest.toJson()['status'], 'completed');
     expect(updated.toJson()['completed_at'], '2026-07-09T13:00:00.000Z');
 
-    final legacy = wire.GeneratedActionItemResponse.fromJson(fixture['legacy_response'] as Map<String, dynamic>);
+    final legacy = wire.GeneratedActionItemResponse.fromJson(
+      fixture['legacy_response'] as Map<String, dynamic>,
+    );
     expect(legacy.goalId, isNull);
     expect(legacy.workstreamId, isNull);
 
@@ -89,7 +97,9 @@ void main() {
     expect(unlinkJson['goal_id'], isNull);
     expect(unlinkJson.containsKey('workstream_id'), isFalse);
 
-    final workstream = intelligence.GeneratedWorkstream.fromJson(fixture['linked_workstream'] as Map<String, dynamic>);
+    final workstream = intelligence.GeneratedWorkstream.fromJson(
+      fixture['linked_workstream'] as Map<String, dynamic>,
+    );
     expect(workstream.workstreamId, decoded.workstreamId);
     expect(workstream.status, 'open');
 
@@ -101,7 +111,9 @@ void main() {
     expect(goalPatch['desired_outcome'], isNull);
     expect(goalPatch.containsKey('why_it_matters'), isFalse);
 
-    final workstreamPatch = intelligence.GeneratedWorkstreamUpdate.fromJson({'next_review_at': null}).toJson();
+    final workstreamPatch = intelligence.GeneratedWorkstreamUpdate.fromJson({
+      'next_review_at': null,
+    }).toJson();
     expect(workstreamPatch.containsKey('next_review_at'), isTrue);
     expect(workstreamPatch['next_review_at'], isNull);
     expect(workstreamPatch.containsKey('objective'), isFalse);
@@ -116,7 +128,12 @@ void main() {
       'capture_confidence': 0.9,
       'ownership_confidence': 1.0,
       'evidence_refs': [
-        {'kind': 'local_screen', 'id': 'screen-1', 'scope': 'device_local', 'device_id': 'mac-1'},
+        {
+          'kind': 'local_screen',
+          'id': 'screen-1',
+          'scope': 'device_local',
+          'device_id': 'mac-1',
+        },
       ],
       'source_surface': 'desktop_screen',
       'status': 'pending',
