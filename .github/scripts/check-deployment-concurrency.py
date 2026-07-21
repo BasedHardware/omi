@@ -575,7 +575,9 @@ def check_repository() -> list[str]:
     release_vector_workflows = sorted(
         name for name, text in workflow_text.items() if "backend/scripts/verify_backend_release_vector.py" in text
     )
-    allowed_release_vector_workflows = {"gcp_backend.yml", "gcp_backend_auto_dev.yml"}
+    # Release-ring deploys are admitted from an immutable record and bind the
+    # verifier to that record's source SHA and this deployment run identity.
+    allowed_release_vector_workflows = {"deploy-release-ring.yml", "gcp_backend.yml", "gcp_backend_auto_dev.yml"}
     for name in release_vector_workflows:
         if name not in allowed_release_vector_workflows:
             errors.append(f"{name}: release-vector verification may run only in a source backend deploy workflow")

@@ -44,3 +44,21 @@ def test_dispatch_release_id_cannot_be_interpolated_into_shell(tmp_path: Path, m
     monkeypatch.setattr(checker, "ROOT", tmp_path)
 
     assert any("must enter shell only through the job environment" in error for error in checker.check())
+
+
+def test_serving_release_vector_must_follow_traffic_promotion(tmp_path: Path, monkeypatch) -> None:
+    for relative in checker.BACKEND_RELEASE_SOURCES:
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(checker.ROOT / relative, destination)
+    deploy_path = tmp_path / ".github/workflows/deploy-release-ring.yml"
+    deploy_path.write_text(
+        deploy_path.read_text(encoding="utf-8").replace(
+            "      - name: Verify serving release vector\n",
+            "      - name: Verify release vector before traffic promotion\n",
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(checker, "ROOT", tmp_path)
+
+    assert any("serving release-vector verification must follow traffic promotion" in error for error in checker.check())
