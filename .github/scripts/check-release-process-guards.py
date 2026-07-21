@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -55,6 +55,9 @@ WORKFLOW_CONTRACT_RELATIVE_PATH = Path(".github/scripts/fixtures/codemagic_workf
 CANONICAL_WORKFLOW = "omi-desktop-swift-release"
 PREVIEW_WORKFLOW = "omi-desktop-swift-preview"
 NORMAL_RELEASE_CREDENTIAL_GROUPS = {"desktop_secrets"}
+CODEMAGIC_RAW_SHA256_FIELD = "codemagic_raw_sha256"
+CODEMAGIC_SEMANTIC_SHA256_FIELD = "codemagic_semantic_sha256"
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 # This is deliberately supplemental.  The fixture below is the authority
 # boundary; these literals only make obvious new direct authority easy to spot.
@@ -70,6 +73,22 @@ def _canonical_json(value: object) -> str:
 
 def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _check_codemagic_document_digest(
+    contract: dict[str, object], field: str, actual_digest: str, description: str
+) -> list[str]:
+    """Require a valid approved digest before narrower Codemagic checks run."""
+    expected_digest = contract.get(field)
+    if not isinstance(expected_digest, str) or _SHA256_HEX.fullmatch(expected_digest) is None:
+        return [f"Codemagic workflow contract fixture {field} must be a lowercase SHA-256 digest"]
+    if actual_digest != expected_digest:
+        return [f"Codemagic entire document {description} does not match approved fixture {field}"]
+    return []
 
 
 def _yaml_source_topology_errors(text: str, root: yaml.Node | None) -> list[str]:
@@ -110,15 +129,17 @@ def _yaml_source_topology_errors(text: str, root: yaml.Node | None) -> list[str]
 
 
 def check_codemagic_release_publishers() -> list[str]:
-    """Lock the two desktop workflows and their release capability ownership.
+    """Lock the entire Codemagic document and desktop release capability ownership.
 
-    This intentionally does not try to recognize arbitrary Bash.  The complete
-    executable workflow subtrees and the one publication scalar are compared to
-    checked-in canonical JSON/text digests.  Therefore a constructed command,
-    shell function, control-flow change, or alternate API call cannot gain
-    release authority without an explicit fixture change in review.
+    The entire-file raw and safely-loaded semantic digests are the security
+    boundary, not regex or credential-name recognition: static analysis cannot
+    classify arbitrary Bash or unknown credential capabilities. Future
+    Codemagic edits must intentionally update the reviewed fixture digests and
+    these regression tests. The narrower workflow, topology, scalar, credential,
+    preview, and supplemental checks remain defense in depth.
     """
     codemagic_path = ROOT / "codemagic.yaml"
+    raw_digest = _sha256_bytes(codemagic_path.read_bytes())
     document, duplicates, errors = _load_codemagic_with_duplicates(codemagic_path)
     errors.extend(f"codemagic.yaml has duplicate key: {key}" for key in duplicates)
     workflow_contract = ROOT / WORKFLOW_CONTRACT_RELATIVE_PATH
@@ -128,6 +149,21 @@ def check_codemagic_release_publishers() -> list[str]:
         contract = json.loads(workflow_contract.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         return [*errors, f"Codemagic workflow contract fixture is invalid JSON: {exc}"]
+    if not isinstance(contract, dict):
+        return [*errors, "Codemagic workflow contract fixture must be a mapping"]
+
+    # These comparisons deliberately precede every workflow-specific check.
+    # The raw digest includes comments, anchors, aliases, and source topology;
+    # the semantic digest independently locks the safely loaded full document.
+    errors.extend(_check_codemagic_document_digest(contract, CODEMAGIC_RAW_SHA256_FIELD, raw_digest, "raw byte digest"))
+    errors.extend(
+        _check_codemagic_document_digest(
+            contract,
+            CODEMAGIC_SEMANTIC_SHA256_FIELD,
+            _sha256_text(_canonical_json(document)),
+            "semantic digest",
+        )
+    )
     workflows = document.get("workflows")
     if not isinstance(workflows, dict):
         return [*errors, "codemagic.yaml is missing its workflows mapping"]
