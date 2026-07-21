@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/SignInView.swift
+  s_77f2b8dfbc2e90::t_2862bd31cb98b0 47-53,55-58
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_77f2b8dfbc2e90::t_1be45d51c5658a 812-814
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "fea7b79fb464c03ac7e52000d217a721a93f66ff",
+  "prompts": {},
+  "sessions": {
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
