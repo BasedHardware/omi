@@ -39,6 +39,7 @@ def build_expectation(
     region: str,
     environment: str,
     short_sha: str | None = None,
+    expected_image: str | None = None,
 ) -> DeploymentExpectation:
     """Derive an immutable desired release vector from deploy-run metadata.
 
@@ -68,6 +69,8 @@ def build_expectation(
         resolved_short_sha = normalized_short
     else:
         resolved_short_sha = normalized_sha[:7]
+    if expected_image is not None and not expected_image.strip():
+        raise ValueError('expected image must not be empty')
     suffix = f'{resolved_short_sha}-{deploy_run_id}-{deploy_run_attempt}'
     return DeploymentExpectation(
         commit_sha=normalized_sha,
@@ -77,7 +80,9 @@ def build_expectation(
         region=region,
         environment=environment,
         namespace=f'{environment}-omi-backend',
-        image=f'gcr.io/{project}/backend:{resolved_short_sha}',
+        image=(
+            expected_image.strip() if expected_image is not None else f'gcr.io/{project}/backend:{resolved_short_sha}'
+        ),
         revisions={service: f'{service}-{suffix}' for service in CLOUD_RUN_SERVICES},
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
@@ -392,6 +397,10 @@ def main() -> int:
     parser.add_argument('--region', default='us-central1')
     parser.add_argument('--environment', choices=('dev', 'prod'), required=True)
     parser.add_argument(
+        '--expected-image',
+        help='immutable image reference recorded by a release-ring deployment',
+    )
+    parser.add_argument(
         '--candidate',
         action='store_true',
         help='verify a ready no-traffic candidate release vector before promotion',
@@ -412,6 +421,7 @@ def main() -> int:
             project=args.project,
             region=args.region,
             environment=args.environment,
+            expected_image=args.expected_image,
         )
         if args.cloud_run_only and not args.candidate:
             raise ValueError('--cloud-run-only is valid only for a no-traffic candidate')
