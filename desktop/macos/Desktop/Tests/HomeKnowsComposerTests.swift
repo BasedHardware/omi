@@ -71,4 +71,16 @@ final class HomeKnowsComposerTests: XCTestCase {
   func testEverythingEmptyProducesNoRows() {
     XCTAssertTrue(HomeKnowsListComposer.compose(tasks: [], insights: [], questions: []).isEmpty)
   }
+
+  func testDuplicateQuestionsCollapseToOneRowWithUniqueIDs() {
+    // Question rows derive their ForEach ID from the text; a repeated
+    // suggestion must not produce two rows with a colliding ID.
+    let rows = HomeKnowsListComposer.compose(
+      tasks: [], insights: [],
+      questions: ["What should I do today?", " What should I do today? ", "Second question?"])
+
+    XCTAssertEqual(rows.count, 2)
+    XCTAssertEqual(rows.map(\.text), ["What should I do today?", "Second question?"])
+    XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
+  }
 }
