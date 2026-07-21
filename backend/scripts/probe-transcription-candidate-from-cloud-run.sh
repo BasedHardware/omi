@@ -35,6 +35,16 @@ done
 [[ "$NAME_SUFFIX" =~ ^[a-z0-9-]+$ ]] || { echo 'ERROR: --name-suffix must contain lowercase letters, digits, and hyphens' >&2; exit 2; }
 [[ -f "$FIREBASE_TOKEN_FILE" ]] || { echo 'ERROR: Firebase token file is missing' >&2; exit 2; }
 
+# The tagged candidate has a public run.app hostname. With all traffic routed
+# through the selected VPC subnet, Private Google Access is the required
+# private egress path; fail before creating any ephemeral probe resource.
+PRIVATE_GOOGLE_ACCESS="$(gcloud compute networks subnets describe "$SUBNET" --project="$PROJECT" --region="$REGION" \
+  --format='value(privateIpGoogleAccess)')"
+[[ "$PRIVATE_GOOGLE_ACCESS" == "True" ]] || {
+  echo "ERROR: subnet $SUBNET must enable Private Google Access for all-traffic Cloud Run probe egress" >&2
+  exit 1
+}
+
 NAME_TOKEN="$(python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:20])' "$NAME_SUFFIX")"
 JOB_NAME="backend-candidate-vpc-probe-${NAME_TOKEN}"
 SERVICE_ACCOUNT_NAME="bcp-${NAME_TOKEN}"
@@ -58,7 +68,7 @@ gcloud run services add-iam-policy-binding backend --project="$PROJECT" --region
   --member="serviceAccount:${SERVICE_ACCOUNT}" --role=roles/run.invoker --quiet
 
 gcloud run jobs deploy "$JOB_NAME" --project="$PROJECT" --region="$REGION" --image="$IMAGE" \
-  --service-account="$SERVICE_ACCOUNT" --network="$NETWORK" --subnet="$SUBNET" --vpc-egress=private-ranges-only \
+  --service-account="$SERVICE_ACCOUNT" --network="$NETWORK" --subnet="$SUBNET" --vpc-egress=all-traffic \
   --set-env-vars="CANDIDATE_API_URL=${CANDIDATE_URL},CLOUD_RUN_IDENTITY_AUDIENCE=${IDENTITY_AUDIENCE},FIREBASE_PROBE_TOKEN=${FIREBASE_TOKEN}" \
   --command=python --args=scripts/run_vpc_transcription_candidate_probe.py --task-timeout=120s --max-retries=0 --quiet
 FIREBASE_TOKEN=""

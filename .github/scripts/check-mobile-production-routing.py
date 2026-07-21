@@ -15,7 +15,9 @@ WORKFLOWS = (
     "android-prod-patch",
     "macos-prod-appstore",
 )
+DESKTOP_WORKFLOW = "omi-desktop-swift-release"
 PIN = "https://api.omi.me/"
+DESKTOP_PIN = "https://api.omi.me"
 
 
 def _workflow_block(text: str, workflow: str) -> str | None:
@@ -33,6 +35,12 @@ def validate(root: Path) -> list[str]:
             errors.append(
                 f"{workflow} must contain exactly one immutable API_BASE_URL=https://api.omi.me/ assignment"
             )
+    desktop_block = _workflow_block(text, DESKTOP_WORKFLOW)
+    desktop_assignments = re.findall(r"(?m)^\s*OMI_PYTHON_API_URL:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or "")
+    if desktop_assignments != [DESKTOP_PIN]:
+        errors.append(
+            f"{DESKTOP_WORKFLOW} must contain exactly one immutable OMI_PYTHON_API_URL=https://api.omi.me assignment"
+        )
     return errors
 
 

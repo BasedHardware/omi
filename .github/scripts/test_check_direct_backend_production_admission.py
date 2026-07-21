@@ -31,6 +31,11 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
             "diagnostic": (CHECKER.DIAGNOSTIC, "ERROR: source admission failed"),
             "second_checkout": ("\n", "\n      - uses: actions/checkout@v7\n"),
             "late_image_override": ("\n", "\n      - name: late image override\n        run: IMAGE_TAG=latest\n"),
+            "late_persistent_image_override": (
+                "\n",
+                "\n      - name: late persistent image override\n"
+                "        run: echo \"IMAGE_TAG=latest\" >> \"$GITHUB_ENV\"\n",
+            ),
         }
         for relative in CHECKER.WORKFLOWS:
             for name, (expected, replacement) in mutations.items():
@@ -45,6 +50,24 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                     text = target.read_text(encoding="utf-8")
                     self.assertIn(expected, text)
                     target.write_text(text.replace(expected, replacement, 1), encoding="utf-8")
+                    self.assertTrue(CHECKER.validate(root))
+
+    def test_rejects_multiple_image_tag_authorities_and_late_checkouts(self) -> None:
+        mutations = (
+            "      - name: second image authority\n        run: IMAGE_TAG=deadbee\n",
+            "      - uses: actions/checkout@v7\n        with:\n          ref: main\n",
+        )
+        for relative in CHECKER.WORKFLOWS:
+            for mutation in mutations:
+                with self.subTest(workflow=relative, mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for fixture_relative in CHECKER.WORKFLOWS:
+                        source = ROOT / fixture_relative
+                        target = root / fixture_relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source, target)
+                    target = root / relative
+                    target.write_text(target.read_text(encoding="utf-8") + "\n" + mutation, encoding="utf-8")
                     self.assertTrue(CHECKER.validate(root))
 
 

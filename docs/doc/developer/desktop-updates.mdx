@@ -33,10 +33,10 @@ Repointing stops future rollout but cannot downgrade clients that Sparkle has al
 
 For each channel, update resolution is: live pointer cache, Firestore pointer/manifest, validated last-known-good pointer, then the same channel's legacy GitHub metadata. Stable never falls through to Beta. The legacy resolver remains while older clients require it; pointer failures record the shared fallback telemetry boundary.
 
-The desktop release workflows retain the existing Firestore legacy bridge and stable static repair route. Backend deployments are separate established workflows (`gcp_backend.yml` and service-specific workflows); a desktop pointer promotion never deploys Rust, Python, Cloud Run, GKE, or a backend release ring.
+The desktop release workflows retain the existing Firestore legacy bridge and stable static repair route. A desktop pointer promotion never invokes or controls a backend deployment.
 
 ## Backend deployment boundary for the update API
 
-For this release, the desktop update API needs only the Cloud Run backend. `gcp_backend.yml` accepts `environment=prod, deploy_targets=cloud-run-only`: it deploys tagged no-traffic Cloud Run candidate revisions, proves the exact tagged backend with a VPC-connected ephemeral Cloud Run Job and both Cloud Run IAM plus Firebase authentication, then snapshots, promotes, verifies, and restores Cloud Run traffic if final verification fails. The temporary Job, tag, invoker binding, and probe service account are cleaned up on both success and failure.
+The surviving direct backend deployment boundary for the desktop update API is Cloud Run only. `gcp_backend.yml` accepts `environment=prod, deploy_targets=cloud-run-only`: it deploys tagged no-traffic Cloud Run candidate revisions, proves the exact tagged backend with a VPC-connected ephemeral Cloud Run Job and both Cloud Run IAM plus Firebase authentication, then snapshots, promotes, verifies, and restores Cloud Run traffic if final verification fails. The temporary Job, tag, invoker binding, and probe service account are cleaned up on both success and failure.
 
 `environment=prod, deploy_targets=all` is rejected before checkout, cloud authentication, image publication, or mutation. Transactional GKE/config rollback parity does not exist, so this workflow does not claim atomic full-stack deployment. The source-admitted direct GKE workflows (`gcp_backend_listen_helm.yml`, `gcp_backend_pusher.yml`, `gcp_llm_gateway.yml`, and `gcp_backend_agent_proxy.yml`) remain the operational production paths for their respective surfaces.
