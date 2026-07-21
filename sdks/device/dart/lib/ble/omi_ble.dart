@@ -21,8 +21,7 @@ abstract class OmiBleClient {
   Stream<List<int>> audioPackets();
 
   /// Payload after stripPacketHeader (matches Python listen_payload).
-  Stream<List<int>> audioPayloads() =>
-      audioPackets().map(stripPacketHeader).where((p) => p.isNotEmpty);
+  Stream<List<int>> audioPayloads() => audioPackets().map(stripPacketHeader).where((p) => p.isNotEmpty);
 
   /// First byte of codec characteristic (app: performGetAudioCodec).
   Future<int> readCodec();

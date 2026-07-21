@@ -31,9 +31,7 @@ class DeepgramTranscriber:
         )
         while True:
             try:
-                async with websockets.connect(
-                    url, additional_headers={"Authorization": f"Token {self.api_key}"}
-                ) as ws:
+                async with websockets.connect(url, additional_headers={"Authorization": f"Token {self.api_key}"}) as ws:
 
                     async def send_audio() -> None:
                         while True:
@@ -43,11 +41,7 @@ class DeepgramTranscriber:
                     async def receive() -> None:
                         async for message in ws:
                             data = json.loads(message)
-                            alt = (
-                                data.get("channel", {})
-                                .get("alternatives", [{}])[0]
-                                .get("transcript", "")
-                            )
+                            alt = data.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
                             if alt:
                                 if on_transcript:
                                     on_transcript(alt)

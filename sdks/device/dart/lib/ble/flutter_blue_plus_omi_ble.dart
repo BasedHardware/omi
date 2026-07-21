@@ -56,9 +56,7 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
     final sub = FlutterBluePlus.scanResults.listen((results) {
       for (final r in results) {
         final id = r.device.remoteId.str;
-        final name = r.advertisementData.advName.isNotEmpty
-            ? r.advertisementData.advName
-            : r.device.platformName;
+        final name = r.advertisementData.advName.isNotEmpty ? r.advertisementData.advName : r.device.platformName;
         // Keep strongest RSSI
         final prev = seen[id];
         if (prev == null || r.rssi > prev.rssi) {
@@ -147,8 +145,7 @@ class FlutterBluePlusOmiBle implements OmiBleClient {
   }
 
   @override
-  Stream<List<int>> audioPayloads() =>
-      audioPackets().map(stripPacketHeader).where((p) => p.isNotEmpty);
+  Stream<List<int>> audioPayloads() => audioPackets().map(stripPacketHeader).where((p) => p.isNotEmpty);
 
   @override
   Future<int> readCodec() async {
