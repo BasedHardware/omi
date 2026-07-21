@@ -31,6 +31,7 @@ final class ChatFirstDeferralOutboxDriverTests: XCTestCase {
     XCTAssertTrue(request.question.options[0].isDeferred)
     let data = try JSONEncoder().encode(request.question)
     let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    XCTAssertEqual(wire["type"] as? String, "questionCard")
     let option = try XCTUnwrap((wire["options"] as? [[String: Any]])?.first)
     XCTAssertEqual(option["defer"] as? Bool, true)
     XCTAssertNil(option["isDeferred"])

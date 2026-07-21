@@ -24,12 +24,14 @@ struct ChatFirstDeferralDeliveryRequest: Sendable, Equatable {
   }
 
   struct Question: Codable, Sendable, Equatable {
+    let type: String = "questionCard"
     let questionID: String
     let text: String
     let subject: Subject
     let options: [Option]
 
     enum CodingKeys: String, CodingKey {
+      case type
       case questionID = "question_id"
       case text, subject, options
     }
