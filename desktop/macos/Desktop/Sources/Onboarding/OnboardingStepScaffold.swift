@@ -165,13 +165,17 @@ struct OnboardingStepScaffold<Content: View>: View {
         Divider()
           .background(OmiColors.backgroundTertiary)
 
+        progressRow
+
         GeometryReader { geometry in
           ScrollView(showsIndicators: false) {
             VStack(spacing: OmiSpacing.xxl) {
-              progressRow(centered: true)
               titleBlock(centered: true)
               content
             }
+            // Optical centering: phantom bottom padding lifts the block a bit
+            // above true vertical center.
+            .padding(.bottom, 96)
             .frame(maxWidth: 560)
             .frame(
               minWidth: 0, maxWidth: .infinity, minHeight: geometry.size.height,
@@ -197,9 +201,10 @@ struct OnboardingStepScaffold<Content: View>: View {
       Divider()
         .background(OmiColors.backgroundTertiary)
 
+      progressRow
+
       ScrollView(showsIndicators: false) {
         VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
-          progressRow(centered: false)
           titleBlock(centered: false)
           content
         }
@@ -233,9 +238,12 @@ struct OnboardingStepScaffold<Content: View>: View {
     .padding(.vertical, OmiSpacing.lg)
   }
 
-  private func progressRow(centered: Bool) -> some View {
+  /// Fixed top strip under the header divider, matching the custom full-width
+  /// steps (shortcut/demo views) that place the bar themselves.
+  private var progressRow: some View {
     OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
-      .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+      .frame(maxWidth: .infinity, alignment: .center)
+      .padding(.top, OmiSpacing.xl)
   }
 
   private func titleBlock(centered: Bool) -> some View {

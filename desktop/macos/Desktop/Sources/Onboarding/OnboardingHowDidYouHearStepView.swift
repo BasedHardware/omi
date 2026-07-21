@@ -29,10 +29,7 @@ struct OnboardingHowDidYouHearStepView: View {
     ("AI chat", .emoji("✨")),
     ("Podcast", .emoji("🎙️")),
     ("Colleague", .emoji("🧑‍💻")),
-    ("Article", .emoji("📝")),
     ("Product Hunt", .productHunt),
-    ("Newsletter", .emoji("📬")),
-    ("Event", .emoji("🎟️")),
     ("Other", .emoji("💬")),
   ]
 
@@ -44,9 +41,10 @@ struct OnboardingHowDidYouHearStepView: View {
       eyebrow: "Quick question",
       title: "How did you hear\nabout Omi?",
       description: "",
+      layoutMode: .centered,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      VStack(spacing: OmiSpacing.md) {
         FlowLayout(spacing: OmiSpacing.sm) {
           ForEach(Self.sources, id: \.name) { source in
             OnboardingSelectableChip(
@@ -90,7 +88,7 @@ struct OnboardingHowDidYouHearStepView: View {
         }
         .padding(.top, OmiSpacing.sm)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .center)
       .onAppear {
         hadSelectionOnAppear = !selectedSource.isEmpty
       }
