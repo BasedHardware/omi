@@ -78,12 +78,14 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var videoCallThrottleGate = ProactiveVideoCallThrottleGate()
   private let videoCallThrottleFactor = 5  // Capture 1 out of every 5 frames (effective ~5s interval)
 
-  // Screenshot-app yielding: pause capture entirely while another screenshot/recording
-  // app is frontmost, and hold a short backoff after it resigns so its editor UI isn't
-  // disturbed. Prevents Omi's 3s capture loop from locking WindowServer at the moment
-  // the user is trying to take a screenshot (CleanShot, Shottr, macOS screenshot, etc.).
-  private var screenshotCaptureGate = ProactiveScreenshotCaptureGate()
+  // External-capture yielding: pause capture entirely while a screenshot/recording app is
+  // frontmost (CleanShot, Shottr, macOS screenshot — WindowServer stalls, #6819) or while
+  // another app actively shares the screen in a call (Zoom/Teams/Meet presenting — the
+  // contention has been observed to stop the user's share, issue #10143). Each condition
+  // holds a short backoff after it clears. See ProactiveExternalCaptureYield.
+  private var externalCaptureYield = ProactiveExternalCaptureYield()
   private let screenshotAppBackoffDuration: TimeInterval = 10
+  private let screenShareBackoffDuration: TimeInterval = 10
 
   // Change-gated distribution: only distribute frames to assistants when context changes.
   // Eliminates continuous polling when the user stays on the same app/window.
@@ -493,7 +495,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     backgroundPollCount = 0
     recoveryRetryCount = 0
     isInDelayPeriod = false
-    screenshotCaptureGate.reset()
+    externalCaptureYield.reset()
     videoCallThrottleGate.reset()
     distributionGate.reset()
     latestCapturedFrame = nil
@@ -694,31 +696,16 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    // Skip capture while a screenshot / screen-recording app is frontmost.
-    // Both apps using ScreenCaptureKit at the same time contend for WindowServer
-    // locks, which can stall the user's capture UI for 20-60s. Yield to the user.
-    let wasScreenshotAppFrontmostBeforeDecision = screenshotCaptureGate.wasScreenshotAppFrontmost
-    switch screenshotCaptureGate.nextDecision(
+    // Yield to an external capture in progress: a frontmost screenshot/recording app, or an
+    // active outgoing call screen share. See ProactiveExternalCaptureYield for rationale.
+    if externalCaptureYield.shouldYield(
       isScreenshotAppFrontmost: isScreenshotAppFrontmost(),
+      isScreenShareActive: ConferencingApps.activeScreenSharePresent(),
       now: now,
-      backoffDuration: screenshotAppBackoffDuration
+      screenshotBackoffDuration: screenshotAppBackoffDuration,
+      shareBackoffDuration: screenShareBackoffDuration
     ) {
-    case .pause:
-      if !wasScreenshotAppFrontmostBeforeDecision {
-        log("ProactiveAssistantsPlugin: Screenshot app frontmost — pausing capture to avoid WindowServer contention")
-      }
       return
-    case .resumeIntoBackoff:
-      log(
-        "ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for \(Int(max(0, screenshotCaptureGate.backoffUntil.timeIntervalSinceNow)))s"
-      )
-      return
-    case .resumeAndCapture:
-      log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for 0s")
-    case .continueBackoff:
-      return
-    case .capture:
-      break
     }
     // Get current window info (use real app name, not cached)
     let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
