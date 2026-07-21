@@ -162,7 +162,9 @@ jobs:
         run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py
 
       - name: Check release process guards
-        run: python3 .github/scripts/check-release-process-guards.py
+        run: |
+          pip install -q pyyaml
+          python3 .github/scripts/check-release-process-guards.py
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'
