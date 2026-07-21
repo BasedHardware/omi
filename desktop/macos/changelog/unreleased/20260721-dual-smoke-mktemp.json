@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a release-pipeline check that blocked the first side-by-side Omi Beta build from publishing"
+}

@@ -410,7 +410,10 @@ assert_signing_and_entitlements() {
   [[ -n "$runtime" ]] || fail "signed app is missing hardened runtime metadata"
 
   local entitlements
-  entitlements="$(mktemp "${TMPDIR:-/tmp}/omi-entitlements.XXXXXX.plist")"
+  # macOS mktemp does not substitute X's followed by a suffix — the literal
+  # template file then collides when the smoke runs twice in one build
+  # (stable + Omi Beta). Templates must end with XXXXXX.
+  entitlements="$(mktemp "${TMPDIR:-/tmp}/omi-entitlements.XXXXXX")"
   codesign -d --entitlements :- "$APP_BUNDLE" >"$entitlements" 2>/dev/null || fail "could not read app entitlements"
 
   if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$entitlements" >/dev/null 2>&1; then
@@ -581,7 +584,7 @@ prepare_notification_callback_canary() {
   [[ "$RUN_LAUNCH" == true ]] || fail "--notification-callback-canary requires --launch"
 
   if [[ -z "$NOTIFICATION_CALLBACK_MARKER" ]]; then
-    NOTIFICATION_CALLBACK_MARKER="$(mktemp "${TMPDIR:-/tmp}/omi-notification-callback.XXXXXX.json")"
+    NOTIFICATION_CALLBACK_MARKER="$(mktemp "${TMPDIR:-/tmp}/omi-notification-callback.XXXXXX")"
     NOTIFICATION_CALLBACK_MARKER_IS_TEMP=true
   fi
   rm -f "$NOTIFICATION_CALLBACK_MARKER"
