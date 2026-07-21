@@ -13,7 +13,7 @@ import base64
 import json
 import sys
 from types import ModuleType, SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -68,15 +68,28 @@ def _make_client():
     llm_persona.initial_persona_chat_message = MagicMock(return_value='hi')
     notifications = _install('utils.notifications')
     notifications.send_notification = MagicMock()
+    notifications.send_notification_async = AsyncMock()
 
     fallback_obs = _install('utils.observability.fallback')
     fallback_obs.record_fallback = MagicMock()
 
+    # utils.chat's strict silence validation would try to decode the fake
+    # '/tmp/decoded.wav' path with the real VAD and raise INVALID_INPUT.
+    vad = _install('utils.stt.vad')
+    vad.VADAudioDecodeError = type('VADAudioDecodeError', (Exception,), {})
+    vad.VADProcessingError = type('VADProcessingError', (Exception,), {})
+    vad.linear16_pcm_is_silent = MagicMock(return_value=False)
+    vad.vad_is_empty_strict = MagicMock(return_value=False)
+
     pre_recorded = _install('utils.stt.pre_recorded')
     pre_recorded.get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-2'))
     pre_recorded.postprocess_words = MagicMock(return_value=[SimpleNamespace(text='hello')])
-    pre_recorded.prerecorded = MagicMock(return_value=[])
-    pre_recorded.prerecorded_from_bytes = MagicMock(return_value=[])
+    # Non-empty: utils.chat now treats an empty transcript after detected
+    # speech as a TranscriptionFailure instead of continuing silently.
+    pre_recorded.prerecorded = MagicMock(return_value=[{'word': 'hello'}])
+    pre_recorded.prerecorded_from_bytes = MagicMock(return_value=[{'word': 'hello'}])
+    pre_recorded.get_prerecorded_service = MagicMock(return_value=('parakeet', 'en', 'parakeet'))
+    pre_recorded.PrerecordedSTTConfigurationError = type('PrerecordedSTTConfigurationError', (Exception,), {})
 
     common.usage_tracker.track_usage = MagicMock()
 
