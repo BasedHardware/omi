@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
+  s_62099ccfd5cc12::t_9f116b8f81b57c 26-29,42-43,64,69-72,78-89
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_62099ccfd5cc12::t_70d652d82701e8 289-291
+desktop/macos/Desktop/Tests/NotchMomentsFollowUpCountTests.swift
+  s_62099ccfd5cc12::t_19ddfce07337a3 1-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "d389172f1cac8fca8a442b9b694d09a0003c6de8",
+  "prompts": {},
+  "sessions": {
+    "s_62099ccfd5cc12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bce3b3b3-c244-4ae8-bb2a-1ff7eccbcdbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
