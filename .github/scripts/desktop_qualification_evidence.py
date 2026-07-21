@@ -63,7 +63,11 @@ def build_evidence(
         _fail("source SHA is not an exact 40-character SHA")
     gate = files.pop("__candidate_gate__")
     candidate_gate = json.loads(gate.read_text(encoding="utf-8"))
-    if candidate_gate.get("passed") is not True or candidate_gate.get("release_tag") != release_tag:
+    if (
+        candidate_gate.get("passed") is not True
+        or candidate_gate.get("release_tag") != release_tag
+        or candidate_gate.get("source_sha") != source_sha
+    ):
         _fail("was not created after the passing candidate gate")
     metadata = _metadata(str(release.get("body") or ""))
     artifacts: dict[str, dict[str, str]] = {}

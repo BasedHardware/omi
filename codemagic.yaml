@@ -2679,6 +2679,7 @@ workflows:
               --zip "$SPARKLE_ZIP_PATH" \
               --dmg "$DMG_PATH" \
               --tag "$CM_TAG" \
+              --source-sha "$(git rev-parse HEAD)" \
               --expected-channel beta \
               --launch \
               --auth-storage-canary \

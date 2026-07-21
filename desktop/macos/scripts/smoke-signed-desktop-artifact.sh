@@ -9,6 +9,7 @@ SOURCE_APP_BUNDLE=""
 SPARKLE_ZIP=""
 DMG_PATH=""
 RELEASE_TAG=""
+SOURCE_SHA=""
 EXPECTED_CHANNEL="${OMI_SIGNED_ARTIFACT_SMOKE_CHANNEL:-beta}"
 EXPECTED_TEAM_ID="${OMI_SIGNED_ARTIFACT_SMOKE_TEAM_ID:-9536L8KLMP}"
 EXPECTED_BUNDLE_ID="${OMI_SIGNED_ARTIFACT_SMOKE_BUNDLE_ID:-com.omi.computer-macos}"
@@ -51,6 +52,7 @@ Options:
   --zip PATH                 Sparkle ZIP containing the app bundle
   --dmg PATH                 DMG artifact to verify/mount when available
   --tag TAG                  Expected release tag, vX.Y.Z+BUILD-macos
+  --source-sha SHA           Exact source commit used to build this artifact
   --expected-channel NAME    Expected channel label for result metadata (default: beta)
   --expected-bundle-id ID    Expected app bundle identifier
   --expected-url-scheme URL  Expected app URL scheme
@@ -149,6 +151,7 @@ parse_args() {
       --zip) require_option_value "$1" "${2:-}"; SPARKLE_ZIP="$2"; shift 2 ;;
       --dmg) require_option_value "$1" "${2:-}"; DMG_PATH="$2"; shift 2 ;;
       --tag) require_option_value "$1" "${2:-}"; RELEASE_TAG="$2"; shift 2 ;;
+      --source-sha) require_option_value "$1" "${2:-}"; SOURCE_SHA="$2"; shift 2 ;;
       --expected-channel) require_option_value "$1" "${2:-}"; EXPECTED_CHANNEL="$2"; shift 2 ;;
       --expected-bundle-id) require_option_value "$1" "${2:-}"; EXPECTED_BUNDLE_ID="$2"; shift 2 ;;
       --expected-url-scheme) require_option_value "$1" "${2:-}"; EXPECTED_URL_SCHEME="$2"; shift 2 ;;
@@ -301,6 +304,7 @@ write_result_json() {
   CHECKS_JOINED="$(printf '%s\n' "${SMOKE_CHECKS[@]}")" \
     ARTIFACTS_JOINED="$(printf '%s\n' "${SMOKE_ARTIFACTS[@]}")" \
     RESULT_TAG="$RELEASE_TAG" \
+    RESULT_SOURCE_SHA="$SOURCE_SHA" \
     RESULT_CHANNEL="$EXPECTED_CHANNEL" \
     RESULT_BUNDLE_ID="$bundle_id" \
     RESULT_VERSION="$version" \
@@ -334,6 +338,7 @@ print(json.dumps({
     "ok": True,
     "finished_at": datetime.now(timezone.utc).isoformat(),
     "release_tag": os.environ.get("RESULT_TAG") or None,
+    "source_sha": os.environ.get("RESULT_SOURCE_SHA") or None,
     "expected_channel": os.environ.get("RESULT_CHANNEL") or None,
     "bundle_id": os.environ.get("RESULT_BUNDLE_ID") or None,
     "version": os.environ.get("RESULT_VERSION") or None,

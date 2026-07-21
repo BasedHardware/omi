@@ -281,7 +281,7 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
             path.write_bytes(content)
             paths[name] = path
         gate = root / "gate.json"
-        gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"]}))
+        gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
         evidence = qualification_evidence.build_evidence(
             release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
         )
@@ -293,6 +293,24 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
                 release["tagName"],
                 "a" * 40,
                 {name: qualification_evidence.file_sha256(path) for name, path in paths.items()},
+            )
+
+
+def test_qualification_evidence_rejects_candidate_gate_from_a_different_source():
+    release = _release()
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        paths = {}
+        for name, content in (("Omi.zip", b"zip"), ("omi.dmg", b"dmg")):
+            path = root / name
+            path.write_bytes(content)
+            paths[name] = path
+        gate = root / "gate.json"
+        gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "b" * 40}))
+
+        with pytest.raises(ValueError, match="passing candidate gate"):
+            qualification_evidence.build_evidence(
+                release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
             )
 
 
