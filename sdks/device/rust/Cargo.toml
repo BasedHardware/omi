@@ -7,8 +7,8 @@ license = "MIT"
 
 [features]
 default = []
-# Optional BLE transport glue (no OS BLE stack vendored; enable when wiring btleplug/etc).
-ble = []
+# Optional BLE transport via btleplug (needs local adapter + OS Bluetooth permission).
+ble = ["dep:btleplug", "dep:tokio", "dep:uuid", "dep:futures-util"]
 stt-deepgram = ["dep:tokio-tungstenite", "dep:tokio", "dep:futures-util", "dep:http"]
 stt-parakeet = ["dep:tokio-tungstenite", "dep:tokio", "dep:futures-util"]
 stt-whisper = []
@@ -19,5 +19,7 @@ tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net"], opt
 tokio-tungstenite = { version = "0.24", optional = true, features = ["native-tls"] }
 futures-util = { version = "0.3", optional = true }
 http = { version = "1", optional = true }
+btleplug = { version = "0.12", optional = true }
+uuid = { version = "1", optional = true }
 serde_json = "1"
 thiserror = "1"
