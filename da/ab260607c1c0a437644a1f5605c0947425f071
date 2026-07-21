@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Tests/SBOnboardingScreenPeekTests.swift
+  s_a9432747ff4c4f::t_f0fd523beff3bb 1-41
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_a9432747ff4c4f::t_816e4ab01f88c5 467-470,472-525
+  s_a9432747ff4c4f::t_cba0d696162428 96-99,102-109
+  s_a9432747ff4c4f::t_b2b9146f14a6df 389-416
+  s_a9432747ff4c4f::t_667a36319edafc 471
+  s_a9432747ff4c4f::t_580bdf1c954a10 148
+  s_a9432747ff4c4f::t_4bd652adfd6ea9 2
+  s_a9432747ff4c4f::t_4fad848e1dfde4 56
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_a9432747ff4c4f::t_59962f302f7550 482-483
+  s_a9432747ff4c4f::t_4b709e77394f15 373-440,442-445,458-462
+  s_a9432747ff4c4f::t_95008bb3fa0858 12
+  s_a9432747ff4c4f::t_716fc8f935c4b8 98-100
+  s_a9432747ff4c4f::t_f73ff39c31ecd5 441,446-457
+desktop/macos/changelog/unreleased/20260721-onboarding-live-screen-peek.json
+  s_a9432747ff4c4f::t_96a498517a8127 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "daab260607c1c0a437644a1f5605c0947425f071",
+  "prompts": {},
+  "sessions": {
+    "s_a9432747ff4c4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d4b8429-1319-4599-8e5d-dacbb050d854",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
