@@ -653,7 +653,7 @@ actor AgentRuntimeProcess {
   /// The Node registry is the authority for adapter activation. Swift must not
   /// re-run local executable detection before advertising a realtime provider.
   func registeredDirectedProviderIDs() -> [String] {
-    runtimeAdapterIDs.intersection(["hermes", "openclaw"]).sorted()
+    runtimeAdapterIDs.intersection(["hermes", "openclaw", "codex"]).sorted()
   }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
@@ -2785,6 +2785,16 @@ actor AgentRuntimeProcess {
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
+
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      case .available(command: let codex) = LocalAgentProviderDetector.availability(
+        for: .codex,
+        environment: env,
+        homeDirectory: home
+      ).status
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexAdapterPath: codex)
+    }
   }
 
   static func byokEnvironmentKey(for provider: BYOKProvider) -> String {
@@ -2827,6 +2837,19 @@ actor AgentRuntimeProcess {
       return "\(shellQuote(nodePath)) \(shellQuote(openClawPath)) acp"
     }
     return "\(shellQuote(openClawPath)) acp"
+  }
+
+  /// The `codex-acp` bridge speaks ACP over stdio directly, so — unlike the
+  /// `<cli> acp` adapters — it takes no subcommand. A directly launched app
+  /// bundle may not have `node` on PATH for the bin's shebang, so prefer a
+  /// `node` sitting next to the adapter when present (mirrors OpenClaw).
+  static func codexAdapterCommand(codexAdapterPath: String, fileManager: FileManager = .default) -> String {
+    let nodePath =
+      ((codexAdapterPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("node")
+    if fileManager.isExecutableFile(atPath: nodePath) {
+      return "\(shellQuote(nodePath)) \(shellQuote(codexAdapterPath))"
+    }
+    return shellQuote(codexAdapterPath)
   }
 
   /// Directly launched app bundles do not inherit the shell's FNM multishell

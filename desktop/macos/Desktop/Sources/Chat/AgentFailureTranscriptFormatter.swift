@@ -44,6 +44,7 @@ enum AgentFailureTranscriptFormatter {
         switch harnessMode {
         case .openclaw: return AgentPillsManager.DirectedProvider.openclaw.setupNeededStatus
         case .hermes: return AgentPillsManager.DirectedProvider.hermes.setupNeededStatus
+        case .codex: return AgentPillsManager.DirectedProvider.codex.setupNeededStatus
         default: break
         }
       }

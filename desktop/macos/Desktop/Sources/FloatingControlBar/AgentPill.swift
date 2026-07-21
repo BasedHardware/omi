@@ -401,11 +401,13 @@ final class AgentPillsManager: ObservableObject {
   enum DirectedProvider: String, Equatable {
     case hermes
     case openclaw
+    case codex
 
     var displayName: String {
       switch self {
       case .hermes: return "Hermes"
       case .openclaw: return "OpenClaw"
+      case .codex: return "Codex"
       }
     }
 
@@ -413,6 +415,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return .hermes
       case .openclaw: return .openclaw
+      case .codex: return .codex
       }
     }
 
@@ -420,6 +423,10 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "hermes"
       case .openclaw: return "openclaw"
+      // Codex reaches Omi's ACP bridge through the `codex-acp` adapter
+      // (`@zed-industries/codex-acp`); that binary is what proves the Codex
+      // runtime is installed, since the OpenAI `codex` CLI has no native ACP.
+      case .codex: return "codex-acp"
       }
     }
 
@@ -427,6 +434,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
       case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+      case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
       }
     }
 

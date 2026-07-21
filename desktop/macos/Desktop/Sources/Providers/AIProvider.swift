@@ -61,7 +61,17 @@ struct AIProvider: Identifiable {
     bridgeModeRawValue: "openclaw"
   )
 
-  static let all: [AIProvider] = [.piMono, .claude, .hermes, .openClaw]
+  static let codex = AIProvider(
+    id: "codex",
+    displayName: "Codex",
+    tagline: "Local OpenAI Codex via the codex-acp bridge",
+    attributionURL: URL(string: "https://github.com/openai/codex"),
+    sfSymbol: "",
+    logoResource: nil,
+    bridgeModeRawValue: "codex"
+  )
+
+  static let all: [AIProvider] = [.piMono, .claude, .hermes, .openClaw, .codex]
 
   /// Look up a provider by its `chatBridgeMode` raw value.
   static func from(bridgeMode: String) -> AIProvider? {

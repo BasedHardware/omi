@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2209,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4314
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4337
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "per-turn reasoningEffort threaded through both query variants",
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "reasoningEffort added to the query wire message"
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Codex adapter-command seeding (OMI_CODEX_ADAPTER_COMMAND) and codexAdapterCommand helper"
   },
   "threshold": 1500
 }

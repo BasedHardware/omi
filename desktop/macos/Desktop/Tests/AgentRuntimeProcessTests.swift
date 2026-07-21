@@ -1055,6 +1055,41 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(command, "'\(openClawPath)' acp")
   }
 
+  func testCodexAdapterCommandUsesSiblingNodeWithoutAcpSubcommand() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let nodePath = tempDir.appendingPathComponent("node").path
+    let codexPath = tempDir.appendingPathComponent("codex-acp").path
+    FileManager.default.createFile(atPath: nodePath, contents: Data("#!/bin/sh\n".utf8))
+    FileManager.default.createFile(atPath: codexPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: nodePath)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexPath)
+
+    // The codex-acp bridge speaks ACP directly, so — unlike `<cli> acp` adapters
+    // — the command must NOT append an `acp` subcommand.
+    let command = AgentRuntimeProcess.codexAdapterCommand(codexAdapterPath: codexPath)
+
+    XCTAssertEqual(command, "'\(nodePath)' '\(codexPath)'")
+  }
+
+  func testCodexAdapterCommandFallsBackToBridgeBinaryWithoutSiblingNode() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("codex-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let codexPath = tempDir.appendingPathComponent("codex-acp").path
+    FileManager.default.createFile(atPath: codexPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codexPath)
+
+    let command = AgentRuntimeProcess.codexAdapterCommand(codexAdapterPath: codexPath)
+
+    XCTAssertEqual(command, "'\(codexPath)'")
+  }
+
   func testOpenClawDiscoveryFindsXDGFnmInstall() throws {
     let home = FileManager.default.temporaryDirectory
       .appendingPathComponent("openclaw-fnm-home-\(UUID().uuidString)", isDirectory: true)
