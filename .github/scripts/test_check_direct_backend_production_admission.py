@@ -29,6 +29,8 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
             "head_identity": (CHECKER.HEAD_IDENTITY, "CHECKED_OUT_SHA=${GITHUB_SHA}"),
             "image_identity": (CHECKER.IMAGE_IDENTITY, "IMAGE_TAG=${GITHUB_SHA::7}"),
             "diagnostic": (CHECKER.DIAGNOSTIC, "ERROR: source admission failed"),
+            "second_checkout": ("\n", "\n      - uses: actions/checkout@v7\n"),
+            "late_image_override": ("\n", "\n      - name: late image override\n        run: IMAGE_TAG=latest\n"),
         }
         for relative in CHECKER.WORKFLOWS:
             for name, (expected, replacement) in mutations.items():
