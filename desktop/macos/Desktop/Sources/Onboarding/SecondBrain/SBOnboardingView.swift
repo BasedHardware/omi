@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -7,6 +8,12 @@ struct SBOnboardingView: View {
   @Environment(\.sbTheme) private var sb
   @StateObject private var model: SBOnboardingModel
 
+  /// Same dune background as sign-in, for a continuous entry experience.
+  private static let backgroundImage: NSImage? = {
+    guard let url = Bundle.resourceBundle.url(forResource: "signin_bg", withExtension: "png") else { return nil }
+    return NSImage(contentsOf: url)
+  }()
+
   init(appState: AppState, chatProvider: ChatProvider, onComplete: (() -> Void)?) {
     _model = StateObject(
       wrappedValue: SBOnboardingModel(appState: appState, chatProvider: chatProvider, onComplete: onComplete))
@@ -14,7 +21,21 @@ struct SBOnboardingView: View {
 
   var body: some View {
     ZStack {
-      SBWallpaper()
+      if let bg = Self.backgroundImage {
+        Image(nsImage: bg)
+          .resizable()
+          .scaledToFill()
+          .overlay(
+            LinearGradient(
+              colors: [.black.opacity(0.4), .black.opacity(0.5), .black.opacity(0.72)],
+              startPoint: .top, endPoint: .bottom)
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .clipped()
+          .ignoresSafeArea()
+      } else {
+        SBWallpaper()
+      }
       panel
         .frame(width: 540, height: min(640, 900))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -54,10 +75,11 @@ struct SBOnboardingView: View {
       progressDots
     }
     .background(
-      RoundedRectangle(cornerRadius: 18, style: .continuous).fill(sb.panel)
+      RoundedRectangle(cornerRadius: 18, style: .continuous)
+        .fill(Color.white.opacity(0.05))
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     )
-    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(sb.ink(.w1), lineWidth: 1))
+    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
     .shadow(color: .black.opacity(0.5), radius: 60, y: 30)
   }
 
