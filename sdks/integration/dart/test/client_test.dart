@@ -17,8 +17,11 @@ void main() {
       appId: 'app-123',
       httpClient: mock,
     );
-    final body = await client.listMemories(uid: 'user-1', limit: 10);
-    expect(body, isA<Map>());
+    final body = await client.listMemories(
+      uid: 'user-1',
+      limit: 10,
+    );
+    expect(body, isA<MemoriesResponse>());
     expect(seen.headers['Authorization'], 'Bearer test-key');
     expect(seen.url.path, '/v2/integrations/app-123/memories');
     expect(seen.url.queryParameters['uid'], 'user-1');
