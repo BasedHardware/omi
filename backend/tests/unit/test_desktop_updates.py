@@ -823,6 +823,98 @@ class TestClearCacheEndpoint:
 
 class TestDesktopUpdateAdminEndpoints:
     @pytest.mark.asyncio
+    async def test_qualified_beta_promotion_requires_the_narrow_bearer_capability(self):
+        """The promotion capability is endpoint-scoped and accepts only a tag."""
+        with patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                missing = await client.post(
+                    "/v2/desktop/beta/promote-qualified",
+                    json={"tag": "v0.12.93+12093-macos"},
+                )
+                wrong = await client.post(
+                    "/v2/desktop/beta/promote-qualified",
+                    headers={"Authorization": "Bearer wrong-token"},
+                    json={"tag": "v0.12.93+12093-macos"},
+                )
+
+        assert missing.status_code == wrong.status_code == 401
+        assert missing.json() == wrong.json() == {"detail": "Unauthorized"}
+
+    @pytest.mark.asyncio
+    async def test_qualified_beta_rejects_extra_mutation_controls_before_reads_or_writes(self):
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+            patch("routers.updates.build_qualified_beta_manifest", new_callable=AsyncMock) as read_candidate,
+            patch("routers.updates.admit_qualified_beta_manifest") as write_candidate,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.post(
+                    "/v2/desktop/beta/promote-qualified",
+                    headers={"Authorization": "Bearer promotion-token"},
+                    json={"tag": "v0.12.93+12093-macos", "channel": "stable"},
+                )
+
+        assert response.status_code == 422
+        read_candidate.assert_not_awaited()
+        write_candidate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_qualified_beta_success_advances_only_beta_and_returns_a_retry_receipt(self):
+        manifest = {"release_id": "v0.12.93+12093-macos"}
+        receipt = {
+            "manifest": manifest,
+            "pointer": {"release_id": manifest["release_id"], "generation": 7},
+            "idempotent": False,
+        }
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+            patch("routers.updates.build_qualified_beta_manifest", new_callable=AsyncMock, return_value=manifest),
+            patch("routers.updates.admit_qualified_beta_manifest", return_value=receipt) as admit,
+            patch("routers.updates.delete_generic_cache") as invalidate,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.post(
+                    "/v2/desktop/beta/promote-qualified",
+                    headers={"Authorization": "Bearer promotion-token"},
+                    json={"tag": manifest["release_id"]},
+                )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "tag": manifest["release_id"],
+            "release_id": manifest["release_id"],
+            "generation": 7,
+            "idempotent": False,
+        }
+        admit.assert_called_once_with(manifest)
+        invalidate.assert_called_once_with("desktop_update_pointer:macos:beta")
+
+    @pytest.mark.asyncio
+    async def test_qualified_beta_rejection_writes_nothing_and_never_invalidates_stable(self):
+        from utils.qualified_beta_promotion import QualifiedBetaAdmissionError
+
+        with (
+            patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+            patch(
+                "routers.updates.build_qualified_beta_manifest",
+                new_callable=AsyncMock,
+                side_effect=QualifiedBetaAdmissionError("missing release"),
+            ),
+            patch("routers.updates.admit_qualified_beta_manifest") as admit,
+            patch("routers.updates.delete_generic_cache") as invalidate,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.post(
+                    "/v2/desktop/beta/promote-qualified",
+                    headers={"Authorization": "Bearer promotion-token"},
+                    json={"tag": "v0.12.93+12093-macos"},
+                )
+
+        assert response.status_code == 422
+        admit.assert_not_called()
+        invalidate.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_registers_immutable_manifest(self):
         payload = _pointer_release()["manifest"]
         with (

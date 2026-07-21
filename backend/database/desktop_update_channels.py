@@ -202,6 +202,48 @@ def promote_channel(
     )
 
 
+@transactional
+def _admit_qualified_beta_transaction(
+    transaction: Any, pointer_ref: Any, manifest_ref: Any, manifest: dict[str, Any]
+) -> dict[str, Any]:
+    """Atomically retain one canonical manifest and advance only macOS Beta."""
+    manifest_snapshot = manifest_ref.get(transaction=transaction)
+    manifest_exists = getattr(manifest_snapshot, "exists", False)
+    if manifest_exists:
+        raw_existing: object = manifest_snapshot.to_dict()
+        existing = normalize_release_manifest(
+            cast(dict[str, Any], raw_existing) if isinstance(raw_existing, dict) else {}
+        )
+        if existing != manifest:
+            raise ValueError("release_id already exists with different immutable metadata")
+    pointer_snapshot = pointer_ref.get(transaction=transaction)
+    raw_pointer: object = pointer_snapshot.to_dict() if getattr(pointer_snapshot, "exists", False) else {}
+    current = cast(dict[str, Any], raw_pointer) if isinstance(raw_pointer, dict) else {}
+    pointer = _build_pointer(
+        current,
+        manifest,
+        transition="promote",
+        platform="macos",
+        channel="beta",
+        release_id=manifest["release_id"],
+        expected_generation=None,
+    )
+    if not manifest_exists:
+        transaction.create(manifest_ref, {**manifest, "created_at": datetime.now(timezone.utc)})
+    if pointer is not current:
+        transaction.set(pointer_ref, pointer)
+    return {"manifest": manifest, "pointer": pointer, "idempotent": manifest_exists and pointer is current}
+
+
+def admit_qualified_beta_manifest(data: dict[str, Any], *, firestore_client: Any = None) -> dict[str, Any]:
+    """Commit the narrow server-owned Beta transaction after admission succeeds."""
+    manifest = normalize_release_manifest(data)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    pointer_ref = client.collection(CHANNELS_COLLECTION).document("macos-beta")
+    manifest_ref = client.collection(MANIFESTS_COLLECTION).document(manifest["release_id"])
+    return _admit_qualified_beta_transaction(client.transaction(), pointer_ref, manifest_ref, manifest)
+
+
 def get_channel_release(platform: str, channel: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """Resolve one explicit channel pointer to its immutable manifest."""
     if platform != "macos" or channel not in VALID_CHANNELS:

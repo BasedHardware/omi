@@ -144,12 +144,24 @@ def test_prepared_manifest_is_the_exact_immutable_object_registered_and_promoted
     assert pointer["release_id"] == accepted["release_id"]
 
 
-def test_beta_static_redirect_uses_the_qualified_dmg_on_every_surface():
+def test_beta_workflow_has_only_the_narrow_server_owned_promotion_capability():
     workflow = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
-    redirect = workflow.split("Update existing beta download redirect", 1)[1]
-    assert redirect.count('manifest["dmg_url"]') == 1
-    assert redirect.count("['dmg_url']") == 2
-    assert "beta_dmg_url" not in redirect
+    assert "/v2/desktop/beta/promote-qualified" in workflow
+    assert 'Authorization: Bearer ${BETA_PROMOTION_TOKEN}' in workflow
+    assert '--data "{\\"tag\\":\\"${RELEASE_TAG}\\"}"' in workflow
+    for forbidden in (
+        "gcloud",
+        "google-github-actions/auth",
+        "GCP_CREDENTIALS",
+        "ADMIN_KEY",
+        "RELEASE_SECRET",
+        "GCS_",
+        "stable",
+        "rollback",
+        "emergency",
+        "Backend-Rust",
+    ):
+        assert forbidden not in workflow
 
 
 def test_qualification_workflow_binds_immutable_controls_and_candidate_identity():
@@ -158,6 +170,7 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     tag = "v0.12.64+12064-macos"
     candidate_sha = "a" * 40
     trusted_tag_run = {
+        "status": "completed",
         "conclusion": "success",
         "repository": {"full_name": "BasedHardware/omi"},
         "head_repository": {"full_name": "BasedHardware/omi"},
@@ -175,10 +188,10 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
 
     codemagic = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
     qualification = QUALIFY_BETA_WORKFLOW.read_text(encoding="utf-8")
-    promotion = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
     assert '-f release_tag="$CM_TAG" --ref "$CM_TAG"' in codemagic
     assert "ref: ${{ inputs.release_tag }}" in qualification
-    assert "desktop_qualification_admission.py" in promotion
+    assert "qualification-evidence-${RELEASE_TAG}.json" in qualification
+    assert "gh release upload" in qualification
 
 
 def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():
@@ -360,29 +373,6 @@ def test_prepare_manifest_rejects_unqualified_candidate():
         )
 
 
-def test_beta_pointer_advances_before_legacy_visibility():
-    workflow = PROMOTE_BETA_WORKFLOW.read_text()
-    manifest = workflow.index("      - name: Register immutable release manifest")
-    pointer = workflow.index("      - name: Advance explicit beta pointer")
-    github = workflow.index("      - name: Mark GitHub release live beta")
-    bridge = workflow.index("      - name: Bridge beta for legacy desktop clients")
-
-    assert manifest < pointer < github < bridge
-
-
-def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
-    workflow = PROMOTE_BETA_WORKFLOW.read_text()
-    automatic_gate = workflow.index("      - name: Validate automatic beta request")
-    candidate_download = workflow.index("      - name: Download and validate qualified candidate")
-
-    assert "automatic:" in workflow
-    assert "DESKTOP_AUTO_BETA_ENABLED" in workflow
-    assert "newest is $LATEST_TAG" in workflow
-    assert "git for-each-ref --count=1 --sort=-v:refname" in workflow
-    assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in workflow
-    assert automatic_gate < candidate_download
-
-
 def test_qualification_is_serialized_by_tag_and_retried_without_release_body_state():
     codemagic = CODEMAGIC_CONFIG.read_text()
     dispatch = codemagic[codemagic.index("      - name: Dispatch trusted macOS beta qualification") :]
@@ -397,18 +387,15 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
     assert "steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'" in qualification
 
 
-def test_qualification_and_promotion_bind_the_single_artifact_pair_to_an_immutable_run_artifact():
+def test_qualification_publishes_the_single_artifact_pair_and_immutable_evidence_for_server_readback():
     qualification = QUALIFY_BETA_WORKFLOW.read_text()
-    promotion = PROMOTE_BETA_WORKFLOW.read_text()
 
     for asset in ("Omi.zip", "omi.dmg"):
         assert asset in qualification
-        assert asset in promotion
     assert "actions/upload-artifact@v7" in qualification
-    assert "qualification_run_id" in promotion
-    assert "actions/download-artifact@v7" in promotion
-    assert "--beta-zip-sha256" not in promotion
-    assert "--beta-dmg-sha256" not in promotion
+    assert "--qualification-run-id \"$GITHUB_RUN_ID\"" in qualification
+    assert "gh release upload" in qualification
+    assert "qualification-evidence-${RELEASE_TAG}.json" in qualification
     assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in qualification
 
 
@@ -437,16 +424,13 @@ def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_p
     assert 'ref: ${{ inputs.release_tag }}' in workflow
 
 
-def test_qualification_run_is_bound_to_the_exact_tag_dispatch_and_workflow():
-    for workflow in (PROMOTE_BETA_WORKFLOW.read_text(), PROMOTE_PROD_WORKFLOW.read_text()):
-        assert 'gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID"' in workflow
-        assert 'desktop_qualification_admission.py' in workflow
+def test_stable_workflow_retains_its_own_human_qualification_admission_path():
+    workflow = PROMOTE_PROD_WORKFLOW.read_text()
+    assert 'gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID"' in workflow
+    assert "desktop_qualification_admission.py" in workflow
 
 
-def test_beta_promotion_controls_are_pinned_to_candidate_tag_and_only_accept_lost_response_generation_plus_one():
-    workflow = PROMOTE_BETA_WORKFLOW.read_text()
-
-    assert 'ref: ${{ inputs.release_tag }}' in workflow
+def test_beta_pointer_lost_response_retry_remains_exact_and_generation_stable():
     manifest = normalize_release_manifest(_prepare())
     current = {
         "platform": "macos",

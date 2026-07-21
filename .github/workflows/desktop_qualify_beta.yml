@@ -121,6 +121,7 @@ jobs:
             --release-json /tmp/desktop-beta-qualification/release.json \
             --release-tag "$RELEASE_TAG" --source-sha "$TARGET_SHA" \
             --candidate-gate /tmp/desktop-beta-qualification/candidate-gate.json \
+            --qualification-run-id "$GITHUB_RUN_ID" \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
             --asset "omi.dmg=$STABLE_DMG" \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
@@ -133,6 +134,17 @@ jobs:
           path: /tmp/desktop-beta-qualification/qualification-evidence.json
           if-no-files-found: error
 
+      - name: Attach immutable qualification evidence to the candidate release
+        if: steps.evidence.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" --repo "$REPO" \
+            /tmp/desktop-beta-qualification/qualification-evidence.json#"qualification-evidence-${RELEASE_TAG}.json"
+
       - name: Request protected beta promotion
         if: steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'
         env:
@@ -143,6 +155,4 @@ jobs:
           set -euo pipefail
           gh workflow run desktop_promote_beta.yml --repo "$REPO" \
             --ref "$RELEASE_TAG" \
-            -f release_tag="$RELEASE_TAG" \
-            -f automatic=true \
-            -f qualification_run_id="$GITHUB_RUN_ID"
+            -f release_tag="$RELEASE_TAG"

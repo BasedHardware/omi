@@ -11,10 +11,11 @@ from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
+    admit_qualified_beta_manifest,
     get_release_manifest,
     promote_channel,
     register_release_manifest,
@@ -24,6 +25,7 @@ from database.redis_db import delete_generic_cache
 from utils.desktop_update_resolver import live_cache_key, resolve_pointer_release
 from utils.executors import db_executor, run_blocking
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
+from utils.qualified_beta_promotion import QualifiedBetaAdmissionError, build_qualified_beta_manifest
 from utils.metrics import (
     DESKTOP_UPDATE_FEED_VALID,
     DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL,
@@ -67,6 +69,14 @@ class DesktopChannelPromotionRequest(BaseModel):
     expected_generation: Optional[int] = Field(default=None, ge=0)
     expected_current_release_id: Optional[str] = None
     operation: Literal["promote", "repoint"] = "promote"
+
+
+class QualifiedBetaPromotionRequest(BaseModel):
+    """The caller can name one immutable macOS candidate and nothing else."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tag: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
 
 
 class DesktopPreviewPublishRequest(BaseModel):
@@ -766,6 +776,14 @@ def _has_preview_publish_authorization(secret_key: str) -> bool:
     return bool(preview_key) and hmac.compare_digest(secret_key, preview_key)
 
 
+def _has_beta_promotion_authorization(authorization: str | None) -> bool:
+    """Keep the shared capability fail-closed and limited to this one route."""
+    configured = os.getenv("BETA_PROMOTION_TOKEN")
+    if not configured or not authorization or not authorization.startswith("Bearer "):
+        return False
+    return hmac.compare_digest(authorization.removeprefix("Bearer "), configured)
+
+
 @router.post("/v2/desktop/previews/publish", status_code=201)
 async def publish_desktop_preview(request: DesktopPreviewPublishRequest, secret_key: str = Header(...)):
     """Register a preview artifact without touching normal desktop release state."""
@@ -859,6 +877,35 @@ async def register_desktop_release(request: Dict[str, Any], secret_key: str = He
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"success": True, "manifest": manifest}
+
+
+@router.post("/v2/desktop/beta/promote-qualified")
+async def promote_qualified_beta(
+    request: QualifiedBetaPromotionRequest,
+    authorization: str | None = Header(default=None),
+):
+    """Authenticate, independently admit, then atomically advance macOS Beta only."""
+    if not _has_beta_promotion_authorization(authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        manifest = await build_qualified_beta_manifest(request.tag)
+        receipt = await run_blocking(db_executor, admit_qualified_beta_manifest, manifest)
+    except QualifiedBetaAdmissionError:
+        logger.info("qualified_beta_promotion tag=%s result=rejected", request.tag)
+        raise HTTPException(status_code=422, detail="Qualified Beta candidate rejected") from None
+    except ValueError:
+        logger.info("qualified_beta_promotion tag=%s result=conflict", request.tag)
+        raise HTTPException(status_code=409, detail="Qualified Beta promotion conflict") from None
+    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    logger.info(
+        "qualified_beta_promotion tag=%s result=%s", request.tag, "idempotent" if receipt["idempotent"] else "promoted"
+    )
+    return {
+        "tag": receipt["manifest"]["release_id"],
+        "release_id": receipt["manifest"]["release_id"],
+        "generation": receipt["pointer"]["generation"],
+        "idempotent": receipt["idempotent"],
+    }
 
 
 @router.get("/v2/desktop/releases/{release_id}")

@@ -16,11 +16,15 @@ One Codemagic build signs and notarizes one `Omi.zip`/`omi.dmg` pair from one
 source revision, then creates an immutable, non-live GitHub candidate. The
 trusted macOS qualifier is dispatched on that immutable candidate tag, checks
 out the same tag, and records qualification evidence bound to its exact source
-SHA and the two signed artifact digests. Automatic Beta promotion admits only
-that successful tag-bound qualification run, registers one immutable manifest,
-and advances the Beta pointer. The manifest retains the exact asset URLs and
-digests, Sparkle signature, qualification evidence identity/digest, source
-SHA, and compatibility/backend requirements.
+SHA and the two signed artifact digests. It attaches that evidence as the
+canonical `qualification-evidence-<tag>.json` release asset. The Beta workflow
+then supplies only the tag and its `BETA_PROMOTION_TOKEN` bearer capability to
+`POST /v2/desktop/beta/promote-qualified`. The backend independently reads the
+release, immutable tag, trusted completed qualification run, evidence, signed
+assets, and GitHub SHA-256s before it atomically registers one immutable
+manifest and advances only `macos-beta`. The manifest retains the exact asset
+URLs and digests, Sparkle signature, qualification evidence identity/digest,
+source SHA, and compatibility/backend requirements.
 
 The machine-readable evidence explicitly separates two modalities. `source_qualification` records hermetic T2 and fault coverage for source-built named bundles. `signed_artifact_verification` records the exact signed ZIP/DMG digest, Sparkle-signing, notarization, and signed-smoke evidence. The signed production bytes are never described as having run automation T2. Before a human promotes beyond Beta, the operational release evidence still requires the signed `.89` upgrade, `.70` side-by-side install, real core journeys, and soak against the same immutable manifest. Stable never rebuilds or re-reads mutable release state after manifest registration.
 
@@ -32,7 +36,13 @@ The machine-readable evidence explicitly separates two modalities. `source_quali
 | Qualified Beta | `macos-beta` points at the exact qualified manifest | Beta feed/channel |
 | Stable | `macos-stable` later points at that same retained release ID/artifact | Stable feed/channel |
 
-The normal candidate-to-Beta path uses non-cancelling per-tag GitHub concurrency. Qualification evidence and pointer idempotency make bounded dispatch retries safe; there is no separate claim/running/complete release-body state machine and no unqualified emergency route.
+The normal candidate-to-Beta path uses non-cancelling per-tag GitHub concurrency.
+The backend capability is fail-closed when `BETA_PROMOTION_TOKEN` is absent and
+is not accepted by any other endpoint. Qualification evidence and pointer
+idempotency make lost-response retries safe; there is no separate
+claim/running/complete release-body state machine and no unqualified emergency
+route. Beta promotion never invokes GCP, GCS, legacy Rust, cache-wide, Stable,
+rollback, or emergency mutation paths from GitHub.
 
 ## Stable promotion and repoint
 

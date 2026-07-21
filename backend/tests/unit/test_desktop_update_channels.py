@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from database.desktop_update_channels import (
+    _admit_qualified_beta_transaction,
     _build_pointer,
     get_channel_release,
     get_release_manifest,
@@ -187,6 +188,83 @@ class TestReleaseManifestPersistence:
 
 
 class TestChannelPromotionRules:
+    def test_qualified_beta_transaction_touches_only_its_manifest_and_beta_pointer(self):
+        manifest = normalize_release_manifest(
+            _manifest(
+                release_id="v0.12.93+12093-macos",
+                version="0.12.93",
+                build_number=12093,
+                zip_url="https://github.com/BasedHardware/omi/releases/download/v0.12.93+12093-macos/Omi.zip",
+                dmg_url="https://github.com/BasedHardware/omi/releases/download/v0.12.93+12093-macos/omi.dmg",
+                compatibility_contract={
+                    "schema_version": 1,
+                    "app_release_id": "v0.12.93+12093-macos",
+                    "app_version": "0.12.93",
+                    "app_build_number": 12093,
+                    "backend_mode": "app_only",
+                    "environment_contract_version": "desktop-backend-env-v1",
+                },
+            )
+        )
+        missing_manifest = MagicMock(exists=False)
+        current_beta = MagicMock(exists=True)
+        current_beta.to_dict.return_value = {
+            "release_id": "v0.12.92+12092-macos",
+            "build_number": 12092,
+            "generation": 3,
+        }
+        manifest_ref, beta_ref, stable_ref = MagicMock(), MagicMock(), MagicMock()
+        manifest_ref.get.return_value = missing_manifest
+        beta_ref.get.return_value = current_beta
+        transaction = MagicMock()
+
+        receipt = _admit_qualified_beta_transaction.to_wrap(transaction, beta_ref, manifest_ref, manifest)
+
+        assert receipt["pointer"]["channel"] == "beta"
+        assert receipt["pointer"]["generation"] == 4
+        transaction.create.assert_called_once()
+        transaction.set.assert_called_once_with(beta_ref, receipt["pointer"])
+        assert stable_ref.method_calls == []
+
+    def test_qualified_beta_transaction_lost_response_retry_is_idempotent_without_a_second_pointer_write(self):
+        manifest = normalize_release_manifest(_manifest())
+        existing_manifest = MagicMock(exists=True)
+        existing_manifest.to_dict.return_value = manifest
+        current_beta = MagicMock(exists=True)
+        current_beta.to_dict.return_value = {
+            "release_id": manifest["release_id"],
+            "build_number": manifest["build_number"],
+            "generation": 4,
+        }
+        manifest_ref, beta_ref = MagicMock(), MagicMock()
+        manifest_ref.get.return_value = existing_manifest
+        beta_ref.get.return_value = current_beta
+        transaction = MagicMock()
+
+        receipt = _admit_qualified_beta_transaction.to_wrap(transaction, beta_ref, manifest_ref, manifest)
+
+        assert receipt["idempotent"] is True
+        transaction.create.assert_not_called()
+        transaction.set.assert_not_called()
+
+    def test_qualified_beta_cas_race_never_stages_a_stable_or_cache_side_effect(self):
+        manifest = normalize_release_manifest(_manifest())
+        missing_manifest = MagicMock(exists=False)
+        raced_beta = MagicMock(exists=True)
+        raced_beta.to_dict.return_value = {"release_id": "v0.12.99+12099-macos", "build_number": 12099, "generation": 8}
+        manifest_ref, beta_ref = MagicMock(), MagicMock()
+        manifest_ref.get.return_value = missing_manifest
+        beta_ref.get.return_value = raced_beta
+        transaction = MagicMock()
+
+        with pytest.raises(ValueError, match="roll-forward only"):
+            _admit_qualified_beta_transaction.to_wrap(transaction, beta_ref, manifest_ref, manifest)
+
+        # The race is rejected before either mutable write is staged, and this
+        # helper has no cache authority.
+        transaction.create.assert_not_called()
+        transaction.set.assert_not_called()
+
     def test_first_qualified_promotion_sets_generation_and_build(self):
         pointer = _build_pointer(
             {},

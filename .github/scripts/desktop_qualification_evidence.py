@@ -55,7 +55,7 @@ def file_sha256(path: Path) -> str:
 
 
 def build_evidence(
-    release: dict[str, Any], release_tag: str, source_sha: str, files: dict[str, Path]
+    release: dict[str, Any], release_tag: str, source_sha: str, files: dict[str, Path], qualification_run_id: int | None = None
 ) -> dict[str, Any]:
     if release.get("tagName") != release_tag:
         _fail("release ID does not match requested tag")
@@ -86,7 +86,7 @@ def build_evidence(
                 _fail(f"is missing {signature_key}")
             item["signature"] = signature
         artifacts[name] = item
-    return {
+    evidence = {
         "schema_version": 1,
         "release_id": release_tag,
         "source_sha": source_sha,
@@ -103,6 +103,11 @@ def build_evidence(
         },
         "artifacts": artifacts,
     }
+    if qualification_run_id is not None:
+        if qualification_run_id <= 0:
+            _fail("has an invalid qualification run identity")
+        evidence["qualification_run_id"] = qualification_run_id
+    return evidence
 
 
 def verify_evidence(
@@ -152,6 +157,7 @@ def main() -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--evidence", required=True)
     parser.add_argument("--candidate-gate")
+    parser.add_argument("--qualification-run-id", type=int)
     parser.add_argument("--asset", action="append", default=[])
     args = parser.parse_args()
     release = json.loads(Path(args.release_json).read_text(encoding="utf-8"))
@@ -165,7 +171,7 @@ def main() -> int:
         if not args.candidate_gate:
             raise SystemExit("build requires --candidate-gate")
         files["__candidate_gate__"] = Path(args.candidate_gate)
-        result = build_evidence(release, args.release_tag, args.source_sha, files)
+        result = build_evidence(release, args.release_tag, args.source_sha, files, args.qualification_run_id)
         Path(args.evidence).write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     else:
         evidence = json.loads(Path(args.evidence).read_text(encoding="utf-8"))
