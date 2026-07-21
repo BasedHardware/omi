@@ -149,14 +149,14 @@ echo "**Tag:** \\`$TAG\\`" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 
 '''
-def canonical_body_at_indent(content_indent):
+def body_at_indent(body, content_indent):
     return "".join(
         line if line == "\n" else f"{' ' * content_indent}{line}"
-        for line in canonical_installer_run.splitlines(keepends=True)
+        for line in body.splitlines(keepends=True)
     )
 
 
-canonical_run_body = canonical_body_at_indent(run_indent + 2)
+canonical_run_body = body_at_indent(canonical_installer_run, run_indent + 2)
 if "".join(lines[run_start + 1:run_end]).encode("utf-8") != canonical_run_body.encode("utf-8"):
     fail("installer literal run block differs from the admitted canonical block")
 
@@ -170,24 +170,81 @@ for index, line in enumerate(lines):
     candidate_indent = len(match.group("indent"))
     candidate_end = literal_body_end(index, candidate_indent, len(lines))
     candidate_body = "".join(lines[index + 1:candidate_end])
-    expected_body = canonical_body_at_indent(candidate_indent + 2)
+    expected_body = body_at_indent(canonical_installer_run, candidate_indent + 2)
     if candidate_body.encode("utf-8") == expected_body.encode("utf-8"):
         fail("canonical installer literal run block appears outside id: download")
 
-mount_matches = exact_named_steps("Mount DMG and Install")
+mount_name = "Mount DMG and Install"
+mount_name_mentions = [
+    (index, without_line_ending(line))
+    for index, line in enumerate(lines)
+    if re.match(r"^ *-\s+name:", without_line_ending(line)) and mount_name in without_line_ending(line)
+]
+for _, line in mount_name_mentions:
+    if line != f"      - name: {mount_name}":
+        fail("mount/install step name must use the one exact unquoted canonical spelling")
+
+mount_matches = exact_named_steps(mount_name)
 if len(mount_matches) != 1:
-    fail("expected one exact Mount DMG and Install step")
+    fail(f"expected one exact {mount_name!r} step, found {len(mount_matches)}")
 mount_start, mount_indent = mount_matches[0]
 if mount_start <= step_start:
     fail("mount/install flow must occur after the download producer")
 mount_end = step_end_after(mount_start, mount_indent)
-mount_body = "".join(lines[mount_start + 1:mount_end])
-for required_line, description in [
-    (f"{' ' * (mount_indent + 4)}DMG_PATH=\"${{{{ steps.download.outputs.dmg_path }}}}\"\n", "download output input"),
-    (f"{' ' * (mount_indent + 4)}ditto \"$MOUNTPOINT/Omi.app\" \"/Applications/Omi.app\"\n", "mounted-app copy"),
-]:
-    if required_line not in mount_body:
-        fail(f"mount/install flow missing exact {description}")
+mount_field_indent = mount_indent + 2
+if without_line_ending(lines[mount_start]) != f"{' ' * mount_indent}- name: {mount_name}":
+    fail("mount/install step name is not the exact canonical YAML line")
+if mount_start + 1 >= mount_end or without_line_ending(lines[mount_start + 1]) != f"{' ' * mount_field_indent}run: |":
+    fail("mount/install step must consist of the exact run: | literal field")
+mount_run_start = mount_start + 1
+mount_run_end = literal_body_end(mount_run_start, mount_field_indent, mount_end)
+if mount_run_end != mount_end:
+    fail("mount/install literal run block must occupy the rest of its step")
+
+canonical_mount_run = '''set -euo pipefail
+DMG_PATH="${{ steps.download.outputs.dmg_path }}"
+MOUNTPOINT="$RUNNER_TEMP/omi-install-mount-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+DEVICE=""
+
+cleanup() {
+  local exit_code=$?
+  if [[ -n "$DEVICE" ]]; then
+    hdiutil detach "$DEVICE" -quiet || true
+  fi
+  rm -rf "$MOUNTPOINT" "$(dirname "$DMG_PATH")"
+  exit "$exit_code"
+}
+trap cleanup EXIT
+
+mkdir -p "$MOUNTPOINT"
+xattr -d com.apple.quarantine "$DMG_PATH" 2>/dev/null || true
+DEVICE=$(hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MOUNTPOINT" | awk '/^\\/dev\\// { print $1; exit }')
+[[ -n "$DEVICE" ]]
+[[ -d "$MOUNTPOINT/Omi.app" ]]
+echo "Mounted $DMG_PATH at $MOUNTPOINT ($DEVICE)"
+
+# Use ditto to preserve extended attributes from the exact mounted image.
+ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"
+
+echo "App installed to /Applications"
+
+'''
+canonical_mount_body = body_at_indent(canonical_mount_run, mount_field_indent + 2)
+if "".join(lines[mount_run_start + 1:mount_run_end]).encode("utf-8") != canonical_mount_body.encode("utf-8"):
+    fail("mount/install literal run block differs from the admitted canonical block")
+
+# The mount consumer is a byte contract too.  A second canonical body under a
+# different name is a decoy, not an alternate installation path.
+for index, line in enumerate(lines):
+    match = any_run_key_pattern.match(without_line_ending(line))
+    if not match or index == mount_run_start or without_line_ending(line) != f"{' ' * len(match.group('indent'))}run: |":
+        continue
+    candidate_indent = len(match.group("indent"))
+    candidate_end = literal_body_end(index, candidate_indent, len(lines))
+    candidate_body = "".join(lines[index + 1:candidate_end])
+    expected_body = body_at_indent(canonical_mount_run, candidate_indent + 2)
+    if candidate_body.encode("utf-8") == expected_body.encode("utf-8"):
+        fail("canonical mount/install literal run block appears outside Mount DMG and Install")
 PY
 }
 
@@ -229,6 +286,32 @@ def download_dir_line_index():
     if len(matches) != 1:
         raise SystemExit(f"expected one canonical download directory line, found {len(matches)}")
     return matches[0]
+
+
+def mount_step_bounds():
+    starts = [index for index, line in enumerate(lines) if line == '      - name: Mount DMG and Install\n']
+    if len(starts) != 1:
+        raise SystemExit(f"expected one canonical mount step, found {len(starts)}")
+    start = starts[0]
+    end = next(
+        (index for index in range(start + 1, len(lines)) if lines[index].startswith('      - ')),
+        len(lines),
+    )
+    run_start = next(index for index in range(start + 1, end) if lines[index] == '        run: |\n')
+    return start, run_start, end
+
+
+def mount_line_index(text):
+    _, run_start, end = mount_step_bounds()
+    matches = [index for index in range(run_start + 1, end) if lines[index] == text]
+    if len(matches) != 1:
+        raise SystemExit(f"expected one canonical mount line {text!r}, found {len(matches)}")
+    return matches[0]
+
+
+def mount_run_body():
+    _, run_start, end = mount_step_bounds()
+    return lines[run_start + 1:end]
 
 
 def add_skipped_canonical_decoy(quoted):
@@ -424,6 +507,67 @@ elif mutation == "no-whitespace-hash-command-substitution":
         '--dir "$DOWNLOAD_DIR"',
         '--dir "$DOWNLOAD_DIR"#$(gh release download "$TAG" --repo BasedHardware/omi --pattern "*.dmg" --dir "$DOWNLOAD_DIR")',
     )
+elif mutation == "mount-dead-branch-dmg-assignment-alternate":
+    index = mount_line_index('          DMG_PATH="${{ steps.download.outputs.dmg_path }}"\n')
+    lines[index:index + 1] = [
+        '          if false; then\n',
+        '            DMG_PATH="${{ steps.download.outputs.dmg_path }}"\n',
+        '          fi\n',
+        '          DMG_PATH="$RUNNER_TEMP/attacker.dmg"\n',
+    ]
+elif mutation == "mount-dead-branch-ditto-alternate-source":
+    index = mount_line_index('          ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"\n')
+    lines[index:index + 1] = [
+        '          if false; then\n',
+        '            ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"\n',
+        '          fi\n',
+        '          ditto "/tmp/attacker/Omi.app" "/Applications/Omi.app"\n',
+    ]
+elif mutation == "mount-exit-before-dmg-assignment":
+    index = mount_line_index('          DMG_PATH="${{ steps.download.outputs.dmg_path }}"\n')
+    lines[index:index] = ['          exit 0\n']
+elif mutation == "mount-exit-before-ditto":
+    index = mount_line_index('          ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"\n')
+    lines[index:index] = ['          exit 0\n']
+elif mutation == "mount-assignment-override":
+    index = mount_line_index('          DMG_PATH="${{ steps.download.outputs.dmg_path }}"\n')
+    lines[index + 1:index + 1] = ['          DMG_PATH="$RUNNER_TEMP/attacker.dmg"\n']
+elif mutation == "mount-alternate-copy-after-ditto":
+    index = mount_line_index('          ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"\n')
+    lines[index + 1:index + 1] = ['          ditto "/tmp/attacker/Omi.app" "/Applications/Omi.app"\n']
+elif mutation == "mount-comment":
+    index = mount_line_index('          set -euo pipefail\n')
+    lines[index + 1:index + 1] = ['          # Attacker-controlled no-op in the protected block.\n']
+elif mutation == "mount-command-substitution":
+    index = mount_line_index('          set -euo pipefail\n')
+    lines[index + 1:index + 1] = ['          : "$(printf attacker)"\n']
+elif mutation == "mount-backtick":
+    index = mount_line_index('          set -euo pipefail\n')
+    lines[index + 1:index + 1] = ['          : `printf attacker`\n']
+elif mutation == "mount-wrapper":
+    index = mount_line_index('          ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"\n')
+    lines[index] = '          command ditto "$MOUNTPOINT/Omi.app" "/Applications/Omi.app"\n'
+elif mutation == "mount-control-flow":
+    index = mount_line_index('          set -euo pipefail\n')
+    _, _, end = mount_step_bounds()
+    lines[index:index] = ['          if true; then\n']
+    lines[end + 1:end + 1] = ['          fi\n']
+elif mutation == "mount-duplicate-step":
+    start, _, end = mount_step_bounds()
+    lines[end:end] = lines[start:end]
+elif mutation == "mount-quoted-step":
+    start, _, _ = mount_step_bounds()
+    lines[start] = "      - name: 'Mount DMG and Install'\n"
+elif mutation == "mount-renamed-step":
+    start, _, _ = mount_step_bounds()
+    lines[start] = '      - name: Install mounted DMG\n'
+elif mutation == "mount-extra-canonical-block-decoy":
+    _, _, end = mount_step_bounds()
+    lines[end:end] = [
+        '      - name: Installer mount decoy\n',
+        '        run: |\n',
+        *mount_run_body(),
+    ]
 else:
     raise SystemExit(f"unknown mutation: {mutation}")
 
@@ -431,6 +575,11 @@ destination.write_text(''.join(lines))
 if mutation in {"unquoted-canonical-decoy-active-wildcard", "quoted-canonical-decoy-active-wildcard"}:
     prove_decoy_topology_with_ruby(destination, mutation)
 PY
+
+  ruby -e 'require "yaml"; YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)' "$mutated_workflow"
+  if [[ "$mutation" != "unquoted-canonical-decoy-active-wildcard" && "$mutation" != "quoted-canonical-decoy-active-wildcard" ]]; then
+    actionlint -shellcheck= "$mutated_workflow"
+  fi
 
   if bash "$SCRIPT_DIR/test-test-install-workflow-contract.sh" --check "$mutated_workflow"; then
     if [[ "$expected" == "reject" ]]; then
@@ -478,5 +627,20 @@ run_mutation no-whitespace-hash-backtick no-whitespace-hash-backtick
 run_mutation no-whitespace-hash-parameter no-whitespace-hash-parameter
 run_mutation no-whitespace-hash-literal no-whitespace-hash-literal
 run_mutation benign-comment benign-comment
+run_mutation mount-dead-branch-dmg-assignment-alternate mount-dead-branch-dmg-assignment-alternate
+run_mutation mount-dead-branch-ditto-alternate-source mount-dead-branch-ditto-alternate-source
+run_mutation mount-exit-before-dmg-assignment mount-exit-before-dmg-assignment
+run_mutation mount-exit-before-ditto mount-exit-before-ditto
+run_mutation mount-assignment-override mount-assignment-override
+run_mutation mount-alternate-copy-after-ditto mount-alternate-copy-after-ditto
+run_mutation mount-comment mount-comment
+run_mutation mount-command-substitution mount-command-substitution
+run_mutation mount-backtick mount-backtick
+run_mutation mount-wrapper mount-wrapper
+run_mutation mount-control-flow mount-control-flow
+run_mutation mount-duplicate-step mount-duplicate-step
+run_mutation mount-quoted-step mount-quoted-step
+run_mutation mount-renamed-step mount-renamed-step
+run_mutation mount-extra-canonical-block-decoy mount-extra-canonical-block-decoy
 
 echo "test-install workflow exact-DMG contract passed"
