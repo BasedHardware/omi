@@ -134,7 +134,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
 | Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
 | Omi Glass | [`omiGlass/`](omiGlass/) | ESP32-S3, C |
-| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python |
+| SDKs | [`sdks/`](sdks/) | Device (Python/Swift/RN + multi-lang protocol) |
 | AI Personas | [`web/personas-open-source/`](web/personas-open-source/) | Next.js |
 
 </details>
@@ -158,9 +158,11 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 ### API & SDKs
 - [API Reference](https://docs.omi.me/api-reference/introduction) — REST endpoints for memories, conversations, action items
-- [Python SDK](sdks/python/)
-- [Swift SDK](sdks/swift/)
-- [React Native SDK](sdks/react-native/)
+- [Device multi-lang protocol SDKs](sdks/device/) — shared BLE UUIDs/packet framing for TS/Go/Rust/C++/Dart
+- [Python device SDK](sdks/python/) — full BLE + Opus + Deepgram
+- [Swift device SDK](sdks/swift/)
+- [React Native device SDK](sdks/react-native/)
+- [MCP Server](mcp/) — Model Context Protocol integration
 - [MCP Server](mcp/) — Model Context Protocol integration
 
 ### Architecture
