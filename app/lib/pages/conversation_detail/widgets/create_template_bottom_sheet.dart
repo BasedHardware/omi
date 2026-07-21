@@ -182,8 +182,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
             Navigator.pop(context);
             // Polarity comes from the tested classifier so a failed install
             // can never be reported as success (#10074).
-            final outcome =
-                success ? TemplateCreationOutcome.installed : TemplateCreationOutcome.installFailed;
+            final outcome = success ? TemplateCreationOutcome.installed : TemplateCreationOutcome.installFailed;
             if (templateCreationOutcomeIsError(outcome)) {
               // The provider already showed the failure dialog; tell the user
               // what state they are actually in.
