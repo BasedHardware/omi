@@ -3,7 +3,7 @@ import io
 import json
 import zipfile
 import zlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +16,7 @@ from utils.qualified_beta_promotion import (
     REPOSITORY,
     GitHubQualifiedBetaReader,
     QualifiedBetaAdmissionError,
+    _current_time,
     _timestamp,
     build_qualified_beta_manifest,
 )
@@ -25,6 +26,20 @@ _test_app.include_router(updates_router)
 
 TAG = "v0.12.93+12093-macos"
 SHA = "a" * 40
+
+
+class RaisingTZ(tzinfo):
+    def __init__(self, error_type=RuntimeError):
+        self.error_type = error_type
+
+    def utcoffset(self, dt):
+        raise self.error_type("hostile clock")
+
+
+class HostileAdmissionClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 21, 12, 2, tzinfo=RaisingTZ())
 
 
 class FakeQualifiedBetaReader:
@@ -241,6 +256,45 @@ async def test_naive_admission_clock_is_a_typed_rejection_and_aware_offsets_norm
     )
 
     assert manifest["release_id"] == TAG
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, LookupError])
+def test_hostile_admission_clock_tzinfo_errors_are_typed_rejections(error_type):
+    with pytest.raises(QualifiedBetaAdmissionError, match="candidate admission clock is invalid"):
+        _current_time(datetime(2026, 7, 21, 12, 2, tzinfo=RaisingTZ(error_type)))
+
+
+@pytest.mark.parametrize("error_type", [KeyboardInterrupt, SystemExit])
+def test_hostile_admission_clock_does_not_contain_base_exceptions(error_type):
+    with pytest.raises(error_type, match="hostile clock"):
+        _current_time(datetime(2026, 7, 21, 12, 2, tzinfo=RaisingTZ(error_type)))
+
+
+@pytest.mark.asyncio
+async def test_hostile_admission_clock_rejects_at_endpoint_before_admission_or_cache_mutation():
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+
+    with (
+        patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+        patch("utils.qualified_beta_promotion.datetime", HostileAdmissionClock),
+        patch("utils.qualified_beta_promotion.GitHubQualifiedBetaReader", return_value=reader),
+        patch("routers.updates.admit_qualified_beta_manifest") as admit,
+        patch("routers.updates.delete_generic_cache") as invalidate,
+    ):
+        async with AsyncClient(
+            transport=ASGITransport(app=_test_app, raise_app_exceptions=False), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/v2/desktop/beta/promote-qualified",
+                headers={"Authorization": "Bearer promotion-token"},
+                json={"tag": TAG},
+            )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Qualified Beta candidate rejected"}
+    admit.assert_not_called()
+    invalidate.assert_not_called()
 
 
 @pytest.mark.asyncio

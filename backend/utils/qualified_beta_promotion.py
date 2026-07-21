@@ -55,15 +55,22 @@ def _timestamp(value: object) -> datetime:
 def _current_time(value: object) -> datetime:
     """Use an aware UTC clock value so admission never subtracts naive datetimes."""
     if value is None:
-        return datetime.now(timezone.utc)
+        try:
+            value = datetime.now(timezone.utc)
+        except Exception:
+            _fail("candidate admission clock is invalid")
     if not isinstance(value, datetime):
-        _fail("candidate freshness clock is invalid")
+        _fail("candidate admission clock is invalid")
+    if value.tzinfo is None:
+        _fail("candidate admission clock is invalid")
     try:
-        if value.tzinfo is None or value.utcoffset() is None:
-            _fail("candidate freshness clock is invalid")
-        return value.astimezone(timezone.utc)
-    except (OverflowError, TypeError, ValueError):
-        _fail("candidate freshness clock is invalid")
+        offset = value.utcoffset()
+        normalized = value.astimezone(timezone.utc)
+    except Exception:
+        _fail("candidate admission clock is invalid")
+    if offset is None:
+        _fail("candidate admission clock is invalid")
+    return normalized
 
 
 def _is_fresh(timestamp: datetime, now: datetime) -> bool:
