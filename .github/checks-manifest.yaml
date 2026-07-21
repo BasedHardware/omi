@@ -38,6 +38,7 @@ checks:
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
     triggers: ["backend/database/desktop_update_channels.py", "backend/testing/desktop_beta_admission/**", "package.json", "package-lock.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
+    platforms: ["macos"]
     reason: "real Firestore transaction serialization must fence stale qualified Beta admissions after reservation, pause, and generation transitions"
   - id: desktop-changelog-io-tests
     command: ["python3", ".github/scripts/test_desktop_changelog.py"]
