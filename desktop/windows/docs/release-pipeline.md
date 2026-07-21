@@ -159,3 +159,33 @@ Once the secrets exist, the next release is signed automatically — no workflow
   jobs": the plan job would see no new change since the just-created tag and skip,
   stranding the tag with no assets. Alternatively, `workflow_dispatch` with
   `release_mode: force_release` cuts a fresh version.
+
+## Public download link (backend-served)
+
+Every release also uploads a canonical `omi-setup.exe` asset (exact lowercase
+name — the Windows analog of macOS's `omi.dmg`). The backend resolves it:
+
+- `https://api.omi.me/v2/desktop/download/windows` — latest **stable** Windows
+  release, served as an auto-download landing page
+- `…/v2/desktop/download/windows?channel=beta` — latest beta
+- `…/v2/desktop/download/latest?platform=windows` — same, query-param form
+
+Channel mapping is GitHub's own release state (`backend/routers/updates.py`):
+the auto-cut **prerelease is the beta channel**; clearing the prerelease flag
+(`gh release edit v<version>-windows --prerelease=false`) **promotes it to
+stable** — no KEY_VALUE block needed. Releases marked draft are never served.
+
+### windows.omi.me (one-time infra setup)
+
+`macos.omi.me` is a Namecheap A record (`registrar-servers.com` DNS) pointing
+at the GCP global load balancer in front of the backend, with a URL-map host
+rule that rewrites `/` to the download endpoint. To stand up `windows.omi.me`:
+
+1. Namecheap: add an A record for `windows` → the existing LB IP (same as
+   `macos.omi.me`, currently `34.54.223.100`).
+2. GCP LB: add `windows.omi.me` to the managed certificate, and add a URL-map
+   host rule routing `/` to the backend service with path rewrite
+   `/v2/desktop/download/windows` (URL maps can't add query params — that's why
+   the dedicated route exists).
+
+Until then, the `api.omi.me` links above are the canonical distributable URLs.

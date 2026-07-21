@@ -289,6 +289,13 @@ jobs:
           test -f dist/latest.yml || { echo "latest.yml missing — auto-update feed would be broken." >&2; exit 1; }
           compgen -G "dist/*.exe" >/dev/null || { echo "installer .exe missing." >&2; exit 1; }
           compgen -G "dist/*.exe.blockmap" >/dev/null || { echo "installer blockmap missing." >&2; exit 1; }
+          # Canonical stable-name copy the backend download endpoints resolve
+          # (backend/routers/updates.py matches exactly `omi-setup.exe`, the
+          # case-sensitive Windows analog of macOS's `omi.dmg`). The dist/*.exe
+          # glob in the upload step below picks it up automatically.
+          installer=$(compgen -G "dist/Omi-for-Windows-Setup-*.exe" | head -1)
+          test -n "$installer" || { echo "versioned installer not found for canonical copy." >&2; exit 1; }
+          cp "$installer" dist/omi-setup.exe
 
       - name: Publish prerelease (beta) GitHub Release
         shell: bash
