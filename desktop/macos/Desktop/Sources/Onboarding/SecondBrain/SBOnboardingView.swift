@@ -130,6 +130,8 @@ struct SBOnboardingView: View {
     case .meet: meetWidget
     case .perm: permWidget
     case .files: filesWidget
+    case .ptt: pttWidget
+    case .launch: launchWidget
     case .calendar: calendarWidget
     case .wow: wowWidget
     case .capture: captureWidget
@@ -255,6 +257,55 @@ struct SBOnboardingView: View {
     }
   }
 
+  private var pttWidget: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(spacing: 8) {
+        Image(systemName: "mic.fill").font(.system(size: 12)).foregroundStyle(sb.ink(.w7))
+        Text("Hold").geist(size: 14).foregroundStyle(sb.ink(.w85))
+        keycap("fn")
+        Text("and just talk — I answer out loud.").geist(size: 14).foregroundStyle(sb.ink(.w85))
+      }
+      HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 1) {
+          Text("Accessibility").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+          Text("catches the hold-fn shortcut anywhere on your Mac").geist(size: 12).foregroundStyle(sb.ink(.w4))
+        }
+        Spacer(minLength: 8)
+        permTrailing(model.accState) { model.requestAccessibility() }
+      }
+      .padding(.horizontal, 14).padding(.vertical, 9)
+      .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
+      SBInkButton(title: model.accState == .on ? "Continue" : "Skip for now") { model.answerPtt() }
+    }
+    .frame(maxWidth: 380, alignment: .leading)
+  }
+
+  private func keycap(_ text: String) -> some View {
+    Text(text)
+      .geistMono(size: 12, weight: .medium)
+      .foregroundStyle(sb.ink(.w9))
+      .padding(.horizontal, 8).padding(.vertical, 3)
+      .background(RoundedRectangle(cornerRadius: 6).fill(sb.ink(.w08)))
+      .overlay(RoundedRectangle(cornerRadius: 6).stroke(sb.ink(.w14), lineWidth: 1))
+  }
+
+  private var launchWidget: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 1) {
+          Text("Launch at login").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+          Text("I reopen automatically after a restart or quit").geist(size: 12).foregroundStyle(sb.ink(.w4))
+        }
+        Spacer(minLength: 8)
+        SBToggleSwitch(isOn: Binding(get: { model.launchAtLogin }, set: { model.toggleLaunch($0) }))
+      }
+      .padding(.horizontal, 14).padding(.vertical, 9)
+      .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
+      SBInkButton(title: "Continue") { model.answerLaunch() }
+    }
+    .frame(maxWidth: 380, alignment: .leading)
+  }
+
   @ViewBuilder
   private func permTrailing(_ state: SBOnboardingModel.PermState, action: @escaping () -> Void) -> some View {
     switch state {
@@ -300,32 +351,25 @@ struct SBOnboardingView: View {
   }
 
   private var wowWidget: some View {
+    // Tapping a question actually asks Omi — the real answer streams into the
+    // thread above (a live chat, not a canned line).
     let qs = [
       "What does my day look like?", "What did I promise people?", "What was I working on yesterday?",
     ]
-    let answers = [
-      "I'll pull your meetings, deadlines, and the one thing that actually matters today.",
-      "I track every promise you make out loud and remind you before it slips.",
-      "I remember the docs and apps you had open, so you can pick up where you left off.",
-    ]
     return VStack(alignment: .leading, spacing: 7) {
-      ForEach(Array(qs.enumerated()), id: \.offset) { i, q in
-        Button { model.pickWow(i) } label: {
-          Text(q).geist(size: 14).foregroundStyle(model.wowPick == i ? sb.ink : sb.ink(.w85))
+      ForEach(qs, id: \.self) { q in
+        Button { model.askWow(q) } label: {
+          Text(q).geist(size: 14).foregroundStyle(sb.ink(.w85))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 13).padding(.vertical, 9)
-            .overlay(RoundedRectangle(cornerRadius: 11).stroke(model.wowPick == i ? sb.ink(.w5) : sb.ink(.w14), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w14), lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .disabled(model.wowAsking)
+        .opacity(model.wowAsking ? 0.5 : 1)
       }
-      if let pick = model.wowPick {
-        Text(answers[pick]).geist(size: 14).foregroundStyle(sb.ink(.w85)).lineSpacing(2)
-          .padding(12)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .background(RoundedRectangle(cornerRadius: 12).fill(sb.ink(.w04)))
-          .overlay(RoundedRectangle(cornerRadius: 12).stroke(sb.ink(.w09), lineWidth: 1))
-        SBInkButton(title: "Continue") { model.answerWow() }
-      }
+      SBInkButton(title: "Continue") { model.answerWow() }
+        .padding(.top, 4)
     }
     .frame(maxWidth: 380, alignment: .leading)
   }

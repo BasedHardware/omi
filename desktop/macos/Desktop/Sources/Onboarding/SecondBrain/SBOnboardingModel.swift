@@ -9,7 +9,7 @@ import Foundation
 @MainActor
 final class SBOnboardingModel: ObservableObject {
   enum Step: Int, CaseIterable {
-    case promise, name, role, meet, perm, files, calendar, wow, capture
+    case promise, name, role, meet, perm, files, ptt, launch, calendar, wow, capture
   }
 
   struct Msg: Identifiable {
@@ -35,8 +35,14 @@ final class SBOnboardingModel: ObservableObject {
   @Published private(set) var micState: PermState = .ask
   @Published private(set) var sysState: PermState = .ask
   @Published private(set) var fdaState: PermState = .ask
+  @Published private(set) var accState: PermState = .ask  // accessibility, for the PTT shortcut
+  @Published var launchAtLogin: Bool = LaunchAtLoginManager.shared.isEnabled
   @Published private(set) var calState: String = "idle"  // idle | connecting | on | needsSignIn
   @Published private(set) var wowPick: Int?
+  /// Real chat at the wow step: true while Omi is answering the tapped question.
+  @Published private(set) var wowAsking = false
+  private var wowAnswerIndex: Int?
+  private var wowCancellable: AnyCancellable?
 
   private unowned let appState: AppState
   private let chatProvider: ChatProvider
@@ -78,6 +84,12 @@ final class SBOnboardingModel: ObservableObject {
     case .files:
       return
         "One more thing that makes me sharper: let me read your files. Then my answers can cite your actual documents — the spec, the deck, the note. It's read-only and stays on this Mac."
+    case .ptt:
+      return
+        "The fastest way to reach me: hold fn and just talk — I answer out loud, hands-free, from anywhere. To catch that shortcut everywhere, macOS needs to grant me Accessibility."
+    case .launch:
+      return
+        "So I'm there the moment you need me — even after a restart or a quit — let me open at login. You can always turn this off later."
     case .calendar:
       return
         "Now your calendar. Then I know when meetings start, prepare beforehand, and capture automatically."
@@ -226,6 +238,7 @@ final class SBOnboardingModel: ObservableObject {
     case "microphone": return appState.hasMicrophonePermission
     case "system_audio": return appState.hasSystemAudioPermission
     case "full_disk_access": return appState.hasFullDiskAccess
+    case "accessibility": return appState.hasAccessibilityPermission && !appState.isAccessibilityBroken
     default: return false
     }
   }
@@ -235,6 +248,7 @@ final class SBOnboardingModel: ObservableObject {
     case "microphone": micState = .on
     case "system_audio": sysState = .on
     case "full_disk_access": fdaState = .on
+    case "accessibility": accState = .on
     default: break
     }
   }
@@ -256,7 +270,30 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   func answerFiles() {
-    advance(userAnswer: fdaState == .on ? "Files on" : "Skip for now", to: .calendar)
+    advance(userAnswer: fdaState == .on ? "Files on" : "Skip for now", to: .ptt)
+  }
+
+  // MARK: push-to-talk (Accessibility permission for the global shortcut)
+
+  func requestAccessibility() {
+    accState = .waiting
+    appState.triggerAccessibilityPermission()
+    pollPermission("accessibility")
+  }
+
+  func answerPtt() {
+    advance(userAnswer: accState == .on ? "Accessibility on" : "Maybe later", to: .launch)
+  }
+
+  // MARK: launch at login (app reopens after a quit / restart)
+
+  func toggleLaunch(_ on: Bool) {
+    _ = LaunchAtLoginManager.shared.setEnabled(on)
+    launchAtLogin = LaunchAtLoginManager.shared.isEnabled
+  }
+
+  func answerLaunch() {
+    advance(userAnswer: launchAtLogin ? "Open at login" : "No auto-open", to: .calendar)
   }
 
   func connectCalendar() {
@@ -274,8 +311,45 @@ final class SBOnboardingModel: ObservableObject {
 
   func skipCalendar() { advance(userAnswer: "Skip for now", to: .wow) }
 
-  func pickWow(_ i: Int) { wowPick = i }
-  func answerWow() { advance(userAnswer: "Continue", to: .capture) }
+  /// The wow moment: actually ask Omi the tapped question and stream the real
+  /// answer into the onboarding thread — a live chat, not a canned line.
+  func askWow(_ question: String) {
+    guard !wowAsking else { return }
+    wowAsking = true
+    wowAnswerIndex = nil
+    streamTask?.cancel()
+    streamingText = nil
+    thread.append(Msg(isOmi: false, text: question))
+    typing = true
+    showWidget = false
+    Task { _ = await chatProvider.sendMainDraft(question) }
+    wowCancellable = chatProvider.$messages
+      .receive(on: RunLoop.main)
+      .sink { [weak self] messages in
+        guard let self else { return }
+        guard let ai = messages.last(where: { $0.sender == .ai }),
+          !ai.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return }
+        self.typing = false
+        if let idx = self.wowAnswerIndex, idx < self.thread.count {
+          self.thread[idx].text = ai.text
+        } else {
+          self.thread.append(Msg(isOmi: true, text: ai.text))
+          self.wowAnswerIndex = self.thread.count - 1
+        }
+        if !ai.isStreaming {
+          self.wowAsking = false
+          self.showWidget = true
+          self.wowCancellable = nil
+        }
+      }
+  }
+
+  func answerWow() {
+    wowCancellable = nil
+    wowAsking = false
+    advance(userAnswer: "Continue", to: .capture)
+  }
 
   // MARK: capture choice → completes onboarding
 
