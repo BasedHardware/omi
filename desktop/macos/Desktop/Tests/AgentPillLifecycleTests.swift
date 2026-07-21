@@ -1647,8 +1647,12 @@ import XCTest
     XCTAssertTrue(source.contains("let breadcrumb = Breadcrumb(level: .info, category: \"lifecycle\")"))
     XCTAssertTrue(source.contains("breadcrumb.message = \"App Terminating\""))
     XCTAssertFalse(source.contains("SentrySDK.capture(message: \"App Terminating\")"))
+    XCTAssertFalse(
+      loggerSource.contains("breadcrumb.message = message"),
+      "free-form local log messages must not be sent as Sentry breadcrumbs")
     XCTAssertTrue(
-      loggerSource.contains("if !isDevBuild {\n    let breadcrumb = Breadcrumb(level: .info, category: \"app\")"))
+      loggerSource.contains("writeIncidentDiagnosticsAttachment("),
+      "actionable errors must send bounded redacted diagnostics instead")
     XCTAssertTrue(loggerSource.contains("guard !isDevBuild else { return }"))
   }
 

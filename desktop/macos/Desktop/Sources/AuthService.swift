@@ -1282,10 +1282,9 @@ class AuthService {
     Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
     if !AnalyticsManager.isDevBuild {
-      let sentryUser = User(userId: userId)
-      sentryUser.email = AuthState.shared.userEmail
-      sentryUser.username = displayName.isEmpty ? nil : displayName
-      SentrySDK.setUser(sentryUser)
+      // Keep Sentry correlation opaque; PII remains in the application/backend,
+      // not crash and error reports.
+      SentrySDK.setUser(User(userId: userId))
     }
 
     NSLog("OMI AUTH: Apple Sign in complete!")
@@ -1576,12 +1575,9 @@ class AuthService {
       // floating bar read it); without this it stays nil/old until launch.
       Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
-      // Set Sentry user context for error tracking (skip in dev builds)
+      // Set opaque Sentry user context for error correlation (skip in dev builds).
       if !AnalyticsManager.isDevBuild {
-        let sentryUser = User(userId: userId)
-        sentryUser.email = tokenResult.email
-        sentryUser.username = displayName.isEmpty ? nil : displayName
-        SentrySDK.setUser(sentryUser)
+        SentrySDK.setUser(User(userId: userId))
       }
 
       NSLog("OMI AUTH: Sign in complete!")

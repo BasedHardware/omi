@@ -35,9 +35,11 @@ import XCTest
       let data = try Data(contentsOf: url)
       let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
       let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
-      let snapshot = try XCTUnwrap(snapshots.last)
+      let snapshot = try XCTUnwrap(
+        snapshots.first(where: { $0["event"] as? String == "user_visible_issue" }))
 
-      XCTAssertEqual(snapshot["event"] as? String, "ptt_audio_capture_silent_turn")
+      XCTAssertEqual(snapshot["event"] as? String, "user_visible_issue")
+      XCTAssertEqual(snapshot["area"] as? String, "ptt")
       XCTAssertEqual(snapshot["input_device_class"] as? String, "built_in_mic")
       XCTAssertEqual(snapshot["peak"] as? Int, 0)
       XCTAssertEqual(snapshot["rms"] as? Int, 0)
@@ -46,6 +48,84 @@ import XCTest
       XCTAssertFalse(json.contains("Alice"))
       XCTAssertFalse(json.contains("private microphone"))
       XCTAssertFalse(json.contains("id=123"))
+    }
+
+    func testIncidentAttachmentUsesRedactedBoundedLocalLogContext() throws {
+      let logURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("omi-incident-log-\(UUID().uuidString).txt")
+      try """
+      [12:00:00] [app] PTT capture started
+      [12:00:01] [app] PTT device=[David's AirPods]
+      Authorization: Bearer very-sensitive-token-value
+      user@example.com opened /Users/example/Documents/private.txt
+      Conversation title: confidential meeting notes
+      Arbitrary component message: this must not reach cloud
+      [12:00:02] [error] silent capture detected
+      """.write(to: logURL, atomically: true, encoding: .utf8)
+      defer { try? FileManager.default.removeItem(at: logURL) }
+      DesktopDiagnosticsManager.shared.recordWalUploadFailed(
+        walId: "private-wal-id",
+        reason: "backend returned customer-specific private detail")
+
+      let url = try XCTUnwrap(
+        DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+          area: "ptt",
+          failureClass: "silent_capture",
+          phase: "audio_capture",
+          logPath: logURL.path,
+          maxLogLines: 20))
+      defer { try? FileManager.default.removeItem(at: url) }
+
+      let data = try Data(contentsOf: url)
+      let json = String(data: data, encoding: .utf8) ?? ""
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let incident = try XCTUnwrap(root["incident"] as? [String: String])
+      let tail = try XCTUnwrap(root["redacted_log_tail"] as? String)
+
+      XCTAssertEqual(incident["area"], "ptt")
+      XCTAssertEqual(incident["failure_class"], "silent_capture")
+      XCTAssertEqual(incident["phase"], "audio_capture")
+      XCTAssertFalse(tail.contains("very-sensitive-token-value"))
+      XCTAssertFalse(tail.contains("user@example.com"))
+      XCTAssertFalse(tail.contains("/Users/example/Documents/private.txt"))
+      XCTAssertFalse(tail.contains("confidential meeting notes"))
+      XCTAssertFalse(tail.contains("this must not reach cloud"))
+      XCTAssertFalse(tail.contains("David's AirPods"))
+      XCTAssertFalse(json.contains("private-wal-id"))
+      XCTAssertFalse(json.contains("customer-specific private detail"))
+      XCTAssertTrue(tail.contains("PTT capture started"))
+      XCTAssertTrue(tail.contains("silent capture detected"))
+    }
+
+    func testPTTSilentTurnCreatesUserVisibleIssueSnapshot() throws {
+      DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+        source: "hub",
+        mode: "hold",
+        audioSeconds: 1.2,
+        voicedSeconds: 0,
+        peak: 0,
+        rms: 0,
+        deviceDescription: "built-in microphone",
+        micPermissionGranted: true,
+        hubActive: true)
+
+      let snapshot = try latestSnapshot()
+      XCTAssertEqual(snapshot["event"] as? String, "user_visible_issue")
+      XCTAssertEqual(snapshot["area"] as? String, "ptt")
+      XCTAssertEqual(snapshot["failure_class"] as? String, "silent_capture")
+      XCTAssertEqual(snapshot["phase"] as? String, "audio_capture")
+    }
+
+    func testChatFailureCreatesUserVisibleIssueSnapshot() throws {
+      DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: "tool_stall")
+
+      let snapshot = try latestSnapshot()
+      XCTAssertEqual(snapshot["event"] as? String, "user_visible_issue")
+      XCTAssertEqual(snapshot["area"] as? String, "chat")
+      XCTAssertEqual(snapshot["failure_class"] as? String, "tool_stall")
+      XCTAssertEqual(snapshot["phase"] as? String, "query")
+      XCTAssertNil(snapshot["incident_id"])
+      XCTAssertNil(snapshot["attempt_id"])
     }
 
     func testSilentTurnRecordsRecoveryActionAndResult() throws {

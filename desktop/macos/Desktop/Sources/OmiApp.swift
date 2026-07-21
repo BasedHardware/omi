@@ -489,13 +489,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
       AnalyticsManager.shared.identify()
-      // Set Sentry user context (now enabled for dev builds too)
-      if let email = AuthState.shared.userEmail {
-        let sentryUser = Sentry.User()
-        sentryUser.email = email
-        sentryUser.username =
-          AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.displayName
-        SentrySDK.setUser(sentryUser)
+      // Set an opaque Sentry user identifier for incident correlation. Do not
+      // attach email or display name to crash/error reports.
+      if let userID = AuthState.shared.userId {
+        SentrySDK.setUser(Sentry.User(userId: userID))
       }
       // Fetch API keys after first-window warmup settles. First-use paths call waitForKeys().
       scheduleAPIKeyFetch()
