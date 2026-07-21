@@ -5,9 +5,15 @@ import pytest
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateRecord, CandidateStatus
 from models.task_intelligence import TaskWorkflowControl
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 import routers.staged_tasks as staged_router
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.staged_migration import migrate_staged_tasks, proposal_from_legacy_staged
+
+
+@pytest.fixture(autouse=True)
+def canonical_test_users(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'user-1', 'uid')
 
 
 def _rows():

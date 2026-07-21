@@ -20,10 +20,10 @@ CANONICAL_MEMORY_USERS: frozenset[str] = frozenset(
 )
 
 
-def is_canonical_memory_user(uid: str) -> bool:
+def is_canonical_memory_user(uid: object) -> bool:
     """Return whether ``uid`` belongs to the sole canonical entitlement cohort."""
 
-    return bool(uid) and uid in CANONICAL_MEMORY_USERS
+    return bool(uid) and isinstance(uid, str) and uid in CANONICAL_MEMORY_USERS
 
 
 __all__ = [

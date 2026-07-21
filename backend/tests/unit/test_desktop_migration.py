@@ -177,6 +177,9 @@ task_intelligence_stub.candidate_service = candidate_service_stub
 staged_migration_stub = _stub_module("utils.task_intelligence.staged_migration")
 staged_migration_stub.proposal_from_legacy_staged = MagicMock()
 staged_migration_stub.migrate_staged_tasks = MagicMock()
+rollout_stub = _stub_module("utils.task_intelligence.rollout")
+setattr(rollout_stub, "effective_task_workflow_control", lambda control, rollout: control)
+setattr(rollout_stub, "resolve_task_intelligence_for_user", MagicMock())
 request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
