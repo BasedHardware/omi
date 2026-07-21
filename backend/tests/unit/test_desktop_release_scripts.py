@@ -239,6 +239,29 @@ def test_qualification_workflow_binds_immutable_controls_and_candidate_identity(
     assert "gh release upload" in qualification
 
 
+def test_codemagic_produces_canonical_app_and_strictly_verifiable_dmg():
+    workflow = CODEMAGIC_CONFIG.read_text(encoding="utf-8")
+    smoke = (REPO_ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh").read_text(encoding="utf-8")
+    assert workflow.count('APP_NAME: "Omi"') == 1
+    assert 'APP_NAME: "omi"' not in workflow
+    assert "xattr -d com.apple.FinderInfo" in workflow
+    assert "xattr -d com.apple.ResourceFork" in workflow
+    assert 'codesign --verify --deep --strict --verbose=2 "$STAGING_DIR/$APP_NAME.app"' in workflow
+    assert 'dmg_app="$DMG_MOUNTPOINT/Omi.app"' in smoke
+    assert "DMG-contained Omi.app failed deep strict codesign verification" in smoke
+
+
+def test_universal_release_stages_and_smokes_both_sharp_architectures():
+    prepare = (REPO_ROOT / "desktop/macos/scripts/prepare-agent-runtime.sh").read_text(encoding="utf-8")
+    smoke = (REPO_ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh").read_text(encoding="utf-8")
+    assert "stage_darwin_sharp_arches" in prepare
+    assert "for package_arch in arm64 x64" in prepare
+    assert "@img/sharp-darwin-$package_arch@$sharp_version" in prepare
+    assert "@img/sharp-libvips-darwin-$package_arch@$libvips_version" in prepare
+    assert "for sharp_arch in arm64 x64" in prepare
+    assert "agent runtime missing Sharp/libvips darwin-$sharp_arch pair" in smoke
+
+
 def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():
     """Promotion can only bind bytes independently recorded by qualification."""
     evidence = {
