@@ -23,7 +23,7 @@ The canonical current production routing is:
 | Flutter agent WebSocket | `wss://agent.omi.me/v1/agent/ws` |
 | macOS Python API | `https://api.omi.me/` |
 | macOS desktop API | `https://desktop-backend-hhibjajaja-uc.a.run.app/` |
-| macOS beta identity | `com.omi.computer-macos.beta`, in `AppBuild.productionFamilyBundleIdentifiers` |
+| macOS Omi Beta identity | `com.omi.computer-macos`; Beta is a channel pointer over the canonical app identity |
 | macOS Firebase/Firestore config | the shipped production customer project (`based-hardware`) |
 
 ## MUST NOT
