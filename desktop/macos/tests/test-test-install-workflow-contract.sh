@@ -11,6 +11,45 @@ fail() {
 }
 
 strict_check_workflow() {
+  ruby - "$WORKFLOW" <<'RUBY'
+require "yaml"
+
+
+def fail(message)
+  abort("FAIL: #{message}")
+end
+
+
+workflow_path = ARGV.fetch(0)
+workflow_text = File.read(workflow_path, encoding: "UTF-8")
+
+begin
+  stream = Psych.parse_stream(workflow_text)
+  fail("workflow must contain exactly one YAML document") unless stream.children.length == 1
+  root = stream.children.fetch(0).root
+  fail("workflow YAML root must be a mapping") unless root.is_a?(Psych::Nodes::Mapping)
+  top_level_key_nodes = root.children.each_slice(2).map(&:first)
+  fail("workflow top-level keys must be scalar") unless top_level_key_nodes.all? { |key| key.is_a?(Psych::Nodes::Scalar) }
+
+  workflow = YAML.safe_load(workflow_text, aliases: false)
+rescue Psych::Exception, ArgumentError, EncodingError => error
+  fail("workflow YAML must safely parse without aliases: #{error.message}")
+end
+
+fail("workflow YAML root must safely load as a mapping") unless workflow.is_a?(Hash)
+# Psych follows YAML 1.1 and resolves GitHub Actions' canonical unquoted `on`
+# key as true. Permit only that one known scalar spelling; every other
+# non-string top-level key is invalid.
+non_string_keys = workflow.keys.reject { |key| key.is_a?(String) }
+canonical_on_key = top_level_key_nodes.count { |key| key.value == "on" && key.tag.nil? } == 1
+fail("workflow has an invalid top-level key type") unless non_string_keys.empty? || (non_string_keys == [true] && canonical_on_key)
+fail("workflow may not add top-level defaults or env that affect jobs.test-install") if workflow.key?("defaults") || workflow.key?("env")
+
+semantic_jobs_keys = top_level_key_nodes.count { |key| key.value == "jobs" }
+fail("workflow must contain exactly one semantic top-level jobs key") unless semantic_jobs_keys == 1
+fail("workflow jobs must safely load as a mapping") unless workflow["jobs"].is_a?(Hash)
+RUBY
+
   python3 - "$WORKFLOW" "$SCRIPT_DIR/fixtures/test-install-job-contract.yml" <<'PY'
 from pathlib import Path
 import re
@@ -340,6 +379,37 @@ elif mutation == "workflow-defaults-shell-override":
         "    shell: bash -c 'exit 0' {0}\n",
         "\n",
     ]
+elif mutation in {"workflow-quoted-defaults-shell-override", "workflow-escaped-defaults-shell-override"}:
+    index = next(index for index, line in enumerate(lines) if line == "on:\n")
+    key = '"defaults"' if mutation == "workflow-quoted-defaults-shell-override" else '"def\\u0061ults"'
+    lines[index:index] = [
+        f"{key}:\n",
+        "  run:\n",
+        "    shell: bash -c 'exit 0' {0}\n",
+        "\n",
+    ]
+elif mutation in {
+    "workflow-quoted-env-bash-env",
+    "workflow-escaped-env-bash-env",
+    "workflow-explicit-env-bash-env",
+    "workflow-tagged-env-bash-env",
+}:
+    index = next(index for index, line in enumerate(lines) if line == "on:\n")
+    if mutation == "workflow-quoted-env-bash-env":
+        addition = ['"env":\n', "  BASH_ENV: /tmp/skip-canonical-steps\n", "\n"]
+    elif mutation == "workflow-escaped-env-bash-env":
+        addition = ['"en\\u0076":\n', "  BASH_ENV: /tmp/skip-canonical-steps\n", "\n"]
+    elif mutation == "workflow-explicit-env-bash-env":
+        addition = ["? env\n", ": {BASH_ENV: /tmp/skip-canonical-steps}\n", "\n"]
+    else:
+        addition = ["!!str env:\n", "  BASH_ENV: /tmp/skip-canonical-steps\n", "\n"]
+    lines[index:index] = addition
+elif mutation == "semantic-duplicate-jobs":
+    index = next(index for index, line in enumerate(lines) if line == "jobs:\n")
+    lines[index:index] = ["? jobs\n", ": {}\n", "\n"]
+elif mutation == "non-mapping-jobs":
+    index = next(index for index, line in enumerate(lines) if line == "jobs:\n")
+    lines[index:index + 1] = ["jobs: []\n", "\n", "unrelated-jobs:\n"]
 elif mutation == "test-install-defaults-shell-override":
     index = test_install_job_start() + 1
     lines[index:index] = [
@@ -582,7 +652,7 @@ if mutation.startswith("canonical-job-decoy-"):
 PY
 
   ruby -e 'require "yaml"; YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)' "$mutated_workflow"
-  if [[ "$mutation" != "unquoted-canonical-decoy-active-wildcard" && "$mutation" != "quoted-canonical-decoy-active-wildcard" ]]; then
+  if [[ "$mutation" != "unquoted-canonical-decoy-active-wildcard" && "$mutation" != "quoted-canonical-decoy-active-wildcard" && "$mutation" != "semantic-duplicate-jobs" && "$mutation" != "non-mapping-jobs" ]]; then
     actionlint -shellcheck= "$mutated_workflow"
   fi
 
@@ -616,6 +686,14 @@ run_mutation canonical-job-decoy-after-unquoted canonical-job-decoy-after-unquot
 run_mutation canonical-job-decoy-before-quoted canonical-job-decoy-before-quoted
 run_mutation canonical-job-decoy-after-quoted canonical-job-decoy-after-quoted
 run_mutation workflow-defaults-shell-override workflow-defaults-shell-override
+run_mutation workflow-quoted-defaults-shell-override workflow-quoted-defaults-shell-override
+run_mutation workflow-escaped-defaults-shell-override workflow-escaped-defaults-shell-override
+run_mutation workflow-quoted-env-bash-env workflow-quoted-env-bash-env
+run_mutation workflow-escaped-env-bash-env workflow-escaped-env-bash-env
+run_mutation workflow-explicit-env-bash-env workflow-explicit-env-bash-env
+run_mutation workflow-tagged-env-bash-env workflow-tagged-env-bash-env
+run_mutation semantic-duplicate-jobs semantic-duplicate-jobs
+run_mutation non-mapping-jobs non-mapping-jobs
 run_mutation test-install-defaults-shell-override test-install-defaults-shell-override
 run_mutation download-step-shell-override download-step-shell-override
 run_mutation test-install-if-false test-install-if-false
