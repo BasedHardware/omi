@@ -350,7 +350,7 @@ async def test_malformed_members_mixed_with_valid_github_collections_fail_closed
     [
         ("name", 1),
         ("browser_download_url", []),
-        ("digest", None),
+        ("digest", []),
     ],
 )
 async def test_every_consumed_release_asset_field_is_checked_for_mixed_members(field, value):
@@ -365,6 +365,78 @@ async def test_every_consumed_release_asset_field_is_checked_for_mixed_members(f
     reader.release_payload["assets"].append(malformed)
 
     await _assert_direct_and_endpoint_rejection(reader)
+
+
+@pytest.mark.asyncio
+async def test_malformed_timestamp_in_otherwise_trusted_run_rejects_before_endpoint_mutation():
+    release, evidence, run = _candidate()
+    reader = FakeQualifiedBetaReader(release, evidence, run)
+    reader.runs_payload.append({**run, "id": 124, "updated_at": "not-a-date"})
+
+    direct_rejected = False
+    try:
+        await build_qualified_beta_manifest(
+            TAG,
+            reader=reader,
+            now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+        )
+    except QualifiedBetaAdmissionError:
+        direct_rejected = True
+
+    with (
+        patch.dict("os.environ", {"BETA_PROMOTION_TOKEN": "promotion-token"}),
+        patch("utils.qualified_beta_promotion.GitHubQualifiedBetaReader", return_value=reader),
+        patch("routers.updates.admit_qualified_beta_manifest") as admit,
+        patch("routers.updates.delete_generic_cache") as invalidate,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+            response = await client.post(
+                "/v2/desktop/beta/promote-qualified",
+                headers={"Authorization": "Bearer promotion-token"},
+                json={"tag": TAG},
+            )
+
+    assert (response.status_code, admit.call_count, invalidate.call_count) == (422, 0, 0)
+    assert response.json() == {"detail": "Qualified Beta candidate rejected"}
+    assert direct_rejected is True
+    admit.assert_not_called()
+    invalidate.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "unrelated_member",
+    [
+        (
+            "assets",
+            {"name": "unrelated.bin", "browser_download_url": "https://example.test/unrelated.bin", "digest": None},
+        ),
+        ("runs", {**_candidate()[2], "id": 124, "name": None}),
+        ("runs", {key: value for key, value in {**_candidate()[2], "id": 124}.items() if key != "name"}),
+        ("runs", {**_candidate()[2], "id": 124, "head_branch": None}),
+        (
+            "artifacts",
+            {
+                "id": 457,
+                "name": "unrelated-artifact",
+                "expired": False,
+                "size_in_bytes": 0,
+                "archive_download_url": "https://api.github.com/repos/BasedHardware/omi/actions/artifacts/457/zip",
+            },
+        ),
+    ],
+)
+async def test_documented_unrelated_github_member_shapes_do_not_reject_a_valid_candidate(unrelated_member):
+    collection, member = unrelated_member
+    reader = _reader_with_malformed_member(collection, member)
+
+    manifest = await build_qualified_beta_manifest(
+        TAG,
+        reader=reader,
+        now=datetime(2026, 7, 21, 12, 2, tzinfo=timezone.utc),
+    )
+
+    assert manifest["release_id"] == TAG
 
 
 @pytest.mark.asyncio

@@ -92,39 +92,55 @@ def _nonempty_string(value: object, message: str) -> str:
     return value
 
 
-def _release_assets(value: object, tag: str) -> list[dict[str, Any]]:
-    """Reject malformed GitHub assets before their names become set members."""
+def _release_assets(value: object) -> list[dict[str, Any]]:
+    """Validate collection structure without applying canonical asset rules to unrelated assets."""
     assets = _github_objects(value, "candidate GitHub release assets are invalid")
     for asset in assets:
-        name = _nonempty_string(asset.get("name"), "candidate GitHub release assets are invalid")
-        expected_url = f"https://github.com/{REPOSITORY}/releases/download/{tag}/{name}"
-        if asset.get("browser_download_url") != expected_url:
-            _fail("candidate asset identity does not match its immutable release")
-        if not isinstance(asset.get("digest"), str) or not SHA256_RE.fullmatch(asset["digest"]):
-            _fail("candidate asset is missing its GitHub SHA-256 digest")
+        _nonempty_string(asset.get("name"), "candidate GitHub release assets are invalid")
+        _nonempty_string(asset.get("browser_download_url"), "candidate GitHub release assets are invalid")
+        digest = asset.get("digest")
+        if digest is not None and not isinstance(digest, str):
+            _fail("candidate GitHub release assets are invalid")
     return assets
 
 
-def _validate_qualification_run_shape(run: dict[str, Any]) -> None:
+def _validate_qualification_run_member(run: dict[str, Any]) -> None:
+    """Reject malformed run members while permitting documented nullable unrelated fields."""
     if not _is_exact_integer(run.get("id")) or run["id"] <= 0:
         _fail("candidate qualification run has no trusted identity")
-    for field in ("status", "conclusion", "event", "path", "head_branch", "head_sha", "name", "updated_at"):
+    for field in ("status", "conclusion", "event", "path", "head_sha"):
+        _nonempty_string(run.get(field), "candidate qualification runs are invalid")
+    for field in ("head_branch", "name"):
+        value = run.get(field)
+        if value is not None and not isinstance(value, str):
+            _fail("candidate qualification runs are invalid")
+    for field in ("repository", "head_repository"):
+        repository = _github_object(run.get(field), "candidate qualification runs are invalid")
+        _nonempty_string(repository.get("full_name"), "candidate qualification runs are invalid")
+    _timestamp(run.get("updated_at"))
+
+
+def _validate_selected_qualification_run(run: dict[str, Any]) -> tuple[int, datetime]:
+    """Apply exact identity and freshness requirements only after a run is trusted."""
+    run_id = _trusted_run_id(run)
+    for field in ("status", "conclusion", "event", "path", "head_branch", "head_sha", "name"):
         _nonempty_string(run.get(field), "candidate qualification runs are invalid")
     for field in ("repository", "head_repository"):
         repository = _github_object(run.get(field), "candidate qualification runs are invalid")
         _nonempty_string(repository.get("full_name"), "candidate qualification runs are invalid")
+    return run_id, _timestamp(run.get("updated_at"))
 
 
 def _qualification_runs(value: object) -> list[dict[str, Any]]:
     """Validate every run before trust selection can skip an invalid member."""
     runs = _github_objects(value, "candidate qualification runs are invalid")
     for run in runs:
-        _validate_qualification_run_shape(run)
+        _validate_qualification_run_member(run)
     return runs
 
 
 def _qualification_artifacts(value: object) -> list[dict[str, Any]]:
-    """Validate every artifact before selecting the canonical evidence archive."""
+    """Validate collection structure without applying canonical artifact rules to unrelated entries."""
     artifacts = _github_objects(value, "candidate qualification artifacts are invalid")
     for artifact in artifacts:
         artifact_id = artifact.get("id")
@@ -134,11 +150,9 @@ def _qualification_artifacts(value: object) -> list[dict[str, Any]]:
         if type(artifact.get("expired")) is not bool:
             _fail("candidate qualification artifact is invalid")
         size = artifact.get("size_in_bytes")
-        if not _is_exact_integer(size) or size <= 0:
+        if not _is_exact_integer(size) or size < 0:
             _fail("candidate qualification artifact is invalid")
-        expected_url = f"https://api.github.com/repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip"
-        if artifact.get("archive_download_url") != expected_url:
-            _fail("candidate qualification artifacts are invalid")
+        _nonempty_string(artifact.get("archive_download_url"), "candidate qualification artifacts are invalid")
     return artifacts
 
 
@@ -170,10 +184,11 @@ def _select_qualification_run(runs: object, tag: str, source_sha: str, now: date
     for run in _qualification_runs(runs):
         try:
             validate_qualification_run(run, REPOSITORY, tag, source_sha)
-            run_id = _trusted_run_id(run)
-            completed_at = _timestamp(run.get("updated_at"))
-        except (ValueError, QualifiedBetaAdmissionError):
+        except QualifiedBetaAdmissionError:
+            raise
+        except ValueError:
             continue
+        run_id, completed_at = _validate_selected_qualification_run(run)
         if now - completed_at > timedelta(seconds=_max_age_seconds()):
             continue
         acceptable.append((completed_at, run_id, run))
@@ -200,6 +215,9 @@ def _qualification_artifact_id(artifacts: object, tag: str) -> int:
         or not 0 < size <= MAX_QUALIFICATION_ARTIFACT_BYTES
     ):
         _fail("candidate qualification artifact is invalid")
+    expected_url = f"https://api.github.com/repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip"
+    if artifact.get("archive_download_url") != expected_url:
+        _fail("candidate qualification artifacts are invalid")
     return artifact_id
 
 
@@ -361,7 +379,7 @@ async def build_qualified_beta_manifest(
     if (now or datetime.now(timezone.utc)) - published > timedelta(seconds=_max_age_seconds()):
         _fail("candidate release is stale")
 
-    assets = _release_assets(release.get("assets"), tag)
+    assets = _release_assets(release.get("assets"))
     names = {asset.get("name") for asset in assets}
     if names & RETIRED_ASSET_NAMES or any(isinstance(name, str) and "omi beta" in name.lower() for name in names):
         _fail("candidate contains a retired desktop identity")
