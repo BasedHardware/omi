@@ -56,3 +56,12 @@ export class OmiDeviceSession {
     });
   }
 }
+
+export {
+  createTranscriber,
+  createDeepgramTranscriber,
+  createParakeetTranscriber,
+  createWhisperTranscriber,
+  parakeetWsUrl,
+} from './stt/index';
+export type { SttEngine, StreamingTranscriber, TranscriptHandler } from './stt/index';
