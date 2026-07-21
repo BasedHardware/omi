@@ -2923,8 +2923,13 @@ workflows:
           set -euo pipefail
           # Per-tag GitHub concurrency and immutable qualification evidence own
           # duplicate dispatches; this bounded retry only handles dispatch I/O.
+          # Codemagic also loads appstore_credentials, whose legacy GH_TOKEN
+          # takes precedence over GITHUB_TOKEN in the GitHub CLI. Bind this
+          # handoff explicitly to the desktop_secrets token that is scoped for
+          # candidate-release and Actions-dispatch access.
           for attempt in 1 2 3; do
-            if gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
+            if GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}" \
+              gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
               -f release_tag="$CM_TAG"; then
               echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
               exit 0
