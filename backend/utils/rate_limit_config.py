@@ -25,7 +25,7 @@ import os
 # ---------------------------------------------------------------------------
 
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
-RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() != "false"
+RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Policies: "name" -> (max_requests, window_seconds)

@@ -140,7 +140,7 @@ export interface ImportRemoteJournalTurnInput {
   metadataJson?: string;
   createdAtMs: number;
   nowMs?: number;
-  source: "backend_reconcile";
+  source: "backend_reconcile" | "legacy_upgrade";
 }
 
 export interface ImportRemoteJournalTurnResult {
@@ -406,7 +406,17 @@ export function recordJournalExchange(
     for (const turn of input.turns) {
       assertCanonicalJournalDelivery(turn.surfaceKind, canonicalDelivery);
     }
-    const results = input.turns.map((turn) => recordJournalTurn(store, {
+    const exchangeBaseCreatedAtMs = input.turns[0]?.createdAtMs ?? Date.now();
+    const normalizedTurns = input.turns.map((turn, index) => ({
+      ...turn,
+      // Creation time is the immutable conversation-order key. Preserve an
+      // imported timestamp when possible, but make the assistant half strictly
+      // later than its user half even when a coarse backend clock ties them.
+      createdAtMs: index === 0
+        ? exchangeBaseCreatedAtMs
+        : Math.max(turn.createdAtMs ?? exchangeBaseCreatedAtMs + index, exchangeBaseCreatedAtMs + index),
+    }));
+    const results = normalizedTurns.map((turn) => recordJournalTurn(store, {
       ...turn,
       ownerId: input.ownerId,
       conversationId: input.conversationId,
@@ -1176,8 +1186,8 @@ export function importRemoteJournalTurn(
   store: AgentStore,
   input: ImportRemoteJournalTurnInput,
 ): ImportRemoteJournalTurnResult {
-  if (input.source !== "backend_reconcile") {
-    throw new Error("Remote journal import requires a kernel-owned reconcile source");
+  if (input.source !== "backend_reconcile" && input.source !== "legacy_upgrade") {
+    throw new Error("Remote journal import requires a kernel-owned import source");
   }
   const remoteId = nonEmpty(input.remoteId, "remoteId");
   const canonicalTurnId = input.canonicalTurnId == null

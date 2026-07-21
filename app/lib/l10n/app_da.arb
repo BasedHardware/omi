@@ -2944,7 +2944,7 @@
     "upgradePlan": "Opgrader plan",
     "billingMonthly": "Månedlig",
     "billingYearly": "Årlig",
-    "savePercent": "Spar ~17%",
+    "savePercent": "Spar ~{percent}%",
     "popular": "Populært",
     "currentPlan": "Nuværende",
     "neoSubtitle": "{count} spørgsmål om måneden",
@@ -3064,7 +3064,7 @@
     "syncCustomSttWarningMessage": "Du bruger din egen transskriptionsudbyder. Synkronisering af disse optagelser transskriberer dem på Omis servere i stedet, og de tæller med i din plans transskriptionsgrænse.",
     "transcribeLaterTitle": "Transskriber senere",
     "transcribeLaterDescription": "Optag lyd nu, og transskriber den efter behov i stedet for live. Optagelserne gemmes på din telefon, hvorefter du uploader dem for at oprette samtaler.",
-    "transcribeLaterNote": "Fungerer indtil videre med Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.",
+    "transcribeLaterNote": "Fungerer med telefonens mikrofon samt Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.",
     "transcribeLaterStorageFull": "Din telefon er ved at løbe tør for lagerplads, så optagelsen er sat på pause. Frigør plads, eller upload dine optagelser, så fortsætter den automatisk.",
     "unmute": "Slå lyd til",
     "newRecording": "Ny optagelse",
@@ -3152,5 +3152,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Enhedens lager",
+    "deviceStoragePercentFull": "{percent}% fyldt",
+    "deviceStorageUsedOfTotal": "{used} af {total} brugt",
+    "deviceStorageFree": "{free} ledig",
+    "deviceStorageNearlyFull": "Enheden er næsten fuld — synkronisér for at frigøre plads.",
+    "phoneMicOfflineFallbackMessage": "Ingen forbindelse – der optages lokalt. Det bliver transskriberet, når du er online igen.",
+    "dataEncryptedBanner": "Dine data er som standard sikret med stærk kryptering, og du bestemmer, hvordan de opbevares og bruges.",
+    "rayBanMetaMicPickerTitle": "Vælg din Ray-Ban Meta-mikrofon",
+    "rayBanMetaMicPickerDescription": "Vælg Bluetooth-mikrofonen til dine briller. Musik sættes på pause, mens Omi bruger den.",
+    "rayBanMetaMicPickerEmpty": "Der blev ikke fundet nogen Bluetooth-mikrofoner. Tilslut dine briller i iPhone-indstillinger, og prøv igen.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth-mikrofonerne kunne ikke indlæses. Kontrollér, at Bluetooth er slået til, og prøv igen.",
+    "rayBanMetaMicPickerConnectError": "Der kunne ikke oprettes forbindelse til mikrofonen. Sørg for, at den er tilsluttet i iPhone-indstillinger."
 }

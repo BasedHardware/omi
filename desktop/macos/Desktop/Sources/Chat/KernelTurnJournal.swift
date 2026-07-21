@@ -53,17 +53,21 @@ struct KernelJournalTurn: Sendable, Equatable {
     self.conversationId = dictionary["conversationId"] as? String ?? ""
     self.turnId = turnId
     self.turnSeq = Self.int(dictionary["turnSeq"]) ?? 0
-    self.conversationGeneration = Self.int(dictionary["conversationGeneration"])
+    self.conversationGeneration =
+      Self.int(dictionary["conversationGeneration"])
       ?? conversationGenerationFallback
-    self.generationBaseTurnSeq = Self.int(dictionary["generationBaseTurnSeq"])
+    self.generationBaseTurnSeq =
+      Self.int(dictionary["generationBaseTurnSeq"])
       ?? generationBaseTurnSeqFallback
     self.producerId = dictionary["producerId"] as? String ?? ""
     self.payloadHash = dictionary["payloadHash"] as? String ?? ""
     self.role = role
     self.surfaceKind = dictionary["surfaceKind"] as? String ?? surfaceFallback?.surfaceKind ?? ""
-    self.externalRefKind = dictionary["externalRefKind"] as? String
+    self.externalRefKind =
+      dictionary["externalRefKind"] as? String
       ?? surfaceFallback?.externalRefKind ?? ""
-    self.externalRefId = dictionary["externalRefId"] as? String
+    self.externalRefId =
+      dictionary["externalRefId"] as? String
       ?? surfaceFallback?.externalRefId ?? ""
     self.content = content
     self.origin = dictionary["origin"] as? String ?? "legacy"
@@ -87,9 +91,9 @@ struct KernelJournalTurn: Sendable, Equatable {
 
   private static func jsonArrayString(_ value: Any?) -> String {
     guard let array = value as? [Any],
-          JSONSerialization.isValidJSONObject(array),
-          let data = try? JSONSerialization.data(withJSONObject: array),
-          let encoded = String(data: data, encoding: .utf8)
+      JSONSerialization.isValidJSONObject(array),
+      let data = try? JSONSerialization.data(withJSONObject: array),
+      let encoded = String(data: data, encoding: .utf8)
     else { return "[]" }
     return encoded
   }
@@ -143,7 +147,7 @@ struct KernelJournalTurnWrite: Sendable {
 
   static func jsonArray(_ raw: String) -> [Any] {
     guard let data = raw.data(using: .utf8),
-          let value = try? JSONSerialization.jsonObject(with: data) as? [Any]
+      let value = try? JSONSerialization.jsonObject(with: data) as? [Any]
     else { return [] }
     return value
   }
@@ -258,10 +262,10 @@ struct KernelJournalRemoteTurn: Sendable {
 
   private static func normalizedMetadataObject(_ raw: String) -> String {
     guard let data = raw.data(using: .utf8),
-          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          JSONSerialization.isValidJSONObject(object),
-          let normalized = try? JSONSerialization.data(withJSONObject: object),
-          let encoded = String(data: normalized, encoding: .utf8)
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      JSONSerialization.isValidJSONObject(object),
+      let normalized = try? JSONSerialization.data(withJSONObject: object),
+      let encoded = String(data: normalized, encoding: .utf8)
     else { return "{}" }
     return encoded
   }
@@ -271,7 +275,8 @@ struct KernelJournalRemoteTurn: Sendable {
 extension KernelJournalTurn {
   func chatMessage() -> ChatMessage {
     let metadata = Self.metadataObject(metadataJSON)
-    let continuityKey = (metadata["continuityKey"] as? String)
+    let continuityKey =
+      (metadata["continuityKey"] as? String)
       ?? (metadata["idempotencyKey"] as? String)
     let owner: ChatTurnOwner?
     switch origin {
@@ -293,13 +298,14 @@ extension KernelJournalTurn {
       resources: ChatResource.hydrateFileStates(
         ChatResource.decodeResourcesFromPersistence(resourcesJSON)
       ),
-      turnOwner: owner
+      turnOwner: owner,
+      journalStatus: status
     )
   }
 
   private static func metadataObject(_ raw: String) -> [String: Any] {
     guard let data = raw.data(using: .utf8),
-          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return [:] }
     return object
   }
@@ -325,7 +331,7 @@ extension ChatMessage {
     if let messageSource { metadata["messageSource"] = messageSource }
     let metadataJSON: String
     if let data = try? JSONSerialization.data(withJSONObject: metadata),
-       let encoded = String(data: data, encoding: .utf8)
+      let encoded = String(data: data, encoding: .utf8)
     {
       metadataJSON = encoded
     } else {

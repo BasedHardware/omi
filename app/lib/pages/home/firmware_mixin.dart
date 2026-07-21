@@ -17,10 +17,13 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/manifest/manifest.dart';
 
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
+  FirmwareUpdateBuildPolicy get firmwareUpdatePolicy => FirmwareUpdateBuildPolicy.current;
+
   Map latestFirmwareDetails = {};
   bool isDownloading = false;
   bool isDownloaded = false;
@@ -30,7 +33,9 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   int installProgress = 0;
   bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
-  final mcumgr.FirmwareUpdateManagerFactory? managerFactory = mcumgr.FirmwareUpdateManagerFactory();
+  late final mcumgr.FirmwareUpdateManagerFactory? managerFactory = firmwareUpdatePolicy.allowsOmiFirmwareUpdate
+      ? mcumgr.FirmwareUpdateManagerFactory()
+      : null;
   mcumgr.FirmwareUpdateManager? _mcuUpdateManager;
 
   /// Process ZIP file and return firmware image list
@@ -78,6 +83,10 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> startDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+    if (!firmwareUpdatePolicy.allowsOmiFirmwareUpdate) {
+      Logger.debug('Omi firmware updates are unavailable in the Ray-Ban DAT build');
+      return;
+    }
     if (isLegacySecureDFU) {
       return startLegacyDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
     }
@@ -96,6 +105,10 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> startMCUDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+    if (!firmwareUpdatePolicy.allowsOmiFirmwareUpdate) {
+      Logger.debug('MCU firmware updates are unavailable in the Ray-Ban DAT build');
+      return;
+    }
     setState(() {
       isInstalling = true;
     });
@@ -150,13 +163,17 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.logger.logMessageStream
         .where((log) => log.level.rawValue > 1) // Filter debug messages
         .listen((log) {
-      Logger.debug('dfu log: ${log.message}');
-    });
+          Logger.debug('dfu log: ${log.message}');
+        });
 
     await updateManager.update(images, configuration: configuration);
   }
 
   Future<void> startLegacyDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+    if (!firmwareUpdatePolicy.allowsOmiFirmwareUpdate) {
+      Logger.debug('Legacy firmware updates are unavailable in the Ray-Ban DAT build');
+      return;
+    }
     setState(() {
       isInstalling = true;
     });

@@ -10,9 +10,10 @@ from enum import Enum
 from typing import Any, cast
 
 from database.memory_collections import MemoryCollections
+from models.memory_state_head import MEMORY_STATE_HEAD_SCHEMA_VERSION, MEMORY_STATE_HEAD_SOURCE
 
-V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION = 1
-V3_TRUSTED_ACCOUNT_GENERATION_SOURCE = 'memory_state_head'
+V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION = MEMORY_STATE_HEAD_SCHEMA_VERSION
+V3_TRUSTED_ACCOUNT_GENERATION_SOURCE = MEMORY_STATE_HEAD_SOURCE
 
 
 class V3AccountGenerationFailureReason(str, Enum):

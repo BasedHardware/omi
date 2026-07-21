@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import ObjectiveC
 
 /// Synchronous session fence for conversation cache transaction admission.
 ///
@@ -68,8 +69,8 @@ struct ConversationRepositorySnapshot: Equatable {
   let source: ConversationSnapshotSource
 }
 
-protocol ConversationRemoteDataSource {
-  func list(query: ConversationListQuery) async throws -> [ServerConversation]
+protocol ConversationRemoteDataSource: Sendable {
+  func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation
   func search(text: String) async throws -> [ServerConversation]
@@ -79,7 +80,7 @@ protocol ConversationRemoteDataSource {
   func delete(id: String) async throws
 }
 
-protocol ConversationLocalDataSource {
+protocol ConversationLocalDataSource: Sendable {
   func list(query: ConversationListQuery) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation?
@@ -96,11 +97,11 @@ protocol ConversationLocalDataSource {
 }
 
 struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
-  func list(query: ConversationListQuery) async throws -> [ServerConversation] {
+  func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation] {
     let range = query.dateRange
     return try await APIClient.shared.getConversations(
-      limit: 50,
-      offset: 0,
+      limit: limit,
+      offset: offset,
       statuses: [.completed, .processing],
       includeDiscarded: false,
       startDate: range.start,
@@ -254,20 +255,50 @@ final class ConversationRepository {
   private var mutationWaiters: [String: [MutationWaiter]] = [:]
   private var deletionTokens: [String: UUID] = [:]
   private var currentQuery: ConversationListQuery?
+  private var nextPageOffset = 0
+  private var isLoadingMore = false
 
   private(set) var conversations: [ServerConversation] = []
   private(set) var count: Int?
+  private var isCountAuthoritative = false
+  private(set) var hasMore = false
   private(set) var isLoading = false
   private(set) var error: String?
   var onSnapshot: ((ConversationRepositorySnapshot) -> Void)?
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
 
   init(remote: ConversationRemoteDataSource, local: ConversationLocalDataSource) {
     self.remote = remote
     self.local = local
+    // Owner fencing: an in-place account switch posts only
+    // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
+    // previous owner's conversations keep rendering for the next account and
+    // ConversationsPage.onAppear skips its reload because the array is
+    // non-empty. Mirrors TasksStore.resetSessionState's subscription.
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.reset()
+      }
+    }
+  }
+
+  deinit {
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 
   convenience init() {
     self.init(remote: LiveConversationRemoteDataSource(), local: LiveConversationLocalDataSource())
+  }
+
+  private static let pageSize = 50
+
+  private static func hasMorePages(loaded: Int, pageSize: Int, totalCount: Int?, received: Int) -> Bool {
+    guard received == pageSize else { return false }
+    return totalCount.map { loaded < $0 } ?? true
   }
 
   func load(query: ConversationListQuery, includeCache: Bool = true) async {
@@ -278,9 +309,14 @@ final class ConversationRepository {
     currentQuery = query
     isLoading = true
     error = nil
+    // A cached count is useful for display but must never suppress a full
+    // server page when the authoritative count request is unavailable.
+    isCountAuthoritative = false
     if queryChanged {
       conversations = []
       count = nil
+      nextPageOffset = 0
+      hasMore = false
       emit(.cache)
     }
 
@@ -291,7 +327,14 @@ final class ConversationRepository {
         if !cached.isEmpty {
           let cachedCount = try? await local.count(query: query)
           guard generation == requestGeneration else { return }
-          conversations = cached
+          // Overlay in-flight optimistic mutations before publishing, mirroring
+          // the server merge path (mergeList → apply). Without this, a load()
+          // that races a pending star/title/folder edit (e.g. the user toggles a
+          // filter mid-mutation) paints the bare cached rows and visually reverts
+          // the edit until the remote call lands.
+          conversations = cached.map {
+            ConversationReconciliationPolicy.apply(mutation: pendingMutations[$0.id], to: $0)
+          }
           count = cachedCount
           emit(.cache)
         }
@@ -301,7 +344,7 @@ final class ConversationRepository {
     }
 
     do {
-      async let listTask = remote.list(query: query)
+      async let listTask = remote.list(query: query, offset: 0, limit: Self.pageSize)
       async let countTask = remote.count(query: query)
       let server = try await listTask
       let serverCount = try? await countTask
@@ -319,7 +362,17 @@ final class ConversationRepository {
       pendingMutations = result.pendingMutations
       mutationBaselines = mutationBaselines.filter { pendingMutations[$0.key] != nil }
       conversations = result.conversations
-      count = serverCount ?? count
+      if let serverCount {
+        count = serverCount
+        isCountAuthoritative = true
+      }
+      nextPageOffset = server.count
+      hasMore = Self.hasMorePages(
+        loaded: nextPageOffset,
+        pageSize: Self.pageSize,
+        totalCount: isCountAuthoritative ? count : nil,
+        received: server.count
+      )
       isLoading = false
       emit(.server)
       await storeInBackground(server, session: session)
@@ -335,6 +388,49 @@ final class ConversationRepository {
 
   func refresh(query: ConversationListQuery) async {
     await load(query: query, includeCache: false)
+  }
+
+  /// Fetch the next server page without discarding conversations already visible.
+  /// The backend owns each returned row; the existing page order remains stable.
+  func loadMore() async {
+    guard let query = currentQuery, hasMore, !isLoading, !isLoadingMore else { return }
+
+    let session = cacheWriteScope.capture()
+    requestGeneration += 1
+    let generation = requestGeneration
+    let offset = nextPageOffset
+    isLoadingMore = true
+    defer { isLoadingMore = false }
+
+    do {
+      let server = try await remote.list(query: query, offset: offset, limit: Self.pageSize)
+      guard generation == requestGeneration, currentQuery == query else { return }
+
+      let result = ConversationReconciliationPolicy.mergeList(
+        server: server,
+        current: [],
+        pendingMutations: pendingMutations,
+        pendingMutationTTL: .greatestFiniteMagnitude
+      )
+      for conversation in server where result.pendingMutations[conversation.id] != nil {
+        updateMutationBaseline(id: conversation.id, canonical: conversation)
+      }
+      pendingMutations = result.pendingMutations
+      mutationBaselines = mutationBaselines.filter { pendingMutations[$0.key] != nil }
+      mergeNextPage(result.conversations)
+      nextPageOffset = offset + server.count
+      hasMore = Self.hasMorePages(
+        loaded: nextPageOffset,
+        pageSize: Self.pageSize,
+        totalCount: isCountAuthoritative ? count : nil,
+        received: server.count
+      )
+      emit(.server)
+      await storeInBackground(server, session: session)
+    } catch {
+      guard generation == requestGeneration else { return }
+      emit(.server)
+    }
   }
 
   func search(text: String) async throws -> [ServerConversation] {
@@ -456,11 +552,30 @@ final class ConversationRepository {
     deletionTokens = [:]
     conversations = []
     count = nil
+    isCountAuthoritative = false
+    nextPageOffset = 0
+    hasMore = false
+    isLoadingMore = false
     error = nil
     isLoading = false
     pendingMutations = [:]
     mutationBaselines = [:]
     emit(.server)
+  }
+
+  private func mergeNextPage(_ page: [ServerConversation]) {
+    var indexByID = [String: Int]()
+    for (index, conversation) in conversations.enumerated() {
+      indexByID[conversation.id] = index
+    }
+    for conversation in page {
+      if let index = indexByID[conversation.id] {
+        conversations[index] = conversation
+      } else {
+        indexByID[conversation.id] = conversations.count
+        conversations.append(conversation)
+      }
+    }
   }
 
   private func mutate(
@@ -510,8 +625,9 @@ final class ConversationRepository {
   private func rollbackPendingField(id: String, operation: MutationOperation) {
     let shouldRollback = clearPendingField(id: id, operation: operation)
     if shouldRollback,
-       let baseline = mutationBaselines[id],
-       let index = conversations.firstIndex(where: { $0.id == id }) {
+      let baseline = mutationBaselines[id],
+      let index = conversations.firstIndex(where: { $0.id == id })
+    {
       conversations[index] = operation.rollback(conversations[index], to: baseline)
       applyPending(id: id)
     }
@@ -536,8 +652,9 @@ final class ConversationRepository {
       return
     }
     if let incomingRevision = canonical.updatedAt,
-       let existingRevision = existing.updatedAt,
-       incomingRevision < existingRevision {
+      let existingRevision = existing.updatedAt,
+      incomingRevision < existingRevision
+    {
       return
     }
     mutationBaselines[id] = canonical
@@ -604,8 +721,9 @@ final class ConversationRepository {
     guard let index = conversations.firstIndex(where: { $0.id == conversation.id }) else { return }
     let existing = conversations[index]
     if let incoming = conversation.updatedAt,
-       let current = existing.updatedAt,
-       incoming < current {
+      let current = existing.updatedAt,
+      incoming < current
+    {
       return
     }
     conversations[index] = conversation

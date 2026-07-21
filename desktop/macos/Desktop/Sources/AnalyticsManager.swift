@@ -75,7 +75,9 @@ class AnalyticsManager {
   }
 
   /// Track onboarding chat shape without sending the user's message content.
-  func onboardingChatMessageDetailed(role: String, text: String, step: String, toolCalls: [String]? = nil, model: String? = nil, error: String? = nil) {
+  func onboardingChatMessageDetailed(
+    role: String, text: String, step: String, toolCalls: [String]? = nil, model: String? = nil, error: String? = nil
+  ) {
     var props: [String: Any] = [
       "role": role,
       "step": step,
@@ -301,13 +303,30 @@ class AnalyticsManager {
     if hadPreviousSession && !lastCleanExit {
       log("Analytics: Previous session did not exit cleanly — reporting crash")
       let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+      let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+        area: "crash",
+        failureClass: "unknown",
+        phase: "startup")
+      defer {
+        if let attachmentURL {
+          try? FileManager.default.removeItem(at: attachmentURL)
+        }
+      }
       SentrySDK.capture(message: "App Crash Detected") { scope in
         scope.setLevel(.warning)
         scope.setTag(value: "app_crash_detected", key: "diagnostic")
-        scope.setContext(value: [
-          "app_version": version,
-          "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
-        ], key: "crash")
+        scope.setContext(
+          value: [
+            "app_version": version,
+            "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
+          ], key: "crash")
+        if let attachmentURL {
+          scope.addAttachment(
+            Attachment(
+              path: attachmentURL.path,
+              filename: "desktop-incident-diagnostics.json",
+              contentType: "application/json"))
+        }
       }
     }
   }
@@ -548,6 +567,9 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    if case .failed(_, _, let errorClass, _) = event {
+      DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
+    }
     let diagnosticKeys = [
       "duration_ms", "error_class", "cancel_reason", "partial_response",
       "surface", "harness", "runtime_surface",
@@ -609,8 +631,12 @@ class AnalyticsManager {
 
   private func addScreenContextProperties(_ context: ScreenContextTelemetryContext, to props: inout [String: Any]) {
     if let surfaceKind = context.surfaceKind { props["surface_kind"] = boundedAnalyticsIdentifier(surfaceKind) }
-    if let externalRefKind = context.externalRefKind { props["external_ref_kind"] = boundedAnalyticsIdentifier(externalRefKind) }
-    if let externalRefId = context.externalRefId { props["external_ref_id"] = boundedAnalyticsIdentifier(externalRefId) }
+    if let externalRefKind = context.externalRefKind {
+      props["external_ref_kind"] = boundedAnalyticsIdentifier(externalRefKind)
+    }
+    if let externalRefId = context.externalRefId {
+      props["external_ref_id"] = boundedAnalyticsIdentifier(externalRefId)
+    }
     if let runId = context.runId { props["run_id"] = boundedAnalyticsIdentifier(runId) }
     if let pillId = context.pillId { props["pill_id"] = boundedAnalyticsIdentifier(pillId) }
   }

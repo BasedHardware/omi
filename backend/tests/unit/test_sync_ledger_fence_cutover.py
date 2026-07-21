@@ -18,7 +18,6 @@ def _write_passing_probe_evidence(path: Path) -> None:
                 "suite": cutover.PROBE_EVIDENCE_SUITE,
                 "status": "PASS",
                 "full_route_authoritative": True,
-                "direct_diagnostic_only": True,
                 "checks": [
                     {
                         "name": "full_route",
@@ -29,10 +28,6 @@ def _write_passing_probe_evidence(path: Path) -> None:
                             "json_object": True,
                             "outcome_success": True,
                             "phrase_match": True,
-                            "provider_checked": True,
-                            "provider_match": True,
-                            "model_checked": True,
-                            "model_match": True,
                             "authority": "candidate_gate",
                         },
                     }
@@ -261,10 +256,11 @@ def test_cutover_workflow_keeps_protected_candidate_gate_and_no_failure_resume_c
 
     assert "group: deploy-backend-stack-${{ github.event.inputs.environment }}" in workflow
     assert "candidate_image must be an immutable @sha256 digest" in workflow
-    assert 'python3 backend/scripts/transcription_capability_probe.py' in workflow
-    assert '--candidate-api-url "$CANDIDATE_PROBE_URL"' in workflow
-    assert "--require-route-identity" in workflow
-    assert "OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL: ${{ secrets.OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL }}" in workflow
+    assert 'uses: ./.github/actions/transcription-release-candidate-probe' in workflow
+    assert 'candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}' in workflow
+    assert 'project_id: ${{ vars.GCP_PROJECT_ID }}' in workflow
+    assert 'evidence_path: ${{ runner.temp }}/transcription-capability-probe.json' in workflow
+    assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in workflow
     assert "sync_ledger_fence_cutover.py activate-promote" in workflow
     assert "gcloud tasks queues resume" not in workflow
     assert "Plan safe activation recovery from persisted phase" in workflow
@@ -407,7 +403,7 @@ def test_active_prepare_refuses_stage_artifact_when_queues_are_not_paused(tmp_pa
     )
 
 
-def test_probe_evidence_must_prove_full_route_transcript_and_route_identity(tmp_path: Path) -> None:
+def test_probe_evidence_must_prove_full_route_transcript_contract(tmp_path: Path) -> None:
     runner = FakeCloudRunner()
     stage_config = _config(tmp_path)
     _orchestrator(stage_config, runner, mode="standby").stage()

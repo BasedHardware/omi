@@ -1,22 +1,17 @@
-"""Characterize the current conversation lifecycle before #9516 convergence.
-
-These tests intentionally lock both the useful compare-and-swap claim and the
-legacy escape hatches around it. The follow-up lifecycle service will replace
-the latter with an explicit state machine and update these characterizations
-where the product contract deliberately changes.
-"""
+"""Behavioral contract for the exclusive conversation lifecycle owner (#9516)."""
 
 import copy
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from types import ModuleType
 from typing import Any
 
 import pytest
+from google.api_core.exceptions import AlreadyExists
 
 import database.conversations as conversations_db
 from models.conversation_enums import ConversationStatus
+from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.merge_conversations import validate_merge_compatibility
 
 
@@ -42,10 +37,14 @@ class _DocumentRef:
         return _Snapshot(self.firestore.documents.get(self.path))
 
     def update(self, updates: dict[str, Any]) -> None:
-        if self.path not in self.firestore.documents:
-            raise KeyError(self.path)
         self.firestore.documents[self.path].update(copy.deepcopy(updates))
         self.firestore.write_log.append((self.path, copy.deepcopy(updates)))
+
+    def create(self, data: dict[str, Any]) -> None:
+        if self.path in self.firestore.documents:
+            raise AlreadyExists('already exists')
+        self.firestore.documents[self.path] = copy.deepcopy(data)
+        self.firestore.write_log.append((self.path, copy.deepcopy(data)))
 
     def collection(self, name: str) -> '_CollectionRef':
         return _CollectionRef(self.firestore, self.path + (name,))
@@ -94,24 +93,9 @@ class _FakeFirestore:
         return self.documents[('users', uid, 'conversations', conversation_id)]
 
 
-class _RecordedMetric:
-    def __init__(self) -> None:
-        self.events: list[dict[str, str]] = []
-        self._labels: dict[str, str] | None = None
-
-    def labels(self, **labels: str) -> '_RecordedMetric':
-        self._labels = labels
-        return self
-
-    def inc(self) -> None:
-        assert self._labels is not None
-        self.events.append(self._labels)
-
-
 @pytest.fixture
 def lifecycle_store(monkeypatch):
     store = _FakeFirestore()
-    metric = _RecordedMetric()
 
     def transactional(func):
         def locked(transaction, *args, **kwargs):
@@ -122,137 +106,191 @@ def lifecycle_store(monkeypatch):
 
     monkeypatch.setattr(conversations_db, 'db', store)
     monkeypatch.setattr(conversations_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(conversations_db, 'CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS', metric)
-    return store, metric
+    return store
 
 
-@pytest.mark.parametrize(
-    ('initial_status', 'target_status'),
-    [
-        (ConversationStatus.in_progress, ConversationStatus.processing),
-        (ConversationStatus.processing, ConversationStatus.completed),
-        (ConversationStatus.processing, ConversationStatus.failed),
-        (ConversationStatus.completed, ConversationStatus.merging),
-        (ConversationStatus.merging, ConversationStatus.completed),
-    ],
-)
-def test_current_lifecycle_transitions_are_written(initial_status, target_status, lifecycle_store):
-    """Existing callers directly persist each observed lifecycle transition."""
-    store, metric = lifecycle_store
-    store.put_conversation('uid', 'conversation', status=initial_status.value, discarded=False)
-
-    conversations_db.update_conversation_status('uid', 'conversation', target_status)
-
-    assert store.conversation('uid', 'conversation')['status'] == target_status
-    assert metric.events == [{'writer': 'other', 'operation': 'status_update'}]
-
-
-def test_current_generic_writer_allows_an_illegal_status_reversal(lifecycle_store):
-    """Characterize the generic-write escape hatch the lifecycle service must remove."""
-    store, metric = lifecycle_store
-    store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
-
-    conversations_db.update_conversation('uid', 'conversation', {'status': ConversationStatus.in_progress.value})
-
-    assert store.conversation('uid', 'conversation')['status'] == ConversationStatus.in_progress.value
-    assert metric.events == [{'writer': 'other', 'operation': 'generic_update'}]
-
-
-def test_conditional_claim_admits_only_one_finalizer(lifecycle_store):
-    """The existing CAS is the one current path that makes finalization idempotent."""
-    store, metric = lifecycle_store
-    store.put_conversation('uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False)
-
-    first = conversations_db.claim_conversation_status(
-        'uid', 'conversation', ConversationStatus.in_progress, ConversationStatus.processing
-    )
-    second = conversations_db.claim_conversation_status(
-        'uid', 'conversation', ConversationStatus.in_progress, ConversationStatus.processing
+def test_lifecycle_service_allows_only_declared_transitions(lifecycle_store):
+    lifecycle_store.put_conversation(
+        'uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False
     )
 
-    assert (first, second) == (True, False)
-    assert store.conversation('uid', 'conversation')['status'] == ConversationStatus.processing.value
-    assert metric.events == [{'writer': 'other', 'operation': 'conditional_claim'}]
+    assert lifecycle_service.admit_processing('uid', 'conversation') is True
+    # processing -> merging stays undeclared: merge only ever admits completed conversations.
+    with pytest.raises(lifecycle_service.LifecycleTransitionError, match='invalid lifecycle transition'):
+        lifecycle_service.begin_merge('uid', 'conversation')
+    assert lifecycle_service.complete('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed
 
 
-def test_concurrent_finalizers_have_one_successful_claim(lifecycle_store):
-    """The Firestore transaction seam serializes simultaneous finalize claims."""
-    store, _ = lifecycle_store
-    store.put_conversation('uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False)
+def test_merge_admission_and_lifecycle_agree_on_completed(lifecycle_store):
+    """The two gates in POST /v1/conversations/merge must agree on the admitted status.
+
+    validate_merge_compatibility rejects every status except completed, so completed is the only
+    status that can reach begin_merge. If the transition table omits completed -> merging, every
+    accepted merge raises LifecycleTransitionError, which is an unhandled 500 and makes the merge
+    feature unusable. merge_conversations' failure rollback documents the same edge in reverse.
+    """
+    conversations = [
+        {'id': 'conversation', 'status': ConversationStatus.completed.value},
+        {'id': 'other', 'status': ConversationStatus.completed.value},
+    ]
+    is_valid, error_message, _ = validate_merge_compatibility(conversations)
+    assert (is_valid, error_message) == (True, None)
+
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
+
+    assert lifecycle_service.begin_merge('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.merging
+
+
+def test_generic_lifecycle_field_write_fails_closed(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
+
+    with pytest.raises(ValueError, match='lifecycle fields'):
+        conversations_db.update_conversation('uid', 'conversation', {'status': ConversationStatus.in_progress.value})
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed.value
+
+
+def test_concurrent_finalizers_have_one_service_admission(lifecycle_store):
+    lifecycle_store.put_conversation(
+        'uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False
+    )
     start = threading.Barrier(2)
 
-    def claim() -> bool:
+    def admit() -> bool:
         start.wait()
-        return conversations_db.claim_conversation_status(
-            'uid', 'conversation', ConversationStatus.in_progress, ConversationStatus.processing
-        )
+        return lifecycle_service.admit_processing('uid', 'conversation')
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        results = list(executor.map(lambda _unused: claim(), range(2)))
+        results = list(executor.map(lambda _unused: admit(), range(2)))
 
     assert sorted(results) == [False, True]
-    assert store.conversation('uid', 'conversation')['status'] == ConversationStatus.processing.value
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.processing.value
 
 
-def test_sync_live_collision_bypasses_a_successful_claim(lifecycle_store):
-    """Current sync/live-style drivers can both record processing admission work."""
-    store, _ = lifecycle_store
-    store.put_conversation('uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False)
-
-    assert conversations_db.claim_conversation_status(
-        'uid', 'conversation', ConversationStatus.in_progress, ConversationStatus.processing
+def test_discarded_conversation_cannot_be_readmitted(lifecycle_store):
+    lifecycle_store.put_conversation(
+        'uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False
     )
-    conversations_db.update_conversation_status('uid', 'conversation', ConversationStatus.processing)
 
-    assert [updates for _path, updates in store.write_log] == [
-        {'status': ConversationStatus.processing.value},
-        {'status': ConversationStatus.processing},
-    ]
+    lifecycle_service.discard('uid', 'conversation')
+    assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is True
+    assert lifecycle_service.admit_processing('uid', 'conversation') is False
+    lifecycle_service.restore_discarded('uid', 'conversation')
+    assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is False
 
 
-def test_concurrent_finalize_and_reprocess_have_order_dependent_admission(lifecycle_store):
-    """Current reprocess persistence is not fenced by the finalizer's CAS claim."""
-    store, metric = lifecycle_store
-    store.put_conversation('uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False)
-    start = threading.Barrier(2)
+def test_terminal_failed_finalization_closes_only_the_current_processing_generation(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=False)
 
-    def finalize() -> bool:
-        start.wait()
-        return conversations_db.claim_conversation_status(
-            'uid', 'conversation', ConversationStatus.in_progress, ConversationStatus.processing
-        )
+    assert lifecycle_service.fail_and_discard_processing('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation') == {
+        'status': ConversationStatus.failed,
+        'discarded': True,
+    }
+    assert lifecycle_service.fail_and_discard_processing('uid', 'conversation') is False
 
-    def reprocess() -> None:
-        start.wait()
-        conversations_db.upsert_conversation(
+
+def test_rollback_processing_admission_returns_a_failed_synchronous_finalization(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=False)
+
+    assert lifecycle_service.rollback_processing_admission('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.in_progress.value
+    # The generation stays finalizable — a retry can admit processing again.
+    assert lifecycle_service.admit_processing('uid', 'conversation') is True
+
+
+def test_rollback_processing_admission_never_reopens_a_terminal_generation(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
+
+    assert lifecycle_service.rollback_processing_admission('uid', 'conversation') is False
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed.value
+
+
+def test_rollback_processing_admission_respects_discard(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=True)
+
+    assert lifecycle_service.rollback_processing_admission('uid', 'conversation') is False
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.processing.value
+
+
+def test_discard_fences_a_stale_processing_result_and_completion(lifecycle_store):
+    lifecycle_store.put_conversation(
+        'uid',
+        'conversation',
+        status=ConversationStatus.processing.value,
+        discarded=True,
+        title='user-kept terminal state',
+    )
+
+    persisted = lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'conversation',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'title': 'stale processor output',
+            'data_protection_level': 'standard',
+        },
+    )
+
+    assert persisted is False
+    assert lifecycle_service.complete('uid', 'conversation') is False
+    assert lifecycle_store.conversation('uid', 'conversation') == {
+        'status': ConversationStatus.processing.value,
+        'discarded': True,
+        'title': 'user-kept terminal state',
+    }
+
+
+def test_missing_conversation_fences_processing_result_without_resurrection(lifecycle_store):
+    persisted = lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'deleted-conversation',
+            'status': ConversationStatus.completed,
+            'title': 'stale processor output',
+            'data_protection_level': 'standard',
+        },
+    )
+
+    assert persisted is False
+    assert ('users', 'uid', 'conversations', 'deleted-conversation') not in lifecycle_store.documents
+    assert lifecycle_store.write_log == []
+
+
+def test_completed_conversation_creation_is_explicit_and_idempotent(lifecycle_store):
+    created = lifecycle_service.create_completed_conversation(
+        'uid',
+        {
+            'id': 'new-conversation',
+            'status': ConversationStatus.completed,
+            'title': 'created by an initial request',
+            'data_protection_level': 'standard',
+        },
+        idempotent=True,
+    )
+
+    assert created is True
+    assert lifecycle_store.conversation('uid', 'new-conversation')['status'] == ConversationStatus.completed
+    assert (
+        lifecycle_service.create_completed_conversation(
             'uid',
             {
-                'id': 'conversation',
+                'id': 'new-conversation',
                 'status': ConversationStatus.completed,
-                'discarded': False,
+                'title': 'stale duplicate request',
                 'data_protection_level': 'standard',
             },
+            idempotent=True,
         )
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        finalizer = executor.submit(finalize)
-        reprocessor = executor.submit(reprocess)
-        finalizer_claimed = finalizer.result()
-        assert reprocessor.result() is None
-
-    assert store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed
-    expected_operations = {'upsert'}
-    if finalizer_claimed:
-        expected_operations.add('conditional_claim')
-    assert {event['operation'] for event in metric.events} == expected_operations
+        is False
+    )
+    assert lifecycle_store.conversation('uid', 'new-conversation')['title'] == 'created by an initial request'
 
 
-def test_import_of_an_already_completed_conversation_is_a_single_document_upsert(lifecycle_store):
-    """The current import persistence path updates the existing conversation identity."""
-    store, metric = lifecycle_store
-    store.put_conversation('uid', 'imported', status=ConversationStatus.completed.value, discarded=False, title='old')
-
-    conversations_db.upsert_conversation(
+def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
+    lifecycle_service.persist_imported_conversation(
         'uid',
         {
             'id': 'imported',
@@ -263,29 +301,11 @@ def test_import_of_an_already_completed_conversation_is_a_single_document_upsert
         },
     )
 
-    assert list(store.documents) == [('users', 'uid', 'conversations', 'imported')]
-    assert store.conversation('uid', 'imported')['status'] == ConversationStatus.completed
-    assert store.conversation('uid', 'imported')['title'] == 'imported title'
-    assert metric.events == [{'writer': 'other', 'operation': 'upsert'}]
-
-
-def test_discard_is_not_currently_terminal(lifecycle_store):
-    """Characterize the developer re-open path before the terminal-discard change."""
-    store, metric = lifecycle_store
-    store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
-
-    conversations_db.set_conversation_as_discarded('uid', 'conversation')
-    conversations_db.update_conversation('uid', 'conversation', {'discarded': False})
-
-    assert store.conversation('uid', 'conversation')['discarded'] is False
-    assert metric.events == [
-        {'writer': 'other', 'operation': 'discard'},
-        {'writer': 'other', 'operation': 'generic_update'},
-    ]
+    assert list(lifecycle_store.documents) == [('users', 'uid', 'conversations', 'imported')]
+    assert lifecycle_store.conversation('uid', 'imported')['status'] == ConversationStatus.completed
 
 
 def test_merge_rejects_processing_conversations():
-    """Merge has a separate current admission rule: all sources must be completed."""
     is_valid, error_message, warning_message = validate_merge_compatibility(
         [
             {'id': 'completed', 'status': ConversationStatus.completed.value},
@@ -295,86 +315,3 @@ def test_merge_rejects_processing_conversations():
 
     assert (is_valid, warning_message) == (False, None)
     assert error_message == 'Conversation processing is not ready (status: processing). Wait for it to complete.'
-
-
-def test_lifecycle_metric_writer_labels_are_bounded_to_the_current_inventory():
-    assert {
-        conversations_db.lifecycle_writer_label(module_name)
-        for module_name in (
-            'routers.transcribe',
-            'routers.pusher',
-            'routers.conversations',
-            'routers.sync',
-            'routers.developer',
-            'utils.sync.pipeline',
-            'utils.conversations.process_conversation',
-            'utils.conversations.postprocess_conversation',
-            'utils.conversations.merge_conversations',
-            'utils.imports.limitless',
-        )
-    } == {
-        'transcribe',
-        'pusher',
-        'conversations_router',
-        'sync_router',
-        'developer_router',
-        'sync_pipeline',
-        'process_conversation',
-        'postprocess_conversation',
-        'merge_conversations',
-        'limitless_import',
-    }
-    assert conversations_db.lifecycle_writer_label('unexpected.module') == 'other'
-
-
-def test_lifecycle_metric_traces_the_direct_writer_module(lifecycle_store):
-    """The temporary counter identifies the legacy writer without caller plumbing."""
-    store, metric = lifecycle_store
-    store.put_conversation('uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False)
-    transcribe = ModuleType('routers.transcribe')
-    transcribe.conversations_db = conversations_db
-    transcribe.ConversationStatus = ConversationStatus
-    exec(
-        "def mark_processing():\n"
-        "    conversations_db.update_conversation_status(\n"
-        "        'uid', 'conversation', ConversationStatus.processing\n"
-        "    )\n",
-        transcribe.__dict__,
-    )
-
-    transcribe.mark_processing()
-
-    assert metric.events == [{'writer': 'transcribe', 'operation': 'status_update'}]
-
-
-def test_lazy_lifecycle_metric_registers_once_under_concurrent_first_calls(monkeypatch):
-    """Double-checked locking must prevent duplicate Prometheus Counter registration."""
-    created: list[object] = []
-    create_lock = threading.Lock()
-
-    class _FakeCounter:
-        def __init__(self, *args, **kwargs):
-            with create_lock:
-                created.append(self)
-
-        def labels(self, **labels: str):
-            return self
-
-        def inc(self) -> None:
-            return None
-
-    monkeypatch.setattr(conversations_db, 'CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS', None)
-    monkeypatch.setattr(conversations_db, 'Counter', _FakeCounter)
-
-    workers = 16
-    barrier = threading.Barrier(workers)
-
-    def race(_: int) -> None:
-        barrier.wait()
-        conversations_db._record_legacy_lifecycle_mutation('status_update')
-
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        list(pool.map(race, range(workers)))
-
-    assert len(created) == 1
-    assert conversations_db.CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is created[0]

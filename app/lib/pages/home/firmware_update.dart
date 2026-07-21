@@ -61,8 +61,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         if (mounted) {
           setState(() {
             shouldUpdate = result.$2;
-            updateMessage =
-                widget.device!.firmwareRevision.isEmpty ? context.l10n.unableToDetermineFirmwareVersion : result.$1;
+            updateMessage = widget.device!.firmwareRevision.isEmpty
+                ? context.l10n.unableToDetermineFirmwareVersion
+                : result.$1;
             isLoading = false;
           });
         }
@@ -375,7 +376,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         const SizedBox(height: 24),
 
         // Action buttons
-        if (shouldUpdate) ...[
+        if (shouldUpdate && firmwareUpdatePolicy.allowsOmiFirmwareUpdate) ...[
           // Update button
           GestureDetector(
             onTap: () async {
@@ -425,8 +426,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                     widget.isRollback
                         ? context.l10n.installStableFirmware
                         : otaUpdateSteps.isEmpty
-                            ? context.l10n.installUpdate
-                            : context.l10n.updateNow,
+                        ? context.l10n.installUpdate
+                        : context.l10n.updateNow,
                     style: const TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -528,10 +529,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             child: isLoading
                 ? _buildLoadingSection()
                 : isDownloading || isInstalling
-                    ? _buildProgressSection()
-                    : isInstalled
-                        ? _buildSuccessSection()
-                        : _buildUpdateSection(),
+                ? _buildProgressSection()
+                : isInstalled
+                ? _buildSuccessSection()
+                : _buildUpdateSection(),
           ),
         ),
       ),

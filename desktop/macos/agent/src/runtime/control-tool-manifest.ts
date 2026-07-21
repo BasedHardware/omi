@@ -39,6 +39,8 @@ export interface AgentControlManifestTool {
     | "resolve_desktop_dispatch"
     | "cancel_agent_run"
     | "inspect_agent_artifacts"
+    | "read_tool_output"
+    | "search_tool_output"
     | "update_agent_artifact_lifecycle"
     | "send_agent_message"
     | "spawn_background_agent"
@@ -123,6 +125,7 @@ Returns canonical session/run summaries plus task_agents and floating_agent_pill
     promptGuidelines: [
       "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
       "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then call get_agent_run with the returned runId and answer from run.finalText without exposing the internal id.",
     ],
     capabilityDoc: controlDoc(
       "List Agent Sessions",
@@ -143,7 +146,7 @@ Returns canonical session/run summaries plus task_agents and floating_agent_pill
       surfaceKind: {
         type: "string",
         enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
-        description: "Filter to a canonical surface kind.",
+        description: "Optional surface hint. background_agent and delegated_agent discover recent child sessions across concrete surfaces.",
       },
       limit: { type: "number", description: "Maximum sessions to return. Default 50, max 200." },
       beforeUpdatedAtMs: { type: "number", description: "Pagination cursor: only sessions updated before this epoch-ms timestamp." },
@@ -160,6 +163,7 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     promptGuidelines: [
       "Use a runId from list_agent_sessions or a correlated Omi result.",
       "Returns the run, attempts, adapter bindings, events, and artifact metadata.",
+      "For a completed child, use run.finalText to answer the user and keep the internal runId out of the user-visible response.",
     ],
     capabilityDoc: controlDoc(
       "Get Agent Run",
@@ -523,6 +527,56 @@ Returns metadata and references only. It does not read arbitrary artifact conten
     required: [],
   },
   {
+    name: "read_tool_output",
+    label: "Read Tool Output",
+    description: "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+    promptSnippet: "read_tool_output - Read a bounded excerpt from a saved Omi tool result",
+    promptGuidelines: [
+      "Use an artifactId returned by a toolResultEnvelope fullOutputRef or inspect_agent_artifacts.",
+      "The response is bounded; use search_tool_output for targeted retrieval.",
+    ],
+    capabilityDoc: controlDoc(
+      "Read Tool Output",
+      "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+      ["Requires a canonical artifact id and keeps provider payloads bounded."],
+    ),
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...artifactManagePolicy,
+    runtimePreconditions: ["Artifact must be a local canonical tool_output owned by the active user."],
+    timeoutClass: "normal",
+    properties: {
+      artifactId: { type: "string", description: "Canonical tool-output artifact_id." },
+      ownerId: { type: "string", description: "Owner guard. Defaults to the active signed-in owner." },
+      maxBytes: { type: "number", description: "Maximum excerpt size in bytes. Default 4096, max 8192." },
+    },
+    required: ["artifactId"],
+  },
+  {
+    name: "search_tool_output",
+    label: "Search Tool Output",
+    description: "Search a canonical Omi tool-output artifact without sending the complete artifact to a provider.",
+    promptSnippet: "search_tool_output - Search a saved Omi tool result",
+    promptGuidelines: ["Use after a truncated toolResultEnvelope to find the relevant local output."],
+    capabilityDoc: controlDoc(
+      "Search Tool Output",
+      "Search a canonical Omi tool-output artifact without returning the complete artifact.",
+      ["Requires a canonical artifact id and returns bounded matching lines."],
+    ),
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...artifactManagePolicy,
+    runtimePreconditions: ["Artifact must be a local canonical tool_output owned by the active user."],
+    timeoutClass: "normal",
+    properties: {
+      artifactId: { type: "string", description: "Canonical tool-output artifact_id." },
+      ownerId: { type: "string", description: "Owner guard. Defaults to the active signed-in owner." },
+      query: { type: "string", description: "Text to find in the saved output." },
+      maxMatches: { type: "number", description: "Maximum matching lines. Default 5, max 20." },
+    },
+    required: ["artifactId", "query"],
+  },
+  {
     name: "update_agent_artifact_lifecycle",
     label: "Update Agent Artifact Lifecycle",
     description: `Update metadata-only lifecycle state for one canonical Omi agent artifact.
@@ -662,7 +716,8 @@ Pass parentRunId to link the new run to a parent.`,
     promptGuidelines: [
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
+      "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
       "Inspect progress with list_agent_sessions or get_agent_run.",
     ],
     capabilityDoc: controlDoc(
@@ -682,7 +737,7 @@ Pass parentRunId to link the new run to a parent.`,
     properties: {
       objective: { type: "string", description: "Self-contained background-agent objective." },
       requestedAgentCount: { type: "number", description: "Number of sibling agents requested in this single canonical route decision (default 1, maximum 8)." },
-      provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override." },
+      provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent." },
       parentRunId: { type: "string", description: "Optional parent run to link via delegation." },
       visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
       title: { type: "string", description: "Optional visible session title." },

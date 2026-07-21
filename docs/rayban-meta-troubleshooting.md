@@ -66,7 +66,7 @@ The DAT integration was written against the DAT 0.8 API reference without SDK
 access (the package is public but the API may drift between preview releases).
 All DAT symbols live in `app/ios/Runner/RayBanMeta/RayBanMetaHostApiImpl.swift`
 inside `#if canImport(MWDATCore)` — reconcile symbol names against
-<https://wearables.developer.meta.com/docs/reference/ios_swift/dat/> for your
+https://wearables.developer.meta.com/docs/reference/ios_swift/dat/ for your
 package version. `RayBanMetaAudioCapture.swift` has no DAT dependency and
 should never break.
 
@@ -76,7 +76,8 @@ Expected — DAT 0.8 exposes no battery API; the row is hidden.
 
 ## App crashes at launch after linking the DAT SDK (SwiftProtobuf collision)
 
-**Known integration blocker — must be resolved before shipping the DAT build.**
+This crash occurs only when DAT and `mcumgr_flutter` are linked into the same
+app target. The repository keeps them in separate build graphs.
 
 Symptom: with `MWDATCore`/`MWDATCamera` linked, the app crashes on launch
 (`EXC_BAD_ACCESS` / `SIGSEGV` in `swift_getObjectType`, during Flutter plugin
@@ -100,15 +101,16 @@ unrelated Swift plugin's `register(with:)` dereferences null.
 
 Confirmed by removing `mcumgr_flutter` (the app's only SwiftProtobuf consumer —
 `whisper_flutter_new` does not use it): the duplicate disappears (`nm Runner |
-grep -c SwiftProtobuf` → 0) and the launch crash goes away. That removal is not
-shippable, though — it disables Omi CV1 MCU firmware updates.
+grep -c SwiftProtobuf` → 0) and the launch crash goes away. The default build
+still needs that pod for Omi CV1 firmware updates, so the DAT build uses a
+dedicated target instead of changing the default target.
 
-Fix directions (pick one before enabling the DAT build in production):
+Possible long-term fix directions are:
 
 1. **Ask Meta to stop exporting SwiftProtobuf** from `MWDATCore` (build it with
    hidden symbol visibility / a private module, or vendor it under a renamed
    namespace). This is the clean fix and the right upstream ask — file it on
-   <https://github.com/facebook/meta-wearables-dat-ios/issues>.
+   https://github.com/facebook/meta-wearables-dat-ios/issues.
 2. **Remove the app's second SwiftProtobuf copy.** Replace `mcumgr_flutter`'s
    SwiftProtobuf dependency, or isolate MCU-DFU (the only consumer) behind a
    boundary that doesn't co-link with `MWDATCore` — e.g. load `MWDATCore` only
@@ -118,12 +120,41 @@ Fix directions (pick one before enabling the DAT build in production):
    `mcumgr_flutter` (Ray-Ban glasses don't do nRF MCU firmware updates anyway),
    accepting that that flavor can't OTA-update Omi CV1 pendants.
 
-Until one of these lands, keep the DAT SPM package out of the default shipping
-build (the `#if canImport(MWDATCore)` guard already makes the app compile and
-run in audio-only mode without it).
+The repository implements option 3. Keep the DAT SPM products off the default
+`Runner` target; its `#if canImport(MWDATCore)` guard remains the audio-only
+path.
+
+### Implemented option 3 — DAT flavor without `mcumgr_flutter`
+
+The audio-only build needs none of this. The camera-capable path is isolated as
+follows:
+
+1. `RunnerRayBanDat` is a separate Xcode target and `raybanDat` scheme. Only
+   that target links `MWDATCore` and `MWDATCamera` from the exact 0.8.0 package;
+   default `Runner` has no DAT product dependency.
+2. Exact shell flag `OMI_RAYBAN_DAT=1` makes `app/ios/Podfile` resolve only the
+   DAT target. `rayban_dat_plugin_boundary.rb` removes the iOS
+   `mcumgr_flutter` entry and its Objective-C
+   `Runner/GeneratedPluginRegistrant.m` import/registration before CocoaPods
+   runs. It leaves Android and Dart dependency metadata intact and fails closed
+   if Flutter's generated shape changes.
+3. `app/scripts/rayban_dat.sh` is the only supported build entry point. It runs
+   Flutter with `--flavor raybanDat`, `--dart-define=OMI_RAYBAN_DAT=true`, and
+   `--no-pub`, then restores the exact default generated plugin files, Flutter
+   flavor environment, pod graph, and lock on exit.
+4. Dart firmware policy disables Omi pendant DFU in DAT builds before any
+   `mcumgr_flutter` factory or channel call. OpenGlass Wi-Fi OTA remains
+   available because it does not use mcumgr.
+5. The accepted tradeoff remains: a DAT build cannot OTA-update Omi pendants.
+
+Hermetic Ruby contracts cover the plugin transform, build transaction, package
+pin, target separation, signing identity, and default mcumgr lock. They do not
+replace runtime proof: launch on a physical iPhone, confirm the duplicate-class
+warning and `swift_getObjectType` crash are absent, then complete
+`rayban-meta-founder-acceptance.md`, including a real photo.
 
 ## Reference
 
-- Meta toolkit docs: <https://wearables.developer.meta.com/docs/develop/>
-- Mic/speaker guidance (HFP): <https://wearables.developer.meta.com/docs/develop/dat/microphones-and-speakers/>
-- iOS integration: <https://wearables.developer.meta.com/docs/build-integration-ios/>
+- Meta toolkit docs: https://wearables.developer.meta.com/docs/develop/
+- Mic/speaker guidance (HFP): https://wearables.developer.meta.com/docs/develop/dat/microphones-and-speakers/
+- iOS integration: https://wearables.developer.meta.com/docs/build-integration-ios/

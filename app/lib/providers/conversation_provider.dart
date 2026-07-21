@@ -15,13 +15,14 @@ import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef DailySummariesChecker = Future<bool> Function();
-typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
-  String query, {
-  int? page,
-  int? limit,
-  required bool includeDiscarded,
-  String? speakerId,
-});
+typedef ConversationSearchFetcher =
+    Future<(List<ServerConversation>, int, int)> Function(
+      String query, {
+      int? page,
+      int? limit,
+      required bool includeDiscarded,
+      String? speakerId,
+    });
 
 class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
@@ -42,8 +43,6 @@ class ConversationProvider extends ChangeNotifier {
   String previousQuery = '';
   int totalSearchPages = 1;
   int currentSearchPage = 1;
-
-  Timer? _processingConversationWatchTimer;
 
   // Add debounce mechanism for refresh
   Timer? _refreshDebounceTimer;
@@ -93,10 +92,10 @@ class ConversationProvider extends ChangeNotifier {
     DailySummariesChecker? dailySummariesChecker,
     ConversationSearchFetcher? conversationSearchFetcher,
     bool Function()? isSignedIn,
-  })  : _conversationListFetcher = conversationListFetcher,
-        _dailySummariesChecker = dailySummariesChecker,
-        _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
-        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
+  }) : _conversationListFetcher = conversationListFetcher,
+       _dailySummariesChecker = dailySummariesChecker,
+       _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
+       _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
     _setupMergeListener();
     _loadSettings();
   }
@@ -143,8 +142,6 @@ class ConversationProvider extends ChangeNotifier {
     _initialFetchRetryCount = 0;
     memoriesToDelete = {};
     deleteTimestamps = {};
-    _processingConversationWatchTimer?.cancel();
-    _processingConversationWatchTimer = null;
     _refreshDebounceTimer?.cancel();
     _refreshDebounceTimer = null;
     _lastRefreshTime = null;
@@ -336,8 +333,9 @@ class ConversationProvider extends ChangeNotifier {
   Future<bool> checkHasDailySummaries() async {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
-    final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+    final hasSummaries =
+        await (_dailySummariesChecker?.call() ??
+            getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     hasDailySummaries = hasSummaries;
     notifyListeners();
@@ -414,6 +412,19 @@ class ConversationProvider extends ChangeNotifier {
     if (!result.ok) return;
 
     List<ServerConversation> newConversations = result.items;
+
+    // A conversation the server no longer reports as processing must drop its
+    // "Processing" card. The websocket ConversationEvent that normally clears it
+    // can be missed (socket drop, app backgrounded on Android), and unlike
+    // fetchConversations this path never rebuilt processingConversations — so a
+    // stale card stayed pinned at the top of the list indefinitely.
+    final resolvedIds = newConversations
+        .where((c) => c.status != ConversationStatus.processing)
+        .map((c) => c.id)
+        .toSet();
+    if (resolvedIds.isNotEmpty) {
+      processingConversations.removeWhere((c) => resolvedIds.contains(c.id));
+    }
 
     List<ServerConversation> upsertConvos = [];
 
@@ -924,7 +935,6 @@ class ConversationProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _processingConversationWatchTimer?.cancel();
     _refreshDebounceTimer?.cancel();
     _initialFetchRetryTimer?.cancel();
     _mergeCompletedSubscription?.cancel();
@@ -963,8 +973,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -977,8 +987,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }

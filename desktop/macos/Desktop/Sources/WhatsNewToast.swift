@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Drives the in-app "what's new" card that appears in the bottom-right corner of
 /// the main window the first time the app launches on a newer build (i.e. right

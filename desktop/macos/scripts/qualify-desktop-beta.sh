@@ -16,6 +16,7 @@ PROMOTE=1
 AUTOMATIC=0
 SIGNED_SMOKE_RESULT=""
 CANDIDATE_GATE_RESULT=""
+GITHUB_ACTIONS_ARTIFACT=0
 RELEASE_TAG=""
 
 usage() {
@@ -23,7 +24,7 @@ usage() {
 Qualify a macOS desktop candidate (rebuild tag + T2 core E2E + promote beta).
 
 Usage:
-  qualify-desktop-beta.sh [--keep-stack] [--no-promote] [--automatic] \
+  qualify-desktop-beta.sh [--keep-stack] [--no-promote] [--automatic] [--github-actions-artifact] \
     [--signed-smoke-result PATH --candidate-gate-result PATH] <vX.Y.Z+BUILD-macos>
 
 Options:
@@ -32,6 +33,7 @@ Options:
   --automatic    Run richer automatic gates and require this to remain the newest candidate
   --signed-smoke-result PATH  Codemagic signed-artifact smoke evidence (required with --automatic)
   --candidate-gate-result PATH  Digest-bound candidate gate evidence (required with --automatic)
+  --github-actions-artifact  Leave trusted evidence publication to the workflow artifact
 USAGE
 }
 
@@ -58,6 +60,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 && -n "${2:-}" && "${2:-}" != -* ]] || { echo "--candidate-gate-result requires a path" >&2; exit 2; }
       CANDIDATE_GATE_RESULT="$2"
       shift 2
+      ;;
+    --github-actions-artifact)
+      GITHUB_ACTIONS_ARTIFACT=1
+      shift
       ;;
     --help|-h)
       usage
@@ -120,14 +126,24 @@ DESKTOP_LAUNCH_PID=""
 QUALIFICATION_SUCCESS=0
 BRIDGE_WAIT_SECS=900
 
-gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,body \
+gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json tagName,isDraft,isPrerelease,publishedAt,assets,body \
   > /tmp/desktop-qualification-release.json
 
 python3 "$KEYVALUE_PY" preflight-release /tmp/desktop-qualification-release.json "$RELEASE_TAG"
 
 SHA=$(git -C "$REPO_ROOT" rev-list -n1 "$RELEASE_TAG")
 
-rm -rf "$WORKTREE"
+remove_registered_qualification_worktree() {
+  if git -C "$REPO_ROOT" worktree list --porcelain | grep -Fxq "worktree $WORKTREE"; then
+    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE"
+    git -C "$REPO_ROOT" worktree prune
+  elif [[ -e "$WORKTREE" ]]; then
+    echo "qualification failed: unregistered worktree path exists: $WORKTREE" >&2
+    return 1
+  fi
+}
+
+remove_registered_qualification_worktree
 git -C "$REPO_ROOT" worktree add --detach "$WORKTREE" "$RELEASE_TAG"
 
 LAUNCH_LOG="$WORKTREE/.qualification-desktop-launch.log"
@@ -234,25 +250,6 @@ PY
   return 1
 }
 
-prepare_qualification_defaults() {
-  local bundle_id="$1" bundle_name="$2"
-  case "$bundle_name" in
-    omi-qualification-*) ;;
-    *) echo "refusing to reset non-qualification profile: $bundle_name" >&2; return 1 ;;
-  esac
-  # Qualification is a fresh, synthetic profile. Never inherit stale onboarding,
-  # capture, or shortcut state from this bundle's previous run or from Omi Dev.
-  rm -rf "$HOME/Library/Application Support/$bundle_name" "$HOME/Library/Caches/$bundle_name"
-  defaults delete "$bundle_id" >/dev/null 2>&1 || true
-  defaults write "$bundle_id" hasCompletedOnboarding -bool true
-  defaults write "$bundle_id" devLazyPermissionsEnabled -bool true
-  defaults write "$bundle_id" screenAnalysisEnabled -bool false
-  defaults write "$bundle_id" transcriptionEnabled -bool false
-  defaults write "$bundle_id" systemAudioCaptureMode -string never
-  defaults write "$bundle_id" screenAnalysisAutoStartFixed_v2 -bool true
-  defaults write "$bundle_id" shortcut_floatingBarTypedQuestionVoiceAnswersEnabled -bool false
-}
-
 cleanup() {
   local exit_code=$?
   if [[ -n "$BUNDLE" ]]; then
@@ -265,15 +262,15 @@ cleanup() {
     (cd "$WORKTREE" && PROVIDER_MODE=offline make dev-down) >/dev/null 2>&1 || true
   fi
   if [[ "$QUALIFICATION_SUCCESS" -eq 1 ]]; then
-    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || rm -rf "$WORKTREE"
+    remove_registered_qualification_worktree || \
+      echo "qualification cleanup: retained unregistered worktree path: $WORKTREE" >&2
   fi
   exit "$exit_code"
 }
 trap cleanup EXIT
 
-QUALIFICATION_BUNDLE_ID="$(derive_bundle_id "$BUNDLE")"
 terminate_qualification_desktop "$BUNDLE"
-prepare_qualification_defaults "$QUALIFICATION_BUNDLE_ID" "$BUNDLE"
+"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"
 
 (
   cd "$WORKTREE"
@@ -281,6 +278,8 @@ prepare_qualification_defaults "$QUALIFICATION_BUNDLE_ID" "$BUNDLE"
   OMI_SKIP_SETTINGS_SEED=1 make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
 ) >"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
+# Build time must not consume the desktop-launch readiness allowance.
+SECONDS=0
 
 if ! wait_for_bridge "$AUTOMATION_PORT"; then
   echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
@@ -328,18 +327,25 @@ if manifest.get("passed") is not True or manifest.get("tier") != "fault":
 PY
 fi
 
+if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]; then
+  QUALIFICATION_SUCCESS=1
+  echo "Qualified $RELEASE_TAG for beta; trusted workflow will publish immutable Actions evidence."
+  exit 0
+fi
+
 STAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-ASSET="qualification-evidence-${VERSION}-$(date -u +%Y%m%dT%H%M%SZ).json"
-cp "$EVIDENCE/manifest.json" "/tmp/$ASSET"
+EVIDENCE_FILE="/tmp/qualification-evidence-${VERSION}-$$.json"
+cp "$EVIDENCE/manifest.json" "$EVIDENCE_FILE"
 
 if [[ "$AUTOMATIC" -eq 1 ]]; then
   git -C "$REPO_ROOT" fetch origin --tags --force
-  LATEST_TAG=$(git -C "$REPO_ROOT" tag -l 'v*-macos' --sort=-v:refname | head -1)
+  LATEST_TAG=$(git -C "$REPO_ROOT" for-each-ref --count=1 --sort=-v:refname \
+    --format='%(refname:strip=2)' 'refs/tags/v*-macos')
   if [[ "$LATEST_TAG" != "$RELEASE_TAG" ]]; then
     echo "automatic qualification stopped: newer candidate exists ($LATEST_TAG)" >&2
     exit 1
   fi
-  python3 - "/tmp/$ASSET" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
+  python3 - "$EVIDENCE_FILE" "$SIGNED_SMOKE_RESULT" "$CANDIDATE_GATE_RESULT" "$FAULT_EVIDENCE/manifest.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -355,12 +361,18 @@ evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", 
 PY
 fi
 
+# Qualification evidence is factual, immutable history. Its content digest is
+# part of the asset identity and uploads never clobber an earlier observation.
+EVIDENCE_SHA=$(shasum -a 256 "$EVIDENCE_FILE" | awk '{print $1}')
+ASSET="qualification-evidence-${VERSION}-${EVIDENCE_SHA}.json"
+mv "$EVIDENCE_FILE" "/tmp/$ASSET"
+
 BODY_FILE=/tmp/desktop-qualification-release-body.md
 gh release view "$RELEASE_TAG" --repo BasedHardware/omi --json body --jq .body > "$BODY_FILE"
 
 python3 "$KEYVALUE_PY" update-qualified-beta "$BODY_FILE" "$STAMP" "$SHA" "$ASSET"
 
-gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi --clobber
+gh release upload "$RELEASE_TAG" "/tmp/$ASSET" --repo BasedHardware/omi
 gh release edit "$RELEASE_TAG" --repo BasedHardware/omi --notes-file "$BODY_FILE"
 
 if [[ "$PROMOTE" -eq 1 ]]; then

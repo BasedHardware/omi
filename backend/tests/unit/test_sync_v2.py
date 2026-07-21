@@ -22,6 +22,8 @@ from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi.routing import APIRoute
+from models.users import PlanType
 from utils.executors import run_blocking as _production_run_blocking
 
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
@@ -1326,6 +1328,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.metrics',
             'utils.log_sanitizer',
             'utils.http_client',
+            'utils.multipart',
             'utils.request_validation',
             'utils.sync.files',
             'utils.sync.playback',
@@ -1349,6 +1352,9 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
+        sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
+        sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
 
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
@@ -1698,6 +1704,12 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
             pipeline.RUN_LOCK_TTL_SECONDS = 0.006
             pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            # Drive the lease deadline explicitly. A 6 ms wall-clock window can
+            # legitimately expire after one scheduler turn on a busy CI worker,
+            # even though the retry behavior under test is correct.
+            pipeline.time = types.SimpleNamespace(
+                monotonic=MagicMock(side_effect=[0.0, 0.0, 0.001, 0.001, 0.002, 0.006])
+            )
             pipeline.renew_job_run_lock = MagicMock(side_effect=ConnectionError('redis unavailable'))
             stop_event = asyncio.Event()
             lease_lost_event = asyncio.Event()
@@ -2362,6 +2374,67 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('subscription', 'expected_plan', 'lookup_error'),
+        [
+            (types.SimpleNamespace(plan=PlanType.unlimited_v2), PlanType.unlimited_v2, None),
+            (types.SimpleNamespace(plan=PlanType.basic), PlanType.basic, None),
+            (None, None, None),
+            (None, None, RuntimeError('subscription store unavailable')),
+        ],
+        ids=['unlimited', 'basic', 'missing-subscription', 'subscription-read-failure'],
+    )
+    async def test_fresh_soft_caps_use_the_current_subscription_plan(self, subscription, expected_plan, lookup_error):
+        """Queued fresh work applies the persisted plan instead of the default cap tier."""
+        module, stubs = self._load_sync_module()
+        try:
+            pipeline = stubs['pipeline']
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+
+            def _vad_with_segments(path, segmented_paths, errors):
+                segmented_paths.add('/tmp/seg_1700000001.wav')
+
+            speech_totals = {'daily_ms': 5_000, 'three_day_ms': 5_000, 'weekly_ms': 5_000}
+            pipeline.retrieve_vad_segments = _vad_with_segments
+            pipeline.get_wav_duration = MagicMock(return_value=5.0)
+            pipeline.FAIR_USE_ENABLED = True
+            pipeline.FAIR_USE_RESTRICT_DAILY_DG_MS = 0
+            pipeline.record_speech_ms = MagicMock()
+            pipeline.get_rolling_speech_ms = MagicMock(return_value=speech_totals)
+            pipeline.check_soft_caps = MagicMock(return_value=[])
+            pipeline.users_db = MagicMock()
+            pipeline.users_db.get_existing_user_subscription = MagicMock(return_value=subscription)
+            if lookup_error:
+                pipeline.users_db.get_existing_user_subscription.side_effect = lookup_error
+            pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
+            pipeline.build_person_embeddings_cache = MagicMock(return_value={})
+            pipeline.process_segment = MagicMock()
+            pipeline.record_dg_usage_ms = MagicMock()
+            pipeline.record_usage = MagicMock()
+
+            await module._run_full_pipeline_background_async('j-plan', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job')
+
+            pipeline.users_db.get_existing_user_subscription.assert_called_once_with('uid')
+            pipeline.check_soft_caps.assert_called_once_with('uid', speech_totals=speech_totals, plan=expected_plan)
+            stubs['sync_jobs'].finalize_sync_job.assert_called_once()
+            if lookup_error:
+                pipeline.record_fallback.assert_called_once_with(
+                    component='other',
+                    from_mode='subscription_plan',
+                    to_mode='default_cap',
+                    reason='policy',
+                    outcome='degraded',
+                    log=pipeline.logger,
+                )
+            else:
+                pipeline.record_fallback.assert_not_called()
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
     async def test_partial_segment_failure_completes(self):
         """Partial segment failure must complete (not fail) with error count."""
         module, stubs = self._load_sync_module()
@@ -2695,6 +2768,7 @@ class TestV2EndpointExecution:
             'utils.metrics',
             'utils.log_sanitizer',
             'utils.http_client',
+            'utils.multipart',
             'utils.request_validation',
             'utils.sync.files',
             'utils.sync.playback',
@@ -2716,6 +2790,9 @@ class TestV2EndpointExecution:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
+        sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
+        sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
 
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
@@ -2774,6 +2851,7 @@ class TestV2EndpointExecution:
         # Set up fair_use defaults
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
+        sys.modules['utils.fair_use'].is_daily_audio_ceiling_exceeded = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
@@ -3056,6 +3134,13 @@ class TestV2EndpointExecution:
                 pass
 
             module._run_full_pipeline_background_async = _noop_pipeline
+            scheduled_tasks = []
+
+            def _capture_background_task(coro, *, name):
+                scheduled_tasks.append(name)
+                coro.close()
+
+            module.start_background_task = _capture_background_task
 
             async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
                 return fn(*args, **kwargs)
@@ -3083,67 +3168,29 @@ class TestV2EndpointExecution:
             assert body['status'] == 'queued'
             assert body['poll_after_ms'] == 3000
             mock_sync_jobs.create_sync_job.assert_called_once()
+            assert scheduled_tasks == [f"sync_pipeline:{body['job_id']}"]
         finally:
             self._cleanup_modules(saved)
 
 
 # ---------------------------------------------------------------------------
-# Pusher coordinator executor pattern
+# Conversation finalizer executor pattern
 # ---------------------------------------------------------------------------
 
 
-class TestPusherCoordinatorExecutor:
-    """Pusher _process_conversation_task must use run_in_executor(None, ...) not critical_executor.
-
-    process_conversation is a coordinator that internally submits to critical_executor.
-    Passing critical_executor to run_in_executor would nest executors and cause deadlock.
-    """
+class TestConversationFinalizerExecutor:
+    """The durable finalizer must use the post-processing bulkhead."""
 
     @staticmethod
-    def _read_pusher_source():
-        pusher_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'pusher.py')
-        with open(pusher_path, encoding='utf-8') as f:
+    def _read_finalizer_source():
+        finalizer_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'finalizer.py')
+        with open(finalizer_path, encoding='utf-8') as f:
             return f.read()
 
-    def test_process_conversation_uses_run_in_executor(self):
-        """pusher._process_conversation_task must use run_in_executor for process_conversation."""
-        source = self._read_pusher_source()
-        assert 'run_in_executor' in source, "pusher.py must use run_in_executor for process_conversation"
-
-    def test_process_conversation_uses_none_executor(self):
-        """pusher._process_conversation_task must pass None as executor to avoid deadlock.
-
-        process_conversation is a coordinator that submits child tasks to critical_executor.
-        Using run_in_executor(None, ...) uses the default executor, preventing nested pool deadlock.
-        """
-        source = self._read_pusher_source()
-        assert '_process_conversation_task' in source, "pusher.py must define _process_conversation_task"
-        start = source.index('async def _process_conversation_task')
-        next_def = source.find('\nasync def ', start + 1)
-        if next_def == -1:
-            next_def = len(source)
-        func_body = source[start:next_def]
-
-        none_executor_pattern = re.compile(r'run_in_executor\(\s*None\s*,')
-        assert none_executor_pattern.search(func_body), (
-            "pusher._process_conversation_task must use run_in_executor(None, process_conversation, ...) "
-            "— not critical_executor — because process_conversation is a coordinator that submits "
-            "child tasks to critical_executor; nesting would cause deadlock under load"
-        )
-
-    def test_process_conversation_not_using_critical_executor_directly(self):
-        """process_conversation call in pusher must NOT use critical_executor as the executor arg."""
-        source = self._read_pusher_source()
-        start = source.index('async def _process_conversation_task')
-        next_def = source.find('\nasync def ', start + 1)
-        if next_def == -1:
-            next_def = len(source)
-        func_body = source[start:next_def]
-
-        assert 'run_in_executor(critical_executor, process_conversation' not in func_body, (
-            "pusher._process_conversation_task must NOT pass critical_executor for process_conversation — "
-            "use None (default executor) to prevent deadlock"
-        )
+    def test_process_conversation_uses_postprocess_bulkhead(self):
+        source = self._read_finalizer_source()
+        assert 'postprocess_executor' in source
+        assert re.search(r'run_blocking\(\s+postprocess_executor,\s+process_conversation', source)
 
 
 # ---------------------------------------------------------------------------
@@ -3334,13 +3381,15 @@ class TestTimeoutConfiguration:
 
     def test_llm_mini_has_timeout(self):
         source = self._read_clients_source()
-        llm_mini_line = [l for l in source.split('\n') if 'llm_mini' in l and 'ChatOpenAI' in l][0]
-        assert 'request_timeout=120' in llm_mini_line
-        assert 'max_retries=1' in llm_mini_line
+        start = source.index('def _create_legacy_llm_mini')
+        end = source.find('\n\ndef ', start + 1)
+        factory_body = source[start:end]
+        assert 'request_timeout=120' in factory_body
+        assert 'max_retries=1' in factory_body
 
     def test_anthropic_default_has_timeout(self):
         source = self._read_clients_source()
-        default_line = [l for l in source.split('\n') if '_default_anthropic_client' in l and 'AsyncAnthropic' in l][0]
+        default_line = [l for l in source.split('\n') if '= anthropic.AsyncAnthropic' in l][0]
         assert 'timeout=120' in default_line
         assert 'max_retries=1' in default_line
 

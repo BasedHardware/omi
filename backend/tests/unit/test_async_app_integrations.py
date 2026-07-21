@@ -284,6 +284,45 @@ def _make_app(app_id: str, webhook_url: str, triggers_realtime=False, triggers_a
     return app
 
 
+class TestDurableExternalIntegrationFanout:
+    """The #9687 fanout boundary retries failures with a stable HTTP key."""
+
+    @pytest.mark.asyncio
+    async def test_finalization_delivery_sends_the_durable_idempotency_key(self):
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        response = MagicMock(status_code=200)
+        response.json.return_value = {}
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ):
+            await app_integrations.trigger_external_integrations(
+                'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
+            )
+
+        assert client.post.call_args.kwargs['headers'] == {'X-Omi-Idempotency-Key': 'fanout-1'}
+
+    @pytest.mark.asyncio
+    async def test_finalization_delivery_failure_remains_retryable(self):
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        response = MagicMock(status_code=503, text='unavailable')
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), pytest.raises(app_integrations.ExternalIntegrationFanoutError):
+            await app_integrations.trigger_external_integrations(
+                'uid-1', conversation, idempotency_key='fanout-1', require_delivery=True
+            )
+
+
 class TestAsyncTriggerRealtimeAudioBytes:
     """Test async audio bytes fan-out."""
 

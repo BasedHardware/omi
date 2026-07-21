@@ -5,8 +5,9 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 ## Build Bootstrap
 
 ### Flavors
-- **dev**: `com.friend.ios.dev` — uses `.dev.env`, Firebase project `based-hardware-dev`
-- **prod**: `com.friend.ios` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **dev**: Android `com.friend.ios.dev`, iOS `com.friend-app-with-wearable.ios12.development` — uses `.dev.env`, Firebase project `based-hardware-dev`
+- **prod**: Android `com.friend.ios`, iOS `com.friend-app-with-wearable.ios12` — uses `.prod.env`, Firebase project `based-hardware-prod`
+- **raybanDat**: camera-capable iOS target with the same iOS development identity; use `scripts/rayban_dat.sh`, which excludes mcumgr only for that transaction and restores the default graph.
 
 ### Generated Files (never edit manually)
 | Generator | Source | Output | Command |
@@ -43,11 +44,14 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - iOS: `ios/Runner/PhoneCallsPlugin.swift`
 - Methods: initialize, makeCall, endCall, toggleMute, toggleSpeaker
 
-### Pigeon (Phone Mic — iOS conversation capture)
-- Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift`
+### Pigeon (Phone Mic — conversation capture)
+- Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift` + `android/app/src/main/kotlin/com/friend/ios/phonemic/PhoneMicPigeon.g.kt`
 - Regenerate: `dart run pigeon --input lib/phone_mic_interface.dart`
 - iOS module: `ios/Runner/PhoneMic/` — self-healing AVAudioEngine capture (interruptions/route changes recover natively; Dart only mirrors state)
-- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile/Android stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
+- Android module: `android/app/src/main/kotlin/com/friend/ios/phonemic/` — AudioRecord capture with a self-healing rebuild loop + silencing detection (calls/assistant recover natively; Dart only mirrors state); `PhoneMicForegroundService` (microphone FGS) keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus
+- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
+- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops any event whose id is not the current session's, so a late/stale native event can't clobber a fresh session, and a `start()` onto a still-live native session adopts the new id and re-emits the current state so the caller converges. `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
+- Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit on iOS, libopus JNI shim on Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or automatic offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
 
 ## Permission Matrix
 
@@ -80,6 +84,8 @@ flutter test test/unit/  # specific directory
 ```
 
 `bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
+
+PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes. Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
@@ -129,4 +135,21 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
-- agent-flutter (Marionette) for programmatic UI interaction — see root AGENTS.md for setup
+
+## Verifying UI Changes (agent-flutter)
+
+After any Flutter UI edit, verify programmatically with [agent-flutter](https://github.com/beastoin/agent-flutter) (Marionette is integrated in debug builds). Install once: `npm install -g agent-flutter-cli`.
+
+Edit → Verify → Evidence loop:
+1. Edit code, hot restart: `kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)`
+2. Connect: `AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect`
+3. Verify: `agent-flutter snapshot -i`
+4. Interact: `agent-flutter press @e3` / `press 540 1200` / `find type button press` / `fill @e5 "text"` / `dismiss`
+5. Evidence: `agent-flutter screenshot /tmp/evidence.png`
+
+Key rules:
+- Must reconnect after every hot restart (kills VM Service session).
+- Refs go stale frequently — always re-snapshot before every interaction. Use `press x y` as fallback.
+- `AGENT_FLUTTER_LOG` must point to flutter run stdout (not logcat).
+- Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Add `Key('descriptive_name')` to new interactive widgets.
+- Full command reference: `agent-flutter schema`.

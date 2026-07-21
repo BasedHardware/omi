@@ -14,6 +14,10 @@ on:
         options:
           - release_now
           - force_release
+          # break_glass additionally bypasses the Desktop Swift source check.
+          # force_release does not: it only overrides the active-release and
+          # no-changes checks. Use this when the source gate itself is broken.
+          - break_glass
       next_version:
         description: 'Optional explicit desktop version to tag (for example, 0.12.0)'
         required: false
@@ -34,13 +38,13 @@ jobs:
       reason: ${{ steps.plan.outputs.reason }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Generate Omi Bot token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
@@ -67,13 +71,13 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Generate Omi Bot token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
@@ -152,7 +156,8 @@ jobs:
           git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
-          # Tag the changelog commit first; Codemagic uses this tag to trigger builds.
+          # The planner checked the newest queued releasable desktop source SHA.
+          # Tag this commit so Codemagic receives the consolidated release notes too.
           # NOTE: commit message must NOT contain [skip ci].
           git tag "$RELEASE_TAG"
           git push origin "$RELEASE_TAG"

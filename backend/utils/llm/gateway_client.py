@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, TypeVar, cast
@@ -9,9 +10,13 @@ from typing import Any, TypeVar, cast
 import httpx
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
-from pydantic import BaseModel, ValidationError
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, PrivateAttr, ValidationError
 
+from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
+from utils.llm.gateway_resilience import gateway_circuit, gateway_transport_timeout, observe_gateway_first_byte
+from utils.llm.usage_tracker import get_current_context
 
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
 LEGACY_LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
@@ -20,16 +25,58 @@ DEFAULT_LLM_GATEWAY_URL = 'http://127.0.0.1:9080'
 LLM_GATEWAY_AUTO_LANE_PREFIX = 'omi:auto:'
 CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
 CHAT_AGENT_AUTO_LANE_ID = 'omi:auto:chat-agent'
+PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE = 'public_shared_conversation_chat'
+PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID = 'omi:auto:public-shared-conversation-chat'
 LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION'
 LLM_GATEWAY_CALLER = 'backend'
+LLM_GATEWAY_USER_UID_HEADER = 'X-Omi-User-Uid'
+LLM_GATEWAY_USAGE_FEATURE_HEADER = 'X-Omi-LLM-Feature'
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
+GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
 
 StructuredOutput = TypeVar('StructuredOutput', bound=BaseModel)
 JsonDict = dict[str, Any]
 JsonList = list[Any]
+
+
+class PublicSharedConversationChatGatewayUnavailable(Exception):
+    """The gateway-only public shared-chat lane could not produce an answer."""
+
+    pass
+
+
+class GatewayContextChatOpenAI(ChatOpenAI):
+    """A shared client that adds user attribution at invocation time."""
+
+    _omi_gateway_feature: str | None = PrivateAttr(default=None)
+
+    def __init__(self, *args: Any, omi_gateway_feature: str | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._omi_gateway_feature = omi_gateway_feature
+
+    def _get_request_payload(self, input_: Any, *, stop: list[str] | None = None, **kwargs: Any) -> dict:
+        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        raw_headers = payload.get('extra_headers')
+        headers = dict(raw_headers) if isinstance(raw_headers, Mapping) else {}
+        headers.update(_gateway_usage_headers(feature=self._omi_gateway_feature))
+        if headers:
+            payload['extra_headers'] = headers
+
+        raw_metadata = payload.get('metadata')
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
+        feature = _gateway_feature_for_current_request(self._omi_gateway_feature)
+        if feature:
+            metadata.setdefault('omi_feature', feature)
+        if metadata:
+            payload['metadata'] = metadata
+        return payload
+
+
+def is_gateway_transport_status_code(status_code: object) -> bool:
+    return isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES
 
 
 def _as_json_dict(value: object) -> JsonDict | None:
@@ -116,11 +163,16 @@ def invoke_chat_structured_gateway(
     call does not stall the event loop. Do **not** call this from ``async def``
     code without first offloading via ``run_blocking(llm_executor, ...)``.
     """
+    if not gateway_circuit.allow_request():
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='circuit_open')
+        return None
+
+    gateway_started_at = time.monotonic()
     try:
-        with httpx.Client(timeout=timeout_seconds) as client:
+        with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
             response = client.post(
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_headers(),
+                headers=_gateway_headers(feature=feature),
                 json=_chat_structured_payload(prompt, output_model, feature=feature),
             )
             response.raise_for_status()
@@ -138,16 +190,27 @@ def invoke_chat_structured_gateway(
             record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='invalid_json_shape')
             return None
         result = _validate_output_model(output_model, cast(Mapping[str, object], decoded))
+        gateway_circuit.record_transport_success()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='success')
         record_chat_extraction_gateway_result(feature=feature, outcome='success', reason='ok')
         return result
     except httpx.HTTPStatusError as exc:
         reason = f'http_{exc.response.status_code}'
-        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
-        return None
+        if is_gateway_transport_status_code(exc.response.status_code):
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
+            record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
+            return None
+        record_chat_extraction_gateway_result(feature=feature, outcome='error', reason=reason)
+        raise
     except httpx.TimeoutException:
+        gateway_circuit.record_transport_failure()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='timeout')
         return None
     except httpx.RequestError:
+        gateway_circuit.record_transport_failure()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='request_error')
         return None
     except (ValidationError, JsonSchemaValidationError):
@@ -158,11 +221,85 @@ def invoke_chat_structured_gateway(
         return None
 
 
+async def invoke_public_shared_conversation_chat_gateway(messages: list[dict[str, str]]) -> str:
+    """Invoke the dedicated non-streaming public shared-conversation lane.
+
+    This surface is deliberately gateway-only. Every transport, status, or
+    response-shape fault becomes a typed unavailable result for the public API;
+    it never constructs or invokes a direct provider client.
+    """
+
+    started_at = time.monotonic()
+    if not gateway_circuit.allow_request():
+        record_gateway_request_result(
+            feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+            outcome='error',
+            reason='circuit_open',
+            mode='gateway',
+        )
+        raise PublicSharedConversationChatGatewayUnavailable()
+
+    try:
+        async with get_llm_gateway_semaphore():
+            response = await get_llm_gateway_client().post(
+                f'{get_llm_gateway_base_url()}/v1/chat/completions',
+                headers=_gateway_headers(feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE),
+                json={
+                    'model': PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID,
+                    'messages': messages,
+                    'stream': False,
+                    'max_completion_tokens': 600,
+                    'metadata': {
+                        'omi_feature': PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+                        'prompt_version': 'public_shared_conversation_chat.v1',
+                        'parser_version': 'plain_text.v1',
+                    },
+                },
+            )
+        response.raise_for_status()
+        content = _extract_choice_content(response.json())
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError('gateway returned empty public shared-chat content')
+    except PublicSharedConversationChatGatewayUnavailable:
+        raise
+    except Exception as exc:
+        if isinstance(exc, (httpx.RequestError, httpx.TimeoutException)) or (
+            isinstance(exc, httpx.HTTPStatusError) and is_gateway_transport_status_code(exc.response.status_code)
+        ):
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(
+                feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+                started_at=started_at,
+                outcome='transport_failure',
+            )
+        record_gateway_request_result(
+            feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+            outcome='error',
+            reason='gateway_unavailable',
+            mode='gateway',
+        )
+        raise PublicSharedConversationChatGatewayUnavailable() from exc
+
+    gateway_circuit.record_transport_success()
+    observe_gateway_first_byte(
+        feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+        started_at=started_at,
+        outcome='success',
+    )
+    record_gateway_request_result(
+        feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+        outcome='success',
+        reason='ok',
+        mode='gateway',
+    )
+    return content.strip()
+
+
 def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str, mode: str | None = None) -> None:
     record_gateway_request_result(feature=feature, outcome=outcome, reason=reason, mode=mode)
 
 
-def _gateway_headers() -> dict[str, str]:
+def _gateway_headers(*, feature: str | None = None) -> dict[str, str]:
     headers = {
         'Content-Type': 'application/json',
         'X-Omi-Service-Caller': LLM_GATEWAY_CALLER,
@@ -170,11 +307,12 @@ def _gateway_headers() -> dict[str, str]:
     service_token = get_llm_gateway_service_token()
     if service_token is not None:
         headers['Authorization'] = f'Bearer {service_token}'
+    headers.update(_gateway_usage_headers(feature=feature))
     return headers
 
 
-def llm_gateway_headers() -> dict[str, str]:
-    return _gateway_headers()
+def llm_gateway_headers(*, feature: str | None = None) -> dict[str, str]:
+    return _gateway_headers(feature=feature)
 
 
 def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> JsonDict:
@@ -309,6 +447,19 @@ def _validate_output_model(
     return output_model.model_validate(decoded)
 
 
+def _gateway_timeout(timeout_seconds: float) -> httpx.Timeout:
+    """Keep feature-specific total budgets while bounding the gateway connect/read hop."""
+
+    shared = gateway_transport_timeout()
+    bounded = min(timeout_seconds, shared.read or timeout_seconds)
+    return httpx.Timeout(
+        connect=shared.connect,
+        read=bounded,
+        write=bounded,
+        pool=shared.pool,
+    )
+
+
 def generate_image_via_gateway(
     *,
     model: str,
@@ -324,7 +475,7 @@ def generate_image_via_gateway(
     with httpx.Client(timeout=timeout_seconds) as client:
         response = client.post(
             f'{get_llm_gateway_base_url()}/v1/images/generations',
-            headers=_gateway_headers(),
+            headers=_gateway_headers(feature='app_generator'),
             json={
                 'model': model,
                 'prompt': prompt,
@@ -339,3 +490,21 @@ def generate_image_via_gateway(
     if not isinstance(body, Mapping):
         raise ValueError('gateway image response must be an object')
     return cast('Mapping[str, object]', body)
+
+
+def _gateway_usage_headers(*, feature: str | None) -> dict[str, str]:
+    context = get_current_context()
+    headers: dict[str, str] = {}
+    if context is not None and context.uid:
+        headers[LLM_GATEWAY_USER_UID_HEADER] = context.uid
+    resolved_feature = context.feature if context is not None and context.feature else feature
+    if resolved_feature:
+        headers[LLM_GATEWAY_USAGE_FEATURE_HEADER] = resolved_feature
+    return headers
+
+
+def _gateway_feature_for_current_request(default: str | None) -> str | None:
+    context = get_current_context()
+    if context is not None and context.feature:
+        return context.feature
+    return default

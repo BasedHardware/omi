@@ -56,7 +56,8 @@ from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
-from utils.conversations.location import get_google_maps_location
+from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.location import resolve_geolocation
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -79,6 +80,7 @@ from utils.memory.default_read_rollout import (
     guard_legacy_memory_write,
     read_default_read_rollout,
 )
+from utils.observability import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -91,6 +93,25 @@ _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6f
 
 class DeveloperSuccessResponse(BaseModel):
     success: bool
+
+
+DEVELOPER_MEMORY_ACCESS_NOT_READY = 'developer_memory_access_not_ready'
+
+
+def _developer_memory_access_not_ready_detail(reason: Optional[str]) -> dict:
+    return {
+        'enabled': False,
+        'code': DEVELOPER_MEMORY_ACCESS_NOT_READY,
+        'message': (
+            'Developer Memory API access is not enabled for this account. '
+            'Your API key can be valid and correctly scoped; this endpoint also requires server-side memory '
+            'readiness. Try again after access is enabled, or contact Omi support if it remains unavailable.'
+        ),
+        'reason': reason,
+        'consumer': 'developer_api',
+        'archive_default_visible': False,
+        'archive_capability': False,
+    }
 
 
 def _developer_request_ip(request: Request) -> Optional[str]:
@@ -373,18 +394,21 @@ def get_memories(
     if memory_result.read_decision == MemoryReadDecision.USE_MEMORY:
         return [CleanerMemory.model_validate(memory) for memory in memory_result.memories]
     if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+        if memory_result.fallback_reason != 'missing_rollout_state':
+            raise HTTPException(
+                status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
+            )
+        # pin_memory_system above already resolved this account to LEGACY, so an absent
+        # memory_control/state doc is the expected un-enrolled state and the legacy
+        # `memories` collection is the authoritative read surface — not a fail-closed
+        # migration condition (#9892).
+        record_fallback(
+            component='other',
+            from_mode='memory_default_read',
+            to_mode='legacy_memories',
+            reason='policy',
+            outcome='recovered',
         )
-    if memory_result.should_use_legacy_fallback:
-        pass
 
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
@@ -486,25 +510,11 @@ def search_memories_vector(
     )
     if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
         raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
     if memory_result.should_use_legacy_fallback:
         raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
+            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
     return {
         'items': memory_result.memories,
@@ -1466,14 +1476,8 @@ def create_conversation(
     if finished_at < started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
-    # Process geolocation if provided
-    geolocation = request.geolocation
-    if geolocation and not geolocation.google_place_id:
-        try:
-            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-        except Exception as e:
-            logger.error(f"Error enriching geolocation: {e}")
-            # Continue with original geolocation if enrichment fails
+    # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
+    geolocation = resolve_geolocation(request.geolocation)
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1652,14 +1656,8 @@ def _create_conversation_from_segments(
     if finished_at <= started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
-    # Process geolocation if provided
-    geolocation = request.geolocation
-    if geolocation and not geolocation.google_place_id:
-        try:
-            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-        except Exception as e:
-            logger.error(f"Error enriching geolocation: {e}")
-            # Continue with original geolocation if enrichment fails
+    # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
+    geolocation = resolve_geolocation(request.geolocation)
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1715,7 +1713,9 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.model_dump()):
+        if not lifecycle_service.create_processing_conversation(
+            uid, create_conversation_obj.model_dump(), idempotent=True
+        ):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1752,7 +1752,7 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        conversations_db.upsert_conversation(uid, conversation.model_dump())
+        lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
 
     return ConversationResponse(
         id=conversation.id,
@@ -1907,9 +1907,9 @@ def update_conversation_endpoint(
 
     if request.discarded is not None:
         if request.discarded:
-            conversations_db.set_conversation_as_discarded(uid, conversation_id)
+            lifecycle_service.discard(uid, conversation_id)
         else:
-            conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
+            lifecycle_service.restore_discarded(uid, conversation_id)
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation:

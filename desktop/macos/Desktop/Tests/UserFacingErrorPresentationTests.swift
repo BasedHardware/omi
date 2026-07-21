@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class UserFacingErrorPresentationTests: XCTestCase {

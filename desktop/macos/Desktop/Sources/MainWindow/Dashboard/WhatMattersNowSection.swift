@@ -1,146 +1,8 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
-struct WhatMattersNowSection: View {
-  @ObservedObject var store: DashboardIntelligenceStore
-  let onOpen: (DashboardRecommendation) async -> Bool
-
-  var body: some View {
-    if !store.recommendations.isEmpty {
-      VStack(alignment: .leading, spacing: 10) {
-        HStack {
-          Text("What matters now")
-            .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Spacer()
-        }
-
-        HStack(alignment: .top, spacing: 10) {
-          ForEach(store.recommendations) { recommendation in
-            WhatMattersNowCard(
-              recommendation: recommendation,
-              onPrimary: {
-                if await onOpen(recommendation) {
-                  await store.recordPrimaryAction(recommendation)
-                }
-              },
-              onLater: { await store.later(recommendation) },
-              onDismiss: { reason in await store.dismiss(recommendation, reason: reason) }
-            )
-          }
-        }
-      }
-      .padding(12)
-      .background(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(OmiColors.backgroundSecondary.opacity(0.72))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(OmiColors.border.opacity(0.55), lineWidth: 1)
-      )
-      .accessibilityIdentifier("what-matters-now")
-    }
-  }
-}
-
-private struct WhatMattersNowCard: View {
-  let recommendation: DashboardRecommendation
-  let onPrimary: () async -> Void
-  let onLater: () async -> Void
-  let onDismiss: (OmiAPI.TaskIntelligenceFeedbackReason?) async -> Void
-
-  @State private var showDismissReasons = false
-  @State private var choseReason = false
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 7) {
-      Text(recommendation.headline)
-        .scaledFont(size: 13, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
-        .lineLimit(2)
-
-      Text(recommendation.whyNow)
-        .scaledFont(size: 11)
-        .foregroundColor(OmiColors.textSecondary)
-        .lineLimit(3)
-
-      if let context = recommendation.contextLabel, !context.isEmpty {
-        Label(context, systemImage: "target")
-          .scaledFont(size: 9)
-          .foregroundColor(OmiColors.textTertiary)
-          .lineLimit(1)
-      }
-
-      if !recommendation.evidencePreview.isEmpty {
-        HStack(spacing: 5) {
-          Image(systemName: "link")
-          Text(recommendation.evidencePreview)
-            .lineLimit(1)
-        }
-        .scaledFont(size: 9)
-        .foregroundColor(OmiColors.textTertiary)
-      }
-
-      Spacer(minLength: 0)
-
-      HStack(spacing: 6) {
-        Button(recommendation.recommendedAction) { Task { await onPrimary() } }
-          .buttonStyle(.borderedProminent)
-          .tint(OmiColors.textPrimary)
-          .foregroundColor(.black)
-          .lineLimit(1)
-          .accessibilityIdentifier("wmn-primary-\(recommendation.interventionID)")
-
-        Button("Later") { Task { await onLater() } }
-          .buttonStyle(.bordered)
-          .accessibilityIdentifier("wmn-later-\(recommendation.interventionID)")
-
-        Button("Dismiss") {
-          choseReason = false
-          showDismissReasons = true
-        }
-        .buttonStyle(.bordered)
-        .popover(isPresented: $showDismissReasons) {
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Optional reason")
-              .scaledFont(size: 11, weight: .semibold)
-            ForEach(reasonChoices, id: \.label) { choice in
-              Button(choice.label) {
-                choseReason = true
-                Task { await onDismiss(choice.reason) }
-                showDismissReasons = false
-              }
-              .buttonStyle(.bordered)
-            }
-          }
-          .padding(12)
-          .frame(width: 210)
-        }
-        .accessibilityIdentifier("wmn-dismiss-\(recommendation.interventionID)")
-      }
-      .controlSize(.small)
-    }
-    .padding(10)
-    .frame(maxWidth: .infinity, minHeight: 152, alignment: .topLeading)
-    .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous)
-        .fill(OmiColors.backgroundTertiary.opacity(0.72))
-    )
-    .onChange(of: showDismissReasons) { wasShowing, isShowing in
-      guard wasShowing, !isShowing, !choseReason else { return }
-      Task { await onDismiss(nil) }
-    }
-  }
-
-  private var reasonChoices: [(label: String, reason: OmiAPI.TaskIntelligenceFeedbackReason)] {
-    [
-      ("Already handled", .already_handled),
-      ("Not mine", .not_mine),
-      ("Not useful", .not_useful),
-    ]
-  }
-}
+// Recommendation ("what matters now") surfacing moved into the Home hub's
+// knows-list rows in DashboardPage; this file keeps the goals surfaces.
 
 struct FocusedGoalsSection: View {
   @ObservedObject var store: DashboardIntelligenceStore
@@ -396,8 +258,9 @@ private struct CanonicalGoalCreateSheet: View {
         .buttonStyle(.borderedProminent)
         .tint(OmiColors.textPrimary)
         .foregroundColor(.black)
-        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          || desiredOutcome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(
+          title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || desiredOutcome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
     }
     .padding(20)
@@ -405,8 +268,8 @@ private struct CanonicalGoalCreateSheet: View {
   }
 }
 
-private extension String {
-  var nilIfEmpty: String? { isEmpty ? nil : self }
+extension String {
+  fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 struct CanonicalGoalDetailSheet: View {

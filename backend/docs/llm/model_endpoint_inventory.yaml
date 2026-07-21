@@ -68,12 +68,19 @@ model_config_features:
       - web_search
     pinned:
       - fair_use
-  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, gemini, openrouter, perplexity, and anthropic.
-  migration_status: get_llm can centrally switch Omi-managed feature traffic to the generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway; BYOK remains direct user-key routing outside the gateway flip and fails closed during the gateway flip unless explicitly acknowledged; direct exception surfaces fail closed during the gateway flip unless explicitly acknowledged.
+  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic.
+  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed; temporary direct exceptions retain the native Vertex legacy client until those callers migrate.
   test_guardrail_coverage:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
     - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
 surfaces:
+  - surface: public_shared_conversation_chat
+    code_path: backend/routers/public_shared_conversation_chat.py:public_shared_conversation_chat
+    current_provider_model: gateway-only openai/gpt-5-nano
+    request_shape: non-streaming plain chat with server-resolved shared transcript, at most eight user/assistant history entries, and no tools or retrieval
+    gateway_lane_capability_needed: dedicated non-streaming no-tools omi:auto:public-shared-conversation-chat lane
+    migration_status: gateway_only_trusted_frontend_bff
+    test_guardrail_coverage: backend/tests/unit/test_public_shared_conversation_chat.py and web/frontend/src/__tests__/shared-conversation-chat-contract.test.mjs
   - surface: langchain_feature_routing
     code_path: backend/utils/llm/clients.py:get_llm
     current_provider_model: utils.llm.model_config feature profile

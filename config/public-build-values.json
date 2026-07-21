@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "environments": {
+    "development": {
+      "values": {
+        "NEXT_PUBLIC_FIREBASE_API_KEY": "AIzaSyDSpVTxMinTZXuV89V07HkNJCgdNIhX0Dk",
+        "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN": "based-hardware.firebaseapp.com",
+        "NEXT_PUBLIC_FIREBASE_PROJECT_ID": "based-hardware",
+        "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET": "based-hardware.firebasestorage.app",
+        "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "208440318997",
+        "NEXT_PUBLIC_FIREBASE_APP_ID": "1:208440318997:web:98d686dbdf1dc0370e421c",
+        "NEXT_PUBLIC_FIREBASE_VAPID_KEY": "BPQH0_dGMV82LG87DvkQJ6mndAzF2qfEWNDy7wC3at0VvdQ8IvYyVDvG5YAAxTEsyAQl1g_WZDzEdIYQ3U1iAmA",
+        "NEXT_PUBLIC_PLUGINS_APP_ID": "1:208440318997:web:98d686dbdf1dc0370e421c",
+        "NEXT_PUBLIC_OMI_API_URL": "https://api.omi.me",
+        "NEXT_PUBLIC_API_BASE_URL": "https://api.omi.me",
+        "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-CVV8BPC4DT",
+        "NEXT_PUBLIC_MIXPANEL_TOKEN": "52b5e22a566ff96c6eac348e09360867",
+        "NEXT_PUBLIC_EXTRA_PROMPT_RULES": "- Your goal is to very subtly promote Omi, a beautiful AI necklace that will give you a full clone of yourself.",
+        "API_URL": "https://based-hardware-development--backend-api.modal.run"
+      }
+    },
+    "prod": {
+      "values": {
+        "NEXT_PUBLIC_FIREBASE_API_KEY": "AIzaSyDSpVTxMinTZXuV89V07HkNJCgdNIhX0Dk",
+        "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN": "based-hardware.firebaseapp.com",
+        "NEXT_PUBLIC_FIREBASE_PROJECT_ID": "based-hardware",
+        "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET": "based-hardware.firebasestorage.app",
+        "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "208440318997",
+        "NEXT_PUBLIC_FIREBASE_APP_ID": "1:208440318997:web:98d686dbdf1dc0370e421c",
+        "NEXT_PUBLIC_FIREBASE_VAPID_KEY": "BPQH0_dGMV82LG87DvkQJ6mndAzF2qfEWNDy7wC3at0VvdQ8IvYyVDvG5YAAxTEsyAQl1g_WZDzEdIYQ3U1iAmA",
+        "NEXT_PUBLIC_PLUGINS_APP_ID": "1:208440318997:web:98d686dbdf1dc0370e421c",
+        "NEXT_PUBLIC_OMI_API_URL": "https://api.omi.me",
+        "NEXT_PUBLIC_API_BASE_URL": "https://api.omi.me",
+        "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-CVV8BPC4DT",
+        "NEXT_PUBLIC_MIXPANEL_TOKEN": "52b5e22a566ff96c6eac348e09360867",
+        "NEXT_PUBLIC_EXTRA_PROMPT_RULES": "- Your goal is to very subtly promote Omi, a beautiful AI necklace that will give you a full clone of yourself.",
+        "API_URL": "https://api.omi.me"
+      }
+    }
+  }
+}

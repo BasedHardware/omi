@@ -17,6 +17,7 @@ import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/utils/plan_pricing.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -284,36 +285,36 @@ class _PlansSheetState extends State<PlansSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Downgrade to Freemium?',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.downgradeToFreemiumTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('You will experience these limitations:', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+            Text(context.l10n.downgradeLimitationsHeading, style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
             const SizedBox(height: 16),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.carBattery, '7x battery consumption'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.carBattery, context.l10n.downgradeLimitBattery),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.triangleExclamation, '30% less transcription quality'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.triangleExclamation, context.l10n.downgradeLimitQuality),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.clock, '5-7 second delay'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.clock, context.l10n.downgradeLimitDelay),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.userSlash, 'Cannot identify speakers'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.userSlash, context.l10n.downgradeLimitSpeakers),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            child: Text(
+              context.l10n.cancel,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Downgrade Anyway', style: TextStyle(color: Colors.red.shade400)),
+            child: Text(context.l10n.downgradeAnyway, style: TextStyle(color: Colors.red.shade400)),
           ),
         ],
       ),
@@ -357,13 +358,13 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic>? selectedPlanData;
     if (tierId != null) {
       selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-          );
+        (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+      );
     }
     // Fallback to old behavior (first plan matching interval) for backwards compat
     selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-        );
+      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+    );
 
     if (selectedPlanData == null) {
       AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
@@ -377,14 +378,10 @@ class _PlansSheetState extends State<PlansSheet> {
     final currentSub = provider.subscription?.subscription;
     // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
-    final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
+    final currentTierName = currentSub?.plan.wireName; // backend plan_id, e.g. 'plus', 'unlimited_v2'
     final isSameTier = currentTierName == tierId;
-    final isUpgradingFromMonthlyToAnnual = isSameTier &&
-        (currentSub?.plan == PlanType.unlimited ||
-            currentSub?.plan == PlanType.operator ||
-            currentSub?.plan == PlanType.architect) &&
-        currentSub?.status == SubscriptionStatus.active &&
-        isYearly;
+    final isUpgradingFromMonthlyToAnnual =
+        isSameTier && (currentSub?.plan.isPaid ?? false) && currentSub?.status == SubscriptionStatus.active && isYearly;
 
     if (isUpgradingFromMonthlyToAnnual && currentSub?.cancelAtPeriodEnd != true) {
       // Show confirmation popup for monthly to annual upgrade
@@ -492,9 +489,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
     final currentSub = provider.subscription!.subscription;
 
-    if (currentSub.plan == PlanType.unlimited ||
-        currentSub.plan == PlanType.operator ||
-        currentSub.plan == PlanType.architect) {
+    if (currentSub.plan.isPaid) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => ConfirmationDialog(
@@ -518,11 +513,7 @@ class _PlansSheetState extends State<PlansSheet> {
       Map<String, dynamic>? result;
 
       // If user already has a paid plan and it's not canceled
-      if ((currentSub.plan == PlanType.unlimited ||
-              currentSub.plan == PlanType.operator ||
-              currentSub.plan == PlanType.architect) &&
-          currentSub.status == SubscriptionStatus.active &&
-          !currentSub.cancelAtPeriodEnd) {
+      if (currentSub.plan.isPaid && currentSub.status == SubscriptionStatus.active && !currentSub.cancelAtPeriodEnd) {
         result = await provider.upgradeUserSubscription(
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
@@ -612,8 +603,7 @@ class _PlansSheetState extends State<PlansSheet> {
         }
 
         final sub = provider.subscription?.subscription;
-        final isPaidPlan =
-            sub?.plan == PlanType.unlimited || sub?.plan == PlanType.operator || sub?.plan == PlanType.architect;
+        final isPaidPlan = sub?.plan.isPaid ?? false;
         final isUnlimited = isPaidPlan; // backward-compat alias for UI branching
         final isCancelled = sub?.cancelAtPeriodEnd ?? false;
 
@@ -948,7 +938,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded = sub?.currentPeriodEnd != null &&
+                              final periodEnded =
+                                  sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1017,7 +1008,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption =
+                                _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1179,7 +1171,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
+                            final shouldShowContinueButton =
+                                !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1253,11 +1246,14 @@ class _PlansSheetState extends State<PlansSheet> {
                           const SizedBox(height: 16),
                           Column(
                             children: [
-                              _buildLimitationItem(icon: FontAwesomeIcons.carBattery, text: '7x battery consumption'),
+                              _buildLimitationItem(
+                                icon: FontAwesomeIcons.carBattery,
+                                text: context.l10n.downgradeLimitBattery,
+                              ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
                                 icon: FontAwesomeIcons.triangleExclamation,
-                                text: '30% less transcription quality',
+                                text: context.l10n.downgradeLimitQuality,
                               ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
@@ -1265,7 +1261,10 @@ class _PlansSheetState extends State<PlansSheet> {
                                 text: '5-7 second delay (not real-time)',
                               ),
                               const SizedBox(height: 12),
-                              _buildLimitationItem(icon: FontAwesomeIcons.userSlash, text: 'Cannot identify speakers'),
+                              _buildLimitationItem(
+                                icon: FontAwesomeIcons.userSlash,
+                                text: context.l10n.downgradeLimitSpeakers,
+                              ),
                             ],
                           ),
                         ],
@@ -1549,7 +1548,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     // Tier ordering
-    const tierOrder = ['unlimited', 'operator', 'architect'];
+    const tierOrder = ['plus', 'unlimited_v2', 'unlimited', 'operator', 'architect'];
     final sortedTierIds = grouped.keys.toList()
       ..sort((a, b) {
         final ai = tierOrder.indexOf(a);
@@ -1564,6 +1563,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final isYearly = selectedPlan == 'yearly';
+    final savePercent = bestAnnualDiscountPercent(grouped.values);
 
     return Column(
       children: [
@@ -1594,20 +1594,25 @@ class _PlansSheetState extends State<PlansSheet> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
-                        child: Text(
-                          context.l10n.savePercent,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
+                      if (savePercent != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade800,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            context.l10n.savePercent(savePercent),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -1669,7 +1674,7 @@ class _PlansSheetState extends State<PlansSheet> {
             child: _buildDynamicPlanOption(
               isSelected: isSelected,
               planData: planDataWithName,
-              saveTag: isYearly ? '2 Months Free' : null,
+              saveTag: isYearly ? annualSaveTag(tierPlans) : null,
               isPopular: eyebrow == 'Most popular',
               featureSummary: planSubtitle,
               features: planFeatures,
@@ -1692,7 +1697,7 @@ class _PlansSheetState extends State<PlansSheet> {
         _buildDynamicPlanOption(
           isSelected: selectedPlan == 'yearly',
           planData: plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first),
-          saveTag: '2 Months Free',
+          saveTag: annualSaveTag(plans),
           isPopular: true,
           onTap: () {
             HapticFeedback.lightImpact();
@@ -2064,6 +2069,8 @@ class _PlansSheetState extends State<PlansSheet> {
       case 'architect':
         return true;
       case 'unlimited':
+      case 'plus':
+      case 'unlimited_v2':
         return false;
       default:
         return null;

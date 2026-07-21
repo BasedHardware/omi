@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
@@ -16,6 +19,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final hostApiChannelNames = <String>{};
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
 
   void setRayBanMetaHostApiHandler(String methodName, Future<Object?> Function(Object? message) handler) {
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -153,9 +161,9 @@ void main() {
 
       setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
       setRayBanMetaHostApiHandler(
-        'getBluetoothHfpInputNames',
+        'getBluetoothHfpInputs',
         (_) async => <Object?>[
-          <Object?>['Ray-Ban Meta'],
+          <BluetoothHfpInput>[BluetoothHfpInput(uid: 'hfp-rayban-uid', name: 'Ray-Ban Meta')],
         ],
       );
       setRayBanMetaHostApiHandler('stopAudioCapture', (_) async {
@@ -171,7 +179,7 @@ void main() {
         return <Object?>[];
       });
 
-      final transport = RayBanMetaTransport('rayban-meta-test');
+      final transport = RayBanMetaTransport('hfp-rayban-uid');
       await transport.connect();
 
       await expectLater(transport.disconnect(), completes);
@@ -180,18 +188,112 @@ void main() {
     });
   });
 
+  group('RayBanMetaTransport audio-only UID matching', () {
+    test('passes the selected UID to native audio capture', () async {
+      String? capturedUid;
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler('startAudioCapture', (message) async {
+        capturedUid = (message as List<Object?>).first as String?;
+        return <Object?>[];
+      });
+
+      final transport = RayBanMetaTransport('selected-uid');
+      await transport.startAudioCapture();
+
+      expect(capturedUid, 'selected-uid');
+      await transport.dispose();
+    });
+
+    test('connects a renamed input only when its stable UID matches', () async {
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[BluetoothHfpInput(uid: 'selected-uid', name: 'My Renamed Glasses')],
+        ],
+      );
+
+      final transport = RayBanMetaTransport('selected-uid');
+      await expectLater(transport.connect(), completes);
+      expect(await transport.isConnected(), isTrue);
+      await transport.dispose();
+    });
+
+    test('does not substitute a name-matched input with a different UID', () async {
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[BluetoothHfpInput(uid: 'different-uid', name: 'Ray-Ban Meta')],
+        ],
+      );
+
+      final transport = RayBanMetaTransport('selected-uid');
+      await expectLater(transport.connect(), throwsException);
+      expect(await transport.isConnected(), isFalse);
+      await transport.dispose();
+    });
+  });
+
   group('RayBanMetaDiscoverer audio-only matching', () {
+    test('surfaces the persisted HFP UID after the Bluetooth name changes', () async {
+      final stored = RayBanMetaDiscoverer.audioOnlyDeviceForInput(
+        BluetoothHfpInput(uid: 'stable-hfp-uid', name: 'Original Ray-Ban Name'),
+      );
+      SharedPreferences.setMockInitialValues({'btDevice': jsonEncode(stored.toJson())});
+      await SharedPreferencesUtil.init();
+
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[
+            BluetoothHfpInput(uid: 'other-headset', name: 'AirPods Pro'),
+            BluetoothHfpInput(uid: 'stable-hfp-uid', name: 'Completely Renamed Glasses'),
+          ],
+        ],
+      );
+
+      final result = await RayBanMetaDiscoverer().discover();
+
+      expect(result.devices, hasLength(1));
+      expect(result.devices.single.id, 'stable-hfp-uid');
+      expect(result.devices.single.name, 'Completely Renamed Glasses');
+      expect(result.devices.single.type, DeviceType.raybanMeta);
+      expect(result.devices.single.locator?.extras[RayBanMetaDiscoverer.audioOnlyExtraKey], isTrue);
+    });
+
+    test('uses a name match only as a first-selection convenience and keeps the real UID', () async {
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputs',
+        (_) async => <Object?>[
+          <BluetoothHfpInput>[BluetoothHfpInput(uid: 'el-ai-uid', name: 'EL AI 000F')],
+        ],
+      );
+
+      final result = await RayBanMetaDiscoverer().discover();
+
+      expect(result.devices.single.id, 'el-ai-uid');
+      expect(result.devices.single.name, 'EL AI 000F');
+    });
+
     test('matches Meta product names precisely, not generic glasses', () {
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses("Eulices's Ray-Ban Meta"), isTrue);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('RayBan Meta Smart Glasses'), isTrue);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Oakley Meta HSTN'), isTrue);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Meta Glasses'), isTrue);
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('EL AI 000F'), isTrue);
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('el ai 1a2b'), isTrue);
 
       // Must not swallow other glasses/audio devices.
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('OmiGlass'), isFalse);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('OpenGlass'), isFalse);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('AirPods Pro'), isFalse);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Car Audio'), isFalse);
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('El Camino AI'), isFalse);
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Elaine AI Speaker'), isFalse);
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Michael AI'), isFalse);
     });
   });
 }

@@ -22,6 +22,7 @@ import type {
   RevokeOwnerRuntimeMessage,
   OwnerRuntimeRevokedMessage,
   JournalRecordTurnMessage,
+  JournalImportRemoteTurnMessage,
   JournalTerminalizeTurnMessage,
   JournalBackendSyncMessage,
 } from "../src/protocol.js";
@@ -109,6 +110,30 @@ describe("protocol v2", () => {
       result: JSON.stringify({ ok: false, error: { code: "direct_control_owner_revoked" } }),
     };
     expect((receipt as OutboundMessage).ownerId).toBe(message.ownerId);
+  });
+
+  it("types the bounded remote-turn upgrade as an owner-scoped journal request", () => {
+    const message: JournalImportRemoteTurnMessage = {
+      type: "journal_import_remote_turn",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "import-remote",
+      clientId: "main-chat-upgrade",
+      ownerId: "owner-1",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      turn: {
+        remoteId: "remote-1",
+        canonicalTurnId: "turn-1",
+        role: "user",
+        content: "fixture",
+        contentBlocks: [],
+        resources: [],
+        metadataJson: "{}",
+        createdAtMs: 1,
+      },
+    };
+    expect((message as InboundMessage).type).toBe("journal_import_remote_turn");
   });
 
   it("bootstraps local runtimes with an owner-only handshake before owner-scoped RPCs", () => {

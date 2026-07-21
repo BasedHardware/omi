@@ -1,13 +1,13 @@
+import OmiTheme
 import Sentry
 import SwiftUI
 import UniformTypeIdentifiers
-import OmiTheme
 
 /// The Sentry event title used when a user submits feedback. Shared by the real
 /// `submitFeedback()` path and the non-prod dry-run bridge action so the dry-run
 /// can never drift from the title that actually ships to Sentry (SET-02).
-func feedbackReportTitle(for message: String) -> String {
-  message.isEmpty ? "User Report (logs only)" : "User Report: \(message)"
+func feedbackReportTitle(for _: String) -> String {
+  "User Report"
 }
 
 /// Filename of the JSON diagnostics attachment on the feedback Sentry event.
@@ -94,7 +94,7 @@ struct FeedbackView: View {
           .font(.headline)
 
         Text(
-          "App logs will be included automatically. Optionally describe what went wrong, or save a redacted diagnostics file to share manually."
+          "Redacted diagnostics will be included automatically. Notes, name, and email stay on this device for privacy; save a diagnostics file to share them manually."
         )
         .font(.caption)
         .foregroundColor(.secondary)
@@ -158,15 +158,14 @@ struct FeedbackView: View {
     // Submit to Sentry with log file attachment (dev + prod — user explicitly chose to report)
     let sentryMessage = feedbackReportTitle(for: message)
 
-    // Capture event with log file attached via scope
-    let eventId = SentrySDK.capture(message: sentryMessage) { scope in
-      let logPath = omiLogFilePath()
-      let logFilename = (logPath as NSString).lastPathComponent
-      if FileManager.default.fileExists(atPath: logPath) {
-        let attachment = Attachment(path: logPath, filename: logFilename, contentType: "text/plain")
-        scope.addAttachment(attachment)
-      }
-      if let diagnosticsURL = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+    // Attach bounded, redacted diagnostics rather than the raw local log or
+    // user-entered feedback text.
+    let diagnosticsURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+      area: "other",
+      failureClass: "user_report",
+      phase: "other")
+    SentrySDK.capture(message: sentryMessage) { scope in
+      if let diagnosticsURL {
         let attachment = Attachment(
           path: diagnosticsURL.path,
           filename: feedbackDiagnosticsAttachmentFilename,
@@ -174,21 +173,13 @@ struct FeedbackView: View {
         scope.addAttachment(attachment)
       }
     }
-
-    // Also send as Sentry feedback if there's a message
-    if !message.isEmpty {
-      let feedback = SentryFeedback(
-        message: message,
-        name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-        email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-        associatedEventId: eventId
-      )
-      SentrySDK.capture(feedback: feedback)
+    if let diagnosticsURL {
+      try? FileManager.default.removeItem(at: diagnosticsURL)
     }
 
-    log(
-      "User report submitted to Sentry (logs attached, message: \(message.isEmpty ? "none" : "yes"))"
-    )
+    // The user-entered text, name, and email are intentionally not sent to Sentry.
+    // The report's diagnostic attachment is the privacy-safe cloud evidence path.
+    log("User report diagnostics submitted to Sentry")
 
     // Show success
     OmiMotion.withGated {

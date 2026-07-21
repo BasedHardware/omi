@@ -67,6 +67,7 @@ from utils.mcp_memories import (
     build_mcp_default_memory_read_context,
     collect_filtered_memories,
     list_default_mcp_memories,
+    mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
@@ -862,7 +863,7 @@ def execute_tool(
         )
         if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": memory_list_results.memories}
-        if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+        if not mcp_legacy_read_authorized(memory_list_results):
             return {"memories": []}
 
         result = collect_filtered_memories(
@@ -1090,7 +1091,7 @@ def execute_tool(
         )
         if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": vector_search_results.memories}
-        if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+        if not mcp_legacy_read_authorized(vector_search_results):
             return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)

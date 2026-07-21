@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - ChatErrorCard
 //
@@ -139,6 +139,8 @@ struct ChatErrorCard: View {
         return "AI components missing"
       case .crashed:
         return "AI stopped unexpectedly"
+      case .failedToStart:
+        return "AI couldn't start"
       case .unknown:
         return "AI isn't running"
       }
@@ -163,6 +165,15 @@ struct ChatErrorCard: View {
         return "The AI components aren't installed. Install them to keep chatting."
       case .crashed:
         return "The AI stopped mid-turn. Try again to start a fresh response."
+      case .failedToStart(let failure):
+        switch failure {
+        case .handshakeTimedOut:
+          return "The AI took too long to start. Try again to start a fresh response."
+        case .incompatibleHandshake:
+          return "The AI needs to restart before it can respond. Try again."
+        case .exitedDuringStartup, .launchFailed:
+          return "The AI couldn't start. Try again to start a fresh response."
+        }
       case .unknown:
         return "The AI is not responding. Try again to start a fresh response."
       }
@@ -204,6 +215,8 @@ struct ChatErrorCard: View {
         return "Cause: bridge script missing on disk."
       case .crashed:
         return "Cause: bridge process exited."
+      case .failedToStart(let failure):
+        return "Cause: bridge start failed (\(failure.rawValue))."
       case .unknown:
         return ""
       }

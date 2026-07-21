@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   func advancedCategoryHeader(title: String, icon: String) -> some View {
@@ -32,11 +32,45 @@ extension SettingsContentView {
       preferencesSubsection
       advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
       troubleshootingSubsection
+      if AppBuild.isBetaProductionBundle {
+        advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
+        betaDiagnosticsSubsection
+      }
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
+    }
+  }
+
+  // MARK: - Beta Diagnostics
+
+  var betaDiagnosticsSubsection: some View {
+    settingsCard(settingId: "advanced.beta.enhanced_diagnostics") {
+      HStack(spacing: OmiSpacing.lg) {
+        Image(systemName: "waveform.path.ecg")
+          .scaledFont(size: OmiType.subheading)
+          .foregroundColor(OmiColors.textSecondary)
+          .frame(width: 24, height: 24)
+
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Enhanced Diagnostics")
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text(
+            "Share additional technical failure context to improve this beta. No prompts, transcripts, or raw log files are included."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+        }
+
+        Spacer()
+
+        Toggle("Enhanced Diagnostics", isOn: $betaEnhancedDiagnosticsEnabled)
+          .toggleStyle(OmiToggleStyle())
+          .labelsHidden()
+      }
     }
   }
 
@@ -84,13 +118,11 @@ extension SettingsContentView {
 
             Spacer()
 
-            Picker("", selection: $realtimeOmniProvider) {
+            SettingsMenuPicker(selection: $realtimeOmniProvider) {
               ForEach(RealtimeOmniProvider.allCases, id: \.rawValue) { p in
                 Text(p.displayName).tag(p.rawValue)
               }
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
             .onChange(of: realtimeOmniProvider) { _, newValue in
               if newValue == RealtimeOmniProvider.auto.rawValue {
                 AutoModelSelector.shared.refreshIfStale()
@@ -121,39 +153,39 @@ extension SettingsContentView {
               .scaledFont(size: OmiType.subheading)
               .foregroundColor(OmiColors.textTertiary)
 
-            Text("AI Provider")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+              Text("AI Provider")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(OmiColors.textSecondary)
+
+              if let provider = AIProvider.from(bridgeMode: chatBridgeMode) {
+                if let url = provider.attributionURL {
+                  Link(destination: url) {
+                    Text("\(provider.tagline) · \(url.host ?? "")")
+                      .scaledFont(size: OmiType.caption)
+                      .foregroundColor(OmiColors.textTertiary)
+                  }
+                } else {
+                  Text(provider.tagline)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(OmiColors.textTertiary)
+                }
+              }
+            }
 
             Spacer()
 
-            Picker("", selection: $chatBridgeMode) {
+            SettingsMenuPicker(selection: $chatBridgeMode) {
               ForEach(AIProvider.all) { provider in
                 Text(provider.displayName).tag(provider.bridgeModeRawValue)
               }
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
             .onChange(of: chatBridgeMode) { _, newMode in
               if let mode = ChatProvider.BridgeMode(rawValue: newMode) {
                 Task {
                   await chatProvider?.switchBridgeMode(to: mode)
                 }
               }
-            }
-          }
-
-          if let provider = AIProvider.from(bridgeMode: chatBridgeMode) {
-            if let url = provider.attributionURL {
-              Link(destination: url) {
-                Text("\(provider.tagline) · \(url.host ?? "")")
-                  .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
-              }
-            } else {
-              Text(provider.tagline)
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
             }
           }
 
@@ -433,7 +465,7 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.body, design: .monospaced)
                 .foregroundColor(OmiColors.textSecondary)
                 .scrollContentBackground(.hidden)
-                .frame(maxHeight: 200)
+                .frame(minHeight: 120, maxHeight: 300)
 
               HStack {
                 Button("Cancel") {

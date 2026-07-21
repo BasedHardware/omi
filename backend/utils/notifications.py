@@ -406,7 +406,7 @@ def send_app_review_reply_notification(
 ):
     """Sends a notification to a user when their app review receives a reply."""
     app_owner = get_user_from_uid(app_owner_uid)
-    owner_name = app_owner.get('display_name', 'The developer') if app_owner else 'The developer'
+    owner_name = (app_owner or {}).get('display_name') or 'The developer'
     title = f'{owner_name} ({app_name})'
     body = reply_body
     data = {'app_id': app_id, 'type': 'app_review_reply', 'navigate_to': f'/apps/{app_id}'}
@@ -418,7 +418,7 @@ def send_new_app_review_notification(
 ):
     """Sends a notification to the app owner when a new review is submitted."""
     reviewer = get_user_from_uid(reviewer_uid)
-    reviewer_name = reviewer.get('display_name', 'A user') if reviewer else 'A user'
+    reviewer_name = (reviewer or {}).get('display_name') or 'A user'
     title = f'{reviewer_name} reviewed {app_name}'
     body = review_body
     data = {'app_id': app_id, 'type': 'new_app_review', 'navigate_to': f'/apps/{app_id}'}

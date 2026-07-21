@@ -11,6 +11,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
+_DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029'})
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -20,6 +21,10 @@ def _as_config_dict(value: object) -> ConfigDict | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description='Render backend Cloud Run runtime env from the manifest.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
+    parser.add_argument(
+        '--job',
+        help='render only this Cloud Run job and the shared network flags; services remain full-environment only',
+    )
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     args = parser.parse_args()
 
@@ -28,26 +33,48 @@ def main() -> int:
     env_config = _as_config_dict(environments[args.env]) or {}
     cloud_run = _as_config_dict(env_config['cloud_run']) or {}
 
-    network = _as_config_dict(cloud_run.get('network')) or {}
-    _emit_output('cloud_run_flags', _render_flags(_as_config_dict(network.get('flags')) or {}))
-    services = _as_config_dict(cloud_run.get('services')) or {}
-    for service, raw_service_config in services.items():
-        service_config = _as_config_dict(raw_service_config)
-        if service_config is None:
-            raise ValueError(f'Cloud Run service {service} must be a mapping')
-        output_prefix = _output_prefix(service)
-        _emit_output(f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {})))
-        _emit_output(f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {})))
-        _emit_output(f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {})))
     jobs = _as_config_dict(cloud_run.get('jobs')) or {}
-    for job, raw_job_config in jobs.items():
+    selected_jobs = jobs
+    if args.job:
+        raw_job_config = jobs.get(args.job)
+        if raw_job_config is None:
+            raise ValueError(f'unknown Cloud Run job {args.job!r} for environment {args.env}')
+        selected_jobs = {args.job: raw_job_config}
+
+    # Render everything before emitting output. A selected job with an invalid
+    # contract must fail without leaving a partial GITHUB_OUTPUT file behind.
+    rendered_outputs: list[tuple[str, str]] = []
+    network = _as_config_dict(cloud_run.get('network')) or {}
+    rendered_outputs.append(('cloud_run_flags', _render_flags(_as_config_dict(network.get('flags')) or {})))
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    if not args.job:
+        for service, raw_service_config in services.items():
+            service_config = _as_config_dict(raw_service_config)
+            if service_config is None:
+                raise ValueError(f'Cloud Run service {service} must be a mapping')
+            output_prefix = _output_prefix(service)
+            rendered_outputs.extend(
+                (
+                    (f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {}))),
+                    (f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {}))),
+                    (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
+                )
+            )
+    for job, raw_job_config in selected_jobs.items():
         job_config = _as_config_dict(raw_job_config)
         if job_config is None:
             raise ValueError(f'Cloud Run job {job} must be a mapping')
         output_prefix = _output_prefix(job)
-        _emit_output(f'{output_prefix}_env_vars', _render_env_vars(job_config.get('env', {})))
-        _emit_output(f'{output_prefix}_secrets', _render_secrets(job_config.get('secrets', {})))
-        _emit_output(f'{output_prefix}_secret_names', _render_secret_names(job_config.get('secrets', {})))
+        rendered_outputs.extend(
+            (
+                (f'{output_prefix}_flags', _render_flags(_as_config_dict(job_config.get('flags')) or {})),
+                (f'{output_prefix}_env_vars', _render_env_vars(job_config.get('env', {}))),
+                (f'{output_prefix}_secrets', _render_secrets(job_config.get('secrets', {}))),
+                (f'{output_prefix}_secret_names', _render_secret_names(job_config.get('secrets', {}))),
+            )
+        )
+    for name, value in rendered_outputs:
+        _emit_output(name, value)
     return 0
 
 
@@ -69,8 +96,16 @@ def _render_env_vars(env_entries: ConfigDict) -> str:
         if value is None:
             # Provisional values belong to services not yet deployed in every environment.
             continue
-        lines.append(f'{name}={value}')
+        lines.append(f'{name}={_escape_deploy_cloud_run_env_value(value)}')
     return '\n'.join(lines)
+
+
+def _escape_deploy_cloud_run_env_value(value: str) -> str:
+    """Encode a value for deploy-cloudrun's escaped key/value input grammar."""
+    return ''.join(
+        f'\\{character}' if character == '\\' or character in _DEPLOY_CLOUD_RUN_ENV_SEPARATORS else character
+        for character in value
+    )
 
 
 def _render_secrets(secret_entries: ConfigDict) -> str:

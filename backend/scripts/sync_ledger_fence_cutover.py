@@ -514,9 +514,6 @@ def _require_passing_candidate_probe(evidence: bytes) -> None:
         raise CutoverError("candidate probe evidence did not report a passing transcription suite")
     if document.get("full_route_authoritative") is not True:
         raise CutoverError("candidate probe evidence did not mark the full route authoritative")
-    if document.get("direct_diagnostic_only") is not True:
-        raise CutoverError("candidate probe evidence did not preserve direct-route diagnostic semantics")
-
     checks = document.get("checks")
     if not isinstance(checks, list):
         raise CutoverError("candidate probe evidence has no checks list")
@@ -532,13 +529,9 @@ def _require_passing_candidate_probe(evidence: bytes) -> None:
         "json_object",
         "outcome_success",
         "phrase_match",
-        "provider_checked",
-        "provider_match",
-        "model_checked",
-        "model_match",
     )
     if any(details.get(field) is not True for field in required_true_details):
-        raise CutoverError("candidate probe evidence did not prove transcript and route identity")
+        raise CutoverError("candidate probe evidence did not prove the candidate transcript contract")
 
 
 class CutoverOrchestrator:

@@ -9,7 +9,8 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
-import 'package:omi/backend/http/api/conversations.dart' as conv_api
+import 'package:omi/backend/http/api/conversations.dart'
+    as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -76,11 +77,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
 
     result ??= _cachedConversation;
-    if (result != null &&
-        result.createdAt.year == selectedDate.year &&
-        result.createdAt.month == selectedDate.month &&
-        result.createdAt.day == selectedDate.day) {
-      return _cachedConversation = result;
+    if (result != null) {
+      // Validate against the same effective date used to group conversations
+      // (startedAt ?? createdAt). Using createdAt alone breaks for
+      // conversations whose startedAt lands on a different calendar day, which
+      // would otherwise make this getter return null for a conversation that is
+      // actually present in the selected day-group.
+      final effectiveDate = result.startedAt ?? result.createdAt;
+      if (effectiveDate.year == selectedDate.year &&
+          effectiveDate.month == selectedDate.month &&
+          effectiveDate.day == selectedDate.day) {
+        return _cachedConversation = result;
+      }
     }
 
     return null;
@@ -448,8 +456,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps =
-          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
+      final locallyAddedApps = _cachedEnabledConversationApps
+          .where((app) => _locallyAddedAppIds.contains(app.id))
+          .toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);

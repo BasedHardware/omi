@@ -1483,7 +1483,7 @@
     "exportConfiguration": "உள்ளமைப்பை ஏற்றுமதி செய்யவும்",
     "bringYourOwn": "உங்களையே கொண்டு வாருங்கள்",
     "payYourSttProvider": "Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.",
-    "freeMinutesMonth": "மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ",
+    "freeMinutesMonth": "மாதத்திற்கு 300 இலவச நிமிடங்கள் அடங்கியுள்ளது. ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ஹோஸ்ட் தேவை",
     "validPortRequired": "சரியான போர்ட் தேவை",
@@ -5506,7 +5506,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை",
+    "basicPlanDescription": "300 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7281,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
+    "premiumMinutesInfo": "மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7392,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
+    "premiumMinutesMonth": "மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10521,7 +10521,7 @@
     "upgradePlan": "திட்டத்தை மேம்படுத்து",
     "billingMonthly": "மாதாந்திர",
     "billingYearly": "ஆண்டு",
-    "savePercent": "~17% சேமிக்கவும்",
+    "savePercent": "~{percent}% சேமிக்கவும்",
     "popular": "பிரபலம்",
     "currentPlan": "தற்போதைய",
     "neoSubtitle": "மாதத்திற்கு {count} கேள்விகள்",
@@ -10633,7 +10633,7 @@
     "syncCustomSttWarningMessage": "நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.",
     "transcribeLaterTitle": "பின்னர் எழுத்தாக்கு",
     "transcribeLaterDescription": "இப்போது ஆடியோவைப் பதிவுசெய்து, நேரலையாக அல்லாமல் தேவைப்படும்போது எழுத்தாக்கம் செய்யுங்கள். பதிவுகள் உங்கள் தொலைபேசியில் சேமிக்கப்படும்; பிறகு அவற்றைப் பதிவேற்றி உரையாடல்களை உருவாக்கலாம்.",
-    "transcribeLaterNote": "தற்போது Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.",
+    "transcribeLaterNote": "தொலைபேசி மைக்ரோஃபோன், Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.",
     "transcribeLaterStorageFull": "உங்கள் தொலைபேசியில் இடவசதி குறைவாக உள்ளதால் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலியாக்குங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள்; பிறகு தானாகவே தொடரும்.",
     "unmute": "ஒலியை இயக்கு",
     "newRecording": "புதிய பதிவு",
@@ -10721,5 +10721,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "சாதன சேமிப்பு",
+    "deviceStoragePercentFull": "{percent}% நிரம்பியது",
+    "deviceStorageUsedOfTotal": "{total} இல் {used} பயன்படுத்தப்பட்டது",
+    "deviceStorageFree": "{free} காலி",
+    "deviceStorageNearlyFull": "சாதனம் கிட்டத்தட்ட நிரம்பிவிட்டது — இடத்தைக் காலி செய்ய ஒத்திசைக்கவும்.",
+    "phoneMicOfflineFallbackMessage": "இணைப்பு இல்லை — உள்ளூரில் பதிவு செய்யப்படுகிறது. நீங்கள் மீண்டும் ஆன்லைனுக்கு வரும்போது படியெடுக்கப்படும்.",
+    "dataEncryptedBanner": "உங்கள் தரவு இயல்பாகவே வலுவான குறியாக்கத்துடன் பாதுகாக்கப்படுகிறது, மேலும் அது எவ்வாறு சேமிக்கப்படுகிறது மற்றும் பயன்படுத்தப்படுகிறது என்பதை நீங்கள் கட்டுப்படுத்துகிறீர்கள்.",
+    "rayBanMetaMicPickerTitle": "உங்கள் Ray-Ban Meta மைக்ரோஃபோனைத் தேர்வுசெய்யவும்",
+    "rayBanMetaMicPickerDescription": "உங்கள் கண்ணாடியின் Bluetooth மைக்ரோஃபோனைத் தேர்வுசெய்யவும். Omi அதைப் பயன்படுத்தும்போது இசை இடைநிறுத்தப்படும்.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth மைக்ரோஃபோன்கள் எதுவும் கிடைக்கவில்லை. iPhone அமைப்புகளில் கண்ணாடியை இணைத்து மீண்டும் முயலவும்.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth மைக்ரோஃபோன்களை ஏற்ற முடியவில்லை. Bluetooth இயக்கத்தில் உள்ளதா எனச் சரிபார்த்து மீண்டும் முயலவும்.",
+    "rayBanMetaMicPickerConnectError": "அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது iPhone அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்."
 }

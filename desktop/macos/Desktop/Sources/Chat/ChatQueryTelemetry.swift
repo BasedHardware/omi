@@ -6,6 +6,7 @@ enum ChatQueryErrorClass: String, Equatable, Sendable {
   case attachmentUpload = "attachment_upload"
   case authentication
   case bridgeUnavailable = "bridge_unavailable"
+  case bridgeStartFailed = "bridge_start_failed"
   case browserExtensionMissing = "browser_extension_missing"
   case concurrentRequest = "concurrent_request"
   case encoding
@@ -56,6 +57,8 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         return .failed(.authentication)
       case .agentError where bridgeError.isSessionAuthenticationFailure:
         return .failed(.authentication)
+      case .failedToStart:
+        return .failed(.bridgeStartFailed)
       case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .processExited, .restarting:
         return .failed(.bridgeUnavailable)
       case .outOfMemory:
@@ -137,7 +140,8 @@ enum ChatTelemetryDimension {
     } else {
       withoutMCPPrefix = rawValue
     }
-    let base = withoutMCPPrefix
+    let base =
+      withoutMCPPrefix
       .split(separator: ":", maxSplits: 1)
       .first
       .map(String.init)?
@@ -330,7 +334,8 @@ final class ChatQueryTelemetryAttempt {
       let startedAt = ContinuousClock.now
       self.elapsedMilliseconds = {
         let components = (ContinuousClock.now - startedAt).components
-        let milliseconds = Int(components.seconds) * 1_000
+        let milliseconds =
+          Int(components.seconds) * 1_000
           + Int(components.attoseconds / 1_000_000_000_000_000)
         return max(0, milliseconds)
       }

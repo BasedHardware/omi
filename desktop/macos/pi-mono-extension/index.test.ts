@@ -33,9 +33,12 @@ import {
   __omiPendingCallsForTest,
   __registerOmiToolsForTest,
   __resetOmiPipeForTest,
+  omiRequestIdFromRelayContext,
+  omiReasoningEffortFromRelayContext,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
+import { discoverSkillCatalog, searchSkills } from "../agent/src/runtime/node-tools.ts";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
@@ -45,6 +48,21 @@ import {
 // ---------------------------------------------------------------------------
 // classifyBash — allow-by-default for normal dev commands
 // ---------------------------------------------------------------------------
+
+test("request correlation: accepts only opaque bounded relay ids", () => {
+  assert.equal(omiRequestIdFromRelayContext('{"requestId":"req_01AB-cd"}'), "req_01AB-cd");
+  assert.equal(omiRequestIdFromRelayContext('{"requestId":"has space"}'), undefined);
+  assert.equal(omiRequestIdFromRelayContext(JSON.stringify({ requestId: "x".repeat(129) })), undefined);
+  assert.equal(omiRequestIdFromRelayContext("not json"), undefined);
+});
+
+test("reasoning effort relay: strict two-token allowlist", () => {
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"adaptive"}'), "adaptive");
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"fast"}'), "fast");
+  assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"max"}'), undefined);
+  assert.equal(omiReasoningEffortFromRelayContext('{"requestId":"req_1"}'), undefined);
+  assert.equal(omiReasoningEffortFromRelayContext("not json"), undefined);
+});
 
 test("classifyBash: allows normal dev commands", () => {
   const allowed = [
@@ -1118,6 +1136,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     inspect_agent_artifacts: [],
     update_agent_artifact_lifecycle: ["artifactId", "state"],
     load_skill: ["name"],
+    search_skills: ["query"],
     send_agent_message: ["sessionId", "originSurfaceKind", "prompt"],
     spawn_agent: ["objective"],
     run_agent_and_wait: ["objective", "originSurfaceKind", "parentRunId"],
@@ -1125,6 +1144,8 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     search_tasks: ["query"],
     complete_task: ["task_id"],
     delete_task: ["task_id"],
+    read_tool_output: ["artifactId"],
+    search_tool_output: ["artifactId", "query"],
     save_knowledge_graph: ["nodes", "edges"],
     get_conversations: [],
     search_conversations: ["query"],
@@ -1441,7 +1462,7 @@ test("load_skill: refuses symlink escapes from the skills root", async () => {
     const result = await tool.execute("call-1", { name: skillName }, new AbortController().signal);
 
     assert.equal(result.content[0].type, "text");
-    assert.match(result.content[0].text, /not found/i);
+    assert.match(result.content[0].text, /not available/i);
     assert.doesNotMatch(result.content[0].text, /secret instructions/);
   } finally {
     if (previousWorkspace === undefined) {
@@ -1451,6 +1472,46 @@ test("load_skill: refuses symlink escapes from the skills root", async () => {
     }
     await rm(root, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("skill catalog: project skills override globals and search returns compact matching metadata", async () => {
+  const workspace = await mkdtemp(pathJoin(tmpdir(), "omi-skill-workspace-"));
+  const globalRoot = await mkdtemp(pathJoin(tmpdir(), "omi-skill-global-"));
+  try {
+    await mkdir(pathJoin(workspace, ".claude", "skills", "research"), { recursive: true });
+    await writeFile(
+      pathJoin(workspace, ".claude", "skills", "research", "SKILL.md"),
+      "---\ndescription: Project-specific research workflow\n---\nProject research details"
+    );
+    await mkdir(pathJoin(globalRoot, "research"), { recursive: true });
+    await writeFile(
+      pathJoin(globalRoot, "research", "SKILL.md"),
+      "---\ndescription: Global fallback workflow\n---\nGlobal details"
+    );
+    await mkdir(pathJoin(workspace, ".claude", "skills", "release-notes"), { recursive: true });
+    await writeFile(
+      pathJoin(workspace, ".claude", "skills", "release-notes", "SKILL.md"),
+      "---\ndescription: Prepare customer-facing release notes\n---\nRelease notes details"
+    );
+
+    const catalog = await discoverSkillCatalog([pathJoin(workspace, ".claude", "skills"), globalRoot]);
+    assert.deepEqual(catalog.map((skill) => skill.name), ["release-notes", "research"]);
+    assert.equal(catalog.find((skill) => skill.name === "research")?.description, "Project-specific research workflow");
+
+    const previousWorkspace = process.env.OMI_WORKSPACE;
+    process.env.OMI_WORKSPACE = workspace;
+    try {
+      const results = await searchSkills("customer release");
+      assert.match(results, /release-notes: Prepare customer-facing release notes/);
+      assert.doesNotMatch(results, /Project research details/);
+    } finally {
+      if (previousWorkspace === undefined) delete process.env.OMI_WORKSPACE;
+      else process.env.OMI_WORKSPACE = previousWorkspace;
+    }
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+    await rm(globalRoot, { recursive: true, force: true });
   }
 });
 

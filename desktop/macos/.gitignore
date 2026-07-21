@@ -26,6 +26,7 @@ DerivedData/
 # Swift Package Manager
 .swiftpm/
 Package.resolved
+!Desktop/Package.resolved
 Desktop/.build-agent-*/
 Desktop/.build-hybrid-llm-check/
 

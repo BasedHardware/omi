@@ -4,6 +4,7 @@
 // === Swift → Bridge (stdin) ===
 
 export const PROTOCOL_VERSION = 2 as const;
+export const RUNTIME_CAPABILITIES = ["journal_import_remote_turn", "runtime_adapter_availability"] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export interface ProtocolEnvelope {
@@ -34,6 +35,13 @@ export interface QueryMessage extends ProtocolEnvelope {
   expectedContextSnapshotGeneration?: number;
   expectedContextRendererFingerprint?: string;
   expectedCapabilityVersion?: string;
+  /**
+   * Per-turn reasoning-effort lane: "adaptive" for typed chat (model decides
+   * its own thinking depth), "fast" for PTT/voice (speed-optimized, no
+   * thinking). Relayed opaquely to the desktop backend as the
+   * x-omi-reasoning-effort header; never interpreted by the runtime.
+   */
+  reasoningEffort?: string;
 }
 
 export interface QueryAttachment {
@@ -254,6 +262,57 @@ export interface JournalRecordExchangeMessage extends ProtocolEnvelope {
   turns: JournalTurnWireInput[];
 }
 
+export interface JournalRemoteTurnWireInput {
+  remoteId: string;
+  canonicalTurnId?: string;
+  role: "user" | "assistant";
+  content: string;
+  contentBlocks: unknown[];
+  resources: unknown[];
+  metadataJson: string;
+  createdAtMs: number;
+}
+
+/**
+ * Bounded upgrade input for backend rows written before the kernel journal was
+ * authoritative. The runtime, not Swift, resolves the canonical conversation
+ * and owns the imported turn projection.
+ */
+export interface JournalImportRemoteTurnMessage extends ProtocolEnvelope {
+  type: "journal_import_remote_turn";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  turn: JournalRemoteTurnWireInput;
+}
+
+export function assertJournalRemoteTurnInput(
+  input: unknown,
+): asserts input is JournalRemoteTurnWireInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Remote journal turn input must be an object");
+  }
+  const turn = input as Partial<JournalRemoteTurnWireInput>;
+  if (typeof turn.remoteId !== "string" || !turn.remoteId.trim()) {
+    throw new Error("Remote journal turn requires remoteId");
+  }
+  if (turn.canonicalTurnId !== undefined
+      && (typeof turn.canonicalTurnId !== "string" || !turn.canonicalTurnId.trim())) {
+    throw new Error("Remote journal canonicalTurnId must be non-empty when provided");
+  }
+  if (turn.role !== "user" && turn.role !== "assistant") {
+    throw new Error("Remote journal turn requires a valid role");
+  }
+  if (typeof turn.content !== "string"
+      || !Array.isArray(turn.contentBlocks)
+      || !Array.isArray(turn.resources)
+      || typeof turn.metadataJson !== "string"
+      || typeof turn.createdAtMs !== "number"
+      || !Number.isFinite(turn.createdAtMs)) {
+    throw new Error("Remote journal turn has an invalid payload");
+  }
+}
+
 export interface JournalUpdateTurnMessage extends ProtocolEnvelope {
   type: "journal_update_turn";
   surfaceKind: string;
@@ -387,6 +446,7 @@ export type InboundMessage =
   | GetContextSnapshotMessage
   | JournalRecordTurnMessage
   | JournalRecordExchangeMessage
+  | JournalImportRemoteTurnMessage
   | JournalUpdateTurnMessage
   | JournalTerminalizeTurnMessage
   | JournalListTurnsMessage
@@ -422,10 +482,14 @@ export interface QueryScopedOutbound extends OutboundEnvelope, CanonicalCorrelat
   adapterSessionId?: string;
 }
 
-export interface InitMessage {
+export interface InitMessage extends OutboundEnvelope {
   type: "init";
   sessionId: string;
   agentControlTools: string[];
+  runtimeVersion: string;
+  runtimeCapabilities: string[];
+  /** Exact registry projection used by Swift to build local-provider schemas. */
+  runtimeAdapterIds: string[];
 }
 
 export interface TextDeltaMessage extends QueryScopedOutbound {
@@ -561,6 +625,8 @@ export interface SerializedArtifact {
 
 export interface RuntimeFailurePayload {
   code: string;
+  /** Closed failure taxonomy; `code` remains the detailed diagnostic key. */
+  failureCode?: "authentication" | "quota_exceeded" | "invalid_request" | "timeout" | "transport_interruption" | "adapter_unavailable" | "adapter_incompatible" | "bridge_start_failed" | "provider_setup_needed" | "malformed_or_oversized_tool_result" | "cancelled" | "stale_owner" | "policy_denied" | "unknown";
   userMessage: string;
   technicalMessage?: string;
   source?: string;
@@ -572,7 +638,7 @@ export interface RuntimeFailurePayload {
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
-  status: "started" | "completed" | "failed";
+  status: "started" | "progress" | "completed" | "failed";
   toolUseId?: string;
   input?: Record<string, unknown>;
 }
@@ -684,6 +750,25 @@ export interface ContextSnapshotProjection {
   capabilityVersion: string;
   /** Canonical, surface-specific context material rendered by the kernel. */
   renderedContext: string;
+  /**
+   * Kernel-owned history/cache plan shared by typed chat and realtime voice.
+   * Older history is intentionally not implied by a 64-turn window: callers
+   * must honor the declared handoff strategy rather than pretending it exists.
+   */
+  contextPlan: {
+    version: 1;
+    planId: string;
+    semanticGuidanceVersion: string;
+    semanticGuidance: string;
+    retainedTurnStartSeq: number | null;
+    retainedTurnEndSeq: number | null;
+    retainedTurnCount: number;
+    totalTurnCount: number;
+    omittedTurnCount: number;
+    olderHistoryStrategy: "none" | "truncated";
+    stableCacheIdentity: string;
+    dynamicContextIdentity: string;
+  };
   ownerId: string;
   sessionId: string;
   conversationId: string;
@@ -705,6 +790,22 @@ export interface ContextSnapshotProjection {
     surfaceKind: string;
     updatedAtMs: number;
     finalText: string | null;
+  }>;
+  /**
+   * Bounded, kernel-owned terminal child runs. These are contextual status
+   * records, not tool receipts: use get_agent_run before claiming a side
+   * effect beyond the recorded final output.
+   */
+  recentCompletedRuns: Array<{
+    sessionId: string;
+    runId: string;
+    parentRunId: string;
+    status: string;
+    title: string;
+    surfaceKind: string;
+    completedAtMs: number;
+    finalText: string | null;
+    errorMessage: string | null;
   }>;
   capabilities: {
     executionRole: "coordinator" | "leaf";
@@ -773,7 +874,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "update" | "list" | "clear";
+  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;
@@ -876,13 +977,13 @@ export type OutboundMessage =
   | JournalBackendDeleteMessage
   | JournalBackendReconcileMessage;
 
-type OutboundWithEnvelope = Exclude<OutboundMessage, InitMessage | AuthRequiredMessage | AuthSuccessMessage>;
+type OutboundWithEnvelope = Exclude<OutboundMessage, AuthRequiredMessage | AuthSuccessMessage>;
 
 type DraftEnvelope<T extends OutboundWithEnvelope> = Omit<T, "protocolVersion"> & Partial<Pick<T, "protocolVersion">>;
 
 /** Outbound payload before correlation / envelope enrichment (adapters, transport internals). */
 export type OutboundMessageDraft =
-  | InitMessage
+  | DraftEnvelope<InitMessage>
   | AuthRequiredMessage
   | AuthSuccessMessage
   | DraftEnvelope<TextDeltaMessage>
@@ -913,7 +1014,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<JournalBackendReconcileMessage>;
 
 export function ensureOutboundProtocolVersion(message: OutboundMessageDraft): OutboundMessage {
-  if (message.type === "init" || message.type === "auth_required" || message.type === "auth_success") {
+  if (message.type === "auth_required" || message.type === "auth_success") {
     return message;
   }
   if ("protocolVersion" in message && message.protocolVersion === PROTOCOL_VERSION) {

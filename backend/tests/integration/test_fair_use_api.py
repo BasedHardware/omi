@@ -392,8 +392,8 @@ class TestPublicEndpointRateLimit:
             assert resp.status_code == 429
 
 
-class TestTranscribePathFairUseImports:
-    """Structural test: transcribe.py fair-use imports match expected design.
+class TestListenPathFairUseImports:
+    """Structural test: extracted listen fair-use imports match expected design.
 
     Reads the source file directly (avoids heavy dep chain import).
     Warning/throttle are notify-only. Restrict enforces DG budget cap only.
@@ -401,21 +401,22 @@ class TestTranscribePathFairUseImports:
     """
 
     @staticmethod
-    def _read_transcribe_source():
-        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-        with open(transcribe_path) as f:
-            return f.read()
+    def _read_listen_sources():
+        listen_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'listen')
+        return '\n'.join(
+            open(os.path.join(listen_dir, module)).read() for module in ('runtime.py', 'receiver.py', 'contracts.py')
+        )
 
-    def test_transcribe_does_not_import_hard_restriction(self):
-        """transcribe.py must not use is_hard_restricted (blanket block) or VAD throttle."""
-        source = self._read_transcribe_source()
-        assert 'is_hard_restricted' not in source, 'transcribe.py must not reference is_hard_restricted'
-        assert 'fair_use_restricted' not in source, 'transcribe.py must not have fair_use_restricted variable'
-        assert 'get_user_vad_threshold_delta' not in source, 'transcribe.py must not use VAD throttle'
+    def test_listen_does_not_import_hard_restriction(self):
+        """Listen must not use a blanket restriction or VAD throttle."""
+        source = self._read_listen_sources()
+        assert 'is_hard_restricted' not in source
+        assert 'fair_use_restricted' not in source
+        assert 'get_user_vad_threshold_delta' not in source
 
     def test_fair_use_imports_include_budget_gate(self):
         """Tracking + DG budget gate functions should be imported from fair_use."""
-        source = self._read_transcribe_source()
+        source = self._read_listen_sources()
         # Tracking functions
         assert 'record_speech_ms' in source
         assert 'check_soft_caps' in source
@@ -430,11 +431,11 @@ class TestTranscribePathFairUseImports:
         """fair_use_dg_budget_exhausted must appear in if-conditionals, not just as an import/comment."""
         import re
 
-        source = self._read_transcribe_source()
+        source = self._read_listen_sources()
         # Must be used as a guard, either inline or passed into the STT decision helpers.
         guard_uses = re.findall(
-            r'(?:if|and|not)\s+session\.fair_use_dg_budget_exhausted'
-            r'|fair_use_dg_budget_exhausted=session\.fair_use_dg_budget_exhausted',
+            r'(?:if|and|not)\s+self\.(?:host\.)?state\.fair_use_dg_budget_exhausted'
+            r'|fair_use_dg_budget_exhausted=self\.(?:host\.)?state\.fair_use_dg_budget_exhausted',
             source,
         )
         # Expect at least 3 guard points: session-start, periodic check, single-ch DG,
@@ -448,13 +449,16 @@ class TestTranscribePathFairUseImports:
         record_dg_usage_ms is called only at periodic flush + session-end flush.
         The accumulation points (dg_usage_ms_pending +=) cover all active provider paths.
         """
-        source = self._read_transcribe_source()
+        receiver_source = self._read_listen_sources()
+        runtime_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'listen', 'runtime.py')
+        runtime_source = open(runtime_path).read()
         import re
 
         # Verify accumulation points cover DG single + multi-channel (#5854 batching)
-        accum_calls = re.findall(r'^\s+session\.dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
+        accum_calls = re.findall(r'^\s+self\.host\.state\.dg_usage_ms_pending\s*\+=', receiver_source, re.MULTILINE)
         assert len(accum_calls) >= 2, f'Expected >=2 dg_usage_ms_pending accumulation points, found {len(accum_calls)}'
 
-        # Verify flush calls exist (periodic + session-end)
-        flush_calls = re.findall(r'^\s+record_dg_usage_ms\(uid, session\.dg_usage_ms_pending\)', source, re.MULTILINE)
-        assert len(flush_calls) >= 2, f'Expected >=2 record_dg_usage_ms flush calls, found {len(flush_calls)}'
+        # Periodic and final writes share one flush implementation.
+        assert 'record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending' in runtime_source
+        assert '_flush_usage(final=False)' in runtime_source
+        assert '_flush_usage(final=True)' in runtime_source

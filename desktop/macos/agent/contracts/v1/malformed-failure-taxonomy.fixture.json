@@ -1,0 +1,4 @@
+{
+  "failureTaxonomy": ["authentication", "quota_exceeded", "invalid_request", "timeout", "transport_interruption", "adapter_unavailable", "adapter_incompatible", "bridge_start_failed", "provider_setup_needed", "malformed_or_oversized_tool_result", "cancelled", "stale_owner", "policy_denied", "misspelled_failure"],
+  "expectedError": "$.failureTaxonomy[13]: value is outside enum"
+}

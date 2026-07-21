@@ -48,22 +48,30 @@ final class PhoneMicEventEmitter {
         self.generation = generation
     }
 
-    func emitFrame(_ data: Data, epoch: UInt64) {
+    func emitFrame(_ data: Data, epoch: UInt64, sessionId: Int64) {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.generation.matches(epoch) else { return }
-            self.api.onAudioFrame(pcm16leMono16k: FlutterStandardTypedData(bytes: data)) { _ in }
+            self.api.onAudioFrame(pcm16leMono16k: FlutterStandardTypedData(bytes: data), sessionId: sessionId) { _ in }
         }
     }
 
-    func emitState(_ state: PhoneMicCaptureState) {
+    func emitState(_ state: PhoneMicCaptureState, sessionId: Int64) {
         DispatchQueue.main.async { [weak self] in
-            self?.api.onStateChanged(state: state) { _ in }
+            self?.api.onStateChanged(state: state, sessionId: sessionId) { _ in }
         }
     }
 
-    func emitError(code: String, message: String) {
+    func emitError(code: String, message: String, sessionId: Int64) {
         DispatchQueue.main.async { [weak self] in
-            self?.api.onCaptureError(code: code, message: message) { _ in }
+            self?.api.onCaptureError(code: code, message: message, sessionId: sessionId) { _ in }
+        }
+    }
+
+    /// Batch-mode 1Hz liveness/progress. Not epoch-gated: unlike frames it carries
+    /// no audio, and its steady arrival is the Dart watchdog's liveness signal.
+    func emitBatchProgress(_ capturedSeconds: Double, sessionId: Int64) {
+        DispatchQueue.main.async { [weak self] in
+            self?.api.onBatchProgress(capturedSeconds: capturedSeconds, sessionId: sessionId) { _ in }
         }
     }
 }

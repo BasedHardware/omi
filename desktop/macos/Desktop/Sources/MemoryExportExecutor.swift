@@ -1,5 +1,5 @@
 import AppKit
-import ApplicationServices
+@preconcurrency import ApplicationServices
 import Foundation
 
 /// Shared "Execute" logic for connector setup. Used by both the Execute button in
@@ -28,6 +28,16 @@ enum MemoryExportExecutor {
   }
 
   static func run(_ destination: MemoryExportDestination) async throws -> Outcome {
+    if case .directoryApp = destination.mcpExecuteKind {
+      guard let directoryURL = destination.directoryInstallURL else {
+        throw ExecutorError.unsupported(destination.title)
+      }
+      NSWorkspace.shared.open(directoryURL)
+      return Outcome(
+        taskTitle: "Opened Omi in ChatGPT. Add Omi and authorize it there, then return to Omi.",
+        mode: .assisted)
+    }
+
     if requiresAccessibilityPreflight(destination), !isAccessibilityReadyForBrowserSetup() {
       requestAccessibilityApprovalForCloudSetup()
       throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
@@ -47,6 +57,8 @@ enum MemoryExportExecutor {
     }
 
     switch destination.mcpExecuteKind {
+    case .directoryApp:
+      throw ExecutorError.unsupported(destination.title)
     case .localAutonomous:
       guard let task = destination.omiExecutionTask(key: key) else {
         throw ExecutorError.unsupported(destination.title)
@@ -370,5 +382,61 @@ enum MemoryExportExecutor {
       model: model,
       originSurface: .mainChat,
       systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix)
+  }
+}
+
+/// Detects running Claude Code CLI sessions so the post-setup UI can offer to
+/// stop them (new MCP config only loads at session start). Stopping is safe-ish:
+/// Claude Code persists conversations, so `claude --continue` resumes them.
+enum ClaudeCodeSessions {
+  /// The CLI binary is ".../bin/claude" (native install) or ".../bin/claude.exe"
+  /// (pnpm/bun bundle). Claude Desktop and its helpers are capitalized
+  /// ("Claude", "Claude Helper") and must never match.
+  static func isClaudeCLI(executablePath: String) -> Bool {
+    let name = (executablePath as NSString).lastPathComponent
+    return name == "claude" || name == "claude.exe"
+  }
+
+  static func completionSubtitle(sessionCount: Int, didStop: Bool) -> String {
+    if didStop {
+      return "Sessions stopped — run claude --continue in your terminal to pick up where you left off."
+    }
+    if sessionCount == 0 {
+      return "You're all set — Omi Memory loads automatically in your next Claude Code session."
+    }
+    return "Restart Claude Code to load Omi Memory."
+  }
+
+  /// Current user's running Claude Code CLI processes.
+  static func runningPIDs() -> [pid_t] {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/ps")
+    process.arguments = ["-axo", "pid=,uid=,comm="]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    do { try process.run() } catch { return [] }
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard let output = String(data: data, encoding: .utf8) else { return [] }
+    let uid = getuid()
+    var pids: [pid_t] = []
+    for line in output.split(separator: "\n") {
+      // comm may contain spaces — keep everything after pid and uid as the path.
+      let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+      guard fields.count == 3,
+        let pid = pid_t(fields[0]),
+        let lineUID = uid_t(fields[1]),
+        lineUID == uid,
+        isClaudeCLI(executablePath: String(fields[2]))
+      else { continue }
+      pids.append(pid)
+    }
+    return pids
+  }
+
+  static func stop(_ pids: [pid_t]) {
+    for pid in pids where pid > 0 {
+      kill(pid, SIGTERM)
+    }
   }
 }

@@ -1,4 +1,15 @@
 feature_bundles:
+  - feature: public_shared_conversation_chat
+    lane_id: omi:auto:public-shared-conversation-chat
+    prompt_version: public_shared_conversation_chat.v1
+    parser_version: plain_text.v1
+    eval_suite: public_shared_conversation_chat.contract.v1
+    promotion_gates:
+      request_contract: strict_pydantic
+      visibility_fail_closed: required
+      rate_limit_fail_closed: required
+      direct_provider_fallback: forbidden
+      frontend_service_auth: cloud_run_oidc_and_opaque_ip_hmac
   - feature: chat_extraction.requires_context
     lane_id: omi:auto:chat-structured
     prompt_version: chat_extraction.requires_context.v1

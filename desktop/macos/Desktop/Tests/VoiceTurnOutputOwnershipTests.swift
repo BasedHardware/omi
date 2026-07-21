@@ -1,12 +1,85 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
 
 @MainActor
 final class VoiceTurnOutputOwnershipTests: XCTestCase {
+  private func syntheticLease(_ lane: VoiceOutputLane, turnID: VoiceTurnID) -> VoiceOutputLease {
+    VoiceOutputLease(
+      id: VoiceLeaseID(),
+      turnID: turnID,
+      lane: lane,
+      identity: VoiceEffectIdentity(turnID: turnID, effectID: UInt64.max))
+  }
+
   func testAudioPlayerMustActuallyStartBeforePlaybackOwnsLease() {
     XCTAssertTrue(VoicePlaybackStartPolicy.accepts(started: true))
     XCTAssertFalse(VoicePlaybackStartPolicy.accepts(started: false))
+  }
+
+  func testOldSystemSpeechCallbackCannotOwnNewerUtterance() {
+    let firstUtterance = NSObject()
+    let currentUtterance = NSObject()
+    let leaseID = VoiceLeaseID()
+    let token = SystemSpeechToken(
+      generation: 8,
+      leaseID: leaseID,
+      utterance: currentUtterance)
+
+    XCTAssertFalse(
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: firstUtterance,
+        currentToken: token,
+        playbackGeneration: 8,
+        activeLeaseID: leaseID))
+    XCTAssertFalse(
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: currentUtterance,
+        currentToken: token,
+        playbackGeneration: 9,
+        activeLeaseID: leaseID))
+    XCTAssertFalse(
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: currentUtterance,
+        currentToken: token,
+        playbackGeneration: 8,
+        activeLeaseID: VoiceLeaseID()))
+    XCTAssertTrue(
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: currentUtterance,
+        currentToken: token,
+        playbackGeneration: 8,
+        activeLeaseID: leaseID))
+  }
+
+  func testCancelledBackgroundKickoffCannotUseCachedOrSystemFallback() {
+    let leaseID = VoiceLeaseID()
+    let token = VoiceSynthesisToken(generation: 4, leaseID: leaseID)
+
+    XCTAssertFalse(
+      VoiceSynthesisFallbackPolicy.shouldUseFallback(
+        afterCancellation: true,
+        token: token,
+        playbackGeneration: 4,
+        activeLeaseID: leaseID))
+    XCTAssertTrue(
+      VoiceSynthesisFallbackPolicy.shouldUseFallback(
+        afterCancellation: false,
+        token: token,
+        playbackGeneration: 4,
+        activeLeaseID: leaseID))
+  }
+
+  func testSupersededCloudSynthesisCannotFallbackIntoNewLease() {
+    let token = VoiceSynthesisToken(generation: 4, leaseID: VoiceLeaseID())
+
+    XCTAssertFalse(
+      VoiceSynthesisFallbackPolicy.shouldUseFallback(
+        afterCancellation: false,
+        token: token,
+        playbackGeneration: 4,
+        activeLeaseID: VoiceLeaseID()))
   }
 
   func testFillerCarriesTextIntoSystemVoiceFallback() throws {
@@ -58,7 +131,7 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
 
   func testFillerIsTheOnlyLaneThatYieldsToRealOutputOnTheSameTurn() throws {
     let turnID = VoiceTurnID()
-    let filler = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .filler)
+    let filler = syntheticLease(.filler, turnID: turnID)
 
     for lane in VoiceOutputLane.allCases where lane != .filler {
       XCTAssertTrue(
@@ -73,7 +146,7 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
         to: .filler,
         turnID: turnID))
 
-    let native = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    let native = syntheticLease(.nativeRealtime, turnID: turnID)
     XCTAssertFalse(
       VoiceOutputHandoffPolicy.fillerCanYield(
         active: native,
@@ -116,15 +189,27 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
     XCTAssertTrue(coordinator.outputSnapshot.providerOutputSuppressed)
   }
 
+  func testScreenVerificationFailureCanTakeOverSpeculativeNativeLease() throws {
+    let (coordinator, turnID) = awaitingCoordinator()
+    let native = try XCTUnwrap(tryLease(coordinator.acquireOutput(.nativeRealtime, turnID: turnID)))
+
+    XCTAssertTrue(coordinator.releaseOutput(native))
+    let screen = try XCTUnwrap(
+      tryLease(coordinator.acquireOutput(.deterministicScreenEvidence, turnID: turnID)))
+
+    XCTAssertEqual(screen.lane, .deterministicScreenEvidence)
+    XCTAssertEqual(coordinator.outputSnapshot.activeLease, screen)
+  }
+
   func testStaleReleaseCannotClearCurrentLease() throws {
     let (coordinator, firstTurnID) = awaitingCoordinator()
     let staleLease = try XCTUnwrap(
       tryLease(coordinator.acquireOutput(.nativeRealtime, turnID: firstTurnID)))
     let secondTurnID = coordinator.begin(intent: .hold)
-    coordinator.send(.selectRoute(turnID: secondTurnID, route: .deepgramBatch))
-    coordinator.send(.finalize(turnID: secondTurnID))
-    coordinator.send(.transcriptionStarted(turnID: secondTurnID))
-    coordinator.send(.transcriptionFinal(turnID: secondTurnID, text: "second"))
+    coordinator.publish(.selectRoute(turnID: secondTurnID, route: .deepgramBatch))
+    coordinator.publish(.finalize(turnID: secondTurnID))
+    coordinator.publish(.transcriptionStarted(turnID: secondTurnID))
+    coordinator.publish(.transcriptionFinal(turnID: secondTurnID, text: "second"))
     let currentLease = try XCTUnwrap(
       tryLease(coordinator.acquireOutput(.selectedVoiceFallback, turnID: secondTurnID)))
 
@@ -143,7 +228,7 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
   func testReleaseRequiresExactLeaseIdentity() throws {
     let (coordinator, turnID) = awaitingCoordinator()
     let lease = try XCTUnwrap(tryLease(coordinator.acquireOutput(.nativeRealtime, turnID: turnID)))
-    let impostor = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    let impostor = syntheticLease(.nativeRealtime, turnID: turnID)
 
     XCTAssertFalse(coordinator.releaseOutput(impostor))
     XCTAssertEqual(coordinator.outputSnapshot.activeLease, lease)
@@ -155,9 +240,9 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
     let (coordinator, turnID) = awaitingCoordinator()
     XCTAssertNotNil(tryLease(coordinator.acquireOutput(.systemVoiceFallback, turnID: turnID)))
 
-    coordinator.send(.interrupt(turnID: VoiceTurnID()))
+    coordinator.publish(.interrupt(turnID: VoiceTurnID()))
     XCTAssertNotNil(coordinator.outputSnapshot.activeLease)
-    coordinator.send(.interrupt(turnID: turnID))
+    coordinator.publish(.interrupt(turnID: turnID))
     XCTAssertNil(coordinator.outputSnapshot.activeLease)
     XCTAssertEqual(coordinator.model.lastTerminal?.reason, .explicitInterrupt)
   }
@@ -165,10 +250,10 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
   private func awaitingCoordinator() -> (VoiceTurnCoordinator, VoiceTurnID) {
     let coordinator = VoiceTurnCoordinator()
     let turnID = coordinator.begin(intent: .hold)
-    coordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
-    coordinator.send(.finalize(turnID: turnID))
-    coordinator.send(.transcriptionStarted(turnID: turnID))
-    coordinator.send(.transcriptionFinal(turnID: turnID, text: "fixture"))
+    coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.publish(.finalize(turnID: turnID))
+    coordinator.publish(.transcriptionStarted(turnID: turnID))
+    coordinator.publish(.transcriptionFinal(turnID: turnID, text: "fixture"))
     return (coordinator, turnID)
   }
 

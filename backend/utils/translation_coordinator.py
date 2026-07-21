@@ -392,7 +392,6 @@ class TranslationCoordinator:
                 raise RuntimeError('Translation service returned the wrong number of outcomes')
 
             for outcome, (seg_id, original_text, conv_id, version) in zip(outcomes, valid_units):
-
                 state = self._segment_states.get(seg_id)
                 if not state or state.version != version:
                     continue

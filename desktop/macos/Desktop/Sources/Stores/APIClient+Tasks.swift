@@ -1,5 +1,10 @@
 import Foundation
 
+/// Response wrapper for GET v1/action-items/ids (lightweight reconcile source).
+struct ActionItemIdsResponse: Decodable {
+  let ids: [String]
+}
+
 extension APIClient {
   /// Fetch action items through an immutable owner-bound request. Callers that
   /// span pagination must pass the same owner to every page.
@@ -31,6 +36,21 @@ extension APIClient {
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )
+  }
+
+  /// Fetch every action-item ID for the signed-in user (IDs only, no fields).
+  /// Used as an independent confirmation before an empty incomplete-task page
+  /// is allowed to reconcile (wipe) synced local rows.
+  func getActionItemIds(
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> [String] {
+    let response: ActionItemIdsResponse = try await get(
+      "v1/action-items/ids",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
+    return response.ids
   }
 
   func migrateStagedTasks(

@@ -1,0 +1,9 @@
+{
+  "files": {
+    "desktop/macos/Backend-Rust/src/routes/proxy.rs": 2803
+  },
+  "raise_justifications": {
+    "desktop/macos/Backend-Rust/src/routes/proxy.rs": "Streaming Gemini Vertex->AI Studio heal telemetry now derives its Recovered/Exhausted outcome from the upstream HTTP status (a testable stream_heal_outcome helper) instead of send-success, matching the non-streaming provider-switch telemetry; adds a unit test."
+  },
+  "threshold": 1500
+}

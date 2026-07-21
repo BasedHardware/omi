@@ -742,6 +742,15 @@ export async function uploadChatFiles(
 /**
  * Transcribe voice message to text
  */
+function getAudioFileExtension(mimeType: string): string {
+  const normalizedMimeType = mimeType.split(';', 1)[0].toLowerCase();
+  if (normalizedMimeType === 'audio/webm' || normalizedMimeType === 'video/webm')
+    return 'webm';
+  if (normalizedMimeType === 'audio/mp4' || normalizedMimeType === 'video/mp4')
+    return 'mp4';
+  return 'wav';
+}
+
 export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   let token: string | null = null;
 
@@ -759,14 +768,20 @@ export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   const url = `${API_BASE_URL}/v2/voice-message/transcribe`;
 
   const formData = new FormData();
-  // API expects field name 'files' (matching mobile app)
-  formData.append('files', audioBlob, 'audio.wav');
+  // The backend uses the filename extension when it uploads audio for STT.
+  formData.append('files', audioBlob, `audio.${getAudioFileExtension(audioBlob.type)}`);
+  const deviceIdHash = await getWebDeviceIdHash();
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${token}`,
+    'X-App-Platform': 'web',
+  };
+  if (deviceIdHash) {
+    headers['X-Device-Id-Hash'] = deviceIdHash;
+  }
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     body: formData,
   });
 
@@ -1382,10 +1397,14 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       '/v1/users/me/subscription',
     );
 
+    // Any paid tier counts as premium for UI gating (Manage vs Choose Plan).
+    // Plus / Unlimited arrive wired as 'unlimited'; Operator / Architect arrive
+    // as their real plan id now that web renders the full new catalog.
+    const paidPlans = ['unlimited', 'plus', 'unlimited_v2', 'operator', 'architect'];
     const result: UserSubscription = {
       plan: response.subscription?.plan || 'basic',
       status: response.subscription?.status || 'active',
-      is_unlimited: response.subscription?.plan === 'unlimited',
+      is_unlimited: paidPlans.includes(response.subscription?.plan ?? ''),
       current_period_end: response.subscription?.current_period_end,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
       current_price_id: response.subscription?.current_price_id,

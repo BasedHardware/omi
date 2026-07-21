@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
@@ -10,10 +9,9 @@ from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from pydantic import ValidationError
-
 import database.action_items as action_items_db
 from database._client import db
+from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskStatus
 from models.candidate import (
     CandidateAction,
@@ -24,8 +22,6 @@ from models.candidate import (
     CandidateSubjectKind,
 )
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
-
-logger = logging.getLogger(__name__)
 
 CANDIDATES_COLLECTION = 'candidates'
 ACTION_ITEMS_COLLECTION = 'action_items'
@@ -140,7 +136,7 @@ def _task_control_ref(uid: str):
 def _validate_write_control(snapshot: Any, *, account_generation: int) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
-        control = TaskWorkflowControl.model_validate(_snapshot_dict(snapshot))
+        control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise CandidateGenerationMismatchError('account generation mismatch')
     if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
@@ -415,14 +411,14 @@ def create_candidate(
             aliased_snapshot = _candidate_ref(uid, aliased_candidate_id).get(transaction=write_transaction)
             if not aliased_snapshot.exists:
                 raise CandidateConflictError('candidate idempotency alias target is missing')
-            aliased = CandidateRecord.from_storage(_snapshot_dict(aliased_snapshot))
+            aliased = parse_snapshot_strict(CandidateRecord, aliased_snapshot)
             if aliased.account_generation != account_generation:
                 raise CandidateConflictError('candidate idempotency alias generation mismatch')
             return aliased
 
         snapshot = ref.get(transaction=write_transaction)
         if snapshot.exists:
-            existing = CandidateRecord.from_storage(_snapshot_dict(snapshot))
+            existing = parse_snapshot_strict(CandidateRecord, snapshot)
             if existing.account_generation != account_generation or existing.idempotency_key != key_hash:
                 raise CandidateConflictError('candidate idempotency collision')
             existing_proposal = existing.as_proposal()
@@ -452,7 +448,7 @@ def create_candidate(
                     claimed_ref = _candidate_ref(uid, claimed_candidate_id)
                     claimed_snapshot = claimed_ref.get(transaction=write_transaction)
                     if claimed_snapshot.exists:
-                        candidate = CandidateRecord.from_storage(_snapshot_dict(claimed_snapshot))
+                        candidate = parse_snapshot_strict(CandidateRecord, claimed_snapshot)
                         if candidate.account_generation == account_generation:
                             claimed_candidate = candidate
                             if candidate.status == CandidateStatus.accepted and candidate.result_task_id:
@@ -547,7 +543,7 @@ def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
     snapshot = _candidate_ref(uid, candidate_id).get()
     if not snapshot.exists:
         return None
-    return CandidateRecord.from_storage(_snapshot_dict(snapshot))
+    return parse_snapshot_or_none(CandidateRecord, snapshot)
 
 
 def list_candidates(
@@ -567,24 +563,7 @@ def list_candidates(
     if offset:
         query = query.offset(offset)
     query = query.limit(limit)
-    records: list[CandidateRecord] = []
-    for snapshot in query.stream():
-        try:
-            records.append(CandidateRecord.from_storage(_snapshot_dict(snapshot)))
-        except ValidationError as e:
-            # One malformed/legacy candidate doc must not 500 the whole list. Catch only the pydantic
-            # validation failure (from_storage is model_validate) so unexpected runtime errors still
-            # surface. Pydantic's rendered error includes input_value, which may contain private task
-            # text, so retain only a bounded structural error-type summary.
-            errors = e.errors(include_input=False, include_url=False)
-            bounded_error_types = [str(error.get('type', 'unknown')) for error in errors[:5]]
-            logger.warning(
-                'Skipping malformed candidate record %s: error_count=%s validation_types=%s',
-                getattr(snapshot, 'id', None),
-                e.error_count(),
-                bounded_error_types,
-            )
-    return records
+    return parse_snapshots(CandidateRecord, query.stream())
 
 
 def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datetime) -> dict[str, Any]:
@@ -660,7 +639,7 @@ def resolve_task_candidate(
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
-        candidate = CandidateRecord.from_storage(_snapshot_dict(snapshot))
+        candidate = parse_snapshot_strict(CandidateRecord, snapshot)
         if candidate.account_generation != account_generation:
             raise CandidateGenerationMismatchError(candidate_id)
         if candidate.status == CandidateStatus.accepted:
@@ -792,7 +771,7 @@ def claim_candidate_integration_dispatch(
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
         control = TaskWorkflowControl()
         if control_snapshot.exists:
-            control = TaskWorkflowControl.model_validate(_snapshot_dict(control_snapshot))
+            control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
         if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
             write_transaction.update(
                 outbox_ref,
@@ -857,7 +836,7 @@ def complete_candidate_integration_dispatch(
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
         control = TaskWorkflowControl()
         if control_snapshot.exists:
-            control = TaskWorkflowControl.model_validate(_snapshot_dict(control_snapshot))
+            control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
         if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
             write_transaction.update(
                 outbox_ref,
@@ -933,7 +912,7 @@ def resolve_candidate_without_mutation(
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
-        candidate = CandidateRecord.from_storage(_snapshot_dict(snapshot))
+        candidate = parse_snapshot_strict(CandidateRecord, snapshot)
         if candidate.account_generation != account_generation:
             raise CandidateGenerationMismatchError(candidate_id)
         if candidate.status == status:
@@ -992,7 +971,7 @@ def reconcile_migrated_candidate(
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
-        candidate = CandidateRecord.from_storage(_snapshot_dict(snapshot))
+        candidate = parse_snapshot_strict(CandidateRecord, snapshot)
         if candidate.account_generation != account_generation:
             raise CandidateGenerationMismatchError(candidate_id)
         if candidate.status == status:
@@ -1060,7 +1039,7 @@ def claim_candidate_for_legacy_promotion(
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
-        candidate = CandidateRecord.from_storage(_snapshot_dict(candidate_snapshot))
+        candidate = parse_snapshot_strict(CandidateRecord, candidate_snapshot)
         if candidate.account_generation != account_generation:
             raise CandidateGenerationMismatchError(candidate_id)
         if candidate.status != CandidateStatus.pending:
@@ -1134,7 +1113,7 @@ def begin_candidate_legacy_promotion(
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
-        candidate = CandidateRecord.from_storage(_snapshot_dict(candidate_snapshot))
+        candidate = parse_snapshot_strict(CandidateRecord, candidate_snapshot)
         if candidate.account_generation != account_generation:
             raise CandidateGenerationMismatchError(candidate_id)
         if candidate.status != CandidateStatus.pending:

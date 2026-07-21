@@ -14,6 +14,7 @@ from models.chat import Message
 from utils import encryption
 from ._client import db
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
+from database.read_boundary import parse_snapshot_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,12 @@ def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[str] = None) -> Message:
+    """Add a chat message an app posted for the user, linking it to that app's chat session so it
+    appears in the chat feed. get_messages filters by chat_session_id whenever a session exists, so
+    a message stored without one is never returned on that path."""
+    chat_session = get_chat_session(uid, app_id=app_id)
+    chat_session_id = chat_session['id'] if chat_session else None
+
     ai_message = Message(
         id=str(uuid.uuid4()),
         text=text,
@@ -103,8 +110,11 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         from_external_integration=False,
         type='text',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         memories_id=[conversation_id] if conversation_id else [],
+        chat_session_id=chat_session_id,
     )
     add_message(uid, ai_message.model_dump())
+    if chat_session_id:
+        add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
 
 
@@ -396,12 +406,13 @@ def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     if not message_doc:
         return None
 
-    message_data: Dict[str, Any] = _typed_doc(message_doc)
-    if not message_data:
+    message = parse_snapshot_or_none(
+        Message,
+        message_doc,
+        payload_from_snapshot=lambda snapshot: _prepare_message_for_read(_typed_doc(snapshot), uid),
+    )
+    if message is None:
         return None
-
-    decrypted_data: Dict[str, Any] = _prepare_message_for_read(message_data, uid)
-    message = Message(**decrypted_data)
 
     return message, message_doc.id
 

@@ -54,9 +54,8 @@ def build_repair_bundle(manifest: dict[str, Any], bucket: str) -> dict[str, Any]
 
     release_path = quote(release_id, safe=".-_~+")
     public_base = f"https://storage.googleapis.com/{quote(bucket_name, safe='.-_~')}"
-    artifact_object = f"stable/{release_id}/Omi.dmg"
     repair_object = f"stable/{release_id}/repair.json"
-    installer_url = f"{public_base}/stable/{release_path}/Omi.dmg"
+    installer_url = _required_string(manifest, "dmg_url")
     repair_manifest_url = f"{public_base}/stable/{release_path}/repair.json"
 
     repair = {
@@ -95,7 +94,6 @@ def build_repair_bundle(manifest: dict[str, Any], bucket: str) -> dict[str, Any]
 </html>
 """
     return {
-        "artifact_object": artifact_object,
         "repair_object": repair_object,
         "repair": repair,
         "latest": latest,

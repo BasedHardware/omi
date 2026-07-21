@@ -24,7 +24,17 @@ export type ExternalSurfaceToolPolicyDecision =
   };
 
 const PERMISSION_TYPES: ReadonlyArray<{ type: string; phrases: readonly string[] }> = [
-  { type: "screen_recording", phrases: ["screen recording", "screen-recording"] },
+  {
+    type: "screen_recording",
+    phrases: [
+      "screen recording",
+      "screen-recording",
+      "screen share",
+      "screen-share",
+      "screen sharing",
+      "screen-sharing",
+    ],
+  },
   { type: "microphone", phrases: ["microphone", "mic permission", "microphone access"] },
   { type: "notifications", phrases: ["notification permission", "notifications permission", "omi notifications"] },
   { type: "accessibility", phrases: ["accessibility permission", "accessibility access"] },
@@ -36,6 +46,14 @@ const PERMISSION_CAPABILITY_SUBJECTS = new Set([
   "screen recording",
   "screen recording permission",
   "screen recording access",
+  "screen share",
+  "screen-share",
+  "screen sharing",
+  "screen-sharing",
+  "screen share permission",
+  "screen sharing permission",
+  "screen share access",
+  "screen sharing access",
   "microphone",
   "microphone permission",
   "microphone access",
@@ -53,6 +71,12 @@ const PERMISSION_CAPABILITY_SUBJECTS = new Set([
   "full disk access",
   "full disk access permission",
 ]);
+
+const DIRECTED_PROVIDER_TARGETS = [
+  { provider: "openclaw" as const, pattern: "(?:open\\s*claw|open\\s*cloud)" },
+  { provider: "hermes" as const, pattern: "hermes" },
+] as const;
+const DIRECTED_PROVIDER_ACTION = "(?:ask|tell|ping|message|use|run|try|start|spawn|delegate(?:\\s+to)?|have|let|send|make)";
 
 /**
  * External surfaces propose tools; this policy owns the semantic safety rewrite
@@ -87,7 +111,10 @@ export function routeExternalSurfaceTool(
         message: "Permission tools require one supported Omi permission type",
       };
     }
-    if (hasExplicitExternalPermissionTarget("", input.originatingPrompt, input.toolInput)) {
+    if (
+      hasExplicitExternalPermissionTarget("", input.originatingPrompt, input.toolInput)
+      || hasExplicitExternalPermissionTarget("", input.precedingAssistantText ?? "", {})
+    ) {
       return {
         action: "reject",
         code: "permission_target_rejected",
@@ -122,7 +149,8 @@ export function routeExternalSurfaceTool(
     return { action: "execute", toolName: input.toolName, toolInput: input.toolInput, recoveredFromDelegation: false };
   }
 
-  const objective = textField(input.toolInput, "objective") || textField(input.toolInput, "brief");
+  const toolInput = constrainSpawnProviderToCurrentUserIntent(input.toolInput, input.originatingPrompt);
+  const objective = textField(toolInput, "objective") || textField(toolInput, "brief");
   const permission = permissionRequest(objective);
   if (!permission) {
     if (mentionsPermissionCapability(objective)) {
@@ -132,9 +160,12 @@ export function routeExternalSurfaceTool(
         message: "Permission work must use a direct native permission tool with an explicit check or request action",
       };
     }
-    return { action: "execute", toolName: input.toolName, toolInput: input.toolInput, recoveredFromDelegation: false };
+    return { action: "execute", toolName: input.toolName, toolInput, recoveredFromDelegation: false };
   }
-  if (hasExplicitExternalPermissionTarget(objective, input.originatingPrompt, input.toolInput)) {
+  if (
+    hasExplicitExternalPermissionTarget(objective, input.originatingPrompt, toolInput)
+    || hasExplicitExternalPermissionTarget("", input.precedingAssistantText ?? "", {})
+  ) {
     return {
       action: "reject",
       code: "permission_target_rejected",
@@ -159,9 +190,44 @@ export function routeExternalSurfaceTool(
   };
 }
 
+/**
+ * A realtime model may propose a local provider, but choosing a user's local
+ * Hermes/OpenClaw credential boundary is not model authority. Only the current
+ * user utterance may select it. Everything else stays on the regular Omi
+ * managed-agent path, including a model-invented or stale provider field.
+ */
+function constrainSpawnProviderToCurrentUserIntent(
+  toolInput: Record<string, unknown>,
+  originatingPrompt: string,
+): Record<string, unknown> {
+  const selectedProvider = directedProviderSelectedByUser(originatingPrompt);
+  if (selectedProvider) return { ...toolInput, provider: selectedProvider };
+
+  const suppliedProvider = textField(toolInput, "provider");
+  if (suppliedProvider !== "openclaw" && suppliedProvider !== "hermes") return toolInput;
+
+  const { provider: _, ...defaultOmiInput } = toolInput;
+  return defaultOmiInput;
+}
+
+function directedProviderSelectedByUser(prompt: string): "openclaw" | "hermes" | null {
+  const normalized = prompt.toLowerCase();
+  const selected = DIRECTED_PROVIDER_TARGETS.flatMap(({ provider, pattern }) => {
+    const target = `(?:the\\s+)?${pattern}(?:\\s+agent)?`;
+    const positive = new RegExp(
+      `(?:\\b${DIRECTED_PROVIDER_ACTION}\\s+${target}\\b|\\b(?:with|via|using|in)\\s+${target}\\b|^\\s*${pattern}\\s*(?::|,|—|-))`,
+    );
+    const negated = new RegExp(`\\b(?:don't|do not|never)\\s+${DIRECTED_PROVIDER_ACTION}\\s+${target}\\b`);
+    return positive.test(normalized) && !negated.test(normalized) ? [provider] : [];
+  });
+  return selected.length === 1 ? selected[0]! : null;
+}
+
 function normalizedPermissionType(value: string): string | null {
   const normalized = value.toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
-  return PERMISSION_TYPES.some(({ type }) => type === normalized) ? normalized : null;
+  if (PERMISSION_TYPES.some(({ type }) => type === normalized)) return normalized;
+  if (normalized === "screen_share" || normalized === "screen_sharing") return "screen_recording";
+  return null;
 }
 
 function hasPermissionRequestAuthority(
@@ -178,12 +244,23 @@ function hasPermissionRequestAuthority(
   if (namesPermission && explicitAction) return true;
 
   const affirmative = /^(?:yes|yeah|yep|sure|ok|okay|please do|do it|go ahead|grant it|allow it)\b/.test(prompt);
-  if (!affirmative) return false;
   const preceding = precedingAssistantText.toLowerCase();
-  const precedingNamesPermission = permission.phrases.some((phrase) => preceding.includes(phrase))
-    || preceding.includes(type.replaceAll("_", " "));
-  return precedingNamesPermission
+  const precedingPermissionTypes = PERMISSION_TYPES.filter((candidate) =>
+    candidate.phrases.some((phrase) => preceding.includes(phrase))
+      || preceding.includes(candidate.type.replaceAll("_", " ")),
+  ).map((candidate) => candidate.type);
+  const precedingIsPermissionRequest = precedingPermissionTypes.length === 1
+    && precedingPermissionTypes[0] === type
+    && !hasExplicitExternalPermissionTarget("", preceding, {})
     && /\b(?:request|grant|allow|enable|open|permission|access)\b/.test(preceding);
+  if (!precedingIsPermissionRequest) return false;
+  if (affirmative) return true;
+
+  // A direct anaphoric imperative is meaningful only when the immediately
+  // preceding assistant turn identified one concrete permission. This accepts
+  // natural replies such as "request it" without broadening generic requests.
+  return /\b(?:request|grant|allow|enable|open)\b/.test(prompt)
+    && /\b(?:it|that|the (?:permission|access)|permissions?)\b/.test(prompt);
 }
 
 /**
@@ -278,9 +355,10 @@ function hasExplicitExternalPermissionTarget(
   for (const narrative of [originatingPrompt, objective]) {
     const normalized = narrative.toLowerCase();
     const candidates = [
-      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)['’]s\s+(?:screen recording|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
-      ...captures(normalized, /\b(?:screen recording|microphone|mic|notifications?|accessibility|automation|full disk access)(?:\s+permission|\s+access)?\s+for\s+([a-z0-9._ -]+?)(?:[?.!,]|$)/g),
-      ...captures(normalized, /\b(?:grant|allow|enable|give|check)\s+([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+(?:screen recording|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
+      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)['’]s\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
+      ...captures(normalized, /\b([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+needs\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
+      ...captures(normalized, /\b(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)(?:\s+permissions?|\s+access)?\s+for\s+([a-z0-9._ -]+?)(?:[?.!,]|$)/g),
+      ...captures(normalized, /\b(?:grant|allow|enable|give|check)\s+([a-z0-9._-]+(?:\s+[a-z0-9._-]+)?)\s+(?:screen recording|screen[- ]share(?:ing)?|microphone|mic|notifications?|accessibility|automation|full disk access)\b/g),
     ];
     for (const candidate of candidates) {
       const cleaned = normalizeTarget(candidate);

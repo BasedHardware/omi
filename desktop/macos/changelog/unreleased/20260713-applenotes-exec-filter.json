@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Apple Notes import silently skipping notes whose title or summary contained words like \"execution\" or \"executive\""
-}

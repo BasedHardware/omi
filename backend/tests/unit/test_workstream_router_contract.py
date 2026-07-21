@@ -16,6 +16,7 @@ import routers.workstreams as workstreams_router
 from models.goal import GoalCreate, GoalFocusRequest, GoalUpdate
 from models.task_recommendation import NormalizedContextSnapshot, OpenLoopSnapshot, SnapshotReceipt
 from models.workstream import TaskOriginWorkIntent, WorkIntentReceipt, WorkstreamUpdate
+from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
 
 
 def test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_create():
@@ -208,6 +209,37 @@ def test_task_intelligence_reads_fail_closed_when_generation_changes_during_proj
 
     assert error.value.status_code == 404
     assert projection_reads == ['debug' if surface == 'debug' else 'evaluate']
+
+
+def test_what_matters_now_initializes_the_dev_smoke_fixture_before_rollout(monkeypatch):
+    calls = []
+    sentinel_projection = object()
+    monkeypatch.setattr(
+        task_recommendations_router,
+        'task_control_db',
+        SimpleNamespace(ensure_development_smoke_fixture=lambda uid: calls.append(('ensure', uid)) or True),
+    )
+    monkeypatch.setattr(
+        task_recommendations_router,
+        '_rollout',
+        lambda uid: calls.append(('rollout', uid))
+        or SimpleNamespace(intelligence_product_enabled=True, account_generation=0),
+    )
+    monkeypatch.setattr(task_recommendations_router, '_bound_device_id', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        task_recommendations_router.recommendations, 'evaluate', lambda *_args, **_kwargs: sentinel_projection
+    )
+
+    result = task_recommendations_router.get_what_matters_now(
+        request_context=object(), device_id=None, uid=WHAT_MATTERS_NOW_SMOKE_UID
+    )
+
+    assert result is sentinel_projection
+    assert calls == [
+        ('ensure', WHAT_MATTERS_NOW_SMOKE_UID),
+        ('rollout', WHAT_MATTERS_NOW_SMOKE_UID),
+        ('rollout', WHAT_MATTERS_NOW_SMOKE_UID),
+    ]
 
 
 def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaults(monkeypatch):

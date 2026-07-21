@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import sys
@@ -42,19 +43,42 @@ def _urlopen_responses(*responses):
     return _urlopen, calls
 
 
-def _config(module, **overrides):
+def _fixture_paths(tmp_path, *, audio=b'fixture-audio-secret', expected_phrase='Hello Omi', language='en'):
+    fixture_path = tmp_path / 'transcription-release-probe.wav'
+    fixture_path.write_bytes(audio)
+    manifest_path = tmp_path / 'transcription-release-probe.json'
+    manifest_path.write_text(
+        json.dumps(
+            {
+                'schema_version': 1,
+                'fixture_filename': fixture_path.name,
+                'sha256': hashlib.sha256(audio).hexdigest(),
+                'expected_transcript': expected_phrase,
+                'language': language,
+                'source': {'license': 'CC-BY-4.0'},
+            }
+        ),
+        encoding='utf-8',
+    )
+    return fixture_path, manifest_path
+
+
+def _token_file(tmp_path, token='probe-token-that-must-not-leak'):
+    token_file = tmp_path / 'probe-token'
+    token_file.write_text(token, encoding='utf-8')
+    token_file.chmod(0o600)
+    return token_file
+
+
+def _config(module, tmp_path, **overrides):
+    fixture_path, manifest_path = _fixture_paths(tmp_path)
     values = {
-        'audio_url': 'https://fixture.invalid/known.wav',
+        'fixture_path': fixture_path,
+        'manifest_path': manifest_path,
         'api_url': 'https://candidate.invalid',
         'bearer_token': 'probe-token-that-must-not-leak',
-        'expected_phrase': 'Hello Omi',
-        'synthetic_language': 'en',
-        'expected_provider': None,
-        'expected_model': None,
-        'direct_url': None,
+        'cloud_run_identity_token': None,
         'timeout_seconds': 3.0,
-        'require_direct': False,
-        'require_route_identity': False,
     }
     values.update(overrides)
     return module.ProbeConfig(**values)
@@ -68,36 +92,17 @@ def _unexpected_network(*_args, **_kwargs):
     raise AssertionError('unexpected HTTP request')
 
 
-def test_full_route_posts_real_multipart_and_validates_exact_candidate_contract(monkeypatch):
+def test_full_route_posts_versioned_fixture_and_validates_exact_candidate_contract(monkeypatch, tmp_path):
     module = _load_module()
-    fixture = b'fixture-audio-secret'
     fake_urlopen, calls = _urlopen_responses(
-        _Response(200, fixture),
-        _Response(
-            200,
-            json.dumps(
-                {
-                    'outcome': 'success',
-                    'transcript': '  HELLO, omi! ',
-                    'stt_provider': 'parakeet',
-                    'stt_model': 'parakeet-v3',
-                }
-            ).encode(),
-        ),
+        _Response(200, json.dumps({'outcome': 'success', 'transcript': '  HELLO, omi! '}).encode())
     )
     monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
 
-    report = module.build_report(
-        _config(
-            module,
-            expected_provider='parakeet',
-            expected_model='parakeet-v3',
-            require_route_identity=True,
-        )
-    )
+    report = module.build_report(_config(module, tmp_path))
 
     assert report['status'] == 'PASS'
-    full_route, direct = report['checks']
+    full_route = report['checks'][0]
     assert full_route['status'] == 'PASS'
     assert full_route['details'] == {
         'configured': True,
@@ -106,42 +111,46 @@ def test_full_route_posts_real_multipart_and_validates_exact_candidate_contract(
         'json_object': True,
         'outcome_success': True,
         'phrase_match': True,
-        'provider_checked': True,
-        'provider_match': True,
-        'model_checked': True,
-        'model_match': True,
         'authority': 'candidate_gate',
     }
-    assert direct['status'] == 'NOT_RUN'
-    assert len(calls) == 2
-    fixture_request, _ = calls[0]
-    full_request, _ = calls[1]
-    assert fixture_request.full_url == 'https://fixture.invalid/known.wav'
-    assert fixture_request.get_method() == 'GET'
-    assert full_request.full_url == 'https://candidate.invalid/v2/voice-message/transcribe'
-    assert full_request.get_method() == 'POST'
-    headers = _headers(full_request)
+    assert len(calls) == 1
+    request, _ = calls[0]
+    assert request.full_url == 'https://candidate.invalid/v2/voice-message/transcribe'
+    assert request.get_method() == 'POST'
+    headers = _headers(request)
     assert headers['authorization'] == 'Bearer probe-token-that-must-not-leak'
+    assert 'x-serverless-authorization' not in headers
     assert headers['content-type'].startswith('multipart/form-data; boundary=')
-    assert b'name="files"; filename="known-audio.wav"' in full_request.data
-    assert b'Content-Disposition: form-data; name="language"\r\n\r\nen\r\n' in full_request.data
-    assert b'Content-Type: audio/wav' in full_request.data
-    assert fixture in full_request.data
+    assert b'name="files"; filename="transcription-release-probe.wav"' in request.data
+    assert b'Content-Disposition: form-data; name="language"\r\n\r\nen\r\n' in request.data
+    assert b'Content-Type: audio/wav' in request.data
+    assert b'fixture-audio-secret' in request.data
 
     encoded = json.dumps(report)
     for sensitive in ('fixture-audio-secret', 'probe-token-that-must-not-leak', 'Hello Omi', 'candidate.invalid'):
         assert sensitive not in encoded
 
 
-def test_full_route_rejects_success_with_extra_words_instead_of_substring_match(monkeypatch):
+def test_full_route_uses_cloud_run_identity_and_firebase_auth_together(monkeypatch, tmp_path):
     module = _load_module()
-    fake_urlopen, _ = _urlopen_responses(
-        _Response(200, b'fixture-audio-secret'),
-        _Response(200, b'{"outcome":"success","transcript":"hello omi extra"}'),
-    )
+    fake_urlopen, calls = _urlopen_responses(_Response(200, b'{"outcome":"success","transcript":"hello omi"}'))
     monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
 
-    report = module.build_report(_config(module))
+    report = module.build_report(_config(module, tmp_path, cloud_run_identity_token='serverless-token'))
+
+    assert report['status'] == 'PASS'
+    headers = _headers(calls[0][0])
+    assert headers['authorization'] == 'Bearer probe-token-that-must-not-leak'
+    assert headers['x-serverless-authorization'] == 'Bearer serverless-token'
+    assert 'serverless-token' not in json.dumps(report)
+
+
+def test_full_route_rejects_success_with_incorrect_transcript(monkeypatch, tmp_path):
+    module = _load_module()
+    fake_urlopen, _ = _urlopen_responses(_Response(200, b'{"outcome":"success","transcript":"hello omi extra"}'))
+    monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
+
+    report = module.build_report(_config(module, tmp_path))
 
     full_route = report['checks'][0]
     assert report['status'] == 'FAIL'
@@ -151,147 +160,89 @@ def test_full_route_rejects_success_with_extra_words_instead_of_substring_match(
     assert 'hello omi extra' not in json.dumps(report)
 
 
-def test_full_route_requires_http_200_and_success_outcome(monkeypatch):
+def test_fixture_digest_mismatch_fails_closed_without_calling_candidate(monkeypatch, tmp_path):
     module = _load_module()
-    fake_urlopen, _ = _urlopen_responses(
-        _Response(200, b'fixture-audio-secret'),
-        _Response(503, b'{"outcome":"expected_silence","transcript":"hello omi"}'),
-    )
-    monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
-
-    report = module.build_report(_config(module))
-
-    full_route = report['checks'][0]
-    assert report['status'] == 'FAIL'
-    assert full_route['details']['http_status'] == 503
-    assert full_route['details']['outcome_success'] is False
-    assert full_route['details']['phrase_match'] is True
-    assert 'expected_silence' not in json.dumps(report)
-
-
-def test_direct_parakeet_is_a_protected_diagnostic_with_its_own_multipart_shape(monkeypatch):
-    module = _load_module()
-    fixture = b'fixture-audio-secret'
-    fake_urlopen, calls = _urlopen_responses(
-        _Response(200, fixture),
-        _Response(200, b'{"outcome":"success","transcript":"hello omi"}'),
-        _Response(200, b'{"text":"HELLO, OMI!"}'),
-    )
-    monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
-
-    report = module.build_report(
-        _config(module, direct_url='http://private-parakeet.invalid/v1/transcribe', require_direct=True)
-    )
-
-    assert report['status'] == 'PASS'
-    assert report['full_route_authoritative'] is True
-    assert report['direct_diagnostic_only'] is True
-    direct = report['checks'][1]
-    assert direct['status'] == 'PASS'
-    assert direct['details']['authority'] == 'diagnostic_only'
-    assert len(calls) == 3
-    direct_request, _ = calls[2]
-    assert direct_request.full_url == 'http://private-parakeet.invalid/v1/transcribe'
-    headers = _headers(direct_request)
-    assert 'authorization' not in headers
-    assert b'name="file"; filename="known-audio.wav"' in direct_request.data
-    assert b'name="language"' not in direct_request.data
-    assert fixture in direct_request.data
-    assert 'private-parakeet.invalid' not in json.dumps(report)
-
-
-def test_direct_is_not_run_by_default_but_is_required_when_requested():
-    module = _load_module()
-    optional = module._probe_direct(_config(module, direct_url=None, require_direct=False), None, {})
-    required = module._probe_direct(_config(module, direct_url=None, require_direct=True), None, {})
-
-    assert optional['status'] == 'NOT_RUN'
-    assert optional['details']['configured'] is False
-    assert required['status'] == 'FAIL'
-    assert required['details']['missing_config'] == ['direct_url']
-
-
-def test_optional_direct_failure_does_not_block_the_full_route_candidate_gate(monkeypatch):
-    module = _load_module()
-    fake_urlopen, _ = _urlopen_responses(
-        _Response(200, b'fixture-audio-secret'),
-        _Response(200, b'{"outcome":"success","transcript":"hello omi"}'),
-        _Response(503, b'{"detail":"private diagnostic unavailable"}'),
-    )
-    monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
-
-    report = module.build_report(
-        _config(module, direct_url='http://private-parakeet.invalid/v1/transcribe', require_direct=False)
-    )
-
-    assert report['checks'][0]['status'] == 'PASS'
-    assert report['checks'][1]['status'] == 'FAIL'
-    assert report['status'] == 'PASS'
-
-
-def test_require_direct_makes_a_direct_diagnostic_failure_blocking(monkeypatch):
-    module = _load_module()
-    fake_urlopen, _ = _urlopen_responses(
-        _Response(200, b'fixture-audio-secret'),
-        _Response(200, b'{"outcome":"success","transcript":"hello omi"}'),
-        _Response(503, b'{"detail":"private diagnostic unavailable"}'),
-    )
-    monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
-
-    report = module.build_report(
-        _config(module, direct_url='http://private-parakeet.invalid/v1/transcribe', require_direct=True)
-    )
-
-    assert report['checks'][0]['status'] == 'PASS'
-    assert report['checks'][1]['status'] == 'FAIL'
-    assert report['status'] == 'FAIL'
-
-
-def test_route_identity_flag_requires_protected_provider_and_model_without_network(monkeypatch):
-    module = _load_module()
+    fixture_path, manifest_path = _fixture_paths(tmp_path)
+    fixture_path.write_bytes(b'changed-audio')
     monkeypatch.setattr(module.urllib.request, 'urlopen', _unexpected_network)
 
-    report = module.build_report(_config(module, require_route_identity=True))
+    report = module.build_report(
+        module.ProbeConfig(
+            fixture_path=fixture_path,
+            manifest_path=manifest_path,
+            api_url='https://candidate.invalid',
+            bearer_token='probe-token-that-must-not-leak',
+            cloud_run_identity_token=None,
+            timeout_seconds=3.0,
+        )
+    )
 
     assert report['status'] == 'FAIL'
-    assert report['checks'][0]['details']['missing_config'] == ['expected_provider', 'expected_model']
+    assert report['checks'][0]['details'] == {
+        'configured': True,
+        'error_kind': 'fixture_invalid',
+        'fixture_available': False,
+        'authority': 'candidate_gate',
+    }
 
 
-def test_missing_full_route_config_fails_main_without_network_or_sensitive_output(monkeypatch, capsys):
+def test_auth_failure_from_candidate_is_redacted_and_fails_closed(monkeypatch, tmp_path):
     module = _load_module()
-    for name in (
-        'OMI_TRANSCRIPTION_SYNTHETIC_AUDIO_URL',
-        'OMI_TRANSCRIPTION_SYNTHETIC_API_URL',
-        'OMI_TRANSCRIPTION_SYNTHETIC_BEARER_TOKEN',
-        'OMI_TRANSCRIPTION_SYNTHETIC_EXPECTED_PHRASE',
-        'OMI_TRANSCRIPTION_SYNTHETIC_LANGUAGE',
-        'OMI_TRANSCRIPTION_SYNTHETIC_DIRECT_URL',
-    ):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(module.urllib.request, 'urlopen', _unexpected_network)
+    fake_urlopen, _ = _urlopen_responses(_Response(401, b'{"detail":"never expose this"}'))
+    monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
 
-    exit_code = module.main(['--json-only'])
+    report = module.build_report(_config(module, tmp_path))
 
-    output = capsys.readouterr().out
-    report = json.loads(output)
-    assert exit_code == 1
     assert report['status'] == 'FAIL'
-    assert report['checks'][0]['details']['missing_config'] == [
-        'audio_url',
-        'api_url',
-        'bearer_token',
-        'expected_phrase',
-        'synthetic_language',
-    ]
+    assert report['checks'][0]['details']['http_status'] == 401
+    assert 'never expose this' not in json.dumps(report)
 
 
-def test_candidate_revision_flag_overrides_configured_api_url(monkeypatch):
+def test_token_file_must_not_be_group_or_world_readable(tmp_path):
     module = _load_module()
-    monkeypatch.setenv('OMI_TRANSCRIPTION_SYNTHETIC_API_URL', 'https://production.invalid')
+    token_file = _token_file(tmp_path)
+    token_file.chmod(0o644)
 
     config = module.config_from_args(
-        module.parse_args(['--candidate-api-url', 'https://candidate.invalid/', '--require-route-identity'])
+        module.parse_args(
+            [
+                '--candidate-api-url',
+                'https://candidate.invalid/',
+                '--fixture-path',
+                str(_fixture_paths(tmp_path)[0]),
+                '--manifest-path',
+                str(_fixture_paths(tmp_path)[1]),
+                '--bearer-token-file',
+                str(token_file),
+            ]
+        )
     )
 
     assert config.api_url == 'https://candidate.invalid'
-    assert config.require_route_identity is True
+    assert config.bearer_token is None
+
+
+def test_missing_token_fails_main_without_network_or_sensitive_output(monkeypatch, tmp_path, capsys):
+    module = _load_module()
+    fixture_path, manifest_path = _fixture_paths(tmp_path)
+    missing_token = tmp_path / 'missing-token'
+    monkeypatch.setattr(module.urllib.request, 'urlopen', _unexpected_network)
+
+    exit_code = module.main(
+        [
+            '--candidate-api-url',
+            'https://candidate.invalid',
+            '--fixture-path',
+            str(fixture_path),
+            '--manifest-path',
+            str(manifest_path),
+            '--bearer-token-file',
+            str(missing_token),
+            '--json-only',
+        ]
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert report['status'] == 'FAIL'
+    assert report['checks'][0]['details']['missing_config'] == ['bearer_token']

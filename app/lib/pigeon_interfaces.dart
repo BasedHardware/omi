@@ -266,6 +266,14 @@ class RayBanMetaGlasses {
   RayBanMetaGlasses({required this.id, required this.name});
 }
 
+/// A Bluetooth Hands-Free Profile input exposed by iOS.
+class BluetoothHfpInput {
+  final String uid;
+  final String name;
+
+  BluetoothHfpInput({required this.uid, required this.name});
+}
+
 /// Dart → native. Camera/photo capture goes through the Meta Wearables Device
 /// Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
 /// uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
@@ -318,8 +326,8 @@ abstract class RayBanMetaHostAPI {
 
   /// Starts capturing the glasses microphone over the Bluetooth HFP route and
   /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
-  @SwiftFunction('startAudioCapture()')
-  void startAudioCapture();
+  @SwiftFunction('startAudioCapture(inputUid:)')
+  void startAudioCapture(String? inputUid);
 
   @SwiftFunction('stopAudioCapture()')
   void stopAudioCapture();
@@ -328,10 +336,11 @@ abstract class RayBanMetaHostAPI {
   @SwiftFunction('isGlassesAudioRouteActive()')
   bool isGlassesAudioRouteActive();
 
-  /// Bluetooth HFP input port names currently available, for the audio-only
-  /// fallback when the DAT SDK is not part of this build.
-  @SwiftFunction('getBluetoothHfpInputNames()')
-  List<String> getBluetoothHfpInputNames();
+  /// Bluetooth HFP input ports currently available, for the audio-only
+  /// fallback when the DAT SDK is not part of this build. The UID is the
+  /// stable identity; the user-visible name may change.
+  @SwiftFunction('getBluetoothHfpInputs()')
+  List<BluetoothHfpInput> getBluetoothHfpInputs();
 
   /// Starts the DAT camera stream session so photo capture is ready. While
   /// active the glasses' capture LED is on (hardware-enforced by Meta).
