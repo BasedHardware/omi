@@ -20,12 +20,69 @@ env:
   CANDIDATE_TAG: candidate
 
 jobs:
+  scope:
+    name: Decide backend deployment scope
+    # This unprivileged decision runs before source admission, Firestore
+    # readiness, image work, or any cloud mutation. workflow_run does not
+    # support a safe workflow-level paths filter, so inspect its immutable SHA.
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest-m
+    outputs:
+      applies: ${{ steps.scope.outputs.applies }}
+    steps:
+      - name: Checkout triggering main commit for scope decision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - name: Decide whether the triggering commit can affect the backend deployment
+        id: scope
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if ! git cat-file -e "${RELEASE_SHA}^{commit}"; then
+            echo "Cannot resolve triggering Release Eligibility SHA: $RELEASE_SHA" >&2
+            exit 1
+          fi
+
+          if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
+            # An unavailable parent is uncertain scope: retain the existing
+            # exact-SHA admission and deployment path rather than skip.
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: could not resolve the triggering commit parent."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
+          printf 'Changed files for %s:\n%s\n' "$RELEASE_SHA" "$changed_files"
+          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest|desktop_qualification_admission|desktop_qualification_evidence)\.py$)' <<<"$changed_files"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: the triggering commit can affect backend runtime or deployment inputs."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy no-op"
+              echo "Green no-op: the triggering commit cannot affect backend runtime or deployment inputs."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   firestore_readiness:
     # A workflow_run can access deployment credentials, so never run source
     # code until the first completed proof identifies the exact current commit
     # on this repository's main branch. Every later checkout and release vector
     # uses that admitted SHA rather than a mutable default branch ref.
+    needs: scope
     if: >-
+      needs.scope.outputs.applies == 'true' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.run_attempt == 1 &&
