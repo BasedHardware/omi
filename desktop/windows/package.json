@@ -12,7 +12,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
-    "dev": "electron-vite dev",
+    "dev": "node scripts/dev.mjs",
     "build": "npm run typecheck && electron-vite build",
     "rebuild:sqlite": "electron-rebuild -f -w better-sqlite3",
     "build:ocr-helper": "powershell -ExecutionPolicy Bypass -File scripts/build-ocr-helper.ps1",
