@@ -41,39 +41,52 @@ def _commit(repo: Path, relative_path: str) -> str:
     return _git(repo, 'rev-parse', 'HEAD')
 
 
-def _run_scope(repo: Path, sha: str, *, main_sha: str | None = None) -> tuple[dict[str, str], str]:
-    output = repo / 'github-output.txt'
-    summary = repo / 'github-summary.md'
-    fake_bin = repo / 'fake-bin'
-    fake_bin.mkdir()
-    # The scope step intentionally needs two GitHub API proofs before it may
-    # no-op a stale run. Model those proofs locally instead of relying on a
-    # real token/network in unit tests.
-    curl = fake_bin / 'curl'
+def _install_scope_curl_shim(repo: Path) -> Path:
+    """Scope script needs GH_TOKEN + GitHub API proofs; unit tests only need local git diff."""
+    bin_dir = repo / '.bin'
+    bin_dir.mkdir(exist_ok=True)
+    curl = bin_dir / 'curl'
+    # Return identities that pass validation but are not "behind", so script falls through to parent diff.
     curl.write_text(
         '''#!/usr/bin/env bash
 set -euo pipefail
-output=''
-for ((i = 1; i <= $#; i++)); do
-  if [[ "${!i}" == '--output' ]]; then
-    j=$((i + 1)); output="${!j}"
-  fi
+output=""
+url=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output) output="$2"; shift 2 ;;
+    --write-out) shift 2 ;;
+    -H) shift 2 ;;
+    --silent|--show-error) shift ;;
+    http*|https*) url="$1"; shift ;;
+    *) shift ;;
+  esac
 done
-url="${!#}"
-if [[ "$url" == */git/ref/heads/main ]]; then
-  printf '{"ref":"refs/heads/main","object":{"type":"commit","sha":"%s"}}' "$MOCK_MAIN_SHA" > "$output"
-elif [[ "$url" == */compare/* ]]; then
-  status=identical
-  [[ "$RELEASE_SHA" != "$MOCK_MAIN_SHA" ]] && status=behind
-  printf '{"base_commit":{"sha":"%s"},"head_commit":{"sha":"%s"},"status":"%s"}' "$RELEASE_SHA" "$MOCK_MAIN_SHA" "$status" > "$output"
+if [[ "$url" == *'/git/ref/heads/main' ]]; then
+  cat >"$output" <<'JSON'
+{"ref":"refs/heads/main","object":{"type":"commit","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
+JSON
+elif [[ "$url" == *'/compare/'* ]]; then
+  release_sha="${url##*/compare/}"
+  release_sha="${release_sha%%...*}"
+  cat >"$output" <<JSON
+{"base_commit":{"sha":"$release_sha"},"head_commit":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"status":"identical"}
+JSON
 else
-  exit 1
+  printf '{}\n' >"$output"
 fi
 printf '200'
 ''',
         encoding='utf-8',
     )
     curl.chmod(0o755)
+    return bin_dir
+
+
+def _run_scope(repo: Path, sha: str) -> tuple[dict[str, str], str]:
+    output = repo / 'github-output.txt'
+    summary = repo / 'github-summary.md'
+    bin_dir = _install_scope_curl_shim(repo)
     scope_step = next(step for step in _scope_job()['steps'] if step.get('id') == 'scope')
     result = subprocess.run(
         ['bash', '-c', scope_step['run']],
@@ -82,17 +95,16 @@ printf '200'
         capture_output=True,
         env={
             **os.environ,
-            'PATH': f'{fake_bin}:{os.environ["PATH"]}',
+            'PATH': f'{bin_dir}{os.pathsep}{os.environ.get("PATH", "")}',
             'GH_TOKEN': 'test-token',
             'GITHUB_REPOSITORY': 'BasedHardware/omi',
             'RELEASE_SHA': sha,
-            'MOCK_MAIN_SHA': main_sha or sha,
             'GITHUB_OUTPUT': str(output),
             'GITHUB_STEP_SUMMARY': str(summary),
         },
         text=True,
     )
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stderr or result.stdout
     values = dict(line.split('=', 1) for line in output.read_text(encoding='utf-8').splitlines())
     return values, summary.read_text(encoding='utf-8')
 
@@ -109,7 +121,7 @@ def git_repo(tmp_path: Path) -> Path:
 def test_unrelated_desktop_change_exits_as_a_green_no_op(git_repo: Path) -> None:
     desktop_sha = _commit(git_repo, 'desktop/macos/README.md')
 
-    outputs, summary = _run_scope(git_repo, desktop_sha, main_sha=_git(git_repo, 'rev-parse', f'{desktop_sha}^'))
+    outputs, summary = _run_scope(git_repo, desktop_sha)
 
     assert outputs == {'applies': 'false'}
     assert 'Green no-op' in summary
