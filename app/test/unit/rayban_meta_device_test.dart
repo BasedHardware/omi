@@ -187,11 +187,21 @@ void main() {
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Oakley Meta HSTN'), isTrue);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Meta Glasses'), isTrue);
 
+      // Real glasses advertise an EssilorLuxottica codename over Bluetooth HFP,
+      // not a "Ray-Ban" string. Observed on hardware as `EL AI 000F`; without
+      // this the glasses never appear in the audio-only scan.
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('EL AI 000F'), isTrue);
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('el ai 1a2b'), isTrue);
+
       // Must not swallow other glasses/audio devices.
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('OmiGlass'), isFalse);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('OpenGlass'), isFalse);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('AirPods Pro'), isFalse);
       expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Car Audio'), isFalse);
+      // The `EL AI ` codename match is prefix-anchored — do not swallow these.
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('El Camino AI'), isFalse);
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Elaine AI Speaker'), isFalse);
+      expect(RayBanMetaDiscoverer.looksLikeMetaGlasses('Michael AI'), isFalse);
     });
   });
 }

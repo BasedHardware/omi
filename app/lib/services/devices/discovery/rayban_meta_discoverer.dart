@@ -83,12 +83,20 @@ class RayBanMetaDiscoverer extends DeviceDiscoverer {
   /// Explicit product-name match for the audio-only fallback. Without the
   /// toolkit the HFP port name is the only identity signal, so match Meta's
   /// product names precisely rather than anything containing 'glass'.
+  ///
+  /// Ray-Ban / Oakley Meta glasses do not advertise a friendly "Ray-Ban" name
+  /// over Bluetooth — they expose an EssilorLuxottica codename, observed on
+  /// hardware as `EL AI 000F` (and matching `EL AI <hex>` on the desktop app).
+  /// Match that codename family too, or real glasses are silently filtered out
+  /// of discovery. The `EL AI ` prefix (note the trailing space before the
+  /// unit id) is specific enough not to swallow names like "El Camino AI".
   static bool looksLikeMetaGlasses(String portName) {
     final lower = portName.toLowerCase();
     return lower.contains('ray-ban') ||
         lower.contains('rayban') ||
         lower.contains('oakley meta') ||
-        lower.contains('meta glasses');
+        lower.contains('meta glasses') ||
+        lower.startsWith('el ai ');
   }
 
   @override
