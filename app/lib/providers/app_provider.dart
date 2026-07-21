@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:collection/collection.dart';
 
@@ -14,6 +15,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class AppProvider extends BaseProvider {
+  /// Test seam — overrides [enableAppServer] in [toggleApp].
+  @visibleForTesting
+  Future<bool> Function(String appId)? enableAppOverride;
+
+  /// Test seam — overrides [disableAppServer] in [toggleApp].
+  @visibleForTesting
+  Future<void> Function(String appId)? disableAppOverride;
+
   List<App> apps = [];
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
@@ -802,7 +811,7 @@ class AppProvider extends BaseProvider {
 
     try {
       if (isEnabled) {
-        success = await enableAppServer(appId);
+        success = await (enableAppOverride ?? enableAppServer)(appId);
         if (!success) {
           final context = globalNavigatorKey.currentState?.context;
           errorMessage = context != null && context.mounted
@@ -812,7 +821,7 @@ class AppProvider extends BaseProvider {
           PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
-        await disableAppServer(appId);
+        await (disableAppOverride ?? disableAppServer)(appId);
         success = true;
         PlatformManager.instance.analytics.appDisabled(appId);
       }
