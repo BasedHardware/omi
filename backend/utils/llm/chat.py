@@ -1265,7 +1265,7 @@ def retrieve_metadata_from_message(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone).
     {tz} is the user's timezone, respond in user local timezone.
     If the message mentions "today", it means the current day.
     If the message mentions "tomorrow", it means the next day after today.
@@ -1299,7 +1299,7 @@ def retrieve_metadata_from_text(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone).
     {tz} is the user's timezone, respond in user local timezone.
     If the text mentions "today", it means the current day.
     If the text mentions "tomorrow", it means the next day after today.
