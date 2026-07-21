@@ -30,6 +30,32 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
                 )
                 self.assertTrue(CHECKER.validate(root))
 
+    def test_each_production_workflow_rejects_missing_wrong_or_conflicting_assignment(self) -> None:
+        original = (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
+        for workflow in CHECKER.WORKFLOWS:
+            block = CHECKER._workflow_block(original, workflow)
+            self.assertIsNotNone(block)
+            assert block is not None
+            for mutation in ("missing", "wrong", "conflicting"):
+                with self.subTest(workflow=workflow, mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    if mutation == "missing":
+                        changed = block.replace("echo API_BASE_URL=https://api.omi.me/ >> .env\n", "", 1)
+                    elif mutation == "wrong":
+                        changed = block.replace(
+                            "echo API_BASE_URL=https://api.omi.me/",
+                            "echo API_BASE_URL=https://api.omi.dev/",
+                            1,
+                        )
+                    else:
+                        changed = block.replace(
+                            "echo API_BASE_URL=https://api.omi.me/ >> .env",
+                            "echo API_BASE_URL=https://api.omi.me/ >> .env\n          echo API_BASE_URL=https://staging.example.test/ >> .env",
+                            1,
+                        )
+                    (root / "codemagic.yaml").write_text(original.replace(block, changed, 1), encoding="utf-8")
+                    self.assertTrue(CHECKER.validate(root))
+
 
 if __name__ == "__main__":
     unittest.main()
