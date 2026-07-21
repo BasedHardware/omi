@@ -27,11 +27,10 @@
     "react-native-ble-plx": "^3.1.2",
     "react-native-quick-base64": "^2.0.8",
     "react-native-typography": "^1.4.1",
-    "react-native-web": "~0.19.6",
-    "@babel/core": ">=7.26.0"
+    "react-native-web": "~0.19.6"
   },
   "devDependencies": {
-    "@babel/core": ">=7.26.0",
+    "@babel/core": "^7.26.0",
     "@types/cli-progress": "^3.11.5",
     "@types/react": "~18.3.12",
     "@types/web-bluetooth": "^0.0.20",
@@ -51,7 +50,7 @@
     "form-data": ">=4.0.4",
     "js-yaml": ">=4.1.1",
     "ws": ">=8.17.0",
-    "@babel/core": ">=7.26.0"
+    "@babel/core": "^7.26.0"
   },
   "private": true
 }
