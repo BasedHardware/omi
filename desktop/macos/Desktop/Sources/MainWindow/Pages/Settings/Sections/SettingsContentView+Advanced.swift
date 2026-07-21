@@ -32,7 +32,7 @@ extension SettingsContentView {
       preferencesSubsection
       advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
       troubleshootingSubsection
-      if AppBuild.isBetaProductionBundle {
+      if AppBuild.isProductionBundle && AppBuild.currentUpdateChannel == "beta" {
         advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
         betaDiagnosticsSubsection
       }

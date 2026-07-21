@@ -1058,7 +1058,10 @@ def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
 
     day_start = day
     day_end = day + timedelta(days=1)
-    week_start = day - timedelta(days=7)
+    # "7 days ending on that date" is inclusive of `day`, so the window is
+    # [day-6, day+1) — mirroring the one-day daily window [day, day+1). Using
+    # day-7 spanned 8 calendar days and over-counted the weekly totals.
+    week_start = day - timedelta(days=6)
 
     col = db.collection('users').document(uid).collection(action_items_collection)
 

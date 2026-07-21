@@ -84,8 +84,7 @@ struct ShortcutsSettingsSection: View {
       && !settings.askOmiUsesCustomShortcut
     return Button {
       stopShortcutCapture()
-      settings.askOmiEnabled = true
-      settings.askOmiShortcut = shortcut
+      settings.updateAskOmiRegistration(enabled: true, shortcut: shortcut)
     } label: {
       shortcutSelectionLabel(tokens: shortcut.displayTokens, isSelected: isSelected)
     }
@@ -437,8 +436,7 @@ struct ShortcutsSettingsSection: View {
       else {
         return false
       }
-      settings.askOmiEnabled = true
-      settings.askOmiShortcut = shortcut
+      settings.updateAskOmiRegistration(enabled: true, shortcut: shortcut)
     case .pushToTalk:
       guard
         let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(

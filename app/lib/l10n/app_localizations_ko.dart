@@ -9595,4 +9595,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Ray-Ban Meta 마이크 선택';
+
+  @override
+  String get rayBanMetaMicPickerDescription => '안경의 Bluetooth 마이크를 선택하세요. Omi가 사용하는 동안 음악이 일시 정지됩니다.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty => 'Bluetooth 마이크를 찾을 수 없습니다. iPhone 설정에서 안경을 연결한 후 다시 시도하세요.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError => 'Bluetooth 마이크를 불러올 수 없습니다. Bluetooth가 켜져 있는지 확인한 후 다시 시도하세요.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError => '해당 마이크에 연결할 수 없습니다. iPhone 설정에서 연결되어 있는지 확인하세요.';
 }

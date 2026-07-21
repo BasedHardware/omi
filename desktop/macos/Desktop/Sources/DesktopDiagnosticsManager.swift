@@ -360,6 +360,28 @@ final class DesktopDiagnosticsManager {
       captureSentry: false)
   }
 
+  /// Records a global-hotkey registration failure surfaced by Carbon
+  /// `RegisterEventHotKey`.
+  ///
+  /// This is a hard-terminal failure — the shortcut will not fire on this machine
+  /// (typically another app, or a macOS System Settings > Keyboard > Shortcuts
+  /// entry — even a disabled one — already owns the combination). Because no
+  /// provider, mode, or correctness path switches and there is nothing to fail
+  /// open to, the telemetry contract routes this through the incident path, not
+  /// `recordFallback`. `isConflict` distinguishes `eventHotKeyExistsErr` (-9878),
+  /// which is a property of the user's machine, from other `OSStatus` values.
+  func recordHotkeyRegistrationFailed(osStatus: Int, keycode: Int, modifiers: Int, isConflict: Bool) {
+    recordUserVisibleIssue(
+      area: "startup",
+      failureClass: isConflict ? "hotkey_conflict" : "unknown",
+      phase: "startup",
+      extra: [
+        "osstatus": osStatus,
+        "keycode": keycode,
+        "modifiers": modifiers,
+      ])
+  }
+
   /// Records a beta-only typed error trail entry. The caller passes free-form local
   /// log text only for local classification; no message or error description is
   /// retained in the trail or cloud attachment.
@@ -640,6 +662,7 @@ final class DesktopDiagnosticsManager {
     "is_near_zero", "watchdog_eligible", "consecutive_silent_turns", "tcc_microphone_granted",
     "input_device_class", "recovery_action", "recovery_result", "threshold",
     "component", "operation", "outcome", "error_domain", "error_code",
+    "osstatus", "keycode", "modifiers",
   ]
 
   func writeDiagnosticsAttachment() -> URL? {
@@ -1097,7 +1120,7 @@ final class DesktopDiagnosticsManager {
       "silent_capture", "tool_stall", "agent_error", "agent_runtime", "attachment_upload",
       "authentication", "bridge_unavailable", "bridge_start_failed", "browser_extension_missing",
       "concurrent_request", "encoding", "quota", "resource_exhausted", "session_setup",
-      "timeout", "transient_network", "unknown", "user_report",
+      "hotkey_conflict", "timeout", "transient_network", "unknown", "user_report",
     ]
     return allowed.contains(label) ? label : "other"
   }
@@ -1107,6 +1130,7 @@ final class DesktopDiagnosticsManager {
     "turn_audio_seconds", "voiced_audio_seconds",
     "peak", "rms", "is_near_zero", "watchdog_eligible", "consecutive_silent_turns",
     "tcc_microphone_granted", "input_device_class", "recovery_action", "recovery_result",
+    "osstatus", "keycode", "modifiers",
   ]
 
   private static let allowedFallbackAreas: Set<String> = [

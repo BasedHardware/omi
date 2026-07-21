@@ -3166,5 +3166,10 @@
     "thanksForYourFeedback": "フィードバックありがとうございます！",
     "copyMessage": "メッセージをコピー",
     "searchSettings": "設定を検索…",
-    "errorLoadingAudio": "音声の読み込みエラー"
+    "errorLoadingAudio": "音声の読み込みエラー",
+    "rayBanMetaMicPickerTitle": "Ray-Ban Meta のマイクを選択",
+    "rayBanMetaMicPickerDescription": "メガネの Bluetooth マイクを選択してください。Omi の使用中は音楽が一時停止します。",
+    "rayBanMetaMicPickerEmpty": "Bluetooth マイクが見つかりません。iPhone の設定でメガネを接続してから、もう一度お試しください。",
+    "rayBanMetaMicPickerLoadError": "Bluetooth マイクを読み込めませんでした。Bluetooth がオンになっていることを確認して、もう一度お試しください。",
+    "rayBanMetaMicPickerConnectError": "そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。"
 }

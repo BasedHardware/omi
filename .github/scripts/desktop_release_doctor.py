@@ -287,10 +287,11 @@ def collect_snapshot(
                 "platform",
                 "version",
                 "build_number",
-                "source_sha",
+                "app_source_sha",
                 "zip_sha256",
                 "dmg_sha256",
-                "qualification",
+                "qualification_evidence_asset",
+                "qualification_evidence_sha256",
             ),
         ),
         "pointers": {

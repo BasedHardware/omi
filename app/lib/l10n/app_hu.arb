@@ -3246,5 +3246,10 @@
     "deviceStorageFree": "{free} szabad",
     "deviceStorageNearlyFull": "Az eszköz majdnem tele van — szinkronizáljon a hely felszabadításához.",
     "phoneMicOfflineFallbackMessage": "Nincs kapcsolat – helyben rögzítjük. Átírjuk, amint újra online vagy.",
-    "dataEncryptedBanner": "Az adataid alapértelmezés szerint erős titkosítással védettek, és te döntöd el, hogyan tárolják és használják őket."
+    "dataEncryptedBanner": "Az adataid alapértelmezés szerint erős titkosítással védettek, és te döntöd el, hogyan tárolják és használják őket.",
+    "rayBanMetaMicPickerTitle": "Válaszd ki a Ray-Ban Meta mikrofonját",
+    "rayBanMetaMicPickerDescription": "Válaszd ki a szemüveg Bluetooth-mikrofonját. A zene szünetel, amíg az Omi használja.",
+    "rayBanMetaMicPickerEmpty": "Nem található Bluetooth-mikrofon. Csatlakoztasd a szemüveget az iPhone Beállításokban, majd próbáld újra.",
+    "rayBanMetaMicPickerLoadError": "A Bluetooth-mikrofonokat nem sikerült betölteni. Ellenőrizd, hogy a Bluetooth be van-e kapcsolva, majd próbáld újra.",
+    "rayBanMetaMicPickerConnectError": "Nem sikerült csatlakozni ehhez a mikrofonhoz. Ellenőrizd, hogy csatlakoztatva van-e az iPhone Beállításokban."
 }

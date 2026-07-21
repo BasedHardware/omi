@@ -1,0 +1,3 @@
+{
+  "change": "Claude Code setup now detects running CLI sessions and offers a one-click restart to load Omi Memory, and the manual setup cards copy just the paste-able value instead of the labeled text"
+}

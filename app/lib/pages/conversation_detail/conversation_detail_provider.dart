@@ -76,11 +76,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
 
     result ??= _cachedConversation;
-    if (result != null &&
-        result.createdAt.year == selectedDate.year &&
-        result.createdAt.month == selectedDate.month &&
-        result.createdAt.day == selectedDate.day) {
-      return _cachedConversation = result;
+    if (result != null) {
+      // Validate against the same effective date used to group conversations
+      // (startedAt ?? createdAt). Using createdAt alone breaks for
+      // conversations whose startedAt lands on a different calendar day, which
+      // would otherwise make this getter return null for a conversation that is
+      // actually present in the selected day-group.
+      final effectiveDate = result.startedAt ?? result.createdAt;
+      if (effectiveDate.year == selectedDate.year &&
+          effectiveDate.month == selectedDate.month &&
+          effectiveDate.day == selectedDate.day) {
+        return _cachedConversation = result;
+      }
     }
 
     return null;

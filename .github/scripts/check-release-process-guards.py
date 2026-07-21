@@ -3,22 +3,502 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
+MAX_SECURITY_BOUND_FILE_BYTES = 10 * 1024 * 1024
+
+
+class SecurityBoundFileError(Exception):
+    """A release lock input was not read from one verified ordinary file."""
+
+
+def _security_bound_file_identity(file_stat: os.stat_result) -> tuple[int, int, int]:
+    """Return the pathname identity fields that must agree with the descriptor."""
+    return file_stat.st_dev, file_stat.st_ino, stat.S_IFMT(file_stat.st_mode)
+
+
+def _lstat_security_bound_file(path: Path, description: str) -> os.stat_result:
+    """Inspect one pathname without following a link and require a regular file."""
+    try:
+        path_stat = os.lstat(path)
+    except OSError as exc:
+        raise SecurityBoundFileError(
+            f"{description} could not inspect its security-bound file: {path} ({exc})"
+        ) from exc
+    if not stat.S_ISREG(path_stat.st_mode):
+        raise SecurityBoundFileError(
+            f"{description} must be an ordinary regular file read without following links: {path}"
+        )
+    return path_stat
+
+
+def _read_security_bound_file(path: Path, description: str) -> bytes:
+    """Read one bounded ordinary file without following a replacement path.
+
+    The descriptor, not a later pathname lookup, is the source for every
+    consumer of this security-bound input. Both pathname checks and descriptor
+    checks bind the same ordinary file; O_NOFOLLOW closes the open-time symlink
+    race where available, while the identity comparisons keep the fallback
+    fail-closed.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0)
+    try:
+        before = _lstat_security_bound_file(path, description)
+        fd = os.open(path, flags)
+    except SecurityBoundFileError:
+        raise
+    except OSError as exc:
+        raise SecurityBoundFileError(
+            f"{description} must be an ordinary regular file read without following links: {path} ({exc})"
+        ) from exc
+
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode):
+            raise SecurityBoundFileError(
+                f"{description} must be an ordinary regular file read without following links: {path}"
+            )
+        if _security_bound_file_identity(before) != _security_bound_file_identity(opened):
+            raise SecurityBoundFileError(f"{description} changed while opening its security-bound file: {path}")
+        if opened.st_size > MAX_SECURITY_BOUND_FILE_BYTES:
+            raise SecurityBoundFileError(f"{description} exceeds the security-bound read limit: {path}")
+
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(fd, min(64 * 1024, MAX_SECURITY_BOUND_FILE_BYTES + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > MAX_SECURITY_BOUND_FILE_BYTES:
+                raise SecurityBoundFileError(f"{description} exceeds the security-bound read limit: {path}")
+
+        completed = os.fstat(fd)
+        if (
+            *_security_bound_file_identity(opened),
+            opened.st_size,
+            opened.st_mtime_ns,
+            opened.st_ctime_ns,
+        ) != (
+            *_security_bound_file_identity(completed),
+            completed.st_size,
+            completed.st_mtime_ns,
+            completed.st_ctime_ns,
+        ):
+            raise SecurityBoundFileError(f"{description} changed while being read: {path}")
+        final_path_stat = _lstat_security_bound_file(path, description)
+        if _security_bound_file_identity(final_path_stat) != _security_bound_file_identity(opened):
+            raise SecurityBoundFileError(f"{description} changed while being read: {path}")
+        return b"".join(chunks)
+    except SecurityBoundFileError:
+        raise
+    except OSError as exc:
+        raise SecurityBoundFileError(f"{description} could not be read safely: {path} ({exc})") from exc
+    finally:
+        os.close(fd)
+
+
+def _load_codemagic_with_duplicates(raw_bytes: bytes) -> tuple[dict[str, object], list[str], list[str]]:
+    """Load the executable YAML shape; comments never provide release authority."""
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return {}, [], [f"codemagic.yaml must be valid UTF-8: {exc}"]
+    try:
+        root = yaml.compose(text)
+    except yaml.YAMLError as exc:
+        return {}, [], [f"codemagic.yaml is not valid YAML: {exc}"]
+    source_errors = _yaml_source_topology_errors(text, root)
+    try:
+        document = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        return {}, [], [f"codemagic.yaml is not valid YAML: {exc}", *source_errors]
+    duplicates: list[str] = []
+
+    def visit(node: yaml.Node | None) -> None:
+        if isinstance(node, yaml.MappingNode):
+            keys: set[str] = set()
+            for key_node, value_node in node.value:
+                if isinstance(key_node, yaml.ScalarNode):
+                    key = key_node.value
+                    if key in keys:
+                        duplicates.append(key)
+                    keys.add(key)
+                visit(value_node)
+        elif isinstance(node, yaml.SequenceNode):
+            for child in node.value:
+                visit(child)
+
+    visit(root)
+    if not isinstance(document, dict):
+        return {}, duplicates, ["codemagic.yaml must be a mapping", *source_errors]
+    return document, duplicates, source_errors
+
+
+WORKFLOW_CONTRACT_RELATIVE_PATH = Path(".github/scripts/fixtures/codemagic_workflow_contract/v1.json")
+CANONICAL_WORKFLOW = "omi-desktop-swift-release"
+PREVIEW_WORKFLOW = "omi-desktop-swift-preview"
+NORMAL_RELEASE_CREDENTIAL_GROUPS = {"desktop_secrets"}
+WORKFLOW_CONTRACT_SCHEMA_VERSION_FIELD = "schema_version"
+WORKFLOW_CONTRACT_SCHEMA_VERSION = 1
+CODEMAGIC_RAW_SHA256_FIELD = "codemagic_raw_sha256"
+CODEMAGIC_SEMANTIC_SHA256_FIELD = "codemagic_semantic_sha256"
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+WORKFLOW_CONTRACT_TOP_LEVEL_KEYS = frozenset(
+    {
+        WORKFLOW_CONTRACT_SCHEMA_VERSION_FIELD,
+        CODEMAGIC_RAW_SHA256_FIELD,
+        CODEMAGIC_SEMANTIC_SHA256_FIELD,
+        CANONICAL_WORKFLOW,
+        PREVIEW_WORKFLOW,
+    }
+)
+WORKFLOW_CONTRACT_NESTED_KEYS = {
+    CANONICAL_WORKFLOW: frozenset({"semantic_sha256", "publication_script", "publication_script_sha256"}),
+    PREVIEW_WORKFLOW: frozenset({"semantic_sha256"}),
+}
+
+# This is deliberately supplemental.  The fixture below is the authority
+# boundary; these literals only make obvious new direct authority easy to spot.
+_DIRECT_RELEASE_CREATE = re.compile(r"(?m)^\s*gh\s+release\s+create\b")
+_DIRECT_GITHUB_RELEASE_API = re.compile(
+    r"https://api\.github\.com/repos/[^\s'\"\\]+/releases(?:[/?#]|$)", re.IGNORECASE
+)
+_FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES = (
+    re.compile(r"\bGCP_SERVICE_ACCOUNT_KEY\b"),
+    re.compile(r"\bCloud\s+Run\s+Admin\b", re.IGNORECASE),
+    re.compile(r"\broles/run\.admin\b", re.IGNORECASE),
+    re.compile(r"\bStorage\s+Object\s+Admin\b", re.IGNORECASE),
+    re.compile(r"\broles/storage\.objectAdmin\b", re.IGNORECASE),
+    re.compile(r"\bGCR\s+push\b", re.IGNORECASE),
+)
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _iter_semantic_strings(value: object) -> Iterator[str]:
+    """Yield only safely loaded keys and values, deliberately excluding YAML comments."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if isinstance(key, str):
+                yield key
+            yield from _iter_semantic_strings(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_semantic_strings(child)
+    elif isinstance(value, str):
+        yield value
+
+
+class _DuplicateFixtureKeyError(ValueError):
+    pass
+
+
+def _reject_duplicate_fixture_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateFixtureKeyError(key)
+        result[key] = value
+    return result
+
+
+def _fixture_sha256_error(field: str) -> str:
+    return f"Codemagic workflow contract fixture {field} must be a lowercase SHA-256 digest"
+
+
+def _load_workflow_contract(raw_bytes: bytes) -> tuple[dict[str, object] | None, list[str]]:
+    """Parse the fixture as a closed, typed schema from its verified bytes."""
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return None, [f"Codemagic workflow contract fixture must be valid UTF-8: {exc}"]
+    try:
+        contract = json.loads(text, object_pairs_hook=_reject_duplicate_fixture_keys)
+    except _DuplicateFixtureKeyError as exc:
+        return None, [f"Codemagic workflow contract fixture has duplicate key: {exc}"]
+    except json.JSONDecodeError as exc:
+        return None, [f"Codemagic workflow contract fixture is invalid JSON: {exc}"]
+    if type(contract) is not dict:
+        return None, ["Codemagic workflow contract fixture must be a mapping"]
+    if set(contract) != WORKFLOW_CONTRACT_TOP_LEVEL_KEYS:
+        missing = sorted(WORKFLOW_CONTRACT_TOP_LEVEL_KEYS.difference(contract))
+        unknown = sorted(set(contract).difference(WORKFLOW_CONTRACT_TOP_LEVEL_KEYS))
+        return None, [
+            "Codemagic workflow contract fixture top-level keys must exactly match the approved schema "
+            f"(missing: {missing}; unknown: {unknown})"
+        ]
+
+    errors: list[str] = []
+    schema_version = contract[WORKFLOW_CONTRACT_SCHEMA_VERSION_FIELD]
+    if type(schema_version) is not int or schema_version != WORKFLOW_CONTRACT_SCHEMA_VERSION:
+        errors.append(
+            "Codemagic workflow contract fixture schema_version must be the exact integer "
+            f"{WORKFLOW_CONTRACT_SCHEMA_VERSION}"
+        )
+    for field in (CODEMAGIC_RAW_SHA256_FIELD, CODEMAGIC_SEMANTIC_SHA256_FIELD):
+        value = contract[field]
+        if type(value) is not str or _SHA256_HEX.fullmatch(value) is None:
+            errors.append(_fixture_sha256_error(field))
+
+    for workflow_name, expected_keys in WORKFLOW_CONTRACT_NESTED_KEYS.items():
+        workflow = contract[workflow_name]
+        if type(workflow) is not dict:
+            errors.append(f"Codemagic workflow contract fixture {workflow_name} must be a mapping")
+            continue
+        if set(workflow) != expected_keys:
+            missing = sorted(expected_keys.difference(workflow))
+            unknown = sorted(set(workflow).difference(expected_keys))
+            errors.append(
+                f"Codemagic workflow contract fixture {workflow_name} keys must exactly match the approved schema "
+                f"(missing: {missing}; unknown: {unknown})"
+            )
+            continue
+        semantic_digest = workflow["semantic_sha256"]
+        if type(semantic_digest) is not str or _SHA256_HEX.fullmatch(semantic_digest) is None:
+            errors.append(_fixture_sha256_error(f"{workflow_name}.semantic_sha256"))
+        if workflow_name == CANONICAL_WORKFLOW:
+            publication_script = workflow["publication_script"]
+            publication_digest = workflow["publication_script_sha256"]
+            if type(publication_script) is not str:
+                errors.append("Codemagic workflow contract fixture publication_script must be an exact string")
+            if type(publication_digest) is not str or _SHA256_HEX.fullmatch(publication_digest) is None:
+                errors.append(_fixture_sha256_error("publication_script_sha256"))
+            elif type(publication_script) is str and _sha256_text(publication_script) != publication_digest:
+                errors.append("Codemagic workflow contract fixture publication script digest does not match publication_script")
+    return (contract if not errors else None), errors
+
+
+def _check_codemagic_document_digest(
+    contract: dict[str, object], field: str, actual_digest: str, description: str
+) -> list[str]:
+    """Require a valid approved digest before narrower Codemagic checks run."""
+    expected_digest = contract.get(field)
+    if type(expected_digest) is not str or _SHA256_HEX.fullmatch(expected_digest) is None:
+        return [_fixture_sha256_error(field)]
+    if actual_digest != expected_digest:
+        return [f"Codemagic entire document {description} does not match approved fixture {field}"]
+    return []
+
+
+def _yaml_source_topology_errors(text: str, root: yaml.Node | None) -> list[str]:
+    """Reject source features that can make a semantic fixture ambiguous."""
+    errors: list[str] = []
+    try:
+        events = list(yaml.parse(text))
+    except yaml.YAMLError as exc:
+        return [f"codemagic.yaml is not valid YAML: {exc}"]
+
+    anchors = [
+        event.anchor
+        for event in events
+        if isinstance(event, (yaml.events.MappingStartEvent, yaml.events.SequenceStartEvent, yaml.events.ScalarEvent))
+        and event.anchor is not None
+    ]
+    aliases = [event.anchor for event in events if isinstance(event, yaml.events.AliasEvent)]
+    if anchors != ["desktop_signed_artifact_steps"] or aliases != ["desktop_signed_artifact_steps"]:
+        errors.append("codemagic.yaml must use exactly the approved desktop_signed_artifact_steps anchor and alias")
+    for event in events:
+        if isinstance(event, (yaml.events.MappingStartEvent, yaml.events.SequenceStartEvent, yaml.events.ScalarEvent)):
+            if event.tag is not None:
+                errors.append("codemagic.yaml must not use explicit YAML tags")
+                break
+
+    def visit(node: yaml.Node | None) -> None:
+        if isinstance(node, yaml.MappingNode):
+            for key_node, value_node in node.value:
+                if isinstance(key_node, yaml.ScalarNode) and key_node.value == "<<":
+                    errors.append("codemagic.yaml must not use YAML merge keys")
+                visit(value_node)
+        elif isinstance(node, yaml.SequenceNode):
+            for child in node.value:
+                visit(child)
+
+    visit(root)
+    return errors
+
+
+def check_codemagic_release_publishers() -> list[str]:
+    """Lock the entire Codemagic document and desktop release capability ownership.
+
+    The entire-file raw and safely-loaded semantic digests are the security
+    boundary, not regex or credential-name recognition: static analysis cannot
+    classify arbitrary Bash or unknown credential capabilities. Future
+    Codemagic edits must intentionally update the reviewed fixture digests and
+    these regression tests. The narrower workflow, topology, scalar, credential,
+    preview, and supplemental checks remain defense in depth.
+    """
+    codemagic_path = ROOT / "codemagic.yaml"
+    try:
+        codemagic_bytes = _read_security_bound_file(codemagic_path, "codemagic.yaml")
+    except SecurityBoundFileError as exc:
+        return [str(exc)]
+    raw_digest = _sha256_bytes(codemagic_bytes)
+    document, duplicates, errors = _load_codemagic_with_duplicates(codemagic_bytes)
+    errors.extend(f"codemagic.yaml has duplicate key: {key}" for key in duplicates)
+    workflow_contract = ROOT / WORKFLOW_CONTRACT_RELATIVE_PATH
+    try:
+        contract_bytes = _read_security_bound_file(workflow_contract, "Codemagic workflow contract fixture")
+    except SecurityBoundFileError as exc:
+        return [*errors, str(exc)]
+    contract, contract_errors = _load_workflow_contract(contract_bytes)
+    if contract is None:
+        return [*errors, *contract_errors]
+
+    # These comparisons deliberately precede every workflow-specific check.
+    # The raw digest includes comments, anchors, aliases, and source topology;
+    # the semantic digest independently locks the safely loaded full document.
+    errors.extend(_check_codemagic_document_digest(contract, CODEMAGIC_RAW_SHA256_FIELD, raw_digest, "raw byte digest"))
+    errors.extend(
+        _check_codemagic_document_digest(
+            contract,
+            CODEMAGIC_SEMANTIC_SHA256_FIELD,
+            _sha256_text(_canonical_json(document)),
+            "semantic digest",
+        )
+    )
+    workflows = document.get("workflows")
+    if not isinstance(workflows, dict):
+        return [*errors, "codemagic.yaml is missing its workflows mapping"]
+    canonical = workflows.get(CANONICAL_WORKFLOW)
+    preview = workflows.get(PREVIEW_WORKFLOW)
+    if not isinstance(canonical, dict):
+        return [*errors, f"codemagic.yaml is missing the {CANONICAL_WORKFLOW} workflow"]
+    if not isinstance(preview, dict):
+        return [*errors, f"codemagic.yaml is missing the {PREVIEW_WORKFLOW} workflow"]
+
+    for workflow_name, workflow in ((CANONICAL_WORKFLOW, canonical), (PREVIEW_WORKFLOW, preview)):
+        expected = contract.get(workflow_name)
+        if not isinstance(expected, dict):
+            errors.append(f"Codemagic workflow contract fixture is missing {workflow_name}")
+            continue
+        actual_digest = _sha256_text(_canonical_json(workflow))
+        if actual_digest != expected.get("semantic_sha256"):
+            errors.append(f"{workflow_name} semantic workflow contract digest does not match the approved fixture")
+
+    canonical_scripts = canonical.get("scripts")
+    preview_scripts = preview.get("scripts")
+    if not isinstance(canonical_scripts, list) or not isinstance(preview_scripts, list):
+        return [*errors, "canonical and preview workflows must both have scripts"]
+    if canonical_scripts is not preview_scripts:
+        errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
+    if len(canonical_scripts) != 21:
+        errors.append("canonical workflow must retain exactly 21 approved script steps")
+
+    for scalar in _iter_semantic_strings(canonical):
+        for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
+            match = forbidden_authority.search(scalar)
+            if match is not None:
+                errors.append(
+                    f"{CANONICAL_WORKFLOW} contains forbidden broad GCP authority {match.group(0)!r}"
+                )
+
+    preview_environment = preview.get("environment")
+    preview_groups = preview_environment.get("groups") if isinstance(preview_environment, dict) else None
+    preview_vars = preview_environment.get("vars") if isinstance(preview_environment, dict) else None
+    if preview_groups != ["desktop_preview_secrets"]:
+        errors.append("preview workflow must use only the approved desktop_preview_secrets credential group")
+    if not isinstance(preview_vars, dict) or preview_vars.get("PREVIEW_MODE") != "true":
+        errors.append('preview workflow must set exact PREVIEW_MODE: "true"')
+
+    publication_steps = [
+        step
+        for step in canonical_scripts
+        if isinstance(step, dict)
+        and step.get("name") == "Create GitHub release"
+        and isinstance(step.get("script"), str)
+    ]
+    if len(publication_steps) != 1:
+        errors.append("canonical workflow must contain exactly one Create GitHub release script")
+    else:
+        publication_script = publication_steps[0]["script"]
+        expected_publication = contract.get(CANONICAL_WORKFLOW, {}).get("publication_script")
+        if publication_script != expected_publication:
+            errors.append("canonical publication script text does not match the approved fixture")
+        elif _sha256_text(publication_script) != contract[CANONICAL_WORKFLOW].get("publication_script_sha256"):
+            errors.append("canonical publication script digest does not match the approved fixture")
+        preview_exit = 'if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then\n  echo "External previews do not create GitHub releases."\n  exit 0\nfi'
+        if not publication_script.startswith(preview_exit):
+            errors.append("locked preview publication script must exit before reservation or publication")
+
+    for workflow_name, workflow in workflows.items():
+        if not isinstance(workflow, dict):
+            continue
+        environment = workflow.get("environment")
+        groups = environment.get("groups", []) if isinstance(environment, dict) else []
+        vars_ = environment.get("vars", {}) if isinstance(environment, dict) else {}
+        if not isinstance(groups, list):
+            errors.append(f"Codemagic workflow {workflow_name} environment groups must be a list")
+            continue
+        if not isinstance(vars_, dict):
+            errors.append(f"Codemagic workflow {workflow_name} environment vars must be a mapping")
+            continue
+        forbidden_groups = NORMAL_RELEASE_CREDENTIAL_GROUPS.intersection(str(group) for group in groups)
+        if workflow_name != CANONICAL_WORKFLOW and forbidden_groups:
+            errors.append(
+                f"Codemagic workflow {workflow_name} imports normal release credential group(s): {sorted(forbidden_groups)}"
+            )
+        if workflow_name != CANONICAL_WORKFLOW:
+            for token_name in ("GITHUB_TOKEN", "GH_TOKEN"):
+                if token_name in vars_:
+                    errors.append(f"Codemagic workflow {workflow_name} exposes {token_name} outside canonical release")
+
+    # A deliberately conservative tripwire. It is not used to establish the
+    # security boundary; the exact semantic fixture above does that.
+    for workflow_name, workflow in workflows.items():
+        if not isinstance(workflow, dict):
+            continue
+        steps = workflow.get("scripts")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict) or not isinstance(step.get("script"), str):
+                continue
+            script = step["script"]
+            approved_shared_publication = workflow_name in {
+                CANONICAL_WORKFLOW,
+                PREVIEW_WORKFLOW,
+            } and script == contract.get(CANONICAL_WORKFLOW, {}).get("publication_script")
+            if _DIRECT_RELEASE_CREATE.search(script) and not approved_shared_publication:
+                errors.append(
+                    f"Codemagic workflow {workflow_name} has direct GitHub release-create authority outside the fixture"
+                )
+            if _DIRECT_GITHUB_RELEASE_API.search(script):
+                errors.append(f"Codemagic workflow {workflow_name} has direct GitHub releases API authority")
+    return errors
 
 
 def main() -> int:
     errors: list[str] = []
     errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_codemagic_release_publishers())
     errors.extend(check_desktop_preview_publishing())
     errors.extend(check_desktop_qualification_runner())
+    errors.extend(check_desktop_update_docs())
     errors.extend(check_no_unprovisioned_beta_backend_hosts())
     errors.extend(check_mobile_codemagic_release_triggers())
     errors.extend(check_docs_workflow_scripts())
@@ -100,6 +580,23 @@ def check_desktop_codemagic_release() -> list[str]:
         errors.append("desktop signed artifact smoke must run before Create GitHub release")
     if dispatch_index == -1 or release_index == -1 or dispatch_index < release_index:
         errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
+    reserve_index = desktop_workflow_body.find("/v2/desktop/beta/candidates/reserve")
+    canonical_publish_index = desktop_workflow_body.find('gh release create "$CM_TAG"')
+    if (
+        reserve_index == -1
+        or canonical_publish_index == -1
+        or not (smoke_index < reserve_index < canonical_publish_index)
+    ):
+        errors.append(
+            "desktop release must reserve its exact candidate after signed smoke and before canonical publication"
+        )
+    for required_fragment in (
+        'Authorization: Bearer ${BETA_PROMOTION_TOKEN}',
+        '--data "{\\"tag\\":\\"${CM_TAG}\\"}"',
+        'test -n "${BETA_PROMOTION_TOKEN:-}"',
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop candidate reservation is missing fail-closed fragment: {required_fragment}")
     if "desktop_qualify_beta.yml" not in desktop_workflow_body:
         errors.append("desktop release must dispatch the trusted macOS qualification workflow")
     for required_fragment in (
@@ -111,6 +608,10 @@ def check_desktop_codemagic_release() -> list[str]:
             errors.append(f"desktop qualification handoff is missing reliable dispatch fragment: {required_fragment}")
     dispatch_start = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
     dispatch_body = desktop_workflow_body[dispatch_start:] if dispatch_start != -1 else ""
+    if 'GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}"' not in dispatch_body:
+        errors.append(
+            "Codemagic qualification dispatch must bind GH_TOKEN to the scoped desktop_secrets GITHUB_TOKEN"
+        )
     if "gh release edit \"$CM_TAG\"" in dispatch_body:
         errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
     if "candidate remains non-live" not in desktop_workflow_body:
@@ -159,7 +660,7 @@ def check_desktop_codemagic_release() -> list[str]:
         "build/desktop-smoke-result.json",
         "desktop-smoke-result.json",
         "desktop_qualify_beta.yml",
-        "DESKTOP_AUTO_BETA_ENABLED",
+        "BETA_PROMOTION_TOKEN",
     ):
         if required_fragment not in desktop_workflow_body:
             errors.append(f"desktop release is missing signed smoke result artifact fragment: {required_fragment}")
@@ -294,7 +795,7 @@ def check_desktop_qualification_runner() -> list[str]:
         "self-hosted",
         "macos",
         "omi-desktop-qualification",
-        "ref: main",
+        "ref: ${{ inputs.release_tag }}",
         "docker info",
         "check-desktop-auto-beta-candidate.py",
         "--automatic",
@@ -319,6 +820,27 @@ def check_desktop_qualification_runner() -> list[str]:
             errors.append(
                 f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}"
             )
+    return errors
+
+
+def check_desktop_update_docs() -> list[str]:
+    """Keep operator docs aligned with the single retained artifact identity."""
+    path = ROOT / "docs/doc/developer/desktop-updates.mdx"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    errors: list[str] = []
+    required = ("Omi.app", "com.omi.computer-macos", "Omi.zip", "`omi.dmg`", "independent pointers")
+    forbidden = (
+        "separately installable",
+        "own bundle identity",
+        "all four artifacts",
+        "Stable/Beta URLs",
+    )
+    for fragment in required:
+        if fragment not in text:
+            errors.append(f"desktop update docs are missing single-artifact contract: {fragment}")
+    for fragment in forbidden:
+        if fragment in text:
+            errors.append(f"desktop update docs retain forbidden dual-identity claim: {fragment}")
     return errors
 
 

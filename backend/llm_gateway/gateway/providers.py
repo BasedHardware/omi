@@ -719,7 +719,7 @@ def _anthropic_to_openai_response(
     normalized: dict[str, Any] = {
         'id': str(response.get('id') or 'anthropic_gateway'),
         'object': 'chat.completion',
-        'created': 1782522000,
+        'created': int(time.time()),
         'model': requested_model,
         'choices': [
             {

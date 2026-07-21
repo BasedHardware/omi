@@ -1,8 +1,11 @@
 import os
 import sys
+import time
 import types
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
+
+import pytest
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -150,3 +153,71 @@ class TestConversationsToStringTimezone:
         conv = _make_conversation()
         result = conversations_to_string([conv], tz="Not/AZone")
         assert "15 Jan 2026 at 10:00 UTC" in result
+
+
+def _make_naive_conversation(created, started, finished):
+    """A Conversation whose timestamps are timezone-naive (as stored for many rows)."""
+    return Conversation(
+        id="naive-id",
+        created_at=created,
+        started_at=started,
+        finished_at=finished,
+        structured=Structured(title="T", overview="O", category=CategoryEnum.personal),
+        apps_results=[],
+    )
+
+
+class TestConversationsToStringNaiveTimestamps:
+    """Naive stored timestamps must be read as UTC, never as the server's local time.
+
+    ``conversation.created_at`` / ``started_at`` / ``finished_at`` are plain ``datetime``
+    and are frequently naive (stored as naive UTC). Calling ``.astimezone(display_tz)`` on a
+    naive datetime makes Python assume it is in the *server's* local timezone, so the text
+    handed to the chat LLM shows a wrong wall clock whenever the backend host is not on UTC —
+    exactly the "incorrect event time mentions" class of bug the module's ``_as_utc`` guard
+    exists to prevent (issues #4643, #6214). This test forces a non-UTC process timezone so
+    the naive-as-local defect is deterministic regardless of where the suite runs.
+    """
+
+    def setup_method(self):
+        self._old_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "America/Los_Angeles"  # UTC-8 / -7, well away from UTC
+        if hasattr(time, "tzset"):
+            time.tzset()
+
+    def teardown_method(self):
+        if self._old_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = self._old_tz
+        if hasattr(time, "tzset"):
+            time.tzset()
+
+    def test_naive_timestamps_render_as_utc(self):
+        if not hasattr(time, "tzset"):
+            pytest.skip("time.tzset() unavailable on this platform")
+        # Naive 20:00 must be read as 20:00 UTC. The buggy path would treat it as
+        # 20:00 America/Los_Angeles and render 16 Jan ~04:00 UTC instead.
+        conv = _make_naive_conversation(
+            created=datetime(2026, 1, 15, 20, 0),
+            started=datetime(2026, 1, 15, 20, 0),
+            finished=datetime(2026, 1, 15, 20, 30),
+        )
+        result = conversations_to_string([conv])
+        assert "15 Jan 2026 at 20:00 UTC" in result
+        assert "Started: 15 Jan 2026 at 20:00 UTC" in result
+        assert "Finished: 15 Jan 2026 at 20:30 UTC" in result
+        assert "16 Jan" not in result
+
+    def test_naive_timestamps_convert_to_user_tz(self):
+        if not hasattr(time, "tzset"):
+            pytest.skip("time.tzset() unavailable on this platform")
+        # Naive 20:00 (UTC) -> 17:00 in America/Sao_Paulo (UTC-3), independent of server tz.
+        conv = _make_naive_conversation(
+            created=datetime(2026, 1, 15, 20, 0),
+            started=datetime(2026, 1, 15, 20, 0),
+            finished=datetime(2026, 1, 15, 20, 30),
+        )
+        result = conversations_to_string([conv], tz="America/Sao_Paulo")
+        assert "15 Jan 2026 at 17:00 America/Sao_Paulo" in result
+        assert "Finished: 15 Jan 2026 at 17:30 America/Sao_Paulo" in result

@@ -113,6 +113,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GITHUB_TOKEN
+  - name: BETA_PROMOTION_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: BETA_PROMOTION_TOKEN
   - name: OPENAI_API_KEY
     valueFrom:
       secretKeyRef:
