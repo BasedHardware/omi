@@ -256,10 +256,6 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: TYPESENSE_API_KEY
-          SERVICE_ACCOUNT_JSON:
-            secret:
-              name: dev-omi-backend-secrets
-              key: SERVICE_ACCOUNT_JSON
           METRICS_SECRET:
             secret:
               name: dev-omi-backend-secrets
@@ -368,9 +364,6 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
@@ -487,9 +480,6 @@ environments:
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
@@ -581,9 +571,6 @@ environments:
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
@@ -614,9 +601,6 @@ environments:
           forbidden_env:
             - HOSTED_PUSHER_API_URL
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
@@ -668,9 +652,6 @@ environments:
               value: memories-backend-dev
               category: memory_rollout
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
@@ -833,10 +814,6 @@ environments:
           OMI_LLM_GATEWAY_URL:
             value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
             category: service_discovery
-          SERVICE_ACCOUNT_JSON:
-            secret:
-              name: prod-omi-backend-secrets
-              key: SERVICE_ACCOUNT_JSON
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: 'off'
             category: rollout
@@ -1262,9 +1239,6 @@ environments:
               value: memories-backend
               category: integrations
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
@@ -1301,9 +1275,6 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
           secrets:
-            SERVICE_ACCOUNT_JSON:
-              secret: SERVICE_ACCOUNT_JSON
-              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
