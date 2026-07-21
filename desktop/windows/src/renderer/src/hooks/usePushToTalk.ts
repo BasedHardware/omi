@@ -215,8 +215,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
    *  from the machine state (or a delegated hub hold), never a second source of
    *  truth. `hubActiveRef` is always false unless a hold delegated (flag on), so
    *  flag-off this reads exactly as before. */
-  const isHolding = (): boolean =>
-    jobRef.current?.state.phase === 'holding' || hubActiveRef.current
+  const isHolding = (): boolean => jobRef.current?.state.phase === 'holding' || hubActiveRef.current
 
   // Acquire the mic NOW (macOS parity: capture starts at key-down, not at the
   // hold threshold), prefetch the auth token alongside the mic spin-up, and
@@ -558,6 +557,9 @@ export function usePushToTalk(opts: Options): PushToTalk {
           if (hubActiveRef.current) {
             hubActiveRef.current = false
             optsRef.current.hubDelegate?.end()
+            // Report the completed hands-free turn like gestureUp does — the
+            // delegated path bypasses the local machine's captureEnded effect.
+            optsRef.current.onCaptureEnd?.()
             break
           }
           const job = jobRef.current
@@ -626,6 +628,11 @@ export function usePushToTalk(opts: Options): PushToTalk {
       // local job exists. (Only reachable when a hold delegated, i.e. flag on.)
       hubActiveRef.current = false
       optsRef.current.hubDelegate?.end()
+      // The local machine reports a completed hold via its captureEnded effect;
+      // the delegated path has no local machine, so report the gesture here. The
+      // onboarding voice step gates its Continue on this — without it a hub-driven
+      // hold (the default, pttHubEnabled on) never acknowledges the user's press.
+      optsRef.current.onCaptureEnd?.()
       return 'released'
     }
     const job = jobRef.current

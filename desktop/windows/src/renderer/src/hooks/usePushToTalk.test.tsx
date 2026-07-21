@@ -558,27 +558,36 @@ describe('warm-hub delegation', () => {
 
   it('flag on — release ends the delegated turn; a tap never delegates', async () => {
     const delegate = hub(true)
-    setup({ hubDelegate: delegate })
+    const { onCaptureEnd } = setup({ hubDelegate: delegate })
     // A quick tap: threshold not crossed → no delegation.
     pressSpace()
     await advance(HOLD_THRESHOLD_MS - 100)
     releaseSpace()
     expect(delegate.begin).not.toHaveBeenCalled()
+    expect(onCaptureEnd).not.toHaveBeenCalled()
     // A real hold then release drives begin + end.
     pressSpace()
     await advance(HOLD_THRESHOLD_MS)
     releaseSpace()
     expect(delegate.begin).toHaveBeenCalledTimes(1)
     expect(delegate.end).toHaveBeenCalledTimes(1)
+    // Regression: the delegated path bypasses the local machine's captureEnded,
+    // so the hook must report the completed hold itself — the onboarding voice
+    // step gates its Continue on this, and with the hub default-on it never
+    // fired, leaving the step unacknowledged ("nothing happened").
+    expect(onCaptureEnd).toHaveBeenCalledTimes(1)
   })
 
   it('flag on — cancel() aborts the delegated turn', async () => {
     const delegate = hub(true)
-    const { result } = setup({ hubDelegate: delegate })
+    const { result, onCaptureEnd } = setup({ hubDelegate: delegate })
     pressSpace()
     await advance(HOLD_THRESHOLD_MS)
     act(() => result.current.cancel())
     expect(delegate.cancel).toHaveBeenCalledTimes(1)
+    // An aborted hold is NOT a completed one (parity with the local path, whose
+    // cancel never reaches captureEnded).
+    expect(onCaptureEnd).not.toHaveBeenCalled()
   })
 })
 
@@ -683,7 +692,7 @@ describe('tap-to-lock latch (hotkey path)', () => {
 
   it('flag on — a locked capture delegates to the hub and a finalizing tap ends the hub turn', async () => {
     const delegate = { enabled: () => true, begin: vi.fn(), end: vi.fn(), cancel: vi.fn() }
-    const { result } = setup({ hubDelegate: delegate })
+    const { result, onCaptureEnd } = setup({ hubDelegate: delegate })
     // Double-tap to latch.
     act(() => result.current.beginHold())
     await advance(120)
@@ -700,6 +709,8 @@ describe('tap-to-lock latch (hotkey path)', () => {
     act(() => result.current.beginHold())
     expect(result.current.locked).toBe(false)
     expect(delegate.end).toHaveBeenCalledTimes(1)
+    // The finalized hands-free turn reports a completed hold, like gestureUp.
+    expect(onCaptureEnd).toHaveBeenCalledTimes(1)
   })
 
   it('a long hold via the hotkey is a normal PTT turn (never latches)', async () => {

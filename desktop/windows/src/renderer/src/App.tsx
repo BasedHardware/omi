@@ -14,11 +14,9 @@ import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
 import { useAppState } from './state/appState'
 import { SourcePicker } from './components/SourcePicker'
-// Imported DIRECTLY (NOT lazy/Suspense). Code-splitting the Onboarding page
-// (commit c226cac, for the three.js bundle win) repeatedly blanked the onboarding
-// brain map — wrapping the page in Suspense breaks the BrainGraph render. The
-// direct import keeps the map reliable; the bundle-size win is not worth it.
-import { Onboarding } from './pages/Onboarding'
+// OnboardingScreen imports the Onboarding page DIRECTLY (NOT lazy/Suspense) —
+// see the note there (Suspense breaks the BrainGraph render).
+import { OnboardingScreen } from './pages/OnboardingScreen'
 import { consumePendingRoute } from './lib/preferences'
 import { useOnboardingComplete } from './hooks/useOnboardingComplete'
 import { getPreferences } from './lib/preferences'
@@ -347,15 +345,10 @@ function App(): React.JSX.Element {
             ) : onboarded ? (
               <Navigate to="/home" replace />
             ) : (
-              // Onboarding is imported DIRECTLY (no lazy/Suspense) so the
-              // BrainGraph map renders reliably — see the import comment. Screen
-              // capture during onboarding is owned by the always-alive capture
-              // window now (it seeds the hot currentScreen cache), so no capture
-              // host is mounted here.
-              <>
-                <TitleBar variant="overlay" />
-                <Onboarding />
-              </>
+              // The route body lives in OnboardingScreen (extracted so its mount
+              // topology — the voice-hub host that makes onboarding PTT work —
+              // is testable without this file's import graph).
+              <OnboardingScreen />
             )
           }
         />
