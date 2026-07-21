@@ -373,6 +373,7 @@ def test_stable_workflow_allows_retained_repoint_but_requires_current_beta_for_p
     assert "edSignature') == expected['ed_signature']" in workflow
     assert "sparkle:channel" not in workflow
     assert 'Authorization: Bearer $ACCESS_TOKEN' in workflow
+    assert 'Authorization: Bearer ***' not in workflow
     assert 'ref: main' in workflow
 
 
