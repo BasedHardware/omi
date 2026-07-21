@@ -80,17 +80,12 @@ jobs:
             --pattern 'desktop-smoke-result.json' \
             --dir /tmp/desktop-beta-qualification
           gh release download "$RELEASE_TAG" --repo "$REPO" \
-            --pattern 'desktop-smoke-result-beta.json' \
-            --dir /tmp/desktop-beta-qualification 2>/dev/null || true
-          gh release download "$RELEASE_TAG" --repo "$REPO" \
             --pattern 'Omi.zip' --pattern 'Omi.dmg' --pattern 'omi.dmg' \
-            --pattern 'Omi.Beta.zip' --pattern 'omi-beta.dmg' \
             --dir /tmp/desktop-beta-qualification/assets
 
           python3 .github/scripts/check-desktop-auto-beta-candidate.py \
             --release-json /tmp/desktop-beta-qualification/release.json \
             --smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result.json \
-            --beta-smoke-result /tmp/desktop-beta-qualification/desktop-smoke-result-beta.json \
             --release-tag "$RELEASE_TAG" \
             --latest-tag "$LATEST_TAG" \
             --tag-sha "$TARGET_SHA" \
@@ -128,8 +123,6 @@ jobs:
             --candidate-gate /tmp/desktop-beta-qualification/candidate-gate.json \
             --asset Omi.zip=/tmp/desktop-beta-qualification/assets/Omi.zip \
             --asset "$(basename "$STABLE_DMG")=$STABLE_DMG" \
-            --asset Omi.Beta.zip=/tmp/desktop-beta-qualification/assets/Omi.Beta.zip \
-            --asset omi-beta.dmg=/tmp/desktop-beta-qualification/assets/omi-beta.dmg \
             --evidence /tmp/desktop-beta-qualification/qualification-evidence.json
 
       - name: Upload immutable qualification evidence

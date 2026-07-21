@@ -198,7 +198,7 @@ def app_info(app_path):
         or name == "Omi"
         or name == "Omi Dev"
         or name.startswith("omi-")
-        or app_path.name in {"Omi.app", "Omi Dev.app", "Omi Beta.app"}
+        or app_path.name in {"Omi.app", "Omi Dev.app"}
         or app_path.name.startswith("omi-")
     ):
         return None

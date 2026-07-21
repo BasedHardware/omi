@@ -35,7 +35,6 @@ def _release(body: str | None = None):
 isLive: false
 channel: candidate
 edSignature: signature
-betaEdSignature: beta-signature
 changelog: Fixed updates|Improved recovery
 qualifiedBeta: true
 qualifiedBetaAt: 2026-07-09T12:00:00Z
@@ -52,8 +51,6 @@ KEY_VALUE_END -->"""
         "assets": [
             {"name": "Omi.zip", "url": "https://example.com/Omi.zip"},
             {"name": "omi.dmg", "url": "https://example.com/omi.dmg"},
-            {"name": "Omi.Beta.zip", "url": "https://example.com/Omi.Beta.zip"},
-            {"name": "omi-beta.dmg", "url": "https://example.com/omi-beta.dmg"},
             {"name": evidence, "url": "https://example.com/evidence.json"},
         ],
     }
@@ -69,12 +66,6 @@ def _evidence():
         "artifacts": {
             "Omi.zip": {"url": "https://example.com/Omi.zip", "sha256": "b" * 64, "signature": "signature"},
             "omi.dmg": {"url": "https://example.com/omi.dmg", "sha256": "c" * 64},
-            "Omi.Beta.zip": {
-                "url": "https://example.com/Omi.Beta.zip",
-                "sha256": "d" * 64,
-                "signature": "beta-signature",
-            },
-            "omi-beta.dmg": {"url": "https://example.com/omi-beta.dmg", "sha256": "e" * 64},
         },
     }
 
@@ -86,8 +77,6 @@ def _prepare(release=None, *, allow_stable_channel=False):
         "a" * 40,
         "b" * 64,
         "c" * 64,
-        beta_zip_sha256="d" * 64,
-        beta_dmg_sha256="e" * 64,
         qualification_evidence=_evidence(),
         allow_stable_channel=allow_stable_channel,
     )
@@ -111,13 +100,12 @@ def test_prepare_manifest_requires_exact_qualification_and_assets():
     assert manifest["changelog"] == ["Fixed updates", "Improved recovery"]
 
 
-def test_beta_static_redirect_uses_beta_identity_dmg_on_every_surface():
+def test_beta_static_redirect_uses_the_qualified_dmg_on_every_surface():
     workflow = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
     redirect = workflow.split("Update existing beta download redirect", 1)[1]
-    assert redirect.count('manifest["beta_dmg_url"]') == 1
-    assert redirect.count("['beta_dmg_url']") == 2
-    assert 'manifest["dmg_url"]' not in redirect
-    assert "['dmg_url']" not in redirect
+    assert redirect.count('manifest["dmg_url"]') == 1
+    assert redirect.count("['dmg_url']") == 2
+    assert "beta_dmg_url" not in redirect
 
 
 def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():
@@ -129,12 +117,6 @@ def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_eviden
         "artifacts": {
             "Omi.zip": {"url": "https://example.com/Omi.zip", "sha256": "b" * 64, "signature": "signature"},
             "omi.dmg": {"url": "https://example.com/omi.dmg", "sha256": "c" * 64},
-            "Omi.Beta.zip": {
-                "url": "https://example.com/Omi.Beta.zip",
-                "sha256": "d" * 64,
-                "signature": "beta-signature",
-            },
-            "omi-beta.dmg": {"url": "https://example.com/omi-beta.dmg", "sha256": "e" * 64},
         },
         "source_qualification": {"passed": True, "tier": "T2", "subject": "source-built named-bundle"},
         "signed_artifact_verification": {"passed": True, "subject": "exact signed ZIP/DMG bytes"},
@@ -147,8 +129,6 @@ def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_eviden
             "a" * 40,
             "1" * 64,
             "2" * 64,
-            beta_zip_sha256="3" * 64,
-            beta_dmg_sha256="4" * 64,
             qualification_evidence=evidence,
         )
 
@@ -156,8 +136,7 @@ def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_eviden
 def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointering():
     release = _release()
     release["assets"] = [
-        {"name": name, "url": f"https://example.com/{name}", "digest": ""}
-        for name in ("Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg")
+        {"name": name, "url": f"https://example.com/{name}", "digest": ""} for name in ("Omi.zip", "omi.dmg")
     ]
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -165,8 +144,6 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
         for name, content in (
             ("Omi.zip", b"stable zip"),
             ("omi.dmg", b"stable dmg"),
-            ("Omi.Beta.zip", b"beta zip"),
-            ("omi-beta.dmg", b"beta dmg"),
         ):
             path = root / name
             path.write_bytes(content)
@@ -176,8 +153,8 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
         evidence = qualification_evidence.build_evidence(
             release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
         )
-        paths["Omi.Beta.zip"].write_bytes(b"replacement")
-        with pytest.raises(ValueError, match="Omi.Beta.zip hash differs"):
+        paths["Omi.zip"].write_bytes(b"replacement")
+        with pytest.raises(ValueError, match="Omi.zip hash differs"):
             qualification_evidence.verify_evidence(
                 evidence,
                 release,
@@ -231,8 +208,7 @@ def test_local_candidate_evidence_beta_stable_repoint_and_retry_simulation():
     )
     assert beta["release_id"] == manifest["release_id"]
     assert repointed["release_id"] == retained["release_id"]
-    assert manifest["beta_zip_sha256"] == "d" * 64
-    assert manifest["beta_ed_signature"] == "beta-signature"
+    assert manifest["zip_sha256"] == "b" * 64
 
 
 def test_stable_repair_bundle_uses_the_retained_manifest_installer_identity():
@@ -302,8 +278,6 @@ def test_prepare_manifest_rejects_unqualified_candidate():
             "a" * 40,
             "b" * 64,
             "c" * 64,
-            beta_zip_sha256="d" * 64,
-            beta_dmg_sha256="e" * 64,
             qualification_evidence=evidence,
         )
 
@@ -345,18 +319,18 @@ def test_qualification_is_serialized_by_tag_and_retried_without_release_body_sta
     assert "steps.candidate.outcome == 'success' && steps.qualify.outcome == 'success'" in qualification
 
 
-def test_qualification_and_promotion_bind_all_four_enclosures_to_an_immutable_run_artifact():
+def test_qualification_and_promotion_bind_the_single_artifact_pair_to_an_immutable_run_artifact():
     qualification = QUALIFY_BETA_WORKFLOW.read_text()
     promotion = PROMOTE_BETA_WORKFLOW.read_text()
 
-    for asset in ("Omi.zip", "Omi.dmg", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"):
+    for asset in ("Omi.zip", "Omi.dmg", "omi.dmg"):
         assert asset in qualification
         assert asset in promotion
     assert "actions/upload-artifact@v7" in qualification
     assert "qualification_run_id" in promotion
     assert "actions/download-artifact@v7" in promotion
-    assert "--beta-zip-sha256" in promotion
-    assert "--beta-dmg-sha256" in promotion
+    assert "--beta-zip-sha256" not in promotion
+    assert "--beta-dmg-sha256" not in promotion
     assert "git tag -l 'v*-macos' --sort=-v:refname | head -1" not in qualification
 
 

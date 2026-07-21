@@ -25,7 +25,8 @@ final class BetaEnhancedDiagnosticsConfigurationTests: XCTestCase {
     }
     XCTAssertTrue(
       BetaEnhancedDiagnosticsConfiguration.isEnabled(
-        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        updateChannel: "beta",
         defaults: defaults))
   }
 
@@ -38,7 +39,8 @@ final class BetaEnhancedDiagnosticsConfigurationTests: XCTestCase {
 
     XCTAssertFalse(
       BetaEnhancedDiagnosticsConfiguration.isEnabled(
-        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        updateChannel: "beta",
         defaults: defaults))
   }
 
@@ -52,6 +54,7 @@ final class BetaEnhancedDiagnosticsConfigurationTests: XCTestCase {
     XCTAssertFalse(
       BetaEnhancedDiagnosticsConfiguration.isEnabled(
         bundleIdentifier: AppBuild.productionBundleIdentifier,
+        updateChannel: "stable",
         defaults: defaults))
   }
 }

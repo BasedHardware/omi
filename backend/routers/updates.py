@@ -67,18 +67,14 @@ class DesktopReleaseManifestRequest(BaseModel):
     build_number: int = Field(gt=0)
     zip_url: str
     dmg_url: Optional[str] = None
-    beta_zip_url: Optional[str] = None
-    beta_dmg_url: Optional[str] = None
     ed_signature: str
-    beta_ed_signature: Optional[str] = None
     published_at: str
     changelog: List[str] = Field(default_factory=list)
     mandatory: bool = False
     source_sha: str
     zip_sha256: Optional[str] = None
     dmg_sha256: Optional[str] = None
-    beta_zip_sha256: Optional[str] = None
-    beta_dmg_sha256: Optional[str] = None
+
     qualification: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -227,73 +223,20 @@ def _parse_changelog_to_changes(changelog: List[str], release_body: str) -> List
     return changes
 
 
-# Assets for the separately-installable "Omi Beta" identity (side-by-side with
-# stable). Releases older than the dual-identity pipeline simply lack them.
-BETA_IDENTITY_SPARKLE_ASSET = "Omi.Beta.zip"
-BETA_IDENTITY_DMG_ASSET = "omi-beta.dmg"
-
-
-def _get_asset_download_url(release: Dict, names: set) -> Optional[str]:
-    for asset in release.get("assets", []):
-        if asset.get("name", "") in names:
-            return asset.get("browser_download_url")
-    return None
-
-
 def _get_sparkle_zip_download_url(release: Dict) -> Optional[str]:
     """Get the Sparkle ZIP download URL from GitHub release assets."""
-    return _get_asset_download_url(release, {"Omi.zip"})
+    for asset in release.get("assets", []):
+        if asset.get("name", "") == "Omi.zip":
+            return asset.get("browser_download_url")
+    return None
 
 
 def _get_dmg_download_url(release: Dict) -> Optional[str]:
-    """Stable-identity DMG installer URL from GitHub release assets.
-
-    Beta-identity assets are excluded by exact name so their presence can never
-    change which installer stable users receive.
-    """
+    """Get the DMG installer download URL from GitHub release assets."""
     for asset in release.get("assets", []):
-        name = asset.get("name", "")
-        if name.endswith(".dmg") and name != BETA_IDENTITY_DMG_ASSET:
+        if asset.get("name", "").endswith(".dmg"):
             return asset.get("browser_download_url")
     return None
-
-
-async def _find_desktop_release_by_tag(tag_name: str) -> Optional[Dict]:
-    """Raw GitHub release by tag, without the isLive filter.
-
-    Pointer entries fabricate their asset list from the registered manifest, so
-    beta-identity asset lookups need the underlying release; the pointer itself
-    already authorizes liveness.
-    """
-    if not tag_name:
-        return None
-    releases = await get_omi_github_releases("github_releases_desktop", tag_filter=DESKTOP_RELEASE_TAG_PATTERN)
-    for release in releases or []:
-        if release.get("tag_name") == tag_name:
-            return release
-    return None
-
-
-async def _resolve_beta_identity_dmg(entry: Dict) -> Optional[str]:
-    """Beta-identity DMG URL for this entry's release, or None when it predates
-    the dual-identity pipeline."""
-    return _get_asset_download_url(entry["release"], {BETA_IDENTITY_DMG_ASSET})
-
-
-async def _resolve_beta_identity_enclosure(entry: Dict) -> Optional[tuple]:
-    """(download_url, ed_signature) of the Omi Beta artifact for this entry's release.
-
-    Returns None when the release predates the dual-identity pipeline (no beta
-    asset or no beta signature) — the item is then omitted from the beta feed
-    rather than served with a stable-identity artifact.
-    """
-    release = entry["release"]
-    metadata = entry.get("metadata") or {}
-    url = _get_asset_download_url(release, {BETA_IDENTITY_SPARKLE_ASSET})
-    signature = (metadata.get("betaEdSignature") or "").strip()
-    if not url or not signature:
-        return None
-    return url, signature
 
 
 async def _get_legacy_live_desktop_releases(platform: str) -> List[Dict]:
@@ -357,10 +300,7 @@ def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str
     assets = [{"name": "Omi.zip", "browser_download_url": manifest["zip_url"]}]
     if manifest.get("dmg_url"):
         assets.append({"name": "Omi.dmg", "browser_download_url": manifest["dmg_url"]})
-    if manifest.get("beta_zip_url"):
-        assets.append({"name": "Omi.Beta.zip", "browser_download_url": manifest["beta_zip_url"]})
-    if manifest.get("beta_dmg_url"):
-        assets.append({"name": "omi-beta.dmg", "browser_download_url": manifest["beta_dmg_url"]})
+
     return {
         "channel": channel,
         "source": source,
@@ -377,9 +317,6 @@ def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str
         },
         "metadata": {
             "edSignature": manifest["ed_signature"],
-            "betaEdSignature": manifest["beta_ed_signature"],
-            "betaZipSha256": manifest.get("beta_zip_sha256"),
-            "betaDmgSha256": manifest.get("beta_dmg_sha256"),
             "changelog": manifest.get("changelog", []),
             "mandatory": "true" if manifest.get("mandatory") else "false",
             "sourceSha": manifest["source_sha"],
@@ -703,20 +640,11 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
 
 
 @router.get("/v2/desktop/appcast.xml")
-async def get_desktop_appcast_xml(
-    platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
-    identity: str = Query(default="stable", pattern="^(stable|beta)$"),
-):
+async def get_desktop_appcast_xml(platform: str = Query(default="macos", pattern="^(macos|windows|linux)$")):
     """
     Sparkle appcast XML endpoint for desktop auto-updates.
     Returns a single feed with both beta and stable channel items.
     Sparkle clients filter by their configured allowed channels.
-
-    identity=beta is requested only by the separately-installable "Omi Beta" app
-    (its SUFeedURL carries the parameter): it gets beta-channel items only, with
-    beta-identity enclosures, so Sparkle can never replace it with a
-    stable-identity bundle. Legacy stable-identity installs on the beta channel
-    keep the default feed and their current update behavior.
     """
     try:
         desktop_releases = await _get_live_desktop_releases(platform)
@@ -730,8 +658,6 @@ async def get_desktop_appcast_xml(
 
         for entry in desktop_releases:
             channel = entry["channel"]
-            if identity == "beta" and channel != "beta":
-                continue
             if channel in seen_channels:
                 continue
             seen_channels.add(channel)
@@ -745,14 +671,7 @@ async def get_desktop_appcast_xml(
             ed_signature = kv.get("edSignature", "")
 
             changes = _parse_changelog_to_changes(changelog, release.get("body", ""))
-            if identity == "beta":
-                beta_enclosure = await _resolve_beta_identity_enclosure(entry)
-                if beta_enclosure is None:
-                    seen_channels.discard(channel)
-                    continue
-                download_url, ed_signature = beta_enclosure
-            else:
-                download_url = _get_sparkle_zip_download_url(release)
+            download_url = _get_sparkle_zip_download_url(release)
 
             if not download_url:
                 seen_channels.discard(channel)
@@ -789,18 +708,13 @@ async def get_desktop_appcast_xml(
 async def download_latest_desktop_release(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
     channel: str = Query(default="stable", pattern="^(beta|stable)$"),
-    identity: str = Query(default="stable", pattern="^(stable|beta)$"),
 ):
     """
     Redirect to the latest desktop release DMG installer.
     Both channels resolve only from their explicit channel pointer or the same
     channel in the legacy release metadata.
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
-    identity=beta serves the separately-installable "Omi Beta" DMG, which runs
-    side-by-side with stable.
     """
-    if identity == "beta":
-        channel = "beta"
     desktop_releases = await _get_live_desktop_releases(platform)
     if not desktop_releases:
         raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
@@ -809,10 +723,7 @@ async def download_latest_desktop_release(
     for entry in desktop_releases:
         if entry["channel"] != channel:
             continue
-        if identity == "beta":
-            dmg_url = await _resolve_beta_identity_dmg(entry)
-        else:
-            dmg_url = _get_dmg_download_url(entry["release"])
+        dmg_url = _get_dmg_download_url(entry["release"])
         if dmg_url:
             version = entry["version_info"]["version"]
             return HTMLResponse(content=_download_landing_html(dmg_url, channel=channel, version=version))
@@ -827,26 +738,8 @@ async def download_beta_desktop_release(
     """
     Redirect to the latest beta desktop release DMG installer.
     Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
-
-    Serves the side-by-side "Omi Beta" app. Until the first release that ships
-    beta-identity artifacts is live, it falls back to the stable-identity DMG so
-    the public link keeps working. (Sparkle self-updates stay strict: only this
-    human install landing may fall back.)
     """
-    try:
-        return await download_latest_desktop_release(platform=platform, channel="beta", identity="beta")
-    except HTTPException as e:
-        if e.status_code != 404:
-            raise
-    record_fallback(
-        component='other',
-        from_mode='desktop_download_beta_identity',
-        to_mode='desktop_download_stable_identity',
-        reason='config_incomplete',
-        outcome='degraded',
-        log=logger,
-    )
-    return await download_latest_desktop_release(platform=platform, channel="beta", identity="stable")
+    return await download_latest_desktop_release(platform=platform, channel="beta")
 
 
 def _preview_landing_response(result: Dict[str, Any]) -> HTMLResponse:

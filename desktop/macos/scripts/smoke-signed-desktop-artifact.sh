@@ -13,7 +13,6 @@ EXPECTED_CHANNEL="${OMI_SIGNED_ARTIFACT_SMOKE_CHANNEL:-beta}"
 EXPECTED_TEAM_ID="${OMI_SIGNED_ARTIFACT_SMOKE_TEAM_ID:-9536L8KLMP}"
 EXPECTED_BUNDLE_ID="${OMI_SIGNED_ARTIFACT_SMOKE_BUNDLE_ID:-com.omi.computer-macos}"
 EXPECTED_URL_SCHEME="${OMI_SIGNED_ARTIFACT_SMOKE_URL_SCHEME:-omi-computer}"
-EXPECTED_FEED_URL="${OMI_SIGNED_ARTIFACT_SMOKE_FEED_URL:-https://api.omi.me/v2/desktop/appcast.xml}"
 EXPECTED_PYTHON_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_PYTHON_API_URL:-https://api.omi.me}"
 EXPECTED_DESKTOP_API_URL="${OMI_SIGNED_ARTIFACT_SMOKE_DESKTOP_API_URL:-https://desktop-backend-hhibjajaja-uc.a.run.app/}"
 IS_EXTERNAL_PREVIEW=false
@@ -55,8 +54,6 @@ Options:
   --expected-channel NAME    Expected channel label for result metadata (default: beta)
   --expected-bundle-id ID    Expected app bundle identifier
   --expected-url-scheme URL  Expected app URL scheme
-  --expected-feed-url URL    Expected SUFeedURL (default: plain shared appcast;
-                             the Omi Beta variant passes its identity-scoped feed)
   --expected-python-api-url URL
                              Expected OMI_PYTHON_API_URL in the artifact
   --expected-desktop-api-url URL
@@ -155,7 +152,6 @@ parse_args() {
       --expected-channel) require_option_value "$1" "${2:-}"; EXPECTED_CHANNEL="$2"; shift 2 ;;
       --expected-bundle-id) require_option_value "$1" "${2:-}"; EXPECTED_BUNDLE_ID="$2"; shift 2 ;;
       --expected-url-scheme) require_option_value "$1" "${2:-}"; EXPECTED_URL_SCHEME="$2"; shift 2 ;;
-      --expected-feed-url) require_option_value "$1" "${2:-}"; EXPECTED_FEED_URL="$2"; shift 2 ;;
       --expected-python-api-url) require_option_value "$1" "${2:-}"; EXPECTED_PYTHON_API_URL="$2"; shift 2 ;;
       --expected-desktop-api-url) require_option_value "$1" "${2:-}"; EXPECTED_DESKTOP_API_URL="$2"; shift 2 ;;
       --preview) IS_EXTERNAL_PREVIEW=true; shift ;;
@@ -377,10 +373,8 @@ assert_bundle_identity() {
     [[ "$automatic_checks" == "false" || "$automatic_checks" == "0" ]] \
       || fail "external preview must disable automatic update checks"
   else
-    # The Omi Beta variant carries an identity-scoped feed; the expected URL is
-    # passed per artifact (default: the plain shared feed).
-    [[ "$feed_url" == "$EXPECTED_FEED_URL" ]] \
-      || fail "SUFeedURL mismatch: expected $EXPECTED_FEED_URL, got ${feed_url:-missing}"
+    [[ "$feed_url" == "https://api.omi.me/v2/desktop/appcast.xml" ]] \
+      || fail "SUFeedURL mismatch: ${feed_url:-missing}"
   fi
   [[ -n "$executable" && -x "$APP_BUNDLE/Contents/MacOS/$executable" ]] || fail "main executable missing or not executable"
 

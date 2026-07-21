@@ -17,8 +17,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-ARTIFACTS = ("Omi.zip", "Omi.dmg", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg")
-ZIP_SIGNATURES = {"Omi.zip": "edSignature", "Omi.Beta.zip": "betaEdSignature"}
+ARTIFACTS = ("Omi.zip", "Omi.dmg", "omi.dmg")
+ZIP_SIGNATURES = {"Omi.zip": "edSignature"}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -70,9 +70,9 @@ def build_evidence(
     stable_dmg = [name for name in ("Omi.dmg", "omi.dmg") if name in files]
     if len(stable_dmg) != 1:
         _fail("requires exactly one stable DMG file")
-    required = {"Omi.zip", stable_dmg[0], "Omi.Beta.zip", "omi-beta.dmg"}
+    required = {"Omi.zip", stable_dmg[0]}
     if set(files) != required:
-        _fail("does not contain all four qualified artifacts")
+        _fail("does not contain the exact qualified ZIP and DMG")
     for name, path in files.items():
         if not path.is_file():
             _fail(f"is missing downloaded {name}")
@@ -119,7 +119,11 @@ def verify_evidence(
         _fail("release ID or source SHA does not match the trusted run")
     source_qualification = evidence.get("source_qualification")
     signed_artifacts = evidence.get("signed_artifact_verification")
-    if not isinstance(source_qualification, dict) or source_qualification.get("passed") is not True or source_qualification.get("tier") != "T2":
+    if (
+        not isinstance(source_qualification, dict)
+        or source_qualification.get("passed") is not True
+        or source_qualification.get("tier") != "T2"
+    ):
         _fail("does not prove source-built named-bundle T2 qualification")
     if not isinstance(signed_artifacts, dict) or signed_artifacts.get("passed") is not True:
         _fail("does not prove exact signed artifact verification")
