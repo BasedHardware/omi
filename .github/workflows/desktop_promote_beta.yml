@@ -136,41 +136,23 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Register immutable release manifest
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-        run: |
-          set -euo pipefail
-          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
-          curl -fsS \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "secret-key: $ADMIN_KEY" \
-            --data-binary @/tmp/desktop-release-manifest.json \
-            https://api.omi.me/v2/desktop/releases \
-            > /tmp/desktop-manifest-response.json
-          python3 -m json.tool /tmp/desktop-manifest-response.json
-
-      - name: Advance explicit beta pointer
+      - name: Promote qualified beta with scoped token
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
-          python3 - "$RELEASE_TAG" <<'PY' > /tmp/desktop-beta-pointer.json
-          import json
-          import sys
-          print(json.dumps({"platform": "macos", "channel": "beta", "release_id": sys.argv[1]}))
-          PY
+          BETA_PROMOTION_TOKEN=$(gcloud secrets versions access latest --secret=BETA_PROMOTION_TOKEN --project "$PROJECT_ID")
+          jq -n --slurpfile manifest /tmp/desktop-release-manifest.json '{manifest: $manifest[0]}' \
+            > /tmp/desktop-qualified-beta-request.json
           curl -fsS \
             -X POST \
             -H "Content-Type: application/json" \
-            -H "secret-key: $ADMIN_KEY" \
-            --data-binary @/tmp/desktop-beta-pointer.json \
-            https://api.omi.me/v2/desktop/channels/promote \
-            > /tmp/desktop-pointer-response.json
-          python3 -m json.tool /tmp/desktop-pointer-response.json
+            -H "secret-key: $BETA_PROMOTION_TOKEN" \
+            --data-binary @/tmp/desktop-qualified-beta-request.json \
+            https://api.omi.me/v2/desktop/channels/promote-qualified-beta \
+            > /tmp/desktop-qualified-beta-response.json
+          python3 -m json.tool /tmp/desktop-qualified-beta-response.json
 
       - name: Mark GitHub release live beta
         env:
@@ -188,6 +170,7 @@ jobs:
             --notes-file /tmp/release-body-beta.md
 
       - name: Bridge beta for legacy desktop clients
+        if: ${{ !inputs.automatic }}
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
@@ -256,12 +239,6 @@ jobs:
               "/tmp/macos-beta-${file}" "$GCS_DESKTOP_UPDATES_BUCKET/beta/$file"
           done
 
-      - name: Clear live update caches
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      - name: Summarize scoped beta promotion
         run: |
-          set -euo pipefail
-          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
-          curl -fsS -X POST -H "secret-key: $ADMIN_KEY" \
-            https://api.omi.me/v2/desktop/clear-cache >/dev/null
-          echo "Promoted ${{ inputs.release_tag }} to qualified beta." >> "$GITHUB_STEP_SUMMARY"
+          echo "Promoted ${{ inputs.release_tag }} to qualified beta with the dedicated promotion capability." >> "$GITHUB_STEP_SUMMARY"

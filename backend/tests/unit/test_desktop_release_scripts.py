@@ -120,6 +120,20 @@ def test_beta_static_redirect_uses_beta_identity_dmg_on_every_surface():
     assert "['dmg_url']" not in redirect
 
 
+def test_automatic_beta_promotion_workflow_uses_only_scoped_backend_capability():
+    workflow = PROMOTE_BETA_WORKFLOW.read_text(encoding="utf-8")
+    assert "--secret=BETA_PROMOTION_TOKEN" in workflow
+    assert "https://api.omi.me/v2/desktop/channels/promote-qualified-beta" in workflow
+    assert "https://api.omi.me/v2/desktop/releases" not in workflow
+    assert "desktop-beta-pointer.json" not in workflow
+    assert "https://api.omi.me/v2/desktop/clear-cache" not in workflow
+    assert "--secret=ADMIN_KEY" not in workflow
+
+    legacy_bridge = workflow.split("Bridge beta for legacy desktop clients", 1)[1]
+    assert "if: ${{ !inputs.automatic }}" in legacy_bridge.split("env:", 1)[0]
+    assert "--secret=RELEASE_SECRET" in legacy_bridge
+
+
 def test_prepare_manifest_rejects_caller_hashes_that_do_not_match_trusted_evidence():
     """Promotion can only bind bytes independently recorded by qualification."""
     evidence = {
@@ -310,12 +324,11 @@ def test_prepare_manifest_rejects_unqualified_candidate():
 
 def test_beta_pointer_advances_before_legacy_visibility():
     workflow = PROMOTE_BETA_WORKFLOW.read_text()
-    manifest = workflow.index("      - name: Register immutable release manifest")
-    pointer = workflow.index("      - name: Advance explicit beta pointer")
+    scoped_promotion = workflow.index("      - name: Promote qualified beta with scoped token")
     github = workflow.index("      - name: Mark GitHub release live beta")
     bridge = workflow.index("      - name: Bridge beta for legacy desktop clients")
 
-    assert manifest < pointer < github < bridge
+    assert scoped_promotion < github < bridge
 
 
 def test_automatic_beta_is_pauseable_and_rejects_stale_tags():
