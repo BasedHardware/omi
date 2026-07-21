@@ -134,9 +134,9 @@ def _has_beta_promotion_authorization(secret_key: str) -> bool:
 
 
 def _has_admin_authorization(secret_key: str) -> bool:
-    """Match the existing admin key with a constant-time comparison."""
+    """Match a configured admin key with a constant-time comparison."""
     admin_key = os.getenv("ADMIN_KEY")
-    return admin_key is not None and hmac.compare_digest(secret_key, admin_key)
+    return bool(admin_key) and hmac.compare_digest(secret_key, admin_key)
 
 
 DESKTOP_RELEASE_TAG_PATTERN = re.compile(

@@ -791,6 +791,18 @@ class TestClearCacheEndpoint:
         assert resp.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_empty_admin_key_does_not_authorize_empty_header_or_clear_cache(self):
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": ""}),
+            patch("routers.updates.delete_generic_cache") as mock_delete,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.post("/v2/desktop/clear-cache", headers={"secret-key": ""})
+
+        assert resp.status_code == 403
+        mock_delete.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_success_with_valid_key(self):
         with (
             patch.dict("os.environ", {"ADMIN_KEY": "real-secret"}),
