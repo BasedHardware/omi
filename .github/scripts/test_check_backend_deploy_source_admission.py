@@ -212,8 +212,8 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "triggering SHA checkout",
-                "ref: ${{ github.event.workflow_run.head_sha }}\n          fetch-depth: 2",
-                "ref: main\n          fetch-depth: 2",
+                "ref: ${{ github.event.workflow_run.head_sha }}\n          # Full history is required only here: a green no-op is safe only when\n          # the triggering SHA is proven to be an ancestor of current main.\n          fetch-depth: 0",
+                "ref: main\n          # Full history is required only here: a green no-op is safe only when\n          # the triggering SHA is proven to be an ancestor of current main.\n          fetch-depth: 0",
                 "auto backend scope decision must inspect the triggering SHA",
             ),
             (
@@ -227,6 +227,40 @@ class WorkflowContractTests(unittest.TestCase):
                 "    runs-on: ubuntu-latest-m\n    outputs:",
                 "    runs-on: ubuntu-latest-m\n    steps:\n      - uses: google-github-actions/auth@v3\n    outputs:",
                 "auto backend scope decision must not authenticate to cloud services",
+            ),
+        )
+        for name, old, new, expected in cases:
+            with self.subTest(name=name):
+                root = self.fixture_root()
+                self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
+                self.assertIn(expected, CHECKER.validate(root))
+
+    def test_auto_workflow_rejects_supersession_no_op_bypasses(self) -> None:
+        """Static tripwires for the green no-op decision before privileged jobs."""
+        cases = (
+            (
+                "current candidate treated as stale",
+                '[[ "$RELEASE_SHA" != "$main_sha" ]] && git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"',
+                'git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"',
+                "auto backend scope decision must prove a distinct triggering SHA is already on current main before a superseded no-op",
+            ),
+            (
+                "no current-main refresh",
+                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+                "git fetch --no-tags origin +refs/heads/release:refs/remotes/origin/main",
+                "auto backend scope decision must refresh current origin/main before declaring supersession",
+            ),
+            (
+                "unknown main becomes no-op",
+                "could not resolve current origin/main; preserving fail-closed source admission",
+                "triggering SHA $RELEASE_SHA was superseded by current origin/main $main_sha",
+                "auto backend scope decision must treat an unresolved current main as guarded admission, not supersession",
+            ),
+            (
+                "ambiguous stale summary",
+                "triggering SHA $RELEASE_SHA was superseded by current origin/main $main_sha",
+                "triggering candidate was superseded",
+                "auto backend scope decision must name both triggering and current SHAs in a superseded summary",
             ),
         )
         for name, old, new, expected in cases:
@@ -251,8 +285,8 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "stale main fetch",
-                "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
-                "git fetch --no-tags origin +refs/heads/release:refs/remotes/origin/main",
+                "RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}\n        run: |\n          set -euo pipefail\n          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+                "RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}\n        run: |\n          set -euo pipefail\n          git fetch --no-tags origin +refs/heads/release:refs/remotes/origin/main",
                 "automatic source admission must refresh current main",
             ),
             (
