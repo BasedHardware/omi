@@ -906,44 +906,6 @@ struct DashboardPage: View {
     }
   }
 
-  /// Inline stat strip pinned to the header's leading edge: bare counts, no
-  /// card chrome, each navigating to its page.
-  private var homeStatTextStrip: some View {
-    HStack(spacing: OmiSpacing.lg) {
-      HomeStatTextCell(
-        count: conversationStatCount, singular: "conversation", plural: "conversations",
-        action: { navigate(to: .conversations) })
-      HomeStatTextCell(
-        count: taskStatCount, singular: "task", plural: "tasks",
-        action: { navigate(to: .tasks) })
-      HomeStatTextCell(
-        count: memoryStatCount, singular: "memory", plural: "memories",
-        action: { navigate(to: .memories) })
-      HomeStatTextCell(
-        count: screenshotStatCount, singular: "screenshot", plural: "screenshots",
-        action: { navigate(to: .rewind) })
-    }
-  }
-
-  private var conversationStatCount: Int? {
-    homeStatusStore.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count
-  }
-
-  private var taskStatCount: Int? {
-    homeStatusStore.taskCount ?? incompleteTaskCount
-  }
-
-  private var memoryStatCount: Int? {
-    homeStatusStore.memoryCount
-      ?? (memoriesViewModel.totalMemoriesCount > 0
-        ? memoriesViewModel.totalMemoriesCount
-        : memoriesViewModel.memories.count)
-  }
-
-  private var screenshotStatCount: Int? {
-    homeStatusStore.screenshotCount
-  }
-
   // MARK: Inline chat panel
 
   private func homeChatPanel(width: CGFloat) -> some View {
@@ -2584,43 +2546,6 @@ private struct HomeKnowsRowView: View {
     ("Not mine", .not_mine),
     ("Not useful", .not_useful),
   ]
-}
-
-/// Bare "12 conversations" header stat: bold count, muted label, no chrome.
-private struct HomeStatTextCell: View {
-  let count: Int?
-  let singular: String
-  let plural: String
-  let action: () -> Void
-
-  @State private var isHovering = false
-
-  private var valueText: String {
-    count.map { $0.formatted() } ?? "—"
-  }
-
-  private var labelText: String {
-    count == 1 ? singular : plural
-  }
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.xxs) {
-        Text(valueText)
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundStyle(isHovering ? Color.white : HomePalette.ink)
-
-        Text(labelText)
-          .scaledFont(size: OmiType.body)
-          .foregroundStyle(isHovering ? HomePalette.secondary : HomePalette.muted)
-      }
-      .lineLimit(1)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .accessibilityLabel("\(valueText) \(labelText)")
-  }
 }
 
 private struct HomeCanvasBackground: View {
