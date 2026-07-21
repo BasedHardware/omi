@@ -453,9 +453,15 @@ func logError(_ message: String, error: Error? = nil) {
   // Always persist locally; only the Sentry capture is filtered/rate-limited below.
   appendToLogFile(line)
 
-  // Transient network/IO errors (offline, timeouts, cancellations, socket resets)
-  // are not actionable bugs — keep them as local logs + breadcrumbs only.
-  if isNonActionableTransient(error) { return }
+  let enhancedBetaDiagnostics = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  DesktopDiagnosticsManager.shared.recordBetaLogError(
+    message: message,
+    error: error,
+    enabled: enhancedBetaDiagnostics)
+
+  // Stable keeps the existing low-volume transient-error behavior. Beta captures
+  // these typed failures with the expanded diagnostic trail for release triage.
+  if isNonActionableTransient(error), !enhancedBetaDiagnostics { return }
 
   guard !isDevBuild else { return }
 

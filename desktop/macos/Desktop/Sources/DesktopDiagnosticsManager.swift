@@ -18,6 +18,7 @@ enum DesktopHealthEventName: String {
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
   case userVisibleIssue = "user_visible_issue"
+  case betaDiagnosticTrail = "beta_diagnostic_trail"
   case fallbackTriggered = "fallback_triggered"
 }
 
@@ -355,6 +356,30 @@ final class DesktopDiagnosticsManager {
       captureSentry: false)
   }
 
+  /// Records a beta-only typed error trail entry. The caller passes free-form local
+  /// log text only for local classification; no message or error description is
+  /// retained in the trail or cloud attachment.
+  func recordBetaLogError(
+    message: String,
+    error: Error?,
+    enabled: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  ) {
+    guard enabled else { return }
+    let nsError = error as NSError?
+    record(
+      .betaDiagnosticTrail,
+      properties: [
+        "component": betaComponent(for: message),
+        "operation": "error",
+        "phase": "handling",
+        "outcome": "failed",
+        "failure_class": betaFailureClass(for: nsError),
+        "error_domain": betaErrorDomain(nsError?.domain),
+        "error_code": betaErrorCode(nsError?.code),
+      ],
+      trackRemotely: false)
+  }
+
   func recordVoiceTurnTerminal(
     reason: String,
     route: String,
@@ -509,9 +534,14 @@ final class DesktopDiagnosticsManager {
     return current
   }
 
-  private func currentCloudSnapshotsForSentry() -> [[String: Any]] {
+  private func currentCloudSnapshotsForSentry(
+    includeBetaDiagnostics: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
+  ) -> [[String: Any]] {
     lock.lock()
-    let current = snapshots.map { cloudSafeSnapshot($0) }
+    let current = snapshots.compactMap { snapshot -> [String: Any]? in
+      guard includeBetaDiagnostics || snapshot.event != .betaDiagnosticTrail else { return nil }
+      return cloudSafeSnapshot(snapshot, includeBetaDiagnostics: includeBetaDiagnostics)
+    }
     lock.unlock()
     return current
   }
@@ -520,13 +550,20 @@ final class DesktopDiagnosticsManager {
     currentSnapshotsForSentry()
   }
 
-  private func cloudSafeSnapshot(_ snapshot: DesktopHealthSnapshot) -> [String: Any] {
+  private func cloudSafeSnapshot(
+    _ snapshot: DesktopHealthSnapshot,
+    includeBetaDiagnostics: Bool
+  ) -> [String: Any] {
     var result: [String: Any] = [
       "timestamp": ISO8601DateFormatter.desktopDiagnostics.string(from: snapshot.timestamp),
       "event": snapshot.event.rawValue,
     ]
 
-    guard snapshot.event == .userVisibleIssue || snapshot.event == .pttAudioCaptureWatchdogTriggered else {
+    let includesTypedIncidentContext =
+      snapshot.event == .userVisibleIssue
+      || snapshot.event == .pttAudioCaptureWatchdogTriggered
+      || (includeBetaDiagnostics && snapshot.event == .betaDiagnosticTrail)
+    guard includesTypedIncidentContext else {
       return result
     }
 
@@ -543,6 +580,7 @@ final class DesktopDiagnosticsManager {
     "source", "mode", "hub_active", "turn_audio_seconds", "voiced_audio_seconds", "peak", "rms",
     "is_near_zero", "watchdog_eligible", "consecutive_silent_turns", "tcc_microphone_granted",
     "input_device_class", "recovery_action", "recovery_result", "threshold",
+    "component", "operation", "outcome", "error_domain", "error_code",
   ]
 
   func writeDiagnosticsAttachment() -> URL? {
@@ -563,7 +601,8 @@ final class DesktopDiagnosticsManager {
     failureClass: String,
     phase: String,
     logPath: String = omiLogFilePath(),
-    maxLogLines: Int = 200
+    maxLogLines: Int = 200,
+    includeBetaDiagnostics: Bool = BetaEnhancedDiagnosticsConfiguration.isEnabled
   ) -> URL? {
     let incident = incidentProperties(
       id: incidentID,
@@ -574,7 +613,7 @@ final class DesktopDiagnosticsManager {
       "generated_at": ISO8601DateFormatter.desktopDiagnostics.string(from: Date()),
       "privacy": "redacted_incident_context",
       "incident": incident,
-      "snapshots": currentCloudSnapshotsForSentry(),
+      "snapshots": currentCloudSnapshotsForSentry(includeBetaDiagnostics: includeBetaDiagnostics),
       "redacted_log_tail": redactedLogTail(
         logPath: logPath,
         maxLines: maxLogLines,
@@ -915,6 +954,48 @@ final class DesktopDiagnosticsManager {
 
   private func rounded(_ value: Double) -> Double {
     (value * 100).rounded() / 100
+  }
+
+  private func betaComponent(for message: String) -> String {
+    let value = message.lowercased()
+    if value.contains("chat") || value.contains("bridge") { return "chat" }
+    if value.contains("realtime") || value.contains("omni") { return "realtime" }
+    if value.contains("ptt") || value.contains("audio") || value.contains("transcription") { return "audio" }
+    if value.contains("bluetooth") || value.contains("wifi") || value.contains("device") { return "device" }
+    if value.contains("auth") || value.contains("sign") { return "auth" }
+    if value.contains("sync") || value.contains("wal") { return "sync" }
+    if value.contains("update") || value.contains("sparkle") { return "update" }
+    if value.contains("rewind") || value.contains("screen") { return "capture" }
+    return "app"
+  }
+
+  private func betaFailureClass(for error: NSError?) -> String {
+    guard let error else { return "unknown" }
+    if error.domain == NSURLErrorDomain {
+      switch error.code {
+      case NSURLErrorTimedOut: return "timeout"
+      case NSURLErrorNotConnectedToInternet, NSURLErrorCannotConnectToHost: return "network_unavailable"
+      default: return "network_error"
+      }
+    }
+    if error.domain == NSPOSIXErrorDomain { return "posix_error" }
+    if error.domain == NSCocoaErrorDomain { return "cocoa_error" }
+    return "other"
+  }
+
+  private func betaErrorDomain(_ domain: String?) -> String {
+    switch domain {
+    case NSURLErrorDomain: return "url"
+    case NSPOSIXErrorDomain: return "posix"
+    case NSCocoaErrorDomain: return "cocoa"
+    case nil: return "none"
+    default: return "other"
+    }
+  }
+
+  private func betaErrorCode(_ code: Int?) -> Int {
+    guard let code else { return 0 }
+    return max(-9_999, min(9_999, code))
   }
 
   private func classifyInputDevice(_ description: String?) -> String {

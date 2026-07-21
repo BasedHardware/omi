@@ -97,6 +97,55 @@ import XCTest
       XCTAssertTrue(tail.contains("silent capture detected"))
     }
 
+    func testBetaTrailIncludesTypedErrorContextWithoutRawMessage() throws {
+      DesktopDiagnosticsManager.shared.recordBetaLogError(
+        message: "Chat bridge returned Alice's private conversation title",
+        error: NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut),
+        enabled: true)
+
+      let url = try XCTUnwrap(
+        DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+          area: "chat",
+          failureClass: "timeout",
+          phase: "query",
+          includeBetaDiagnostics: true))
+      defer { try? FileManager.default.removeItem(at: url) }
+
+      let data = try Data(contentsOf: url)
+      let json = String(data: data, encoding: .utf8) ?? ""
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      let trail = try XCTUnwrap(
+        snapshots.first(where: { $0["event"] as? String == "beta_diagnostic_trail" }))
+
+      XCTAssertEqual(trail["component"] as? String, "chat")
+      XCTAssertEqual(trail["failure_class"] as? String, "timeout")
+      XCTAssertEqual(trail["error_domain"] as? String, "url")
+      XCTAssertEqual(trail["error_code"] as? Int, NSURLErrorTimedOut)
+      XCTAssertFalse(json.contains("Alice"))
+      XCTAssertFalse(json.contains("private conversation title"))
+    }
+
+    func testBetaTrailIsExcludedWhenEnhancedDiagnosticsIsDisabled() throws {
+      DesktopDiagnosticsManager.shared.recordBetaLogError(
+        message: "Chat bridge timed out",
+        error: NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut),
+        enabled: true)
+
+      let url = try XCTUnwrap(
+        DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+          area: "chat",
+          failureClass: "timeout",
+          phase: "query",
+          includeBetaDiagnostics: false))
+      defer { try? FileManager.default.removeItem(at: url) }
+
+      let data = try Data(contentsOf: url)
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      XCTAssertFalse(snapshots.contains { $0["event"] as? String == "beta_diagnostic_trail" })
+    }
+
     func testPTTSilentTurnCreatesUserVisibleIssueSnapshot() throws {
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "hub",
