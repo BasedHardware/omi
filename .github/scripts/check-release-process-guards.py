@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -22,9 +22,13 @@ def _load_codemagic_with_duplicates(path: Path) -> tuple[dict[str, object], list
     text = path.read_text(encoding="utf-8")
     try:
         root = yaml.compose(text)
-        document = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         return {}, [], [f"codemagic.yaml is not valid YAML: {exc}"]
+    source_errors = _yaml_source_topology_errors(text, root)
+    try:
+        document = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        return {}, [], [f"codemagic.yaml is not valid YAML: {exc}", *source_errors]
     duplicates: list[str] = []
 
     def visit(node: yaml.Node | None) -> None:
@@ -43,325 +47,187 @@ def _load_codemagic_with_duplicates(path: Path) -> tuple[dict[str, object], list
 
     visit(root)
     if not isinstance(document, dict):
-        return {}, duplicates, ["codemagic.yaml must be a mapping"]
-    return document, duplicates, []
+        return {}, duplicates, ["codemagic.yaml must be a mapping", *source_errors]
+    return document, duplicates, source_errors
 
 
-_ShellCommand = tuple[str, ...]
+WORKFLOW_CONTRACT_RELATIVE_PATH = Path(".github/scripts/fixtures/codemagic_workflow_contract/v1.json")
+CANONICAL_WORKFLOW = "omi-desktop-swift-release"
+PREVIEW_WORKFLOW = "omi-desktop-swift-preview"
+NORMAL_RELEASE_CREDENTIAL_GROUPS = {"desktop_secrets"}
 
-
-_SHELL_SEPARATORS = {";", "&&", "||", "|", "&", "\n"}
-_SHELL_CONTROL_WORDS = {"then", "do", "else", "elif", "fi", "done", "esac", "{", "}"}
-_ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_RELEASE_CREATE_GRAMMAR = re.compile(r"\bgh\s+release\s+create\b")
-_RELEASE_CREATE_AUTHORITY = re.compile(
-    r"(?<![A-Za-z0-9_./-])"
-    r"(?P<executable>gh|/(?:[^ \t\r\n;&|()]+/)*gh|\$GH|\$\{GH\})"
-    r"(?![A-Za-z0-9_./-])"
-    r"(?:[ \t\r\n])+release(?:[ \t\r\n])+create\b"
+# This is deliberately supplemental.  The fixture below is the authority
+# boundary; these literals only make obvious new direct authority easy to spot.
+_DIRECT_RELEASE_CREATE = re.compile(r"(?m)^\s*gh\s+release\s+create\b")
+_DIRECT_GITHUB_RELEASE_API = re.compile(
+    r"https://api\.github\.com/repos/[^\s'\"\\]+/releases(?:[/?#]|$)", re.IGNORECASE
 )
 
 
-def _normalize_shell_text(script: str) -> str:
-    """Apply the one continuation rule needed before conservative authority scanning."""
-    return script.replace("\\\n", "")
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _raw_codemagic_script_scalars(path: Path) -> tuple[list[str], list[str]]:
-    """Return physical YAML script scalars, preserving their unparsed shell text.
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
-    YAML aliases intentionally reuse the desktop release scripts for previews.
-    Track scalar-node identity so that an alias is one physical scalar rather
-    than a second release authority occurrence.
-    """
+
+def _yaml_source_topology_errors(text: str, root: yaml.Node | None) -> list[str]:
+    """Reject source features that can make a semantic fixture ambiguous."""
+    errors: list[str] = []
     try:
-        root = yaml.compose(path.read_text(encoding="utf-8"))
+        events = list(yaml.parse(text))
     except yaml.YAMLError as exc:
-        return [], [f"codemagic.yaml is not valid YAML: {exc}"]
+        return [f"codemagic.yaml is not valid YAML: {exc}"]
 
-    scripts: list[str] = []
-    seen_scripts: set[int] = set()
+    anchors = [
+        event.anchor
+        for event in events
+        if isinstance(event, (yaml.events.MappingStartEvent, yaml.events.SequenceStartEvent, yaml.events.ScalarEvent))
+        and event.anchor is not None
+    ]
+    aliases = [event.anchor for event in events if isinstance(event, yaml.events.AliasEvent)]
+    if anchors != ["desktop_signed_artifact_steps"] or aliases != ["desktop_signed_artifact_steps"]:
+        errors.append("codemagic.yaml must use exactly the approved desktop_signed_artifact_steps anchor and alias")
+    for event in events:
+        if isinstance(event, (yaml.events.MappingStartEvent, yaml.events.SequenceStartEvent, yaml.events.ScalarEvent)):
+            if event.tag is not None:
+                errors.append("codemagic.yaml must not use explicit YAML tags")
+                break
 
     def visit(node: yaml.Node | None) -> None:
         if isinstance(node, yaml.MappingNode):
             for key_node, value_node in node.value:
-                if (
-                    isinstance(key_node, yaml.ScalarNode)
-                    and key_node.value == "script"
-                    and isinstance(value_node, yaml.ScalarNode)
-                    and id(value_node) not in seen_scripts
-                ):
-                    seen_scripts.add(id(value_node))
-                    scripts.append(value_node.value)
+                if isinstance(key_node, yaml.ScalarNode) and key_node.value == "<<":
+                    errors.append("codemagic.yaml must not use YAML merge keys")
                 visit(value_node)
         elif isinstance(node, yaml.SequenceNode):
             for child in node.value:
                 visit(child)
 
     visit(root)
-    return scripts, []
-
-
-def _raw_release_create_occurrences(path: Path) -> tuple[list[re.Match[str]], list[str]]:
-    """Find all release-create grammar in physical script text, before shell lexing."""
-    scripts, errors = _raw_codemagic_script_scalars(path)
-    return [
-        match for script in scripts for match in _RELEASE_CREATE_AUTHORITY.finditer(_normalize_shell_text(script))
-    ], errors
-
-
-def _script_commands(script: str) -> list[_ShellCommand]:
-    """Split a small safe shell-command stream without treating output as authority.
-
-    This is intentionally not a shell parser.  It only needs enough grammar to
-    find direct executable commands after control separators and continuations;
-    dynamic shell evaluation is rejected below instead of being interpreted.
-    """
-    lexer = shlex.shlex(_normalize_shell_text(script), posix=True, punctuation_chars=";&|()\n")
-    lexer.whitespace = " \t\r"
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    commands: list[_ShellCommand] = []
-    words: list[str] = []
-    for word in lexer:
-        if word in _SHELL_SEPARATORS:
-            if words:
-                commands.append(tuple(words))
-                words = []
-            continue
-        if word in _SHELL_CONTROL_WORDS:
-            if words:
-                commands.append(tuple(words))
-                words = []
-            continue
-        if word in {"(", ")"}:
-            continue
-        words.append(word)
-    if words:
-        commands.append(tuple(words))
-    return commands
-
-
-def _executable_words(command: _ShellCommand) -> tuple[str, ...]:
-    """Remove assignment and `command`/`env` wrappers before classifying a command."""
-    words = command
-    index = 0
-    while index < len(words) and _ENV_ASSIGNMENT.match(words[index]):
-        index += 1
-    while index < len(words):
-        if words[index] == "command":
-            index += 1
-            while index < len(words) and words[index].startswith("-"):
-                index += 1
-            continue
-        if words[index] == "env":
-            index += 1
-            while index < len(words):
-                word = words[index]
-                if _ENV_ASSIGNMENT.match(word):
-                    index += 1
-                elif word in {"-u", "--unset", "-C", "--chdir"}:
-                    index += 2
-                elif word.startswith("-"):
-                    index += 1
-                else:
-                    break
-            continue
-        break
-    return words[index:]
-
-
-def _release_create_tag(command: _ShellCommand) -> str | None:
-    """Return the tag for a direct, wrapper-normalized gh release-create command."""
-    words = _executable_words(command)
-    if len(words) >= 4 and words[:3] == ("gh", "release", "create"):
-        return words[3]
-    return None
-
-
-def _is_dynamic_release_create(command: _ShellCommand) -> bool:
-    """Fail closed when a shell would parse release authority dynamically."""
-    words = _executable_words(command)
-    if not words:
-        return False
-    if words[0] == "eval":
-        return any(_RELEASE_CREATE_GRAMMAR.search(argument) for argument in words[1:])
-    if words[0] in {"bash", "sh", "zsh", "dash"}:
-        for index, word in enumerate(words[:-1]):
-            if word == "-c" or (word.startswith("-") and "c" in word[1:]):
-                return bool(_RELEASE_CREATE_GRAMMAR.search(words[index + 1]))
-    return False
-
-
-def _has_embedded_release_create(command: _ShellCommand) -> bool:
-    """Reject command substitutions that this deliberately small scanner cannot model."""
-    if _release_create_tag(command) is not None:
-        return False
-    words = command
-    if _executable_words(command)[:1] in {("echo",), ("printf",)} and "$" not in words:
-        return False
-    return any(words[index : index + 3] == ("gh", "release", "create") for index in range(len(words) - 2))
-
-
-def _has_unclassifiable_release_authority(script: str, matches: list[re.Match[str]]) -> bool:
-    """Reject syntax that carries release authority outside the tiny direct-command grammar."""
-    if not matches:
-        return False
-    normalized = _normalize_shell_text(script)
-    for match in matches:
-        line_start = normalized.rfind("\n", 0, match.start()) + 1
-        line_end = normalized.find("\n", match.end())
-        line = normalized[line_start:] if line_end == -1 else normalized[line_start:line_end]
-        before = normalized[line_start : match.start()]
-        if match.group("executable") != "gh":
-            return True
-        if re.search(r"(?:^|[;|&]\s*)[A-Za-z_][A-Za-z0-9_]*=", before):
-            return True
-        if re.search(r"\b(?:eval|(?:bash|sh|zsh|dash)\s+(?:-[A-Za-z]*c\b|-c\b))", before):
-            return True
-        if "$(" in before or "`" in line:
-            return True
-    return False
-
-
-def _is_candidate_reservation(command: _ShellCommand) -> bool:
-    """Recognize only a real curl reservation request, never echoed text."""
-    words = _executable_words(command)
-    return bool(words and words[0] == "curl" and any("/v2/desktop/beta/candidates/reserve" in word for word in words))
-
-
-def _contains_live_release_marker(value: object) -> bool:
-    if isinstance(value, dict):
-        return any(
-            key == "isLive" and item is True or _contains_live_release_marker(item) for key, item in value.items()
-        )
-    if isinstance(value, list):
-        return any(_contains_live_release_marker(item) for item in value)
-    if isinstance(value, str):
-        return bool(re.search(r"(?m)^\s*isLive:\s*true\s*$", value))
-    return False
-
-
-def _is_isolated_preview_workflow(workflow: dict[str, object]) -> bool:
-    environment = workflow.get("environment")
-    vars_ = environment.get("vars") if isinstance(environment, dict) else None
-    return isinstance(vars_, dict) and vars_.get("PREVIEW_MODE") == "true"
+    return errors
 
 
 def check_codemagic_release_publishers() -> list[str]:
-    """Keep exactly one executable canonical GitHub-release publisher in Codemagic."""
+    """Lock the two desktop workflows and their release capability ownership.
+
+    This intentionally does not try to recognize arbitrary Bash.  The complete
+    executable workflow subtrees and the one publication scalar are compared to
+    checked-in canonical JSON/text digests.  Therefore a constructed command,
+    shell function, control-flow change, or alternate API call cannot gain
+    release authority without an explicit fixture change in review.
+    """
     codemagic_path = ROOT / "codemagic.yaml"
     document, duplicates, errors = _load_codemagic_with_duplicates(codemagic_path)
     errors.extend(f"codemagic.yaml has duplicate key: {key}" for key in duplicates)
-    raw_occurrences, raw_errors = _raw_release_create_occurrences(codemagic_path)
-    errors.extend(raw_errors)
+    workflow_contract = ROOT / WORKFLOW_CONTRACT_RELATIVE_PATH
+    if not workflow_contract.exists():
+        return [*errors, "Codemagic workflow contract fixture is missing"]
+    try:
+        contract = json.loads(workflow_contract.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [*errors, f"Codemagic workflow contract fixture is invalid JSON: {exc}"]
     workflows = document.get("workflows")
     if not isinstance(workflows, dict):
         return [*errors, "codemagic.yaml is missing its workflows mapping"]
-
-    canonical_name = "omi-desktop-swift-release"
-    canonical = workflows.get(canonical_name)
+    canonical = workflows.get(CANONICAL_WORKFLOW)
+    preview = workflows.get(PREVIEW_WORKFLOW)
     if not isinstance(canonical, dict):
-        return [*errors, "codemagic.yaml is missing the omi-desktop-swift-release workflow"]
+        return [*errors, f"codemagic.yaml is missing the {CANONICAL_WORKFLOW} workflow"]
+    if not isinstance(preview, dict):
+        return [*errors, f"codemagic.yaml is missing the {PREVIEW_WORKFLOW} workflow"]
 
-    publisher_commands: list[tuple[str, str, str]] = []
+    for workflow_name, workflow in ((CANONICAL_WORKFLOW, canonical), (PREVIEW_WORKFLOW, preview)):
+        expected = contract.get(workflow_name)
+        if not isinstance(expected, dict):
+            errors.append(f"Codemagic workflow contract fixture is missing {workflow_name}")
+            continue
+        actual_digest = _sha256_text(_canonical_json(workflow))
+        if actual_digest != expected.get("semantic_sha256"):
+            errors.append(f"{workflow_name} semantic workflow contract digest does not match the approved fixture")
+
+    canonical_scripts = canonical.get("scripts")
+    preview_scripts = preview.get("scripts")
+    if not isinstance(canonical_scripts, list) or not isinstance(preview_scripts, list):
+        return [*errors, "canonical and preview workflows must both have scripts"]
+    if canonical_scripts is not preview_scripts:
+        errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
+    if len(canonical_scripts) != 21:
+        errors.append("canonical workflow must retain exactly 21 approved script steps")
+
+    preview_environment = preview.get("environment")
+    preview_groups = preview_environment.get("groups") if isinstance(preview_environment, dict) else None
+    preview_vars = preview_environment.get("vars") if isinstance(preview_environment, dict) else None
+    if preview_groups != ["desktop_preview_secrets"]:
+        errors.append("preview workflow must use only the approved desktop_preview_secrets credential group")
+    if not isinstance(preview_vars, dict) or preview_vars.get("PREVIEW_MODE") != "true":
+        errors.append('preview workflow must set exact PREVIEW_MODE: "true"')
+
+    publication_steps = [
+        step
+        for step in canonical_scripts
+        if isinstance(step, dict)
+        and step.get("name") == "Create GitHub release"
+        and isinstance(step.get("script"), str)
+    ]
+    if len(publication_steps) != 1:
+        errors.append("canonical workflow must contain exactly one Create GitHub release script")
+    else:
+        publication_script = publication_steps[0]["script"]
+        expected_publication = contract.get(CANONICAL_WORKFLOW, {}).get("publication_script")
+        if publication_script != expected_publication:
+            errors.append("canonical publication script text does not match the approved fixture")
+        elif _sha256_text(publication_script) != contract[CANONICAL_WORKFLOW].get("publication_script_sha256"):
+            errors.append("canonical publication script digest does not match the approved fixture")
+        preview_exit = 'if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then\n  echo "External previews do not create GitHub releases."\n  exit 0\nfi'
+        if not publication_script.startswith(preview_exit):
+            errors.append("locked preview publication script must exit before reservation or publication")
+
     for workflow_name, workflow in workflows.items():
         if not isinstance(workflow, dict):
             continue
-        isolated_preview = _is_isolated_preview_workflow(workflow)
-        if _contains_live_release_marker(workflow):
-            errors.append(f"Codemagic workflow {workflow_name} contains isLive: true")
+        environment = workflow.get("environment")
+        groups = environment.get("groups", []) if isinstance(environment, dict) else []
+        vars_ = environment.get("vars", {}) if isinstance(environment, dict) else {}
+        if not isinstance(groups, list):
+            errors.append(f"Codemagic workflow {workflow_name} environment groups must be a list")
+            continue
+        if not isinstance(vars_, dict):
+            errors.append(f"Codemagic workflow {workflow_name} environment vars must be a mapping")
+            continue
+        forbidden_groups = NORMAL_RELEASE_CREDENTIAL_GROUPS.intersection(str(group) for group in groups)
+        if workflow_name != CANONICAL_WORKFLOW and forbidden_groups:
+            errors.append(
+                f"Codemagic workflow {workflow_name} imports normal release credential group(s): {sorted(forbidden_groups)}"
+            )
+        if workflow_name != CANONICAL_WORKFLOW:
+            for token_name in ("GITHUB_TOKEN", "GH_TOKEN"):
+                if token_name in vars_:
+                    errors.append(f"Codemagic workflow {workflow_name} exposes {token_name} outside canonical release")
+
+    # A deliberately conservative tripwire. It is not used to establish the
+    # security boundary; the exact semantic fixture above does that.
+    for workflow_name, workflow in workflows.items():
+        if not isinstance(workflow, dict):
+            continue
         steps = workflow.get("scripts")
         if not isinstance(steps, list):
             continue
         for step in steps:
             if not isinstance(step, dict) or not isinstance(step.get("script"), str):
                 continue
-            step_name = step.get("name") if isinstance(step.get("name"), str) else "unnamed script"
             script = step["script"]
-            script_matches = list(_RELEASE_CREATE_AUTHORITY.finditer(_normalize_shell_text(script)))
-            if _has_unclassifiable_release_authority(script, script_matches):
+            approved_shared_publication = workflow_name in {
+                CANONICAL_WORKFLOW,
+                PREVIEW_WORKFLOW,
+            } and script == contract.get(CANONICAL_WORKFLOW, {}).get("publication_script")
+            if _DIRECT_RELEASE_CREATE.search(script) and not approved_shared_publication:
                 errors.append(
-                    f"Codemagic workflow {workflow_name} has release-create authority in shell syntax the guard cannot classify"
+                    f"Codemagic workflow {workflow_name} has direct GitHub release-create authority outside the fixture"
                 )
-            try:
-                commands = _script_commands(script)
-            except ValueError:
-                if script_matches:
-                    errors.append(
-                        f"Codemagic workflow {workflow_name} has malformed shell syntax around release-create authority"
-                    )
-                continue
-            for command in commands:
-                if _is_dynamic_release_create(command) or _has_embedded_release_create(command):
-                    errors.append(
-                        f"Codemagic workflow {workflow_name} has a dynamic shell command that cannot safely interpret "
-                        "release-create authority"
-                    )
-                tag = _release_create_tag(command)
-                if tag is not None:
-                    # The preview workflow deliberately shares the script anchor,
-                    # but PREVIEW_MODE exits before this command can execute.
-                    if not isolated_preview:
-                        publisher_commands.append((str(workflow_name), step_name, tag))
-
-    if len(raw_occurrences) != 1:
-        errors.append("Codemagic must contain exactly one release-create authority occurrence in raw script text")
-    if len(publisher_commands) != 1:
-        errors.append("Codemagic must contain exactly one executable gh release create publisher")
-    if publisher_commands != [(canonical_name, "Create GitHub release", "$CM_TAG")]:
-        errors.append(
-            "canonical workflow must contain the exact canonical gh release create \"$CM_TAG\" and no alternate release-create path"
-        )
-    for workflow, _, tag in publisher_commands:
-        workflow_config = workflows.get(workflow)
-        if workflow != canonical_name and not (
-            isinstance(workflow_config, dict) and _is_isolated_preview_workflow(workflow_config)
-        ):
-            if tag == "$TAG_NAME":
-                errors.append(f"Codemagic workflow {workflow} contains a legacy $TAG_NAME publisher")
-            else:
-                errors.append(f"Codemagic workflow {workflow} contains an alternate gh release create publisher")
-
-    scripts = canonical.get("scripts")
-    if not isinstance(scripts, list):
-        return [*errors, "canonical workflow is missing scripts"]
-    smoke_position = next(
-        (
-            index
-            for index, step in enumerate(scripts)
-            if isinstance(step, dict) and step.get("name") == "Smoke signed desktop artifact"
-        ),
-        None,
-    )
-    release_position = next(
-        (
-            index
-            for index, step in enumerate(scripts)
-            if isinstance(step, dict) and step.get("name") == "Create GitHub release"
-        ),
-        None,
-    )
-    if smoke_position is None or release_position is None or smoke_position >= release_position:
-        errors.append("canonical signed smoke must precede canonical publication")
-        return errors
-    release_step = scripts[release_position]
-    release_script = release_step.get("script") if isinstance(release_step, dict) else None
-    try:
-        commands = _script_commands(release_script) if isinstance(release_script, str) else []
-    except ValueError:
-        commands = []
-        errors.append("canonical workflow has malformed shell syntax around release-create authority")
-    create_index = next(
-        (index for index, command in enumerate(commands) if _release_create_tag(command) == "$CM_TAG"), None
-    )
-    reservation_index = next(
-        (index for index, command in enumerate(commands) if _is_candidate_reservation(command)), None
-    )
-    if create_index is None or reservation_index is None or reservation_index + 1 != create_index:
-        errors.append(
-            "canonical candidate reservation must be immediately before the exact canonical gh release create"
-        )
+            if _DIRECT_GITHUB_RELEASE_API.search(script):
+                errors.append(f"Codemagic workflow {workflow_name} has direct GitHub releases API authority")
     return errors
 
 
