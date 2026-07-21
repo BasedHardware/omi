@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, List, Mapping, Optional, cast
+from typing import Any, List, Mapping, Optional, TypeVar, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 
 class AnnouncementType(str, Enum):
@@ -107,6 +107,21 @@ class AnnouncementContent(BaseModel):
 
 
 # Main announcement model
+_SubModel = TypeVar("_SubModel", bound=BaseModel)
+
+
+def _optional_submodel(model_cls: type[_SubModel], sub_data: Optional[Mapping[str, Any]]) -> Optional[_SubModel]:
+    # Tolerate a malformed targeting/display sub-document (a bad enum, a bad datetime) the same way a
+    # bad top-level type is tolerated in from_dict: drop the sub-object rather than let one legacy
+    # announcement 500 the whole list (the DB helpers loop from_dict with no per-item guard).
+    if not sub_data:
+        return None
+    try:
+        return model_cls(**sub_data)
+    except ValidationError:
+        return None
+
+
 class Announcement(BaseModel):
     id: str
     type: AnnouncementType
@@ -173,17 +188,22 @@ class Announcement(BaseModel):
         except ValueError:
             announcement_type = AnnouncementType.ANNOUNCEMENT
 
+        # Tolerate a legacy doc missing id or created_at the same way a missing type is tolerated above,
+        # so a single malformed announcement cannot 500 the whole list. A missing created_at sorts as
+        # the epoch.
+        announcement_id = cast(str, data.get("id")) or ""
+        created_at = cast(datetime, data.get("created_at")) or datetime.fromtimestamp(0, tz=timezone.utc)
         return Announcement(
-            id=cast(str, data.get("id")),
+            id=announcement_id,
             type=announcement_type,
-            created_at=cast(datetime, data.get("created_at")),
+            created_at=created_at,
             active=data.get("active", True),
             app_version=data.get("app_version"),
             firmware_version=data.get("firmware_version"),
             device_models=data.get("device_models"),
             expires_at=data.get("expires_at"),
-            targeting=Targeting(**targeting_data) if targeting_data else None,
-            display=Display(**display_data) if display_data else None,
+            targeting=_optional_submodel(Targeting, targeting_data),
+            display=_optional_submodel(Display, display_data),
             content=data.get("content", {}),
         )
 

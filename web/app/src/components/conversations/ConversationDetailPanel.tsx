@@ -17,6 +17,7 @@ import {
   Volume2,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
@@ -29,7 +30,13 @@ import { SpeakerTagSheet } from './SpeakerTagSheet';
 import { ManagePeopleModal } from './ManagePeopleModal';
 import { AudioPlayer, AudioPlayerRef } from './AudioPlayer';
 import { usePeople } from '@/hooks/usePeople';
-import { precacheConversationAudio, getConversationAudioUrls } from '@/lib/api';
+import {
+  precacheConversationAudio,
+  getConversationAudioUrls,
+  updateSegmentText,
+  reprocessConversation,
+} from '@/lib/api';
+import { MixpanelManager } from '@/lib/analytics/mixpanel';
 import type {
   Conversation,
   AppResponse,
@@ -58,6 +65,10 @@ interface ConversationDetailPanelProps {
   onConversationUpdate?: (conversation: Conversation) => void;
   onDelete?: () => void;
 }
+
+// Give a reprocess this long before we stop waiting and surface a failure, so a
+// hung request can't leave the UI stuck on "Reprocessing…" indefinitely.
+const REPROCESS_TIMEOUT_MS = 90_000;
 
 type TabId = 'summary' | 'actions' | 'transcript';
 
@@ -403,8 +414,54 @@ export function ConversationDetailPanel({
   const [selectedSegment, setSelectedSegment] = useState<TranscriptSegment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
   const [showManagePeople, setShowManagePeople] = useState(false);
+  // Whether a transcript segment was edited this session (derived summary/search
+  // is now stale until the conversation is reprocessed — see the nudge banner).
+  const [transcriptEdited, setTranscriptEdited] = useState(false);
+  const [isReprocessing, setIsReprocessing] = useState(false);
+  // Set when a reprocess errors or times out, so the failure is surfaced to the
+  // user (not just console) and they can retry — the summary stays stale.
+  const [reprocessFailed, setReprocessFailed] = useState(false);
+  // Serialized transcript-edit save queue. Segment edits are persisted one at a
+  // time so concurrent PATCHes can't lose-update the backend's read-modify-write
+  // of the whole segments array (each save reads the state left by the previous
+  // one). `saveBatch` drives the "Saving X of N" progress UI.
+  const saveQueueRef = useRef<
+    Array<{ segmentId: string; text: string; prevText: string }>
+  >([]);
+  const processingRef = useRef(false);
+  const [saveBatch, setSaveBatch] = useState<{
+    total: number;
+    done: number;
+    savingId: string | null;
+    failed: number;
+  }>({ total: 0, done: 0, savingId: null, failed: 0 });
   const router = useRouter();
   const { people } = usePeople();
+
+  // Refs holding the *currently displayed* conversation id and object, so async
+  // completions (segment saves, reprocess) can (a) build optimistic updates from
+  // the latest state and (b) bail out if the user switched conversations while a
+  // request was in flight — otherwise a stale response would clobber the new
+  // conversation's UI (displayed id vs. request id divergence).
+  const convIdRef = useRef(conversationId);
+  const conversationRef = useRef(conversation);
+  useEffect(() => {
+    convIdRef.current = conversationId;
+    conversationRef.current = conversation;
+  }, [conversationId, conversation]);
+
+  // Reset all edit/save state when switching to a different conversation so
+  // nothing leaks across (queued saves, progress, "edited" nudge, reprocessing).
+  useEffect(() => {
+    saveQueueRef.current = [];
+    processingRef.current = false;
+    setSaveBatch({ total: 0, done: 0, savingId: null, failed: 0 });
+    setTranscriptEdited(false);
+    setIsReprocessing(false);
+    setReprocessFailed(false);
+  }, [conversationId]);
+
+  const isSavingSegments = saveBatch.total > saveBatch.done;
 
   // Audio state
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
@@ -522,6 +579,128 @@ export function ConversationDetailPanel({
     },
     [conversation, onConversationUpdate],
   );
+
+  // Immutably patch a single segment's text from the *latest* conversation state
+  // (via ref, not a stale closure) so overlapping edits don't drop each other.
+  const applyOptimisticText = useCallback(
+    (segmentId: string, text: string) => {
+      const latest = conversationRef.current;
+      if (!latest || !onConversationUpdate) return;
+      onConversationUpdate({
+        ...latest,
+        transcript_segments: (latest.transcript_segments ?? []).map((seg) =>
+          seg.id === segmentId ? { ...seg, text } : seg,
+        ),
+      });
+    },
+    [onConversationUpdate],
+  );
+
+  // Drain the save queue one PATCH at a time. Serializing is the correctness fix:
+  // the backend rewrites the whole segments array, so concurrent writes lose-update
+  // — running them sequentially means each save reads the previous one's result.
+  const processSaveQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    const convId = convIdRef.current;
+    try {
+      while (saveQueueRef.current.length > 0) {
+        // Abandon the batch if the user navigated to another conversation.
+        if (convIdRef.current !== convId) {
+          saveQueueRef.current = [];
+          break;
+        }
+        const task = saveQueueRef.current.shift()!;
+        setSaveBatch((s) => ({ ...s, savingId: task.segmentId }));
+        try {
+          await updateSegmentText(convId, task.segmentId, task.text);
+          if (convIdRef.current === convId) {
+            setTranscriptEdited(true);
+            MixpanelManager.track('Transcript Segment Edited', {
+              conversation_id: convId,
+              segment_id: task.segmentId,
+            });
+          }
+        } catch (error) {
+          console.error('Failed to save transcript segment edit:', error);
+          // Revert the optimistic change so the UI reflects the persisted truth.
+          if (convIdRef.current === convId)
+            applyOptimisticText(task.segmentId, task.prevText);
+          setSaveBatch((s) => ({ ...s, failed: s.failed + 1 }));
+        } finally {
+          setSaveBatch((s) => ({ ...s, done: s.done + 1, savingId: null }));
+        }
+      }
+    } finally {
+      processingRef.current = false;
+      // Collapse the progress counters once the queue is fully drained (keep the
+      // failure count so the error banner persists until the next edit).
+      if (saveQueueRef.current.length === 0) {
+        setSaveBatch((s) => ({ total: 0, done: 0, savingId: null, failed: s.failed }));
+      }
+    }
+  }, [applyOptimisticText]);
+
+  // Enqueue a segment edit: show it optimistically now, persist it in order.
+  const enqueueSegmentSave = useCallback(
+    (segmentId: string, text: string) => {
+      const latest = conversationRef.current;
+      if (!latest) return;
+      const prevText =
+        (latest.transcript_segments ?? []).find((seg) => seg.id === segmentId)?.text ??
+        '';
+      const trimmed = text.trim();
+      if (!trimmed || trimmed === prevText) return;
+
+      applyOptimisticText(segmentId, trimmed);
+      saveQueueRef.current.push({ segmentId, text: trimmed, prevText });
+      // A new edit while the queue is idle starts a fresh batch (clears old errors).
+      setSaveBatch((s) => {
+        const fresh = s.total === s.done;
+        return {
+          total: (fresh ? 0 : s.total) + 1,
+          done: fresh ? 0 : s.done,
+          savingId: s.savingId,
+          failed: fresh ? 0 : s.failed,
+        };
+      });
+      void processSaveQueue();
+    },
+    [applyOptimisticText, processSaveQueue],
+  );
+
+  // Reprocess the conversation to refresh summary/search after transcript edits.
+  // Reprocessing is heavy; race it against a timeout so a hung request can't leave
+  // the UI stuck on "Reprocessing…", and surface failures to the user (not console).
+  const handleReprocessAfterEdit = useCallback(async () => {
+    const convId = convIdRef.current;
+    setIsReprocessing(true);
+    setReprocessFailed(false);
+    try {
+      const updated = await Promise.race([
+        reprocessConversation(convId),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Reprocess timed out')),
+            REPROCESS_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+      // Ignore the response if the user has since switched conversations.
+      if (convIdRef.current === convId) {
+        onConversationUpdate?.(updated);
+        setTranscriptEdited(false);
+        MixpanelManager.track('Conversation Reprocessed After Edit', {
+          conversation_id: convId,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to reprocess conversation after edit:', error);
+      if (convIdRef.current === convId) setReprocessFailed(true);
+    } finally {
+      if (convIdRef.current === convId) setIsReprocessing(false);
+    }
+  }, [onConversationUpdate]);
 
   // Handle title change - update conversation with new title
   const handleTitleChange = useCallback(
@@ -744,6 +923,73 @@ export function ConversationDetailPanel({
                     <span>Loading audio...</span>
                   </div>
                 )}
+                {/* Save-queue progress: edits persist one at a time (serialized) */}
+                {isSavingSegments && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 text-sm text-text-secondary">
+                    <div className="w-4 h-4 border-2 border-text-quaternary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    <span>
+                      Saving edit {Math.min(saveBatch.done + 1, saveBatch.total)} of{' '}
+                      {saveBatch.total}…
+                    </span>
+                  </div>
+                )}
+                {/* Failed-save banner (edits were reverted to their saved value) */}
+                {!isSavingSegments && saveBatch.failed > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-error/10 border border-error/20 text-sm text-error">
+                    <span>
+                      Couldn&apos;t save {saveBatch.failed} edit
+                      {saveBatch.failed > 1 ? 's' : ''} — reverted to the saved text.
+                      Please try again.
+                    </span>
+                  </div>
+                )}
+                {/* Reprocess failed/timed out — surface it and let the user retry */}
+                {reprocessFailed && !isReprocessing && !conversation.discarded && (
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-error/10 border border-error/20">
+                    <span className="text-sm text-error">
+                      Reprocessing failed — the summary and search may be out of date.
+                    </span>
+                    <button
+                      onClick={handleReprocessAfterEdit}
+                      className={cn(
+                        'flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium',
+                        'bg-white text-bg-primary hover:bg-white/90 transition-colors',
+                      )}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Retry</span>
+                    </button>
+                  </div>
+                )}
+                {/* Nudge to refresh derived summary/search after edits (once saved) */}
+                {transcriptEdited &&
+                  !conversation.discarded &&
+                  !isSavingSegments &&
+                  saveBatch.failed === 0 &&
+                  !reprocessFailed && (
+                    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50">
+                      <div className="flex items-center gap-2 text-sm text-text-secondary">
+                        <Sparkles className="w-4 h-4 text-text-secondary flex-shrink-0" />
+                        <span>
+                          Transcript edited. Reprocess to update the summary and search.
+                        </span>
+                      </div>
+                      <button
+                        onClick={handleReprocessAfterEdit}
+                        disabled={isReprocessing}
+                        className={cn(
+                          'flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium',
+                          'bg-white text-bg-primary hover:bg-white/90 transition-colors',
+                          'disabled:opacity-60',
+                        )}
+                      >
+                        <RefreshCw
+                          className={cn('w-3.5 h-3.5', isReprocessing && 'animate-spin')}
+                        />
+                        <span>{isReprocessing ? 'Reprocessing…' : 'Reprocess'}</span>
+                      </button>
+                    </div>
+                  )}
                 <TranscriptView
                   segments={transcript_segments}
                   userName={userName}
@@ -751,6 +997,9 @@ export function ConversationDetailPanel({
                   people={people}
                   editable={true}
                   onSpeakerClick={handleSpeakerClick}
+                  onSegmentTextChange={enqueueSegmentSave}
+                  savingSegmentId={saveBatch.savingId}
+                  editingDisabled={isReprocessing}
                   currentTime={currentPlaybackTime}
                   hasAudio={audioAvailable}
                   onSeekTo={handleSeekTo}

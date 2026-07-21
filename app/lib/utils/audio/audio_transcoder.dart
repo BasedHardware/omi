@@ -1,7 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
-
 import 'package:opus_dart/opus_dart.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';

@@ -1,6 +1,7 @@
 import { auth } from './firebase'
 import type { BackendSegment, ListenEvent, ListenMode, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
+import { getWindowsDeviceIdHash } from './clientDevice'
 
 export type OmiListenCallbacks = {
   /** Fires once when the v4/listen WS reaches OPEN. */
@@ -52,6 +53,7 @@ export async function startOmiListen(
   const user = auth.currentUser
   if (!user) throw new Error('Omi v4/listen requires sign-in.')
   const token = await user.getIdToken()
+  const deviceIdHash = await getWindowsDeviceIdHash()
   const sessionId = `omi-listen-${Date.now()}-${nextSessionId++}`
 
   let stopped = false
@@ -105,6 +107,7 @@ export async function startOmiListen(
       sessionId,
       source,
       token,
+      deviceIdHash,
       language: getPreferences().language,
       mode,
       clientConversationId

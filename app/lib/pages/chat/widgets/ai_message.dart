@@ -825,10 +825,12 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     (idx, date) = memProvider.addConversationWithDateGrouped(m);
                     PlatformManager.instance.analytics.chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
-                    context.read<ConversationDetailProvider>().updateConversation(m.id, date);
-                    await Navigator.of(
-                      context,
-                    ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
+                    if (context.mounted) {
+                      context.read<ConversationDetailProvider>().updateConversation(m.id, date);
+                      await Navigator.of(
+                        context,
+                      ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
+                    }
                     if (SharedPreferencesUtil().modifiedConversationDetails?.id == m.id) {
                       ServerConversation modifiedDetails = SharedPreferencesUtil().modifiedConversationDetails!;
                       widget.updateConversation(SharedPreferencesUtil().modifiedConversationDetails!);
@@ -1138,9 +1140,9 @@ class _MessageActionBarState extends State<MessageActionBar> {
         // Show confirmation snackbar
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Thanks for your feedback!', style: TextStyle(color: Colors.white)),
-              duration: Duration(seconds: 2),
+            SnackBar(
+              content: Text(context.l10n.thanksForYourFeedback, style: const TextStyle(color: Colors.white)),
+              duration: const Duration(seconds: 2),
             ),
           );
         }
@@ -1269,6 +1271,7 @@ class CopyButton extends StatelessWidget {
         highlightColor: Colors.transparent,
         onTap: () async {
           await Clipboard.setData(ClipboardData(text: messageText));
+          if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -1287,7 +1290,7 @@ class CopyButton extends StatelessWidget {
               padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 4.0, 0.0),
               child: Icon(Icons.content_copy, color: Theme.of(context).textTheme.bodySmall!.color, size: 10.0),
             ),
-            Text('Copy message', style: Theme.of(context).textTheme.bodySmall),
+            Text(context.l10n.copyMessage, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(width: 8),
           ],
         ),

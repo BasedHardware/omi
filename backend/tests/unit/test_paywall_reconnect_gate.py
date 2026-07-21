@@ -8,14 +8,19 @@ Validates:
 - Behavioral tests for is_trial_paywalled and clear_trial_paywall_cache
 """
 
-from unittest.mock import patch, MagicMock
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
+from routers.listen.contracts import ListenRequest
+from routers.listen.runtime import ListenSessionRuntime
 
-TRANSCRIBE_SRC_PATH = 'routers/transcribe.py'
-PAYMENT_SRC_PATH = 'routers/payment.py'
-USERS_SRC_PATH = 'routers/users.py'
-SUBSCRIPTION_SRC_PATH = 'utils/subscription.py'
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+RUNTIME_SRC_PATH = BACKEND_DIR / 'routers' / 'listen' / 'runtime.py'
+PAYMENT_SRC_PATH = BACKEND_DIR / 'routers' / 'payment.py'
+USERS_SRC_PATH = BACKEND_DIR / 'routers' / 'users.py'
+SUBSCRIPTION_SRC_PATH = BACKEND_DIR / 'utils' / 'subscription.py'
 
 
 def _read_source(path):
@@ -23,130 +28,60 @@ def _read_source(path):
         return f.read()
 
 
+class FakeWebSocket:
+    def __init__(self):
+        self.headers = {}
+        self.events = []
+        self.closed = []
+
+    async def send_json(self, event):
+        self.events.append(event)
+
+    async def close(self, *, code, reason):
+        self.closed.append((code, reason))
+
+
+def _runtime(uid='test-user', source='desktop'):
+    websocket = FakeWebSocket()
+    return ListenSessionRuntime(ListenRequest(websocket=websocket, uid=uid, source=source)), websocket
+
+
 class TestAdmissionPhase:
-    """Verify paywalled desktop users are rejected in the admission phase, before session start."""
+    """Exercise admission through the extracted runtime instead of source ordering."""
 
-    def test_paywall_check_before_session_start(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('is_trial_paywalled(uid, source)')
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        assert paywall_pos != -1, "is_trial_paywalled call not found in _stream_handler"
-        assert session_pos != -1, "session start not found in _stream_handler"
-        assert paywall_pos < session_pos, "paywall check must come before session start"
+    @pytest.mark.asyncio
+    async def test_paywall_rejects_before_session_start(self, monkeypatch):
+        runtime, websocket = _runtime()
 
-    def test_paywall_rejection_returns_before_session(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        paywall_block = handler_body[paywall_pos:session_pos]
-        assert 'return' in paywall_block, "paywall rejection must return before session start"
+        async def fake_run_blocking(_executor, function, *args):
+            assert function.__name__ == 'is_trial_paywalled'
+            assert args == ('test-user', 'desktop')
+            return True
 
-    def test_paywall_close_uses_1008(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        paywall_block = handler_body[paywall_pos:session_pos]
-        assert (
-            'websocket.close' in paywall_block and '1008' in paywall_block
-        ), "admission paywall must close with code 1008"
+        monkeypatch.setattr('routers.listen.runtime.run_blocking', fake_run_blocking)
+        assert await runtime._admit() is False
+        assert websocket.events[0]['type'] == 'freemium_threshold_reached'
+        assert websocket.closed == [(1008, 'trial_expired')]
+        assert runtime.task_supervisor._session_started is False
 
-    def test_paywall_close_reason_is_trial_expired(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        paywall_block = handler_body[paywall_pos:session_pos]
-        assert 'trial_expired' in paywall_block, "paywall close must use reason 'trial_expired'"
+    @pytest.mark.asyncio
+    async def test_bad_uid_and_audio_format_are_rejected_without_starting_session(self, monkeypatch):
+        missing_uid, missing_uid_socket = _runtime(uid='')
+        assert await missing_uid._admit() is False
+        assert missing_uid_socket.closed == [(1008, 'Bad uid')]
 
-    def test_uid_check_before_session(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        uid_check_pos = handler_body.find('Bad uid')
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        assert uid_check_pos != -1, "uid check not found in _stream_handler"
-        assert session_pos != -1, "session start not found in _stream_handler"
-        assert uid_check_pos < session_pos, "uid check must come before session start"
-
-    def test_freemium_event_sent_before_close(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        paywall_block = handler_body[paywall_pos:session_pos]
-        event_pos = paywall_block.find('FreemiumThresholdReachedEvent')
-        close_pos = paywall_block.find('websocket.close')
-        assert event_pos != -1, "admission must send FreemiumThresholdReachedEvent for desktop client"
-        assert close_pos != -1
-        assert event_pos < close_pos, "freemium event must be sent before websocket close"
-
-
-class TestGaugeIncTryFinally:
-    """Verify session start is immediately before the try/finally that decrements it — no leakable returns."""
-
-    def test_start_immediately_inside_try(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        try_pos = handler_body.find('try:')
-        start_pos = handler_body.find('task_supervisor.start_session()')
-        assert try_pos != -1
-        assert start_pos != -1
-        assert try_pos < start_pos, "session start must be inside the guarded try block"
-
-    def test_unsupported_language_return_before_session(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        lang_pos = handler_body.find('The language is not supported')
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        assert lang_pos != -1, "unsupported language check not found"
-        assert lang_pos < session_pos, "unsupported language return must come before session start"
-
-    def test_bad_user_return_before_session(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        user_pos = handler_body.find('Bad user')
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        assert user_pos != -1, "bad user check not found"
-        assert user_pos < session_pos, "bad user return must come before session start"
+        invalid_audio, invalid_audio_socket = _runtime()
+        monkeypatch.setattr('routers.listen.runtime.validate_audio_format', lambda *_args: 'bad_audio')
+        assert await invalid_audio._admit() is False
+        assert invalid_audio_socket.closed == [(1003, 'bad_audio')]
+        assert invalid_audio.task_supervisor._session_started is False
 
 
 class TestNoPaywallBlockInSession:
-    """Verify the old paywall close block was removed from inside the session."""
-
-    def test_no_paywalled_desktop_variable(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        after_session = handler_body[session_pos:]
-        assert (
-            'is_paywalled_desktop' not in after_session
-        ), "is_paywalled_desktop variable should not exist after session start — handled in admission"
-
-    def test_no_cooldown_calls(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        assert 'check_trial_paywall_ws_cooldown' not in src, "cooldown check removed"
-        assert 'set_trial_paywall_ws_cooldown' not in src, "cooldown set removed"
-
-    def test_session_dec_in_finally(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        finally_pos = handler_body.rfind('finally:')
-        assert finally_pos != -1
-        finally_block = handler_body[finally_pos:]
-        assert 'task_supervisor.end_session()' in finally_block, "session end must be in the finally block"
+    def test_runtime_has_no_legacy_cooldown_logic(self):
+        source = _read_source(RUNTIME_SRC_PATH)
+        assert 'check_trial_paywall_ws_cooldown' not in source
+        assert 'set_trial_paywall_ws_cooldown' not in source
 
 
 class TestCacheInvalidation:
@@ -260,14 +195,13 @@ class TestPlatformFiltering:
         assert '.lower()' in fn_body, "is_trial_paywalled must use .lower() for case-insensitive matching"
 
     def test_admission_calls_is_trial_paywalled_with_source(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        session_pos = handler_body.find('task_supervisor.start_session()')
-        admission_body = handler_body[:session_pos]
+        src = _read_source(RUNTIME_SRC_PATH)
+        admission_start = src.find('async def _admit(')
+        admission_end = src.find('    async def _bootstrap', admission_start)
+        admission_body = src[admission_start:admission_end]
         assert (
-            'is_trial_paywalled(uid, source)' in admission_body
-        ), "admission phase must call is_trial_paywalled with uid and source"
+            'run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source)' in admission_body
+        ), "admission phase must offload is_trial_paywalled with uid and source"
 
 
 class TestIsTrialPaywalledBehavioral:

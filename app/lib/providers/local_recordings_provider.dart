@@ -9,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/batch_recording.dart';
@@ -32,7 +33,7 @@ import 'package:omi/utils/waveform_utils.dart';
 /// `completed` (never fire-and-forget).
 /// Result of a user-triggered [LocalRecordingsProvider.upload], so the UI can
 /// react (fair-use message, generic error, or navigate away) instead of guessing.
-enum LocalUploadOutcome { started, rateLimited, failed, busy }
+enum LocalUploadOutcome { started, fairUseLimited, backendBusy, failed, busy }
 
 class LocalRecordingsProvider extends ChangeNotifier {
   final AudioPlayerUtils _audio = AudioPlayerUtils.instance;
@@ -57,6 +58,14 @@ class LocalRecordingsProvider extends ChangeNotifier {
   String? _uploadingName;
   String? _failedName; // last upload that errored (file intact, retriable)
 
+  // Consecutive auto-upload failures per fileName. In-memory only (never
+  // persisted): the backoff resets on the next app launch, so a file that hit
+  // the [autoPhoneUploadMaxFailures] cap is retried once the app restarts.
+  final Map<String, int> _autoFailures = {};
+  // Re-entrancy guard for an auto-upload pass (connectivity can flip rapidly).
+  bool _isAutoUploading = false;
+  StreamSubscription<bool>? _connectivitySub;
+
   Timer? _reconcileTimer;
   bool _disposed = false;
 
@@ -68,7 +77,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
     // rotated recording surfaces without waiting for a BLE disconnect.
     BleBridge.instance.addBatchRecordingFinalizedListener(_onRecordingFinalized);
     _jobs = _loadJobs();
-    refresh();
+    // Trigger (a): auto-upload offline-fallback recordings once the initial scan
+    // is in. Trigger (b): whenever connectivity is (re)gained.
+    refresh().then((_) => _maybeAutoUpload());
+    _connectivitySub = ConnectivityService().onConnectionChange.listen((connected) {
+      if (connected) _maybeAutoUpload();
+    });
     if (_jobs.isNotEmpty) {
       _startReconcileTimer();
       _reconcile();
@@ -182,16 +196,19 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// Upload a single recording → backend transcribes it into a conversation.
   /// 200 fast-path: delete the file + surface the conversation immediately.
   /// 202 queued: persist the jobId and let the reconciler finish it.
-  Future<LocalUploadOutcome> upload(LocalRecording rec) async {
-    if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
-    if (SyncRateLimiter.instance.isLimited) {
-      notifyListeners();
-      return LocalUploadOutcome.rateLimited;
-    }
+  ///
+  /// User-initiated: surfaces the `failed` chip on any error and fires the
+  /// `Transcribe Later Recording Processed` analytic. Auto uploads go through the
+  /// same core via [_uploadFile] but stay silent (see [_recordUploadOutcome]).
+  Future<LocalUploadOutcome> upload(LocalRecording rec) => _uploadFile(rec, auto: false);
 
+  Future<LocalUploadOutcome> _uploadFile(LocalRecording rec, {required bool auto}) async {
+    if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
     _isUploading = true;
     _uploadingName = rec.fileName;
-    _failedName = null;
+    // Only the user's own retry clears the visible chip; an auto pass must not
+    // wipe a failed state the user is looking at for some other recording.
+    if (!auto) _failedName = null;
     await refresh();
 
     var outcome = LocalUploadOutcome.started;
@@ -199,11 +216,14 @@ class LocalRecordingsProvider extends ChangeNotifier {
       final file = File(rec.filePath);
       if (!file.existsSync()) {
         Logger.error('LocalRecordings: file missing on upload: ${rec.fileName}');
-        _failedName = rec.fileName;
         outcome = LocalUploadOutcome.failed;
       } else {
-        final result = await uploadLocalFilesV2([file]);
-        SyncRateLimiter.instance.clear();
+        final lane = syncUploadLaneForTimestamp(
+          rec.timerStart,
+          DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          hasServerCaptureProof: false,
+        );
+        final result = await SyncUploadGate.instance.upload([file], lane: lane);
 
         if (result.completed != null) {
           await _deleteFileOnly(rec.fileName);
@@ -215,21 +235,84 @@ class LocalRecordingsProvider extends ChangeNotifier {
         }
       }
     } on SyncRateLimitedException catch (e) {
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
-      outcome = LocalUploadOutcome.rateLimited;
+      outcome =
+          e.kind == SyncRateLimitKind.fairUse ? LocalUploadOutcome.fairUseLimited : LocalUploadOutcome.backendBusy;
     } catch (e) {
-      _failedName = rec.fileName;
       Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');
       outcome = LocalUploadOutcome.failed;
     } finally {
       _isUploading = false;
       _uploadingName = null;
-      await refresh();
     }
-    if (outcome == LocalUploadOutcome.started) {
-      PlatformManager.instance.analytics.transcribeLaterRecordingProcessed();
-    }
+    // Record outcome (failed chip / backoff / analytics) before the final refresh
+    // so `_stateFor` reflects any `_failedName` change in the same rebuild.
+    _recordUploadOutcome(rec.fileName, outcome, auto: auto);
+    await refresh();
     return outcome;
+  }
+
+  void _recordUploadOutcome(String fileName, LocalUploadOutcome outcome, {required bool auto}) {
+    if (outcome == LocalUploadOutcome.started) {
+      // Accepted (200 completed or 202 queued): clear any failure bookkeeping.
+      _autoFailures.remove(fileName);
+      if (!auto) PlatformManager.instance.analytics.transcribeLaterRecordingProcessed();
+      return;
+    }
+    // Rate-limited / backend-busy: transient push-back, not a per-file fault.
+    if (outcome != LocalUploadOutcome.failed) return;
+
+    if (!auto) {
+      _failedName = fileName;
+      return;
+    }
+    // Auto: silent retry until the per-file cap, then surface a chip so the user
+    // eventually sees something actionable. `_autoFailures` is in-memory only —
+    // documented on the field: the backoff resets on the next app launch.
+    final failures = (_autoFailures[fileName] ?? 0) + 1;
+    _autoFailures[fileName] = failures;
+    if (failures >= autoPhoneUploadMaxFailures) _failedName = fileName;
+  }
+
+  // ─────────────────────── auto-upload (offline fallback) ───────────────────────
+
+  /// Silently upload the automatic offline-fallback phone recordings
+  /// (`audio_omibatchphoneauto_*`) once connectivity allows. Explicit Transcribe
+  /// Later recordings are never touched here — that mode's promise is manual
+  /// upload. Files are processed one at a time through [_uploadFile] so the
+  /// single-flight guard and jobs sidecar keep working.
+  Future<void> _maybeAutoUpload() async {
+    if (_disposed || _isAutoUploading) return;
+    _isAutoUploading = true;
+    try {
+      // Files attempted this pass — so a file that fails (below its cap) or is
+      // rate-limited isn't re-selected in a tight loop within the same pass.
+      final handled = <String>{};
+      while (!_disposed) {
+        if (!canAutoUploadPhoneRecordings(
+          useCustomStt: SharedPreferencesUtil().useCustomStt,
+          autoSyncOfflineRecordings: SharedPreferencesUtil().autoSyncOfflineRecordings,
+          isUploading: _isUploading,
+        )) {
+          return;
+        }
+        final busy = <String>{if (_uploadingName != null) _uploadingName!, ..._jobs.keys, ...handled};
+        final next = selectNextAutoPhoneUpload(
+          _recordings.map((r) => r.fileName).toList(),
+          busyNames: busy,
+          failureCounts: _autoFailures,
+        );
+        if (next == null) break;
+        handled.add(next);
+        final rec = getById(next);
+        if (rec == null) continue; // deleted between scan and now
+        final outcome = await _uploadFile(rec, auto: true);
+        // Backend pushed back (fair-use / busy): stop this pass, retry on the
+        // next trigger rather than hammering.
+        if (outcome == LocalUploadOutcome.fairUseLimited || outcome == LocalUploadOutcome.backendBusy) break;
+      }
+    } finally {
+      _isAutoUploading = false;
+    }
   }
 
   // ───────────────────────── reconcile ─────────────────────────
@@ -427,6 +510,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _stopReconcileTimer();
+    _connectivitySub?.cancel();
     BleBridge.instance.removeBatchRecordingFinalizedListener(_onRecordingFinalized);
     _audio.removeListener(_onAudioChanged);
     super.dispose();

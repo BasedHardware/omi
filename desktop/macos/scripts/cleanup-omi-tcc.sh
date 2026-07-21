@@ -6,7 +6,7 @@
 # bundle IDs; it never edits ~/Library/Application Support/com.apple.TCC/TCC.db.
 #
 # Usage:
-#   scripts/cleanup-omi-tcc.sh [--list] [--apply-tccutil] [--json]
+#   scripts/cleanup-omi-tcc.sh [--list] [--apply-tccutil] [--json] [--verbose]
 #
 # Keeps by default:
 #   com.omi.computer-macos  (Omi)
@@ -15,12 +15,13 @@ set -euo pipefail
 
 MODE="list"
 OUTPUT="text"
+VERBOSE="false"
 KEEP_BUNDLE_IDS="com.omi.computer-macos,com.omi.desktop-dev"
 CANDIDATE_PREFIXES="com.omi.omi-"
 
 usage() {
     cat <<'USAGE'
-Usage: cleanup-omi-tcc.sh [--list] [--apply-tccutil] [--json]
+Usage: cleanup-omi-tcc.sh [--list] [--apply-tccutil] [--json] [--verbose]
                           [--keep-bundle-id BUNDLE_ID]
                           [--candidate-prefix BUNDLE_ID_PREFIX] [--help]
 
@@ -34,6 +35,7 @@ Options:
   --list           List inventory only (default)
   --apply-tccutil  Reset TCC/privacy permissions for candidate bundle IDs
   --json           Emit deterministic JSON instead of human-readable text
+  --verbose        Include every matching app, preference, and TCC row
   --keep-bundle-id BUNDLE_ID
                    Preserve this Omi bundle ID. May be passed more than once.
   --candidate-prefix BUNDLE_ID_PREFIX
@@ -54,6 +56,9 @@ while [ "$#" -gt 0 ]; do
             ;;
         --json)
             OUTPUT="json"
+            ;;
+        --verbose)
+            VERBOSE="true"
             ;;
         --keep-bundle-id)
             if [ "$#" -lt 2 ] || [ -z "$2" ]; then
@@ -89,7 +94,7 @@ if [ "$MODE" != "list" ] && [ "$MODE" != "apply-tccutil" ]; then
     exit 2
 fi
 
-python3 - "$MODE" "$OUTPUT" "$KEEP_BUNDLE_IDS" "$CANDIDATE_PREFIXES" <<'PY'
+python3 - "$MODE" "$OUTPUT" "$VERBOSE" "$KEEP_BUNDLE_IDS" "$CANDIDATE_PREFIXES" <<'PY'
 import datetime as dt
 import json
 import os
@@ -101,8 +106,9 @@ from pathlib import Path
 
 MODE = sys.argv[1]
 OUTPUT = sys.argv[2]
-KEEP_BUNDLE_IDS = {item for item in sys.argv[3].split(",") if item}
-CANDIDATE_PREFIXES = tuple(item for item in sys.argv[4].split(",") if item)
+VERBOSE = sys.argv[3] == "true"
+KEEP_BUNDLE_IDS = {item for item in sys.argv[4].split(",") if item}
+CANDIDATE_PREFIXES = tuple(item for item in sys.argv[5].split(",") if item)
 HOME = Path(os.environ.get("OMI_TCC_HOME") or Path.home())
 TCC_DB = Path(
     os.environ.get("OMI_TCC_DB")
@@ -192,7 +198,7 @@ def app_info(app_path):
         or name == "Omi"
         or name == "Omi Dev"
         or name.startswith("omi-")
-        or app_path.name in {"Omi.app", "Omi Dev.app", "Omi Beta.app"}
+        or app_path.name in {"Omi.app", "Omi Dev.app"}
         or app_path.name.startswith("omi-")
     ):
         return None
@@ -345,6 +351,51 @@ def status_counts(items):
     return dict(sorted(counts.items()))
 
 
+def limited(items, limit=20):
+    return items[:limit], max(0, len(items) - limit)
+
+
+def output_inventory(inventory):
+    if VERBOSE:
+        return {
+            **inventory,
+            "output_schema_version": 1,
+            "detail_mode": "full",
+            "details_available": False,
+        }
+
+    tcc = inventory["tcc"]
+    result = {
+        "output_schema_version": 1,
+        "detail_mode": "summary",
+        "details_available": True,
+        "keep_bundle_ids": inventory["keep_bundle_ids"],
+        "candidate_prefixes": inventory["candidate_prefixes"],
+        "candidate_rule": inventory["candidate_rule"],
+        "summary": inventory["summary"],
+        "candidate_bundle_ids_count": len(inventory["candidate_bundle_ids"]),
+        "tccutil_bundle_ids_count": len(inventory["tccutil_bundle_ids"]),
+        "tcc": {
+            "database": tcc["database"],
+            "readable": tcc["readable"],
+            "error": tcc["error"],
+            "row_count": len(tcc["rows"]),
+        },
+    }
+    if "apply" in inventory:
+        failed = [item["bundle_id"] for item in inventory["apply"]["results"] if item["status"] != "ok"]
+        visible_failed, omitted_failed = limited(failed)
+        result["apply"] = {
+            "mode": inventory["apply"]["mode"],
+            "tool": inventory["apply"]["tool"],
+            "summary": inventory["apply"]["summary"],
+            "result_count": len(inventory["apply"]["results"]),
+            "failed_bundle_ids": visible_failed,
+            "failed_bundle_ids_omitted_count": omitted_failed,
+        }
+    return result
+
+
 def candidate_bundle_ids(inventory):
     bundle_ids = set()
     for item in inventory["apps"]:
@@ -432,7 +483,13 @@ if MODE == "apply-tccutil":
     inventory["apply"]["summary"] = status_counts(inventory["apply"]["results"])
 
 if OUTPUT == "json":
-    print(json.dumps(inventory, indent=2, sort_keys=True))
+    print(json.dumps(output_inventory(inventory), indent=2, sort_keys=True))
+    sys.exit(0)
+
+if not VERBOSE:
+    print("Omi macOS permissions cleanup summary")
+    print("====================================")
+    print(json.dumps(output_inventory(inventory), indent=2, sort_keys=True))
     sys.exit(0)
 
 if MODE == "apply-tccutil":

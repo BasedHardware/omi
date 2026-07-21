@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
@@ -9,6 +10,7 @@ import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -23,11 +25,11 @@ class ApiClient {
 }
 
 class AuthTokenUnavailableException implements Exception {
-  final String message;
-  AuthTokenUnavailableException([this.message = 'No auth token found']);
+  final AuthTokenResult result;
+  AuthTokenUnavailableException(this.result);
 
   @override
-  String toString() => 'AuthTokenUnavailableException: $message';
+  String toString() => 'AuthTokenUnavailableException(${result.runtimeType})';
 }
 
 // Normal-mode connectivity failures on mobile (no network, DNS failure,
@@ -52,8 +54,12 @@ bool _isTransientNetworkError(Object e) {
   return false;
 }
 
-Future<String> getAuthHeader() async {
-  DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
+Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
+  if (!AuthService.instance.isSignedIn()) {
+    throw AuthTokenUnavailableException(const AuthTokenMissingUser());
+  }
+
+  final expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
   bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
@@ -61,25 +67,40 @@ Future<String> getAuthHeader() async {
       (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
-    final refreshedToken = await AuthService.instance.getIdToken();
-    if (refreshedToken != null) {
-      SharedPreferencesUtil().authToken = refreshedToken;
-    } else if (expiry.isBefore(DateTime.now())) {
-      // Refresh failed AND token is already expired — clear the stale cached
-      // token so we don't keep retrying with an invalid bearer. Only clear
-      // truly expired tokens, not near-expiry ones in the 5-min buffer.
-      SharedPreferencesUtil().authToken = '';
+    final refreshResult = await AuthService.instance.refreshIdToken();
+    switch (refreshResult) {
+      case AuthTokenSuccess(:final token):
+        SharedPreferencesUtil().authToken = token;
+        break;
+      case AuthTokenTransientFailure():
+        if (expiry.isBefore(DateTime.now())) {
+          // Preserve a still-valid token during transient refresh trouble, but
+          // never reuse one whose expiration has already passed.
+          SharedPreferencesUtil().authToken = '';
+        }
+        break;
+      case AuthTokenMissingUser():
+        throw AuthTokenUnavailableException(refreshResult);
+      case AuthTokenMissingToken():
+        if (expireTerminalSession) {
+          await AuthService.instance.expireSession(
+            const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
+          );
+        }
+        throw AuthTokenUnavailableException(refreshResult);
+      case AuthTokenTerminalFailure(:final code):
+        if (expireTerminalSession) {
+          await AuthService.instance.expireSession(
+            AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.terminalTokenFailure, code: code),
+          );
+        }
+        throw AuthTokenUnavailableException(refreshResult);
     }
     hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
+    if (!hasAuthToken) throw AuthTokenUnavailableException(refreshResult);
   }
 
-  if (!hasAuthToken) {
-    if (AuthService.instance.isSignedIn()) {
-      // should only throw if the user is signed in but the token is not found
-      // if the user is not signed in, the token will always be empty
-      throw AuthTokenUnavailableException('No auth token found');
-    }
-  }
+  if (!hasAuthToken) throw AuthTokenUnavailableException(const AuthTokenMissingToken());
   return 'Bearer ${SharedPreferencesUtil().authToken}';
 }
 
@@ -89,6 +110,7 @@ Future<String> getAuthHeader() async {
 Future<Map<String, String>> buildHeaders({
   required bool requireAuthCheck,
   Map<String, String> fromHeaders = const {},
+  bool expireTerminalSession = true,
 }) async {
   final headers = <String, String>{
     'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
@@ -99,18 +121,9 @@ Future<Map<String, String>> buildHeaders({
   };
 
   if (requireAuthCheck) {
-    try {
-      headers['Authorization'] = await getAuthHeader();
-    } on AuthTokenUnavailableException {
-      // Signed-in user has no usable token (refresh returned null for a
-      // transient or degraded reason). Proceed without Authorization; the
-      // downstream HTTP 401 path in makeApiCall already calls
-      // AuthService.signOut(), so recovery runs where it was already wired.
-      // We avoid forcing sign-out here because getIdToken() treats generic
-      // failures as transient (e.g. offline / platform hiccups) and leaves
-      // currentUser intact.
-      Logger.debug('No auth token available for request, proceeding without Authorization header');
-    }
+    // Authenticated requests must never degrade into anonymous traffic. A
+    // typed exception stops the request before it reaches the network.
+    headers['Authorization'] = await getAuthHeader(expireTerminalSession: expireTerminalSession);
   }
 
   return headers;
@@ -130,14 +143,124 @@ Future<http.StreamedResponse> makeRawApiCall({
   required String method,
   Map<String, String> headers = const {},
 }) async {
-  final builtHeaders = await buildHeaders(requireAuthCheck: _isRequiredAuthCheck(url), fromHeaders: headers);
-  var request = http.Request(method, Uri.parse(url));
-  request.headers.addAll(builtHeaders);
-  return HttpPoolManager.instance.sendStreaming(request);
+  final requireAuthCheck = _isRequiredAuthCheck(url);
+  try {
+    var builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    var request = http.Request(method, Uri.parse(url));
+    request.headers.addAll(builtHeaders);
+    var response = await HttpPoolManager.instance.sendStreaming(request);
+    if (requireAuthCheck && response.statusCode == 401) {
+      response = await refreshAndReplayAfter401(
+        firstResponse: response,
+        statusCode: (value) => value.statusCode,
+        disposeUnauthorizedResponse: _drainStreamedResponse,
+        expireTerminalSession: true,
+        replay: () async {
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          request = http.Request(method, Uri.parse(url));
+          request.headers.addAll(builtHeaders);
+          return HttpPoolManager.instance.sendStreaming(request);
+        },
+      );
+      if (response.statusCode == 401) return _authUnavailableStreamedResponse();
+    }
+    return response;
+  } on AuthTokenUnavailableException catch (e) {
+    await _handleAuthUnavailable(e, expireTerminalSession: true);
+    Logger.debug('Authenticated raw request blocked before send: ${e.result.runtimeType}');
+    return _authUnavailableStreamedResponse();
+  }
 }
+
+Future<void> _drainStreamedResponse(http.StreamedResponse response) async {
+  try {
+    await response.stream.drain<void>();
+  } catch (e) {
+    Logger.debug('Failed to drain unauthorized response: ${e.runtimeType}');
+  }
+}
+
+http.StreamedResponse _authUnavailableStreamedResponse() =>
+    http.StreamedResponse(const Stream<List<int>>.empty(), 401, reasonPhrase: 'Authentication unavailable');
 
 void _checkClockSkewResponse(http.Response response) {
   ClockSkewDetector.instance.checkResponse(response);
+}
+
+Future<void> _handleAuthUnavailable(
+  AuthTokenUnavailableException exception, {
+  required bool expireTerminalSession,
+}) async {
+  if (!expireTerminalSession) return;
+  final event = switch (exception.result) {
+    AuthTokenMissingUser() => null,
+    AuthTokenMissingToken() => const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
+    AuthTokenTerminalFailure(:final code) => AuthSessionExpiredEvent(
+        reason: AuthSessionExpirationReason.terminalTokenFailure,
+        code: code,
+      ),
+    _ => null,
+  };
+  if (event != null) await AuthService.instance.expireSession(event);
+}
+
+@visibleForTesting
+Future<T> refreshAndReplayAfter401<T>({
+  required T firstResponse,
+  required int Function(T response) statusCode,
+  required Future<T> Function() replay,
+  required bool expireTerminalSession,
+  Future<void> Function(T response)? disposeUnauthorizedResponse,
+  AuthService? authService,
+}) async {
+  final service = authService ?? AuthService.instance;
+  await disposeUnauthorizedResponse?.call(firstResponse);
+  final refresh = await service.refreshIdToken();
+  switch (refresh) {
+    case AuthTokenSuccess():
+      late T replayed;
+      try {
+        replayed = await replay();
+      } catch (_) {
+        service.recordAuthenticatedRequest401(recovered: false, outcome: 'replay_failed');
+        rethrow;
+      }
+      final recovered = statusCode(replayed) != 401;
+      if (!recovered) await disposeUnauthorizedResponse?.call(replayed);
+      service.recordAuthenticatedRequest401(
+        recovered: recovered,
+        outcome: recovered ? 'refresh_succeeded' : 'backend_rejected_refreshed_token',
+      );
+      if (!recovered && expireTerminalSession) {
+        await service.expireSession(
+          const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.backendRejectedRefreshedToken),
+        );
+      }
+      return replayed;
+    case AuthTokenTransientFailure():
+      service.recordAuthenticatedRequest401(recovered: false, outcome: 'refresh_transient_failure');
+      return firstResponse;
+    case AuthTokenMissingUser():
+      service.recordAuthenticatedRequest401(recovered: false, outcome: 'missing_user');
+      if (expireTerminalSession) {
+        await service.expireSession(const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingUser));
+      }
+      return firstResponse;
+    case AuthTokenMissingToken():
+      service.recordAuthenticatedRequest401(recovered: false, outcome: 'missing_token');
+      if (expireTerminalSession) {
+        await service.expireSession(const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken));
+      }
+      return firstResponse;
+    case AuthTokenTerminalFailure(:final code):
+      service.recordAuthenticatedRequest401(recovered: false, outcome: 'terminal_token_failure');
+      if (expireTerminalSession) {
+        await service.expireSession(
+          AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.terminalTokenFailure, code: code),
+        );
+      }
+      return firstResponse;
+  }
 }
 
 Future<http.Response?> makeApiCall({
@@ -151,7 +274,11 @@ Future<http.Response?> makeApiCall({
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
+    Map<String, String> builtHeaders = await buildHeaders(
+      requireAuthCheck: requireAuthCheck,
+      fromHeaders: headers,
+      expireTerminalSession: signOutOn401,
+    );
 
     final effectiveTimeout =
         timeout ?? (method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite);
@@ -164,36 +291,31 @@ Future<http.Response?> makeApiCall({
     );
 
     if (requireAuthCheck && response.statusCode == 401) {
-      Logger.log('Token expired on 1st attempt');
-      SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
-      if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
-        response = await HttpPoolManager.instance.send(
-          () => _buildRequest(url, builtHeaders, body, method),
-          timeout: effectiveTimeout,
-          retries: 0,
-        );
-        Logger.log('Token refreshed and request retried');
-        if (response.statusCode == 401 && signOutOn401) {
-          await AuthService.instance.signOut();
-          Logger.handle(
-            Exception('Authentication failed. Please sign in again.'),
-            StackTrace.current,
-            message: 'Authentication failed. Please sign in again.',
+      response = await refreshAndReplayAfter401(
+        firstResponse: response,
+        statusCode: (value) => value.statusCode,
+        expireTerminalSession: signOutOn401,
+        replay: () async {
+          builtHeaders = await buildHeaders(
+            requireAuthCheck: true,
+            fromHeaders: headers,
+            expireTerminalSession: signOutOn401,
           );
-        }
-      } else if (signOutOn401) {
-        await AuthService.instance.signOut();
-        Logger.handle(
-          Exception('Authentication failed. Please sign in again.'),
-          StackTrace.current,
-          message: 'Authentication failed. Please sign in again.',
-        );
-      }
+          return HttpPoolManager.instance.send(
+            () => _buildRequest(url, builtHeaders, body, method),
+            timeout: effectiveTimeout,
+            retries: 0,
+          );
+        },
+      );
     }
 
     _checkClockSkewResponse(response);
     return response;
+  } on AuthTokenUnavailableException catch (e) {
+    await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
+    Logger.debug('Authenticated HTTP request blocked before send: ${e.result.runtimeType}');
+    return null;
   } catch (e, stackTrace) {
     Logger.debug('HTTP request failed: $e, $stackTrace');
     if (!_isTransientNetworkError(e)) {
@@ -307,41 +429,32 @@ Future<http.Response> makeMultipartApiCall({
     var response = await http.Response.fromStream(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
-      Logger.log('Token expired on 1st multipart attempt');
-      SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
-      if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
-        request = await _buildMultipartRequest(
-          url: url,
-          files: files,
-          headers: builtHeaders,
-          fields: fields,
-          fileFieldName: fileFieldName,
-          method: method,
-        );
-        streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-        response = await http.Response.fromStream(streamedResponse);
-        Logger.log('Token refreshed and multipart request retried');
-        if (response.statusCode == 401) {
-          await AuthService.instance.signOut();
-          Logger.handle(
-            Exception('Authentication failed. Please sign in again.'),
-            StackTrace.current,
-            message: 'Authentication failed. Please sign in again.',
+      response = await refreshAndReplayAfter401(
+        firstResponse: response,
+        statusCode: (value) => value.statusCode,
+        expireTerminalSession: true,
+        replay: () async {
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          request = await _buildMultipartRequest(
+            url: url,
+            files: files,
+            headers: builtHeaders,
+            fields: fields,
+            fileFieldName: fileFieldName,
+            method: method,
           );
-        }
-      } else {
-        await AuthService.instance.signOut();
-        Logger.handle(
-          Exception('Authentication failed. Please sign in again.'),
-          StackTrace.current,
-          message: 'Authentication failed. Please sign in again.',
-        );
-      }
+          streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
+          return http.Response.fromStream(streamedResponse);
+        },
+      );
     }
 
     _checkClockSkewResponse(response);
     return response;
+  } on AuthTokenUnavailableException catch (e) {
+    await _handleAuthUnavailable(e, expireTerminalSession: true);
+    Logger.debug('Authenticated multipart request blocked before send: ${e.result.runtimeType}');
+    return http.Response('', 401, reasonPhrase: 'Authentication unavailable');
   } catch (e, stackTrace) {
     Logger.debug('Multipart HTTP request failed: $e, $stackTrace');
     if (!_isTransientNetworkError(e)) {
@@ -381,42 +494,33 @@ Future<http.Response> makeMultipartApiCallUnpooled({
     var response = await http.Response.fromStream(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
-      Logger.log('Token expired on 1st unpooled multipart attempt');
-      SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
-      if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
-        request = await _buildMultipartRequest(
-          url: url,
-          files: files,
-          headers: builtHeaders,
-          fields: fields,
-          fileFieldName: fileFieldName,
-          method: method,
-        );
-        HttpPoolManager.stampRequestTime(request);
-        streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
-        response = await http.Response.fromStream(streamedResponse);
-        Logger.log('Token refreshed and unpooled multipart request retried');
-        if (response.statusCode == 401) {
-          await AuthService.instance.signOut();
-          Logger.handle(
-            Exception('Authentication failed. Please sign in again.'),
-            StackTrace.current,
-            message: 'Authentication failed. Please sign in again.',
+      response = await refreshAndReplayAfter401(
+        firstResponse: response,
+        statusCode: (value) => value.statusCode,
+        expireTerminalSession: true,
+        replay: () async {
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          request = await _buildMultipartRequest(
+            url: url,
+            files: files,
+            headers: builtHeaders,
+            fields: fields,
+            fileFieldName: fileFieldName,
+            method: method,
           );
-        }
-      } else {
-        await AuthService.instance.signOut();
-        Logger.handle(
-          Exception('Authentication failed. Please sign in again.'),
-          StackTrace.current,
-          message: 'Authentication failed. Please sign in again.',
-        );
-      }
+          HttpPoolManager.stampRequestTime(request);
+          streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+          return http.Response.fromStream(streamedResponse);
+        },
+      );
     }
 
     _checkClockSkewResponse(response);
     return response;
+  } on AuthTokenUnavailableException catch (e) {
+    await _handleAuthUnavailable(e, expireTerminalSession: true);
+    Logger.debug('Authenticated unpooled multipart request blocked before send: ${e.result.runtimeType}');
+    return http.Response('', 401, reasonPhrase: 'Authentication unavailable');
   } catch (e, stackTrace) {
     Logger.debug('Unpooled multipart HTTP request failed: $e, $stackTrace');
     if (!_isTransientNetworkError(e)) {
@@ -435,7 +539,8 @@ Stream<String> makeStreamingApiCall({
   String method = 'POST',
 }) async* {
   try {
-    final builtHeaders = await buildHeaders(requireAuthCheck: _isRequiredAuthCheck(url), fromHeaders: headers);
+    final requireAuthCheck = _isRequiredAuthCheck(url);
+    var builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
 
     var request = http.Request(method, Uri.parse(url));
     request.headers.addAll(builtHeaders);
@@ -446,6 +551,26 @@ Stream<String> makeStreamingApiCall({
     }
 
     var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
+
+    if (requireAuthCheck && streamedResponse.statusCode == 401) {
+      streamedResponse = await refreshAndReplayAfter401(
+        firstResponse: streamedResponse,
+        statusCode: (value) => value.statusCode,
+        disposeUnauthorizedResponse: _drainStreamedResponse,
+        expireTerminalSession: true,
+        replay: () async {
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          request = http.Request(method, Uri.parse(url));
+          request.headers.addAll(builtHeaders);
+          if (body.isNotEmpty) {
+            request.headers['Content-Type'] = 'application/json';
+            request.body = body;
+          }
+          return HttpPoolManager.instance.sendStreaming(request);
+        },
+      );
+      if (streamedResponse.statusCode == 401) return;
+    }
 
     if (streamedResponse.statusCode != 200) {
       Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
@@ -482,6 +607,9 @@ Stream<String> makeStreamingApiCall({
     if (remainder.isNotEmpty) {
       yield remainder;
     }
+  } on AuthTokenUnavailableException catch (e) {
+    await _handleAuthUnavailable(e, expireTerminalSession: true);
+    Logger.debug('Authenticated streaming request blocked before send: ${e.result.runtimeType}');
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
     if (!_isTransientNetworkError(e)) {
@@ -513,38 +641,25 @@ Stream<String> makeMultipartStreamingApiCall({
     var response = await HttpPoolManager.instance.sendStreaming(request);
 
     if (requireAuthCheck && response.statusCode == 401) {
-      Logger.log('Token expired on 1st multipart streaming attempt');
-      SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
-      if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
-        request = await _buildMultipartRequest(
-          url: url,
-          files: files,
-          headers: builtHeaders,
-          fields: fields,
-          fileFieldName: fileFieldName,
-          method: 'POST',
-        );
-        response = await HttpPoolManager.instance.sendStreaming(request);
-        Logger.log('Token refreshed and multipart streaming request retried');
-        if (response.statusCode == 401) {
-          await AuthService.instance.signOut();
-          Logger.handle(
-            Exception('Authentication failed. Please sign in again.'),
-            StackTrace.current,
-            message: 'Authentication failed. Please sign in again.',
+      response = await refreshAndReplayAfter401(
+        firstResponse: response,
+        statusCode: (value) => value.statusCode,
+        disposeUnauthorizedResponse: _drainStreamedResponse,
+        expireTerminalSession: true,
+        replay: () async {
+          builtHeaders = await buildHeaders(requireAuthCheck: true, fromHeaders: headers);
+          request = await _buildMultipartRequest(
+            url: url,
+            files: files,
+            headers: builtHeaders,
+            fields: fields,
+            fileFieldName: fileFieldName,
+            method: 'POST',
           );
-          return;
-        }
-      } else {
-        await AuthService.instance.signOut();
-        Logger.handle(
-          Exception('Authentication failed. Please sign in again.'),
-          StackTrace.current,
-          message: 'Authentication failed. Please sign in again.',
-        );
-        return;
-      }
+          return HttpPoolManager.instance.sendStreaming(request);
+        },
+      );
+      if (response.statusCode == 401) return;
     }
 
     if (response.statusCode != 200) {
@@ -576,6 +691,9 @@ Stream<String> makeMultipartStreamingApiCall({
     if (remainder.isNotEmpty) {
       yield remainder;
     }
+  } on AuthTokenUnavailableException catch (e) {
+    await _handleAuthUnavailable(e, expireTerminalSession: true);
+    Logger.debug('Authenticated multipart streaming request blocked before send: ${e.result.runtimeType}');
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');
     if (!_isTransientNetworkError(e)) {

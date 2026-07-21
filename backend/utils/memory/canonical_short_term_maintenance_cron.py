@@ -12,10 +12,15 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from collections.abc import Callable
 from typing import Any, Optional
 
 from database._client import db as default_db_client
+from models.product_memory import MemoryItem
 from utils.executors import db_executor, run_blocking
+from utils.observability.fallback import record_fallback
+from utils.llm.clients import get_llm
+from utils.memory.canonical_required_processing import ProcessedRequiredMemory, invoke_required_memory_processor
 from utils.memory.memory_system import list_canonical_cohort_uids
 from utils.memory.short_term_promotion import (
     CanonicalShortTermMaintenanceReport,
@@ -27,6 +32,10 @@ logger = logging.getLogger(__name__)
 MEMORY_CANONICAL_PROMOTION_CRON_ENABLED_ENV = "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED"
 MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS_ENV = "MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS"
 DEFAULT_CRON_INTERVAL_HOURS = 1
+
+
+def _required_memory_processor(item: MemoryItem) -> ProcessedRequiredMemory:
+    return invoke_required_memory_processor(item, get_llm("memory_l2"))
 
 
 def _empty_errors() -> list[str]:
@@ -64,6 +73,7 @@ class CanonicalShortTermMaintenanceCronSummary:
     promoted_total: int = 0
     vector_sync_failures_total: int = 0
     skipped_users: int = 0
+    recurrence_candidates_total: int = 0
     errors: list[str] = field(default_factory=_empty_errors)
 
 
@@ -92,6 +102,8 @@ def run_canonical_short_term_maintenance_for_cohort(
     db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
+    recurrence_signal_persister: Optional[Callable[..., int]] = None,
+    recurrence_signal_consumer: Optional[Callable[..., int]] = None,
 ) -> CanonicalShortTermMaintenanceCronSummary:
     """Run maintenance for every uid in ``CANONICAL_MEMORY_USERS``.
 
@@ -125,6 +137,8 @@ def run_canonical_short_term_maintenance_for_cohort(
                 db_client=client,
                 now=current_time,
                 run_id=effective_run_id,
+                recurrence_signal_sink=recurrence_signal_persister,
+                required_processor=_required_memory_processor,
             )
         except Exception as exc:
             message = f"uid={uid}: {type(exc).__name__}: {exc}"
@@ -138,6 +152,24 @@ def run_canonical_short_term_maintenance_for_cohort(
         trigger = report.promotion.trigger_reason if report.promotion else None
         summary.promoted_total += promoted
         summary.vector_sync_failures_total += vector_sync_failures
+        if recurrence_signal_consumer is not None and report.consolidation is not None:
+            try:
+                summary.recurrence_candidates_total += recurrence_signal_consumer(
+                    uid,
+                    report.consolidation.recurrence_signals,
+                    firestore_client=client,
+                )
+            except Exception as exc:
+                message = f"uid={uid}: recurrence_consumer:{type(exc).__name__}"
+                summary.errors.append(message)
+                logger.warning("canonical_short_term_maintenance_cron: %s", message)
+                record_fallback(
+                    component='other',
+                    from_mode='recurrence_maintenance',
+                    to_mode='recurrence_inbox_retry',
+                    reason='other',
+                    outcome='degraded',
+                )
         if promoted == 0:
             summary.skipped_users += 1
 
@@ -169,6 +201,8 @@ async def run_canonical_short_term_maintenance_cron(
     db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
+    recurrence_signal_persister: Optional[Callable[..., int]] = None,
+    recurrence_signal_consumer: Optional[Callable[..., int]] = None,
 ) -> CanonicalShortTermMaintenanceCronSummary:
     """Async entrypoint: offload sync Firestore maintenance to ``db_executor``."""
     return await run_blocking(
@@ -177,4 +211,6 @@ async def run_canonical_short_term_maintenance_cron(
         db_client=db_client,
         now=now,
         run_id=run_id,
+        recurrence_signal_persister=recurrence_signal_persister,
+        recurrence_signal_consumer=recurrence_signal_consumer,
     )

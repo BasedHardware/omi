@@ -10,6 +10,7 @@ vi.mock('./firebase', () => ({
   auth: { currentUser: { getIdToken: vi.fn(async () => 'test-token') } }
 }))
 vi.mock('./preferences', () => ({ getPreferences: () => ({ language: 'en' }) }))
+vi.mock('./clientDevice', () => ({ getWindowsDeviceIdHash: vi.fn(async () => 'abcd1234') }))
 
 import { startOmiListen } from './omiListenClient'
 
@@ -152,7 +153,11 @@ describe('startOmiListen', () => {
     emitEvent({ type: 'capture-window-restarted' })
     const starts = bridge.commands.filter((c) => c.type === 'audio-start')
     expect(starts.length).toBe(startsBefore + 1)
-    expect(starts[starts.length - 1]).toMatchObject({ type: 'audio-start', sessionId, source: 'mic' })
+    expect(starts[starts.length - 1]).toMatchObject({
+      type: 'audio-start',
+      sessionId,
+      source: 'mic'
+    })
   })
 
   it('does NOT re-issue audio-start after stop()', async () => {

@@ -24,6 +24,7 @@ from database.vector_db import upsert_memory_vector, delete_memory_vector
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
+from models.conversation import AppResult
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
@@ -54,15 +55,14 @@ import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
     list_default_mcp_memories,
+    mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
     search_default_mcp_memories_vector,
 )
-import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
-from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 import logging
 
 logger = logging.getLogger(__name__)
@@ -96,26 +96,6 @@ class McpScreenActivityAppSummary(BaseModel):
 class McpScreenActivitySummaryResponse(BaseModel):
     apps: Dict[str, McpScreenActivityAppSummary] = {}
     total_screenshots: int = 0
-
-
-@router.get("/v1/mcp/keys", response_model=List[McpApiKey], tags=["mcp"])
-def get_keys(uid: str = Depends(get_current_user_id)):
-    return mcp_api_key_db.get_mcp_keys_for_user(uid)
-
-
-@router.post("/v1/mcp/keys", response_model=McpApiKeyCreated, tags=["mcp"])
-def create_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id)):
-    if not key_data.name or len(key_data.name.strip()) == 0:
-        raise HTTPException(status_code=422, detail="Key name cannot be empty")
-
-    raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
-    return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
-
-
-@router.delete("/v1/mcp/keys/{key_id}", status_code=204, tags=["mcp"])
-def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
-    mcp_api_key_db.delete_mcp_key(uid, key_id)
-    return
 
 
 @router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
@@ -320,7 +300,7 @@ def search_memories(
     )
     if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return vector_search_results.memories
-    if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not mcp_legacy_read_authorized(vector_search_results):
         return []
 
     return memory_service.search_mcp(uid, query, limit=limit)
@@ -328,7 +308,6 @@ def search_memories(
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Depends(get_uid_from_mcp_api_key),
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
@@ -340,6 +319,7 @@ def get_memories(
     include_activity: bool = False,
     include_sensitive: bool = True,
 ):
+    uid = auth_context.uid
     try:
         limit = parse_mcp_int(limit, "limit", default=25, minimum=1, maximum=500)
         offset = parse_mcp_int(offset, "offset", default=0, minimum=0, maximum=100000)
@@ -416,7 +396,7 @@ def get_memories(
     )
     if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return memory_list_results.memories
-    if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not mcp_legacy_read_authorized(memory_list_results):
         return []
 
     result = collect_filtered_memories(
@@ -461,6 +441,7 @@ class SimpleConversation(BaseModel):
     finished_at: Optional[datetime]
     structured: SimpleStructured
     language: Optional[str] = None
+    apps_results: List[AppResult] = []
 
 
 class FullConversation(SimpleConversation):
@@ -487,6 +468,12 @@ def get_conversations(
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
     logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
+    # Clamp pagination so a negative value cannot reach Firestore .limit()/.offset() (which
+    # raises -> HTTP 500) and an oversized value cannot stream/skip the whole collection.
+    # Mirrors the sibling MCP tool (routers/mcp_sse.py get_conversations) and every other
+    # paginated list endpoint in this file (get_action_items, get_chat_messages, etc.).
+    limit = max(1, min(limit, 1000))
+    offset = max(0, min(offset, 100000))
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
@@ -574,7 +561,14 @@ def get_conversation_by_id(
 
     populate_speaker_names(uid, [conversation])
 
-    return conversation
+    # A legacy/poisoned record (e.g. a structured.category no longer in CategoryEnum)
+    # must not 500 this single-item fetch via response_model coercion — mirror the
+    # per-record guard already used by the list/search siblings above.
+    try:
+        return FullConversation.model_validate(conversation)
+    except Exception as e:  # noqa: BLE001 - malformed legacy record must not 500
+        logger.warning(f"Conversation {conversation_id} failed MCP response validation: {e}")
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,10 @@ that the namespaced OmiAPI types cover the desktop's highest-traffic read DTOs.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import os
+import subprocess
+import sys
+from pathlib import Path, PureWindowsPath
 
 from scripts import generate_swift_openapi_types
 
@@ -36,9 +39,16 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
         'struct Conversation:',
         'struct Structured:',
         'struct ActionItemResponse:',
+        'struct ActionItemCreateRequest:',
+        'struct ActionItemUpdateRequest:',
         'struct ActionItem:',
         'struct MemoryDB:',
         'struct GoalResponse:',
+        'struct GoalDetailProjection:',
+        'struct CandidateRecord:',
+        'struct WorkstreamDetailProjection:',
+        'struct ArtifactDescriptor:',
+        'struct ContinuationCheckpoint:',
         'struct TranscriptSegment:',
         'struct Geolocation:',
         'struct AppResult:',
@@ -49,6 +59,14 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
     assert 'public enum ConversationStatus:' in generated
     assert 'public enum MemoryCategory:' in generated
     assert 'public enum GoalType:' in generated
+    assert 'public enum CandidateTaskChange: Codable {' in generated
+    assert 'public enum CandidateCreate: Codable {' in generated
+    assert 'public enum OmiPatchField<Value: Codable>: Codable {' in generated
+    assert 'public let goalId: OmiPatchField<String>' in generated
+    assert 'public struct GoalUpdate: Codable {' in generated
+    assert 'public let desiredOutcome: OmiPatchField<String>' in generated
+    assert 'public let nextReviewAt: OmiPatchField<String>' in generated
+    assert 'taskChange = .create(try c.decode(TaskCreatePayload.self' in generated
 
 
 def test_swift_generator_handles_refs_optionals_and_enums():
@@ -89,9 +107,74 @@ def test_swift_generator_handles_refs_optionals_and_enums():
     assert '[String: Double]?' in widget_block
 
 
+def test_swift_generator_sanitizes_openapi_component_names():
+    rendered = generate_swift_openapi_types._render_struct(
+        'WorkstreamProposal-Output',
+        {'type': 'object', 'properties': {'title': {'type': 'string'}}, 'required': ['title']},
+    )
+
+    assert 'public struct WorkstreamProposalOutput: Codable {' in rendered
+    assert 'WorkstreamProposal-Output' not in rendered
+
+
 def test_swift_generator_module_helper_is_emitted():
     spec = {'components': {'schemas': {}}}
     generated = generate_swift_openapi_types.generate(spec, 'test-openapi.json')
     # OmiAnyCodable helper present for opaque maps even with no target schemas.
     assert 'public struct OmiAnyCodable: Codable' in generated
     assert 'public enum OmiAPI {' in generated
+
+
+def test_swift_generator_emits_required_headers_and_client_default_headers():
+    spec = {
+        'components': {'schemas': {}},
+        'paths': {
+            '/v1/example': {
+                'post': {
+                    'operationId': 'create_example',
+                    'parameters': [
+                        {
+                            'in': 'header',
+                            'name': 'Idempotency-Key',
+                            'required': True,
+                            'schema': {'type': 'string'},
+                        }
+                    ],
+                    'responses': {'200': {'content': {'application/json': {'schema': {'type': 'string'}}}}},
+                }
+            }
+        },
+    }
+
+    generated = generate_swift_openapi_types.generate(spec, 'test-openapi.json')
+
+    assert 'headers: [String: String] = [:]' in generated
+    assert 'idempotencyKey: String' in generated
+    assert 'for (name, value) in client.headers' in generated
+    assert 'req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")' in generated
+
+
+def test_swift_source_label_is_stable_for_windows_paths():
+    root = PureWindowsPath('C:/src/omi')
+    spec_path = root / 'docs' / 'api-reference' / 'app-client-openapi.json'
+
+    assert (
+        generate_swift_openapi_types.source_label_for_path(spec_path, root)
+        == 'docs/api-reference/app-client-openapi.json'
+    )
+
+
+def test_swift_generator_cli_uses_utf8_when_the_process_locale_does_not():
+    env = os.environ.copy()
+    env.update({'LANG': 'C', 'LC_ALL': 'C', 'PYTHONCOERCECLOCALE': '0', 'PYTHONUTF8': '0'})
+
+    completed = subprocess.run(
+        [sys.executable, str(generate_swift_openapi_types.__file__), '--check'],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT_DIR,
+        env=env,
+    )
+
+    assert completed.returncode == 0, completed.stderr

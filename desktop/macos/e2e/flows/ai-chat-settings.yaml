@@ -1,0 +1,49 @@
+version: 2
+name: ai-chat-settings
+tier: 2
+description: AI Chat settings section navigation and snapshot (non-prod only)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+FloatingBarAndChat.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Assistants.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatLabView.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatResource.swift
+  - desktop/macos/Desktop/Sources/Chat/ClaudeAuthSheet.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentViews.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/FocusTestRunnerWindow.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/InsightTestRunnerWindow.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/TaskTestRunnerWindow.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/InsightPromptEditorWindow.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/MemoryPromptEditorWindow.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/PromptEditorWindow.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/TaskPromptEditorWindow.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowBorderView.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowDemoWindow.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowEdgeWindow.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings AI Chat section
+    bridge.navigate:
+      target: settings
+      settingsSection: AI Chat
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: AI Chat
+
+  - id: S2
+    name: AI Chat settings snapshot
+    bridge.action:
+      name: settings_aichat_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

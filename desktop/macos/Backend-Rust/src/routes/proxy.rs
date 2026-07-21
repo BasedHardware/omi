@@ -13,6 +13,7 @@ use axum::{
     routing::post,
     Router,
 };
+use std::future::Future;
 use std::time::{Duration, Instant};
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
@@ -50,18 +51,186 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 /// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
-/// Keep non-streaming upstream calls below observed Cloud Run request boundaries
-/// so the proxy owns timeout mapping and desktop clients get a retryable error.
-const GEMINI_UPSTREAM_TIMEOUT: Duration = Duration::from_secs(90);
+/// Cloud Run's configured request timeout for `desktop-backend`.
+const CLOUD_RUN_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Headroom reserved under the platform deadline so the proxy, rather than
+/// Cloud Run, owns timeout mapping and can return the typed, retryable
+/// `upstream_timeout` response.
+const GEMINI_PLATFORM_HEADROOM: Duration = Duration::from_secs(60);
+
+/// One end-to-end budget for non-streaming Gemini work. It derives from the
+/// Cloud Run request contract and includes token acquisition, provider
+/// selection/fallback, request send, and body drain. Long-context calls can
+/// legitimately spend more than 90 seconds thinking before their first byte.
+const GEMINI_TOTAL_TIMEOUT: Duration =
+    Duration::from_secs(CLOUD_RUN_REQUEST_TIMEOUT.as_secs() - GEMINI_PLATFORM_HEADROOM.as_secs());
+
+/// Per-attempt defense inside the logical budget. There are no post-dispatch
+/// retries: generateContent may have completed (and incurred cost) even when its
+/// response is lost, so replaying it is not known-safe.
+const GEMINI_ATTEMPT_HEADROOM: Duration = Duration::from_secs(5);
+const GEMINI_ATTEMPT_TIMEOUT: Duration =
+    Duration::from_secs(GEMINI_TOTAL_TIMEOUT.as_secs() - GEMINI_ATTEMPT_HEADROOM.as_secs());
 
 /// Bound TCP/TLS setup for all Gemini proxy calls. Streaming requests must not
 /// use a total response timeout because long SSE replies are expected.
 const GEMINI_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GeminiDeadlineElapsed;
+
+async fn within_gemini_deadline<F, T>(
+    budget: Duration,
+    future: F,
+) -> Result<T, GeminiDeadlineElapsed>
+where
+    F: Future<Output = T>,
+{
+    race_gemini_deadline(tokio::time::sleep(budget), future).await
+}
+
+async fn race_gemini_deadline<D, F, T>(deadline: D, future: F) -> Result<T, GeminiDeadlineElapsed>
+where
+    D: Future<Output = ()>,
+    F: Future<Output = T>,
+{
+    tokio::pin!(deadline);
+    tokio::pin!(future);
+    tokio::select! {
+        value = &mut future => Ok(value),
+        () = &mut deadline => Err(GeminiDeadlineElapsed),
+    }
+}
+
+/// Emits exactly one bounded outcome for a logical non-streaming provider call.
+/// A request id is useful for log correlation but must never become a metric
+/// label. If the handler future is dropped, the guard records a neutral
+/// cancellation outcome while dropping the borrowed reqwest future too; the
+/// transport layer may have cancelled for a caller disconnect or server lifecycle.
+struct GeminiRequestTelemetry {
+    request_id: String,
+    provider: &'static str,
+    model_tier: &'static str,
+    action: String,
+    payload_bucket: &'static str,
+    started: Instant,
+    phase: &'static str,
+    completed: bool,
+}
+
+impl GeminiRequestTelemetry {
+    fn new(provider: &'static str, model: &str, action: &str, payload_bytes: usize) -> Self {
+        Self {
+            request_id: ulid::Ulid::new().to_string(),
+            provider,
+            model_tier: bucket_gemini_tier(model),
+            action: action.to_string(),
+            payload_bucket: payload_bucket(payload_bytes),
+            started: Instant::now(),
+            phase: "pre_dispatch",
+            completed: false,
+        }
+    }
+
+    fn set_provider(&mut self, provider: &'static str) {
+        self.provider = provider;
+    }
+
+    fn set_phase(&mut self, phase: &'static str) {
+        self.phase = phase;
+    }
+
+    fn complete(&mut self, outcome: &'static str, status_class: &'static str) {
+        if self.completed {
+            return;
+        }
+        self.completed = true;
+        self.emit(outcome, status_class);
+    }
+
+    fn emit(&self, outcome: &'static str, status_class: &'static str) {
+        tracing::info!(
+            event = "gemini_provider_request",
+            request_id = %self.request_id,
+            route = "gemini_nonstream",
+            provider = self.provider,
+            model_tier = self.model_tier,
+            action = %self.action,
+            phase = self.phase,
+            outcome,
+            status_class,
+            payload_bucket = self.payload_bucket,
+            duration_bucket = duration_bucket(self.started.elapsed()),
+            "gemini_provider_request"
+        );
+    }
+}
+
+impl Drop for GeminiRequestTelemetry {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.completed = true;
+            self.emit("cancelled", "cancelled");
+        }
+    }
+}
+
+struct GeminiFallbackTelemetry {
+    from: &'static str,
+    to: &'static str,
+    reason: &'static str,
+    completed: bool,
+}
+
+impl GeminiFallbackTelemetry {
+    fn vertex_to_ai_studio(reason: &'static str) -> Self {
+        Self {
+            from: "vertex_ai",
+            to: "ai_studio",
+            reason,
+            completed: false,
+        }
+    }
+
+    fn complete(&mut self, outcome: FallbackOutcome) {
+        if self.completed {
+            return;
+        }
+        self.completed = true;
+        record_fallback("gemini_proxy", self.from, self.to, self.reason, outcome);
+    }
+}
+
+/// Mid-request Vertex → AI Studio heal reason, if any.
+///
+/// Missing `vertex_auth` is steady-state boot routing (AI Studio when Vertex was
+/// never configured), not a fallback — do not emit `record_fallback` for that.
+/// Token acquisition failure after Vertex was selected IS a real fallback.
+fn vertex_to_ai_studio_fallback_reason(
+    had_vertex_auth: bool,
+    token_failed: bool,
+) -> Option<&'static str> {
+    match (had_vertex_auth, token_failed) {
+        (true, true) => Some("auth"),
+        _ => None,
+    }
+}
+
+impl Drop for GeminiFallbackTelemetry {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.complete(FallbackOutcome::Exhausted);
+        }
+    }
+}
+
 /// Proxy-specific error type — allows JSON 429 responses alongside bare status codes.
 enum ProxyError {
     Status(StatusCode),
     RateLimited,
+    RateLimitUnavailable,
+    UpstreamAuthTimeout,
     UpstreamTimeout,
 }
 
@@ -87,6 +256,24 @@ impl IntoResponse for ProxyError {
                     Body::from(body),
                 )
             }
+            ProxyError::RateLimitUnavailable => response_or_500(
+                Response::builder()
+                    .status(StatusCode::SERVICE_UNAVAILABLE)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "5"),
+                Body::from(
+                    r#"{"error":"metering_unavailable","message":"Gemini metering is temporarily unavailable. Please retry."}"#,
+                ),
+            ),
+            ProxyError::UpstreamAuthTimeout => response_or_500(
+                Response::builder()
+                    .status(StatusCode::SERVICE_UNAVAILABLE)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "5"),
+                Body::from(
+                    r#"{"error":"upstream_auth_timeout","message":"Gemini authentication is temporarily unavailable. Please retry."}"#,
+                ),
+            ),
             ProxyError::UpstreamTimeout => response_or_500(
                 Response::builder()
                     .status(StatusCode::GATEWAY_TIMEOUT)
@@ -105,7 +292,7 @@ fn upstream_timeout_json() -> &'static str {
 pub fn gemini_client() -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(GEMINI_CONNECT_TIMEOUT)
-        .timeout(GEMINI_UPSTREAM_TIMEOUT)
+        .timeout(GEMINI_ATTEMPT_TIMEOUT)
         .build()
         .unwrap_or_default()
 }
@@ -137,27 +324,6 @@ fn duration_bucket(elapsed: Duration) -> &'static str {
     }
 }
 
-fn log_upstream_result(
-    provider: &str,
-    model: &str,
-    action: &str,
-    payload_bucket: &str,
-    started: Instant,
-    phase: &str,
-    status: &str,
-) {
-    tracing::info!(
-        "gemini_proxy: upstream_result provider={} model={} action={} payload_bucket={} duration_bucket={} phase={} status={}",
-        provider,
-        model,
-        action,
-        payload_bucket,
-        duration_bucket(started.elapsed()),
-        phase,
-        status
-    );
-}
-
 fn map_upstream_error(error: reqwest::Error, operation: &str) -> ProxyError {
     let error = error.without_url();
     if error.is_timeout() {
@@ -169,40 +335,58 @@ fn map_upstream_error(error: reqwest::Error, operation: &str) -> ProxyError {
     }
 }
 
-fn map_upstream_error_with_context(
-    error: reqwest::Error,
-    operation: &str,
-    provider: &str,
-    model: &str,
-    action: &str,
-    payload_bucket: &str,
-    started: Instant,
-) -> ProxyError {
-    let error = error.without_url();
-    if error.is_timeout() {
-        log_upstream_result(
-            provider,
-            model,
-            action,
-            payload_bucket,
-            started,
-            operation,
-            "timeout",
-        );
-        tracing::warn!("gemini_proxy: {} timed out: {}", operation, error);
-        ProxyError::UpstreamTimeout
+fn status_outcome(status: StatusCode) -> (&'static str, &'static str) {
+    if status.is_success() {
+        ("success", "2xx")
+    } else if matches!(
+        status,
+        StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT
+    ) {
+        ("provider_timeout", "timeout")
+    } else if status == StatusCode::TOO_MANY_REQUESTS {
+        ("provider_429", "429")
+    } else if status.is_server_error() {
+        ("provider_5xx", "5xx")
     } else {
-        log_upstream_result(
-            provider,
-            model,
-            action,
-            payload_bucket,
-            started,
-            operation,
-            "transport_error",
-        );
-        tracing::error!("gemini_proxy: {} failed: {}", operation, error);
-        ProxyError::Status(StatusCode::BAD_GATEWAY)
+        ("provider_error", "4xx")
+    }
+}
+
+fn attach_request_id(response: &mut Response, request_id: &str) {
+    if let Ok(value) = request_id.parse() {
+        response.headers_mut().insert("x-request-id", value);
+    }
+}
+
+fn enforce_gemini_metering(
+    decision: &RateDecision,
+    route: &'static str,
+    uid: &str,
+) -> Result<(), ProxyError> {
+    match decision {
+        RateDecision::Reject => {
+            tracing::warn!(route, uid, "gemini_proxy: rate limit rejected");
+            Err(ProxyError::RateLimited)
+        }
+        RateDecision::Unavailable => {
+            tracing::error!(route, uid, "gemini_proxy: metering unavailable");
+            Err(ProxyError::RateLimitUnavailable)
+        }
+        RateDecision::Allow | RateDecision::DegradeToFlash => Ok(()),
+    }
+}
+
+fn error_response_with_request_id(error: ProxyError, request_id: &str) -> Response {
+    let mut response = error.into_response();
+    attach_request_id(&mut response, request_id);
+    response
+}
+
+fn deadline_outcome(phase: &str) -> (&'static str, &'static str, ProxyError) {
+    if phase == "provider" {
+        ("provider_timeout", "504", ProxyError::UpstreamTimeout)
+    } else {
+        ("auth_timeout", "503", ProxyError::UpstreamAuthTimeout)
     }
 }
 
@@ -260,15 +444,12 @@ async fn gemini_proxy(
     let is_byok = byok_gemini_key.is_some();
 
     // Rate limit check — skip when using BYOK key
-    if !is_byok {
+    if rate_limit::requires_server_metering(is_byok) {
         let decision = state
             .gemini_rate_limiter
             .check_and_record(&user.uid, state.redis.as_ref())
             .await;
-        if decision == RateDecision::Reject {
-            tracing::warn!("gemini_proxy: rate limit rejected uid={}", user.uid);
-            return Err(ProxyError::RateLimited);
-        }
+        enforce_gemini_metering(&decision, "nonstream", &user.uid)?;
 
         // Apply model degradation if needed
         let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
@@ -288,10 +469,54 @@ async fn gemini_proxy(
             );
         }
 
-        // Non-BYOK path: use server key with Vertex AI / AI Studio routing
-        let response =
-            gemini_proxy_server_key(&state, &effective_path, action, model, &sanitized_body)
-                .await?;
+        // Non-BYOK path: one absolute budget owns token acquisition, provider
+        // fallback, send, and response drain. No work is detached, so dropping
+        // this handler also drops the in-flight upstream request.
+        use crate::llm::model_qos::{resolve_route, Provider};
+        let initial_provider = if resolve_route(model, action).provider == Provider::VertexAi {
+            "vertex_ai"
+        } else {
+            "ai_studio"
+        };
+        let mut telemetry =
+            GeminiRequestTelemetry::new(initial_provider, model, action, sanitized_body.len());
+        let result = within_gemini_deadline(
+            GEMINI_TOTAL_TIMEOUT,
+            gemini_proxy_server_key(
+                &state,
+                &effective_path,
+                action,
+                model,
+                &sanitized_body,
+                &mut telemetry,
+            ),
+        )
+        .await;
+        let mut response = match result {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => {
+                let (outcome, status_class) = match &error {
+                    ProxyError::UpstreamTimeout => ("provider_timeout", "504"),
+                    ProxyError::RateLimited => ("provider_429", "429"),
+                    ProxyError::RateLimitUnavailable => ("metering_unavailable", "503"),
+                    ProxyError::UpstreamAuthTimeout => ("auth_timeout", "503"),
+                    ProxyError::Status(status) if status.is_server_error() => {
+                        ("transport_error", "5xx")
+                    }
+                    ProxyError::Status(_) => ("provider_error", "4xx"),
+                };
+                telemetry.complete(outcome, status_class);
+                return Ok(error_response_with_request_id(error, &telemetry.request_id));
+            }
+            Err(GeminiDeadlineElapsed) => {
+                let (outcome, status_class, error) = deadline_outcome(telemetry.phase);
+                telemetry.complete(outcome, status_class);
+                return Ok(error_response_with_request_id(error, &telemetry.request_id));
+            }
+        };
+        let (outcome, status_class) = status_outcome(response.status());
+        telemetry.complete(outcome, status_class);
+        attach_request_id(&mut response, &telemetry.request_id);
         if response.status().is_success() {
             tracing::info!(
                 "gemini_proxy: forwarded uid={} path={}",
@@ -316,51 +541,47 @@ async fn gemini_proxy(
     tracing::info!("gemini_proxy: using BYOK Gemini key for uid={}", user.uid);
 
     let url = build_gemini_url(&path, byok_key);
-    let request_payload_bucket = payload_bucket(sanitized_body.len());
-    let started = Instant::now();
-    let upstream = state
-        .gemini_client
-        .post(&url)
-        .header("content-type", "application/json")
-        .body(sanitized_body)
-        .send()
-        .await
-        .map_err(|e| {
-            map_upstream_error_with_context(
-                e,
-                "request",
-                "ai_studio_byok",
-                model,
-                action,
-                request_payload_bucket,
-                started,
-            )
-        })?;
-
-    let status =
-        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream.bytes().await.map_err(|e| {
-        map_upstream_error_with_context(
-            e,
-            "body_read",
-            "ai_studio_byok",
-            model,
-            action,
-            request_payload_bucket,
-            started,
-        )
-    })?;
-    log_upstream_result(
-        "ai_studio_byok",
-        model,
-        action,
-        request_payload_bucket,
-        started,
-        "complete",
-        &status.as_u16().to_string(),
-    );
-
-    Ok((status, bytes).into_response())
+    let mut telemetry =
+        GeminiRequestTelemetry::new("ai_studio_byok", model, action, sanitized_body.len());
+    telemetry.set_phase("provider");
+    let result = within_gemini_deadline(GEMINI_TOTAL_TIMEOUT, async {
+        let upstream = state
+            .gemini_client
+            .post(&url)
+            .header("content-type", "application/json")
+            .body(sanitized_body)
+            .send()
+            .await
+            .map_err(|error| map_upstream_error(error, "BYOK request"))?;
+        let status =
+            StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+        let bytes = upstream
+            .bytes()
+            .await
+            .map_err(|error| map_upstream_error(error, "BYOK body read"))?;
+        Ok::<Response, ProxyError>((status, bytes).into_response())
+    })
+    .await;
+    let mut response = match result {
+        Ok(Ok(response)) => response,
+        Ok(Err(error)) => {
+            let (outcome, status_class) = match &error {
+                ProxyError::UpstreamTimeout => ("provider_timeout", "504"),
+                _ => ("transport_error", "5xx"),
+            };
+            telemetry.complete(outcome, status_class);
+            return Ok(error_response_with_request_id(error, &telemetry.request_id));
+        }
+        Err(GeminiDeadlineElapsed) => {
+            let (outcome, status_class, error) = deadline_outcome(telemetry.phase);
+            telemetry.complete(outcome, status_class);
+            return Ok(error_response_with_request_id(error, &telemetry.request_id));
+        }
+    };
+    let (outcome, status_class) = status_outcome(response.status());
+    telemetry.complete(outcome, status_class);
+    attach_request_id(&mut response, &telemetry.request_id);
+    Ok(response)
 }
 
 /// Non-BYOK Gemini proxy: uses server key with Vertex AI / AI Studio routing,
@@ -371,6 +592,7 @@ async fn gemini_proxy_server_key(
     action: &str,
     model: &str,
     sanitized_body: &[u8],
+    telemetry: &mut GeminiRequestTelemetry,
 ) -> Result<Response, ProxyError> {
     // Resolve provider route: single dispatch point for all provider-specific behavior.
     // Returns provider, action override, and body transforms needed.
@@ -393,17 +615,16 @@ async fn gemini_proxy_server_key(
     } else {
         effective_path.to_string()
     };
-    let request_payload_bucket = payload_bucket(request_body.len());
-    let started = Instant::now();
-
     // Build and send request: Vertex AI (Bearer token) or AI Studio (API key).
     // Falls back to AI Studio if Vertex token fetch fails.
     let mut used_vertex = false;
-    let mut upstream_provider = if route.provider == Provider::VertexAi {
+    let upstream_provider = if route.provider == Provider::VertexAi {
         "vertex_ai"
     } else {
         "ai_studio"
     };
+    telemetry.set_provider(upstream_provider);
+    let mut fallback_telemetry: Option<GeminiFallbackTelemetry> = None;
     let upstream = if route.provider == Provider::VertexAi {
         if let Some(ref vertex) = state.vertex_auth {
             let url = vertex.build_url_from_path(&vertex_path).ok_or_else(|| {
@@ -413,9 +634,11 @@ async fn gemini_proxy_server_key(
                 );
                 ProxyError::Status(StatusCode::BAD_REQUEST)
             })?;
+            telemetry.set_phase("auth");
             match vertex.token().await {
                 Ok(token) => {
                     used_vertex = true;
+                    telemetry.set_phase("provider");
                     state
                         .gemini_client
                         .post(&url)
@@ -431,7 +654,10 @@ async fn gemini_proxy_server_key(
                             "gemini_proxy: Vertex AI token failed, falling back to API key: {}",
                             e
                         );
-                        upstream_provider = "ai_studio_fallback";
+                        telemetry.set_provider("ai_studio");
+                        fallback_telemetry = vertex_to_ai_studio_fallback_reason(true, true)
+                            .map(GeminiFallbackTelemetry::vertex_to_ai_studio);
+                        telemetry.set_phase("provider");
                         let url = build_gemini_url(effective_path, gemini_key);
                         state
                             .gemini_client
@@ -450,13 +676,15 @@ async fn gemini_proxy_server_key(
                 }
             }
         } else {
-            // Vertex AI requested but not configured → AI Studio
+            // Vertex AI requested but not configured → AI Studio (steady-state
+            // boot routing, not a mid-request heal — no record_fallback).
             let gemini_key = state
                 .config
                 .gemini_api_key
                 .as_ref()
                 .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-            upstream_provider = "ai_studio_fallback";
+            telemetry.set_provider("ai_studio");
+            telemetry.set_phase("provider");
             let url = build_gemini_url(effective_path, gemini_key);
             state
                 .gemini_client
@@ -468,6 +696,7 @@ async fn gemini_proxy_server_key(
         }
     } else {
         // AI Studio route
+        telemetry.set_phase("provider");
         let gemini_key = state
             .config
             .gemini_api_key
@@ -483,40 +712,34 @@ async fn gemini_proxy_server_key(
             .await
     };
 
-    let upstream = upstream.map_err(|e| {
-        map_upstream_error_with_context(
-            e,
-            "request",
-            upstream_provider,
-            model,
-            action,
-            request_payload_bucket,
-            started,
-        )
-    })?;
+    let upstream = match upstream {
+        Ok(upstream) => upstream,
+        Err(error) => {
+            if let Some(fallback) = fallback_telemetry.as_mut() {
+                fallback.complete(FallbackOutcome::Exhausted);
+            }
+            return Err(map_upstream_error(error, "upstream request"));
+        }
+    };
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream.bytes().await.map_err(|e| {
-        map_upstream_error_with_context(
-            e,
-            "body_read",
-            upstream_provider,
-            model,
-            action,
-            request_payload_bucket,
-            started,
-        )
-    })?;
-    log_upstream_result(
-        upstream_provider,
-        model,
-        action,
-        request_payload_bucket,
-        started,
-        "complete",
-        &status.as_u16().to_string(),
-    );
+    let bytes = match upstream.bytes().await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            if let Some(fallback) = fallback_telemetry.as_mut() {
+                fallback.complete(FallbackOutcome::Exhausted);
+            }
+            return Err(map_upstream_error(error, "upstream body read"));
+        }
+    };
+    if let Some(fallback) = fallback_telemetry.as_mut() {
+        fallback.complete(if status.is_success() {
+            FallbackOutcome::Recovered
+        } else {
+            FallbackOutcome::Exhausted
+        });
+    }
 
     // Apply response transform if needed (e.g., Vertex predict → AI Studio embed format)
     if used_vertex && status.is_success() && route.response_transform != ResponseTransform::None {
@@ -585,15 +808,12 @@ async fn gemini_stream_proxy(
     let is_byok = byok_gemini_key.is_some();
 
     // Rate limit check — skip when using BYOK key
-    if !is_byok {
+    if rate_limit::requires_server_metering(is_byok) {
         let decision = state
             .gemini_rate_limiter
             .check_and_record(&user.uid, state.redis.as_ref())
             .await;
-        if decision == RateDecision::Reject {
-            tracing::warn!("gemini_stream_proxy: rate limit rejected uid={}", user.uid);
-            return Err(ProxyError::RateLimited);
-        }
+        enforce_gemini_metering(&decision, "stream", &user.uid)?;
 
         // Apply model degradation if needed
         let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
@@ -669,6 +889,19 @@ async fn gemini_stream_proxy(
     ))
 }
 
+/// Fallback outcome for a Vertex-token → AI Studio streaming heal. Recovered
+/// only when the request was dispatched AND the upstream returned a success
+/// status; a send error or a non-success SSE status (AI Studio can accept the
+/// connection and still return 4xx/5xx) is Exhausted. Keeps the streaming heal
+/// consistent with the status-keyed non-streaming heal.
+fn stream_heal_outcome(send_succeeded: bool, status_is_success: bool) -> FallbackOutcome {
+    if send_succeeded && status_is_success {
+        FallbackOutcome::Recovered
+    } else {
+        FallbackOutcome::Exhausted
+    }
+}
+
 /// Non-BYOK streaming Gemini proxy: server key with Vertex AI / AI Studio routing.
 async fn gemini_stream_server_key(
     state: &AppState,
@@ -681,6 +914,13 @@ async fn gemini_stream_server_key(
     // Resolve provider route (same dispatch as non-streaming proxy)
     use crate::llm::model_qos::{resolve_route, Provider};
     let route = resolve_route(model, action);
+
+    // Track a Vertex-token → AI Studio heal so its fallback outcome can be
+    // recorded from the upstream HTTP status (below), not merely from whether
+    // the request was dispatched. AI Studio can accept the connection and still
+    // return a 4xx/5xx SSE error; recording Recovered on send success alone
+    // undercounts exhausted fallbacks (the non-streaming path keys off status).
+    let mut healed_from_vertex = false;
 
     // Build and send request: Vertex AI or AI Studio
     let upstream = if route.provider == Provider::VertexAi {
@@ -715,13 +955,20 @@ async fn gemini_stream_server_key(
                         tracing::warn!("gemini_stream_proxy: Vertex AI token failed, falling back to API key: {}", e);
                         let upstream_url =
                             build_gemini_stream_url(effective_path, gemini_key, query);
-                        state
+                        let healed = state
                             .gemini_stream_client
                             .post(&upstream_url)
                             .header("content-type", "application/json")
                             .body(sanitized_body)
                             .send()
-                            .await
+                            .await;
+                        // A Vertex token failure that reroutes to AI Studio is a
+                        // real provider switch that must emit fallback telemetry.
+                        // The outcome is recorded below from the upstream HTTP
+                        // status so a 4xx/5xx SSE error counts as Exhausted, not
+                        // Recovered (mirrors the non-streaming heal).
+                        healed_from_vertex = true;
+                        healed
                     } else {
                         tracing::error!(
                             "gemini_stream_proxy: Vertex AI token error and no fallback: {}",
@@ -763,6 +1010,23 @@ async fn gemini_stream_server_key(
             .send()
             .await
     };
+
+    // Record the Vertex → AI Studio heal outcome from the actual upstream
+    // result: Recovered only when the healed response carried a success status,
+    // Exhausted on any send error or non-success SSE status.
+    if healed_from_vertex {
+        let (send_ok, status_ok) = match &upstream {
+            Ok(resp) => (true, resp.status().is_success()),
+            Err(_) => (false, false),
+        };
+        record_fallback(
+            "gemini_stream_proxy",
+            "vertex_ai",
+            "ai_studio",
+            "auth",
+            stream_heal_outcome(send_ok, status_ok),
+        );
+    }
 
     let upstream = upstream.map_err(|e| map_upstream_error(e, "stream upstream request"))?;
 
@@ -1093,12 +1357,73 @@ pub fn proxy_routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio::sync::oneshot;
+
+    fn local_test_client() -> reqwest::Client {
+        reqwest::Client::builder().no_proxy().build().unwrap()
+    }
+
+    async fn spawn_hanging_upstream() -> (
+        String,
+        oneshot::Receiver<()>,
+        oneshot::Receiver<()>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (request_seen_tx, request_seen_rx) = oneshot::channel();
+        let (disconnected_tx, disconnected_rx) = oneshot::channel();
+        let task = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            loop {
+                let count = socket.read(&mut buffer).await.unwrap();
+                if count == 0 {
+                    return;
+                }
+                request.extend_from_slice(&buffer[..count]);
+                if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let _ = request_seen_tx.send(());
+
+            // Do not produce response headers. A dropped reqwest future must
+            // close this socket instead of leaving provider work detached.
+            loop {
+                match socket.read(&mut buffer).await {
+                    Ok(0) | Err(_) => {
+                        let _ = disconnected_tx.send(());
+                        return;
+                    }
+                    Ok(_) => {}
+                }
+            }
+        });
+        (
+            format!("http://{address}/generateContent"),
+            request_seen_rx,
+            disconnected_rx,
+            task,
+        )
+    }
 
     #[test]
     fn gemini_upstream_timeout_stays_below_cloud_run_deadline() {
-        assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_UPSTREAM_TIMEOUT);
-        assert!(GEMINI_UPSTREAM_TIMEOUT <= Duration::from_secs(90));
-        assert!(GEMINI_UPSTREAM_TIMEOUT < Duration::from_secs(120));
+        assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_ATTEMPT_TIMEOUT);
+        assert!(GEMINI_ATTEMPT_TIMEOUT < GEMINI_TOTAL_TIMEOUT);
+        assert!(GEMINI_TOTAL_TIMEOUT < CLOUD_RUN_REQUEST_TIMEOUT);
+        assert!(
+            CLOUD_RUN_REQUEST_TIMEOUT - GEMINI_TOTAL_TIMEOUT >= GEMINI_PLATFORM_HEADROOM,
+            "reserve enough time to flush the proxy-owned timeout response"
+        );
+        assert!(
+            GEMINI_TOTAL_TIMEOUT >= Duration::from_secs(180),
+            "long-context Gemini calls must not be cut off at the old 70-second deadline"
+        );
     }
 
     #[test]
@@ -1116,6 +1441,33 @@ mod tests {
     }
 
     #[test]
+    fn deadline_attribution_separates_auth_from_provider() {
+        let (outcome, status, error) = deadline_outcome("auth");
+        assert_eq!((outcome, status), ("auth_timeout", "503"));
+        assert!(matches!(error, ProxyError::UpstreamAuthTimeout));
+
+        let (outcome, status, error) = deadline_outcome("provider");
+        assert_eq!((outcome, status), ("provider_timeout", "504"));
+        assert!(matches!(error, ProxyError::UpstreamTimeout));
+    }
+
+    #[test]
+    fn upstream_timeout_statuses_are_not_generic_provider_5xx() {
+        assert_eq!(
+            status_outcome(StatusCode::GATEWAY_TIMEOUT),
+            ("provider_timeout", "timeout")
+        );
+        assert_eq!(
+            status_outcome(StatusCode::REQUEST_TIMEOUT),
+            ("provider_timeout", "timeout")
+        );
+        assert_eq!(
+            status_outcome(StatusCode::SERVICE_UNAVAILABLE),
+            ("provider_5xx", "5xx")
+        );
+    }
+
+    #[test]
     fn proxy_metric_buckets_are_stable() {
         assert_eq!(payload_bucket(0), "0-16kb");
         assert_eq!(payload_bucket(16_385), "16-128kb");
@@ -1124,6 +1476,185 @@ mod tests {
         assert_eq!(duration_bucket(Duration::from_secs(4)), "0-5s");
         assert_eq!(duration_bucket(Duration::from_secs(60)), "60-120s");
         assert_eq!(duration_bucket(Duration::from_secs(120)), "120s+");
+    }
+
+    #[test]
+    fn vertex_missing_auth_is_steady_state_not_fallback() {
+        // Vertex route + vertex_auth=None → AI Studio without record_fallback.
+        assert_eq!(vertex_to_ai_studio_fallback_reason(false, false), None);
+        assert_eq!(vertex_to_ai_studio_fallback_reason(false, true), None);
+        // Successful Vertex token path also must not emit fallback.
+        assert_eq!(vertex_to_ai_studio_fallback_reason(true, false), None);
+    }
+
+    #[test]
+    fn stream_heal_outcome_keys_off_upstream_status_not_send() {
+        // Dispatched + success status → the heal actually recovered.
+        assert_eq!(stream_heal_outcome(true, true), FallbackOutcome::Recovered);
+        // AI Studio accepted the connection (send Ok) but returned a 4xx/5xx SSE
+        // error: the fallback did NOT recover — it is exhausted.
+        assert_eq!(stream_heal_outcome(true, false), FallbackOutcome::Exhausted);
+        // The heal request itself failed to send.
+        assert_eq!(
+            stream_heal_outcome(false, false),
+            FallbackOutcome::Exhausted
+        );
+    }
+
+    #[test]
+    fn vertex_token_failure_records_auth_fallback() {
+        assert_eq!(
+            vertex_to_ai_studio_fallback_reason(true, true),
+            Some("auth")
+        );
+        let mut telemetry = GeminiFallbackTelemetry::vertex_to_ai_studio("auth");
+        assert_eq!(telemetry.reason, "auth");
+        assert_eq!(telemetry.from, "vertex_ai");
+        assert_eq!(telemetry.to, "ai_studio");
+        telemetry.complete(FallbackOutcome::Recovered);
+        // Drop must not double-emit after complete.
+        drop(telemetry);
+    }
+
+    #[tokio::test]
+    async fn hanging_upstream_is_cancelled_at_injected_deadline() {
+        let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
+        let client = local_test_client();
+        let (deadline_tx, deadline_rx) = oneshot::channel();
+        let work = tokio::spawn(async move {
+            race_gemini_deadline(
+                async move {
+                    let _ = deadline_rx.await;
+                },
+                client.post(url).body(Vec::new()).send(),
+            )
+            .await
+        });
+
+        tokio::time::timeout(Duration::from_secs(1), request_seen)
+            .await
+            .expect("local upstream must receive request")
+            .unwrap();
+        deadline_tx.send(()).unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(1), work)
+            .await
+            .expect("deadline work must finish")
+            .unwrap();
+        assert_eq!(result.unwrap_err(), GeminiDeadlineElapsed);
+        tokio::time::timeout(Duration::from_secs(1), disconnected)
+            .await
+            .expect("deadline must drop the upstream request")
+            .unwrap();
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn dropping_proxy_work_cancels_the_upstream_socket() {
+        let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
+        let client = local_test_client();
+        let proxy_work = tokio::spawn(async move {
+            within_gemini_deadline(
+                Duration::from_secs(30),
+                client.post(url).body(Vec::new()).send(),
+            )
+            .await
+        });
+
+        tokio::time::timeout(Duration::from_secs(1), request_seen)
+            .await
+            .expect("local upstream must receive request")
+            .unwrap();
+        proxy_work.abort();
+        let _ = proxy_work.await;
+        tokio::time::timeout(Duration::from_secs(1), disconnected)
+            .await
+            .expect("dropping proxy work must drop reqwest")
+            .unwrap();
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn downstream_http_disconnect_cancels_upstream_work() {
+        let (upstream_url, request_seen, disconnected, upstream_server) =
+            spawn_hanging_upstream().await;
+        let client = local_test_client();
+        let app = Router::new().route(
+            "/",
+            post(move || {
+                let client = client.clone();
+                let upstream_url = upstream_url.clone();
+                async move {
+                    let _ = within_gemini_deadline(
+                        Duration::from_secs(30),
+                        client.post(upstream_url).body(Vec::new()).send(),
+                    )
+                    .await;
+                    StatusCode::NO_CONTENT
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let proxy_server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let mut downstream = TcpStream::connect(address).await.unwrap();
+        downstream
+            .write_all(b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n")
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(1), request_seen)
+            .await
+            .expect("proxy handler must dispatch upstream")
+            .unwrap();
+        drop(downstream);
+
+        tokio::time::timeout(Duration::from_secs(1), disconnected)
+            .await
+            .expect("downstream disconnect must drop upstream work")
+            .unwrap();
+        upstream_server.await.unwrap();
+        proxy_server.abort();
+        let _ = proxy_server.await;
+    }
+
+    #[tokio::test]
+    async fn one_budget_includes_pre_dispatch_work_and_upstream_wait() {
+        let (url, request_seen, disconnected, server) = spawn_hanging_upstream().await;
+        let client = local_test_client();
+        let (dispatch_tx, dispatch_rx) = oneshot::channel();
+        let (deadline_tx, deadline_rx) = oneshot::channel();
+        let work = tokio::spawn(async move {
+            race_gemini_deadline(
+                async move {
+                    let _ = deadline_rx.await;
+                },
+                async move {
+                    // Models token acquisition/provider selection before dispatch.
+                    let _ = dispatch_rx.await;
+                    client.post(url).body(Vec::new()).send().await
+                },
+            )
+            .await
+        });
+
+        dispatch_tx.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), request_seen)
+            .await
+            .expect("pre-dispatch work must leave time to reach upstream")
+            .unwrap();
+        deadline_tx.send(()).unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(1), work)
+            .await
+            .expect("total budget work must finish")
+            .unwrap();
+        assert_eq!(result.unwrap_err(), GeminiDeadlineElapsed);
+        tokio::time::timeout(Duration::from_secs(1), disconnected)
+            .await
+            .expect("total budget must cancel the dispatched remainder")
+            .unwrap();
+        server.await.unwrap();
     }
 
     // --- Gemini action extraction ---
@@ -1891,6 +2422,22 @@ mod tests {
         assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
         let msg = parsed["error"]["message"].as_str().unwrap().to_lowercase();
         assert!(msg.contains("resource exhausted"));
+    }
+
+    #[tokio::test]
+    async fn metering_unavailable_response_fails_closed() {
+        assert!(matches!(
+            enforce_gemini_metering(&RateDecision::Unavailable, "nonstream", "uid"),
+            Err(ProxyError::RateLimitUnavailable)
+        ));
+        let response = ProxyError::RateLimitUnavailable.into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "5");
+        let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(parsed["error"], "metering_unavailable");
     }
 
     // --- Embedding body transform (AI Studio → Vertex AI predict) ---

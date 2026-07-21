@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Compatibility entry point for the generalized named developer updater.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [[ -n "${OMI_MAIN_REPOSITORY:-}" ]]; then
+  export OMI_DEV_REPOSITORY="$OMI_MAIN_REPOSITORY"
+fi
+if [[ -n "${OMI_MAIN_WORKTREE:-}" ]]; then
+  export OMI_DEV_WORKTREE="$OMI_MAIN_WORKTREE"
+fi
+if [[ -n "${OMI_MAIN_STATE_DIR:-}" ]]; then
+  export OMI_DEV_STATE_DIR="$OMI_MAIN_STATE_DIR"
+fi
+
+exec "$SCRIPT_DIR/omi-dev" "$@" --name omi-main

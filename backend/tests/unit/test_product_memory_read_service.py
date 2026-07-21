@@ -72,7 +72,7 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         'version': 1,
         'tier': tier,
         'status': MemoryItemStatus.active,
-        'processing_state': ProcessingState.pending if tier == MemoryTier.short_term else ProcessingState.processed,
+        'processing_state': ProcessingState.processed,
         'content': content or f'{memory_id} coffee preference',
         'evidence': [_evidence(f'{memory_id}-source')],
         'source_state': SourceState.active,
@@ -129,6 +129,28 @@ def test_fetch_default_product_memory_search_reads_authoritative_items_and_filte
     assert response['archive_default_visible'] is False
     assert response['items'][0]['tier'] == 'short_term'
     assert response['items'][1]['tier'] == 'long_term'
+
+
+def test_fetch_default_product_memory_search_excludes_pending_short_term_text():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    pending = _memory_item(
+        'pending-explicit',
+        now=now,
+        content='coffee pending explicit memory',
+        processing_state=ProcessingState.pending,
+    )
+    db_client = _FirestoreFake({f'users/u1/memory_items/{pending.memory_id}': _stored_item(pending)})
+
+    response = fetch_default_product_memory_search(
+        uid='u1',
+        query='coffee',
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=now,
+        db_client=db_client,
+    )
+
+    assert response['items'] == []
+    assert response['total_count'] == 0
 
 
 def test_fetch_default_product_memory_search_paginates_after_filtering_with_deterministic_order():

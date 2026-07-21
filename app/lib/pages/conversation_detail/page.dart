@@ -404,22 +404,19 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       builder: (c) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Google Calendar Not Connected', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Connect your Google Calendar to link conversations to calendar events.',
-          style: TextStyle(color: Color(0xFF8E8E93)),
-        ),
+        title: Text(context.l10n.googleCalendarNotConnected, style: const TextStyle(color: Colors.white)),
+        content: Text(context.l10n.googleCalendarConnectPrompt, style: const TextStyle(color: Color(0xFF8E8E93))),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+            child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(c);
               Navigator.push(context, MaterialPageRoute(builder: (context) => const IntegrationsPage()));
             },
-            child: const Text('Connect', style: TextStyle(color: Colors.white)),
+            child: Text(context.l10n.connect, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -551,10 +548,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles(
-          [XFile(file.path, mimeType: mimeType)],
-          sharePositionOrigin: _shareSheetOrigin(),
-        );
+        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)], sharePositionOrigin: _shareSheetOrigin());
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -829,9 +823,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       // Directly share the summary link
                                       bool shared = await setConversationVisibility(provider.conversation.id);
                                       if (!shared) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(SnackBar(content: Text(context.l10n.conversationUrlNotShared)));
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(context.l10n.conversationUrlNotShared)),
+                                          );
+                                        }
                                         setState(() {
                                           _isSharing = false;
                                         });
@@ -843,8 +839,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         conversation: provider.conversation,
                                         shareMethod: 'url_share',
                                       );
-                                      shareConversationLink(provider.conversation,
-                                          sharePositionOrigin: _shareSheetOrigin());
+                                      shareConversationLink(
+                                        provider.conversation,
+                                        sharePositionOrigin: _shareSheetOrigin(),
+                                      );
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));
                                       setState(() {
@@ -1575,13 +1573,13 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
 
     if (linked != null) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Linked to "${event.title}"')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.linkedToEvent(event.title))));
     } else {
       setState(() {
         _isLinking = false;
         _linkingEventId = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to link calendar event')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToLinkCalendarEvent)));
     }
   }
 

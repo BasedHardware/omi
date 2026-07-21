@@ -141,20 +141,32 @@
       }
     ],
     "updated": "2026-06-23T01:27:10Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "4",
-      "threshold": "5 RPS 4xx"
+      "threshold": "5 RPS 4xx",
+      "summary": "Omi API alert: Backend - 4XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "cew4j7ruiik1sd",
+      "component": "api",
+      "impact": "product"
+    }
   },
   {
     "id": 17,
@@ -301,17 +313,26 @@
       }
     ],
     "updated": "2026-06-23T01:27:10Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "4",
-      "threshold": "1"
+      "threshold": "1",
+      "summary": "Omi API alert: Backend - 5XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "severity": "critical",
+      "alert_identity": "cew4jcnpa68sga",
+      "component": "api",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -439,16 +460,25 @@
       }
     ],
     "updated": "2026-06-20T02:27:33Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "OK",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "62"
+      "__panelId__": "62",
+      "summary": "Omi API alert: Backend - API Quota Exceeded (429).",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
-      "instatus_component": "api"
+      "instatus_component": "api",
+      "severity": "warning",
+      "alert_identity": "fewwk2goqfklcf",
+      "component": "api",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -595,20 +625,32 @@
       }
     ],
     "updated": "2026-06-23T01:20:15Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "3",
-      "threshold": "150"
+      "threshold": "150",
+      "summary": "Omi API alert: Backend RPS is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api",
+      "alert_identity": "cew4a2kdopb0ga",
+      "component": "api",
+      "impact": "infrastructure"
+    }
   },
   {
     "id": 18,
@@ -748,20 +790,32 @@
       }
     ],
     "updated": "2026-06-20T02:27:34Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "5",
-      "threshold": "80 instances (80% of max)"
+      "threshold": "80 instances (80% of max)",
+      "summary": "Omi API alert: Backend instance count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api",
+      "alert_identity": "bew4jihxc1beob",
+      "component": "api",
+      "impact": "infrastructure"
+    }
   },
   {
     "id": 15,
@@ -909,20 +963,32 @@
       }
     ],
     "updated": "2026-06-20T02:27:34Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "6",
-      "threshold": "30"
+      "threshold": "30",
+      "summary": "Omi API alert: Backend max concurrent requests are high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "api",
+      "alert_identity": "bew4iwy0hzmyob",
+      "component": "api",
+      "impact": "infrastructure"
+    }
   },
   {
     "id": 48,
@@ -1044,16 +1110,25 @@
       }
     ],
     "updated": "2026-06-20T02:27:33Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "OK",
     "for": "5m",
     "keep_firing_for": "5m",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "62"
+      "__panelId__": "62",
+      "summary": "Omi API alert: OpenAI - Quota Exceeded.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
-      "instatus_component": "ai-chat"
+      "instatus_component": "api",
+      "severity": "ticket",
+      "alert_identity": "afd0krbk1bugwf",
+      "component": "api",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {

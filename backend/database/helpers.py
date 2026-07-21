@@ -118,13 +118,18 @@ def set_data_protection_level(data_arg_name: str) -> Callable[[F], F]:
 
 
 def prepare_for_write(
-    data_arg_name: str, prepare_func: Callable[[Dict[str, Any], str, str], Dict[str, Any]]
+    data_arg_name: str,
+    prepare_func: Callable[[Dict[str, Any], str, str], Dict[str, Any]],
+    *,
+    preserve_result: bool = False,
 ) -> Callable[[F], F]:
     """
     Decorator to prepare data before writing to the database.
     It uses the provided prepare_func to handle the specifics of data preparation,
     such as compression or encryption, based on the data's protection level.
-    The decorated function's return value is ignored; the decorator returns the original, unencrypted data.
+    By default the decorated function's return value is ignored and the decorator
+    returns the original, unencrypted data.  Callers that need a transactional
+    admission result can opt into ``preserve_result``.
 
     Assumes 'uid' and the data dictionary (specified by data_arg_name) are arguments
     to the decorated function. Also assumes 'data_protection_level' is already set on the data.
@@ -147,8 +152,8 @@ def prepare_for_write(
                 )
 
             if not isinstance(original_data, (dict, list)):
-                func(*args, **kwargs)
-                return original_data
+                result = func(*args, **kwargs)
+                return result if preserve_result else original_data
 
             prepared_data: Any = cast(Any, original_data)
 
@@ -175,10 +180,10 @@ def prepare_for_write(
 
             # Modify the bound arguments with the prepared data and reconstruct the call
             bound_args.arguments[data_arg_name] = prepared_data
-            func(*bound_args.args, **bound_args.kwargs)
+            result = func(*bound_args.args, **bound_args.kwargs)
 
             # Return the original, unmodified data from the initial call
-            return cast(Any, original_data)
+            return result if preserve_result else cast(Any, original_data)
 
         return cast(F, wrapper)
 

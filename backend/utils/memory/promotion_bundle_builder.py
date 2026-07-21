@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Tupl
 from database import memory_ledger
 from models.product_memory import MemoryAccessPolicy
 from utils.memory.projections import rebuild_memory_memory_projections
+from utils.memory_ingestion.ids import canonical_json
 
 try:
     from utils.memory import vector_search_service as _vector_search_service
@@ -147,8 +148,7 @@ def stable_id(namespace: str, payload: Payload) -> str:
     return hashlib.sha256(f'{namespace}|{serialized}'.encode('utf-8')).hexdigest()[:20]
 
 
-def _canonical_json(payload: Payload) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str)
+_canonical_json = canonical_json
 
 
 def tokens(text: str) -> set[str]:

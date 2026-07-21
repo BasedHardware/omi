@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -28,6 +28,31 @@ def resolve_display_tz(tz: Optional[str]) -> Any:
         except (ZoneInfoNotFoundError, ValueError):
             logger.warning(f"resolve_display_tz: invalid timezone '{tz}', falling back to UTC")
     return timezone.utc, "UTC"
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Treat a naive timestamp as UTC so ``astimezone`` cannot reinterpret it as server-local."""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def format_local_time(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
+    """Render a stored timestamp as a labelled wall clock in the user's timezone.
+
+    Every timestamp a chat tool hands the model must carry a timezone label. An unlabelled
+    UTC wall clock reads as local time to the model, which then states the wrong time of day
+    ("tonight" for a mid-afternoon due date) — issues #4643 and #6214.
+    """
+    return f"{_as_utc(dt).astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
+def format_local_date(dt: datetime, display_tz: tzinfo) -> str:
+    """Render a stored timestamp as a calendar date in the user's timezone.
+
+    Needed because the UTC date rolls over at a different instant than the user's: a memory
+    captured at 21:00 in Sao Paulo is stored as the next UTC day, so a raw UTC date is a day
+    late for anyone west of Greenwich in the evening (issue #6214).
+    """
+    return _as_utc(dt).astimezone(display_tz).strftime('%Y-%m-%d')
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +192,9 @@ def conversations_to_string(
     people_map: Dict[str, Person] = {p.id: p for p in people} if people else {}
     display_tz, tz_label = resolve_display_tz(tz)
     for i, conversation in enumerate(conversations):
-        formatted_date = conversation.created_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+        formatted_date = (
+            _as_utc(conversation.created_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+        )
         conversation_str = (
             f"Conversation #{i + 1}\n"
             f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
@@ -176,12 +203,12 @@ def conversations_to_string(
         # Add started_at and finished_at if available
         if conversation.started_at:
             formatted_started = (
-                conversation.started_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+                _as_utc(conversation.started_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
             )
             conversation_str += f"Started: {formatted_started}\n"
         if conversation.finished_at:
             formatted_finished = (
-                conversation.finished_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+                _as_utc(conversation.finished_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
             )
             conversation_str += f"Finished: {formatted_finished}\n"
 

@@ -1,10 +1,14 @@
-ROOT := $(shell git rev-parse --show-toplevel)
 HOOKS_DIR := $(shell git rev-parse --git-path hooks)
-PYTHON ?= $(shell if [ -x backend/venv/bin/python ]; then printf backend/venv/bin/python; else printf python3; fi)
+PYTHON ?= $(shell bash -c 'source "$$(git rev-parse --show-toplevel)/scripts/dev-harness/_resolve_python.sh"; dev_harness_python')
+# Export so recipes use $$PYTHON (shell variable expansion) instead of $(PYTHON)
+# (Make text interpolation). Shell variable expansion treats the resolved path
+# as data and cannot be broken by quote or command-substitution characters in
+# the checkout root, unlike Make interpolation into recipe shell text.
+export PYTHON
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
 
-.PHONY: setup setup-main setup-hooks dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
+.PHONY: setup setup-main setup-hooks preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
 
 setup: setup-main setup-hooks
 	@echo "Worktree setup complete."
@@ -14,6 +18,16 @@ setup-main:
 
 setup-hooks:
 	@bash scripts/install-git-hooks.sh
+
+preflight:
+	python3 .github/scripts/pr_preflight.py --lane local --base origin/main
+
+runtime-image-source-closure:
+	python3 backend/scripts/runtime_image_contracts.py check
+
+runtime-image-smoke:
+	@test -n "$(SERVICE)" || (echo "SERVICE is required (for example: make runtime-image-smoke SERVICE=pusher)" >&2; exit 2)
+	python3 backend/scripts/runtime_image_contracts.py build-smoke --service "$(SERVICE)" --image "$(or $(IMAGE),omi-$(SERVICE):dev)"
 
 dev-check:
 	bash scripts/dev-harness/dev-check.sh
@@ -50,20 +64,20 @@ dev-logs:
 	bash scripts/dev-harness/dev-logs.sh
 
 list-memory-scenarios:
-	$(PYTHON) scripts/dev-harness/list-memory-scenarios.py
+	"$$PYTHON" scripts/dev-harness/list-memory-scenarios.py
 
 seed-memory-scenario:
-	$(PYTHON) scripts/dev-harness/seed-memory-scenario.py $(SCENARIO)
+	"$$PYTHON" scripts/dev-harness/seed-memory-scenario.py $(SCENARIO)
 
 reset-memory-scenario:
-	$(PYTHON) scripts/dev-harness/reset-memory-scenario.py $(SCENARIO)
+	"$$PYTHON" scripts/dev-harness/reset-memory-scenario.py $(SCENARIO)
 
 desktop-run-local:
 	@if [ -n "$(DESKTOP_APP_NAME)" ]; then \
-		PYTHON="$(PYTHON)" OMI_APP_NAME="$(DESKTOP_APP_NAME)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
+		PYTHON="$$PYTHON" OMI_APP_NAME="$(DESKTOP_APP_NAME)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
 	else \
-		PYTHON="$(PYTHON)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
+		PYTHON="$$PYTHON" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"; \
 	fi
 
 run-canonical-promotion:
-	PYTHON="$(PYTHON)" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" $(PYTHON) scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"
+	PYTHON="$$PYTHON" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" "$$PYTHON" scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"

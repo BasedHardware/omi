@@ -12,7 +12,8 @@ export 'package:omi/backend/http/api/conversations.dart'
         fetchSyncJobStatus,
         SyncJobFetch,
         SyncJobFetchOutcome,
-        SyncRateLimitedException;
+        SyncRateLimitedException,
+        SyncRateLimitKind;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
@@ -66,6 +67,7 @@ abstract class LocalWalSync implements IWalSync {
   Future<List<Wal>> getAllWals();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
+  Future<void> deleteAllCorruptedWals();
 
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.

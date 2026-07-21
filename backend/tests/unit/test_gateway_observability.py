@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 from utils.llm import gateway_observability
+from utils.llm import gateway_client
+from utils.llm.gateway_client import (
+    LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
+    LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
+    raise_if_gateway_feature_mode_blocks_direct_model_surface,
+)
 
 
 class _CounterStub:
@@ -75,13 +82,6 @@ def test_record_direct_exception_surface_increments_counter(monkeypatch):
 
 
 def test_raise_if_gateway_feature_mode_records_direct_exception_when_allowed(monkeypatch):
-    from utils.llm import gateway_client
-    from utils.llm.gateway_client import (
-        LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
-        LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
-        raise_if_gateway_feature_mode_blocks_direct_model_surface,
-    )
-
     recorded: list[dict[str, str]] = []
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
     monkeypatch.setenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, 'true')
@@ -95,3 +95,24 @@ def test_raise_if_gateway_feature_mode_records_direct_exception_when_allowed(mon
     raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')
 
     assert recorded == [{'surface': 'file_chat.openai_files', 'reason': 'acknowledged'}]
+
+
+def test_gateway_observability_metric_failure_warns_without_breaking_request(monkeypatch, caplog):
+    class _BrokenCounter:
+        def labels(self, **_kwargs):
+            raise RuntimeError('metric unavailable')
+
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', _BrokenCounter())
+    monkeypatch.setattr(gateway_observability, '_last_observation_warning_at', 0.0)
+    monkeypatch.setattr(gateway_observability, '_observability_logs_enabled', lambda: False)
+
+    with caplog.at_level(logging.WARNING, logger=gateway_observability.logger.name):
+        gateway_observability.record_gateway_request_result(
+            feature='chat_agent',
+            outcome='error',
+            reason='request_error',
+        )
+
+    assert any(
+        'llm_gateway_backend_observation_failed stage=request_metric' in record.message for record in caplog.records
+    )

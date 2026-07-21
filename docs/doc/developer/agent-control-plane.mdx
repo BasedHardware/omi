@@ -37,6 +37,11 @@ The implementation MUST introduce a durable runtime kernel above the existing ha
 13. Phase 1 MUST NOT create another in-memory session authority alongside the kernel.
 14. Owner authority for control operations comes from Omi request context. Tool-supplied `ownerId` values are guards only; they may reject a request but MUST NOT become the active owner.
 15. Request-scoped control and tool-relay paths MUST carry `clientId` and `requestId` together. A bare `requestId` is not globally unique under concurrent clients.
+16. Request and client IDs are correlation, never execution authority; physical tool execution requires a persisted run/attempt invocation claim.
+17. A session's adapter, model profile, working directory, credential scope, and execution role are one immutable, generation-numbered profile. Defaults apply only to future sessions.
+18. Every accepted run pins one kernel-rendered ContextSnapshot. Swift supplies typed source data, not prompt policy or capability authority.
+19. Every canonical conversation has one sequence-addressed kernel journal. Swift is a projection/physical transport. Backend chat is a downstream mirror and an event-triggered feed for genuinely remote turns; stable-ID reconciliation may propose imports, but only the journal mutates canonical history.
+20. Voice lifecycle state changes only through `VoiceTurnCoordinator` and its reducer; microphone, provider, playback, and journal objects are physical drivers.
 
 ## 3. Pre-Phase-1 findings and Phase 1 baseline
 
@@ -81,6 +86,8 @@ flowchart TB
     Pi[pi-mono adapter pool]
     Future[Hermes / OpenClaw / AgentVM / A2A adapters]
     Broker[Omi capability broker and MCP]
+    Journal[Conversation journal and backend outbox]
+    Context[Execution profiles and context snapshots]
 
     UI --> SwiftClient
     SwiftClient --> SharedProcess
@@ -88,6 +95,8 @@ flowchart TB
     Kernel --> Store
     Kernel --> Events
     Kernel --> Scheduler
+    Kernel --> Journal
+    Kernel --> Context
     Scheduler --> ACP
     Scheduler --> Pi
     Scheduler --> Future
@@ -101,6 +110,11 @@ flowchart TB
 Phase 1 uses one long-lived Node process per signed-in desktop app instance. Swift owns that process through a shared `AgentRuntimeProcess`; individual `AgentBridge` values become lightweight client handles.
 
 The Node daemon may own multiple bounded adapter subprocesses. Consolidating lifecycle authority into one daemon does not require forcing every run through one underlying model process.
+
+Before the first owner-scoped RPC, every harness sends the signed-in owner to
+the daemon. Managed pi-mono sessions may establish it with `refresh_token`;
+local ACP, Hermes, and OpenClaw sessions use the token-free `refresh_owner`
+handshake. The daemon's startup placeholder owner is never request authority.
 
 ### 4.2 Worker pools
 
@@ -790,19 +804,72 @@ For every compatibility query, the facade resolves a session in this order:
 
 A `sessionKey` is never an adapter-native session ID. It is only a compatibility alias.
 
+Legacy main-chat mappings created before provider boundaries were persisted may
+initially carry the old ACP default. Before their first run or adapter binding,
+the resolver MAY repair that empty mapping to the active main-chat provider
+boundary. Once either execution record exists, the persisted boundary remains
+immutable and mismatched provider requests fail closed.
+
 ### 13.4 Stable surface references
 
-The three initial surfaces MUST supply:
+Canonical surfaces MUST supply:
 
 | Surface | `surface_kind` | External reference |
 |---|---|---|
 | Main chat | `main_chat` | `chat:<backend-chat-session-id>` or `chat:default` |
 | Task chat | `task_chat` | `task:<task_id>` |
 | Floating pill | `floating_pill` | `pill:<pill-uuid>` |
+| Workstream thread | `workstream` | `workstream:<workstream_id>` |
+
+Once a task has a workstream, task chat is a scoped view into the workstream
+conversation. Multiple tasks in the same workstream MUST NOT resolve separate
+sessions. `task:<task_id>` mappings may remain only as migration shims and are
+scheduled for removal with the smart-tasks compatibility burn-down.
 
 Onboarding, Chat Lab, and other surfaces MAY temporarily use legacy aliases until migrated.
 
-### 13.5 Wire protocol v2
+### 13.5 Workstream product continuity
+
+The local TypeScript kernel remains execution authority. Backend workstream
+state supplies bounded context: current-state summary, selected material events,
+current task, logical artifact heads, and provenance. A continuation checkpoint
+may reconstruct that product context on another runtime, but MUST NOT copy an
+adapter transcript or claim the source runtime's run/attempt status.
+
+Context provenance uses the backend `EvidenceRef` vocabulary (`kind`, `id`,
+optional `version`, `scope`, optional `device_id`, and optional
+`excerpt_hash`). Local-screen refs are device-local. Cross-runtime export fails
+closed unless device-local or sensitive evidence has a resolved
+`export_workstream_continuation` dispatch. The exported checkpoint replaces
+sensitive content with its redacted representation and strips source-runtime
+approval state. Redacted previews do not repeat private summaries, and
+sensitive snippets require a resolved matching context dispatch. `lastEventSequence` is the canonical
+workstream-journal sequence; it is never derived from local runtime events.
+
+Logical workstream artifacts are immutable versions. A head identifies the
+current version; each new version cites evidence and records the artifact it
+supersedes. Prior versions remain inspectable. Supplied run/attempt IDs must
+belong to the resolved workstream; an attempt-only artifact derives and stores
+its run ID so run inspection and events remain connected.
+
+Desktop task Candidates are delivery outbox rows until the backend returns a
+canonical Candidate ID and receipt. The stable local delivery key is the
+idempotency key. After receipt, the row becomes `forwarded` (or reflects a
+terminal backend resolution), leaves the local review queue, and only projects
+subsequent canonical resolution.
+
+The delivery proposal matches the strict backend Candidate union, including
+`supersede`; legacy `delete` maps to canonical `cancel`. Pre-contract local rows
+start blocked until account-generation reconciliation, and terminal historical
+rows never become deliverable. Creation and resolution receipts are stored
+separately so projection does not erase delivery evidence.
+
+Task-session migration moves turns and inspectable artifact history to the
+workstream conversation, stales legacy native bindings so reconstruction is
+truthful, and returns legacy session IDs plus compatibility mappings for the
+Ticket 14 removal pass. Re-running a completed mapping is a no-op.
+
+### 13.6 Wire protocol v2
 
 Inbound query:
 
@@ -911,13 +978,31 @@ Rules:
 - No owner-scoped path may fall back to process-global mutable owner state when `clientId`/`requestId` context is expected but absent.
 - Internal maps and queues MUST key request-scoped state by `(clientId, requestId)`, not `requestId` alone.
 - `runId`-only interrupt or control requests MUST still prove owner visibility through the active context or an explicit matching owner guard.
+- JSONL query, interrupt, warmup, and binding-invalidation handlers MUST resolve
+  the active daemon owner before transport mutation and reject a stale or forged
+  owner guard.
 - Swift app surfaces that manage existing agents outside an active query MUST use the dedicated `direct_control_tool`
-  JSONL envelope. It requires a signed-in `ownerId` guard and is limited to observe/manage tools; request-scoped
-  `control_tool` remains valid only while the daemon has an active `(clientId, requestId)` owner context.
-- Query-scoped tool relay messages MUST carry all available Omi correlation fields: `protocolVersion`, `clientId`, `requestId`, `sessionId`, `runId`, `attemptId`, adapter IDs, and explicitly named adapter-native compatibility fields.
+  JSONL envelope. It requires a signed-in `ownerId` guard, but that request lifetime never authorizes child work. A
+  long-lived run receives a kernel-issued run/attempt capability; the control-effect lease revalidates owner, run,
+  attempt, and immutable execution profile before every physical effect and aborts in-flight work on revocation.
+- Swift captures one immutable runtime-owner authorization snapshot at public
+  operation admission and carries it through daemon startup, every awaited RPC,
+  response routing, UI callbacks, and downstream mutation. Re-reading the same
+  uid is not equivalent: authorization generation changes on every real owner
+  transition, including sign-out and sign-in to the same account.
+- Effective-owner replacement sends correlated `revoke_owner_runtime` and waits
+  for `owner_runtime_revoked`. Node deauthorizes the previous owner before it
+  synchronously terminalizes runs, pending tool claims, and bindings. Swift then
+  drains physical tool tasks and confirms the child has exited before defaults
+  expose the replacement owner. Nack, timeout, malformed receipt, or teardown
+  failure may not fail open to the next owner.
+- Multi-agent admission records each child as soon as the kernel accepts it. If
+  a later sibling fails, the handler immediately cancels every admitted child;
+  any cleanup failure returns the admitted run IDs and cancellation receipts.
+- Query-scoped tool relay messages MUST carry all available Omi correlation fields: `protocolVersion`, `clientId`, `requestId`, `sessionId`, `runId`, `attemptId`, adapter IDs, and explicitly named adapter-native compatibility fields. Request/client IDs remain tracing fields; only the persisted invocation claim authorizes execution.
 - Adapter subprocess environments and adapter-to-daemon relay messages are one contract. If the daemon sets `OMI_REQUEST_ID` and `OMI_CLIENT_ID`, the adapter relay MUST serialize them onto any tool-use message that depends on request ownership.
-- Long-lived adapter workers MUST NOT rely on launch-time environment variables as per-attempt context. They MUST refresh active request/run/attempt context through a per-attempt channel before execution, and relay tools MUST read that channel when emitting request-scoped messages.
-- Missing request context for an owner-scoped control tool is a hard error unless the operation is explicitly unscoped and safe by design.
+- Long-lived adapter workers MUST NOT rely on launch-time environment variables as per-attempt context. They MUST refresh active run/attempt capability context through a per-attempt channel before execution, and relay tools MUST read that channel when emitting invocation messages.
+- Missing run/attempt authority for an owner-scoped physical effect is a hard error even when request correlation is present. An operation may omit it only when it is explicitly unscoped and safe by design.
 
 The local implementation may store this as plain objects rather than a named class, but tests MUST assert the complete context survives each boundary:
 
@@ -940,6 +1025,10 @@ Cleanup MUST remove request maps before or atomically with resuming continuation
 MUST be dropped or logged without reauthorizing a request. Tests SHOULD use fake adapters, temp state, and deterministic
 continuations to cover these terminal paths without depending on wall-clock ordering.
 
+Run/attempt or owner revocation also terminalizes every pending tool invocation:
+`prepared` becomes `failed`, while `dispatched` becomes `outcome_unknown`.
+Swift completion arriving afterward cannot restore durable success.
+
 ### 13.8 v1 compatibility window
 
 For one release, the Node facade SHOULD accept current v1 `query`, `interrupt`, `warmup`, and `invalidate_session` messages.
@@ -951,34 +1040,31 @@ For one release, the Node facade SHOULD accept current v1 `query`, `interrupt`, 
 - The v1 path still creates canonical sessions, runs, attempts, and events.
 - Do not maintain a separate v1 session map.
 
-## 14. Existing task-chat `acpSessionId` migration
+## 14. Existing task-chat journal migration
 
 ### 14.1 Interpretation
 
-Existing `task_chat_messages.acpSessionId` values are adapter-native ACP session IDs. They MUST NOT be copied into `sessions.session_id` and MUST NOT be reinterpreted as Omi IDs.
+`task_chat_messages` is a read-only legacy source. Its `acpSessionId` values are adapter-native ACP session IDs; they MUST NOT be copied into `sessions.session_id` or reinterpreted as Omi IDs. New task/workstream turns use the kernel conversation journal and `TaskChatState` is only its projection.
 
 ### 14.2 Migration strategy
 
-Use lazy backfill on first task-chat access or first new task query:
+Use lazy, idempotent import on first workstream-chat access:
 
-1. Resolve or create one canonical Omi session using `external_ref_kind = 'task'` and `external_ref_id = task_id`.
-2. Read the latest non-null `acpSessionId` from existing task messages.
-3. If the selected adapter is ACP and the canonical session has no ACP binding, insert that ID as adapter binding generation 1 with `resume_fidelity = 'native'`.
-4. Attempt native resume as attempt 1.
-5. If resume fails, mark the binding stale and create a fresh binding in attempt 2. The canonical Omi session remains unchanged.
-6. Older distinct ACP IDs remain legacy history in message rows. Do not import every historical value as an active binding.
+1. Resolve one canonical `surface_kind=workstream` conversation for the owner and workstream.
+2. Read immutable legacy rows in bounded `(createdAt, rowId)` pages across every task linked to that workstream.
+3. Import each row through the journal API with a stable legacy identity; journal deduplication makes retries and restart safe.
+4. Checkpoint only after the terminal page has been accepted. The legacy table remains untouched and rollback-readable.
+5. Migrate any prior task-scoped kernel conversation through the canonical journal migration transaction, preserving typed blocks, resources, revisions, outbox delivery state, sequence, and current visibility.
+6. Treat historical `acpSessionId` values only as legacy adapter-binding hints where native ACP resume is still required; they never become journal/session identity.
 
-### 14.3 Transitional writes
+### 14.3 Legacy-store boundary
 
-For one rollback-compatible release:
+- `TaskChatMessageStorage` exposes only the bounded, cursor-based `legacyMessagePage` import reader; it has no generic projection/search or message-write API.
+- No new path may write `task_chat_messages` or `acpSessionId`.
+- Task chat, main chat, floating chat, voice, notifications, and agent lifecycle all enter the same journal mutation API with distinct surface scopes.
+- The local task/workstream journal remains local-only where product policy requires it; this is a delivery policy, not a second durable writer.
 
-- `TaskChatState` stores `omiSessionId` and `legacyAcpSessionId` separately in memory.
-- New logic uses `QueryResult.omiSessionId` for canonical continuity.
-- Existing `acpSessionId` message writes MAY continue using `QueryResult.adapterSessionId` only when the active adapter is ACP.
-- Never write an Omi session ID into the `acpSessionId` column.
-- After the compatibility release, stop writing `acpSessionId`; retain the column read-only until a later database cleanup.
-
-No new `agentSessionId` column is required in the task-message database because the canonical mapping is durable in `omi-agentd` by `task_id`. A future cloud/cross-device migration may add a canonical session reference to the action-item model.
+No new `agentSessionId` column is required in the legacy task-message database because canonical surface/session mapping is durable in `omi-agentd`.
 
 The current action-item `chatSessionId = task.id` marker is a separate legacy scheduler/deduplication field. It MUST NOT be repurposed to store an Omi agent session ID.
 
@@ -1045,6 +1131,10 @@ Observe/manage-by-id tools (`list_agent_sessions`, `get_agent_run`, `cancel_agen
 `inspect_agent_artifacts`, and `update_agent_artifact_lifecycle`) are cross-surface capabilities for desktop chat
 and PTT/realtime. Creation/continuation tools (`send_agent_message`, `delegate_agent`) remain desktop-chat-only
 until realtime has an equally explicit creation UX, control envelope, and correlation policy.
+
+For PTT/realtime, `AgentControlService` resolves an opaque `agentRef` to only the canonical `runId` required by
+strict run-scoped tools. A completed `get_agent_run` result supplies its bounded final output as untrusted data for
+the coordinator to summarize; raw canonical identifiers remain hidden from user-facing speech.
 
 ### 16.3 Delegation semantics
 

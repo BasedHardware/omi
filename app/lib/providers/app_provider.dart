@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:collection/collection.dart';
 
@@ -14,6 +15,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class AppProvider extends BaseProvider {
+  /// Test seam — overrides [enableAppServer] in [toggleApp].
+  @visibleForTesting
+  Future<bool> Function(String appId)? enableAppOverride;
+
+  /// Test seam — overrides [disableAppServer] in [toggleApp].
+  @visibleForTesting
+  Future<void> Function(String appId)? disableAppOverride;
+
   List<App> apps = [];
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
@@ -549,7 +558,7 @@ class AppProvider extends BaseProvider {
         updatePrefApps();
         final context = globalNavigatorKey.currentState?.context;
         AppSnackbar.showSnackbarSuccess(
-          context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
+          context != null && context.mounted ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
         );
         notifyListeners();
       } else {
@@ -558,7 +567,9 @@ class AppProvider extends BaseProvider {
     } else {
       final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarError(
-        context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.',
+        context != null && context.mounted
+            ? context.l10n.appDeleteFailed
+            : 'Failed to delete app. Please try again later.',
       );
     }
   }
@@ -781,11 +792,13 @@ class AppProvider extends BaseProvider {
     }
   }
 
-  Future<void> toggleApp(String appId, bool isEnabled, int? idx) async {
+  /// Enable/disable [appId] server-side, keeping prefs, local app state, and
+  /// failure UX (error dialog) in one owner. Returns whether the toggle stuck.
+  Future<bool> toggleApp(String appId, bool isEnabled, int? idx) async {
     int loadingIndex = -1;
     if (idx != null && idx >= 0 && idx < appLoading.length) {
       loadingIndex = idx;
-      if (appLoading[loadingIndex]) return;
+      if (appLoading[loadingIndex]) return false;
       appLoading[loadingIndex] = true;
       notifyListeners();
     } else if (idx != null) {
@@ -796,32 +809,38 @@ class AppProvider extends BaseProvider {
     bool success = false;
     String? errorMessage;
 
-    final context = globalNavigatorKey.currentState?.context;
-
     try {
       if (isEnabled) {
-        success = await enableAppServer(appId);
+        success = await (enableAppOverride ?? enableAppServer)(appId);
         if (!success) {
-          errorMessage = context != null
+          final context = globalNavigatorKey.currentState?.context;
+          errorMessage = context != null && context.mounted
               ? context.l10n.errorActivatingAppIntegration
               : 'Error activating the app. If this is an integration app, make sure the setup is completed.';
         } else {
           PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
-        await disableAppServer(appId);
+        await (disableAppOverride ?? disableAppServer)(appId);
         success = true;
         PlatformManager.instance.analytics.appDisabled(appId);
       }
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage =
-          context != null ? context.l10n.errorUpdatingAppStatus : 'An error occurred while updating the app status.';
+      final context = globalNavigatorKey.currentState?.context;
+      errorMessage = context != null && context.mounted
+          ? context.l10n.errorUpdatingAppStatus
+          : 'An error occurred while updating the app status.';
     }
 
     if (!success && errorMessage != null) {
-      AppDialog.show(title: context != null ? context.l10n.error : 'Error', content: errorMessage, singleButton: true);
+      final context = globalNavigatorKey.currentState?.context;
+      AppDialog.show(
+        title: context != null && context.mounted ? context.l10n.error : 'Error',
+        content: errorMessage,
+        singleButton: true,
+      );
     }
 
     if (success) {
@@ -858,6 +877,7 @@ class AppProvider extends BaseProvider {
     }
 
     notifyListeners();
+    return success;
   }
 
   // Performance optimization: Dispose method to clean up resources

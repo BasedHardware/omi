@@ -30,6 +30,7 @@ _fair_use_db.get_violation_counts = MagicMock(return_value={'violation_count_7d'
 
 @pytest.fixture(autouse=True)
 def _patch_fair_use_deps(monkeypatch):
+    _mock_redis.eval.side_effect = None
     monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
     monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
 
@@ -51,6 +52,30 @@ class TestRecordSpeechMs:
         assert pipe.hincrby.called
         assert pipe.zadd.called
         assert pipe.execute.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_content_id_uses_atomic_once_increment(self):
+        fair_use_mod.record_speech_ms('user1', 5000, source='sync_backfill', idempotency_key='content-1')
+
+        _mock_redis.eval.assert_called_once()
+        args = _mock_redis.eval.call_args.args
+        assert args[1] == 3
+        assert args[2].endswith(':sync_backfill:user1:content-1')
+        assert args[3].startswith('fair_use:v2:bucket:sync_backfill:user1')
+        assert not _mock_redis.pipeline.return_value.execute.called
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_durable_content_metering_propagates_redis_failure(self):
+        _mock_redis.eval.side_effect = RuntimeError('redis unavailable')
+
+        with pytest.raises(RuntimeError, match='redis unavailable'):
+            fair_use_mod.record_speech_ms(
+                'user1',
+                5000,
+                source='sync_backfill',
+                idempotency_key='content-1',
+                raise_on_error=True,
+            )
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_ignores_zero_speech(self):
@@ -170,10 +195,10 @@ class TestGetRollingSpeechMs:
         # Bucket from 5 days ago (within weekly, outside 3-day)
         five_day_bucket = str((now - 5 * 86400) // 60)
 
-        _mock_redis.zrangebyscore.return_value = [
-            recent_bucket.encode(),
-            two_day_bucket.encode(),
-            five_day_bucket.encode(),
+        _mock_redis.zrangebyscore.side_effect = [
+            [recent_bucket.encode(), two_day_bucket.encode(), five_day_bucket.encode()],
+            [],
+            [],
         ]
         _mock_redis.hmget.return_value = [b'1000', b'2000', b'3000']
 
@@ -182,6 +207,16 @@ class TestGetRollingSpeechMs:
         assert result['daily_ms'] == 1000
         assert result['three_day_ms'] == 3000  # 1000 + 2000
         assert result['weekly_ms'] == 6000  # 1000 + 2000 + 3000
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    def test_live_totals_include_legacy_meter_during_ttl_transition(self):
+        now_bucket = str(int(__import__('time').time()) // fair_use_mod.FAIR_USE_BUCKET_SECONDS)
+        _mock_redis.zrangebyscore.side_effect = [[], [], [now_bucket.encode()]]
+        _mock_redis.hmget.return_value = [b'4000']
+
+        result = fair_use_mod.get_rolling_speech_ms('user1')
+
+        assert result['daily_ms'] == 4000
 
 
 class TestCheckSoftCaps:
@@ -585,6 +620,22 @@ class TestDgBudget:
         assert result['exhausted'] is False
         assert result['resets_at'] is not None
         assert result['resets_at'].endswith('Z')
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)
+    def test_get_dg_budget_status_resets_at_is_valid_iso8601(self):
+        # resets_at is emitted to API clients (routers/fair_use_admin). tomorrow is tz-aware,
+        # so a naive `isoformat() + 'Z'` produced an invalid "…+00:00Z" that both carries an
+        # offset and a Zulu suffix — datetime.fromisoformat rejects it.
+        _mock_redis.get.return_value = b'600000'
+        result = fair_use_mod.get_dg_budget_status('user1')
+        resets_at = result['resets_at']
+        assert '+00:00Z' not in resets_at, f'malformed offset+Z timestamp: {resets_at!r}'
+        # Must be parseable as ISO-8601 (the reason a client would consume this field).
+        parsed = datetime.fromisoformat(resets_at.replace('Z', '+00:00'))
+        assert parsed.tzinfo is not None
+        # Next-midnight-UTC contract: time component is zeroed.
+        assert (parsed.hour, parsed.minute, parsed.second, parsed.microsecond) == (0, 0, 0, 0)
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_RESTRICT_DAILY_DG_MS', 1800000)

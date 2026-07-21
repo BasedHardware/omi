@@ -23,7 +23,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -80,7 +79,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -88,7 +87,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -241,7 +239,6 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -329,7 +326,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -337,7 +334,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -462,7 +458,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -523,7 +518,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -531,7 +526,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -702,7 +696,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -710,7 +704,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -840,7 +833,6 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -941,7 +933,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -949,7 +941,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -1014,7 +1005,6 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1082,7 +1072,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1090,7 +1080,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -1134,6 +1123,9 @@ workflows:
         notify:
           success: true
           failure: false
+
+  # Retained only for local artifact diagnostics; it has no trigger or publisher.
+  macos-prod-legacy-no-publish:
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1195,7 +1187,6 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1203,7 +1194,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
           echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
       - name: Extract version (from tag or auto-increment)
@@ -1567,7 +1557,7 @@ workflows:
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
-          DMG_PATH="build/macos/dmg/Omi.dmg"
+          DMG_PATH="build/macos/dmg/omi.dmg"
 
           # Use dmgbuild instead of create-dmg — writes .DS_Store directly
           # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
@@ -1586,7 +1576,7 @@ workflows:
         script: |
           set -e
 
-          DMG_PATH=$(find build/macos/dmg -name "Omi.dmg" | head -1)
+          DMG_PATH=$(find build/macos/dmg -name "omi.dmg" | head -1)
 
           # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
@@ -1652,79 +1642,6 @@ workflows:
 
           echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
 
-      - name: Create GitHub Release
-        script: |
-          # Get the recent commits for changelog
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${TAG_NAME}^ 2>/dev/null || echo "")
-
-          if [ -n "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"* %s" $PREVIOUS_TAG..$TAG_NAME | grep -v "Merge" | head -20)
-          else
-            CHANGELOG=$(git log --pretty=format:"* %s" -10 | grep -v "Merge")
-          fi
-
-          # Read the EdDSA signature for Sparkle
-          SIGNATURE=$(cat "dist/${VERSION}-${PLATFORM}/signature.txt" 2>/dev/null || echo "")
-
-          # Create release notes
-          cat > /tmp/release_notes.md <<EOF
-          ## What's Changed
-
-          $CHANGELOG
-
-          **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${TAG_NAME}
-
-          <!-- KEY_VALUE_START
-          changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
-          mandatory: false
-          minimum_app_version: 1.0.70
-          isLive: true
-          edSignature: $SIGNATURE
-          KEY_VALUE_END -->
-          EOF
-
-          # Find the DMG file
-          DMG_FILE=$(find build/macos/dmg -name "Omi.dmg" | head -1)
-
-          # Find the Sparkle ZIP and signature files
-          SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/Omi.zip"
-          SIGNATURE_FILE="dist/${VERSION}-${PLATFORM}/signature.txt"
-
-          # Create GitHub release with DMG, Sparkle ZIP, and signature attachments
-          if [ -f "$DMG_FILE" ]; then
-            # Create the release with the DMG first
-            gh release create "$TAG_NAME" \
-              --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
-              --notes-file /tmp/release_notes.md \
-              --repo BasedHardware/omi \
-              "$DMG_FILE"
-
-            # Upload Sparkle ZIP if it exists
-            if [ -f "$SPARKLE_ZIP" ]; then
-              echo "Uploading Sparkle ZIP: $SPARKLE_ZIP"
-              gh release upload "$TAG_NAME" \
-                "$SPARKLE_ZIP" \
-                --repo BasedHardware/omi \
-                --clobber
-            else
-              echo "WARNING: Sparkle ZIP not found at $SPARKLE_ZIP"
-            fi
-
-            # Upload signature file if it exists
-            if [ -f "$SIGNATURE_FILE" ]; then
-              echo "Uploading signature file: $SIGNATURE_FILE"
-              gh release upload "$TAG_NAME" \
-                "$SIGNATURE_FILE" \
-                --repo BasedHardware/omi \
-                --clobber
-            else
-              echo "WARNING: Signature file not found at $SIGNATURE_FILE"
-            fi
-          else
-            echo "ERROR: DMG file not found"
-            exit 1
-          fi
-
     artifacts:
       - dist/**/*
       - build/macos/**/*.app
@@ -1754,7 +1671,6 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-        STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
@@ -1862,7 +1778,7 @@ workflows:
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
-          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo API_BASE_URL=https://api.omi.me/ >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
@@ -1870,7 +1786,6 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
-          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -1914,8 +1829,6 @@ workflows:
   # Required CodeMagic secret group "desktop_secrets":
   #   SPARKLE_PRIVATE_KEY             — EdDSA private key for Sparkle auto-update signing
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
-  #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
-  #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
   #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded .env bundled into .app at build time
   #                                     Contains only secrets (not URLs):
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
@@ -1930,6 +1843,12 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
+  #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and qualified Beta promotion
+  #   GITHUB_TOKEN                    — repo-scoped fine-grained token used only to dispatch
+  #                                     desktop_qualify_beta.yml; requires GitHub Actions: write.
+  #                                     Add Contents: write only if this credential is also used for
+  #                                     candidate-release publishing. Do not reuse the legacy
+  #                                     appstore_credentials GH_TOKEN for qualification dispatch.
   #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Cloud Run secrets (GCP Secret Manager, DESKTOP_ prefix to avoid conflicts with Python backend):
@@ -1978,22 +1897,92 @@ workflows:
     cache:
       cache_paths:
         - ~/Library/Caches/org.swift.swiftpm
-    scripts:
-      - name: Extract version and build number from tag
+    scripts: &desktop_signed_artifact_steps
+      - name: Resolve trusted source and build identity
         script: |
-          # Tag format: v{version}+{build}-macos  e.g. v0.0.10+10-macos
-          VERSION=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos$/\1/')
-          BUILD_NUMBER=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos$/\2/')
-          if [ -z "$VERSION" ] || [ "$VERSION" = "$CM_TAG" ]; then
-            echo "ERROR: Could not parse version from tag: $CM_TAG"
-            echo "Expected format: v{version}+{build}-macos (e.g. v0.0.10+10-macos)"
-            exit 1
+          set -euo pipefail
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            [[ "$PREVIEW_SLUG" =~ ^[a-z][a-z0-9-]{0,47}$ ]] || {
+              echo "ERROR: PREVIEW_SLUG must be a canonical preview slug" >&2
+              exit 1
+            }
+            [[ "$PREVIEW_SOURCE_REF" == "preview/$PREVIEW_SLUG" ]] || {
+              echo "ERROR: PREVIEW_SOURCE_REF must match PREVIEW_SLUG" >&2
+              exit 1
+            }
+            [[ "$PREVIEW_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "ERROR: PREVIEW_SOURCE_SHA must be a full lowercase SHA" >&2
+              exit 1
+            }
+            expected_preview_id="p$(printf '%s' "$PREVIEW_SLUG" | shasum -a 256 | cut -c1-10)"
+            [[ "$PREVIEW_ID" == "$expected_preview_id" ]] || {
+              echo "ERROR: PREVIEW_ID does not match the canonical slug-derived identity" >&2
+              exit 1
+            }
+            case "$PREVIEW_BACKEND_MODE" in
+              production_compatible)
+                [[ "$OMI_PYTHON_API_URL" == "https://api.omi.me" ]] || {
+                  echo "ERROR: production-compatible previews must use https://api.omi.me" >&2
+                  exit 1
+                }
+                [[ "$OMI_DESKTOP_API_URL" == "https://desktop-backend-hhibjajaja-uc.a.run.app/" ]] || {
+                  echo "ERROR: production-compatible previews must use the canonical desktop API" >&2
+                  exit 1
+                }
+                preview_backend="production"
+                ;;
+              preview_backend)
+                [[ "$OMI_PYTHON_API_URL" =~ ^https:// ]] && [[ "$OMI_DESKTOP_API_URL" =~ ^https:// ]] || {
+                  echo "ERROR: preview_backend requires HTTPS API URLs" >&2
+                  exit 1
+                }
+                preview_backend="development"
+                ;;
+              *)
+                echo "ERROR: unsupported PREVIEW_BACKEND_MODE: $PREVIEW_BACKEND_MODE" >&2
+                exit 1
+                ;;
+            esac
+
+            # Codemagic always starts this workflow from main, where its configuration
+            # is trusted. The approved SHA is data supplied by the protected GitHub
+            # dispatcher; do not re-resolve the mutable source branch here.
+            git fetch --no-tags origin "$PREVIEW_SOURCE_SHA"
+            git checkout --detach "$PREVIEW_SOURCE_SHA"
+            [[ "$(git rev-parse HEAD)" == "$PREVIEW_SOURCE_SHA" ]] || {
+              echo "ERROR: checked out source does not match approved SHA" >&2
+              exit 1
+            }
+
+            VERSION="0.0.$(printf '%d' "0x${PREVIEW_SOURCE_SHA:0:6}")"
+            BUILD_NUMBER="$(git show -s --format=%ct "$PREVIEW_SOURCE_SHA")"
+            APP_NAME="Omi Preview - $PREVIEW_SLUG"
+            BUNDLE_ID="com.omi.preview.$PREVIEW_ID"
+            URL_SCHEME="omi-preview-$PREVIEW_ID"
+            DMG_PATH="$BUILD_DIR/Omi-Preview.dmg"
+            SPARKLE_ZIP_PATH=""
+            echo "PREVIEW_BACKEND=$preview_backend" >> "$CM_ENV"
+          else
+            # Tag format: v{version}+{build}-macos  e.g. v0.0.10+10-macos
+            VERSION=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos$/\1/')
+            BUILD_NUMBER=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos$/\2/')
+            if [ -z "$VERSION" ] || [ "$VERSION" = "$CM_TAG" ]; then
+              echo "ERROR: Could not parse version from tag: $CM_TAG"
+              echo "Expected format: v{version}+{build}-macos (e.g. v0.0.10+10-macos)"
+              exit 1
+            fi
+            URL_SCHEME="omi-computer"
+            DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"
+            SPARKLE_ZIP_PATH="$BUILD_DIR/Omi.zip"
           fi
           echo "VERSION=$VERSION" >> $CM_ENV
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $CM_ENV
+          echo "APP_NAME=$APP_NAME" >> $CM_ENV
+          echo "BUNDLE_ID=$BUNDLE_ID" >> $CM_ENV
+          echo "URL_SCHEME=$URL_SCHEME" >> $CM_ENV
           echo "APP_BUNDLE=$BUILD_DIR/$APP_NAME.app" >> $CM_ENV
-          echo "DMG_PATH=$BUILD_DIR/$APP_NAME.dmg" >> $CM_ENV
-          echo "SPARKLE_ZIP_PATH=$BUILD_DIR/Omi.zip" >> $CM_ENV
+          echo "DMG_PATH=$DMG_PATH" >> $CM_ENV
+          echo "SPARKLE_ZIP_PATH=$SPARKLE_ZIP_PATH" >> $CM_ENV
           echo "Building OMI Desktop v$VERSION (build $BUILD_NUMBER)"
 
       - name: Set up keychain and import Developer ID certificate
@@ -2395,7 +2384,7 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier   $BUNDLE_ID"    "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleName         $APP_NAME"     "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName  $APP_NAME"     "$APP_BUNDLE/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 omi-computer" "$APP_BUNDLE/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $URL_SCHEME" "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 14.0"        "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
             "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || \
@@ -2405,6 +2394,17 @@ workflows:
             "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || \
           /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" \
             "$APP_BUNDLE/Contents/Info.plist"
+
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            # The runtime also treats the reserved bundle-ID prefix as the safety
+            # boundary. These explicit fields make a correctly packaged preview
+            # auditable and keep it isolated from the shared Sparkle feed.
+            /usr/libexec/PlistBuddy -c "Set :OMIExternalPreview true" "$APP_BUNDLE/Contents/Info.plist"
+            /usr/libexec/PlistBuddy -c "Set :OMIExternalPreviewBackend $PREVIEW_BACKEND" "$APP_BUNDLE/Contents/Info.plist"
+            /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :SUEnableAutomaticChecks false" "$APP_BUNDLE/Contents/Info.plist"
+            /usr/libexec/PlistBuddy -c "Set :SUAutomaticallyUpdate false" "$APP_BUNDLE/Contents/Info.plist"
+          fi
 
           printf "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
@@ -2631,6 +2631,10 @@ workflows:
 
       - name: Create Sparkle ZIP and sign
         script: |
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not participate in the shared Sparkle feed."
+            exit 0
+          fi
           # Sparkle expects a ZIP of .app — not a DMG
           ditto -c -k --keepParent "$APP_BUNDLE" "$SPARKLE_ZIP_PATH"
 
@@ -2654,18 +2658,110 @@ workflows:
 
       - name: Smoke signed desktop artifact
         script: |
-          OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
-          scripts/smoke-signed-desktop-artifact.sh \
-            --app "$APP_BUNDLE" \
-            --zip "$SPARKLE_ZIP_PATH" \
-            --dmg "$DMG_PATH" \
-            --tag "$CM_TAG" \
-            --expected-channel beta \
-            --auth-storage-canary \
-            --result-json "$BUILD_DIR/desktop-smoke-result.json"
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            scripts/smoke-signed-desktop-artifact.sh \
+              --app "$APP_BUNDLE" \
+              --dmg "$DMG_PATH" \
+              --expected-channel preview \
+              --expected-bundle-id "$BUNDLE_ID" \
+              --expected-url-scheme "$URL_SCHEME" \
+              --expected-python-api-url "$OMI_PYTHON_API_URL" \
+              --expected-desktop-api-url "$OMI_DESKTOP_API_URL" \
+              --preview \
+              --result-json "$BUILD_DIR/desktop-smoke-result.json"
+          else
+            OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
+            scripts/smoke-signed-desktop-artifact.sh \
+              --app "$APP_BUNDLE" \
+              --zip "$SPARKLE_ZIP_PATH" \
+              --dmg "$DMG_PATH" \
+              --tag "$CM_TAG" \
+              --source-sha "$(git rev-parse HEAD)" \
+              --expected-channel beta \
+              --launch \
+              --auth-storage-canary \
+              --notification-callback-canary \
+              --result-json "$BUILD_DIR/desktop-smoke-result.json"
+          fi
+
+      - name: Publish immutable external preview
+        script: |
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            echo "Normal releases publish through the beta/stable qualification lane."
+            exit 0
+          fi
+          set -euo pipefail
+          test -n "${GCP_DESKTOP_PREVIEW_SERVICE_ACCOUNT:-}" || {
+            echo "ERROR: missing preview-only GCS service account" >&2
+            exit 1
+          }
+          test -n "${DESKTOP_PREVIEW_PUBLISH_KEY:-}" || {
+            echo "ERROR: missing preview-only registry credential" >&2
+            exit 1
+          }
+          test "${DESKTOP_PREVIEW_REGISTRY_URL:-}" = "https://api.omi.me" || {
+            echo "ERROR: preview registry must use the canonical production control plane" >&2
+            exit 1
+          }
+          command -v gcloud >/dev/null || { echo "ERROR: gcloud is required" >&2; exit 1; }
+          command -v jq >/dev/null || { echo "ERROR: jq is required" >&2; exit 1; }
+
+          key_path="$(mktemp /tmp/omi-preview-gcs.XXXXXX.json)"
+          trap 'rm -f "$key_path"' EXIT
+          printf '%s' "$GCP_DESKTOP_PREVIEW_SERVICE_ACCOUNT" | base64 --decode > "$key_path"
+          gcloud auth activate-service-account --key-file="$key_path" >/dev/null
+
+          artifact_path="${GCS_DESKTOP_UPDATES_BUCKET}/previews/${PREVIEW_SLUG}/${PREVIEW_SOURCE_SHA}/Omi-Preview.dmg"
+          dmg_sha256="$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
+          existing_path="$(mktemp /tmp/omi-preview-existing.XXXXXX.dmg)"
+          trap 'rm -f "$key_path" "$existing_path"' EXIT
+          # Read one exact object (no bucket listing) so the GCS identity can
+          # remain limited to previews/** object get/create operations.
+          if gcloud storage cp "$artifact_path" "$existing_path" >/dev/null 2>&1; then
+            existing_sha256="$(shasum -a 256 "$existing_path" | awk '{print $1}')"
+            [[ "$existing_sha256" == "$dmg_sha256" ]] || {
+              echo "ERROR: immutable preview object already exists with a different digest" >&2
+              exit 1
+            }
+            echo "Immutable preview artifact already exists with the same digest."
+          else
+            gcloud storage cp \
+              --if-generation-match=0 \
+              --cache-control='public,max-age=31536000,immutable' \
+              "$DMG_PATH" "$artifact_path"
+          fi
+
+          notes=""
+          if [[ -n "${PREVIEW_NOTES_BASE64:-}" ]]; then
+            notes="$(printf '%s' "$PREVIEW_NOTES_BASE64" | base64 --decode)"
+          fi
+          payload="$(jq -n \
+            --arg slug "$PREVIEW_SLUG" \
+            --arg source_sha "$PREVIEW_SOURCE_SHA" \
+            --arg dmg_url "https://storage.googleapis.com/omi_macos_updates/previews/${PREVIEW_SLUG}/${PREVIEW_SOURCE_SHA}/Omi-Preview.dmg" \
+            --arg dmg_sha256 "$dmg_sha256" \
+            --arg app_name "$APP_NAME" \
+            --arg bundle_id "$BUNDLE_ID" \
+            --arg url_scheme "$URL_SCHEME" \
+            --arg built_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg signer "$SIGN_IDENTITY" \
+            --arg notes "$notes" \
+            --arg backend_url "$OMI_PYTHON_API_URL" \
+            '{slug: $slug, source_sha: $source_sha, dmg_url: $dmg_url, dmg_sha256: $dmg_sha256, app_name: $app_name, bundle_id: $bundle_id, url_scheme: $url_scheme, built_at: $built_at, signer: $signer, notarization: "stapled", notes: $notes, backend_url: $backend_url}')"
+          curl --fail --show-error --silent \
+            --retry 3 \
+            -H 'Content-Type: application/json' \
+            -H "secret-key: $DESKTOP_PREVIEW_PUBLISH_KEY" \
+            --data "$payload" \
+            "${DESKTOP_PREVIEW_REGISTRY_URL%/}/v2/desktop/previews/publish"
 
       - name: Create GitHub release
         script: |
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not create GitHub releases."
+            exit 0
+          fi
+          set -euo pipefail
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2681,125 +2777,66 @@ workflows:
           - **Auto-Update**: Existing users will receive this update automatically via Sparkle
 
           <!-- KEY_VALUE_START
-          isLive: true
-          channel: beta
+          isLive: false
+          channel: candidate
           edSignature: ${ED_SIGNATURE}
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
 
-          # Safe re-run: delete existing release if it exists
-          gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
-            gh release delete "$CM_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null || true
-
-          gh release create "$CM_TAG" \
-            --repo "$GITHUB_REPO" \
-            --title "Omi Desktop v${VERSION}" \
-            --notes "$RELEASE_NOTES" \
-            "$SPARKLE_ZIP_PATH" \
-            "$DMG_PATH"
-
-          echo "GitHub release created: $CM_TAG"
-
-      - name: Publish static beta redirect artifacts
-        script: |
-          set -e
-
-          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
-          gcloud config set project "$GCP_PROJECT" --quiet
-          rm /tmp/gcp_key.json
-
-          export BETA_DMG_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/omi.dmg"
-          export RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-          cat > /tmp/macos-beta-index.html <<EOF
-          <!doctype html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta http-equiv="refresh" content="0; url=${BETA_DMG_URL}">
-            <meta name="robots" content="noindex">
-            <title>Redirecting to latest Omi Beta download…</title>
-          </head>
-          <body>
-            <p>Redirecting to the latest Omi Beta download.</p>
-            <p><a href="${BETA_DMG_URL}">If you are not redirected, click here.</a></p>
-            <script>window.location.replace("${BETA_DMG_URL}");</script>
-          </body>
-          </html>
-          EOF
-
-          python3 - <<'PY' > /tmp/macos-beta-redirect.json
-          import json, os
-          print(json.dumps({
-              "channel": "beta",
-              "version": os.environ["VERSION"],
-              "build_number": int(os.environ["BUILD_NUMBER"]),
-              "tag": os.environ["CM_TAG"],
-              "download_url": os.environ["BETA_DMG_URL"],
-              "published_at": os.environ["RELEASED_AT"],
-          }, indent=2))
-          PY
-
-          echo "$BETA_DMG_URL" > /tmp/macos-beta-latest-url.txt
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-index.html \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/index.html"
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-redirect.json \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/redirect.json"
-
-          gcloud storage cp \
-            --cache-control="no-store,max-age=0" \
-            /tmp/macos-beta-latest-url.txt \
-            "$GCS_DESKTOP_UPDATES_BUCKET/beta/latest-url.txt"
-
-          echo "Static beta redirect artifacts published to $GCS_DESKTOP_UPDATES_BUCKET/beta/"
-
-      - name: Bridge release to Firestore for old clients
-        script: |
-          # MIGRATION BRIDGE: Old installed clients still poll the Rust backend's
-          # /appcast.xml which reads from Firestore. Register as beta here; the
-          # manual desktop_promote_prod.yml workflow promotes this same Firestore
-          # release to stable only after the prod Rust backend is deployed and
-          # verified. Remove this step once the Rust backend is decommissioned.
-          export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
-
-          export CHANGELOG_JSON=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format json || echo "[]")
-
-          RELEASE_JSON=$(python3 -c "
-          import json, os
-          data = {
-            'version':      os.environ['VERSION'],
-            'build_number': int(os.environ['BUILD_NUMBER']),
-            'download_url': os.environ.get('DOWNLOAD_URL', ''),
-            'ed_signature': os.environ.get('ED_SIGNATURE', ''),
-            'changelog':    json.loads(os.environ.get('CHANGELOG_JSON', '[]')),
-            'is_live':      True,
-            'is_critical':  False,
-            'channel':      'beta',
-          }
-          print(json.dumps(data))
-          ")
-
-          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-Release-Secret: $RELEASE_SECRET" \
-            -d "$RELEASE_JSON" \
-            "$OMI_DESKTOP_API_URL/updates/releases")
-
-          HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
-          if [ "$HTTP_CODE" = "201" ]; then
-            echo "Bridge: Release registered in Firestore for old clients (channel: beta)"
+          # A candidate is the evidence container. Once published, preserve its
+          # signed artifacts and every qualification observation; retries only
+          # resume the dispatch handoff below.
+          if gh release view "$CM_TAG" --repo "$GITHUB_REPO" >/dev/null 2>&1; then
+            echo "GitHub release candidate already exists; preserving immutable evidence for $CM_TAG"
           else
-            echo "WARNING: Firestore bridge returned HTTP $HTTP_CODE (non-fatal)"
-            echo "$(echo "$HTTP_RESPONSE" | head -n -1)"
+            # The backend reservation is the authoritative Beta fence. It runs
+            # only after package, signature, notarization, and signed smoke pass,
+            # immediately before this workflow creates the immutable candidate.
+            set -euo pipefail
+            test -n "${BETA_PROMOTION_TOKEN:-}" || {
+              echo "ERROR: BETA_PROMOTION_TOKEN is required to reserve a canonical candidate" >&2
+              exit 1
+            }
+            curl --fail-with-body --silent --show-error \
+              --request POST "${OMI_PYTHON_API_URL%/}/v2/desktop/beta/candidates/reserve" \
+              --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"tag\":\"${CM_TAG}\"}"
+            gh release create "$CM_TAG" \
+              --repo "$GITHUB_REPO" \
+              --title "Omi Desktop v${VERSION} (candidate)" \
+              --notes "$RELEASE_NOTES" \
+              "$SPARKLE_ZIP_PATH" \
+              "$DMG_PATH" \
+              "$BUILD_DIR/desktop-smoke-result.json"
+            echo "GitHub release candidate created: $CM_TAG"
           fi
+
+      - name: Dispatch trusted macOS beta qualification
+        script: |
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not enter beta or stable qualification."
+            exit 0
+          fi
+          set -euo pipefail
+          # Per-tag GitHub concurrency and immutable qualification evidence own
+          # duplicate dispatches; this bounded retry only handles dispatch I/O.
+          # Codemagic also loads appstore_credentials, whose legacy GH_TOKEN
+          # takes precedence over GITHUB_TOKEN in the GitHub CLI. Bind this
+          # handoff explicitly to the desktop_secrets token that is scoped for
+          # candidate-release and Actions-dispatch access.
+          for attempt in 1 2 3; do
+            if GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}" \
+              gh workflow run desktop_qualify_beta.yml --repo "$GITHUB_REPO" \
+              -f release_tag="$CM_TAG" --ref "$CM_TAG"; then
+              echo "Trusted qualification dispatch accepted for $CM_TAG on attempt $attempt."
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              sleep "$((attempt * 2))"
+            fi
+          done
+          echo "WARNING: qualification dispatch was not confirmed after bounded retry; candidate remains non-live."
 
     artifacts:
       - build/*.app
@@ -2813,3 +2850,38 @@ workflows:
         notify:
           success: true
           failure: true
+
+  # This workflow has no automatic trigger. It is started only by
+  # .github/workflows/desktop_publish_preview.yml after the protected
+  # desktop-preview-publish environment approves an immutable source SHA.
+  # Keep this control definition on main: the source SHA is checked out only
+  # after this trusted configuration has loaded.
+  omi-desktop-swift-preview:
+    name: Publish OMI Desktop Preview (Swift)
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      # Do not reuse desktop_secrets or the normal release groups. This group
+      # contains the preview-only signing/notarization credentials, the
+      # DESKTOP_PREVIEW_PUBLISH_KEY, and a GCS identity restricted to previews/.
+      groups:
+        - desktop_preview_secrets
+      vars:
+        PREVIEW_MODE: "true"
+        BINARY_NAME: "Omi Computer"
+        BUILD_DIR: "build"
+        DMGBUILD_VERSION: "1.6.7"
+        GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
+        # This registry remains on the production control plane even when the
+        # preview artifact itself is configured to use a preview backend.
+        DESKTOP_PREVIEW_REGISTRY_URL: "https://api.omi.me"
+      xcode: 16.4
+    working_directory: desktop/macos
+    cache:
+      cache_paths:
+        - ~/Library/Caches/org.swift.swiftpm
+    scripts: *desktop_signed_artifact_steps
+    artifacts:
+      - build/*.app
+      - build/*.dmg
+      - build/desktop-smoke-result.json

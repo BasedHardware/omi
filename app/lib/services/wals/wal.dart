@@ -95,7 +95,7 @@ class Wal {
   WalStorage storage;
 
   String? filePath;
-  List<List<int>> data = [];
+  List<List<int>> data;
   int storageOffset = 0;
   int storageTotalBytes = 0;
   int fileNum = 1;
@@ -137,6 +137,9 @@ class Wal {
   /// user. The sync page renders an explicit label + icon for every value so a
   /// not-yet-synced recording is never visually identical to a failed one.
   WalSyncDisplayState get syncDisplayState {
+    // Corruption is terminal. It must not be visually downgraded to an active
+    // upload if a transient flag was left behind by an interrupted attempt.
+    if (status == WalStatus.corrupted) return WalSyncDisplayState.corrupted;
     if (isSyncing) return WalSyncDisplayState.syncing;
     switch (status) {
       case WalStatus.uploaded:
@@ -154,6 +157,16 @@ class Wal {
     }
   }
 
+  /// Marks this recording as terminally unavailable and clears any transient
+  /// upload presentation left by an interrupted attempt.
+  void markCorrupted() {
+    status = WalStatus.corrupted;
+    isSyncing = false;
+    syncStartedAt = null;
+    syncEtaSeconds = null;
+    syncSpeedKBps = null;
+  }
+
   Wal({
     required this.timerStart,
     required this.codec,
@@ -168,7 +181,7 @@ class Wal {
     this.storageOffset = 0,
     this.storageTotalBytes = 0,
     this.fileNum = 1,
-    this.data = const [],
+    List<List<int>>? data,
     this.totalFrames = 0,
     this.syncedFrameOffset = 0,
     this.originalStorage,
@@ -177,7 +190,7 @@ class Wal {
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
-  }) {
+  }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
 

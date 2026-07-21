@@ -1,5 +1,7 @@
 self-hosted-runner:
   labels:
     - ubuntu-latest-m
+    - macos
+    - omi-desktop-qualification
 
 config-variables: null

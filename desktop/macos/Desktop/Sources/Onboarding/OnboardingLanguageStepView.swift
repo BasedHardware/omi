@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingLanguageStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator
@@ -25,6 +25,12 @@ struct OnboardingLanguageStepView: View {
     coordinator.selectedLanguageCodes.first.map(Self.displayName)
   }
 
+  /// Flag shown before each language chip; custom/other languages get a globe.
+  private static let flags: [String: String] = [
+    "en": "🇺🇸", "es": "🇪🇸", "fr": "🇫🇷", "de": "🇩🇪", "pt": "🇵🇹",
+    "ru": "🇷🇺", "hi": "🇮🇳", "ja": "🇯🇵", "it": "🇮🇹", "nl": "🇳🇱",
+  ]
+
   var body: some View {
     OnboardingStepScaffold(
       graphViewModel: graphViewModel,
@@ -32,24 +38,24 @@ struct OnboardingLanguageStepView: View {
       totalSteps: totalSteps,
       eyebrow: "Languages",
       title: "Pick every language you speak.",
-      description: "Omi listens in all of them — your first pick is the primary, used for prompts and summaries.",
+      description: "Omi listens to all of them. Your first pick is the primary.",
+      layoutMode: .centered,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 18) {
-        LazyVGrid(
-          columns: [GridItem(.adaptive(minimum: 108), spacing: 8)],
-          alignment: .leading, spacing: 8
-        ) {
+      VStack(spacing: OmiSpacing.lg) {
+        FlowLayout(spacing: OmiSpacing.sm) {
           ForEach(chipOptions, id: \.code) { option in
             OnboardingSelectableChip(
               title: chipTitle(option),
+              leading: AnyView(Text(Self.flags[option.code] ?? "🌐").font(.system(size: 13))),
               isSelected: coordinator.selectedLanguageCodes.contains(option.code)
             ) {
               coordinator.toggleLanguage(code: option.code)
             }
           }
           OnboardingSelectableChip(
-            title: "Other…",
+            title: "Other",
+            leading: AnyView(Text("🌐").font(.system(size: 13))),
             isSelected: showingCustomLanguage
           ) {
             showingCustomLanguage.toggle()
@@ -57,16 +63,16 @@ struct OnboardingLanguageStepView: View {
         }
 
         if showingCustomLanguage {
-          HStack(spacing: 10) {
+          HStack(spacing: OmiSpacing.sm) {
             TextField("Ukrainian, Korean, Turkish…", text: $coordinator.customLanguage)
               .textFieldStyle(.plain)
-              .padding(.horizontal, 16)
-              .padding(.vertical, 12)
+              .padding(.horizontal, OmiSpacing.lg)
+              .padding(.vertical, OmiSpacing.md)
               .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                   .fill(OmiColors.backgroundSecondary)
                   .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                       .stroke(Color.white.opacity(0.08), lineWidth: 1)
                   )
               )
@@ -76,7 +82,7 @@ struct OnboardingLanguageStepView: View {
             Button("Add") {
               coordinator.addCustomLanguage()
             }
-            .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
+            .buttonStyle(OmiButtonStyle(.secondary))
           }
         }
 
@@ -86,12 +92,16 @@ struct OnboardingLanguageStepView: View {
             .foregroundColor(OmiColors.textTertiary)
         }
 
-        Button(saving ? "Saving…" : "Continue") {
-          saveAndContinue()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          Button(saving ? "Saving…" : "Continue") {
+            saveAndContinue()
+          }
+          .buttonStyle(OmiButtonStyle(.primary))
+          .keyboardShortcut(.defaultAction)
+          .disabled(coordinator.selectedLanguageCodes.isEmpty || saving)
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-        .keyboardShortcut(.defaultAction)
-        .disabled(coordinator.selectedLanguageCodes.isEmpty || saving)
 
         if let error = coordinator.lastActionError {
           Text(error)
@@ -99,7 +109,7 @@ struct OnboardingLanguageStepView: View {
             .foregroundColor(OmiColors.warning)
         }
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .center)
     }
   }
 

@@ -1,5 +1,6 @@
 {
     "@@locale": "kn",
+    "sessionExpiredSignInAgain": "ಸೆಷನ್ ಅವಧಿ ಮುಗಿದಿದೆ — ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.",
     "@@last_modified": "2024-12-26",
     "appTitle": "ಓಮಿ",
     "@appTitle": {
@@ -1482,7 +1483,7 @@
     "exportConfiguration": "ಕಾನ್ಫಿಗರೇಶನ್ ರಫ್ತು ಮಾಡಿ",
     "bringYourOwn": "ನಿಮ್ಮ ಸ್ವಂತ ತರಿಸಿ",
     "payYourSttProvider": "Omi ಅನ್ನು ಅವಿರತವಾಗಿ ಬಳಸಿ. ನೀವು ಕೇವಲ ನಿಮ್ಮ STT ಪ್ರದಾನಕಾರಕನಿಗೆ ನೇರವಾಗಿ ಪಾವತಿ ಮಾಡಿ.",
-    "freeMinutesMonth": "600 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ",
+    "freeMinutesMonth": "300 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ಹೋಸ್ಟ್ ಅಗತ್ಯ",
     "validPortRequired": "ಮಾನ್ಯ ಪೋರ್ಟ್ ಅಗತ್ಯ",
@@ -5505,7 +5506,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್",
+    "basicPlanDescription": "300 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7280,7 +7281,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
+    "premiumMinutesInfo": "ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7391,7 +7392,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
+    "premiumMinutesMonth": "ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10520,7 +10521,7 @@
     "upgradePlan": "ಯೋಜನೆ ಅಪ್‌ಗ್ರೇಡ್",
     "billingMonthly": "ಮಾಸಿಕ",
     "billingYearly": "ವಾರ್ಷಿಕ",
-    "savePercent": "~17% ಉಳಿಸಿ",
+    "savePercent": "~{percent}% ಉಳಿಸಿ",
     "popular": "ಜನಪ್ರಿಯ",
     "currentPlan": "ಪ್ರಸ್ತುತ",
     "neoSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
@@ -10632,7 +10633,7 @@
     "syncCustomSttWarningMessage": "ನೀವು ನಿಮ್ಮ ಸ್ವಂತ ಪ್ರತಿಲೇಖನ ಪೂರೈಕೆದಾರರನ್ನು ಬಳಸುತ್ತೀರಿ. ಈ ಧ್ವನಿಮುದ್ರಣಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿದರೆ ಅವು Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖನಗೊಳ್ಳುತ್ತವೆ ಮತ್ತು ನಿಮ್ಮ ಯೋಜನೆಯ ಪ್ರತಿಲೇಖನ ಮಿತಿಗೆ ಎಣಿಸಲಾಗುತ್ತದೆ.",
     "transcribeLaterTitle": "ನಂತರ ಲಿಪ್ಯಂತರಿಸಿ",
     "transcribeLaterDescription": "ನೇರ ಪ್ರಸಾರದ ಬದಲು ಈಗ ಧ್ವನಿಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ, ಬೇಕೆಂದಾಗ ಲಿಪ್ಯಂತರಿಸಿ. ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಯುತ್ತವೆ; ನಂತರ ಅವುಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ ಸಂಭಾಷಣೆಗಳನ್ನು ರಚಿಸಿ.",
-    "transcribeLaterNote": "ಸದ್ಯಕ್ಕೆ Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.",
+    "transcribeLaterNote": "ಫೋನ್ ಮೈಕ್ರೊಫೋನ್, Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.",
     "transcribeLaterStorageFull": "ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಸಂಗ್ರಹ ಸ್ಥಳ ಕಡಿಮೆ ಇರುವುದರಿಂದ ರೆಕಾರ್ಡಿಂಗ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಂತಿದೆ. ಸ್ಥಳ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ; ನಂತರ ಅದು ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ.",
     "unmute": "ಮ್ಯೂಟ್ ತೆಗೆ",
     "newRecording": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್",
@@ -10720,5 +10721,17 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "ಸಾಧನ ಸಂಗ್ರಹಣೆ",
+    "deviceStoragePercentFull": "{percent}% ತುಂಬಿದೆ",
+    "deviceStorageUsedOfTotal": "{total} ರಲ್ಲಿ {used} ಬಳಸಲಾಗಿದೆ",
+    "deviceStorageFree": "{free} ಖಾಲಿ",
+    "deviceStorageNearlyFull": "ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.",
+    "phoneMicOfflineFallbackMessage": "ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ.",
+    "dataEncryptedBanner": "ನಿಮ್ಮ ಡೇಟಾ ಪೂರ್ವನಿಯೋಜಿತವಾಗಿ ಬಲವಾದ ಎನ್‌ಕ್ರಿಪ್ಶನ್‌ನಿಂದ ಸುರಕ್ಷಿತವಾಗಿದೆ, ಮತ್ತು ಅದನ್ನು ಹೇಗೆ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಬಳಸಲಾಗುತ್ತದೆ ಎಂಬುದನ್ನು ನೀವು ನಿಯಂತ್ರಿಸುತ್ತೀರಿ.",
+    "rayBanMetaMicPickerTitle": "ನಿಮ್ಮ Ray-Ban Meta ಮೈಕ್ರೊಫೋನ್ ಆಯ್ಕೆಮಾಡಿ",
+    "rayBanMetaMicPickerDescription": "ನಿಮ್ಮ ಕನ್ನಡಕದ Bluetooth ಮೈಕ್ರೊಫೋನ್ ಆಯ್ಕೆಮಾಡಿ. Omi ಅದನ್ನು ಬಳಸುವಾಗ ಸಂಗೀತ ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.",
+    "rayBanMetaMicPickerEmpty": "ಯಾವುದೇ Bluetooth ಮೈಕ್ರೊಫೋನ್ ಕಂಡುಬಂದಿಲ್ಲ. iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕನ್ನಡಕವನ್ನು ಸಂಪರ್ಕಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth ಮೈಕ್ರೊಫೋನ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. Bluetooth ಆನ್ ಆಗಿದೆಯೇ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "rayBanMetaMicPickerConnectError": "ಆ ಮೈಕ್ರೊಫೋನ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಅದು iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಸಂಪರ್ಕಗೊಂಡಿದೆಯೇ ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ."
 }

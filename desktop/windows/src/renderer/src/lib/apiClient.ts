@@ -6,6 +6,7 @@ import axios, {
 import { auth } from './firebase'
 import { forceReauth, refreshIdToken } from './authSession'
 import { withByokHeadersIfActive } from './byokKeys'
+import { getWindowsDeviceIdHash } from './clientDevice'
 
 // Retried statuses: 429 (rate limited) and 503 (transient). Anything else fails
 // fast as before. 401 is handled separately (refresh → retry → reauth).
@@ -138,6 +139,8 @@ function makeClient(baseURL: string): AxiosInstance {
     for (const [name, value] of Object.entries(byokHeaders)) {
       config.headers[name] = value
     }
+    config.headers['X-App-Platform'] = 'windows'
+    config.headers['X-Device-Id-Hash'] = await getWindowsDeviceIdHash()
     return config
   })
 

@@ -1,0 +1,34 @@
+version: 2
+name: apps-marketplace
+tier: 2
+description: Hermetic Apps marketplace catalog snapshot via bridge action
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  - desktop/macos/Desktop/Sources/OmiSupport/Dictionary+Deduplication.swift
+  - desktop/macos/Desktop/Sources/Providers/AppProvider.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Apps.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Apps
+    bridge.navigate:
+      target: apps
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 8
+
+  - id: S2
+    name: Apps catalog snapshot
+    bridge.action:
+      name: apps_catalog_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

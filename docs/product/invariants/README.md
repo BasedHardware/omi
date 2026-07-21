@@ -9,7 +9,7 @@ rules stay in [`AGENTS.md`](../../../AGENTS.md). Product north star:
 | Status | Meaning |
 |--------|---------|
 | `locked` | Binding. Has a hermetic guard test (or an explicit exception with owner + burn date). CI may require naming the ID in PRs that touch its path globs. |
-| `proposed` | Written so drift is visible, but not yet CI-enforced. Promote only when a guard test exists. |
+| `proposed` | Design note written so drift is visible, but not yet CI-enforced. |
 
 ## Index
 
@@ -23,6 +23,8 @@ rules stay in [`AGENTS.md`](../../../AGENTS.md). Product north star:
 | INV-INT-1 | Integrations harness over heuristics | locked | [integrations.md](./integrations.md) |
 | INV-UI-1 | No purple; neutral accents | locked | [brand-ui.md](./brand-ui.md) |
 | INV-AUTH-1 | Desktop Firebase session truth | locked | [auth-session.md](./auth-session.md) |
+| INV-DATA-1 | Production-family customer data-plane continuity | locked | [data-plane-continuity.md](./data-plane-continuity.md) |
+| INV-VOICE-1 | One desktop voice-turn lifecycle owner | locked | [desktop-voice-turns.md](./desktop-voice-turns.md) |
 
 ## File template
 
@@ -57,6 +59,6 @@ Name this invariant ID in the PR body if you touch the path globs above.
 
 ## Promotion
 
-`proposed` → `locked` only when a hermetic guard test exists, or an explicit
-documented exception lists an owner and burn date. Update this index in the
-same PR.
+`proposed` → `locked` only when a hermetic guard test exists (or an explicit
+documented exception lists an owner and burn date) and both the behavior and
+guard have remained unchanged for seven days. Update this index in the same PR.

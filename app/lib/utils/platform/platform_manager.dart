@@ -9,7 +9,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
-import 'package:omi/utils/debugging/crash_reporter.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -28,7 +27,7 @@ class PlatformManager {
   // Service instances
   AnalyticsManager get analytics => AnalyticsManager();
   IntercomManager get intercom => IntercomManager.instance;
-  CrashReporter get crashReporter => CrashlyticsManager.instance;
+  CrashlyticsManager get crashReporter => CrashlyticsManager.instance;
 
   static Future<void> initializeServices() async {
     _instance._packageInfo = await PackageInfo.fromPlatform();
@@ -39,8 +38,8 @@ class PlatformManager {
 
   Future<String> _getDeviceIdHash() async {
     // Check if already stored
-    String? storedHash = SharedPreferencesUtil().deviceIdHash;
-    if (storedHash != null && storedHash.isNotEmpty) {
+    String storedHash = SharedPreferencesUtil().deviceIdHash;
+    if (storedHash.isNotEmpty) {
       return storedHash;
     }
 

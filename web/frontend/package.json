@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "node --test src/__tests__/*.test.mjs",
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
@@ -74,6 +75,11 @@
   "overrides": {
     "postcss": "$postcss",
     "qs": "^6.15.1",
-    "glob": "^10.5.0"
+    "glob": "^10.5.0",
+    "@grpc/grpc-js": ">=1.9.16",
+    "protobufjs": ">=7.6.3",
+    "@babel/core": ">=7.26.0",
+    "js-yaml": ">=4.1.1",
+    "websocket-driver": ">=0.5.8"
   }
 }

@@ -1,501 +1,205 @@
-name: Promote Desktop Backend to Prod
+name: Promote Qualified Desktop Stable
 
-# Prod promotion is intentionally manual and ordered:
-#   1. choose an existing v*-macos GitHub Release,
-#   2. deploy the Rust desktop backend from that exact tag,
-#   3. verify /health reports that release identity,
-#   4. promote the Firestore bridge release for old Rust appcast clients,
-#   5. mark the GitHub Release metadata channel stable,
-#   6. move desktop-backend-prod-deployed.
-#
-# Do not add schedule, push, or release triggers here. Release-edited events
-# have missed promotions before, and automatic triggers can expose stable users
-# to a backend that was not promoted deliberately.
-
+# Stable is a protected distribution pointer, not a backend deployment. It
+# promotes the exact signed artifact already qualified on beta; the existing
+# backend deployment workflows remain independent.
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing v*-macos release tag to promote to stable'
+        description: 'Qualified current beta v*-macos release tag'
         required: true
+        type: string
       confirm:
-        description: 'Type promote-stable to deploy prod and mark the release stable'
+        description: 'Type promote-stable to advance the stable pointer'
         required: true
-      override_unblessed:
-        description: 'DANGER: allow promotion without bless metadata'
-        required: false
-        default: false
-        type: boolean
-      override_confirm:
-        description: 'Type I-ACCEPT-UNBLESSED-PROD-RISK with override_unblessed'
+        type: string
+      operation:
+        description: 'promote advances Stable; repoint selects a retained qualified manifest'
+        required: true
+        default: promote
+        type: choice
+        options: [promote, repoint]
+      expected_current_release_id:
+        description: 'Current stable release ID (empty only for the first promotion)'
         required: false
         default: ''
+        type: string
+      expected_generation:
+        description: 'Current stable pointer generation (0 when Stable is unset)'
+        required: true
+        type: string
+      qualification_run_id:
+        description: 'Successful trusted qualification run required only for an initial promote'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
+  actions: read
+  id-token: write
 
 concurrency:
-  group: desktop-backend-promote-prod
+  group: desktop-stable-promotion
   cancel-in-progress: false
 
 env:
-  SERVICE: desktop-backend
-  REGION: us-central1
-  TRACK_TAG: desktop-backend-prod-deployed
+  GCS_DESKTOP_UPDATES_BUCKET: ${{ vars.GCS_DESKTOP_UPDATES_BUCKET || 'gs://omi_macos_updates' }}
 
 jobs:
   promote:
     environment: prod
-    permissions:
-      contents: read
-      id-token: write
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
-
       - name: Checkout promotion controls
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_tag }}
           fetch-depth: 0
 
-      - name: Validate release promotion request
-        id: plan
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      - name: Validate trusted qualification run for initial promotion
+        if: ${{ inputs.operation == 'promote' }}
+        id: candidate
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
-          OVERRIDE_UNBLESSED: ${{ inputs.override_unblessed }}
-          OVERRIDE_CONFIRM: ${{ inputs.override_confirm }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
         run: |
           set -euo pipefail
-
-          if [ "$CONFIRM" != "promote-stable" ]; then
-            echo "confirm must be exactly: promote-stable" >&2
-            exit 1
-          fi
-
-          if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v.+-macos$'; then
-            echo "Release tag '$RELEASE_TAG' is not a macOS desktop release tag." >&2
-            exit 1
-          fi
-
-          git fetch --force --tags origin \
-            "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}" \
-            "+refs/tags/${TRACK_TAG}:refs/tags/${TRACK_TAG}" || true
-
-          gh release view "$RELEASE_TAG" --repo "$REPO" \
-            --json tagName,body,isDraft,isPrerelease,assets \
-            > /tmp/desktop-release.json
-
-          OVERRIDE_ARGS=()
-          if [ "$OVERRIDE_UNBLESSED" = "true" ]; then
-            OVERRIDE_ARGS=(--override-unblessed --override-confirm "$OVERRIDE_CONFIRM")
-            echo "::warning::Prod promotion override_unblessed enabled for $RELEASE_TAG"
-            echo "::warning::Prod promotion override_unblessed enabled for $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          python3 .github/scripts/check-desktop-release-promotion.py \
-            --release-json /tmp/desktop-release.json \
-            --release-tag "$RELEASE_TAG" \
-            --github-output "$GITHUB_OUTPUT" \
-            "${OVERRIDE_ARGS[@]}"
-
+          test "$CONFIRM" = promote-stable || { echo 'confirm must be exactly: promote-stable' >&2; exit 1; }
+          printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+(\.[0-9]+)?\+[0-9]+-macos$' || {
+            echo "Invalid macOS release tag: $RELEASE_TAG" >&2; exit 1;
+          }
+          git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          BLESSED_SHA=$(grep '^blessed_sha=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2- || true)
-          if [ -n "$BLESSED_SHA" ] && [ "$BLESSED_SHA" != "$TARGET_SHA" ]; then
-            if [ "$OVERRIDE_UNBLESSED" = "true" ]; then
-              echo "::warning::blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA); allowed by override_unblessed"
-              echo "::warning::blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA); allowed by override_unblessed" >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA)" >&2
-              exit 1
-            fi
-          fi
-          CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || true)
-
-          if ! git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA" -- desktop/macos/Backend-Rust/src \
-            || ! git grep -q "release_tag" "$TARGET_SHA" -- desktop/macos/Backend-Rust/src; then
-            echo "$RELEASE_TAG does not include /health release identity support." >&2
-            echo "Choose a release built after the stable-promotion workflow landed; older tags cannot be promoted or rolled back safely." >&2
-            exit 1
-          fi
-
-          if [ -n "$CURRENT_SHA" ] && [ "$TARGET_SHA" != "$CURRENT_SHA" ] \
-            && git merge-base --is-ancestor "$TARGET_SHA" "$CURRENT_SHA"; then
-            echo "$RELEASE_TAG ($TARGET_SHA) is older than tracked prod ($CURRENT_SHA)." >&2
-            echo "This promotion workflow is roll-forward only because both desktop update feeds choose the newest stable release." >&2
-            echo "Ship a newer fixed release for prod, or handle infrastructure rollback outside this stable-promotion path." >&2
-            exit 1
-          fi
-
-          {
-            echo "target_sha=$TARGET_SHA"
-            echo "target_image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${SERVICE}:$TARGET_SHA"
-          } >> "$GITHUB_OUTPUT"
-
-          echo "Promotion target: $RELEASE_TAG ($TARGET_SHA)" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Preflight Omi Bot token configuration
-        id: app-token-preflight
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
-          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
-      - name: Preflight Omi Bot repository access
-        env:
-          GH_TOKEN: ${{ steps.app-token-preflight.outputs.token }}
-          REPO: ${{ github.repository }}
-        run: gh api "repos/${REPO}" --jq .full_name >/dev/null
-
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'qualification_run_id must be numeric' >&2; exit 1; }
+          run=$(gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID")
+          printf '%s\n' "$run" > /tmp/desktop-qualification-run.json
+          python3 .github/scripts/desktop_qualification_admission.py \
+            --run-json /tmp/desktop-qualification-run.json \
+            --repository "$REPO" --release-tag "$RELEASE_TAG" --candidate-sha "$TARGET_SHA"
       - name: Google Auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Login to GCR
-        run: gcloud auth configure-docker
-
-      - name: Preflight Firestore bridge release
+      - name: Fetch exact retained qualified manifest
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          FIRESTORE_DOC_ID: ${{ steps.plan.outputs.firestore_doc_id }}
-          EXPECTED_VERSION: ${{ steps.plan.outputs.release_version }}
-          EXPECTED_BUILD_NUMBER: ${{ steps.plan.outputs.release_build_number }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
+          curl -fsS -H "secret-key: $ADMIN_KEY" "https://api.omi.me/v2/desktop/releases/$RELEASE_TAG" > /tmp/desktop-manifest-response.json
+          jq '.manifest' /tmp/desktop-manifest-response.json > /tmp/desktop-release-manifest.json
+          python3 - <<'PY'
+          import hashlib, json
+          response = json.load(open('/tmp/desktop-manifest-response.json'))
+          manifest = json.load(open('/tmp/desktop-release-manifest.json'))
+          if manifest.get('release_id') != __import__('os').environ['RELEASE_TAG']:
+              raise SystemExit('retained manifest does not match requested release')
+          actual = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+          if actual != response.get('manifest_sha256'):
+              raise SystemExit('retained manifest canonical identity mismatch')
+          PY
+
+      - name: Verify current beta and stable pointer compare-and-swap inputs
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_RELEASE_ID: ${{ inputs.expected_current_release_id }}
+          EXPECTED_GENERATION: ${{ inputs.expected_generation }}
+          OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
           ACCESS_TOKEN=$(gcloud auth print-access-token)
-          DOC_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_releases/${FIRESTORE_DOC_ID}"
-          FIRESTORE_DOC=$(curl -fsS \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            "$DOC_URL")
+          BASE="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_update_channels"
+          curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/macos-beta" > /tmp/macos-beta-pointer.json
+          curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/macos-stable" > /tmp/macos-stable-pointer.json
+          python3 .github/scripts/check_stable_pointer_precondition.py \
+            --beta /tmp/macos-beta-pointer.json --stable /tmp/macos-stable-pointer.json \
+            --release-id "$RELEASE_TAG" --expected-release-id "$EXPECTED_RELEASE_ID" \
+            --expected-generation "$EXPECTED_GENERATION" --operation "$OPERATION"
 
-          FIRESTORE_DOC="$FIRESTORE_DOC" python3 - <<'PY'
+      - name: Publish immutable stable repair installer
+        env:
+          GCS_DESKTOP_UPDATES_BUCKET: ${{ env.GCS_DESKTOP_UPDATES_BUCKET }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/desktop_repair_installer.py --manifest /tmp/desktop-release-manifest.json \
+            --bucket "$GCS_DESKTOP_UPDATES_BUCKET" --output-dir /tmp/desktop-stable-repair
+          REPAIR_SHA=$(sha256sum /tmp/desktop-stable-repair/repair.json | cut -d' ' -f1)
+          target="$GCS_DESKTOP_UPDATES_BUCKET/stable/${RELEASE_TAG}/repair.json"
+          if gcloud storage objects describe "$target" --format='value(metadata.sha256)' > /tmp/remote-sha.txt 2>/dev/null; then
+            test "$(cat /tmp/remote-sha.txt)" = "$REPAIR_SHA" || { echo "Immutable stable repair metadata differs: $target" >&2; exit 1; }
+          else
+            gcloud storage cp --if-generation-match=0 --custom-metadata="sha256=$REPAIR_SHA" /tmp/desktop-stable-repair/repair.json "$target"
+          fi
+
+      - name: Advance explicit stable pointer
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_RELEASE_ID: ${{ inputs.expected_current_release_id }}
+          EXPECTED_GENERATION: ${{ inputs.expected_generation }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
+          python3 - <<'PY' > /tmp/desktop-stable-pointer.json
+          import json, os
+          payload = {"platform": "macos", "channel": "stable", "release_id": os.environ["RELEASE_TAG"],
+                     "expected_generation": int(os.environ["EXPECTED_GENERATION"]), "operation": os.environ["OPERATION"]}
+          if os.environ["EXPECTED_RELEASE_ID"]:
+              payload["expected_current_release_id"] = os.environ["EXPECTED_RELEASE_ID"]
+          print(json.dumps(payload))
+          PY
+          curl -fsS -X POST -H 'Content-Type: application/json' -H "secret-key: $ADMIN_KEY" \
+            --data-binary @/tmp/desktop-stable-pointer.json https://api.omi.me/v2/desktop/channels/promote \
+            > /tmp/desktop-stable-pointer-response.json
+          python3 -m json.tool /tmp/desktop-stable-pointer-response.json
+
+      - name: Bridge stable for legacy desktop clients
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          SERVICE_URL=$(gcloud run services describe desktop-backend --region us-central1 --project "$PROJECT_ID" --format='value(status.url)')
+          RELEASE_SECRET=$(gcloud secrets versions access latest --secret=RELEASE_SECRET --project "$PROJECT_ID")
+          python3 - <<'PY' > /tmp/legacy-desktop-release.json
           import json
-          import os
-          import sys
-
-          doc = json.loads(os.environ["FIRESTORE_DOC"])
-          fields = doc.get("fields", {})
-
-          def string_field(name):
-              return fields.get(name, {}).get("stringValue", "")
-
-          def bool_field(name):
-              return fields.get(name, {}).get("booleanValue")
-
-          def int_field(name):
-              return fields.get(name, {}).get("integerValue")
-
-          channel = string_field("channel")
-          version = string_field("version")
-          is_live = bool_field("is_live")
-          missing = [
-              name
-              for name in ("version", "download_url", "ed_signature")
-              if not string_field(name)
-          ]
-          if channel not in {"beta", "stable"}:
-              print(f"Firestore bridge release must be beta or stable before prod promotion, got {channel!r}", file=sys.stderr)
-              sys.exit(1)
-          if version != os.environ["EXPECTED_VERSION"]:
-              print(
-                  f"Firestore bridge release version mismatch: expected {os.environ['EXPECTED_VERSION']!r}, got {version!r}",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-          build_number = int_field("build_number")
-          if build_number is None or int(build_number) != int(os.environ["EXPECTED_BUILD_NUMBER"]):
-              print(
-                  f"Firestore bridge release build_number mismatch: expected {os.environ['EXPECTED_BUILD_NUMBER']!r}, got {build_number!r}",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-          if is_live is not True:
-              print(f"Firestore bridge release must have is_live=true before prod promotion, got {is_live!r}", file=sys.stderr)
-              sys.exit(1)
-          if missing:
-              print(f"Firestore bridge release is missing required field(s): {', '.join(missing)}", file=sys.stderr)
-              sys.exit(1)
-          print(f"Firestore bridge release preflight OK: channel={channel}")
+          manifest = json.load(open('/tmp/desktop-release-manifest.json'))
+          print(json.dumps({"version": manifest["version"], "build_number": manifest["build_number"],
+              "download_url": manifest["zip_url"], "ed_signature": manifest["ed_signature"], "changelog": manifest["changelog"],
+              "is_live": True, "is_critical": manifest["mandatory"], "channel": "stable"}))
           PY
+          RESPONSE=$(curl -sS -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' \
+            -H "X-Release-Secret: $RELEASE_SECRET" --data-binary @/tmp/legacy-desktop-release.json "${SERVICE_URL%/}/updates/releases")
+          CODE=$(printf '%s\n' "$RESPONSE" | tail -n1)
+          test "$CODE" = 201 -o "$CODE" = 409 || { printf '%s\n' "$RESPONSE" >&2; exit 1; }
 
-      - name: Check current prod backend
-        id: current
+      - name: Publish latest stable repair route
         env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          TARGET_IMAGE: ${{ steps.plan.outputs.target_image }}
-          TARGET_TAG: ${{ inputs.release_tag }}
-          TARGET_SHA: ${{ steps.plan.outputs.target_sha }}
+          GCS_DESKTOP_UPDATES_BUCKET: ${{ env.GCS_DESKTOP_UPDATES_BUCKET }}
         run: |
           set -euo pipefail
-
-          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
-            --region "$REGION" \
-            --project "$PROJECT_ID" \
-            --format='value(status.url)')
-          CURRENT_IMAGE=$(gcloud run services describe "$SERVICE" \
-            --region "$REGION" \
-            --project "$PROJECT_ID" \
-            --format='value(spec.template.spec.containers[0].image)')
-
-          HEALTH_JSON=$(curl -fsS --max-time 15 "${SERVICE_URL%/}/health" || true)
-          HEALTH_MATCH=false
-          if [ -n "$HEALTH_JSON" ]; then
-            HEALTH_MATCH=$(HEALTH_JSON="$HEALTH_JSON" python3 - <<'PY'
-          import json
-          import os
-          import sys
-
-          try:
-              health = json.loads(os.environ["HEALTH_JSON"])
-          except Exception:
-              print("false")
-              sys.exit(0)
-
-          ok = (
-              health.get("release_tag") == os.environ["TARGET_TAG"]
-              and health.get("release_sha") == os.environ["TARGET_SHA"]
-              and health.get("release_channel") == "stable"
-          )
-          print("true" if ok else "false")
-          PY
-            )
-          fi
-
-          DEPLOY_NEEDED=true
-          if [ "$CURRENT_IMAGE" = "$TARGET_IMAGE" ] && [ "$HEALTH_MATCH" = "true" ]; then
-            DEPLOY_NEEDED=false
-          fi
-
-          {
-            echo "service_url=$SERVICE_URL"
-            echo "current_image=$CURRENT_IMAGE"
-            echo "deploy_needed=$DEPLOY_NEEDED"
-          } >> "$GITHUB_OUTPUT"
-
-          {
-            echo "Current prod image: $CURRENT_IMAGE"
-            echo "Target prod image: $TARGET_IMAGE"
-            echo "Health identity already matches target: $HEALTH_MATCH"
-            echo "Deploy needed: $DEPLOY_NEEDED"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Checkout release source
-        if: steps.current.outputs.deploy_needed == 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.plan.outputs.target_sha }}
-          fetch-depth: 0
-          path: release-source
-
-      - name: Set up Docker Buildx
-        if: steps.current.outputs.deploy_needed == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Google Service Account
-        if: steps.current.outputs.deploy_needed == 'true'
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./release-source/desktop/macos/Backend-Rust/google-credentials.json
-
-      - name: Validate desktop OAuth base API URL
-        if: steps.current.outputs.deploy_needed == 'true'
-        env:
-          DESKTOP_BACKEND_BASE_API_URL: ${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DESKTOP_BACKEND_BASE_API_URL//[[:space:]]/}" ]; then
-            echo "DESKTOP_BACKEND_BASE_API_URL must be configured for desktop OAuth callbacks" >&2
-            exit 1
-          fi
-
-      - name: Validate desktop Calendar API key secret
-        if: steps.current.outputs.deploy_needed == 'true'
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-        run: |
-          set -euo pipefail
-          gcloud secrets versions access latest \
-            --project="$PROJECT_ID" \
-            --secret=DESKTOP_GOOGLE_CALENDAR_API_KEY > /tmp/desktop-google-calendar-api-key
-          python3 - <<'PY'
-          from pathlib import Path
-
-          value = Path("/tmp/desktop-google-calendar-api-key").read_bytes()
-          if value.endswith(b"\n"):
-              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY must not include a trailing newline")
-          if len(value) != 39 or not value.startswith(b"AIza"):
-              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY does not look like a Google API key")
-          PY
-
-      - name: Build and Push Desktop Backend Image
-        if: steps.current.outputs.deploy_needed == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: ./release-source/desktop/macos/Backend-Rust
-          file: ./release-source/desktop/macos/Backend-Rust/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.plan.outputs.target_image }}
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:prod
-          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
-          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
-
-      - name: Deploy Desktop Backend to Production
-        if: steps.current.outputs.deploy_needed == 'true'
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: ${{ steps.plan.outputs.target_image }}
-          flags: '--allow-unauthenticated'
-          wait: true
-          env_vars: |
-            FIREBASE_PROJECT_ID=based-hardware
-            GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
-            AGENT_GCS_BUCKET=based-hardware-agent
-            BASE_API_URL=${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
-            OMI_DESKTOP_RELEASE_TAG=${{ inputs.release_tag }}
-            OMI_DESKTOP_RELEASE_SHA=${{ steps.plan.outputs.target_sha }}
-            OMI_DESKTOP_RELEASE_CHANNEL=stable
-          secrets: |
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
-            OPENAI_API_KEY=OPENAI_API_KEY:latest
-            REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
-            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
-            REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest
-            REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest
-            DEEPGRAM_API_KEY=DESKTOP_DEEPGRAM_API_KEY:latest
-            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
-            DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
-            GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
-            RELEASE_SECRET=RELEASE_SECRET:latest
-
-      - name: Route traffic to deployed desktop-backend revision
-        if: steps.current.outputs.deploy_needed == 'true'
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-        run: |
-          set -euo pipefail
-          REVISION="$(gcloud run services describe "$SERVICE" \
-            --project="$PROJECT_ID" \
-            --region="$REGION" \
-            --format='value(status.latestCreatedRevisionName)')"
-          if [ -z "$REVISION" ]; then
-            echo "Could not determine latest desktop-backend revision" >&2
-            exit 1
-          fi
-          gcloud run services update-traffic "$SERVICE" \
-            --project="$PROJECT_ID" \
-            --region="$REGION" \
-            --to-revisions="$REVISION=100" \
-            --quiet
-
-      - name: Verify prod backend release identity
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          TARGET_TAG: ${{ inputs.release_tag }}
-          TARGET_SHA: ${{ steps.plan.outputs.target_sha }}
-        run: |
-          set -euo pipefail
-
-          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
-            --region "$REGION" \
-            --project "$PROJECT_ID" \
-            --format='value(status.url)')
-
-          for attempt in $(seq 1 30); do
-            HEALTH_JSON=$(curl -fsS --max-time 15 "${SERVICE_URL%/}/health" || true)
-            if [ -n "$HEALTH_JSON" ]; then
-              if HEALTH_JSON="$HEALTH_JSON" python3 - <<'PY'
-          import json
-          import os
-          import sys
-
-          health = json.loads(os.environ["HEALTH_JSON"])
-          expected = {
-              "release_tag": os.environ["TARGET_TAG"],
-              "release_sha": os.environ["TARGET_SHA"],
-              "release_channel": "stable",
-          }
-          mismatches = {
-              key: {"expected": value, "actual": health.get(key)}
-              for key, value in expected.items()
-              if health.get(key) != value
-          }
-          if mismatches:
-              print(json.dumps({"health": health, "mismatches": mismatches}, indent=2))
-              sys.exit(1)
-          print(json.dumps(health, indent=2))
-          PY
-              then
-                echo "Verified prod backend identity at $SERVICE_URL/health" >> "$GITHUB_STEP_SUMMARY"
-                exit 0
-              fi
-            fi
-            echo "Waiting for prod backend identity ($attempt/30)..."
-            sleep 10
+          for file in latest.json index.html; do
+            gcloud storage cp --cache-control='no-store,max-age=0' "/tmp/desktop-stable-repair/$file" "$GCS_DESKTOP_UPDATES_BUCKET/stable/$file"
           done
 
-          echo "Prod backend did not report the promoted release identity." >&2
-          exit 1
-
-      - name: Promote Firestore release stable
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          FIRESTORE_DOC_ID: ${{ steps.plan.outputs.firestore_doc_id }}
-        run: |
-          set -euo pipefail
-
-          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
-            --region "$REGION" \
-            --project "$PROJECT_ID" \
-            --format='value(status.url)')
-          RELEASE_SECRET=$(gcloud secrets versions access latest \
-            --secret=RELEASE_SECRET \
-            --project "$PROJECT_ID")
-
-          RESPONSE=$(curl -sS -w "\n%{http_code}" \
-            -X PATCH \
-            -H "Content-Type: application/json" \
-            -H "X-Release-Secret: $RELEASE_SECRET" \
-            -d "{\"doc_id\":\"${FIRESTORE_DOC_ID}\"}" \
-            "${SERVICE_URL%/}/updates/releases/promote")
-
-          HTTP_CODE=$(printf '%s\n' "$RESPONSE" | tail -n1)
-          BODY=$(printf '%s\n' "$RESPONSE" | sed '$d')
-          if [ "$HTTP_CODE" = "200" ]; then
-            NEW_CHANNEL=$(BODY="$BODY" python3 - <<'PY'
-          import json
-          import os
-
-          print(json.loads(os.environ["BODY"]).get("new_channel", ""))
-          PY
-            )
-            if [ "$NEW_CHANNEL" != "stable" ]; then
-              echo "$BODY" >&2
-              echo "Firestore release $FIRESTORE_DOC_ID promoted to $NEW_CHANNEL, not stable." >&2
-              exit 1
-            fi
-            echo "Promoted Firestore release $FIRESTORE_DOC_ID to stable" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "$HTTP_CODE" = "400" ] && printf '%s\n' "$BODY" | grep -qi "already on stable"; then
-            echo "Firestore release $FIRESTORE_DOC_ID is already stable" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "$BODY" >&2
-            echo "Failed to promote Firestore release $FIRESTORE_DOC_ID (HTTP $HTTP_CODE)" >&2
-            exit 1
-          fi
-
-      - name: Generate Omi Bot token for release mutations
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
-          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
-      - name: Mark GitHub Release stable
+      - name: Mark GitHub release live stable
+        if: ${{ inputs.operation == 'promote' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -503,42 +207,29 @@ jobs:
         run: |
           set -euo pipefail
           gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/release-body.md
-          python3 .github/scripts/mark-desktop-release-stable.py \
-            --input /tmp/release-body.md \
-            --output /tmp/release-body-stable.md
-          gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/release-body-stable.md
+          python3 .github/scripts/mark-desktop-release-stable.py --input /tmp/release-body.md --output /tmp/release-body-stable.md
+          gh release edit "$RELEASE_TAG" --repo "$REPO" --title "Omi Desktop ${RELEASE_TAG#v}" --notes-file /tmp/release-body-stable.md
 
-      - name: Clear desktop update cache
+      - name: Verify exact pointer, hashes, and stable feed
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          ADMIN_KEY=$(gcloud secrets versions access latest \
-            --secret=ADMIN_KEY \
-            --project "$PROJECT_ID" 2>/dev/null || true)
-          if [ -z "$ADMIN_KEY" ]; then
-            echo "ADMIN_KEY unavailable; skipping desktop update cache clear." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          curl -fsS \
-            -X POST \
-            -H "secret-key: $ADMIN_KEY" \
-            "https://api.omi.me/v2/desktop/clear-cache" >/dev/null
-          echo "Cleared desktop update cache" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Advance prod-tracking tag
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          TARGET_SHA: ${{ steps.plan.outputs.target_sha }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY' > /tmp/update-desktop-backend-prod-ref.json
-          import json
-          import os
-
-          print(json.dumps({"sha": os.environ["TARGET_SHA"], "force": True}))
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          BASE="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents"
+          curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/desktop_update_channels/macos-stable" > /tmp/final-stable-pointer.json
+          curl -fsS -H "Authorization: Bearer $ACCESS_TOKEN" "$BASE/desktop_release_manifests/$RELEASE_TAG" > /tmp/final-stable-manifest.json
+          python3 - <<'PY'
+          import json, os, sys
+          pointer = json.load(open('/tmp/final-stable-pointer.json')).get('fields', {})
+          manifest = json.load(open('/tmp/final-stable-manifest.json')).get('fields', {})
+          release_id = pointer.get('release_id', {}).get('stringValue')
+          if release_id != os.environ['RELEASE_TAG']: sys.exit('stable pointer does not resolve to the requested release')
+          expected = json.load(open('/tmp/desktop-release-manifest.json'))
+          for key in ('zip_sha256', 'dmg_sha256'):
+              if manifest.get(key, {}).get('stringValue') != expected[key]: sys.exit(f'manifest {key} mismatch')
           PY
-          if ! gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TRACK_TAG}" --input /tmp/update-desktop-backend-prod-ref.json >/dev/null; then
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${TRACK_TAG}" -f sha="${TARGET_SHA}" >/dev/null
-          fi
-          echo "Promoted desktop-backend to PROD - ${{ inputs.release_tag }} (${{ steps.plan.outputs.target_sha }})" >> "$GITHUB_STEP_SUMMARY"
+          curl -fsS 'https://api.omi.me/v2/desktop/appcast.xml?identity=stable' > /tmp/stable-appcast.xml
+          python3 .github/scripts/verify_stable_appcast.py --manifest /tmp/desktop-release-manifest.json --feed /tmp/stable-appcast.xml
+          echo "Stable pointer, exact manifest hashes, and appcast verified for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"

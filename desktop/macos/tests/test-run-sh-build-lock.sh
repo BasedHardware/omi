@@ -101,4 +101,31 @@ omi_run_sh_acquire_build_lock "test holder A2" 10
 
 omi_run_sh_release_build_lock
 
+# An interrupted launcher leaves a dead owner record. A later build must
+# recover it immediately rather than consume the caller's full timeout.
+OMI_DEV_DIR="$TMP_ROOT/wt-stale/.dev"
+export OMI_DEV_DIR
+bash -c '
+  # shellcheck source=/dev/null
+  source "$1"
+  omi_run_sh_acquire_build_lock "interrupted holder" 10
+' _ "$MACOS_DIR/scripts/run-sh-build-lock.sh"
+stale_lock="$(omi_run_sh_build_lock_dir)"
+[ -d "$stale_lock" ] || fail "interrupted holder did not leave its lock"
+omi_run_sh_acquire_build_lock "stale lock recovery" 4
+[ -d "$RUN_SH_LOCK_DIR" ] || fail "stale lock recovery did not acquire lock"
+omi_run_sh_release_build_lock
+[ ! -d "$stale_lock" ] || fail "stale lock remained after recovery release"
+
+# A crash before owner-file creation also leaves an empty directory. Once the
+# short creation grace window has elapsed, recover it rather than timing out.
+OMI_DEV_DIR="$TMP_ROOT/wt-ownerless/.dev"
+ownerless_lock="$(omi_run_sh_build_lock_dir)"
+mkdir -p "$ownerless_lock"
+touch -t 202001010000 "$ownerless_lock"
+omi_run_sh_acquire_build_lock "ownerless stale lock recovery" 4
+[ -d "$RUN_SH_LOCK_DIR" ] || fail "ownerless stale lock recovery did not acquire lock"
+omi_run_sh_release_build_lock
+[ ! -d "$ownerless_lock" ] || fail "ownerless stale lock remained after recovery release"
+
 echo "run-sh-build-lock tests passed"

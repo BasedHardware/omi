@@ -108,6 +108,20 @@ def test_inventory_expands_multi_method_and_websocket_routes():
     assert entries[2]['observed']['timeout_class_hint'] == 'websocket'
 
 
+def test_beta_promotion_token_is_registered_for_only_the_two_beta_admission_routes():
+    manifest = inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
+    assert 'beta_promotion_token' in inventory.AUTH_MECHANISMS
+    routes = [
+        route
+        for route in manifest['routes']
+        if 'beta_promotion_token' in route.get('policy', {}).get('auth', {}).get('mechanisms', [])
+    ]
+    assert [(route.get('method'), route.get('path')) for route in routes] == [
+        ('POST', '/v2/desktop/beta/promote-qualified'),
+        ('POST', '/v2/desktop/beta/candidates/reserve'),
+    ]
+
+
 def test_dependency_evidence_captures_nested_depends_and_security():
     app = FastAPI()
     api_key_header = APIKeyHeader(name='Authorization')

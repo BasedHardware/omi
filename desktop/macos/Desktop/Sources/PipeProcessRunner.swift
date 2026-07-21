@@ -95,10 +95,6 @@ enum PipeProcessRunner {
 
     do {
       try process.run()
-      if let stdinData {
-        stdinPipe.fileHandleForWriting.write(stdinData)
-        try? stdinPipe.fileHandleForWriting.close()
-      }
     } catch {
       stdoutPipe.fileHandleForReading.readabilityHandler = nil
       stderrPipe.fileHandleForReading.readabilityHandler = nil
@@ -106,7 +102,21 @@ enum PipeProcessRunner {
       throw PipeProcessRunnerError.launchFailed(error.localizedDescription)
     }
 
+    // Arm the timeout BEFORE the (potentially blocking) stdin write. Writing more
+    // than the pipe buffer (~64KB) to a child that hasn't started draining stdin
+    // blocks this thread; the timeout — which terminate()s the child and thereby
+    // unblocks the write via EPIPE — was previously scheduled only AFTER the write,
+    // so a stalled child hung the caller forever with the timeout never armed.
     DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWork)
+
+    if let stdinData {
+      // Use the throwing write(contentsOf:) — the legacy write(_:) raises an
+      // uncatchable NSFileHandleOperationException on EPIPE, which is exactly what
+      // the timeout's terminate() triggers on a blocked write.
+      try? stdinPipe.fileHandleForWriting.write(contentsOf: stdinData)
+      try? stdinPipe.fileHandleForWriting.close()
+    }
+
     process.waitUntilExit()
     timeoutWork.cancel()
 

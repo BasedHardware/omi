@@ -1,8 +1,10 @@
 """Unit tests for rate limiting config and logic."""
 
+import asyncio
 import importlib
 import os
 import sys
+import threading
 import types
 import unittest
 from types import ModuleType
@@ -186,6 +188,35 @@ class TestShadowMode(unittest.TestCase):
             self.assertFalse(rlc.RATE_LIMIT_SHADOW)
         importlib.reload(rlc)
 
+    def test_shadow_mode_non_true_values_stay_off(self):
+        """Shadow is opt-in via 'true'; any other value must NOT silently enable it.
+
+        The flag defaults OFF (enforcement active). Only an explicit truthy
+        'true' should turn shadow/log-only mode on. Values like '0', 'off',
+        'no', or an empty string mean "not true", so enforcement must stay on —
+        otherwise setting the env var to disable shadow would fail open and
+        silently drop all rate-limit enforcement.
+        """
+        import utils.rate_limit_config as rlc
+
+        for value in ("0", "off", "no", "", "1", "disabled", "False ", "yes"):
+            with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": value}):
+                importlib.reload(rlc)
+                self.assertFalse(
+                    rlc.RATE_LIMIT_SHADOW,
+                    f"RATE_LIMIT_SHADOW_MODE={value!r} must not enable shadow mode",
+                )
+        importlib.reload(rlc)
+
+    def test_shadow_mode_true_is_case_insensitive(self):
+        import utils.rate_limit_config as rlc
+
+        for value in ("true", "TRUE", "True"):
+            with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": value}):
+                importlib.reload(rlc)
+                self.assertTrue(rlc.RATE_LIMIT_SHADOW, f"{value!r} should enable shadow mode")
+        importlib.reload(rlc)
+
 
 class TestGetEffectiveLimit(unittest.TestCase):
     """Test get_effective_limit edge cases."""
@@ -361,8 +392,6 @@ class TestWithRateLimitWrapper(unittest.TestCase):
 
     @patch('utils.other.endpoints._enforce_rate_limit')
     def test_with_rate_limit_context_uses_app_key_identity(self, mock_enforce):
-        import asyncio
-
         dep_func = self.ep.with_rate_limit_context(lambda: "unused", "dev:conversations_read")
         context = types.SimpleNamespace(uid="uid1", app_id="app1", key_id="key1")
 
@@ -370,6 +399,29 @@ class TestWithRateLimitWrapper(unittest.TestCase):
 
         mock_enforce.assert_called_once_with("app:app1:key:key1", "dev:conversations_read", fail_closed=True)
         self.assertIs(result, context)
+
+    def test_rate_limit_dependency_keeps_event_loop_responsive(self):
+        async def exercise() -> None:
+            loop = asyncio.get_running_loop()
+            entered = asyncio.Event()
+            release = threading.Event()
+
+            def blocking_enforce(_uid, _policy):
+                loop.call_soon_threadsafe(entered.set)
+                release.wait()
+
+            dep_func = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
+            with patch.object(self.ep, "_enforce_rate_limit", blocking_enforce):
+                dependency_task = asyncio.create_task(dep_func(uid="user123"))
+                await entered.wait()
+
+                # If the Redis/Lua boundary were still running on the event loop,
+                # execution could not reach this assertion until release was set.
+                self.assertFalse(dependency_task.done())
+                release.set()
+                self.assertEqual(await dependency_task, "user123")
+
+        asyncio.run(exercise())
 
     @patch('utils.other.endpoints._enforce_rate_limit')
     def test_check_api_key_rate_limit_uses_key_identity_and_fails_closed(self, mock_enforce):

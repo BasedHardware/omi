@@ -4,6 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+# Repository sources are UTF-8. Native Windows Python otherwise inherits the
+# system code page, which makes source-reading tests locale-dependent.
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+
+# Git exports repository-local variables while invoking hooks. They must not
+# leak into pytest: tests that create temporary repositories would otherwise
+# keep operating on the outer worktree. The runner is already anchored at the
+# backend directory, so normal Git discovery remains available after scrubbing.
+while IFS= read -r git_env_name; do
+  [[ -n "$git_env_name" ]] && unset "$git_env_name"
+done < <(git rev-parse --local-env-vars 2>/dev/null || true)
+
 PYTHON_BIN="${PYTHON:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
   if [[ -x ".venv/bin/python" ]]; then
@@ -16,8 +28,21 @@ fi
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 export OPENAI_API_KEY="test-openai-key-not-real"
 export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
+# Direct focused runs and pre-push keep the strict default. The CI runner alone supplies
+# a 1.0-second ceiling so cross-machine CPU differences do not block unrelated PRs.
 export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
 export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.12}"
+
+# The file-isolated runner already parallelizes pytest processes. Letting each process
+# start a native BLAS/OpenMP pool oversubscribes the machine and makes process CPU time
+# depend on which test first initializes NumPy. Keep one native worker per pytest process;
+# callers can still override a setting when intentionally exercising parallel kernels.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+export VECLIB_MAXIMUM_THREADS="${VECLIB_MAXIMUM_THREADS:-1}"
+export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
+export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 
 pytest_args=(-v)
 
@@ -77,6 +102,8 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   fi
 
   active_pids=()
+  active_status_files=()
+  active_test_paths=()
   failed_test_paths=()
   failed=0
   status_dir="$(mktemp -d)"
@@ -90,26 +117,49 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   }
 
   reap_finished_children() {
-    local running_pids
+    local index
     local pid
+    local status_file
+    local test_path
     local still_active=()
-    local current_pids=()
+    local still_status_files=()
+    local still_test_paths=()
+    local running_pids
 
-    running_pids="$(jobs -pr || true)"
+    # Each file-isolated child writes its status atomically before it exits.
+    # Waiting for the oldest PID leaves a worker idle when a newer short test
+    # finishes first; use that completion signal so the next file starts as
+    # soon as *any* worker is available. This is portable to macOS's Bash 3,
+    # which lacks `wait -n`.
     set +u
-    current_pids=("${active_pids[@]}")
-    for pid in "${current_pids[@]}"; do
-      if [[ $'\n'"$running_pids"$'\n' == *$'\n'"$pid"$'\n'* ]]; then
+    # Snapshot running job PIDs once per reap pass.  ``jobs -pr`` lists only
+    # actively-running jobs — a zombie child (exited but not yet waited on) is
+    # NOT listed, so we can distinguish "still computing" from "died before
+    # status handoff" without a blocking ``wait``.
+    running_pids="$(jobs -pr 2>/dev/null || true)"
+    for index in "${!active_pids[@]}"; do
+      pid="${active_pids[$index]}"
+      status_file="${active_status_files[$index]}"
+      test_path="${active_test_paths[$index]}"
+      if [[ -f "$status_file" ]]; then
+        wait "$pid" || true
+      elif [[ $'\n'"$running_pids"$'\n' == *$'\n'"$pid"$'\n'* ]]; then
         still_active+=("$pid")
+        still_status_files+=("$status_file")
+        still_test_paths+=("$test_path")
       else
-        if ! wait "$pid"; then
-          failed=1
-        fi
+        # Worker exited before writing its status file (OOM kill, signal,
+        # crash).  Reap it so the scheduler does not spin forever waiting
+        # for a file that will never arrive.
+        wait "$pid" 2>/dev/null || true
+        echo "::error title=Backend unit file failed::$test_path worker exited before writing status"
+        failed_test_paths+=("$test_path")
+        failed=1
       fi
     done
-    set -u
-    set +u
     active_pids=("${still_active[@]}")
+    active_status_files=("${still_status_files[@]}")
+    active_test_paths=("${still_test_paths[@]}")
     set -u
   }
 
@@ -126,36 +176,35 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         echo "No tests matched marker expression for $test_path; treating as skipped."
         status=0
       fi
-      printf '%s\t%s\n' "$status" "$test_path" > "$status_file"
       if [[ "$status" -ne 0 ]]; then
         echo "::error title=Backend unit file failed::$test_path exited with status $status"
       fi
       echo "::endgroup::"
+      # Rename after writing so the scheduler never observes a partial status.
+      status_temp="$status_file.pending"
+      printf '%s\t%s\n' "$status" "$test_path" > "$status_temp"
+      mv "$status_temp" "$status_file"
       exit 0
     ) &
     active_pids+=("$!")
+    active_status_files+=("$status_file")
+    active_test_paths+=("$test_path")
 
     while [[ "$(active_pid_count)" -ge "$worker_count" ]]; do
       reap_finished_children
       if [[ "$(active_pid_count)" -lt "$worker_count" ]]; then
         break
       fi
-      oldest_pid="${active_pids[0]}"
-      active_pids=("${active_pids[@]:1}")
-      if ! wait "$oldest_pid"; then
-        failed=1
-      fi
+      sleep 0.02
     done
   done
 
-  reap_finished_children
-  set +u
-  for pid in "${active_pids[@]}"; do
-    if ! wait "$pid"; then
-      failed=1
+  while [[ "$(active_pid_count)" -gt 0 ]]; do
+    reap_finished_children
+    if [[ "$(active_pid_count)" -gt 0 ]]; then
+      sleep 0.02
     fi
   done
-  set -u
 
   for status_file in "$status_dir"/*.status; do
     [[ -e "$status_file" ]] || continue

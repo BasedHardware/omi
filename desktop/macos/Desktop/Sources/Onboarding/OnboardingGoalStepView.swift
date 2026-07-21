@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingGoalStepView: View {
   @ObservedObject var appState: AppState
@@ -12,6 +12,7 @@ struct OnboardingGoalStepView: View {
   let onForceComplete: (() -> Void)?
 
   @State private var customGoalSelected = false
+  @State private var saveTask: Task<Void, Never>?
 
   private static let customGoalOption = "Type my own"
 
@@ -28,7 +29,7 @@ struct OnboardingGoalStepView: View {
       onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
-      VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
         GoalChipGrid(
           items: suggestionItems,
           selectedItem: selectedSuggestion,
@@ -48,13 +49,13 @@ struct OnboardingGoalStepView: View {
         if customGoalSelected {
           TextField("Type your goal", text: $coordinator.goalDraft)
             .textFieldStyle(.plain)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.md)
             .background(
-              RoundedRectangle(cornerRadius: 14, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                 .fill(OmiColors.backgroundSecondary)
                 .overlay(
-                  RoundedRectangle(cornerRadius: 14, style: .continuous)
+                  RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 )
             )
@@ -69,19 +70,27 @@ struct OnboardingGoalStepView: View {
             .foregroundColor(OmiColors.warning)
         }
 
-        if shouldShowContinue {
-          Button(coordinator.isSavingGoal ? "Saving…" : "Continue") {
-            saveGoalAndContinue()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if shouldShowContinue {
+            Button(coordinator.isSavingGoal ? "Saving…" : "Continue") {
+              saveGoalAndContinue()
+            }
+            .buttonStyle(OmiButtonStyle(.primary))
+            .keyboardShortcut(.defaultAction)
+            .disabled(coordinator.isSavingGoal)
           }
-          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-          .keyboardShortcut(.defaultAction)
-          .disabled(coordinator.isSavingGoal)
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .onAppear {
         customGoalSelected =
           !coordinator.goalDraft.isEmpty && !baseSuggestions.contains(coordinator.goalDraft)
+      }
+      .onDisappear {
+        saveTask?.cancel()
       }
     }
   }
@@ -111,14 +120,20 @@ struct OnboardingGoalStepView: View {
 
   private func saveGoalAndContinue() {
     guard shouldShowContinue, !coordinator.isSavingGoal else { return }
-    Task {
-      coordinator.goalSaved = false
-      await coordinator.saveGoalIfNeeded()
-      guard coordinator.goalSaved else { return }
+    saveTask?.cancel()
+    saveTask = Task {
+      // Do not reset goalSaved here: saveGoalIfNeeded's `guard !goalSaved`
+      // is the only dedup protection, and createGoal has no idempotency key.
+      // Resetting it meant a retry after a completeIntro failure created a
+      // second backend goal.
+      // Run the save in an unstructured child task so navigating away (which
+      // cancels saveTask in .onDisappear) never aborts the in-flight write —
+      // only the navigation side effects below are dropped.
+      await Task { await coordinator.saveGoalIfNeeded() }.value
+      guard coordinator.goalSaved, !Task.isCancelled else { return }
       let completed = await coordinator.completeIntro(appState: appState)
-      if completed {
-        onContinue()
-      }
+      guard completed, !Task.isCancelled else { return }
+      onContinue()
     }
   }
 }
@@ -129,7 +144,7 @@ private struct GoalChipGrid: View {
   let onSelect: (String) -> Void
 
   var body: some View {
-    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
+    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: OmiSpacing.sm)], spacing: OmiSpacing.sm) {
       ForEach(items, id: \.self) { item in
         let isSelected = selectedItem == item
 
@@ -138,13 +153,13 @@ private struct GoalChipGrid: View {
             .font(.system(size: 13, weight: .semibold))
             .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.md)
             .background(
-              RoundedRectangle(cornerRadius: 14, style: .continuous)
+              RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                 .fill(isSelected ? Color.white : Color.white.opacity(0.05))
                 .overlay(
-                  RoundedRectangle(cornerRadius: 14, style: .continuous)
+                  RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
                     .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
                 )
             )

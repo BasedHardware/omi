@@ -9,6 +9,9 @@ class AppLocalizationsVi extends AppLocalizations {
   AppLocalizationsVi([String locale = 'vi']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Phiên đã hết hạn — hãy đăng nhập lại.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -8986,7 +8989,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get billingYearly => 'Hàng năm';
 
   @override
-  String get savePercent => 'Tiết kiệm ~17%';
+  String savePercent(int percent) {
+    return 'Tiết kiệm ~$percent%';
+  }
 
   @override
   String get popular => 'Phổ biến';
@@ -9338,7 +9343,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
+      'Hoạt động với micrô của điện thoại cùng các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9568,4 +9573,200 @@ class AppLocalizationsVi extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Lỗi khi kết nối với Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Bộ nhớ thiết bị';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'Đã đầy $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'Đã dùng $used trong $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return 'Còn trống $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Thiết bị gần đầy — đồng bộ để giải phóng dung lượng.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dữ liệu của bạn được bảo mật mặc định bằng mã hóa mạnh, và bạn kiểm soát cách nó được lưu trữ và sử dụng.';
+
+  @override
+  String get sttModelAccuracy => 'Accuracy';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Phiên âm đám mây';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Delete Model';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Downloaded';
+
+  @override
+  String get sttModelFaster => 'Faster';
+
+  @override
+  String get sttFilterAuto => 'Auto';
+
+  @override
+  String get sttModelHigher => 'Higher';
+
+  @override
+  String get whisperModelSizeLarge => 'Large';
+
+  @override
+  String get sttModelLower => 'Lower';
+
+  @override
+  String get whisperModelSizeMedium => 'Medium';
+
+  @override
+  String get onDeviceModelDeleted => 'Model deleted';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model download failed';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model downloaded';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get onDeviceModelSize => 'Model Size';
+
+  @override
+  String get sttNone => 'None';
+
+  @override
+  String get onDeviceTranscription => 'Phiên âm trên thiết bị';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Phiên âm được xử lý cục bộ trên thiết bị của bạn';
+
+  @override
+  String get sttModelSlower => 'Slower';
+
+  @override
+  String get whisperModelSizeSmall => 'Small';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Nhà cung cấp chuyển giọng nói thành văn bản';
+
+  @override
+  String get speechToTextProviderDesc => 'Chọn dịch vụ được sử dụng để phiên âm';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Speed';
+
+  @override
+  String get whisperModelSizeTiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Ngôn ngữ phiên âm';
+
+  @override
+  String get transcriptionLanguageDesc => 'Chọn ngôn ngữ cho phiên âm giọng nói';
+
+  @override
+  String get whisperModel => 'Mô hình Whisper';
+
+  @override
+  String get whisperModelDesc => 'Chọn mô hình cho phiên âm trên thiết bị';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Downgrade to Freemium?';
+
+  @override
+  String get downgradeLimitationsHeading => 'You will experience these limitations:';
+
+  @override
+  String get downgradeLimitBattery => '7x battery consumption';
+
+  @override
+  String get downgradeLimitQuality => '30% less transcription quality';
+
+  @override
+  String get downgradeLimitDelay => '5-7 second delay';
+
+  @override
+  String get downgradeLimitSpeakers => 'Cannot identify speakers';
+
+  @override
+  String get downgradeAnyway => 'Downgrade Anyway';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Calendar Not Connected';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Connect your Google Calendar to link conversations to calendar events.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Linked to \"$title\"';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Failed to link calendar event';
+
+  @override
+  String get thanksForYourFeedback => 'Thanks for your feedback!';
+
+  @override
+  String get copyMessage => 'Copy message';
+
+  @override
+  String get searchSettings => 'Search settings…';
+
+  @override
+  String get errorLoadingAudio => 'Error loading audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Chọn micrô Ray-Ban Meta của bạn';
+
+  @override
+  String get rayBanMetaMicPickerDescription => 'Chọn micrô Bluetooth của kính. Nhạc sẽ tạm dừng khi Omi sử dụng micrô.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Không tìm thấy micrô Bluetooth. Hãy kết nối kính trong Cài đặt iPhone rồi thử lại.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Không thể tải micrô Bluetooth. Hãy kiểm tra Bluetooth đã bật rồi thử lại.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Không thể kết nối với micrô đó. Hãy đảm bảo micrô đã được kết nối trong Cài đặt iPhone.';
 }

@@ -1,11 +1,11 @@
 """Inventory + contract test for the macOS desktop app's Python-backend REST surface.
 
-The desktop app (`desktop/macos/Desktop/Sources/APIClient.swift`) is a first-party
-REST consumer of the Python backend. Its routes map to the same Firebase-auth
-app-client OpenAPI surface the Flutter app uses (`docs/api-reference/
-app-client-openapi.json`). This test:
+The desktop app (`desktop/macos/Desktop/Sources/APIClient.swift` and its
+`APIClient+*.swift` extensions) is a first-party REST consumer of the Python
+backend. Its routes map to the same Firebase-auth app-client OpenAPI surface the
+Flutter app uses (`docs/api-reference/app-client-openapi.json`). This test:
 
-- Extracts every backend REST route string hardcoded in APIClient.swift.
+- Extracts every backend REST route string hardcoded in the APIClient sources.
 - Excludes out-of-scope protocols (Rust desktop backend `/v2/agent/*`,
   `/v2/realtime/*`, `/v1/config/api-keys`, integration OAuth `/v1/x/*`, local
   VM, WebSocket/SSE/binary).
@@ -26,7 +26,11 @@ import pytest
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
-APICLIENT_SWIFT = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources' / 'APIClient.swift'
+APICLIENT_SOURCE_ROOT = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources'
+APICLIENT_SWIFT = APICLIENT_SOURCE_ROOT / 'APIClient.swift'
+# APIClient.swift owns only the stateful transport/auth boundary. Feature APIs
+# and DTOs live in nested APIClient+*.swift extensions.
+APICLIENT_SWIFT_MAX_LINES = 1500
 CONVERSATIONS_ROUTER = ROOT_DIR / 'backend' / 'routers' / 'conversations.py'
 CONVERSATIONS_DB = ROOT_DIR / 'backend' / 'database' / 'conversations.py'
 
@@ -73,6 +77,17 @@ def _extract_routes_from_swift(source: str) -> Set[str]:
         route = '/' + route
         routes.add(route)
     return routes
+
+
+def _load_api_client_sources() -> str:
+    """Load the primary client and every conventionally named extension.
+
+    APIClient is intentionally being split into nested `APIClient+*.swift`
+    files. Treating only the original file as authoritative silently drops a
+    route from this inventory whenever a method is extracted.
+    """
+    paths = sorted(APICLIENT_SOURCE_ROOT.rglob('APIClient*.swift'))
+    return '\n'.join(path.read_text(encoding='utf-8') for path in paths)
 
 
 def _in_scope(routes: Set[str]) -> Set[str]:
@@ -133,9 +148,18 @@ def test_apiclient_swift_exists():
     assert APICLIENT_SWIFT.exists(), f'APIClient.swift missing at {APICLIENT_SWIFT}'
 
 
+def test_apiclient_swift_line_count_ratchet():
+    """APIClient.swift must not grow — transport/DTO extractions lower this cap over time."""
+    line_count = len(APICLIENT_SWIFT.read_text(encoding='utf-8').splitlines())
+    assert line_count <= APICLIENT_SWIFT_MAX_LINES, (
+        f'APIClient.swift has {line_count} lines (max {APICLIENT_SWIFT_MAX_LINES}). '
+        'Extract transport/DTOs instead of growing the god file.'
+    )
+
+
 def test_out_of_scope_prefixes_match_at_least_one_route():
     """Every documented out-of-scope prefix must match at least one extracted route."""
-    source = APICLIENT_SWIFT.read_text()
+    source = _load_api_client_sources()
     all_routes = _extract_routes_from_swift(source)
     unused_prefixes = sorted(
         prefix for prefix in OUT_OF_SCOPE_PREFIXES if not any(route.startswith(prefix) for route in all_routes)
@@ -181,7 +205,7 @@ KNOWN_MISSING_ROUTES: Set[str] = {
 
 
 def test_every_in_scope_desktop_rest_route_exists_in_app_client_openapi():
-    source = APICLIENT_SWIFT.read_text()
+    source = _load_api_client_sources()
     in_scope = _in_scope(_extract_routes_from_swift(source))
     spec_paths = _load_spec_paths()
     spec_normalized = {_normalize_for_match(p) for p in spec_paths}
@@ -205,7 +229,7 @@ def test_known_missing_routes_do_not_drift():
     set does not silently grow stale. If a new missing route appears, it must
     be named here rather than left untracked.
     """
-    source = APICLIENT_SWIFT.read_text()
+    source = _load_api_client_sources()
     in_scope = _in_scope(_extract_routes_from_swift(source))
     spec_paths = _load_spec_paths()
     spec_normalized = {_normalize_for_match(p) for p in spec_paths}
@@ -283,7 +307,7 @@ def test_conversation_id_hydration_backfills_legacy_missing_ids():
 
 def test_desktop_rest_inventory_is_nonempty():
     """Sanity guard: the extractor must keep finding routes."""
-    source = APICLIENT_SWIFT.read_text()
+    source = _load_api_client_sources()
     in_scope = _in_scope(_extract_routes_from_swift(source))
     assert len(in_scope) >= 20, (
         f'Expected at least 20 in-scope desktop REST routes, found {len(in_scope)}. '

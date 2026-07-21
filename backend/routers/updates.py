@@ -1,17 +1,43 @@
+from html import escape as html_escape
+import hmac
+import hashlib
+import json
+import logging
 import os
+import random
 import re
-from typing import Optional, List, Dict
+from typing import Any, Optional, List, Dict, Literal
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
-from database.desktop_update_policy import get_desktop_update_policy
+from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
+from database.desktop_update_channels import (
+    admit_qualified_beta_manifest,
+    capture_beta_admission,
+    get_release_manifest,
+    promote_channel,
+    register_release_manifest,
+    reserve_beta_candidate,
+    set_beta_admission_enabled,
+)
+from database.desktop_update_policy import default_desktop_update_policy, get_desktop_update_policy
 from database.redis_db import delete_generic_cache
+from utils.desktop_update_resolver import live_cache_key, resolve_pointer_release
+from utils.executors import db_executor, run_blocking
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
+from utils.qualified_beta_promotion import QualifiedBetaAdmissionError, build_qualified_beta_manifest
+from utils.metrics import (
+    DESKTOP_UPDATE_FEED_VALID,
+    DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL,
+    DESKTOP_UPDATE_RESOLUTION_TOTAL,
+)
+from utils.observability.fallback import record_fallback
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class DesktopUpdatePolicyResponse(BaseModel):
@@ -39,7 +65,60 @@ class ClearCacheResponse(BaseModel):
     message: str = Field(description='Human-readable confirmation.')
 
 
+class DesktopChannelPromotionRequest(BaseModel):
+    platform: str = Field(pattern="^(macos|windows|linux)$")
+    channel: str = Field(pattern="^(beta|stable)$")
+    release_id: str
+    expected_generation: Optional[int] = Field(default=None, ge=0)
+    expected_current_release_id: Optional[str] = None
+    operation: Literal["promote", "repoint"] = "promote"
+
+
+class QualifiedBetaPromotionRequest(BaseModel):
+    """The caller can name one immutable macOS candidate and nothing else."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tag: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
+
+
+class BetaAdmissionControlRequest(BaseModel):
+    """The operator can pause/resume only the one server-owned Beta fence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    promotion_enabled: StrictBool
+
+
+class DesktopPreviewPublishRequest(BaseModel):
+    """Immutable metadata for a signed desktop preview artifact."""
+
+    slug: str
+    source_sha: str
+    dmg_url: str
+    dmg_sha256: str
+    app_name: str
+    bundle_id: str
+    url_scheme: str
+    built_at: str
+    signer: str
+    notarization: str
+    notes: Optional[str] = None
+    backend_url: Optional[str] = None
+    expected_generation: Optional[int] = Field(default=None, ge=0)
+
+
+class DesktopPreviewDelistRequest(BaseModel):
+    """Compare-and-delete request for a mutable preview landing-page pointer."""
+
+    expected_generation: int = Field(ge=0)
+
+
 VALID_CHANNELS = {"beta", "stable"}
+DESKTOP_RELEASE_TAG_PATTERN = re.compile(
+    r'^v?\d+\.\d+(?:\.\d+)?\+\d+-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$',
+    re.IGNORECASE,
+)
 
 _XML_ATTR_ENTITIES = {'"': '&quot;', "'": '&apos;'}
 
@@ -156,14 +235,19 @@ def _get_sparkle_zip_download_url(release: Dict) -> Optional[str]:
 
 
 def _get_dmg_download_url(release: Dict) -> Optional[str]:
-    """Get the DMG installer download URL from GitHub release assets."""
+    """Get only the canonical lowercase ``omi.dmg`` installer URL.
+
+    The release contract is case-sensitive.  Legacy names (including Omi Beta
+    and arbitrary ``*.dmg`` assets) are deliberately ignored for both beta and
+    stable fallback routes.
+    """
     for asset in release.get("assets", []):
-        if asset.get("name", "").endswith(".dmg"):
+        if asset.get("name") == "omi.dmg":
             return asset.get("browser_download_url")
     return None
 
 
-async def _get_live_desktop_releases(platform: str) -> List[Dict]:
+async def _get_legacy_live_desktop_releases(platform: str) -> List[Dict]:
     """
     Fetch and filter live desktop releases for a given platform.
     Returns list of releases sorted by published date (newest first).
@@ -171,7 +255,9 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     and channel (beta or stable).
     """
     cache_key = "github_releases_desktop"
-    releases = await get_omi_github_releases(cache_key)
+    # Paginate the legacy fallback so a stable release cannot silently vanish
+    # when it rolls off GitHub's first 100 releases (root cause of #9079).
+    releases = await get_omi_github_releases(cache_key, tag_filter=DESKTOP_RELEASE_TAG_PATTERN)
 
     if not releases:
         return []
@@ -215,6 +301,143 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
 
     desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
     return desktop_releases
+
+
+def _pointer_release_to_entry(release: Dict[str, Any], channel: str, source: str) -> Dict[str, Any]:
+    manifest = release["manifest"]
+    assets = [{"name": "Omi.zip", "browser_download_url": manifest["zip_url"]}]
+    if manifest.get("dmg_url"):
+        assets.append({"name": "omi.dmg", "browser_download_url": manifest["dmg_url"]})
+
+    return {
+        "channel": channel,
+        "source": source,
+        "release": {
+            "tag_name": manifest["release_id"],
+            "published_at": manifest["published_at"],
+            "body": "",
+            "assets": assets,
+        },
+        "version_info": {
+            "version": manifest["version"],
+            "build": str(manifest["build_number"]),
+            "tag_name": manifest["release_id"],
+        },
+        "metadata": {
+            "edSignature": manifest["ed_signature"],
+            "changelog": manifest.get("changelog", []),
+            "mandatory": "true" if manifest.get("mandatory") else "false",
+            "sourceSha": manifest["app_source_sha"],
+        },
+    }
+
+
+def _reconciliation_sample_rate() -> float:
+    try:
+        return min(1.0, max(0.0, float(os.getenv("DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "0.01"))))
+    except ValueError:
+        return 0.01
+
+
+def _newest_release_by_channel(entries: List[Dict]) -> Dict[str, Dict]:
+    newest: Dict[str, Dict] = {}
+    for entry in entries:
+        channel = entry["channel"]
+        current = newest.get(channel)
+        if current is None or entry["release"].get("published_at", "") > current["release"].get("published_at", ""):
+            newest[channel] = entry
+    return newest
+
+
+def _record_pointer_mismatches(platform: str, pointer_entries: List[Dict], legacy_entries: List[Dict]) -> None:
+    legacy_by_channel = _newest_release_by_channel(legacy_entries)
+    for pointer in pointer_entries:
+        channel = pointer["channel"]
+        legacy = legacy_by_channel.get(channel)
+        if legacy is None:
+            DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL.labels(platform=platform, channel=channel, field="missing").inc()
+            continue
+        comparisons = {
+            "build": (pointer["version_info"]["build"], legacy["version_info"]["build"]),
+            "zip_url": (
+                _get_sparkle_zip_download_url(pointer["release"]),
+                _get_sparkle_zip_download_url(legacy["release"]),
+            ),
+            "dmg_url": (_get_dmg_download_url(pointer["release"]), _get_dmg_download_url(legacy["release"])),
+        }
+        for field, (pointer_value, legacy_value) in comparisons.items():
+            if pointer_value != legacy_value:
+                DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL.labels(platform=platform, channel=channel, field=field).inc()
+                logger.warning(
+                    "desktop_update_pointer_mismatch platform=%s channel=%s field=%s",
+                    platform,
+                    channel,
+                    field,
+                )
+
+
+async def _get_live_desktop_releases(platform: str) -> List[Dict]:
+    """Resolve explicit pointers first, then exact-channel legacy releases.
+
+    A validated pointer LKG is used before the legacy GitHub scan. Stable never
+    falls through to beta. Set DESKTOP_UPDATE_POINTERS_MODE=legacy as a kill
+    switch while the dual-path rollout is being observed.
+    """
+    if os.getenv("DESKTOP_UPDATE_POINTERS_MODE", "primary").lower() == "legacy":
+        releases = await _get_legacy_live_desktop_releases(platform)
+        record_fallback(
+            component='other',
+            from_mode='desktop_update_pointer',
+            to_mode='desktop_update_legacy',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
+        for entry in releases:
+            DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(
+                platform=platform, channel=entry["channel"], source="legacy_forced"
+            ).inc()
+            DESKTOP_UPDATE_FEED_VALID.labels(platform=platform, channel=entry["channel"]).set(1)
+        return releases
+
+    pointer_entries: List[Dict] = []
+    missing: Dict[str, str] = {}
+    for channel in ("stable", "beta"):
+        release, source, reason = await run_blocking(db_executor, resolve_pointer_release, platform, channel)
+        if release is None:
+            missing[channel] = reason or "pointer_missing"
+            continue
+        pointer_entries.append(_pointer_release_to_entry(release, channel, source))
+
+    legacy_entries: List[Dict] = []
+    should_reconcile = bool(pointer_entries) and random.random() < _reconciliation_sample_rate()
+    if missing or should_reconcile:
+        legacy_entries = await _get_legacy_live_desktop_releases(platform)
+
+    if should_reconcile:
+        _record_pointer_mismatches(platform, pointer_entries, legacy_entries)
+
+    resolved = list(pointer_entries)
+    legacy_by_channel = _newest_release_by_channel(legacy_entries)
+    for channel, reason in missing.items():
+        legacy = legacy_by_channel.get(channel)
+        if legacy is None:
+            continue
+        legacy = {**legacy, "source": "legacy_fallback"}
+        resolved.append(legacy)
+        record_fallback(
+            component='other',
+            from_mode='desktop_update_pointer_lkg',
+            to_mode='desktop_update_legacy',
+            reason='config_incomplete' if reason == 'pointer_missing' else 'other',
+            outcome='recovered',
+            log=logger,
+        )
+        DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(platform=platform, channel=channel, source="legacy_fallback").inc()
+        DESKTOP_UPDATE_FEED_VALID.labels(platform=platform, channel=channel).set(1)
+
+    resolved.sort(key=lambda entry: entry["release"].get("published_at", ""), reverse=True)
+    return resolved
 
 
 def _download_landing_html(dmg_url: str, channel: str = "stable", version: str = "") -> str:
@@ -291,6 +514,60 @@ def _download_landing_html(dmg_url: str, channel: str = "stable", version: str =
             document.getElementById("demo-video").style.display = "block";
         }}, 2000);
     </script>
+</body>
+</html>"""
+
+
+def _preview_download_landing_html(manifest: Dict[str, Any]) -> str:
+    """Render a public preview landing page from already-validated metadata.
+
+    The registry still treats notes and app identity as untrusted text because
+    they originate with a CI payload. Escape every dynamic HTML value rather
+    than relying on the publisher's credentials as an XSS boundary.
+    """
+    app_name = html_escape(str(manifest["app_name"]), quote=True)
+    slug = html_escape(str(manifest["slug"]), quote=True)
+    source_sha = html_escape(str(manifest["source_sha"]), quote=True)
+    built_at = html_escape(str(manifest["built_at"]), quote=True)
+    notes = html_escape(str(manifest.get("notes") or ""), quote=True)
+    dmg_url = html_escape(str(manifest["dmg_url"]), quote=True)
+    notes_html = f'<p class="notes">{notes}</p>' if notes else ""
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="2;url={dmg_url}">
+    <title>Download {app_name} for macOS</title>
+    <style>
+        * {{ box-sizing: border-box; }}
+        body {{ margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0a0a0a;
+               color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+        main {{ width: min(620px, calc(100% - 48px)); padding: 40px; border: 1px solid #2a2a2a; border-radius: 16px;
+               background: #121212; text-align: center; }}
+        h1 {{ margin: 0 0 12px; font-size: 28px; }}
+        p {{ color: #b6b6b6; line-height: 1.5; }}
+        code {{ display: block; overflow-wrap: anywhere; padding: 12px; border-radius: 8px; background: #1c1c1c;
+               color: #e8e8e8; font-size: 13px; }}
+        a {{ color: #ffffff; }}
+        .notes {{ white-space: pre-wrap; }}
+        .meta {{ margin-top: 24px; text-align: left; font-size: 13px; color: #909090; }}
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Downloading {app_name}</h1>
+        <p>Your macOS preview download should start automatically.</p>
+        <p><a href="{dmg_url}">Download the preview DMG</a></p>
+        {notes_html}
+        <div class="meta">
+            <p>Preview branch: <strong>{slug}</strong></p>
+            <p>Approved source commit:</p>
+            <code>{source_sha}</code>
+            <p>Build time: {built_at}</p>
+        </div>
+    </main>
 </body>
 </html>"""
 
@@ -442,23 +719,13 @@ async def download_latest_desktop_release(
 ):
     """
     Redirect to the latest desktop release DMG installer.
-    Stable resolves from the latest stable-tagged release.
-    Beta always resolves from the newest desktop GitHub release, regardless of channel metadata.
+    Both channels resolve only from their explicit channel pointer or the same
+    channel in the legacy release metadata.
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
     """
     desktop_releases = await _get_live_desktop_releases(platform)
     if not desktop_releases:
         raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
-
-    if channel == "beta":
-        # Beta downloads should always expose the newest GitHub desktop build,
-        # even if the release-channel promotion metadata is stale.
-        for entry in desktop_releases:
-            dmg_url = _get_dmg_download_url(entry["release"])
-            if dmg_url:
-                version = entry["version_info"]["version"]
-                return HTMLResponse(content=_download_landing_html(dmg_url, channel="beta", version=version))
-        raise HTTPException(status_code=404, detail="No DMG installer found for latest beta release")
 
     # Find latest release matching the requested channel
     for entry in desktop_releases:
@@ -468,14 +735,6 @@ async def download_latest_desktop_release(
         if dmg_url:
             version = entry["version_info"]["version"]
             return HTMLResponse(content=_download_landing_html(dmg_url, channel=channel, version=version))
-
-    # Fallback: if no stable release, try beta (for fresh installs before first promotion)
-    if channel == "stable":
-        for entry in desktop_releases:
-            dmg_url = _get_dmg_download_url(entry["release"])
-            if dmg_url:
-                version = entry["version_info"]["version"]
-                return HTMLResponse(content=_download_landing_html(dmg_url, channel="stable", version=version))
 
     raise HTTPException(status_code=404, detail=f"No DMG installer found for channel: {channel}")
 
@@ -491,6 +750,89 @@ async def download_beta_desktop_release(
     return await download_latest_desktop_release(platform=platform, channel="beta")
 
 
+def _preview_landing_response(result: Dict[str, Any]) -> HTMLResponse:
+    return HTMLResponse(
+        content=_preview_download_landing_html(result["manifest"]),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.get("/v2/desktop/previews/{slug}")
+async def download_current_desktop_preview(slug: str):
+    """Serve a public landing page for the current approved preview of one slug."""
+    try:
+        preview = await run_blocking(db_executor, get_current_preview, slug)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Preview not found") from None
+    if preview is None:
+        raise HTTPException(status_code=404, detail="Preview not found")
+    return _preview_landing_response(preview)
+
+
+@router.get("/v2/desktop/previews/{slug}/{source_sha}")
+async def download_immutable_desktop_preview(slug: str, source_sha: str):
+    """Serve a public landing page for one immutable approved preview artifact."""
+    try:
+        manifest = await run_blocking(db_executor, get_preview_manifest, slug, source_sha)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Preview not found") from None
+    if manifest is None:
+        raise HTTPException(status_code=404, detail="Preview not found")
+    return _preview_landing_response({"manifest": manifest})
+
+
+def _has_preview_publish_authorization(secret_key: str) -> bool:
+    """Require a preview-only secret and fail closed when it is not configured."""
+    preview_key = os.getenv("DESKTOP_PREVIEW_PUBLISH_KEY")
+    return bool(preview_key) and hmac.compare_digest(secret_key, preview_key)
+
+
+def _has_beta_promotion_authorization(authorization: str | None) -> bool:
+    """Keep the shared capability fail-closed and limited to this one route."""
+    configured = os.getenv("BETA_PROMOTION_TOKEN")
+    if not configured or not authorization or not authorization.startswith("Bearer "):
+        return False
+    return hmac.compare_digest(authorization.removeprefix("Bearer "), configured)
+
+
+@router.post("/v2/desktop/previews/publish", status_code=201)
+async def publish_desktop_preview(request: DesktopPreviewPublishRequest, secret_key: str = Header(...)):
+    """Register a preview artifact without touching normal desktop release state."""
+    if not _has_preview_publish_authorization(secret_key):
+        raise HTTPException(status_code=403, detail="You are not authorized to publish desktop previews")
+    try:
+        result = await run_blocking(
+            db_executor,
+            publish_preview,
+            request.model_dump(exclude={"expected_generation"}),
+            expected_generation=request.expected_generation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, **result}
+
+
+@router.delete("/v2/desktop/previews/{slug}")
+async def delist_desktop_preview(
+    slug: str,
+    request: DesktopPreviewDelistRequest,
+    secret_key: str = Header(...),
+):
+    """Remove only a slug's mutable landing-page pointer, retaining immutable artifacts."""
+    if not _has_preview_publish_authorization(secret_key):
+        raise HTTPException(status_code=403, detail="You are not authorized to delist desktop previews")
+    try:
+        result = await run_blocking(
+            db_executor,
+            delist_preview,
+            slug,
+            expected_generation=request.expected_generation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, **result}
+
+
 @router.get("/v2/desktop/update-policy", response_model=DesktopUpdatePolicyResponse)
 def get_desktop_update_policy_endpoint(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
@@ -503,7 +845,21 @@ def get_desktop_update_policy_endpoint(
     ``desktop_update_policy/current`` to show a dismissible banner or a required
     manual-update prompt to future desktop clients.
     """
-    return get_desktop_update_policy(current_build=current_build, platform=platform)
+    try:
+        return get_desktop_update_policy(current_build=current_build, platform=platform)
+    except Exception as exc:
+        # The policy only accelerates manual recovery; clients still have the
+        # Sparkle appcast and stable manual download path when Firestore is unavailable.
+        logger.warning("desktop_update_policy_unavailable error_type=%s", type(exc).__name__)
+        record_fallback(
+            component="other",
+            from_mode="desktop_update_policy",
+            to_mode="desktop_update_appcast",
+            reason="other",
+            outcome="recovered",
+            log=logger,
+        )
+        return default_desktop_update_policy()
 
 
 @router.post("/v2/desktop/clear-cache", response_model=ClearCacheResponse)
@@ -511,11 +867,141 @@ def clear_desktop_cache(secret_key: str = Header(...)):
     """
     Clear the GitHub releases cache for desktop updates.
     This forces the next appcast.xml request to fetch fresh data from GitHub.
-    Also clears the last-known-good fallback so a fresh LKG is established
-    on the next successful fetch.
+    Last-known-good entries are deliberately preserved for incident recovery.
     """
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_generic_cache("github_releases_desktop")
-    delete_generic_cache("github_releases_desktop:lkg")
+    for platform in ("macos", "windows", "linux"):
+        for channel in VALID_CHANNELS:
+            delete_generic_cache(live_cache_key(platform, channel))
     return {"success": True, "message": "Desktop releases cache cleared successfully"}
+
+
+@router.post("/v2/desktop/releases", status_code=201)
+async def register_desktop_release(request: Dict[str, Any], secret_key: str = Header(...)):
+    """Register an immutable release manifest without making it user-visible."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    try:
+        manifest = await run_blocking(db_executor, register_release_manifest, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"success": True, "manifest": manifest}
+
+
+@router.post("/v2/desktop/beta/promote-qualified")
+async def promote_qualified_beta(
+    request: QualifiedBetaPromotionRequest,
+    authorization: str | None = Header(default=None),
+):
+    """Authenticate, independently admit, then atomically advance macOS Beta only."""
+    if not _has_beta_promotion_authorization(authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        control = await run_blocking(db_executor, capture_beta_admission, request.tag)
+        manifest = await build_qualified_beta_manifest(request.tag)
+        receipt = await run_blocking(
+            db_executor,
+            admit_qualified_beta_manifest,
+            manifest,
+            control_generation=control["control_generation"],
+        )
+    except QualifiedBetaAdmissionError:
+        logger.info("qualified_beta_promotion tag=%s result=rejected", request.tag)
+        raise HTTPException(status_code=422, detail="Qualified Beta candidate rejected") from None
+    except ValueError:
+        logger.info("qualified_beta_promotion tag=%s result=conflict", request.tag)
+        raise HTTPException(status_code=409, detail="Qualified Beta promotion conflict") from None
+    # A prior successful commit can lose its cache deletion. Every committed
+    # receipt, including an idempotent retry, repairs only this Beta projection.
+    await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
+    logger.info(
+        "qualified_beta_promotion tag=%s result=%s", request.tag, "idempotent" if receipt["idempotent"] else "promoted"
+    )
+    return {
+        "tag": receipt["manifest"]["release_id"],
+        "release_id": receipt["manifest"]["release_id"],
+        "generation": receipt["pointer"]["generation"],
+        "idempotent": receipt["idempotent"],
+    }
+
+
+@router.post("/v2/desktop/beta/candidates/reserve")
+async def reserve_beta_candidate_endpoint(
+    request: QualifiedBetaPromotionRequest,
+    authorization: str | None = Header(default=None),
+):
+    """Fence an immutable candidate before GitHub makes it canonical."""
+    if not _has_beta_promotion_authorization(authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        control = await run_blocking(db_executor, reserve_beta_candidate, request.tag)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    logger.info("beta_candidate_reservation tag=%s generation=%s", request.tag, control["control_generation"])
+    return {"tag": control["latest_reserved_tag"], "generation": control["control_generation"]}
+
+
+@router.put("/v2/desktop/beta/admission")
+async def set_beta_admission(
+    request: BetaAdmissionControlRequest,
+    secret_key: str | None = Header(default=None),
+):
+    """Allow only ADMIN_KEY operators to pause or resume the Beta fence."""
+    if secret_key != os.getenv("ADMIN_KEY") or not secret_key:
+        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+    try:
+        control = await run_blocking(db_executor, set_beta_admission_enabled, request.promotion_enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # The established admin-key surface has no principal header. Record only its
+    # bounded actor class, never the supplied credential.
+    logger.info(
+        "beta_admission_control actor=admin_key promotion_enabled=%s generation=%s",
+        control["promotion_enabled"],
+        control["control_generation"],
+    )
+    return {"promotion_enabled": control["promotion_enabled"], "generation": control["control_generation"]}
+
+
+@router.get("/v2/desktop/releases/{release_id}")
+async def get_desktop_release_manifest(release_id: str, secret_key: str = Header(...)):
+    """Return the retained manifest used for a pointer transition, not GitHub metadata."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    manifest = await run_blocking(db_executor, get_release_manifest, release_id)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail='desktop release manifest not found')
+    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {"success": True, "manifest": manifest, "manifest_sha256": hashlib.sha256(canonical).hexdigest()}
+
+
+@router.post("/v2/desktop/channels/promote")
+async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secret_key: str = Header(...)):
+    """Atomically advance or repoint one explicit qualified channel pointer."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    if request.channel != "stable":
+        # This generic ADMIN_KEY route is deliberately unable to reach Beta's
+        # database transaction or cache. Beta has one admission-only path.
+        raise HTTPException(status_code=409, detail="generic channel promotion is stable-only")
+    try:
+        pointer = await run_blocking(
+            db_executor,
+            promote_channel,
+            request.platform,
+            request.channel,
+            request.release_id,
+            expected_generation=request.expected_generation,
+            expected_current_release_id=request.expected_current_release_id,
+            operation=request.operation,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await run_blocking(
+        db_executor,
+        delete_generic_cache,
+        live_cache_key(request.platform, request.channel),
+    )
+    return {"success": True, "pointer": pointer}
