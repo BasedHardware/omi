@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:collection/collection.dart';
 
@@ -15,9 +16,11 @@ import 'package:omi/utils/logger.dart';
 
 class AppProvider extends BaseProvider {
   /// Test seam — overrides [enableAppServer] in [toggleApp].
+  @visibleForTesting
   Future<bool> Function(String appId)? enableAppOverride;
 
   /// Test seam — overrides [disableAppServer] in [toggleApp].
+  @visibleForTesting
   Future<void> Function(String appId)? disableAppOverride;
 
   List<App> apps = [];
