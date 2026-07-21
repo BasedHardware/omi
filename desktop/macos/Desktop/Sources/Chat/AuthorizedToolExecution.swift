@@ -123,6 +123,16 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     }
     let surfaceKind = try requiredString("surfaceKind")
     let chatFirstControlGeneration = payload["chatFirstControlGeneration"] as? Int
+    // Validate chat-first capability before manifest digest selection so an
+    // invalid capability surfaces as .invalidChatFirstCapability rather than
+    // a misleading .staleManifest from the subsequent digest comparison.
+    if let chatFirstControlGeneration {
+      guard surfaceKind == "main_chat", chatFirstControlGeneration >= 0 else {
+        throw Rejection.invalidChatFirstCapability
+      }
+    } else if resolvedTool == .renderChatBlocks {
+      throw Rejection.invalidChatFirstCapability
+    }
     let manifestDigest = try requiredString("manifestDigest")
     let expectedManifestDigest =
       surfaceKind == "main_chat" && chatFirstControlGeneration != nil
@@ -167,13 +177,6 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     let expectedInputHash = try requiredString("inputHash")
     guard try inputHash(for: input) == expectedInputHash else {
       throw Rejection.inputHashMismatch
-    }
-    if let chatFirstControlGeneration {
-      guard surfaceKind == "main_chat", chatFirstControlGeneration >= 0 else {
-        throw Rejection.invalidChatFirstCapability
-      }
-    } else if resolvedTool == .renderChatBlocks {
-      throw Rejection.invalidChatFirstCapability
     }
 
     return AuthorizedToolExecution(
